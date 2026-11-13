@@ -44,6 +44,21 @@ CEF one does.
 4. **Switch**: `scripts/test.sh`, every scenario and `Tests/promises.lock` on the new build, then `scripts/perf`
    against the CEF build, then the release.
 
+## Start-up (step 3's first piece)
+
+CEF let Cra drive Chromium: `CraCEFRuntime.initialize…` started it and `runMessageLoop` ran the loop. In Chrome's
+framework `ChromeMain` owns the whole run, start to quit. So:
+
+- `Sources/Cra/App/main.swift` keeps its order. The part after `initialize…` (Chromium's handlers, the perf
+  recorder, `bootstrapIfNeeded`) moves into a block the bridge runs once Chromium is ready, and `runMessageLoop`
+  becomes `CraEngineMain`, which returns at quit; the CEF bridge runs the same block at once, so both engines take
+  the same main.swift.
+- `CraApplication` subclasses Chrome's `BrowserCrApplication` and exists before `ChromeMain`, so Chrome uses it.
+- Chrome's `AppController` (NSApp's delegate) and main menu must not replace Cra's `AppDelegate` and menus: a hook
+  in `ChromeBrowserMainPartsMac` skips them when Cra's parts are present.
+- The bridge's Objective-C classes live in the framework (`//cra`), exported in `framework.exports`; the SwiftPM
+  `CraCEF` target keeps `include/CraCEF.h` and, for this engine, only links Chrome's framework.
+
 ## Status
 
 - 13 Nov 2026: decided; CEF 158 not built.
