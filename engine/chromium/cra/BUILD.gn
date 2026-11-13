@@ -4,6 +4,7 @@
 source_set("core") {
   sources = [
     "CraCEF.h",
+    "CraContentBlocker.h",
     "bridge.h",
     "bridge.mm",
     "downloads.h",

@@ -14,6 +14,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 rsync -a --delete "$HERE/cra/" "$SRC/cra/"
 # The bridge implements the app's header (Sources/CraCEF/include/CraCEF.h).
 cp "$HERE/../../Sources/CraCEF/include/CraCEF.h" "$SRC/cra/CraCEF.h"
+cp "$HERE/../../Sources/CraCEF/CraContentBlocker.h" "$SRC/cra/CraContentBlocker.h"
 cp "$HERE/hooks/cra_engine_hooks.h" "$SRC/chrome/browser/cra_engine_hooks.h"
 cp "$HERE/hooks/cra_permission_hook.h" "$SRC/chrome/browser/cra_permission_hook.h"
 # Google's Widevine signer isn't in public checkouts; an official build of Chrome's framework runs it.

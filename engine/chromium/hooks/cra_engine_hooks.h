@@ -14,6 +14,7 @@ class ChromeBrowserMainExtraParts;
 
 namespace content {
 class WebContents;
+struct GlobalRenderFrameHostId;
 }
 namespace input {
 struct NativeWebKeyboardEvent;
@@ -78,6 +79,12 @@ inline TargetURLHook g_target_url = nullptr;
 // of their own, which Cra's layer takes over (patches/cra-devtools.patch).
 using IsCraPageHook = bool (*)(const content::WebContents* contents);
 inline IsCraPageHook g_is_cra_page = nullptr;
+
+// Cra's ad and tracker blocking (Settings): whether a subresource or subframe request from `frame` is cancelled,
+// as the CEF bridge's OnBeforeResourceLoad decided (CraContentBlocker.h). Top-level navigations never come here
+// (patches/cra-content-blocking.patch).
+using BlockRequestHook = bool (*)(const GURL& url, const content::GlobalRenderFrameHostId& frame);
+inline BlockRequestHook g_block_request = nullptr;
 
 }  // namespace cra
 

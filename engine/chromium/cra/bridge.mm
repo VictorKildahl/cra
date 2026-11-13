@@ -17,6 +17,7 @@
 #import "cra/CraCEF.h"
 
 #include "cra/bridge.h"
+#include "cra/CraContentBlocker.h"
 #include "cra/downloads.h"
 #include "cra/page_protocol.h"
 #include "cra/permission_prompt.h"
@@ -66,6 +67,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -558,6 +560,20 @@ bool TargetURL(content::WebContents* contents, const GURL& url) {
   return true;
 }
 
+// Cra's ad and tracker blocking (patches/cra-content-blocking.patch): a request third-party to its top-level
+// page, to a listed domain.
+bool BlockRequest(const GURL& url, const content::GlobalRenderFrameHostId& frame) {
+  if (!cra_blocker::Enabled().load(std::memory_order_relaxed)) {
+    return false;
+  }
+  content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
+  if (!host) {
+    return false;
+  }
+  std::string page = cra_blocker::WebHost(host->GetOutermostMainFrame()->GetLastCommittedURL().spec());
+  return cra_blocker::ShouldBlock(cra_blocker::WebHost(url.spec()), page);
+}
+
 bool IsCraPage(const content::WebContents* contents) {
   return BrowserFor(const_cast<content::WebContents*>(contents)) != nil;
 }
@@ -834,6 +850,7 @@ void RunReadyBlocks() {
   g_page_is_fullscreen = &PageIsFullscreen;
   g_target_url = &TargetURL;
   g_is_cra_page = &IsCraPage;
+  g_block_request = &BlockRequest;
   StartDownloads(&ReportDownload);
   Strays().Start();
   StartProfilePrefs();
@@ -1877,23 +1894,43 @@ void RunReadyBlocks() {
   g_document_start_params = all;
 }
 + (void)setContentBlockingEnabled:(BOOL)enabled {
+  cra_blocker::Enabled().store(enabled);
 }
 + (BOOL)contentBlockingEnabled {
-  return NO;
+  return cra_blocker::Enabled().load();
 }
 
 + (void)setBlockedDomains:(NSArray<NSString*>*)domains {
+  auto* set = new cra_blocker::DomainSet();
+  for (NSString* domain in domains) {
+    cra_blocker::AddListLine(*set, domain.UTF8String ?: "");
+  }
+  cra_blocker::Publish(set);
 }
 + (void)loadBlockedDomainsFromFile:(NSString*)path completion:(void (^)(NSInteger))completion {
-  if (completion) {
-    completion(0);
-  }
+  void (^done)(NSInteger) = [completion copy];
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    NSInteger count = 0;
+    if (data) {
+      cra_blocker::DomainSet* set =
+          cra_blocker::ParseList(std::string_view(static_cast<const char*>(data.bytes), data.length));
+      count = static_cast<NSInteger>(set->size());
+      cra_blocker::Publish(set);
+    }
+    if (done) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done(count);
+      });
+    }
+  });
 }
 + (NSInteger)blockedDomainCount {
-  return 0;
+  return static_cast<NSInteger>(cra_blocker::Count());
 }
 + (BOOL)shouldBlockRequestURL:(NSString*)requestURL onPageURL:(NSString*)pageURL {
-  return NO;
+  return cra_blocker::ShouldBlock(cra_blocker::WebHost(requestURL.UTF8String ?: ""),
+                                  cra_blocker::WebHost(pageURL.UTF8String ?: ""));
 }
 + (void)endIncognitoSession {
 }

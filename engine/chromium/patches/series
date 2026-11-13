@@ -28,3 +28,4 @@ cra-permissions.patch
 cra-fullscreen-status.patch
 cra-devtools.patch
 cra-download-tabs.patch
+cra-content-blocking.patch
