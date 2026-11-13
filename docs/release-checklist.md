@@ -74,6 +74,11 @@ built release app with a test profile. Note anything that fails in the release's
   is a summary, not the first answer again, and no answer starts with "BEGIN DIALOGUE", "Human:" or a made-up
   question. Then a factual follow-up gets its own quote. The model is on-device and varies, so ask a few times.
 
+- **Ask on Page, long answers and unanswerable questions:** ask a long article something it doesn't say
+  ("why did el salvador succeed?"): the answer never quotes a solar-power page or J.W. Peters. Ask for "the
+  key points of this entire article in detailed bullet points": the window and the page keep scrolling smoothly
+  while it writes, and the answer never vanishes and starts over.
+
 - **#407, Instant Links:** with Apple Intelligence on and Settings ▸ Max ▸ Instant Links on, type
   "top 3 pizza places in naples" in ⌘T and press Shift-Return: the bar closes, "Searching the web for you…"
   shows at the top of Today with the flower turning once a second and the selected row's fill, and about 3 s later

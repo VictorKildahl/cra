@@ -65,6 +65,10 @@ final class AskOnPageController {
     private var current: (tab: UUID, url: String)?
     private var pendingQuote: String?
     private var quoteTimeout: DispatchWorkItem?
+    /// The streamed answer reaches the card at most ten times a second (AskOnPageStreamPacing).
+    private var pacing = AskOnPageStreamPacing()
+    private var pendingSnapshot: (id: UUID, reply: String, fraction: Double?)?
+    private var snapshotFlush: DispatchWorkItem?
 
     init(overlay: OverlayState) {
         self.overlay = overlay
@@ -124,6 +128,7 @@ final class AskOnPageController {
         if subject == nil { subject = current }
         let turns = state.messages.filter(\.finished).map { AskOnPagePrompt.Turn(question: $0.question, answer: $0.reply) }
         asking?.cancel()
+        dropPendingSnapshot()
         state.messages.append(.init(question: question))
         let id = state.messages[state.messages.count - 1].id
         // The field asks the next question; the page's find marks go.
@@ -137,11 +142,51 @@ final class AskOnPageController {
                 return
             }
             let final = await service.answer(question: question, turns: turns, page: page) { reply, fraction in
-                self?.update(id) { $0.reply = reply; $0.fractionRead = fraction }
+                self?.stream(id, reply: reply, fraction: fraction)
             }
             guard !Task.isCancelled, let final else { return }
+            self?.dropPendingSnapshot()
             self?.update(id) { $0.reply = final; $0.finished = true }
+            self?.checkQuotes(final, question: question, pageText: page.text)
         }
+    }
+
+    /// Quotes the page doesn't have say so at once (Arc's "Quote not found"), not after a click.
+    private func checkQuotes(_ reply: String, question: String, pageText: String) {
+        for part in AskOnPageReply.parts(reply, question: question) where part.isQuote {
+            if !AskOnPageReply.isOnPage(part.text, pageText: pageText) {
+                state.quotes[part.text] = .notFound
+                CraLog.note("Ask on Page: a quote isn't on the page")
+            }
+        }
+    }
+
+    /// The model's reply so far: shown now, or the latest one when the pacing allows.
+    private func stream(_ id: UUID, reply: String, fraction: Double?) {
+        pendingSnapshot = (id, reply, fraction)
+        guard snapshotFlush == nil else { return }
+        let wait = pacing.delay(at: ProcessInfo.processInfo.systemUptime)
+        if wait == 0 { flushSnapshot(); return }
+        let flush = DispatchWorkItem { [weak self] in
+            self?.snapshotFlush = nil
+            self?.flushSnapshot()
+        }
+        snapshotFlush = flush
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: flush)
+    }
+
+    private func flushSnapshot() {
+        guard let s = pendingSnapshot else { return }
+        pendingSnapshot = nil
+        pacing.shown(at: ProcessInfo.processInfo.systemUptime)
+        update(s.id) { $0.reply = s.reply; $0.fractionRead = s.fraction }
+    }
+
+    private func dropPendingSnapshot() {
+        snapshotFlush?.cancel()
+        snapshotFlush = nil
+        pendingSnapshot = nil
+        pacing = AskOnPageStreamPacing()
     }
 
     private func update(_ id: UUID, _ change: (inout AskOnPageState.Message) -> Void) {
@@ -205,6 +250,7 @@ final class AskOnPageController {
     func reset() {
         asking?.cancel()
         asking = nil
+        dropPendingSnapshot()
         subject = nil
         pendingQuote = nil
         quoteCandidates = []
@@ -414,10 +460,17 @@ private struct AskOnPageMessageView: View {
             ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
                 if part.isQuote {
                     AskOnPageQuote(quote: part.text, search: state.quotes[part.text], finished: message.finished) { controller.findQuote(part.text) }
-                } else {
+                } else if message.finished {
                     Text(Self.markdown(part.text)).font(.body).foregroundStyle(.primary.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
+                } else {
+                    // While it streams, a line per Text: only the last one is laid out again.
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(AskOnPageReply.lines(part.text).enumerated()), id: \.offset) { _, line in
+                            AskOnPageLine(text: line).equatable()
+                        }
+                    }
                 }
             }
         }
@@ -426,6 +479,16 @@ private struct AskOnPageMessageView: View {
 
     static func markdown(_ s: String) -> AttributedString {
         (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+    }
+}
+
+/// One line of an answer that is still streaming.
+private struct AskOnPageLine: View, Equatable {
+    let text: String
+
+    var body: some View {
+        Text(AskOnPageMessageView.markdown(text)).font(.body).foregroundStyle(.primary.opacity(0.8))
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

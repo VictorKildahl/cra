@@ -86,9 +86,9 @@ public enum AskOnPagePolicy {
     public static let maxPageCharacters = 200_000
 }
 
-/// What the model is asked: Arc's rules and examples (AskInPageChat), the page between Arc's
+/// What the model is asked: Arc's rules (AskInPageChat), the page between Arc's
 /// tags, then the question. Arc sends it all as one message, the conversation written into it as
-/// "BEGIN DIALOGUE", "Human: …", "Assistant: …". Here the rules and examples are the session's
+/// "BEGIN DIALOGUE", "Human: …", "Assistant: …". Here the rules are the session's
 /// instructions, the page goes with the first question, and each question and answer is a turn of
 /// its own. The on-device model, given Arc's dialogue as text, writes a dialogue back: made-up
 /// "Human:" questions, or the last answer again word for word (#417).
@@ -119,30 +119,12 @@ public enum AskOnPagePrompt {
     /// takes that as the shape of its answer and writes a dialogue (#417).
     public static let userLine = "After the page, each message is a question from a user seeking answers about the webpage."
 
-    /// Arc's examples. Its privacy-policy one links an Arc page; Cra's links a placeholder address.
-    public static let examples = """
-    EXAMPLES OF RESPONSES FOR A HYPOTHETICAL WEBPAGE:
-    > Why do people work in solar?
-    According to J.W. Peters, president of Solar Power of Oklahoma:
-    <excerpt>The environmental benefits are nice,” he said, “but most people are doing this for the financial opportunity.”</excerpt>
-    So, mostly **financial, not environmental, reasons**.
-    (Notice how the answer provides a direct quote from the page, on its own line, and the key answer is bold.)
-
-    > What’s the most populous borough in NYC?
-    I think it’s **Brooklyn**, but it’s not mentioned on the page.
-    (Notice how it is clear that the answer comes from background knowledge, not the webpage.)
-
-    > privacy policy
-    According to the page:
-    <excerpt>[Privacy Policy](https://example.com/privacy)</excerpt>
-    (Notice how the answer is provided by the excerpt, in Markdown.)
-
-    > summary
-    (You would provide a brief summary)
-    """
-
+    /// Arc's rules, without the examples Arc sends after them ("EXAMPLES OF RESPONSES FOR A
+    /// HYPOTHETICAL WEBPAGE": solar power, Brooklyn, a privacy policy, a summary). On a question the
+    /// page can't answer, the on-device model quoted the solar example as if it were the page: 9 of
+    /// 20 answers, 0 of 20 without the examples, and answerable questions quote the page as often.
     public static func instructions(language: String) -> String {
-        rules(language: language) + "\n" + examples
+        rules(language: language)
     }
 
     /// One question and its answer, earlier in the conversation.
@@ -159,6 +141,15 @@ public enum AskOnPagePrompt {
     /// Arc's do, so a long conversation leaves the page room.
     public static let keptAnswers = 2
     public static let hiddenAnswer = "[Older messages hidden]"
+    /// An earlier answer is sent again up to this many characters. A summary that filled the context
+    /// left the next questions 20 % of the page; its start is what a follow-up refers to.
+    public static let keptAnswerCharacters = 800
+
+    /// An earlier answer as it is sent again: hidden when older than `keptAnswers`, cut when long.
+    static func earlierAnswer(_ answer: String, index: Int, of count: Int) -> String {
+        if index < count - keptAnswers { return hiddenAnswer }
+        return answer.count > keptAnswerCharacters ? String(answer.prefix(keptAnswerCharacters)) + "…" : answer
+    }
 
     /// One turn the model already took: what it was asked and what it answered.
     public struct Exchange: Equatable, Sendable {
@@ -186,22 +177,42 @@ public enum AskOnPagePrompt {
         let page = context(url: url, title: title, date: date, text: text)
         let earlier = turns.enumerated().map { i, turn in
             Exchange(prompt: i == 0 ? page + turn.question : turn.question,
-                     response: i < turns.count - keptAnswers ? hiddenAnswer : turn.answer)
+                     response: earlierAnswer(turn.answer, index: i, of: turns.count))
         }
-        return Conversation(earlier: earlier, prompt: turns.isEmpty ? page + question : question)
+        return Conversation(earlier: earlier, prompt: turns.isEmpty ? page + question : question + followUpReminder)
     }
+
+    /// After a follow-up question. Past an answer without a quote (a summary), the model kept writing
+    /// without one: factual follow-ups quoted the page 9 times in 24, 16 with this line.
+    public static let followUpReminder = "\n\nQuote the page in an <excerpt> tag if it answers this."
 
     /// What is sent besides the page and the instructions: the questions and the answers kept.
     public static func dialogue(turns: [Turn], question: String) -> String {
         let earlier = turns.enumerated().flatMap { i, turn in
-            [turn.question, i < turns.count - keptAnswers ? hiddenAnswer : turn.answer]
+            [turn.question, earlierAnswer(turn.answer, index: i, of: turns.count)]
         }
-        return (earlier + [question]).joined(separator: "\n")
+        return (earlier + [turns.isEmpty ? question : question + followUpReminder]).joined(separator: "\n")
     }
 
     /// Room left for the answer, in tokens. Arc asks for up to 4,096 from a far bigger model; the
     /// on-device one has 4,096 for everything, and Arc's answers are a quote and a line.
     public static let answerTokens = 600
+
+    /// The most the answer may use where the model counted the prompt: the rest of its context, so a
+    /// long answer ends there instead of overflowing it. Nil when the prompt wasn't counted.
+    public static func responseTokens(contextTokens: Int, promptTokens: Int?) -> Int? {
+        promptTokens.map { max(1, contextTokens - $0) }
+    }
+
+    /// What follows when the context overflows. Before any answer, the page was too long for the
+    /// estimate: read less and ask again. After part of one, the answer outgrew the room left for it
+    /// (a long summary): keep what the card already shows. Starting over wiped 31 s of a summary and
+    /// wrote it again from a shorter page.
+    public enum Overflow: Equatable, Sendable { case readLess, keepAnswer }
+
+    public static func afterOverflow(streamed: String) -> Overflow {
+        streamed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .readLess : .keepAnswer
+    }
 
     /// Arc's budget for the page: three characters per token of context (at most 16,000 tokens),
     /// less the rules, the examples and 200. The on-device model's context also holds the answer,
@@ -237,11 +248,24 @@ public enum AskOnPagePrompt {
     /// Arc's answer for a page with no text to speak of (49 characters or fewer).
     public static let unreadable = "Sorry, I can’t read this type of page."
     public static let failed = "Sorry, I encountered an error"
+    public static let fakeMadeUpQuote = "The moon is made of green cheese, the article says."
+    /// How many points the test model's summary has.
+    public static let fakeSummaryPoints = 28
     public static let minimumText = 50
 
     /// The test model's answer (CRA_TIDY_FAKE_MODEL=1): the first sentence on the page that shares
-    /// a word with the question, quoted the way Arc's answers are.
+    /// a word with the question, quoted the way Arc's answers are. Asked for a summary, it lists the
+    /// page's first sentences as bullets, as long as the real model's summaries run. Asked to make
+    /// something up, it quotes a sentence the page doesn't have, as the real model sometimes does.
     public static func fakeAnswer(question: String, text: String) -> String {
+        let asked = question.lowercased()
+        if asked.contains("make up") || asked.contains("made-up") {
+            return "According to the page:\n<excerpt>\(fakeMadeUpQuote)</excerpt>\nSo, **a guess**."
+        }
+        if asked.contains("summar") || asked.contains("key points") {
+            let sentences = text.split(whereSeparator: { ".!?\n".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.count > 12 }
+            return "Here are the key points of the page:\n\n" + sentences.prefix(fakeSummaryPoints).map { "* **\($0.split(separator: " ").prefix(2).joined(separator: " "))** \($0)." }.joined(separator: "\n")
+        }
         let words = Set(question.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).filter { $0.count > 3 }.map(String.init))
         let sentences = text.split(whereSeparator: { ".!?\n".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.count > 12 }
         guard let hit = sentences.first(where: { s in words.contains { s.lowercased().contains($0) } }) ?? sentences.first else {
@@ -249,6 +273,25 @@ public enum AskOnPagePrompt {
         }
         return "According to the page:\n<excerpt>\(hit).</excerpt>\nSo, **\(hit.split(separator: " ").prefix(4).joined(separator: " "))**."
     }
+}
+
+/// How often a streamed answer reaches the card. The model sends its reply so far after every token,
+/// 30 to 50 times a second; laying out a long answer that often took the main thread for most of a
+/// summary (334 stalls in 14 s). The first snapshot shows at once, then at most one per `interval`,
+/// always the latest, and the finished answer at once.
+public struct AskOnPageStreamPacing: Equatable, Sendable {
+    public static let interval: TimeInterval = 0.1
+    private var lastShown: TimeInterval?
+
+    public init() {}
+
+    /// How long to wait before showing a snapshot that arrived at `now`: 0 shows it now.
+    public func delay(at now: TimeInterval) -> TimeInterval {
+        guard let lastShown else { return 0 }
+        return max(0, lastShown + Self.interval - now)
+    }
+
+    public mutating func shown(at now: TimeInterval) { lastShown = now }
 }
 
 /// An answer split into Arc's parts (AskInPageMessagePart): text, and quotes from the page.
@@ -335,6 +378,28 @@ public enum AskOnPageReply {
         if words.count > 8 { out.append(words.prefix(8).joined(separator: " ")) }
         var seen = Set<String>()
         return out.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// A text part's lines, each drawn on its own while the answer streams so only the last one is
+    /// laid out again. An empty line keeps its height as a space.
+    public static func lines(_ text: String) -> [String] {
+        text.components(separatedBy: "\n").map { $0.isEmpty ? " " : $0 }
+    }
+
+    /// Whether a quote is on the page the model read, as Find on Page would look for it (the whole
+    /// quote, its first sentence, its first eight words), comparing words only: case, punctuation and
+    /// spacing aside. The model sometimes writes a quote the page doesn't have (about 1 in 5 on a
+    /// question the page can't answer); the card says so when the answer is done, not after a click.
+    public static func isOnPage(_ quote: String, pageText: String) -> Bool {
+        let page = words(pageText)
+        return findCandidates(quote).contains { candidate in
+            let w = words(candidate)
+            return !w.isEmpty && page.contains(w)
+        }
+    }
+
+    static func words(_ s: String) -> String {
+        s.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ")
     }
 
     /// The text without a tag cut off at its end ("<exc", "</excer").

@@ -42,7 +42,6 @@ struct AskOnPageTests {
         #expect(rules.hasPrefix("You will be acting as a research assistant."))
         #expect(rules.contains("7. Respond in Danish."))
         #expect(rules.contains("using an <excerpt> tag on its own line"))
-        #expect(AskOnPagePrompt.instructions(language: "English").contains("EXAMPLES OF RESPONSES FOR A HYPOTHETICAL WEBPAGE:"))
         let c = AskOnPagePrompt.conversation(url: "https://apple.com/ios", title: "iOS 17", date: "12/11/2026, 18:00",
                                              text: "React with your hands.", turns: [], question: "How do reactions work?")
         #expect(c.earlier.isEmpty)
@@ -67,6 +66,15 @@ struct AskOnPageTests {
         #expect(instructions.contains(AskOnPagePrompt.userLine))
     }
 
+    @Test func theModelIsShownNoQuotesFromAnotherPage() {
+        // Arc's examples quoted a solar-power page; the on-device model quoted it back as this page's.
+        let instructions = AskOnPagePrompt.instructions(language: "English")
+        for example in ["EXAMPLES OF RESPONSES", "J.W. Peters", "Solar Power of Oklahoma", "Brooklyn", "Privacy Policy"] {
+            #expect(!instructions.contains(example))
+        }
+        #expect(instructions.contains("using an <excerpt> tag on its own line"))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func aFollowUpIsItsOwnTurnAfterThePage() {
         // The reporter's conversation: the first answer stays a turn of its own, the follow-up is
         // asked alone, and no text says "Human:" or "Assistant:" for the model to carry on.
@@ -75,12 +83,33 @@ struct AskOnPageTests {
         let c = AskOnPagePrompt.conversation(url: "https://example.com/haiti", title: "Haiti", date: "13/11/2026, 12:00",
                                              text: "The real measure of success.", turns: [first],
                                              question: "Summarize the key points of this entire article in detailed bullet points.")
-        #expect(c.prompt == "Summarize the key points of this entire article in detailed bullet points.")
+        #expect(c.prompt == "Summarize the key points of this entire article in detailed bullet points." + AskOnPagePrompt.followUpReminder)
         #expect(c.earlier == [.init(prompt: AskOnPagePrompt.context(url: "https://example.com/haiti", title: "Haiti", date: "13/11/2026, 12:00",
                                                                      text: "The real measure of success.") + "why el salvador succeed?",
                                     response: first.answer)])
         let sent = ([c.prompt] + c.earlier.flatMap { [$0.prompt, $0.response] }).joined(separator: "\n")
         for framing in ["BEGIN DIALOGUE", "Human:", "Assistant:"] { #expect(!sent.contains(framing)) }
+    }
+
+    @Test func aFollowUpIsAskedForAQuote() {
+        // After a summary the model kept answering without quotes; the first question needs no reminder.
+        let first = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page", turns: [], question: "q1")
+        #expect(!first.prompt.contains(AskOnPagePrompt.followUpReminder))
+        let next = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page",
+                                                turns: [.init(question: "Summarize it", answer: "* one\n* two")], question: "Who?")
+        #expect(next.prompt == "Who?\n\nQuote the page in an <excerpt> tag if it answers this.")
+        #expect(next.earlier.map(\.prompt).allSatisfy { !$0.contains(AskOnPagePrompt.followUpReminder) })
+    }
+
+    @Test func aLongEarlierAnswerLeavesTheNextQuestionThePage() {
+        let summary = String(repeating: "* A key point of the article.\n", count: 100)
+        let c = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page",
+                                             turns: [.init(question: "Summarize it", answer: summary)], question: "Who?")
+        #expect(c.earlier[0].response == String(summary.prefix(AskOnPagePrompt.keptAnswerCharacters)) + "…")
+        #expect(AskOnPagePrompt.dialogue(turns: [.init(question: "Summarize it", answer: summary)], question: "Who?").count < 900)
+        let short = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page",
+                                                 turns: [.init(question: "Who?", answer: "**Garry Conille**.")], question: "When?")
+        #expect(short.earlier[0].response == "**Garry Conille**.")
     }
 
     @Test func followUpsKeepTheLastAnswersAndHideOlderOnes() {
@@ -92,8 +121,8 @@ struct AskOnPageTests {
             .init(prompt: "q2", response: "a2"),
             .init(prompt: "q3", response: "a3"),
         ])
-        #expect(c.prompt == "q4")
-        #expect(AskOnPagePrompt.dialogue(turns: turns, question: "q4") == "q1\n[Older messages hidden]\nq2\na2\nq3\na3\nq4")
+        #expect(c.prompt == "q4" + AskOnPagePrompt.followUpReminder)
+        #expect(AskOnPagePrompt.dialogue(turns: turns, question: "q4") == "q1\n[Older messages hidden]\nq2\na2\nq3\na3\nq4" + AskOnPagePrompt.followUpReminder)
     }
 
     @Test func budgetIsArcsLessTheAnswersRoom() {
@@ -189,6 +218,60 @@ struct AskOnPageTests {
         let text = "Welcome to the page. Reactions fill the camera frame with effects. Other things here."
         let answer = AskOnPagePrompt.fakeAnswer(question: "How do reactions work?", text: text)
         #expect(AskOnPageReply.parts(answer).contains(.init(text: "Reactions fill the camera frame with effects.", isQuote: true)))
+    }
+
+    @Test func aStreamedAnswerReachesTheCardTenTimesASecond() {
+        var pacing = AskOnPageStreamPacing()
+        #expect(pacing.delay(at: 5.0) == 0)
+        pacing.shown(at: 5.0)
+        #expect(abs(pacing.delay(at: 5.02) - 0.08) < 1e-9)
+        #expect(pacing.delay(at: 5.1) == 0)
+        #expect(pacing.delay(at: 7) == 0)
+        // Fifty snapshots a second for two seconds: about twenty reach the card.
+        var p = AskOnPageStreamPacing(), shown = 0, due: TimeInterval?
+        for i in 0..<100 {
+            let now = Double(i) * 0.02
+            if let d = due, now >= d { p.shown(at: d); shown += 1; due = nil }
+            if due == nil {
+                let wait = p.delay(at: now)
+                if wait == 0 { p.shown(at: now); shown += 1 } else { due = now + wait }
+            }
+        }
+        #expect((19...21).contains(shown))
+    }
+
+    @Test func aStreamingAnswerIsDrawnLineByLine() {
+        #expect(AskOnPageReply.lines("Key points:\n\n* one\n* two") == ["Key points:", " ", "* one", "* two"])
+        #expect(AskOnPageReply.lines("one line") == ["one line"])
+    }
+
+    @Test func aLongAnswerEndsWhereTheContextDoes() {
+        #expect(AskOnPagePrompt.responseTokens(contextTokens: 4096, promptTokens: 3400) == 696)
+        #expect(AskOnPagePrompt.responseTokens(contextTokens: 4096, promptTokens: 5000) == 1)
+        #expect(AskOnPagePrompt.responseTokens(contextTokens: 4096, promptTokens: nil) == nil)
+        // An overflow after part of the answer keeps it; before any, the page is read shorter.
+        #expect(AskOnPagePrompt.afterOverflow(streamed: "Here are the key points:\n* one") == .keepAnswer)
+        #expect(AskOnPagePrompt.afterOverflow(streamed: " \n") == .readLess)
+    }
+
+    @Test func aQuoteThePageDoesntHaveIsCaughtBeforeFindOnPage() {
+        let page = "Since 2020, Haiti's capital Port-au-Prince has been the site of an ongoing armed conflict.\nHenry ultimately resigned and was replaced by Garry Conille on 3 June 2024, who in turn was replaced."
+        // On the page, despite case, curly quotes, a Markdown link, spacing or a cut-short second half.
+        #expect(AskOnPageReply.isOnPage("Since 2020, Haiti’s capital   Port-au-Prince has been the site of an ongoing armed conflict.", pageText: page))
+        #expect(AskOnPageReply.isOnPage("henry ultimately resigned and was replaced by [Garry Conille](https://x.org) on 3 June 2024", pageText: page))
+        #expect(AskOnPageReply.isOnPage("Henry ultimately resigned and was replaced by Garry Conille. He later wrote a book.", pageText: page))
+        // The live model's made-up quote on this page, and the test model's.
+        #expect(!AskOnPageReply.isOnPage("Gangs were not the cause of El Salvador's success.", pageText: page))
+        #expect(!AskOnPageReply.isOnPage(AskOnPagePrompt.fakeMadeUpQuote, pageText: page))
+        #expect(!AskOnPageReply.isOnPage("  ", pageText: page))
+    }
+
+    @Test func theTestModelSummarizesAtLength() {
+        let text = (1...30).map { "Sentence number \($0) about the page." }.joined(separator: " ")
+        let answer = AskOnPagePrompt.fakeAnswer(question: "Summarize the key points of this article", text: text)
+        #expect(answer.components(separatedBy: "\n* ").count - 1 == AskOnPagePrompt.fakeSummaryPoints)
+        #expect(answer.hasPrefix("Here are the key points of the page:"))
+        #expect(answer.count > 600)
     }
 
     @Test func pageScriptLeavesOutArcsSkippedParts() {

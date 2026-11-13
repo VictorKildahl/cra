@@ -738,7 +738,7 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::answersSplitIntoTextAndQuotes  1c355ddc4248
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::longPagesAreCutAndSaySo  87740165fd46
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::placeholdersAreArcs  bd66b23c595c
-#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::promptIsArcsWithThePageBetweenItsTags  c8dc8768726c
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::promptIsArcsWithThePageBetweenItsTags  f94da0ab7989
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnFindsTextOnThePageAndAsksTheRest  60bb9ecd33c9
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelsEchoOfTheDialogueIsLeftOut  c7e6334433dd
 #393   Tests/Scenarios/ask-on-page.scenario  f8c87a909b54
@@ -768,7 +768,7 @@
 #416   Packages/CraCore/Tests/CraCoreTests/BackForwardMenuTests.swift::threeRowsMakeArcs136PointFill  ee2987372e52
 #416   Tests/BackForwardMenuViewTests.swift::historyMenuCase  916d0b476141
 #416   Tests/Scenarios/back-forward-menu.scenario  0c2bcb383c59
-#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aFollowUpIsItsOwnTurnAfterThePage  69092337b9ab
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aFollowUpIsItsOwnTurnAfterThePage  51398915fca7
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelIsNotToldToWriteADialogue  00c89cbe584e
 #419   Packages/CraCore/Tests/CraCoreTests/SidebarLinkDropTests.swift::whichLinkBecomesTheTab  74f055957ef6
 #419   Tests/Scenarios/drop-link.scenario  42faf84636ae

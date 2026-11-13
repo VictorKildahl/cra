@@ -4050,7 +4050,15 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   message is a question…", the page goes with the first question without "BEGIN DIALOGUE", and each earlier question
   and answer is a turn of its own in the session's transcript. Given Arc's dialogue as text, the on-device model wrote
   a dialogue back (made-up questions, "Human:"/"Assistant:" lines, or an earlier answer word for word): 30 of 40
-  answers in ten 4-question conversations on a 10,500-character article, 0 of 40 as turns (13 Nov 2026, macOS 26.7). The card sits
+  answers in ten 4-question conversations on a 10,500-character article, 0 of 40 as turns (13 Nov 2026, macOS 26.7).
+  Arc's four examples aren't sent either: on a question the page can't answer, the model quoted the solar example as
+  the page's (9 of 20; labelled "never quote these" 6 of 20; placeholders copied as placeholders), 0 of 20 without
+  them, and answerable questions quote the page as often (19 of 20). A long answer may use the rest of the context
+  (`maximumResponseTokens`) and keeps what it wrote if it overflows anyway; it reaches the card at most ten times a
+  second, line by line while it streams. A follow-up ends with "Quote the page in an <excerpt> tag if it answers
+  this.": after a summary (no quotes) the model kept answering without them (9 of 24 follow-ups quoted, 16 with it).
+  An earlier answer is sent again up to 800 characters: a summary that filled the context left the next questions
+  20 % of the page. The card sits
   where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)

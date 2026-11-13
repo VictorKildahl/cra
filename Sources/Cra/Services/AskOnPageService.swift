@@ -64,8 +64,9 @@ final class AskOnPageService {
         if TidyTabsService.fakeModel {
             let cut = AskOnPagePrompt.truncate(page.text, budget: 4_000, total: page.total)
             let reply = AskOnPagePrompt.fakeAnswer(question: question, text: page.text)
-            for end in stride(from: 12, to: reply.count, by: 12) {
-                try? await Task.sleep(for: .milliseconds(40))
+            // About a token every 20 ms, as the on-device model streams a long answer.
+            for end in stride(from: 5, to: reply.count, by: 5) {
+                try? await Task.sleep(for: .milliseconds(20))
                 if Task.isCancelled { return nil }
                 update(String(reply.prefix(end)), cut.fractionRead)
             }
@@ -82,15 +83,19 @@ final class AskOnPageService {
             for attempt in 0..<3 {
                 let cut = AskOnPagePrompt.truncate(page.text, budget: budget, total: page.total)
                 let conversation = AskOnPagePrompt.conversation(url: page.url, title: page.title, date: date, text: cut.text, turns: turns, question: question)
-                if attempt == 0, let counted = await Self.tokens(model, instructions: instructions, conversation: conversation) {
+                let counted = await Self.tokens(model, instructions: instructions, conversation: conversation)
+                if let counted, attempt < 2 {
                     let allowed = Self.contextSize(model) - AskOnPagePrompt.answerTokens
                     let smaller = AskOnPagePrompt.shrink(budget: min(budget, cut.text.count), promptTokens: counted, allowedTokens: allowed)
                     if smaller < min(budget, cut.text.count) { budget = smaller; continue }
                 }
+                var last = ""
                 do {
                     let session = Self.session(model, instructions: instructions, earlier: conversation.earlier)
-                    var last = ""
-                    for try await snapshot in session.streamResponse(to: conversation.prompt) {
+                    // A long answer (a summary) ends where the context does instead of overflowing it.
+                    let options = AskOnPagePrompt.responseTokens(contextTokens: Self.contextSize(model), promptTokens: counted)
+                        .map { GenerationOptions(maximumResponseTokens: $0) } ?? GenerationOptions()
+                    for try await snapshot in session.streamResponse(to: conversation.prompt, options: options) {
                         if Task.isCancelled { return nil }
                         last = snapshot.content
                         update(last, cut.fractionRead)
@@ -99,8 +104,14 @@ final class AskOnPageService {
                                        Date().timeIntervalSince(started), min(cut.text.count, page.total), page.total))
                     return last
                 } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
-                    CraLog.note("Ask on Page: the page didn't fit at \(budget) characters")
-                    budget = budget * 3 / 5
+                    switch AskOnPagePrompt.afterOverflow(streamed: last) {
+                    case .keepAnswer:
+                        CraLog.note("Ask on Page: the answer reached the end of the context; kept as written")
+                        return last
+                    case .readLess:
+                        CraLog.note("Ask on Page: the page didn't fit at \(budget) characters")
+                        budget = budget * 3 / 5
+                    }
                 } catch {
                     if Task.isCancelled { return nil }
                     CraLog.note("Ask on Page: the model failed: \(error)")
