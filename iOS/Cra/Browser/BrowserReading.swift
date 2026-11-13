@@ -215,6 +215,15 @@ extension BrowserViewController {
                     page.webView.loadHTMLString(html, baseURL: nil)
                     if !incognito { try? (marker + html).write(to: Self.browseCache(id), atomically: true, encoding: .utf8) }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    // The page's cards slide up as the gradient fades (60fps.design's account of
+                    // Arc Search's "AI generation loader"); just a fade with Reduce Motion.
+                    let slides = !UIAccessibility.isReduceMotionEnabled
+                    page.webView.alpha = 0
+                    if slides { page.webView.transform = CGAffineTransform(translationX: 0, y: 80) }
+                    UIView.animate(withDuration: 0.5, delay: 0.25, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: []) {
+                        page.webView.alpha = 1
+                        page.webView.transform = .identity
+                    }
                     UIView.animate(withDuration: 0.4, delay: 0.25, options: []) { loading.alpha = 0 } completion: { _ in
                         loading.removeFromSuperview()
                         if self?.browseLoading === loading { self?.browseLoading = nil }
