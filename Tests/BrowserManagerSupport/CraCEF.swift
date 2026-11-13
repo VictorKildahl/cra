@@ -12,6 +12,9 @@ public protocol CraBrowserDelegate: AnyObject {
 
 public final class CraDownloadInfo {}
 
+/// CraCEF.h's media session states (#411).
+@objc public enum CraMediaSessionState: Int { case inactive, active, ducking, suspended }
+
 /// The runtime switches BrowserManager's helpers read.
 @MainActor
 public enum CraCEFRuntime {
@@ -37,6 +40,7 @@ open class CraBrowser {
     public var isCapturingMedia = false
     public var isAudible = false
     public var hasUncontrollableSound = false
+    public var reportsMediaSession = false
     /// Chrome's pop-up site setting (#357).
     public private(set) var popupsAllowed = false
     public func setPopupsAllowed(_ allowed: Bool) { popupsAllowed = allowed }

@@ -25,9 +25,13 @@ using ProtocolReply = void (^)(NSString* result, NSString* error);
 // An event: its method and its params JSON.
 using ProtocolEvent = void (^)(NSString* method, NSString* params);
 
-// Starts following the page's media session (the actions its handlers take), for Cra.mediaSession. Once per
-// page, as it is made.
-void WatchMediaSession(content::WebContents* contents);
+// The page's media session changed: its state as CraCEF.h's CraMediaSessionState (0 inactive, 1 active,
+// 2 ducking, 3 suspended) and whether Chrome's global media controls offer it (MediaSessionImpl::IsControllable).
+using MediaSessionChanged = void (^)(NSInteger state, bool controllable);
+
+// Starts following the page's media session (the actions its handlers take, for Cra.mediaSession, and its
+// state, for `changed`). Once per page, as it is made.
+void WatchMediaSession(content::WebContents* contents, MediaSessionChanged changed);
 
 // Puts a saved back and forward list (Cra.getHistory's "history", base64) into a page that hasn't navigated yet
 // and loads entry `index`, as Cra.restoreHistory does. The number of entries, or 0 with `error` set.

@@ -63,23 +63,24 @@ framework `ChromeMain` owns the whole run, start to quit. So:
 
 Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, with its test.
 
-- **The sidebar player follows the media session (#411's follow-up, 13 Nov 2026).** Arc's card holds the media
-  session's status (active, ducking, suspended, inactive; `webContents:didChangeMediaSessionState:`). CEF gives
-  Cra only the audible state and `MediaSessionImpl::IsControllable()` with it, so today:
-  - a ding or Web Audio sound in a tab with a paused card turns the card to playing (`didChangeAudible` and
-    `resumesCard` in `BrowserManager` trust any sound);
-  - a card stays after its media ended, as if paused.
+- **The sidebar player follows the media session (#411's follow-up), done on this branch 13 Nov 2026.** Arc's
+  card holds the media session's status. The layer's `MediaSessionWatch` sends Chromium's `MediaSessionInfo`
+  state and `is_controllable` (`browser:didChangeMediaSessionState:controllable:`, `reportsMediaSession` YES),
+  and CraCore's `PlayerCardSession` decides:
+  - a controllable active session makes the card and plays it;
+  - suspended shows it paused, however long;
+  - a controllable session going inactive (Chromium removes an ended player from the session) removes the card
+    2.5 s later, Chrome's `kFreezeTimerDelay`, and a next track within the wait calls that off;
+  - anything uncontrollable leaves the card as it is. Chromium resets a paused session when a ding starts
+    (`MediaSessionImpl::AddPlayer` clears its players), so the inactive state after a ding never removes a
+    paused card.
 
-  The bridge observes the session (`MediaSessionObserver::MediaSessionInfoChanged`) and sends its state and
-  whether it's controllable. A card is created only for a controllable session, as now. It shows playing only
-  while the session is active. It leaves 2.5 s after the session goes inactive, which is how long Chrome's media
-  controls wait (`kFreezeTimerDelay`, `media_session_notification_item.cc`). New playback within that wait keeps
-  the card. A pause keeps it however long. Tests, locked to #411:
-  - a track that ends: the card is gone after the wait and the tab stays open;
-  - a pause of more than 5 s, buffering or a quiet stretch: the card stays;
-  - a new track within the wait: the card stays, and the old timer can't remove the new one;
-  - a ding after a pause or an end: the speaker shows it, the card stays paused or gone;
-  - media just under, at and over 5 s, and a short clip with a media session `playbackState`: which get a card.
+  On CEF and on WebKit pages the player still follows the audible state. Tests, locked to #411:
+  `PlayerCardSessionTests`, the harness's `nowPlayingFollowsMediaSessionCase` and the scenario
+  `player-follows-session`, which runs only on the new engine (on CEF the ended card stays).
+  Known difference from a plain reading of the issue: a page whose media session sets `playbackState`
+  (YouTube) stays controllable through a ding, so its paused card shows playing during the ding, as Chrome's
+  own media controls do.
 
 ## Status
 

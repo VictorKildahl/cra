@@ -45,6 +45,17 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
     CraChromiumStringSearchWebForImage = 2,
 };
 
+/// The page's media session as Chromium reports it (MediaSessionInfo's state, #411).
+typedef NS_ENUM(NSInteger, CraMediaSessionState) {
+    /// No media holds audio focus: nothing plays, or what played ended or left the page.
+    CraMediaSessionStateInactive = 0,
+    CraMediaSessionStateActive = 1,
+    /// Playing, quieter while another app's sound has the focus for a moment.
+    CraMediaSessionStateDucking = 2,
+    /// Paused, still holding the focus.
+    CraMediaSessionStateSuspended = 3,
+};
+
 CRA_EXPORT @interface CraDownloadInfo : NSObject
 @property (nonatomic) uint32_t identifier;
 @property (nonatomic, copy) NSString *url;
@@ -156,6 +167,12 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 - (void)browser:(CraBrowser *)browser didRestoreHistoryEntries:(NSInteger)count error:(nullable NSString *)error;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
+/// The page's media session changed (#411): its state, and whether Chrome's global media controls
+/// offer it (`controllable`: media over 5 s or of unknown length, or a page media session with a
+/// playbackState; never a ding alone or Web Audio). Only an engine whose `reportsMediaSession` is YES
+/// sends it; the sidebar player follows it then instead of the audible state.
+- (void)browser:(CraBrowser *)browser didChangeMediaSessionState:(CraMediaSessionState)state controllable:(BOOL)controllable
+    NS_SWIFT_NAME(browser(_:didChangeMediaSessionState:controllable:));
 /// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
 /// `browser:didChangeAudible:` hold a quiet page audible.
 - (void)browser:(CraBrowser *)browser didChangeSoundPlaying:(BOOL)playing;
@@ -332,6 +349,9 @@ CRA_EXPORT @interface CraBrowser : NSObject
 /// (Chromium's media session isn't controllable): a sound under 5 s, such as a notification
 /// ding, or Web Audio alone. The sidebar player makes no card for it, as Arc (#411).
 @property (nonatomic, readonly) BOOL hasUncontrollableSound;
+/// The engine sends `browser:didChangeMediaSessionState:controllable:` (Chrome's framework does,
+/// CEF and WebKit pages don't).
+@property (nonatomic, readonly) BOOL reportsMediaSession;
 /// Play/pause the video in the Picture in Picture window.
 - (void)togglePictureInPicturePlayback;
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).

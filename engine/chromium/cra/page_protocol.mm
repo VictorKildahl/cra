@@ -268,7 +268,36 @@ class MediaSessionWatch : public content::WebContentsUserData<MediaSessionWatch>
   bool Routes(media_session::mojom::MediaSessionAction action) const { return actions_.count(action) > 0; }
 
   // media_session::mojom::MediaSessionObserver:
-  void MediaSessionInfoChanged(media_session::mojom::MediaSessionInfoPtr info) override {}
+  void MediaSessionInfoChanged(media_session::mojom::MediaSessionInfoPtr info) override {
+    if (!info || !changed_) {
+      return;
+    }
+    using SessionState = media_session::mojom::MediaSessionInfo::SessionState;
+    NSInteger state = 0;
+    switch (info->state) {
+      case SessionState::kActive:
+        state = 1;
+        break;
+      case SessionState::kDucking:
+        state = 2;
+        break;
+      case SessionState::kSuspended:
+        state = 3;
+        break;
+      case SessionState::kInactive:
+        state = 0;
+        break;
+    }
+    // Chrome sends the whole info again for any change of it (a title, the Picture in Picture state):
+    // Cra hears only a change of what it follows.
+    if (reported_ && state == state_ && info->is_controllable == controllable_) {
+      return;
+    }
+    reported_ = true;
+    state_ = state;
+    controllable_ = info->is_controllable;
+    changed_(state, controllable_);
+  }
   void MediaSessionMetadataChanged(const std::optional<media_session::MediaMetadata>& metadata) override {}
   void MediaSessionActionsChanged(const std::vector<media_session::mojom::MediaSessionAction>& actions) override {
     actions_ = std::set<media_session::mojom::MediaSessionAction>(actions.begin(), actions.end());
@@ -280,12 +309,16 @@ class MediaSessionWatch : public content::WebContentsUserData<MediaSessionWatch>
 
  private:
   friend class content::WebContentsUserData<MediaSessionWatch>;
-  explicit MediaSessionWatch(content::WebContents* contents)
-      : content::WebContentsUserData<MediaSessionWatch>(*contents) {
+  MediaSessionWatch(content::WebContents* contents, MediaSessionChanged changed)
+      : content::WebContentsUserData<MediaSessionWatch>(*contents), changed_(changed) {
     content::MediaSession::Get(contents)->AddObserver(receiver_.BindNewPipeAndPassRemote());
   }
 
   std::set<media_session::mojom::MediaSessionAction> actions_;
+  MediaSessionChanged changed_;
+  bool reported_ = false;
+  NSInteger state_ = 0;
+  bool controllable_ = false;
   mojo::Receiver<media_session::mojom::MediaSessionObserver> receiver_{this};
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
@@ -503,8 +536,8 @@ void HandleCraMethod(content::WebContents* contents,
 
 }  // namespace
 
-void WatchMediaSession(content::WebContents* contents) {
-  MediaSessionWatch::CreateForWebContents(contents);
+void WatchMediaSession(content::WebContents* contents, MediaSessionChanged changed) {
+  MediaSessionWatch::CreateForWebContents(contents, changed);
 }
 
 int RestorePageHistory(content::WebContents* contents, const std::string& history, int index, std::string* error) {

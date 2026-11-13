@@ -35,6 +35,10 @@ final class TabRuntime {
     var audibleAt: Date?
     /// Immediate sound state for music notes; the speaker's audible state has a 2 s hold.
     var soundPlaying = false
+    /// The sidebar player's card from the page's media session (#411), on an engine that reports it.
+    var playerCard = PlayerCardSession()
+    /// The card's removal after its media session ended, until it runs or is called off.
+    var playerCardRemoval: ScheduledWork?
     /// Tab sleeping discarded the page in place (Cra.discard): Chromium keeps its history and
     /// scroll position and loads it again when the tab is shown.
     var discarded = false
@@ -263,6 +267,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.probeWork = nil
         rt.historyWork?.cancel()
         rt.historyWork = nil
+        rt.playerCardRemoval?.cancel()
+        rt.playerCardRemoval = nil
         if rt.browser.hasDevTools { rt.browser.closeDevTools() }
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
@@ -1074,7 +1080,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didChangeAudible audible: Bool) {
         guard let id = tabID(of: browser) else { return }
         runtimes[id]?.audibleAt = clock.now
-        if let np = nowPlaying {
+        // The media session makes and plays the card where the engine reports it (#411).
+        if let np = nowPlaying, !browser.reportsMediaSession {
             if np.entries.contains(where: { $0.id == id }) {
                 np.update(id) { $0.playing = audible }
             } else if audible && !browser.hasUncontrollableSound {
@@ -1091,16 +1098,58 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
         let changed = rt.soundPlaying != playing
         rt.soundPlaying = playing
-        let resumesCard = playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
+        let followsSound = !browser.reportsMediaSession
+        let resumesCard = followsSound && playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
         if resumesCard { nowPlaying?.update(id) { $0.playing = true } }
         // A ding made no card (#411); media starting within its hold has no audible edge of its own.
-        let startsCard = playing && browser.isAudible && !browser.hasUncontrollableSound
+        let startsCard = followsSound && playing && browser.isAudible && !browser.hasUncontrollableSound
             && nowPlaying?.entries.contains(where: { $0.id == id }) == false
         if startsCard {
             nowPlaying?.entries.append(.init(id: id, playing: true))
             refreshMediaControls(id)
         }
         guard changed || resumesCard || startsCard else { return }
+        delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// Chromium's media session (#411): the card is made and plays while the session is controllable
+    /// and active, shows paused while it is suspended, and leaves 2.5 s after it ends, as Chrome's
+    /// media controls do. A ding or Web Audio leaves it as it is (PlayerCardSession).
+    func browser(_ browser: CraBrowser, didChangeMediaSessionState state: CraMediaSessionState, controllable: Bool) {
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        let session: PlayerCardSession.State
+        switch state {
+        case .active: session = .active
+        case .ducking: session = .ducking
+        case .suspended: session = .suspended
+        default: session = .inactive
+        }
+        let change = rt.playerCard.update(session, controllable: controllable)
+        guard let np = nowPlaying else { return }
+        switch change {
+        case .none:
+            return
+        case .show(let playing):
+            rt.playerCardRemoval?.cancel()
+            rt.playerCardRemoval = nil
+            if np.entries.contains(where: { $0.id == id }) {
+                np.update(id) { $0.playing = playing }
+            } else if playing {
+                np.entries.append(.init(id: id, playing: true))
+            } else {
+                return
+            }
+            if playing { refreshMediaControls(id) }
+        case .removeLater:
+            guard np.entries.contains(where: { $0.id == id }), rt.playerCardRemoval == nil else { return }
+            np.update(id) { $0.playing = false }
+            rt.playerCardRemoval = clock.after(PlayerCardSession.endedDelay) { [weak self, weak rt] in
+                guard let self, let rt, self.runtimes[id] === rt else { return }
+                rt.playerCardRemoval = nil
+                self.nowPlaying?.remove(id)
+                self.delegate?.browserManagerDidUpdate(id)
+            }
+        }
         delegate?.browserManagerDidUpdate(id)
     }
 

@@ -3060,6 +3060,11 @@ static BOOL g_makingSpare = NO;
 
 // Chrome's RecentlyAudibleHelper: quiet only once the page stayed quiet for 2 s, so the
 // gap between two tracks doesn't blink the speaker.
+// CEF has no media session callback: the sidebar player follows the audible state (#411).
+- (BOOL)reportsMediaSession {
+    return NO;
+}
+
 - (void)audibleChanged:(BOOL)audible {
     NSUInteger change = ++_audibleChanges;
     if ([self.delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)])

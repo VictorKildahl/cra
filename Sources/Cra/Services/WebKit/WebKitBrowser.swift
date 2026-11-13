@@ -255,6 +255,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     override var isPictureInPicturePlaying: Bool { pictureInPicturePlaying }
     override var isCapturingMedia: Bool { capturing }
     override var isAudible: Bool { audibleHold.audible }
+    /// WebKit reports no media session: the sidebar player follows the audible hold.
+    override var reportsMediaSession: Bool { false }
 
     /// Once per change of the three, as CEF's OnLoadingStateChange (each of them is observed).
     @MainActor

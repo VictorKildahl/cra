@@ -129,6 +129,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageFinishedLoad;
 - (void)pageTitleChanged;
 - (void)pageAudible:(BOOL)audible;
+- (void)pageMediaSession:(CraMediaSessionState)state controllable:(BOOL)controllable;
 - (void)pageFocused;
 - (void)pageDestroyed;
 - (void)pageThemeColor;
@@ -1320,6 +1321,8 @@ void RunReadyBlocks() {
   NSView* _container;
   raw_ptr<content::WebContents> _contents;
   std::unique_ptr<PageObserver> _observer;
+  // The page's media session is one Chrome's global media controls offer (#411).
+  BOOL _mediaSessionControllable;
   // The page's DevTools protocol session, made on the first -sendDevToolsMethod:.
   std::unique_ptr<cra::PageSession> _session;
   NSString* _pendingURL;
@@ -1556,7 +1559,10 @@ void RunReadyBlocks() {
   page.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [_container addSubview:page];
   [self installDocumentStartScripts];
-  cra::WatchMediaSession(contents);
+  __weak CraBrowser* weakSelf = self;
+  cra::WatchMediaSession(contents, ^(NSInteger state, bool controllable) {
+    [weakSelf pageMediaSession:(CraMediaSessionState)state controllable:controllable];
+  });
   if (_pendingFocus) {
     _pendingFocus = NO;
     [self setFocused:YES];
@@ -1666,6 +1672,23 @@ void RunReadyBlocks() {
   if ([_delegate respondsToSelector:@selector(browser:didChangeAudible:)]) {
     [_delegate browser:self didChangeAudible:audible];
   }
+}
+
+// The media session as Chrome's global media controls follow it (#411): the sidebar player's card does too.
+- (void)pageMediaSession:(CraMediaSessionState)state controllable:(BOOL)controllable {
+  _mediaSessionControllable = controllable;
+  if ([_delegate respondsToSelector:@selector(browser:didChangeMediaSessionState:controllable:)]) {
+    [_delegate browser:self didChangeMediaSessionState:state controllable:controllable];
+  }
+}
+
+- (BOOL)reportsMediaSession {
+  return YES;
+}
+
+// A sound with no controllable session behind it: a ding, or Web Audio, which never joins one.
+- (BOOL)hasUncontrollableSound {
+  return !_mediaSessionControllable;
 }
 
 - (void)pagePictureInPicture:(BOOL)active {
