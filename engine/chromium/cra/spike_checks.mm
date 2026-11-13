@@ -10,6 +10,7 @@
 #include "cra/spike_checks.h"
 
 #import <Cocoa/Cocoa.h>
+#include <unistd.h>
 
 #include <string>
 
@@ -17,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -217,14 +219,43 @@ class SpikeRun : public TabStripModelObserver {
 
   void CheckExtensionPopup() {
     NSInteger shown = 0;
+    std::string names;
     for (NSWindow* w in NSApp.windows) {
       if (w.visible && w != window_) {
         ++shown;
+        names += std::string(names.empty() ? "" : ", ") + base::SysNSStringToUTF8(NSStringFromClass(w.class)) + " " +
+                 std::to_string(int(w.frame.size.width)) + "x" + std::to_string(int(w.frame.size.height));
       }
     }
     Report("the extension's popup opened", popup_host_, popup_host_ ? "" : "no popup host");
-    Report("the extension's popup is on screen", shown > 0, std::to_string(shown) + " window(s) besides Cra's");
-    Quit();
+    Report("the extension's popup is on screen", shown > 0, std::to_string(shown) + " window(s) besides Cra's: " + names);
+    ManyTabs();
+  }
+
+  // The memory this is for: twenty pages in one Browser (CEF made a Browser, and a window, per page).
+  void ManyTabs() {
+    int tabs = 0;
+    base::StringToInt(Switch("cra-spike-tabs"), &tabs);
+    if (tabs <= 1) {
+      return Quit();
+    }
+    GURL page(Switch("cra-spike-page"));
+    for (int i = browser_a_->GetTabStripModel()->count(); i < tabs; ++i) {
+      chrome::AddTabAt(browser_a_, page, -1, false);
+    }
+    After(base::Seconds(20), base::BindOnce(&SpikeRun::Measure, base::Unretained(this)));
+  }
+
+  void Measure() {
+    NSInteger hidden_chrome = 0;
+    for (NSWindow* w in NSApp.windows) {
+      if (!w.visible) {
+        ++hidden_chrome;
+      }
+    }
+    fprintf(stderr, "CRA-SPIKE MEASURE pid %d tabs %d hidden windows %ld\n", getpid(),
+            browser_a_->GetTabStripModel()->count(), long(hidden_chrome));
+    After(base::Seconds(10), base::BindOnce(&SpikeRun::Quit, base::Unretained(this)));
   }
 
   void Quit() {

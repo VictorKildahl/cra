@@ -2,7 +2,7 @@
 # apply.sh <chromium src>: puts Cra's engine layer into a Chromium checkout. Idempotent.
 #   - copies engine/chromium/cra to <src>/cra (built into Chrome's framework as //cra:core)
 #   - Chrome's hooks: chrome/browser/cra_engine_hooks.h, ChromeBrowserMainParts::Create adds Cra's startup
-#     part, the framework exports CraEngineMain, chrome_dll depends on //cra:core
+#     part, the framework exports CraEngineMain (framework.exports and .order), chrome_dll depends on //cra:core
 # docs/chromium-engine.md says what the layer is for.
 set -euo pipefail
 SRC="$1"
@@ -37,6 +37,8 @@ edit("chrome/browser/chrome_browser_main.cc", '#include "chrome/browser/chrome_b
      '#include "chrome/browser/chrome_browser_main.h"\n\n#include "chrome/browser/cra_engine_hooks.h"\n',
      '#include "chrome/browser/cra_engine_hooks.h"')
 edit("chrome/app/framework.exports", "_ChromeMain\n", "_ChromeMain\n_CraEngineMain\n", "_CraEngineMain")
+# framework.order wants _ChromeMain last.
+edit("chrome/app/framework.order", "\n_ChromeMain\n", "\n_CraEngineMain\n_ChromeMain\n", "_CraEngineMain")
 
 p = f"{src}/chrome/BUILD.gn"
 s = open(p).read()

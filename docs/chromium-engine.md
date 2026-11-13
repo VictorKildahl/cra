@@ -46,4 +46,27 @@ CEF one does.
 
 ## Status
 
-- 13 Nov 2026: decided; CEF 158 not built. Step 1 started.
+- 13 Nov 2026: decided; CEF 158 not built.
+- 13 Nov 2026, step 1 done, **go**. `engine/spike.sh` on Chromium 156.0.8078.96 (`out/Chrome_arm64`, the CEF tree with
+  `scripts/perf/plain-chromium.patch` and `engine/chromium/apply.sh`): all 12 checks pass. Cra's code runs in Chrome's
+  browser process; two profiles keep their storage apart; pages of two Browsers show in Cra's window at once and
+  stay there; a popup arrives as a tab of its opener's Browser with `window.opener`; an extension's popup opens
+  from a Browser whose Chrome window was never shown; Chrome's own exit quits with code 0; the app never took
+  the focus. 20 tabs of scripts/perf's bench page, measured as `MODES=procs` measures Cra:
+
+  | | Cra on CEF | Test build |
+  |---|---|---|
+  | Total | ~790–830 MB | 706 MB (two processes more: the second profile's page, the extension) |
+  | Browser process | ~185–200 MB | 102 MB |
+  | GPU | ~117–148 MB | 96 MB |
+  | Each page | ~20 MB | ~20 MB |
+
+  Learned:
+  - **Aperitif helpers.** Chrome has two sets of helper apps; only the "Aperitif" ones link the framework at
+    launch (its `__DATA_CONST` clean, as Cra's CraHelper does since 13 Nov). They're behind `AperitifHelpers`,
+    off by default in 156 (Chrome turns it on by field trial): without it each page was 28 MB. The layer has to
+    turn it on.
+  - **An extension's popup shows its Browser's Chrome window** (1200×1366 here). Cra on CEF has the same window
+    and keeps it out of sight; the layer will do the same.
+  - The hooks are inert for CEF: the CEF build doesn't build `chrome_dll`, and `cra::g_extra_parts_factory` is
+    only set by `CraEngineMain`.
