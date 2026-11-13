@@ -853,6 +853,40 @@ PageHost* HostFor(Profile* profile) {
   return host;
 }
 
+// NativeWidgetMacNSWindow's switch for acting as a non-activating panel (Widget::SetActivationIndependence).
+}  // namespace
+
+@protocol CraActivationIndependentWindow
+- (void)setActivationIndependence:(BOOL)independence;
+@end
+
+namespace {
+
+// Chromium makes a Picture in Picture window (a video's, or Document PiP's) an ordinary window that
+// joins every desktop Space, so it went missing over another app's full-screen Space (GitHub #206).
+// Only a non-activating panel joins that Space (#186); Arc's PiP is one (an NSPanel, AXSystemDialog).
+// This is Chromium's own recipe for such windows (Glic's floating panel, the screen-share picker):
+// activation independence, which makes NativeWidgetMacNSWindow answer _isNonactivatingPanel, and
+// SetCanAppearInExistingFullscreenSpaces' collection behaviour.
+void FloatOverFullScreenSpaces(NSWindow* window) {
+    if (!window) return;
+    if ([window respondsToSelector:@selector(setActivationIndependence:)]) {
+        [(id<CraActivationIndependentWindow>)window setActivationIndependence:YES];
+        // It also turns canHide off; Chrome's PiP has always hidden with the app (⌘H), so it still does.
+        window.canHide = YES;
+    }
+    // Chromium also makes every top-level window `.managed` (Document PiP is one), and a managed
+    // window stays off another app's full-screen Space whatever else it says.
+    NSWindowCollectionBehavior behavior = window.collectionBehavior;
+    behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary
+                  | NSWindowCollectionBehaviorManaged);
+    behavior |= NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    window.collectionBehavior = behavior;
+    // Shown while a full-screen Space is in front (Document PiP, or a video's from a tab left for it),
+    // the window only moves onto that Space once it is ordered again.
+    if (window.isVisible) [window orderFrontRegardless];
+}
+
 bool IsHost(BrowserWindowInterface* browser) {
   for (auto& [profile, host] : Hosts()) {
     if (host->browser() == browser) {
@@ -883,6 +917,11 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
       return;
     }
+    // Document Picture in Picture (a call's window): over full-screen Spaces too, as Arc's (GitHub #206).
+    if (browser->GetType() == BrowserWindowInterface::TYPE_PICTURE_IN_PICTURE) {
+      FloatOverFullScreenSpaces(window);
+      return;
+    }
     if (browser->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
       if (window) {
         if (!g_extension_windows) {
@@ -892,8 +931,11 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       }
       return;
     }
+    // Never seen, and never a reason to leave a full-screen Space (GitHub #38).
     window.alphaValue = 0;
     window.ignoresMouseEvents = YES;
+    window.collectionBehavior = (window.collectionBehavior & ~NSWindowCollectionBehaviorFullScreenPrimary) |
+                                NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace;
     browser->GetTabStripModel()->AddObserver(this);
     Later(base::BindOnce(&StrayWindows::TakePages, base::Unretained(this), browser->GetWeakPtr()));
   }
@@ -2298,6 +2340,7 @@ void RunReadyBlocks() {
   return NO;
 }
 + (void)floatOverFullScreenSpaces:(NSWindow*)window {
+  FloatOverFullScreenSpaces(window);
 }
 + (NSString*)pageWindowsReadout {
   return @"shown=0 away=0 animated=0";
