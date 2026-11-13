@@ -19,6 +19,17 @@
 #include "base/supports_user_data.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/ref_counted.h"
+#include "base/scoped_observation.h"
+#include "extensions/browser/webstore_installer.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_observer.h"
+#include "components/crx_file/id_util.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/install_approval.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
@@ -337,6 +348,77 @@ void MediaSessionMethod(content::WebContents* contents,
   result->Set("handled", routed);
 }
 
+// The page that downloads the store's CRX, as WebstoreInstallWithPrompt has one: never shown. It lives until the
+// install is over, or until its profile goes away (a quit while an install runs, GitHub #227).
+struct WebStoreInstallPage : public base::RefCountedThreadSafe<WebStoreInstallPage>, public ProfileObserver {
+  explicit WebStoreInstallPage(Profile* profile)
+      : contents(content::WebContents::Create(content::WebContents::CreateParams(profile))) {
+    observation.Observe(profile);
+  }
+  void OnProfileWillBeDestroyed(Profile* profile) override {
+    observation.Reset();
+    contents.reset();
+  }
+  std::unique_ptr<content::WebContents> contents;
+  base::ScopedObservation<Profile, ProfileObserver> observation{this};
+
+ private:
+  friend class base::RefCountedThreadSafe<WebStoreInstallPage>;
+  ~WebStoreInstallPage() override = default;
+};
+
+using WebStoreDone = base::OnceCallback<void(base::DictValue result, std::string error)>;
+
+// Cra.installFromWebStore {"id","manifest"} (GitHub #203): installs a Chrome Web Store item in this page's profile
+// as the store's "Add to Chrome" does: WebstoreInstaller fetches the signed CRX, CrxInstaller checks the store's
+// signature, and it lands as INTERNAL and from the Web Store. No prompt: Cra asks only for extensions the person
+// chose to bring over. The CEF patch's code (freezing-vote.patch).
+void InstallFromWebStore(content::WebContents* contents, const base::DictValue* params, WebStoreDone done) {
+  const std::string* id = params ? params->FindString("id") : nullptr;
+  const base::DictValue* manifest = params ? params->FindDict("manifest") : nullptr;
+  if (!id || !crx_file::id_util::IdIsValid(*id) || !manifest) {
+    std::move(done).Run(base::DictValue(), "needs a valid extension id and its manifest");
+    return;
+  }
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  if (!profile || profile->IsOffTheRecord()) {
+    std::move(done).Run(base::DictValue(), "not in an off-the-record profile");
+    return;
+  }
+  const extensions::Extension* installed = extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(*id);
+  if (installed && installed->location() == extensions::mojom::ManifestLocation::kInternal &&
+      installed->from_webstore()) {
+    base::DictValue result;
+    result.Set("installed", true);
+    result.Set("already", true);
+    std::move(done).Run(std::move(result), std::string());
+    return;
+  }
+  std::unique_ptr<extensions::InstallApproval> approval = extensions::InstallApproval::CreateWithNoInstallPrompt(
+      profile, *id, manifest->Clone(), /*strict_manifest_check=*/false);
+  approval->skip_post_install_ui = true;
+  approval->use_app_installed_bubble = false;
+  auto page = base::MakeRefCounted<WebStoreInstallPage>(profile);
+  auto split = base::SplitOnceCallback(std::move(done));
+  auto installer = base::MakeRefCounted<extensions::WebstoreInstaller>(
+      profile,
+      base::BindOnce(
+          [](scoped_refptr<WebStoreInstallPage>, WebStoreDone done, const std::string&) {
+            base::DictValue result;
+            result.Set("installed", true);
+            std::move(done).Run(std::move(result), std::string());
+          },
+          page, std::move(split.first)),
+      base::BindOnce(
+          [](scoped_refptr<WebStoreInstallPage>, WebStoreDone done, const std::string& id, const std::string& error,
+             extensions::WebstoreInstaller::FailureReason) {
+            std::move(done).Run(base::DictValue(), error.empty() ? std::string("install failed") : error);
+          },
+          page, std::move(split.second)),
+      page->contents.get(), *id, std::move(approval), extensions::WebstoreInstaller::INSTALL_SOURCE_OTHER);
+  installer->Start();
+}
+
 // Cra.* methods. Fills `result` or `error`.
 void HandleCraMethod(content::WebContents* contents,
                      const std::string& method,
@@ -413,7 +495,7 @@ void HandleCraMethod(content::WebContents* contents,
     // An extension's side panel page: like Chrome's, it has no tab (GitHub #265).
     extensions::SetViewType(contents, extensions::mojom::ViewType::kExtensionSidePanel);
   } else {
-    // Not yet: Cra.installFromWebStore
+    // Cra.installFromWebStore is asynchronous (PageSession::Send).
     // need Cra's Chromium patches (scripts/cef-patches).
     *error = "not yet on Chrome's framework: " + method;
   }
@@ -454,6 +536,23 @@ PageSession::~PageSession() {
 void PageSession::Send(const std::string& method, const std::string& params_json, ProtocolReply reply) {
   const int id = ++next_id_;
   pending_[@(id)] = [reply copy];
+  if (method == "Cra.installFromWebStore") {
+    std::optional<base::DictValue> params =
+        base::JSONReader::ReadDict(params_json.empty() ? "{}" : params_json, base::JSON_PARSE_RFC);
+    PageSession* me = this;
+    base::WeakPtr<PageSession> alive = weak_factory_.GetWeakPtr();
+    InstallFromWebStore(contents_, params ? &*params : nullptr,
+                        base::BindOnce(
+                            [](base::WeakPtr<PageSession> alive, PageSession* me, int id, base::DictValue result,
+                               std::string error) {
+                              if (alive) {
+                                me->Answer(id, error.empty() ? JSON(base::Value(std::move(result))) : nil,
+                                           error.empty() ? nil : ErrorJSON(error));
+                              }
+                            },
+                            alive, me, id));
+    return;
+  }
   if (method.rfind("Cra.", 0) == 0) {
     std::optional<base::DictValue> params =
         base::JSONReader::ReadDict(params_json.empty() ? "{}" : params_json, base::JSON_PARSE_RFC);

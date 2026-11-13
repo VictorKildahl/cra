@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 
 namespace content {
@@ -56,6 +57,7 @@ class PageSession : public content::DevToolsAgentHostClient {
   ProtocolEvent events_;
   NSMutableDictionary<NSNumber*, ProtocolReply>* pending_;
   int next_id_ = 100000;  // clear of ids Chromium's own clients use, as in the CEF bridge
+  base::WeakPtrFactory<PageSession> weak_factory_{this};
 };
 
 }  // namespace cra

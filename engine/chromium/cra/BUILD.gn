@@ -36,6 +36,7 @@ source_set("core") {
     "//chrome/browser/lifetime:lifetime",
     "//chrome/browser/ui:browser_tabstrip",
     "//url",
+    "//extensions/browser:webstore_installer",
     "//chrome/browser/printing:printing",
     "//chrome/browser/devtools:devtools_toggle_action",
     "//chrome/browser/devtools:devtools",
