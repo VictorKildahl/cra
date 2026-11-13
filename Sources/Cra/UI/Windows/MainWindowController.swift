@@ -664,6 +664,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }.joined(separator: "|")
     }
 
+    /// `cra://debug?spaceMenu=<label>`: logs the menu a right-click on the open space's header
+    /// opens, rows as menuReadout writes them (#413: no Set Profile in an incognito window).
+    func testSpaceMenu(label: String) {
+        var headers: [SpaceHeaderView] = []
+        func collect(_ v: NSView) {
+            if let h = v as? SpaceHeaderView, !h.isHiddenOrHasHiddenAncestor { headers.append(h) }
+            v.subviews.forEach(collect)
+        }
+        window?.contentView.map(collect)
+        guard let menu = headers.first?.makeSpaceMenu() else { CraLog.note("space menu \(label): no header"); return }
+        CraLog.note("space menu \(label): \(Self.menuReadout(menu))")
+    }
+
     /// `cra://debug?favoriteMenu=<n>`: logs the menu a right-click on the n-th favorite tile opens
     /// (grid order, rows as menuReadout writes them). `run` picks the row with that title and logs
     /// the tile's tab after it: muted as saved and as Chromium has the page (#387).

@@ -756,5 +756,8 @@
 #408   Tests/Scenarios/ask-on-page-dark-card.scenario  b4f7984975ed
 #411   Tests/BrowserManagerLifecycleTests.swift::nowPlayingSkipsUncontrollableSoundCase  834fe4ecbf39
 #411   Tests/Scenarios/player-skips-dings.scenario  1cc76ac02572
+#413   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::incognitoSpaceOffersNoProfile  ba6e000f474d
+#413   Tests/Scenarios/incognito-space-menu.scenario  6a20db2d4b60
+#413   Tests/StoreTests.swift::incognitoSpaceKeepsItsContext  8803458c0f95
 #419   Packages/CraCore/Tests/CraCoreTests/SidebarLinkDropTests.swift::whichLinkBecomesTheTab  74f055957ef6
 #419   Tests/Scenarios/drop-link.scenario  0996196ed840

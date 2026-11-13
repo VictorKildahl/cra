@@ -271,6 +271,8 @@ the way to check a menu without the pointer. The menu shows up on screen. While 
 it is an AXMenu child of the app: each item's `AXMenuItemCmdChar`, `AXMenuItemCmdModifiers`
 and `AXMenuItemMarkChar` give its shortcut and checkmark, and AXCancel closes it (a posted
 Esc doesn't). The first menu after a launch can close before AX sees it, so open it again.
+`cra://debug?spaceMenu=<label>` logs the rows of the open space's header menu without showing
+it (`&window=incognito` for the newest incognito window's).
 
 The sidebar's tab list and space pager are AppKit (`UI/Sidebar/List`): rows are plain
 layer-backed views rebuilt from the store when it changes, a swipe moves the pager's layers
