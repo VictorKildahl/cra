@@ -1126,14 +1126,14 @@ final class SidebarStore {
     /// Arc's "Add Split View": an empty page becomes a new pane next to `tabID`
     /// (after it by default). Returns the new tab.
     @discardableResult
-    func addEmptyPane(nextTo tabID: UUID, after: Bool = true, url: String = "", window: UUID? = nil) -> SidebarItem? {
+    func addEmptyPane(nextTo tabID: UUID, after: Bool = true, url: String = "", title: String = "", window: UUID? = nil) -> SidebarItem? {
         guard let anchor = items[tabID], anchor.isTab else { return nil }
         let split: SidebarItem
         if let s = splitContaining(tabID) { split = s } else if let s = createSplit(with: [tabID]) { split = s } else { return nil }
         guard let anchorPane = paneID(for: tabID, in: items[split.id] ?? split),
               let idx = items[split.id]?.children.firstIndex(of: anchorPane) else { return nil }
-        var tab = SidebarItem.tab(url, title: "", parent: split.id)
-        tab.data = .tab({ var t = TabData(url: url, title: ""); t.activeTabBeforeCreationID = tabID; return t }())
+        var tab = SidebarItem.tab(url, title: title, parent: split.id)
+        tab.data = .tab({ var t = TabData(url: url, title: title); t.activeTabBeforeCreationID = tabID; return t }())
         items[tab.id] = tab
         var sp = items[split.id]!
         sp.children.insert(tab.id, at: after ? idx + 1 : idx)

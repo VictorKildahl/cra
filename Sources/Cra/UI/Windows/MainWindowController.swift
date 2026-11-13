@@ -89,6 +89,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     var focusedSpaceID: UUID { store.focusedSpaceID(window: windowID) }
     var focusedSpace: Space { store.focusedSpace(window: windowID) }
     var selectedTabID: UUID? { store.selectedTabID(window: windowID) }
+    /// A sidebar tab or a link dragged over the panes (#419).
+    private(set) lazy var splitDrop = PageSplitDrop(owner: self)
+    /// The sidebar holds the content area's left edge: shown and docked, not floating over the page.
+    var sidebarDocksLeft: Bool { sidebarVisible && !shell.floatingSidebar }
     var selectedTab: SidebarItem? { store.selectedTab(window: windowID) }
     var sidebarVisible: Bool {
         get { store.window(windowID).sidebarVisible }
@@ -170,6 +174,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // so the window's own flag is what keeps a row press for the row's drag.
         sidebarUI.onPointerOverDraggableChange = { [weak window] over in window?.isMovableByWindowBackground = !over }
         browsers.paneHost = { [weak self] id in self?.shell.card(for: id)?.webArea }
+        shell.dropTarget = splitDrop
+        shell.registerForSplitDrops()
         shell.makeToolbar = { [weak self] id in
             guard let self else { return NSView() }
             return PaneToolbarView(paneTabID: id, store: self.store, ui: self.sidebarUI, actions: self.sidebarActions)
@@ -1360,6 +1366,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 ChromiumWindowCorners.setSquare(true, for: w)
                 ChromiumChildHover.setDocked(true, for: w)
                 ChromiumChildFullscreen.attach(w)
+                if let page = w.contentView.flatMap(EmbeddedPages.webContentsView(in:)) { PageDropRouter.install(on: page) }
                 w.titlebarAppearsTransparent = true
                 w.titleVisibility = .hidden
                 w.isMovable = false
@@ -1485,6 +1492,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func embedPage(_ id: UUID, from w: NSWindow) {
         guard EmbeddedPages.isEnabled else { return }
         guard let views = EmbeddedPages.pageViews(of: w) else { return }
+        if let page = views.last { PageDropRouter.install(on: page) }
         let target: NSView
         if browsers.devToolsViews[id]?.window != nil, let cv = w.contentView {
             EmbeddedPages.unmarkHost(w)

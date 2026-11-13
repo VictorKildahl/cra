@@ -510,6 +510,20 @@ No decompiler, so property names and types are observed; the algorithms are infe
   `drag-to-combine-tabs-into-split-enabled`, `sidebar-drag-to-split-preview-ui-enabled`, `win-drag-to-split-enabled`.
   Onboarding copy: "Drag a tab from your sidebar into the middle of the screen to create a Split View."
 
+- [M] Measured in Arc 1.173.1 (13 Nov 2026, live Arc, Blank Window, real HID drags; Cra `SplitDropProposal`):
+  - A sidebar tab over a lone page: the region opens on the side of the nearest edge (left/right → side by side,
+    top/bottom → stacked), half the pane, at once (no delay). Over the first ~25 pt next to the sidebar nothing
+    opens (50 pt does). The open region keeps the drag while the pointer is on it, so the middle of the page shows
+    whichever side opened first. The page shows the tab from before the row press (the press switched to the
+    dragged tab) while the region is open; off the panes the dragged tab shows again.
+  - The region: an empty card, the window's backdrop through it, a light 1 pt rim, rounded like a pane; a dragger
+    pill in its gap. The drag image becomes a black card (~216 × 238 pt, ~90 %) with the favicon and title centred.
+  - A tab over a two-pane split: 20 pt in from a pane's side and the gap open the region between the panes (or at
+    either end); the pane's middle, its quarter points, and its top and bottom 25–40 pt ring that pane (replace).
+    A split never flips its direction on a drop.
+  - A page's link dragged over the page: nothing anywhere (the page keeps it).
+  - Not measured: a replace drop's result (the scripted release never landed in a split), the exact edge depth.
+
 ### Commands, menus, entry points
 - [O] `WindowAction.SplitViewAction`: `addPanel(index: InsertionLocation, showCommandBar: Bool)`,
   `movePanel(from:to:)`, `onDropSidebarItem`, `onDropURL`, `onDidBeginWindowContentsSplitViewPaneResize`,

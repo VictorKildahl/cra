@@ -1404,6 +1404,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
                                              modified: !event.modifierFlags.intersection([.command, .shift, .control, .option]).isEmpty),
               !(canReset && iconRegion.contains(point)) else { return false }
         list.ui.iconWentBack = nil
+        list.ui.tabBeforePress = list.store.selectedTabID(window: list.ui.windowID)
         list.clickTab(m.id, event: event)
         return true
     }

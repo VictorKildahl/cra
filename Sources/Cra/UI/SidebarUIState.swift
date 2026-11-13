@@ -20,6 +20,9 @@ final class SidebarUIState {
     /// filled like the selected tab, which loses its fill (Arc: isCommandBarNewTabPlaceholderActive).
     var newTabPlaceholderActive = false
     var draggingID: UUID?
+    /// The tab that was open before the press that switched to the row being dragged: Arc shows it
+    /// again while the drag over the page offers a split, and splits the dragged tab with it.
+    var tabBeforePress: UUID?
     /// Loading progress per tab (0...1), fed by the browser manager.
     var progress: [UUID: Double] = [:]
     var loadedTabIDs: Set<UUID> = []
