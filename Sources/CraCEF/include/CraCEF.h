@@ -6,6 +6,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CraBrowser;
 
+typedef NS_ENUM(NSInteger, CraFindAction) {
+    CraFindActionShow = 0,
+    CraFindActionNext = 1,
+    CraFindActionPrevious = 2,
+};
+
 typedef NS_ENUM(NSInteger, CraDownloadState) {
     CraDownloadStateInProgress = 0,
     CraDownloadStateComplete = 1,
@@ -137,7 +143,12 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didReportBackgroundColor:(NSString *)hex;
 /// Find in page progress: `count` matches, `activeMatch` is the highlighted one
 /// (1-based). Either is -1 while Chromium has no new value for it.
-- (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch;
+/// The immutable generation/purpose belongs to the caller's query session; identifier/final
+/// are native engine evidence (WebKit has no native identifier and reports -1).
+- (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch
+    generation:(NSUUID *)generation quote:(BOOL)quote identifier:(NSInteger)identifier finalUpdate:(BOOL)finalUpdate;
+/// Chrome's native Find commands use the app's Find panel, keeping one search owner.
+- (void)browser:(CraBrowser *)browser requestsFindAction:(CraFindAction)action;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
 /// Chromium dropped the page's permission request before Cra answered it (the page navigated or
@@ -287,7 +298,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)closeDevTools;
 - (double)zoomLevel;
 - (void)setZoomLevel:(double)level;
-- (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext;
+/// A fresh generation restarts native Find; next/previous keep the same generation.
+- (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext
+    generation:(NSUUID *)generation quote:(BOOL)quote;
 - (void)stopFinding:(BOOL)clearSelection;
 - (void)setAudioMuted:(BOOL)muted;
 /// Pops the page's video out into Chromium's floating Picture in Picture

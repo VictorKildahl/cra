@@ -2,6 +2,56 @@ import Foundation
 
 /// Ask on Page's transient dialogue and citations. Browser ownership and model tasks live in the app.
 public enum AskOnPage {
+    public enum FindPurpose: Equatable, Sendable { case ordinary, quote }
+
+    /// One exact query session. Native identifiers are evidence, not caller-supplied IDs.
+    public struct FindRequest: Equatable, Sendable {
+        public let id: UUID
+        public let query: String
+        public let matchCase: Bool
+        public let purpose: FindPurpose
+    }
+
+    public struct FindState: Equatable, Sendable {
+        public private(set) var request: FindRequest?
+        public private(set) var count: Int?
+        public private(set) var activeMatch = 0
+        public private(set) var identifier: Int?
+        public private(set) var finalUpdate = false
+        private var finalZero = false
+
+        public init() {}
+
+        /// Repeated next/previous searches remain in the same native query session.
+        @discardableResult
+        public mutating func begin(_ query: String, matchCase: Bool = false, purpose: FindPurpose = .ordinary) -> FindRequest {
+            if let request, request.query == query, request.matchCase == matchCase, request.purpose == purpose { return request }
+            clear()
+            let next = FindRequest(id: UUID(), query: query, matchCase: matchCase, purpose: purpose)
+            request = next
+            return next
+        }
+
+        public mutating func clear() { self = Self() }
+
+        @discardableResult
+        public mutating func accept(_ generation: UUID, quote: Bool, identifier: Int, count: Int, activeMatch: Int, finalUpdate: Bool) -> Bool {
+            guard let request, request.id == generation, (request.purpose == .quote) == quote else { return false }
+            self.identifier = identifier
+            self.finalUpdate = finalUpdate
+            if count >= 0 { self.count = count }
+            if activeMatch >= 0 { self.activeMatch = activeMatch }
+            // A final unknown count cannot turn an earlier partial zero into proof.
+            finalZero = finalUpdate && count == 0
+            return true
+        }
+
+        public func canAsk(query: String, enabled: Bool, forward: Bool) -> Bool {
+            enabled && forward && finalZero && request?.purpose == .ordinary && request?.query == query
+                && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     public struct Turn: Equatable, Sendable {
         public let question: String
         public let answer: String

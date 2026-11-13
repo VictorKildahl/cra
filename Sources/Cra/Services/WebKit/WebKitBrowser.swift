@@ -47,6 +47,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var pictureInPicturePlaying = false
     private var hoverURL = ""
     private var findQuery = ""
+    private var findGeneration: UUID?
+    private var findQuote = false
     private var findCount = 0
     private var findIndex = 0
     private var messages: ScriptMessageProxy?
@@ -561,31 +563,41 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         MainActor.assumeIsolated { webView?.pageZoom = CGFloat(pow(1.2, level)) }
     }
 
-    override func findText(_ text: String, forward: Bool, matchCase: Bool, findNext: Bool) {
+    override func findText(_ text: String, forward: Bool, matchCase: Bool, findNext: Bool, generation: UUID, quote: Bool) {
         MainActor.assumeIsolated {
             guard let web = webView, !text.isEmpty else { return }
+            let newGeneration = findGeneration != generation || findQuote != quote
+            if newGeneration {
+                stopFinding(false)
+                findGeneration = generation
+                findQuote = quote
+            }
             let config = WKFindConfiguration()
             config.backwards = !forward
             config.caseSensitive = matchCase
             config.wraps = true
-            let fresh = !findNext || text != findQuery
+            let fresh = newGeneration || !findNext || text != findQuery
             findQuery = text
-            web.find(text, configuration: config) { [weak self] result in
+            web.find(text, configuration: config) { [weak self, weak web] result in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, let web, self.webView === web, self.findGeneration == generation,
+                          self.findQuery == text, self.findQuote == quote else { return }
                     guard result.matchFound else {
                         self.findCount = 0
                         self.findIndex = 0
-                        self.delegate?.browser?(self, didFindMatches: 0, activeMatch: 0)
+                        self.delegate?.browser?(self, didFindMatches: 0, activeMatch: 0, generation: generation,
+                                                quote: quote, identifier: -1, finalUpdate: true)
                         return
                     }
-                    let step = { [weak self] (count: Int) in
-                        guard let self else { return }
+                    let step = { [weak self, weak web] (count: Int) in
+                        guard let self, let web, self.webView === web, self.findGeneration == generation,
+                              self.findQuery == text, self.findQuote == quote else { return }
                         self.findCount = max(count, 1)
                         if fresh { self.findIndex = forward ? 1 : self.findCount } else {
                             self.findIndex = forward ? self.findIndex % self.findCount + 1 : (self.findIndex + self.findCount - 2) % self.findCount + 1
                         }
-                        self.delegate?.browser?(self, didFindMatches: self.findCount, activeMatch: self.findIndex)
+                        self.delegate?.browser?(self, didFindMatches: self.findCount, activeMatch: self.findIndex,
+                                                generation: generation, quote: quote, identifier: -1, finalUpdate: true)
                     }
                     if !fresh, self.findCount > 0 { return step(self.findCount) }
                     // WebKit's find doesn't count: the page's text does, the way find sees it.
@@ -607,6 +619,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     override func stopFinding(_ clearSelection: Bool) {
         MainActor.assumeIsolated {
+            findGeneration = nil
             findQuery = ""
             findCount = 0
             findIndex = 0

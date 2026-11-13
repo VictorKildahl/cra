@@ -3,6 +3,60 @@ import Foundation
 import Testing
 
 struct AskOnPageTests {
+    @Test func findFinalZeroBelongsToTheExactCurrentQueryGeneration() {
+        var find = AskOnPage.FindState()
+        let a = find.begin("absent")
+        let acceptsPartial = find.accept(a.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: false)
+        #expect(acceptsPartial)
+        #expect(!find.canAsk(query: "absent", enabled: true, forward: true))
+        let b = find.begin("matching")
+        let rejectsOldZero = !find.accept(a.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsOldZero)
+        #expect(find.count == nil && !find.canAsk(query: "matching", enabled: true, forward: true))
+        let acceptsMatching = find.accept(b.id, quote: false, identifier: 2, count: 3, activeMatch: 1, finalUpdate: true)
+        #expect(acceptsMatching)
+        #expect(find.count == 3 && find.activeMatch == 1 && !find.canAsk(query: "matching", enabled: true, forward: true))
+        let again = find.begin("absent")
+        #expect(again.id != a.id)
+        let rejectsFirstA = !find.accept(a.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsFirstA)
+        let acceptsNewZero = find.accept(again.id, quote: false, identifier: 3, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(acceptsNewZero)
+        #expect(find.canAsk(query: "absent", enabled: true, forward: true))
+        #expect(!find.canAsk(query: "absent", enabled: false, forward: true))
+        #expect(!find.canAsk(query: "absent", enabled: true, forward: false))
+        #expect(!find.canAsk(query: "edited before native Find", enabled: true, forward: true))
+        let continuesSession = find.begin("absent").id == again.id
+        #expect(continuesSession, "next/previous keep the same query session")
+        find.clear()
+        let rejectsClosed = !find.accept(again.id, quote: false, identifier: 3, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsClosed)
+        let reopensFresh = find.begin("absent").id != again.id
+        #expect(reopensFresh, "reopening identical text starts a fresh session")
+    }
+
+    @Test func quoteUnknownAndEmptyFindResultsNeverAuthorizeAsk() {
+        for query in ["", "\r", " "] {
+            var find = AskOnPage.FindState()
+            let request = find.begin(query)
+            _ = find.accept(request.id, quote: false, identifier: 0, count: 0, activeMatch: 0, finalUpdate: true)
+            #expect(!find.canAsk(query: query, enabled: true, forward: true))
+        }
+        var find = AskOnPage.FindState()
+        let request = find.begin("a question")
+        let rejectsWrongPurpose = !find.accept(request.id, quote: true, identifier: 1, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsWrongPurpose)
+        _ = find.accept(request.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: false)
+        _ = find.accept(request.id, quote: false, identifier: 1, count: -1, activeMatch: -1, finalUpdate: true)
+        #expect(!find.canAsk(query: "a question", enabled: true, forward: true), "a negative final must not promote a partial zero")
+        let quote = find.begin("a question", purpose: .quote)
+        #expect(quote.id != request.id)
+        _ = find.accept(quote.id, quote: true, identifier: 2, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(!find.canAsk(query: "a question", enabled: true, forward: true))
+        let restoresOrdinary = find.begin("a question").id != quote.id
+        #expect(restoresOrdinary, "restoring ordinary Find uses a new session")
+    }
+
     @Test func quotesRequireTheExactTransmittedSource() throws {
         let draft = AskOnPage.Draft(excerpts: ["The answer is solar power."], answer: "Mostly solar power.", keyAnswer: "solar power")
         let valid = try #require(AskOnPage.completeAnswer(draft, source: "The answer is solar\n\t power."))

@@ -211,7 +211,67 @@ enum BrowserManagerLifecycleTests {
         await permissionWaitsForItsTabCase()
         permissionPopoverStepsAsideCase()
         await askOnPageSnapshotCase()
+        findCorrelationCase()
         print("Browser manager lifecycle: \(checks) checks passed")
+    }
+
+    @MainActor
+    private static func findCorrelationCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let tab = store.createTab(url: "https://example.test/find").id
+        let other = store.createTab(url: "https://example.test/other").id
+        manager.show(tab, focus: false)
+        let original = manager.visibleRuntime!.browser
+        manager.find("absent", forward: true)
+        let old = manager.findState.request!
+        // A native callback already captured its tag before delivery was queued.
+        let oldDelivery = {
+            manager.browser(original, didFindMatches: 0, activeMatch: 0, generation: old.id, quote: false, identifier: 1, finalUpdate: true)
+        }
+        manager.prepareFind("matching")
+        oldDelivery()
+        expect(manager.findState.count == nil && !manager.canAskFind(query: "matching", enabled: true, forward: true),
+               "an old final zero delivered after a synchronous edit cannot authorize Ask")
+        let current = manager.findState.request!
+        manager.browser(original, didFindMatches: 3, activeMatch: 1, generation: current.id, quote: false, identifier: 2, finalUpdate: true)
+        expect(observer.findStates.last?.count == 3 && manager.findState.activeMatch == 1,
+               "the current browser's tagged native final updates accepted ordinary Find state")
+        manager.find("matching", forward: false)
+        expect(manager.findState.request?.id == current.id, "next/previous preserve the current native query session")
+        for change in 0..<7 {
+            manager.find("absent", forward: true)
+            let browser = manager.visibleRuntime!.browser
+            let request = manager.findState.request!
+            manager.browser(browser, didFindMatches: 0, activeMatch: 0, generation: request.id, quote: false, identifier: 3, finalUpdate: true)
+            expect(manager.canAskFind(query: "absent", enabled: true, forward: true), "current final zero is eligible before owner changes")
+            switch change {
+            case 0: browser.setLoading(true); browser.setLoading(false)
+            case 1: manager.show(other, focus: false); manager.show(tab, focus: false)
+            case 2: store.profilePaths[tab] = "/different-profile"
+            case 3: manager.unload(tab); manager.show(tab, focus: false)
+            case 4: manager.show([tab, other], focused: other, focus: false)
+            case 5: manager.stopFinding(true)
+            default: browser.navigate(to: "https://example.test/find")
+            }
+            manager.browser(browser, didFindMatches: 0, activeMatch: 0, generation: request.id, quote: false, identifier: 3, finalUpdate: true)
+            expect(!manager.canAskFind(query: "absent", enabled: true, forward: true),
+                   "late final zero cannot survive reload, focus, profile, runtime, split, close or same-URL change (\(change))")
+            store.profilePaths[tab] = nil
+            manager.show(tab, focus: false)
+        }
+        manager.find("absent", forward: true, purpose: .quote)
+        let quote = manager.findState.request!
+        manager.browser(manager.visibleRuntime!.browser, didFindMatches: 0, activeMatch: 0, generation: quote.id, quote: true, identifier: 4, finalUpdate: true)
+        expect(manager.findState.count == 0 && !manager.canAskFind(query: "absent", enabled: true, forward: true),
+               "quote navigation has results but cannot complete ordinary Find")
+        manager.browser(original, requestsFindAction: .show)
+        expect(observer.findActions.isEmpty, "retired browser's native command cannot open the current panel")
+        manager.browser(manager.visibleRuntime!.browser, requestsFindAction: .next)
+        expect(observer.findActions == [.next], "current native Chrome Find is routed to the app Find owner")
+        manager.closeAll()
     }
 
     @MainActor
@@ -1842,7 +1902,10 @@ private final class Observer: BrowserManagerDelegate {
     var onPageWindowsChanged: (() -> Void)?
     func browserManagerDidUpdate(_ tabID: UUID) {}
     func browserManager(statusMessage: String, tabID: UUID?) {}
-    func browserManager(findMatches count: Int, activeMatch: Int) {}
+    var findStates: [AskOnPage.FindState] = []
+    var findActions: [CraFindAction] = []
+    func browserManager(findState state: AskOnPage.FindState) { findStates.append(state) }
+    func browserManager(findAction action: CraFindAction) { findActions.append(action) }
     func browserManager(download: CraDownloadInfo) {}
     func browserManager(fullscreen: Bool, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }

@@ -11,6 +11,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     let sidebarUI = SidebarUIState()
     let sidebarActions = SidebarActions()
     let overlay = OverlayState()
+    private var debugFindResults = false
     let commandBar: CommandBarController
     private(set) var browsers: BrowserManager!
     private(set) var shell: ShellView!
@@ -142,6 +143,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // What extensions set for a tab (chrome.action.setIcon with tabId) went with its page.
         browsers.pageClosed = { ExtensionStore.shared.forgetActionTab($0) }
         browsers.delegate = self
+        overlay.onFindQueryChange = { [weak self] query in
+            guard let self else { return }
+            self.browsers.prepareFind(query)
+            if self.overlay.findVisible { self.find(query, forward: true) }
+        }
         browsers.windowID = session.id
         browsers.takeRuntimeFromOtherWindow = { [weak self] id in
             guard let self else { return nil }
@@ -909,10 +915,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }))
     }
 
-    func browserManager(findMatches count: Int, activeMatch: Int) {
+    func browserManager(findState state: AskOnPage.FindState) {
+        if debugFindResults { logFindState() }
         guard overlay.findVisible else { return }
-        if count >= 0 { overlay.findMatchCount = count }
-        if activeMatch >= 0 { overlay.findActiveMatch = activeMatch }
+        overlay.findMatchCount = state.count
+        overlay.findActiveMatch = state.activeMatch
+    }
+
+    func browserManager(findAction action: CraFindAction) {
+        if debugFindResults { CraLog.note("find nativeAction=\(action.rawValue)") }
+        switch action {
+        case .show: showFindBar()
+        case .next: findNext(forward: true)
+        case .previous: findNext(forward: false)
+        @unknown default: break
+        }
     }
 
     func browserManager(download: CraDownloadInfo) {
@@ -3898,8 +3915,44 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Find
 
+    /// Privileged scenario seam: exercise the production query/native-command paths without
+    /// global keyboard input. Result diagnostics contain identity/counts only, never query text.
+    func debugFind(query: String?, step: String?, quote: Bool) {
+        debugFindResults = true
+        if let query {
+            if quote { browsers.find(query, forward: true, purpose: .quote) }
+            else {
+                let restoring = overlay.findVisible && overlay.findQuery == query && browsers.findState.request?.purpose == .quote
+                overlay.findQuery = query
+                showFindBar()
+                if restoring { find(query, forward: true) }
+            }
+        }
+        switch step {
+        case "show": showFindBar()
+        case "close": hideFindBar()
+        case "next": findNext(forward: true)
+        case "previous": findNext(forward: false)
+        case "nativeShow": _ = currentBrowser?.runChromeCommand("IDC_FIND")
+        case "nativeNext": _ = currentBrowser?.runChromeCommand("IDC_FIND_NEXT")
+        case "nativePrevious": _ = currentBrowser?.runChromeCommand("IDC_FIND_PREVIOUS")
+        default: break
+        }
+        logFindState()
+    }
+
+    private func logFindState() {
+        let state = browsers.findState
+        CraLog.note("find generation=\(state.request?.id.uuidString ?? "none") identifier=\(state.identifier.map(String.init) ?? "none") "
+                    + "count=\(state.count.map(String.init) ?? "pending") ordinal=\(state.activeMatch) final=\(state.finalUpdate) "
+                    + "purpose=\(state.request?.purpose == .quote ? "quote" : "ordinary")")
+    }
+
     func showFindBar() {
+        let opening = !overlay.findVisible
+        if opening { browsers.stopFinding(false) }
         overlay.findVisible = true
+        if opening, !overlay.findQuery.isEmpty { find(overlay.findQuery, forward: true) }
         overlay.findFocusToken += 1
         shell.findVisible = true
         shell.layoutContentChildren()
@@ -3913,7 +3966,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         overlay.findVisible = false
         overlay.findMatchCount = nil
         shell.findVisible = false
-        currentBrowser?.stopFinding(true)
+        browsers.stopFinding(true)
         shell.layoutContentChildren()
         if let find = findPanel, let window {
             // Typing goes back to the page, unless focus already moved elsewhere.
@@ -3927,18 +3980,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc's (and Chrome's) Edit ▸ Find ▸ Use Selection to Find: the page's selection becomes the
     /// search, on the find pasteboard too as macOS apps share it, and the bar finds it.
     func useSelectionForFind() {
-        guard let b = currentBrowser else { return }
+        guard let b = currentBrowser, let owner = browsers.findPageContext() else { return }
         b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"getSelection().toString()","returnByValue":true}"#) { [weak self] result, _ in
             MainActor.assumeIsolated {
                 let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 let text = ((o?["result"] as? [String: Any])?["value"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let self, !text.isEmpty else { return }
+                guard let self, self.currentBrowser === b, self.browsers.findPageContext() == owner, !text.isEmpty else { return }
                 let pb = NSPasteboard(name: .find)
                 pb.clearContents()
                 pb.setString(text, forType: .string)
+                let repeatSearch = self.overlay.findVisible && self.overlay.findQuery == text
                 self.overlay.findQuery = text
                 self.showFindBar()
-                self.find(text, forward: true)
+                if repeatSearch { self.find(text, forward: true) }
             }
         }
     }
@@ -3955,9 +4009,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// unlike a first request that selects a match (Chrome's find bar does this while
     /// typing), so the bar shows "1/3" rather than "0/3".
     private func find(_ q: String, forward: Bool) {
-        guard let b = currentBrowser else { return }
-        if q.isEmpty { overlay.findMatchCount = nil; b.stopFinding(true); return }
-        b.findText(q, forward: forward, matchCase: false, findNext: true)
+        browsers.find(q, forward: forward)
     }
 
     // MARK: Sheets

@@ -13,6 +13,7 @@ public protocol CraBrowserDelegate: AnyObject {
 public final class CraDownloadInfo {}
 
 @objc public enum CraLinkWindow: Int { case new, incognito, little }
+@objc public enum CraFindAction: Int { case show, next, previous }
 
 /// `open`: the app subclasses it (WebKitBrowser, faked in AppServices.swift).
 @MainActor
@@ -70,6 +71,8 @@ open class CraBrowser {
     public private(set) var backgroundProbes = 0
     public func probeBackgroundColor() { backgroundProbes += 1 }
     public func setFocused(_ focused: Bool) {}
+    public func findText(_ text: String, forward: Bool, matchCase: Bool, findNext: Bool, generation: UUID, quote: Bool) {}
+    public func stopFinding(_ clearSelection: Bool) {}
     public private(set) var pictureInPictureRequests = 0
     public private(set) var automaticPictureInPictureRequests = 0
     public func requestPictureInPicture(automatic: Bool) {

@@ -14,8 +14,14 @@ struct AskOnPageContext: Equatable {
 
 extension BrowserManager {
     func askOnPageContext() -> AskOnPageContext? {
-        guard let rt = visibleRuntime, rt.browser.isCreated, !rt.browser.isClosed, !rt.browser.isLoading,
-              AskOnPageContent.supportsURL(rt.browser.currentURL),
+        guard let rt = visibleRuntime, !rt.browser.isLoading,
+              AskOnPageContent.supportsURL(rt.browser.currentURL) else { return nil }
+        return findPageContext()
+    }
+
+    /// Ordinary Find also works in documents that the model cannot read, including PDF.
+    func findPageContext() -> AskOnPageContext? {
+        guard let rt = visibleRuntime, rt.browser.isCreated, !rt.browser.isClosed, !rt.discarded,
               rt.browser.isIncognito == store.isIncognito(item: rt.tabID),
               rt.browser.isIncognito || rt.browser.profilePath == store.profilePath(item: rt.tabID) else { return nil }
         return AskOnPageContext(tabID: rt.tabID, runtime: ObjectIdentifier(rt), navigationRevision: rt.navigationRevision,

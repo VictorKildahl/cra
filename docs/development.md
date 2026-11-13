@@ -99,6 +99,14 @@ the save panel.
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
+`find-correlation` exercises ordinary Find in real CEF and WebKit while Ask is disabled.
+Its privileged `cra://debug?findQuery=<synthetic text>` sets the existing Find query;
+`findStep=show|close|next|previous|nativeShow|nativeNext|nativePrevious|state` drives the
+ordinary controls or actual Chrome command route. `findPurpose=quote` exercises only native
+quote-search isolation, not quotation validation. Diagnostics record generation, native ID,
+count, ordinal, final flag and purpose, never the query text. Rapid-order acceptance checks
+must inspect new log output per command; historical matching log lines alone are insufficient.
+
 CI runs the same tests on every pull request and push to main (no CEF download), once, through
 `scripts/coverage.py` plus `scripts/lint.py`, and the smoke test on the app it builds. A change
 to Markdown or `docs/` alone runs nothing.
