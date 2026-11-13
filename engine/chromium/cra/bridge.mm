@@ -19,6 +19,7 @@
 #include "cra/bridge.h"
 #include "cra/downloads.h"
 #include "cra/page_protocol.h"
+#include "cra/permission_prompt.h"
 #include "cra/profile_prefs.h"
 
 #include <fcntl.h>
@@ -42,6 +43,7 @@
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/cra_engine_hooks.h"
+#include "chrome/browser/cra_permission_hook.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/profile.h"
@@ -439,6 +441,31 @@ void DownloadPath(download::DownloadItem* item,
   });
 }
 
+// A page's permission request (patches/cra-permissions.patch): the app asks, as from the CEF bridge's
+// OnShowPermissionPrompt. nullptr for a page that isn't Cra's.
+std::unique_ptr<permissions::PermissionPrompt> MakeCraPrompt(content::WebContents* contents,
+                                                             permissions::PermissionPrompt::Delegate* delegate) {
+  CraBrowser* browser = BrowserFor(contents);
+  if (!browser) {
+    return nullptr;
+  }
+  CraBrowser* __weak weak = browser;
+  return cra::MakePermissionPrompt(
+      delegate,
+      ^(NSString* origin, NSUInteger kinds, void (^answer)(BOOL)) {
+        CraBrowser* page = weak;
+        if (page) {
+          [page.delegate browser:page requestsPermissionForOrigin:origin kinds:kinds completion:answer];
+        }
+      },
+      ^{
+        CraBrowser* page = weak;
+        if ([page.delegate respondsToSelector:@selector(browserWithdrewPermissionRequest:)]) {
+          [page.delegate browserWithdrewPermissionRequest:page];
+        }
+      });
+}
+
 // Cra's translate UI (patches/translate-ui.patch): false for a page that isn't Cra's.
 bool TranslateState(content::WebContents* contents, const std::string& state) {
   CraBrowser* browser = BrowserFor(contents);
@@ -669,6 +696,7 @@ void RunReadyBlocks() {
   g_translate_state = &TranslateState;
   g_key_event = &KeyEvent;
   g_download_path = &DownloadPath;
+  g_permission_prompt = &MakeCraPrompt;
   StartDownloads(&ReportDownload);
   Strays().Start();
   StartProfilePrefs();

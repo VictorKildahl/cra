@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/ui/views/permissions/permission_prompt_factory.cc b/chrome/browser/ui/views/permissions/permission_prompt_factory.cc
+--- a/chrome/browser/ui/views/permissions/permission_prompt_factory.cc
++++ b/chrome/browser/ui/views/permissions/permission_prompt_factory.cc
+@@ -16,6 +16,8 @@
+ #include "chrome/browser/ui/omnibox/omnibox_controller.h"
+ #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+ #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
++
++#include "chrome/browser/cra_permission_hook.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+@@ -301,6 +303,14 @@
+     return nullptr;
+   }
+ 
++  // Cra: its pages' prompts are Cra's (cra_permission_hook.h); Chrome's would hang off its never-shown window.
++  if (cra::g_permission_prompt) {
++    if (std::unique_ptr<permissions::PermissionPrompt> prompt =
++            cra::g_permission_prompt(web_contents, delegate)) {
++      return prompt;
++    }
++  }
++
+ #if BUILDFLAG(IS_MAC)
+   // If this is a notification permission request coming from a PWA (or a PWA
+   // associated tab), and this is the first time we show a permission prompt for

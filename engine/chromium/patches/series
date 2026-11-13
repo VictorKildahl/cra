@@ -24,3 +24,4 @@ translate-ui.patch
 cra-prefs.patch
 cra-keys.patch
 cra-downloads.patch
+cra-permissions.patch

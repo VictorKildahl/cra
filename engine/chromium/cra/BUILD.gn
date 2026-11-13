@@ -11,6 +11,8 @@ source_set("core") {
     "engine_main.mm",
     "page_protocol.h",
     "page_protocol.mm",
+    "permission_prompt.h",
+    "permission_prompt.mm",
     "profile_prefs.h",
     "profile_prefs.mm",
     "spike_checks.h",
