@@ -168,6 +168,7 @@ CraBrowser* _Nullable (^g_extension_tab_handler)(NSString*, NSString* _Nullable,
 void (^g_stray_page_handler)(NSString*, NSString* _Nullable) = nil;
 void (^g_process_event_handler)(NSString*, NSString*, NSString* _Nullable) = nil;
 void (^g_view_source_handler)(CraBrowser*, NSString*) = nil;
+void (^g_relaunch_handler)(NSArray<NSString*>*) = nil;
 NSString* _Nullable (^g_image_search_title)(NSString*) = nil;
 // The "Open Link in New Tab" item: its title and whether its tab opens behind (LinkMenu, GitHub #276).
 NSString* g_link_menu_title = @"Open Link in New Tab";
@@ -824,6 +825,21 @@ bool PageMenuShow(content::WebContents* contents, RenderViewContextMenuBase* men
   return !page.suppressesContextMenu;
 }
 
+// Another launch handed its command line over: its URLs go to the app, as from CEF's OnAlreadyRunningAppRelaunch.
+void Relaunch(const base::CommandLine& command_line) {
+  NSMutableArray<NSString*>* urls = [NSMutableArray array];
+  for (const auto& arg : command_line.GetArgs()) {
+    NSString* text = base::SysUTF8ToNSString(arg);
+    if ([text hasPrefix:@"http://"] || [text hasPrefix:@"https://"] || [text hasPrefix:@"cra://"] ||
+        [text hasPrefix:@"file://"]) {
+      [urls addObject:text];
+    }
+  }
+  if (g_relaunch_handler) {
+    g_relaunch_handler(urls);
+  }
+}
+
 bool IsCraPage(const content::WebContents* contents) {
   return BrowserFor(const_cast<content::WebContents*>(contents)) != nil;
 }
@@ -1146,6 +1162,7 @@ void RunReadyBlocks() {
   g_page_menu_built = &BuildArcMenu;
   g_page_menu_command = &PageMenuCommand;
   g_page_menu_show = &PageMenuShow;
+  g_relaunch = &Relaunch;
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->AddObserver(&Captures());
   blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(base::BindRepeating(&BlockedPopupsChanged));
   StartDownloads(&ReportDownload);
@@ -2292,6 +2309,7 @@ void RunReadyBlocks() {
   }
 }
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString*>*))handler {
+  g_relaunch_handler = [handler copy];
 }
 + (void)setExtensionTabHandler:(CraBrowser* _Nullable (^)(NSString*, NSString* _Nullable, BOOL,
                                                           CraBrowser* _Nullable))handler {

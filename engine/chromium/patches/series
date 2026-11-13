@@ -30,3 +30,4 @@ cra-devtools.patch
 cra-download-tabs.patch
 cra-content-blocking.patch
 cra-page-menu.patch
+cra-relaunch.patch

@@ -21,6 +21,9 @@ namespace ui {
 class SimpleMenuModel;
 }
 class RenderViewContextMenuBase;
+namespace base {
+class CommandLine;
+}
 namespace input {
 struct NativeWebKeyboardEvent;
 }
@@ -109,6 +112,11 @@ using PageMenuCommandHook = bool (*)(content::WebContents* contents,
 inline PageMenuCommandHook g_page_menu_command = nullptr;
 using PageMenuShowHook = bool (*)(content::WebContents* contents, RenderViewContextMenuBase* menu);
 inline PageMenuShowHook g_page_menu_show = nullptr;
+
+// Another launch of Cra handed its command line over (Chrome's process singleton): Cra opens its URLs, Chrome
+// opens no window (patches/cra-relaunch.patch).
+using RelaunchHook = void (*)(const base::CommandLine& command_line);
+inline RelaunchHook g_relaunch = nullptr;
 
 }  // namespace cra
 
