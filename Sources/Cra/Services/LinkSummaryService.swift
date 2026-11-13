@@ -27,11 +27,8 @@ final class LinkSummaryService {
     private var imageOrder: [LinkSummaryRequest] = []
     private var titles: [LinkSummaryRequest: String] = [:]
 
-    /// Banner pictures come over a session that keeps nothing on disk and sends no cookies.
-    private static let imageSession = URLSession(configuration: .ephemeral)
-
     private let fetchPage: (LinkSummaryRequest) async -> LinkSummaryFetch.Page?
-    private let fetchImage: (URL) async -> NSImage?
+    private let fetchImage: (URL, Bool) async -> NSImage?
     private let summarize: (URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?
 
     /// Concrete fetch/model boundaries also let the production lifecycle run on controlled input.
@@ -40,7 +37,7 @@ final class LinkSummaryService {
          answer: ((URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?)? = nil) {
         let transport = LinkSummaryFetch()
         self.fetchPage = fetch ?? { request in await transport.load(request) }
-        self.fetchImage = image ?? Self.image
+        if let image { self.fetchImage = { url, _ in await image(url) } } else { self.fetchImage = Self.image }
         self.summarize = answer ?? Self.ask
     }
 
@@ -79,7 +76,7 @@ final class LinkSummaryService {
         let imageURL = content.imageURL(page: page.url).map { LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }
         let imageTask: Task<Void, Never>? = imageURL.map { url in
             Task { @MainActor in
-                guard !Task.isCancelled, let image = await self.fetchImage(url), !Task.isCancelled,
+                guard !Task.isCancelled, let image = await self.fetchImage(url, request.httpsOnly), !Task.isCancelled,
                       !box.card.finished || box.card.result != nil else { return }
                 box.card.image = image
                 if box.card.finished { self.remember(image, for: request) }
@@ -124,13 +121,10 @@ final class LinkSummaryService {
         return title
     }
 
-    /// The banner: a picture of at most 4 MB.
-    private static func image(_ url: URL) async -> NSImage? {
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
-        request.httpShouldHandleCookies = false
-        guard let (data, response) = try? await imageSession.data(for: request),
-              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              data.count <= 4_000_000, let image = NSImage(data: data), image.size.width > 0 else { return nil }
+    /// Image failure leaves the summary usable; the parent retains ownership until completion.
+    private static func image(_ url: URL, httpsOnly: Bool) async -> NSImage? {
+        guard let data = await LinkSummaryImageFetch().load(url, httpsOnly: httpsOnly),
+              let image = NSImage(data: data), image.size.width > 0 else { return nil }
         return image
     }
 

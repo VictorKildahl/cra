@@ -42,6 +42,7 @@ import AppKit
         NSApp.setActivationPolicy(.prohibited)
         await LinkSummaryFetchTests.run(expect)
         await failedAndBlockedLoadsFinish()
+        await imageFailureKeepsSummary()
         await cancelledImageCannotPublish()
         await imageArrivesAfterSummary()
         await cancelledModelCannotCache()
@@ -70,6 +71,17 @@ import AppKit
         expect(cards.contains { $0.result != nil && !$0.finished }, "a partial answer can be shown before final validation")
         expect(cards.last?.finished == true && cards.last?.result == nil && cards.last?.image == nil, "blocked final output clears earlier rows and images")
         expect(blocked.cached(request()) == nil, "blocked final output must not enter the cache")
+    }
+
+    private static func imageFailureKeepsSummary() async {
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) },
+                                         image: { _ in nil }, answer: { _, _, _, _, _ in answer })
+        var last: LinkSummaryService.Card?
+        await service.load(request()) { last = $0 }
+        expect(last?.finished == true && last?.result?.quickSummary == answer.quickSummary && last?.image == nil,
+               "a rejected optional image leaves the completed summary usable")
+        expect(service.cached(request())?.result == last?.result,
+               "an image transport failure does not discard a successful summary cache entry")
     }
 
     private static func cancelledImageCannotPublish() async {

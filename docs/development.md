@@ -137,6 +137,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-link-summary-cef.sh`: the actual native preview token's byte/cancellation/readiness
   callback contract, compiled with installed CEF headers/wrapper; skips when they are absent.
   Does not boot Chromium or prove wire behavior; validate the dedicated route on a native test app.
+- `scripts/test-link-summary-image.sh`: actual ephemeral image transport through a loopback HTTP
+  proxy with public test URLs: validated redirects, cookie-free requests, streamed 4 MB cap, physical
+  cancellation and one 8-second deadline on a manual clock. No DNS/hosts changes, CEF or visible app.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame as macOS 27 draws it: the emoji's whole picture shows, in the same place (#399).
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
