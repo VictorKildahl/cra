@@ -18,6 +18,7 @@ prove that a quote supports an answer.
 | Actual isolated WebKit | Registered `test-ask-on-page-content.sh` passed31, including inline NFC/literal/repeated quotes, no fuzzy repair, changed DOM, retired/new leases, work bounds and long-paragraph exact Range selection. | Exact production DOM scripts; separate from native Find and visible UI. Long Range viewport was top539/bottom581 in height600. |
 | Actual isolated CEF | Exact production-script export matrix passed37 in a named isolated context. Long quote Range top767/bottom810, height860, scroll940. | Script-only selection/viewport, not post-native-Find highlight or physical UI. |
 | WebKit page realm | Companion exact-script matrix passed. | CDP facade uses page realm; isolated evidence is the registered31-check harness. |
+| Actual CEF/WebKit Find correlation | `find-correlation` passed on branch `822e3ba` / the same `b07de4` app: CEF three-match ordinals 1→2→3→2 through next/nativeNext/nativePrevious, final zero and iframe-only positive; WebKit iframe-only native positive reported count `1` / identifier `-1`, then a new query native zero count `0` / identifier `-1`. Retained `runtime/ask-r4-find-correlation-current/` and `logs/askonpage-R4-find-correlation-current.log`; 277MB/290ms launch/694ms max stall/3 stalls/0.032% recorder cost. | Ask disabled; debug quote-purpose route is not the integrated live-DOM quote operation. WebKit native matchFound is authoritative; main-body script counting omits iframe matches, so max(count,1) is a positive floor, not exact cross-frame count. Ordinal is synthetic and `-1` an identifier sentinel. No physical key, native selection or pixel proof. |
 | Native CEF routing | Two-match next/previous/wrap, closed→nativeShow and discriminating quote→ordinary nativeNext/nativePrevious passed; ordinary query `cobalt`, fresh generation/count2 and completed conversation retained. | Already-open nativeShow focus and DevTools frontend runtime remain unobserved; no universal exclusivity claim. |
 | Privileged extension | Genuine extension ID/realm observed, requesting tabs+find, effective tabs only, `chrome.find` unavailable. | Availability in that context, not an invented foreign native search. Page `window.find`, DOM and resource searches are distinct negative controls. |
 | Ordinary native literal | Existing StopFinding(false) on owner change materialized exact `cobalt` selection in the prior pinned tab; selection was empty before stop. | This proves that ordinary case. It does not prove the quote or restored case. |
@@ -35,6 +36,7 @@ Run from the reviewed checkout and root-built app:
 
 ```sh
 scripts/scenario.sh ask-on-page
+scripts/scenario.sh find-correlation  # Ask disabled; native result correlation, not selection/pixels
 CRA_TEST_SWIFTC_FLAGS=-whole-module-optimization scripts/test-ask-on-page-content.sh
 ```
 
@@ -76,8 +78,10 @@ speculative capture retry is required.
   height. Preserve #408 tone; static colors/animation arguments do not prove runtime fidelity.
 - **Engine limits:** preserve the distinction between prevented stale setup, prevented
   new-document/retired renderer leases and invalidation after final IPC authorization. Already
-  dispatched IPC cannot be atomically revoked. Real WebKit native Find result/selection and
-  remaining command/front-end observability must be described at their observed scope.
+  dispatched IPC cannot be atomically revoked. WebKit iframe-only native positive floor and
+  subsequent native zero were observed in find-correlation. This does not establish an exact
+  cross-frame count; native selection remains OPEN. Remaining command/front-end observability
+  stays at its recorded scope.
 - **Model quality:** retain existing failing assertions and report unsupported background,
   transformation/language, answer relevance and citation support limits separately from wiring.
 
