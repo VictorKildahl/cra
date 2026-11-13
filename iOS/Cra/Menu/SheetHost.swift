@@ -6,7 +6,9 @@ import UIKit
 final class SheetHost: UIView, UIGestureRecognizerDelegate {
     let panel = UIView()
     private let dim = UIControl()
-    private let material = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
+    /// Arc Search 1.49's page menu is dark glass in light mode too (Victor's recording: the panel
+    /// is grey ~130 over a white page dimmed to 206, its boxes a little lighter, white text).
+    private let material = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
     private let content: UIView
     /// Holds the content: it scrolls only when the panel is taller than the screen (landscape).
     private let scroller = UIScrollView()
@@ -31,9 +33,10 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
         panel.clipsToBounds = true
         addSubview(panel)
         panel.addSubview(material)
-        // Arc Search's sheets are lighter than the system's thick material: nearly white.
+        panel.overrideUserInterfaceStyle = .dark
+        // The thin dark material alone is a shade darker than Arc's panel.
         let wash = UIView()
-        wash.backgroundColor = Palette.dynamic(light: UIColor(white: 1, alpha: 0.45), dark: UIColor(white: 0, alpha: 0.2))
+        wash.backgroundColor = UIColor(white: 1, alpha: 0.07)
         wash.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         material.contentView.addSubview(wash)
         scroller.showsVerticalScrollIndicator = false

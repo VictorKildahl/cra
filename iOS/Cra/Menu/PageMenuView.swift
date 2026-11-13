@@ -117,7 +117,7 @@ final class PageMenuView: UIView {
         footer.addSubview(scrubbed)
         restore.text = MobilePageMenu.restoreHint
         restore.font = .systemFont(ofSize: 15, weight: .regular)
-        restore.textColor = Palette.secondaryText
+        restore.textColor = UIColor(white: 1, alpha: 0.5)
         restore.isUserInteractionEnabled = false
         footer.addSubview(restore)
         apply(state)
@@ -354,7 +354,7 @@ final class PageMenuRow: UIControl {
         addSubview(separator)
         if opens {
             chevron.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold))
-            chevron.tintColor = Palette.secondaryText
+            chevron.tintColor = Palette.glyph
             chevron.contentMode = .center
             addSubview(chevron)
         }
