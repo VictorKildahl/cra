@@ -158,6 +158,11 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         if navigationAction.shouldPerformDownload {
             return decisionHandler(.download, preferences)
         }
+        // A Browse for Me page's follow-up chip: a new Browse for Me in a tab of its own.
+        if let url = navigationAction.request.url, url.scheme == "cra-browse" {
+            if navigationAction.navigationType == .linkActivated { delegate?.webPage(self, openInNewTab: url) }
+            return decisionHandler(.cancel, preferences)
+        }
         if navigationAction.targetFrame?.isMainFrame == true {
             applyBlocking(for: navigationAction.request.url)
         }

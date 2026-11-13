@@ -107,7 +107,8 @@ enum BrowseForMe {
                 let made = response.content
                 return MobileBrowseForMe.Answer(title: made.title,
                                                 points: made.points.map { .init(emoji: $0.emoji, term: $0.term, text: $0.text) },
-                                                sections: made.sections.map { .init(heading: $0.heading, text: $0.text) }).cleaned
+                                                sections: made.sections.map { .init(heading: $0.heading, text: $0.text) },
+                                                followUps: made.followUps).cleaned
             } catch {
                 return nil
             }
@@ -127,6 +128,8 @@ private struct GeneratedAnswer {
     var points: [GeneratedPoint]
     @Guide(description: "Sections that go deeper.", .count(2...3))
     var sections: [GeneratedSection]
+    @Guide(description: "Short questions the reader might ask next, each a few words, not the question itself.", .count(2...3))
+    var followUps: [String]
 }
 
 @available(iOS 26.0, *)

@@ -942,3 +942,18 @@ struct MobileSummaryTextTests {
         #expect(answer.plainText(title: "", address: nil).hasPrefix("A guide to the stars."))
     }
 }
+
+/// Browse for Me's follow-ups and Sources (Arc Search 1.24).
+struct MobileBrowseFollowUpTests {
+    @Test func followUpsAreChipsThatAskAgainAndSourcesAreListed() {
+        let answer = MobileBrowseForMe.Answer(title: "Ovens", points: [.init(emoji: "🔥", term: "Heat", text: "Hot.")], sections: [],
+                                              followUps: [" best ovens ", "Best ovens", "", "pizza ovens", "a", "b"]).cleaned
+        #expect(answer?.followUps == ["best ovens", "pizza ovens", "a"])
+        let hit = MobileBrowseForMe.Hit(title: "Oven guide", url: "https://ovens.example/guide", snippet: "")
+        let html = MobileBrowseForMe.pageHTML(query: "pizza ovens", answer: answer!, sources: [.init(hit: hit, title: "Oven guide", text: "")],
+                                              searchURL: "https://www.google.com/search?q=pizza%20ovens")
+        #expect(html.contains("href=\"\(MobileBrowseForMe.tabAddress(query: "best ovens"))\""))
+        #expect(!html.contains(">pizza ovens</a>"), "the question itself is not offered again")
+        #expect(html.contains("<h2>Sources</h2>") && html.contains("https://ovens.example/guide"))
+    }
+}

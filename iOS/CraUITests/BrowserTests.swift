@@ -422,6 +422,28 @@ final class BrowseForMeTests: BrowserTestCase {
     }
 }
 
+final class BrowseFollowUpTests: BrowserTestCase {
+    /// A follow-up chip at the end of a Browse for Me page asks it in a new Browse for Me.
+    func testAFollowUpChipBrowsesForItsQuestion() {
+        launch(["-CraFakeModel", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+        let followUp = app.webViews.links["best pizza ovens"]
+        for _ in 0..<4 where !followUp.isHittable { app.webViews.firstMatch.swipeUp() }
+        XCTAssertTrue(followUp.waitForExistence(timeout: 5), "the follow-up is offered")
+        XCTAssertTrue(app.webViews.staticTexts["Sources"].exists)
+        keep("browse-follow-ups")
+        followUp.tap()
+        XCTAssertTrue(app.staticTexts["browse-query"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["browse-query"].label, "best pizza ovens")
+    }
+}
+
 final class IncognitoTests: BrowserTestCase {
     /// The mask in the search field turns the sheet incognito; a page opened then stays out of
     /// the tab row and out of the Archive, and is gone once it is left.

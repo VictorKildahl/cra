@@ -63,12 +63,18 @@ public enum MobileBrowseForMe {
         public var title: String
         public var points: [Point]
         public var sections: [Section]
+        /// Questions to ask next, shown as chips at the end (Arc Search 1.24's follow-ups).
+        public var followUps: [String]
 
-        public init(title: String, points: [Point], sections: [Section]) {
+        public init(title: String, points: [Point], sections: [Section], followUps: [String] = []) {
             self.title = title
             self.points = points
             self.sections = sections
+            self.followUps = followUps
         }
+
+        /// At most this many follow-ups.
+        public static let maxFollowUps = 3
 
         /// Trimmed, with empty entries dropped; nil when nothing is left to show.
         public var cleaned: Answer? {
@@ -76,7 +82,9 @@ public enum MobileBrowseForMe {
             let points = points.map { Point(emoji: tidy($0.emoji), term: tidy($0.term), text: tidy($0.text)) }.filter { !$0.text.isEmpty }
             let sections = sections.map { Section(heading: tidy($0.heading), text: tidy($0.text)) }.filter { !$0.heading.isEmpty && !$0.text.isEmpty }
             guard !points.isEmpty || !sections.isEmpty else { return nil }
-            return Answer(title: tidy(title), points: points, sections: sections)
+            var seen: Set<String> = []
+            let followUps = followUps.map(tidy).filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+            return Answer(title: tidy(title), points: points, sections: sections, followUps: Array(followUps.prefix(Self.maxFollowUps)))
         }
     }
 
@@ -164,7 +172,8 @@ public enum MobileBrowseForMe {
     public static func fakeAnswer(query: String, sources: [Source]) -> Answer {
         Answer(title: "About \(query)",
                points: sources.prefix(3).map { Point(emoji: "⭐️", term: $0.hit.host, text: $0.title) },
-               sections: sources.prefix(2).map { Section(heading: $0.title, text: MobileSummary.clipped($0.text, limit: 160)) })
+               sections: sources.prefix(2).map { Section(heading: $0.title, text: MobileSummary.clipped($0.text, limit: 160)) },
+               followUps: ["best \(query)", "\(query) for beginners"])
     }
 
     // MARK: The loading screen
@@ -227,6 +236,14 @@ public enum MobileBrowseForMe {
                 + (point.term.isEmpty ? "" : "<b>\(escape(point.term))</b> — ") + "\(escape(point.text))</span></li>"
         }
         let sections = answer.sections.map { "<h2>\(escape($0.heading))</h2><p>\(escape($0.text))</p>" }
+        // Follow-ups (1.24): each a new Browse for Me; and the pages read, as links (1.24's "Sources").
+        let followUps = answer.followUps.filter { $0.lowercased() != query.lowercased() }.map { question in
+            "<a class=\"chip\" href=\"\(escape(tabAddress(query: question)))\">\(escape(question))</a>"
+        }
+        let sourceLinks = sources.map { source in
+            "<li><a href=\"\(escape(source.hit.url))\"><span class=\"src-title\">\(escape(source.title.isEmpty ? source.hit.title : source.title))</span>"
+                + "<span class=\"card-site\">\(escape(source.hit.host))</span></a></li>"
+        }
         return """
         <!doctype html><html><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -254,6 +271,10 @@ public enum MobileBrowseForMe {
         .emoji { flex: none; width: 24px; text-align: center; }
         h2 { margin: 24px 0 6px; font-size: 19px; font-weight: 600; color: var(--blue); }
         p { margin: 0 0 10px; }
+        .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 6px; }
+        .chip { padding: 8px 14px; border-radius: 18px; background: var(--card); font-size: 15px; font-weight: 500; }
+        .sources { margin-top: 8px; } .sources li { display: block; margin: 0 0 10px; }
+        .sources a { display: flex; flex-direction: column; } .src-title { font-weight: 500; }
         </style></head><body><main>
         <a class="query" href="\(escape(searchURL))"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.3" cy="6.3" r="4.8"/><path d="M10 10l3.6 3.6"/></svg><span>\(escape(query))</span></a>
         \(pictures.isEmpty ? "" : "<div class=\"shots\">\(pictures.joined())</div>")
@@ -262,6 +283,8 @@ public enum MobileBrowseForMe {
         <h1>\(escape(answer.title.isEmpty ? query : answer.title))</h1>
         <ul>\(points.joined())</ul>
         \(sections.joined())
+        \(followUps.isEmpty ? "" : "<div class=\"chips\">\(followUps.joined())</div>")
+        \(sourceLinks.isEmpty ? "" : "<h2>Sources</h2><ul class=\"sources\">\(sourceLinks.joined())</ul>")
         </main></body></html>
         """
     }
