@@ -1,0 +1,7 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-macos, x86_64-macos ]
+install-name:    '@executable_path/../../../Chromium Embedded Framework.framework/Chromium Embedded Framework'
+current-version: 0
+compatibility-version: 0
+...

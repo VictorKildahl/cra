@@ -17,6 +17,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     enum RowKey: Hashable {
         case item(UUID)
         case liveStatus(UUID)
+        case instantLinks(UUID)
         case placeholder
         case divider
         case newTab
@@ -27,6 +28,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case folder(FolderRowModel)
         case split(SplitRowModel)
         case liveStatus(LiveStatusModel)
+        case instantLinks(InstantLinksRowModel)
         case placeholder(active: Bool)
         case divider(hasToday: Bool, tidy: DividerTidy)
         case groupHeader(GroupHeaderRowModel)
@@ -352,6 +354,10 @@ final class SpaceListView: NSView, NSDraggingSource {
         out.append(Row(key: .divider, content: .divider(hasToday: !todayKids.isEmpty && !blank, tidy: tidy)))
         let atTop = store.settings.newTabButtonAtTop
         if atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
+        // Instant Links' "Searching the web for you…" (#407): transient, at the top of Today.
+        for r in InstantLinksService.shared.pending(in: spaceID) {
+            out.append(Row(key: .instantLinks(r.id), content: .instantLinks(InstantLinksRowModel(id: r.id, failed: r.failed, current: r.current))))
+        }
         for item in store.children(of: space.todayContainerID) {
             add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: todayKids.firstIndex(of: item.id) ?? 0)
         }
@@ -452,6 +458,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .folder: return v is FolderRowView
         case .split: return v is SplitRowView
         case .liveStatus: return v is LiveStatusRowView
+        case .instantLinks: return v is InstantLinksRowView
         case .placeholder: return v is PinPlaceholderRowView
         case .divider: return v is DividerRowView
         case .groupHeader: return v is GroupHeaderRowView
@@ -465,6 +472,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .folder: return FolderRowView(key: row.key, list: self, colors: colors)
         case .split: return SplitRowView(key: row.key, list: self, colors: colors)
         case .liveStatus: return LiveStatusRowView(key: row.key, list: self, colors: colors)
+        case .instantLinks: return InstantLinksRowView(key: row.key, list: self, colors: colors)
         case .placeholder: return PinPlaceholderRowView(key: row.key, list: self, colors: colors)
         case .divider: return DividerRowView(key: row.key, list: self, colors: colors)
         case .groupHeader: return GroupHeaderRowView(key: row.key, list: self, colors: colors)
@@ -478,6 +486,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         case .folder(let m): (v as? FolderRowView)?.apply(m)
         case .split(let m): (v as? SplitRowView)?.apply(m)
         case .liveStatus(let m): (v as? LiveStatusRowView)?.apply(m)
+        case .instantLinks(let m): (v as? InstantLinksRowView)?.apply(m)
         case .placeholder(let active): (v as? PinPlaceholderRowView)?.apply(active: active)
         case .divider(let hasToday, let tidy): (v as? DividerRowView)?.apply(hasToday: hasToday, tidy: tidy)
         case .groupHeader(let m): (v as? GroupHeaderRowView)?.apply(m)
@@ -839,12 +848,40 @@ final class SpaceListView: NSView, NSDraggingSource {
             hovered = target
             target?.isHovered = true
             FolderPreviewController.shared.hover(target, in: self)
+            tabPreviewHover(target)
         }
         target?.hoverMoved(to: local)
-        let tip = scrolling ? nil : target?.tooltipTarget(at: local)
+        // A pinned tab with a Previews card shows the card instead of its name, as a favorite does.
+        let tip = scrolling || (target != nil && target === previewRow) ? nil : target?.tooltipTarget(at: local)
         if let old = tipTarget, old !== tip { ArcTooltipController.shared.mouseExited(old) }
         tipTarget = tip
         if let tip { ArcTooltipController.shared.mouseMoved(in: tip) }
+    }
+
+    /// The pinned tab whose Previews card is up or on its way.
+    private weak var previewRow: TabRowView?
+
+    /// Arc's Previews on a pinned tab ("Hover your mouse over an Arc Folder, Pinned, or Favorited
+    /// tab"): Gmail, Calendar or a site's recent pages (CraCore SidebarTabPreview), right of the
+    /// sidebar, not on the open tab.
+    private func tabPreviewHover(_ row: SidebarRowView?) {
+        if let old = previewRow, old !== row {
+            FavoritePreviewCard.shared.leave(old)
+            previewRow = nil
+        }
+        guard let tab = row as? TabRowView, tab !== previewRow, let m = tab.model, m.pinned, !m.selected, !m.editing,
+              ui.draggingID == nil, NSEvent.pressedMouseButtons == 0, let url = store.item(m.id)?.tab?.url,
+              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return }
+        previewRow = tab
+        let id = m.id
+        FavoritePreviewCard.shared.hover(tab, target: .sidebarTab(
+            id, url: url, store: store, favicons: favicons, beside: self,
+            open: { [weak self] u in
+                guard let self else { return }
+                self.store.selectTab(id, window: self.ui.windowID)
+                (self.window?.windowController as? MainWindowController)?.loadInSelectedTab(u)
+            },
+            openNewTab: { [weak self] u in self?.actions.openURL(u) }))
     }
 
     // MARK: Clicks
@@ -1218,7 +1255,19 @@ final class SpaceListDocument: NSView {
     private var pointerIsOver: Bool {
         guard let w = window, w.isVisible, !NSApp.isHidden,
               visibleRect.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return false }
-        return NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0) == w.windowNumber
+        return Self.topWindowNumber(at: NSEvent.mouseLocation) == w.windowNumber
+    }
+
+    /// The window under the pointer is a synchronous window-server call (~1 ms), and AppKit asks for
+    /// tracking areas every frame of a space switch, once per space in the strip: 207 ms of the main
+    /// thread over six switches. The answer is kept while the pointer stays put, for 0.1 s at most.
+    private static var topWindow: (point: NSPoint, at: CFTimeInterval, number: Int)?
+    private static func topWindowNumber(at point: NSPoint) -> Int {
+        let now = CACurrentMediaTime()
+        if let t = topWindow, t.point == point, now - t.at < 0.1 { return t.number }
+        let number = NSWindow.windowNumber(at: point, belowWindowWithWindowNumber: 0)
+        topWindow = (point, now, number)
+        return number
     }
 
     override func mouseEntered(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }

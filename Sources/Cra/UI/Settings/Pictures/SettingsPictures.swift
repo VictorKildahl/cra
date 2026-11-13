@@ -80,6 +80,30 @@ extension SettingsArt {
         }
     }
 
+    /// The page fills the card, and the toolbar slides in over its top where the pointer is.
+    static var autoHideToolbar: some View {
+        let t = ArtTint.mint
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t) {
+                ZStack(alignment: .topLeading) {
+                    ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+                    VStack(spacing: 0) {
+                        HStack(spacing: 2) {
+                            Capsule().fill(t.ink.opacity(0.7)).frame(width: 22, height: 3)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 3).frame(height: 7)
+                        .background(Color.white)
+                        Rectangle().fill(Color.black.opacity(0.14)).frame(height: 0.6)
+                    }
+                    .artLift(1)
+                }
+            }
+            .at(9, 5)
+            ArtCursor(size: 8).at(48, 2)
+        }
+    }
+
     /// The space's name at the top and its icon at the bottom of the sidebar.
     static var spaceHeader: some View {
         let t = ArtTint.mauve

@@ -1,0 +1,47 @@
+# Window switchers (DockDoor, AltTab) list an app's accessibility windows that have a close or
+# minimize button or a standard subrole, child windows too. With one page Cra showed two, the
+# browser window and the empty Chrome window its page moved out of; DevTools made three, a Peek
+# its page window, and a Peek parked on its tab (#242) a blank one that stayed (GitHub #401).
+# Only Cra's own windows count: the browser window, a Little Window. Chromium's windows docked on
+# them are groups inside them (DockedWindowAccessibility, #391).
+# promise: #401
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "peekInEveryTab": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?switcherWindows=page
+expect-log switcher windows page: 1 \[main\]
+
+# DevTools docked beside the page.
+cra://action/devTools
+wait 4
+cra://debug?switcherWindows=devtools
+expect-log switcher windows devtools: 1 \[main\]
+cra://action/devTools
+wait 3
+
+# A Peek, with DevTools docked in it, then parked while another tab is on screen.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 2
+cra://debug?switcherWindows=peek
+expect-log switcher windows peek: 1 \[main\]
+cra://debug?target=little&inspectAt=40,40
+wait 5
+cra://debug?switcherWindows=peekDevtools
+expect-log switcher windows peekDevtools: 1 \[main\]
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://debug?peeks=parked
+expect-log Cra peeks parked: hidden \S+n=peek$
+cra://debug?switcherWindows=parked
+expect-log switcher windows parked: 1 \[main\]
+
+# A Little Window is a window of its own; its page window is part of it.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?switcherWindows=little
+expect-log switcher windows little: 2 \[(little, main|main, little)\]
+reject-log fault:

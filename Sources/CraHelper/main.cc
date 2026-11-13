@@ -1,6 +1,12 @@
 // Entry point for every Chromium subprocess (renderer, GPU, utility, plugin,
-// alerts). Enters the macOS sandbox, then loads the framework from the
-// enclosing Cra.app bundle and hands control to CEF.
+// alerts). Enters the macOS sandbox and hands control to CEF.
+//
+// The framework is a launch-time dependency (ChromiumEmbeddedFramework.tbd, linked in
+// Package.swift), as Chrome's helpers have theirs. dyld then maps it before libSystem is up,
+// so the kernel binds its pointers page by page as they're read and its 12.5 MB __DATA_CONST
+// stays clean, shared with the file. A dlopen after launch binds them in the process
+// instead, and every renderer, GPU and utility process kept its own dirty 12.5 MB copy.
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -92,12 +98,19 @@ class HelperApp : public CefApp {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  // The seatbelt profile has to be in place before the framework loads.
-  // libcef_sandbox.dylib ships inside the framework (Libraries/).
+  // A staged update run once before it is installed (Cra's UpdatePrewarm): macOS has checked this
+  // helper by the time Chromium first starts it. Nothing else runs.
+  if (const char* prewarm = getenv("CRA_PREWARM"); prewarm && std::string(prewarm) == "1") {
+    return 0;
+  }
+  // The seatbelt profile goes on before any of CEF's code runs (mapping the framework at
+  // launch runs none). libcef_sandbox.dylib ships inside the framework (Libraries/).
   CefScopedSandboxContext sandbox_context;
   if (!sandbox_context.Initialize(argc, argv)) {
     return 1;
   }
+  // The framework is already mapped: this dlopen gets the same image and fills the wrapper's
+  // function table.
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInHelper()) {
     return 1;

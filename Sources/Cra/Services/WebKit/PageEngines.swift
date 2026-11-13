@@ -15,6 +15,8 @@ enum PageEngines {
     /// The app's pages of its own (EaselBrowser), registered at launch: a browser for an address
     /// one of them owns, else nil.
     static var nativePage: ((_ frame: NSRect, _ url: String, _ delegate: CraBrowserDelegate?, _ incognito: Bool, _ profilePath: String?) -> CraBrowser?)?
+    /// Whether `nativePage` would make the page for this address (an easel's), without making it.
+    static var isNativePage: ((_ url: String) -> Bool)?
 
     /// The list, with the user's own choices (protected-media.json) on it. `defaults write
     /// dk.kildahl.cra webKitProtectedMedia -bool NO` turns it all off (every page Chromium's again).
@@ -84,6 +86,15 @@ enum PageEngines {
             return CraBrowser(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath,
                               history: ["history": restored.state.base64EncodedString(), "index": restored.index])
         }
+    }
+
+    /// Whether a tab at `url` can take a spare page (SparePage), and the saved history it then gets,
+    /// as makeBrowser would hand it in.
+    static func spareFill(url: String, incognito: Bool, history: PageHistory?) -> (canTake: Bool, history: [String: Any]?) {
+        let engine = sites.engine(for: url)
+        guard SparePage.canTake(engine: engine, isEasel: isNativePage?(url) ?? false, incognito: incognito) else { return (false, nil) }
+        let restored = history.flatMap { $0.restores(into: engine, at: url) ? $0 : nil }
+        return (true, restored.map { ["history": $0.state.base64EncodedString(), "index": $0.index] })
     }
 
     /// Whether `browser` is one of the engines' pages (not an easel): only those have a history to save.

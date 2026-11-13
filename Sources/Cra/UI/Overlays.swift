@@ -12,6 +12,8 @@ final class OverlayState {
     /// Find in page results ("2/7" in the bar); nil until the page answers.
     var findMatchCount: Int?
     var findActiveMatch = 0
+    /// The text `findMatchCount` counts: the field can be ahead of the page's answer.
+    var findCountText = ""
 }
 
 /// The link under the pointer, bottom left over the page. AppKit: it changes on every link the
@@ -133,7 +135,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
             count.stringValue = ""
             count.isHidden = true
         }
-        if visible, !wasVisible || token != lastFocusToken { window?.makeFirstResponder(field) }
+        // Ask on Page's card stands in for the bar while its setting is on: its field takes the keys.
+        if visible, !isHidden, !wasVisible || token != lastFocusToken { window?.makeFirstResponder(field) }
         wasVisible = visible
         lastFocusToken = token
         needsLayout = true
@@ -141,7 +144,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if overlay.findVisible { window?.makeFirstResponder(field) }
+        if overlay.findVisible, !isHidden { window?.makeFirstResponder(field) }
     }
 
     func controlTextDidChange(_ obj: Notification) {

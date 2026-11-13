@@ -1,0 +1,24 @@
+# promise: #387
+# A favorite's right-click menu has Arc's Mute row after Rename… (Arc 1.172's favorite menu: Copy
+# Link, Share ›, Change Icon…, Rename…, Mute, Edit Pinned Page ›, …). Mute silences the page without
+# opening it, and on a muted favorite the row says Unmute and brings the sound back (GitHub #387).
+# The tab rows' menu has had Mute from the start; favorites were missing it.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=fav
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+wait 1
+# Another tab in front, so the favorite is muted from its tile without being the open page.
+cra://open?url=${PAGE}?n=other
+wait 1
+cra://debug?favoriteMenu=1&label=before
+expect-log favorite menu before: [^|]*Remove from Favorites\|Rename…\|Mute\|
+cra://debug?favoriteMenu=1&label=mute&run=Mute
+expect-log favorite menu mute ran Mute: saved=muted page=muted$
+cra://debug?favoriteMenu=1&label=muted
+expect-log favorite menu muted: [^|]*Remove from Favorites\|Rename…\|Unmute\|
+cra://debug?favoriteMenu=1&label=unmute&run=Unmute
+expect-log favorite menu unmute ran Unmute: saved=unmuted page=unmuted$

@@ -585,6 +585,8 @@ final class SidebarStore {
             var t = TabData(url: url, title: title)
             t.activeTabBeforeCreationID = selectedTabID(in: sid, window: window)
             t.referrerID = referrer
+            // A background tab joins ⌃Tab's recent tabs when opened, as in Arc.
+            if !select { t.timeLastActiveAt = clock.now }
             return t
         }())
         tab.isUnread = !select
@@ -862,10 +864,15 @@ final class SidebarStore {
 
     /// The tab switcher's list (⌃Tab): a space's most recently used tabs, newest first
     /// (Arc shows five, the current tab first).
-    func recentTabs(in sid: UUID, limit: Int) -> [UUID] {
-        visibleTabs(in: sid)
+    func recentTabs(in sid: UUID, limit: Int, window: UUID? = nil) -> [UUID] {
+        // A tab opened in the background since is newer than the current one, which still comes first.
+        let current = selectedTabID(in: sid, window: window)
+        return visibleTabs(in: sid)
             .filter { $0.tab?.timeLastActiveAt != nil }
-            .sorted { $0.tab!.timeLastActiveAt! > $1.tab!.timeLastActiveAt! }
+            .sorted { a, b in
+                if (a.id == current) != (b.id == current) { return a.id == current }
+                return a.tab!.timeLastActiveAt! > b.tab!.timeLastActiveAt!
+            }
             .prefix(limit).map(\.id)
     }
 
@@ -2212,9 +2219,15 @@ final class SidebarStore {
         }
     }
 
-    func clearToday(_ sid: UUID? = nil) {
+    /// Arc's Clear on Today (`TodayClear`): the tab each window has on screen in this space and
+    /// the tabs in `playing` (the speaker's audible set) stay, with the split or group they're in.
+    func clearToday(_ sid: UUID? = nil, playing: Set<UUID>) {
         guard let space = spaces[sid ?? focusedSpaceID] else { return }
-        for t in tabs(under: space.todayContainerID) { archiveTab(t.id, reason: .clear) }
+        let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
+        let rows = children(of: space.todayContainerID).map { r in
+            TodayClear.Row(id: r.id, tabs: r.isTab ? [r.id] : tabs(under: r.id).map(\.id))
+        }
+        for t in TodayClear.archived(rows, selected: selected, playing: playing) { archiveTab(t, reason: .clear) }
     }
 
     /// Today tabs idle longer than the threshold are archived (Arc:
@@ -2234,7 +2247,8 @@ final class SidebarStore {
     // MARK: Spaces
 
     @discardableResult
-    func createSpace(title: String, emoji: String, symbol: String? = nil, theme: SpaceTheme? = nil, focus: Bool = true) -> Space {
+    func createSpace(title: String, emoji: String, symbol: String? = nil, iconImage: Data? = nil, theme: SpaceTheme? = nil,
+                     focus: Bool = true) -> Space {
         let id = UUID()
         let favorites = SidebarItem.container(.favorites(spaceID: id))
         let pinned = SidebarItem.container(.pinned(spaceID: id))
@@ -2244,7 +2258,7 @@ final class SidebarStore {
         items[today.id] = today
         let t = theme ?? SpaceTheme.presets[spaceOrder.count % SpaceTheme.presets.count]
         let space = Space(id: id, title: title, emoji: emoji, theme: t, favoritesContainerID: favorites.id,
-                          pinnedContainerID: pinned.id, todayContainerID: today.id, createdAt: clock.now, symbol: symbol)
+                          pinnedContainerID: pinned.id, todayContainerID: today.id, createdAt: clock.now, symbol: symbol, iconImage: iconImage)
         spaces[id] = space
         spaceOrder.append(id)
         if settings.sharedFavorites { shareFavorites() }
@@ -2363,7 +2377,12 @@ final class SidebarStore {
     /// The profile a tab's pages load in: its shared-favorites list's, else its space's.
     func profileID(item id: UUID) -> UUID? {
         if let l = profileList(ofItem: id) { return profile(l.profileID)?.id }
-        return spaceID(ofItem: id).flatMap { isIncognito(space: $0) ? nil : profile(spaces[$0]?.profileID)?.id }
+        return spaceID(ofItem: id).flatMap(profileID(space:))
+    }
+
+    /// The profile a space's pages load in (nil = Default, and for an incognito space).
+    func profileID(space id: UUID) -> UUID? {
+        isIncognito(space: id) ? nil : profile(spaces[id]?.profileID)?.id
     }
 
     /// The Chromium profile folder ("Default" or "Profile <id>") a space's pages load in;
@@ -2432,6 +2451,7 @@ final class SidebarStore {
         }
         profileFavorites.removeAll { $0.profileID == id }
         settings.downloadLocations[DownloadLocation.key(profileID: id)] = nil
+        settings.setNewDocumentApp(nil, profileID: id)
         ProfileCleanup.schedule(p.directoryName)
         touch()
     }

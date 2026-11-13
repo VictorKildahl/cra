@@ -1,0 +1,25 @@
+# promise: #406
+# Clear on Today is Arc's "Clear unselected Today tabs": the tab on screen and a tab playing sound
+# stay, the rest are archived. The tone is music-notes' 440 Hz, 60 dB below full volume.
+budget rss=800 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+pace 0.5
+
+cra://open?url=${PAGE}?n=idle
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=video
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"(async()=>{const n=16000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n,true);for(let i=0;i<8000;i++)v.setInt16(44+2*i,Math.round(33*Math.sin(2*Math.PI*440*i/8000)),true);const a=document.createElement('audio');a.loop=true;a.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.append(a);await a.play();return 'tone:'+(a.paused?'paused':'playing')})()"}
+expect-log "value":"tone:playing"
+wait 3
+cra://open?url=${PAGE}?n=shown
+wait 1
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+# Newest first, as the Today list shows them.
+expect-log Cra applescript → .*n=shown.*n=video.*n=idle
+cra://action/clearToday
+wait 1
+cra://debug?applescript=tell%20current%20application%20to%20count%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → 2$
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → .*\[ 'utxt'\("[^"]*n=shown"\), 'utxt'\("[^"]*n=video"\) \]>$

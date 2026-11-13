@@ -261,6 +261,15 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString *)url delegate:(nullable id<CraBrowserDelegate>)delegate
                     incognito:(BOOL)incognito profilePath:(nullable NSString *)profilePath
                       history:(nullable NSDictionary<NSString *, id> *)history;
+/// A page made ahead for the next tab that needs one (SparePages): Chromium makes the page and its
+/// window now, when nothing waits on it, with no address and no delegate; the window stays hidden and
+/// extensions don't see it as a tab (Cra.setSpare, spare-pages.patch). -takeSpareWithURL:history:
+/// gives it its address, after the caller has set the delegate.
+- (instancetype)initSpareWithFrame:(NSRect)frame profilePath:(nullable NSString *)profilePath;
+@property (nonatomic, readonly) BOOL isSpare;
+/// A spare page becomes a tab's page: it loads `url`, or the saved back and forward list `history`
+/// (as -initWithFrame:…history: takes it) with `url` as its current entry.
+- (void)takeSpareWithURL:(NSString *)url history:(nullable NSDictionary<NSString *, id> *)history;
 
 - (void)loadURL:(NSString *)url;
 - (void)goBack;
@@ -289,7 +298,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)setZoomLevel:(double)level;
 - (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext;
 - (void)stopFinding:(BOOL)clearSelection;
+/// Mutes the page, also one Chromium hasn't made yet: it starts muted (#387).
 - (void)setAudioMuted:(BOOL)muted;
+/// Whether Chromium has the page muted (CefBrowserHost::IsAudioMuted), NO before it made it.
+- (BOOL)isAudioMuted;
 /// Pops the page's video out into Chromium's floating Picture in Picture
 /// window. Manual requests toggle (a second call brings the video back).
 /// `automatic` is the "leaving a video tab" case: only a playing video of some

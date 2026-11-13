@@ -70,7 +70,13 @@ final class MCPInput {
                     result = try await onTarget(name, arguments: arguments)
                 } catch is OutsideDocument {
                     await cleanup()
-                    result = try await atPoint(name, try await referencePoint(), arguments: arguments)
+                    if name == "page_upload" {
+                        // A file input has no point to click: find the ref's same-site frame instead.
+                        try await prepareInChildFrame()
+                        result = try await upload(arguments["paths"] as! [String])
+                    } else {
+                        result = try await atPoint(name, try await referencePoint(), arguments: arguments)
+                    }
                 }
             }
         } catch {
@@ -212,7 +218,7 @@ final class MCPInput {
     /// A point of the viewport in CSS pixels: anything at all, iframes and canvas included. The
     /// main document's trusted events are counted; a cross-site frame's aren't visible to Cra.
     private func atPoint(_ name: String, _ point: CGPoint, arguments: [String: Any]) async throws -> [String: Any] {
-        guard ["page_click", "page_hover", "page_scroll", "page_type", "page_fill", "page_press"].contains(name) else {
+        guard ["page_click", "page_hover", "page_scroll", "page_type", "page_fill", "page_press", "page_upload"].contains(name) else {
             throw Failure(message: "\(name) needs a ref or selector of the main document.")
         }
         let metrics = try await call("Page.getLayoutMetrics")
@@ -224,6 +230,23 @@ final class MCPInput {
         try await prepare(selector: "html", scroll: false)
         let hit = await describe(point)
         if let frame = hit["frame"] as? String, !Self.isWeb(frame) { throw Self.notWeb }
+        if name == "page_upload" {
+            // No pointer input: the element at the point (through open shadow roots) is the target.
+            if hit["frame"] != nil { throw Failure(message: "That point is in a frame. Pass the ref of its uploader from page_snapshot.") }
+            _ = try await function("""
+            function(x, y) {
+              let el = document.elementFromPoint(x, y);
+              while (el && el.shadowRoot) { const inner = el.shadowRoot.elementFromPoint(x, y); if (!inner || inner === el) break; el = inner; }
+              if (!el) throw Error('Nothing is at that point.');
+              this.node = el;
+              this.watch(el);
+              return true;
+            }
+            """, arguments: [point.x, point.y])
+            let element = try await function("function(){return this.node}", value: false)
+            node = (element["result"] as? [String: Any])?["objectId"] as? String
+            return try await upload(arguments["paths"] as! [String])
+        }
         if hit["tag"] as? String == "SELECT", name == "page_click" {
             throw Failure(message: "That is a <select>. Use page_select with its ref (page_snapshot) so no native menu opens.")
         }
@@ -400,7 +423,8 @@ final class MCPInput {
         try await MCPCDP(browser, canContinue: canContinue).call(method, parameters, timeout: method.hasPrefix("Input.") ? 5 : 2, cleanup: true)
     }
 
-    private func prepare(selector: String?, scroll: Bool = true) async throws {
+    /// Locates the target in the main document, or with `frame` the ref's node in that child frame.
+    private func prepare(selector: String?, scroll: Bool = true, frame child: String? = nil) async throws {
         let tree = try await call("Page.getFrameTree")
         guard let frameTree = tree["frameTree"] as? [String: Any], let frame = frameTree["frame"] as? [String: Any],
               let frameID = frame["id"] as? String, let loaderID = frame["loaderId"] as? String else {
@@ -408,7 +432,9 @@ final class MCPInput {
         }
         loader = loaderID
         if let reference, reference.document != loaderID { throw Failure(message: "Stale ref: document changed. Take a new snapshot.") }
-        let world = try await call("Page.createIsolatedWorld", ["frameId": frameID, "worldName": "cra-mcp-input"])
+        // A child frame gets a world of its own name: the main frame's attempt already wrapped the
+        // node in "cra-mcp-input", and that wrapper (another realm's) fails every instanceof there.
+        let world = try await call("Page.createIsolatedWorld", ["frameId": child ?? frameID, "worldName": child.map { "cra-mcp-input-" + $0 } ?? "cra-mcp-input"])
         guard let context = world["executionContextId"] as? Int else { throw Failure(message: "No isolated inspection world.") }
         isolatedContext = context
         let literal = String(decoding: try JSONSerialization.data(withJSONObject: [selector ?? ""]), as: UTF8.self)
@@ -438,8 +464,12 @@ final class MCPInput {
           }
           const state = {node, counts:{}, downKeys:new Set()};
           const types = ['mousemove','mousedown','mouseup','click','dblclick','auxclick','contextmenu','keydown','keyup','beforeinput','input','wheel','change','dragstart','dragover','drop','pointermove','pointerup'];
+          // An event that isn't composed (change) stops at the shadow root it started in, so the
+          // target's root is watched too; an event both see counts once.
+          const seen = new WeakSet(), roots = new Set();
           const observe = event => {
-            if (!event.isTrusted) return;
+            if (!event.isTrusted || seen.has(event)) return;
+            seen.add(event);
             const target = event.composedPath().includes(state.node);
             if (event.type === 'keyup' && state.downKeys.has(event.key)) {
               state.counts.keyup = (state.counts.keyup || 0) + 1; state.downKeys.delete(event.key); return;
@@ -449,7 +479,14 @@ final class MCPInput {
             state.counts[event.type] = (state.counts[event.type] || 0) + 1;
           };
           for (const type of types) window.addEventListener(type, observe, true);
-          state.stop = () => { for (const type of types) window.removeEventListener(type, observe, true); };
+          state.watch = el => {
+            const root = el.getRootNode();
+            if (!(root instanceof ShadowRoot) || roots.has(root)) return;
+            roots.add(root);
+            for (const type of types) root.addEventListener(type, observe, true);
+          };
+          state.watch(node);
+          state.stop = () => { for (const type of types) { window.removeEventListener(type, observe, true); for (const root of roots) root.removeEventListener(type, observe, true); } };
           // A page that swaps a field for a new one on focus (Wikipedia's search box): follow focus
           // only to an editable field of the same kind that shares an id, name, placeholder,
           // label or title with the old one. Anything else stays an error; nothing is typed.
@@ -463,6 +500,7 @@ final class MCPInput {
               && ['id', 'name', 'placeholder', 'aria-label', 'title'].some(k => old.getAttribute(k) && old.getAttribute(k) === a.getAttribute(k));
             if (!same) throw Error('The page replaced the field when it was clicked, and focus is not on a matching one. Take a new snapshot; nothing was typed.');
             state.node = a;
+            state.watch(a);
             return true;
           };
           return state;
@@ -491,6 +529,26 @@ final class MCPInput {
             _ = try? await call("Runtime.evaluate", ["expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))",
                                                     "awaitPromise": true, "contextId": context, "timeout": 500])
         }
+    }
+
+    /// For a ref in a same-site iframe (page_snapshot lists their elements): the child frame
+    /// whose isolated world resolves the node to an element of its own document.
+    private func prepareInChildFrame() async throws {
+        let tree = try await call("Page.getFrameTree")
+        var frames: [String] = []
+        var pending = [tree["frameTree"] as? [String: Any] ?? [:]]
+        while let next = pending.popLast(), frames.count < 20 {
+            for child in next["childFrames"] as? [[String: Any]] ?? [] {
+                if let id = (child["frame"] as? [String: Any])?["id"] as? String { frames.append(id) }
+                pending.append(child)
+            }
+        }
+        for frame in frames {
+            do { try await prepare(selector: nil, scroll: false, frame: frame); return }
+            catch is OutsideDocument { continue }
+            catch let failure as MCPCDP.Failure where failure.dialog == nil { continue }  // another site's frame
+        }
+        throw Failure(message: "That ref is in another site's frame, which page_upload can't reach.")
     }
 
     private func function(_ declaration: String, arguments: [Any] = [], value: Bool = true) async throws -> [String: Any] {
@@ -819,7 +877,65 @@ final class MCPInput {
                         "eventVerification": "The document navigated (Enter or a click submitted it); the old event observer is gone. Read the new page to check."])
     }
 
+    /// The file input for the target an agent passed: itself, its label's, the one inside it, or
+    /// the one in its shadow-root component (MCPUploadTarget decides). Becomes this.node.
+    private func uploadTarget() async throws -> MCPUploadTarget.Choice {
+        let response = try await function("""
+        function() {
+          const n = this.node;
+          const isFile = el => el instanceof HTMLInputElement && el.type === 'file';
+          const isField = el => el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el.isContentEditable;
+          // File inputs under an element or shadow root, through open shadow roots.
+          const inputs = scope => {
+            const found = [];
+            const walk = root => { for (const el of root.querySelectorAll('*')) { if (isFile(el)) found.push(el); if (el.shadowRoot) walk(el.shadowRoot); } };
+            walk(scope);
+            if (scope instanceof Element && scope.shadowRoot) walk(scope.shadowRoot);
+            return found;
+          };
+          const label = n.closest('label'), control = label ? label.control : null;
+          // The shadow components around n, nearest first: the root it is in (then its host's),
+          // or a host it is slotted into. The document itself is not one.
+          const scopes = [];
+          for (let a = n; scopes.length < 12;) {
+            const up = a.parentNode;
+            if (!up || up.nodeType === Node.DOCUMENT_NODE) break;
+            if (up instanceof ShadowRoot) { scopes.push(up); a = up.host; continue; }
+            if (up.shadowRoot) scopes.push(up);
+            a = up;
+          }
+          this.uploadCandidates = {label: control, inside: inputs(n), components: scopes.map(inputs)};
+          return {isFileInput: isFile(n), labelsFileInput: isFile(control), isOtherField: isField(n) && !isFile(n) || !!control && !isFile(control),
+                  inside: this.uploadCandidates.inside.length, components: this.uploadCandidates.components.map(c => c.length)};
+        }
+        """)
+        let seen = (response["result"] as? [String: Any])?["value"] as? [String: Any] ?? [:]
+        let choice = MCPUploadTarget.choose(.init(
+            isFileInput: seen["isFileInput"] as? Bool == true, labelsFileInput: seen["labelsFileInput"] as? Bool == true,
+            isOtherField: seen["isOtherField"] as? Bool == true, inside: seen["inside"] as? Int ?? 0, components: seen["components"] as? [Int] ?? []))
+        let level: Int
+        switch choice {
+        case .refused(let message): throw Failure(message: message)
+        case .itself: return choice
+        case .component(let index): level = index
+        case .label, .inside: level = 0
+        }
+        _ = try await function("""
+        function(via, level) {
+          const c = this.uploadCandidates;
+          this.node = via === 'label' ? c.label : via === 'inside' ? c.inside[0] : c.components[level][0];
+          this.watch(this.node);
+          delete this.uploadCandidates;
+          return true;
+        }
+        """, arguments: [choice.via ?? "", level])
+        let element = try await function("function(){return this.node}", value: false)
+        node = (element["result"] as? [String: Any])?["objectId"] as? String
+        return choice
+    }
+
     private func upload(_ paths: [String]) async throws -> [String: Any] {
+        let choice = try await uploadTarget()
         guard let node else { throw Failure(message: "Upload target is unavailable.") }
         _ = try await function("""
         function(count) {
@@ -851,7 +967,12 @@ final class MCPInput {
               let counts = value["counts"] as? [String: Int], (counts["change"] ?? 0) > 0 else {
             throw Failure(message: "Chromium did not confirm the file selection and trusted change event.")
         }
-        return content(["status": "completed", "input": "chromium", "files": files, "trustedEvents": counts])
+        var result: [String: Any] = ["status": "completed", "input": "chromium", "files": files, "trustedEvents": counts]
+        if let via = choice.via {
+            result["fileInput"] = ["label": "The file input this label is for.", "inside": "The file input inside this element.",
+                                   "component": "The file input of this element's shadow-root component."][via]
+        }
+        return content(result)
     }
 
     private func drag(to selector: String) async throws -> [String: Any] {

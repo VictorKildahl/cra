@@ -239,6 +239,9 @@ static CraClient* AsCraClient(CefClient* c) {
 /// The key press that lends the page user activation, for a frame that has a video to show.
 - (void)nudgeUserActivation;
 - (void)adoptBrowser:(CefRefPtr<CefBrowser>)browser;
+/// A muted page's next page: Chromium's sound content setting decides the mute again on every
+/// main-frame navigation and unmutes what CEF muted, so a muted tab mutes it back (#387).
+- (void)keepAudioMuted;
 - (void)devToolsBrowserCreated:(CefRefPtr<CefBrowser>)browser;
 - (void)devToolsBrowserClosed;
 - (void)runDevToolsAction;
@@ -801,10 +804,24 @@ public:
         // chrome://omnibox-popup document, about 45 MB a tab (GPU surfaces and one shared WebUI
         // renderer). Cra never shows Chrome's omnibox; the views popup it falls back to is built
         // only when the omnibox opens.
+        // AutofillAiWalletPrivatePasses (Google Wallet passes in autofill, which needs a Google
+        // account Cra doesn't sign in to) makes every new page's autofill client ask
+        // LocalAuthentication, synchronously, whether Touch ID re-auth is available
+        // (ChromeAutofillClient::SetReauthAvailability): an XPC round trip on the main thread
+        // before the page's first navigation starts.
         std::string disabled = command_line->GetSwitchValue("disable-features");
         command_line->AppendSwitchWithValue("disable-features",
             (disabled.empty() ? "" : disabled + ",") + "WebRtcHideLocalIpsWithMdns,"
-            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup");
+            + "WebUIOmniboxPopup,WebUIOmniboxAimPopup,AutofillAiWalletPrivatePasses,"
+            // Hidden tabs keep their last frame (~15 MB of GPU memory each) for an instant switch
+            // back. Chromium keeps 5 and doubles that when memory is plentiful; Cra keeps 5, the
+            // tabs freezing leaves running (HiddenFrameRelease.savedFrames).
+            + "ScalableFrameEviction,"
+            // Google services Cra never offers, which still set themselves up in the browser process
+            // (and some fetch from Google): optimization hints and the models they download, AI
+            // history search, Gemini in Chrome, Lens. 11-12 MB less in the browser process at 20 tabs
+            // (scripts/perf/bench.sh procs, two rounds), nothing else changed.
+            + "OptimizationHints,PreloadingHeuristicsMLModel,HistoryEmbeddings,Glic,LensOverlay");
         // --load-extension loads after the restored tabs start loading. The first extension
         // with webRequest or declarativeNetRequest makes Chromium reset the profile's URL
         // loader factories (WebRequestAPI::UpdateMayHaveProxies), which strands a navigation
@@ -816,6 +833,14 @@ public:
             // Tab sleeping discards a page in place (Cra.discard), as Arc's Chromium does: the tab
             // keeps its back/forward list and scroll position, and loads again when shown (#153).
             + "WebContentsDiscard,"
+            // Background pages past the five used most recently are frozen (their timers and
+            // scripts stop) and thawed for 5 s each minute, Chromium's own policy behind this
+            // feature. Pages that play sound, capture, hold a Web Lock, use WebRTC or a device,
+            // may notify, or hold a WebSocket or WebTransport connection (Cra's CEF patch
+            // page-live-connections.patch) keep running. Cra's own 30-minute vote (Arc's
+            // timeToFreezeTab) still applies on top. At 20 idle tabs this is most of the
+            // renderers' wakeups.
+            + "InfiniteTabsFreezing,"
             // Chrome keeps its video PiP's origin strip (favicon, host, a dark top scrim) on screen
             // until the person clicks or types in that window, unless the page is file:// or has
             // high media engagement (VideoOverlayWindowViews::UpdateControlsVisibility). Cra's
@@ -1548,6 +1573,7 @@ public:
             [o.delegate browser:o didReportBackgroundColor:@""];
         RunPageScript(frame, "", kLoadingBackgroundProbe);
         SetCommittedLoad(o, YES);
+        [o keepAudioMuted];
     }
 
     void SetCommittedLoad(CraBrowser* o, BOOL committed) {
@@ -2547,7 +2573,12 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     // An address was asked for while the list was going in: a failed restore doesn't load over it.
     BOOL _historySuperseded;
     BOOL _pendingFocus;
+    // Muted before Chromium made the browser (a muted tab's page coming back): applied in -adoptBrowser: (#387).
+    BOOL _audioMuted;
     BOOL _isPopupHost;
+    BOOL _isSpare;
+    /// Taken before Chromium had made the page: -adoptBrowser: loads its address.
+    BOOL _spareTakenEarly;
     NSMutableSet<NSNumber*>* _activeDownloads;
     BOOL _parked;
     NSUInteger _audibleChanges;
@@ -2584,6 +2615,36 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     return [self initWithFrame:frame url:url sidePanelURL:nil history:history delegate:delegate incognito:incognito profilePath:profilePath agent:NO];
 }
 
+/// Set around a spare's init: CEF makes a views-hosted page, window and all, inside it
+/// (createNow), so -adoptBrowser: and -hostWindowCreated: run before the init returns.
+static BOOL g_makingSpare = NO;
+
+- (instancetype)initSpareWithFrame:(NSRect)frame profilePath:(NSString*)profilePath {
+    // No address (CEF then doesn't navigate), as a page that gets a saved history starts.
+    g_makingSpare = YES;
+    self = [self initWithFrame:frame url:@"" sidePanelURL:nil history:nil delegate:nil incognito:NO profilePath:profilePath agent:NO];
+    g_makingSpare = NO;
+    return self;
+}
+
+- (BOOL)isSpare { return _isSpare; }
+
+- (void)takeSpareWithURL:(NSString*)url history:(NSDictionary<NSString*, id>*)history {
+    if (!_isSpare) return;
+    _isSpare = NO;
+    _currentURL = url;
+    _pendingURL = url;
+    _pendingHistory = [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
+    if (!_browser) { _spareTakenEarly = YES; return; }
+    [self sendDevToolsMethod:@"Cra.setSpare" params:@"{\"spare\":false}" completion:^(NSString*, NSString*) {}];
+    [self loadTakenSpare];
+}
+
+- (void)loadTakenSpare {
+    if (_pendingHistory) [self restorePendingHistory];
+    else if (_browser && _pendingURL.length) _browser->GetMainFrame()->LoadURL(CefStringFromNS(_pendingURL));
+}
+
 - (instancetype)initWithFrame:(NSRect)frame extensionSidePanelURL:(NSString*)url
                      delegate:(id<CraBrowserDelegate>)delegate profilePath:(NSString*)profilePath {
     // Created with no page (CEF then doesn't navigate), so no script of the panel runs as a tab.
@@ -2606,6 +2667,7 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     _pendingURL = url;
     _sidePanelURL = [sidePanelURL copy];
     _isPopupHost = (url == nil);
+    _isSpare = g_makingSpare;
     _containerView = [[NSView alloc] initWithFrame:frame];
     _containerView.wantsLayer = YES;
     _containerView.autoresizesSubviews = YES;
@@ -2713,6 +2775,8 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
 
 - (void)hostWindowCreated:(NSWindow*)window {
     self.hostWindow = window;
+    // A spare's window stays out of sight until a tab takes it (its delegate then places it).
+    if (_isSpare) { [window orderOut:nil]; return; }
     [self.delegate browser:self didCreateHostWindow:window];
 }
 
@@ -2755,11 +2819,30 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
             load(@"no answer");
         });
     }
+    if (_isSpare) {
+        // Hidden from extensions until a tab takes it; messages run in order, so before any load.
+        [self sendDevToolsMethod:@"Cra.setSpare" params:@"{\"spare\":true}" completion:^(NSString*, NSString*) {}];
+    } else if (_spareTakenEarly) {
+        _spareTakenEarly = NO;
+        if (!_pendingHistory && _pendingURL.length) browser->GetMainFrame()->LoadURL(CefStringFromNS(_pendingURL));
+    }
     [self restorePendingHistory];
     if (_pendingFocus) {
         _pendingFocus = NO;
         browser->GetHost()->SetFocus(true);
     }
+    if (_audioMuted) browser->GetHost()->SetAudioMuted(true);
+}
+
+- (void)keepAudioMuted {
+    if (!_audioMuted) return;
+    // After the navigation's other observers, SoundContentSettingObserver among them.
+    __weak CraBrowser* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        CraBrowser* me = weakSelf;
+        if (me && me->_audioMuted && me->_browser && !me->_browser->GetHost()->IsAudioMuted())
+            me->_browser->GetHost()->SetAudioMuted(true);
+    });
 }
 
 - (void)browserClosed {
@@ -2964,7 +3047,11 @@ class CraDevToolsObserver : public CefDevToolsMessageObserver {
     if (_browser) _browser->GetHost()->Find(CefStringFromNS(text), forward, matchCase, findNext);
 }
 - (void)stopFinding:(BOOL)clearSelection { if (_browser) _browser->GetHost()->StopFinding(clearSelection); }
-- (void)setAudioMuted:(BOOL)muted { if (_browser) _browser->GetHost()->SetAudioMuted(muted); }
+- (void)setAudioMuted:(BOOL)muted {
+    _audioMuted = muted;
+    if (_browser) _browser->GetHost()->SetAudioMuted(muted);
+}
+- (BOOL)isAudioMuted { return _browser && _browser->GetHost()->IsAudioMuted(); }
 
 // Chrome's RecentlyAudibleHelper: quiet only once the page stayed quiet for 2 s, so the
 // gap between two tracks doesn't blink the speaker.
@@ -3836,19 +3923,8 @@ static BOOL CraIsSystemHotKey(NSEvent* event) {
     [super sendEvent:event];
 }
 
-// Pages, DevTools and panels are child windows docked over the main window, and
-// the page is usually key. Window managers (Rectangle, Magnet, Raycast) move
-// the AX focused window, which tore the page off its dock instead of moving
-// Cra; hand them the top-level window the child belongs to.
-static id CraTopLevelWindow(id element) {
-    if (![element isKindOfClass:[NSWindow class]]) return element;
-    NSWindow* w = element;
-    while (w.parentWindow) w = w.parentWindow;
-    return w;
-}
-
-- (id)accessibilityFocusedWindow { return CraTopLevelWindow([super accessibilityFocusedWindow]); }
-- (id)accessibilityMainWindow { return CraTopLevelWindow([super accessibilityMainWindow]); }
+// Window managers are handed the top-level window, not a docked page or panel, by
+// DockedWindowAccessibility in the app (#391).
 
 // Cmd-Q, the Dock, logout: give the delegate a say, then tear Chromium down
 // in order (browsers first, then the message loop, then CefShutdown in main).

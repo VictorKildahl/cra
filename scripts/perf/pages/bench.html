@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>bench</title>
+<!-- scripts/perf/bench.sh's page: 60 boxes, 120 paragraphs and a 1 s timer, like a quiet real page. It posts its
+     first contentful paint, and on each show its visibilitychange and the second animation frame after it. -->
+<style>body{font:14px system-ui;margin:20px} .b{display:inline-block;width:60px;height:40px;margin:3px;background:#68a}</style></head>
+<body><h1>Bench page</h1><div id="boxes"></div><div id="paras"></div>
+<script>
+const n = new URLSearchParams(location.search).get('n') || '0';
+const boxes = document.getElementById('boxes'), paras = document.getElementById('paras');
+for (let i = 0; i < 60; i++) { const d = document.createElement('div'); d.className = 'b'; boxes.appendChild(d); }
+for (let i = 0; i < 120; i++) { const p = document.createElement('p'); p.textContent = 'Paragraph ' + i + ' lorem ipsum dolor sit amet, consectetur adipiscing elit.'; paras.appendChild(p); }
+setInterval(() => { document.title = 'bench ' + n + ' ' + (Date.now() % 1000); }, 1000);
+function post(kind, t) { fetch('/mark', {method: 'POST', body: JSON.stringify({kind, n, t})}).catch(() => {}); }
+new PerformanceObserver(list => { for (const e of list.getEntries()) if (e.name === 'first-contentful-paint') post('fcp', performance.timeOrigin + e.startTime); }).observe({type: 'paint', buffered: true});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const v = Date.now();
+  requestAnimationFrame(() => requestAnimationFrame(() => post('shown', Date.now())));
+  post('visible', v);
+});
+</script></body></html>
