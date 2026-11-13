@@ -42,6 +42,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/printing/print_view_manager_common.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/cra_engine_hooks.h"
@@ -111,6 +112,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageBackgroundColor;
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
+- (void)pagePictureInPicture:(BOOL)active;
+- (void)pageMediaPlaying:(BOOL)playing;
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
 - (void)devToolsClosed:(BrowserWindowInterface*)devtools;
@@ -173,6 +176,42 @@ void Later(base::OnceClosure task) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE, std::move(task));
 }
 
+// The CEF bridge's Picture in Picture script (Sources/CraCEF/CraCEF.mm says what it picks). Its `send` reported
+// to the CEF bridge; Chrome reports the same through the page observer, so it gets a no-op.
+NSString* PictureInPictureScript(BOOL automatic, int x, int y) {
+    return [NSString stringWithFormat:
+        @"(function(send){var auto=%d,x=%d,y=%d;try{"
+        "if(document.pictureInPictureElement){if(!auto){document.exitPictureInPicture().catch(function(){});}return;}"
+        "var area=function(v){var r=v.getBoundingClientRect();return r.width*r.height;};"
+        "var c=Array.prototype.slice.call(document.querySelectorAll('video')).filter(function(v){return !v.disablePictureInPicture&&v.readyState>=1&&v.videoWidth>0;});"
+        "if(auto){c=c.filter(function(v){return !v.paused&&!v.ended&&!v.muted&&v.volume>0&&area(v)>=20000;});}"
+        "if(!c.length){send('pip:none');return;}"
+        "var v=null;"
+        "if(x>=0){v=c.filter(function(e){var r=e.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;}).sort(function(a,b){return area(a)-area(b);})[0]||null;}"
+        "if(!v){c.sort(function(a,b){return ((b.paused?0:1)-(a.paused?0:1))||(area(b)-area(a));});v=c[0];}"
+        "var go=function(){v.requestPictureInPicture().then(function(){send('pip:ok');}).catch(function(e){send('pip:err '+e.name+': '+e.message);});};"
+        "send('pip:want');"
+        "var n=0;var t=setInterval(function(){if((navigator.userActivation&&navigator.userActivation.isActive)||++n>20){clearInterval(t);go();}},50);"
+        "}catch(e){send('pip:err '+e);}})", automatic ? 1 : 0, x, y];
+}
+
+
+// Runs `script` in every frame of the page (embedded players live in iframes), with a user gesture when asked
+// (a page's requestPictureInPicture and play() need one).
+void RunInFrames(content::WebContents* contents, NSString* script, bool gesture) {
+  std::u16string js = base::SysNSStringToUTF16(script);
+  contents->GetPrimaryMainFrame()->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+    if (!frame->IsRenderFrameLive()) {
+      return;
+    }
+    if (gesture) {
+      frame->ExecuteJavaScriptWithUserGestureForTests(js, base::NullCallback(), /*world_id=*/0);
+    } else {
+      frame->ExecuteJavaScriptForTests(js, base::NullCallback(), /*world_id=*/0);
+    }
+  });
+}
+
 // "#RRGGBB", or "" for no colour.
 NSString* Hex(std::optional<SkColor> color) {
   if (!color) {
@@ -223,6 +262,15 @@ class PageObserver : public content::WebContentsObserver,
   void OnFindTabHelperDestroyed(find_in_page::FindTabHelper* helper) override { find_ = nullptr; }
 
   void DidChangeThemeColor() override { [owner_ pageThemeColor]; }
+  void MediaPictureInPictureChanged(bool active) override { [owner_ pagePictureInPicture:active]; }
+  void MediaStartedPlaying(const MediaPlayerInfo& info, const content::MediaPlayerId& id) override {
+    [owner_ pageMediaPlaying:YES];
+  }
+  void MediaStoppedPlaying(const MediaPlayerInfo& info,
+                           const content::MediaPlayerId& id,
+                           WebContentsObserver::MediaStoppedReason reason) override {
+    [owner_ pageMediaPlaying:NO];
+  }
   void OnBackgroundColorChanged() override { [owner_ pageBackgroundColor]; }
 
   void DidStartNavigation(content::NavigationHandle* handle) override {
@@ -1125,6 +1173,31 @@ void RunReadyBlocks() {
   }
 }
 
+- (void)pagePictureInPicture:(BOOL)active {
+  if (_isInPictureInPicture == active) {
+    return;
+  }
+  _isInPictureInPicture = active;
+  if (!active) {
+    _isPictureInPicturePlaying = NO;
+  } else {
+    _isPictureInPicturePlaying = _contents->IsCurrentlyAudible() || _isAudible;
+  }
+  if ([_delegate respondsToSelector:@selector(browser:didChangePictureInPicture:)]) {
+    [_delegate browser:self didChangePictureInPicture:active];
+  }
+}
+
+- (void)pageMediaPlaying:(BOOL)playing {
+  if (!_isInPictureInPicture || _isPictureInPicturePlaying == playing) {
+    return;
+  }
+  _isPictureInPicturePlaying = playing;
+  if ([_delegate respondsToSelector:@selector(browser:didChangePictureInPicturePlayback:)]) {
+    [_delegate browser:self didChangePictureInPicturePlayback:playing];
+  }
+}
+
 - (void)pageThemeColor {
   [_delegate browser:self didReportThemeColor:Hex(_contents->GetThemeColor())];
 }
@@ -1408,19 +1481,80 @@ void RunReadyBlocks() {
     find->StopFinding(clearSelection ? find_in_page::SelectionAction::kClear : find_in_page::SelectionAction::kKeep);
   }
 }
+#pragma mark Picture in Picture
+
 - (void)requestPictureInPictureAutomatic:(BOOL)automatic {
+  if (!_contents) {
+    return;
+  }
+  if (_isInPictureInPicture) {
+    if (!automatic) {
+      [self exitPictureInPicture];
+    }
+    return;
+  }
+  // Leaving a tab takes only a video that plays aloud: a quiet page gets nothing, not even the gesture, which
+  // would let it open pop-ups for a few seconds (GitHub #357).
+  if (automatic && !_isAudible) {
+    return;
+  }
+  NSString* script = [NSString stringWithFormat:@"%@(function(){})", PictureInPictureScript(automatic, -1, -1)];
+  RunInFrames(_contents, script, /*gesture=*/true);
 }
+
 - (void)exitPictureInPicture {
+  if (_contents) {
+    RunInFrames(_contents, @"if(document.pictureInPictureElement){document.exitPictureInPicture().catch(function(){});}",
+                false);
+  }
 }
+
+// The window's close button: the video pauses and goes back to the page, as in Arc and Chrome.
 - (void)closePictureInPicture {
+  if (_contents) {
+    RunInFrames(_contents,
+                @"(function(){var v=document.pictureInPictureElement;if(!v)return;v.pause();"
+                @"document.exitPictureInPicture().catch(function(){});})();",
+                false);
+  }
 }
+
 - (void)togglePictureInPicturePlayback {
+  if (_contents) {
+    RunInFrames(_contents,
+                @"(function(){var v=document.pictureInPictureElement;if(!v)return;"
+                @"if(v.paused||v.ended){v.play().catch(function(){});}else{v.pause();}})();",
+                true);
+  }
 }
+
 - (void)skipPictureInPictureBy:(double)seconds {
+  if (_contents) {
+    RunInFrames(_contents,
+                [NSString stringWithFormat:@"(function(){var v=document.pictureInPictureElement;if(!v)return;"
+                                           @"var t=v.currentTime+(%f);if(isFinite(v.duration))t=Math.min(t,v.duration);"
+                                           @"v.currentTime=Math.max(0,t);})();",
+                                           seconds],
+                false);
+  }
 }
+
 - (void)seekPictureInPictureTo:(double)seconds {
+  if (_contents) {
+    RunInFrames(_contents,
+                [NSString stringWithFormat:@"(function(){var v=document.pictureInPictureElement;"
+                                           @"if(!v||!isFinite(v.duration))return;"
+                                           @"v.currentTime=Math.max(0,Math.min(%f,v.duration));})();",
+                                           seconds],
+                false);
+  }
 }
+
+// The system print dialog, as CEF's Print: Chrome's print preview would hang off its never-shown window.
 - (void)print {
+  if (_contents) {
+    printing::StartPrint(_contents, /*print_preview_disabled=*/true, /*has_selection=*/false);
+  }
 }
 - (BOOL)runChromeCommand:(NSString*)name {
   return NO;
