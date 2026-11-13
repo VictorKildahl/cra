@@ -55,8 +55,9 @@ enable_dsyms = false
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
 enable_widevine = true
-enable_background_mode = false
 disable_fieldtrial_testing_config = true
+# enable_background_mode stays on: 157 no longer builds without it (//chrome/browser/background asserts);
+# Cra turns background mode off at run time.
 clang_use_chrome_plugins = false
 EOF
   (cd "$ROOT/src" && gn gen "$OUT")
