@@ -34,6 +34,8 @@ final class SummaryModel: ObservableObject {
 /// below it, and a footer that says who wrote it, with the close button.
 struct SummaryView: View {
     @ObservedObject var model: SummaryModel
+    /// The card unfolds into place as the screen comes in (off with Reduce Motion).
+    var unfolds = false
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -49,7 +51,7 @@ struct SummaryView: View {
                             FaviconView(image: model.favicon).frame(width: 16, height: 16)
                             Text(model.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         }
-                        FoldedPageCard(snapshot: model.snapshot)
+                        FoldedPageCard(snapshot: model.snapshot, unfolds: unfolds)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 14)
@@ -147,8 +149,24 @@ struct SummaryView: View {
 /// upside down, as if the page were folded back there.
 private struct FoldedPageCard: View {
     let snapshot: UIImage?
+    var unfolds = false
+    @State private var unfolded = false
 
     var body: some View {
+        card
+            // From the strip at mid-height: unfolds about 75 % wide, then rises with a slight tilt
+            // that straightens as it settles (App Store preview, 14.5–14.8 s).
+            .rotation3DEffect(.degrees(unfolds && !unfolded ? 80 : 0), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.6)
+            .rotationEffect(.degrees(unfolds && !unfolded ? -4 : 0))
+            .scaleEffect(unfolds && !unfolded ? 1.3 : 1)
+            .offset(y: unfolds && !unfolded ? 180 : 0)
+            .onAppear {
+                guard unfolds else { return }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) { unfolded = true }
+            }
+    }
+
+    private var card: some View {
         VStack(spacing: 0) {
             page(width: 218).frame(width: 218, height: 16, alignment: .top).clipped()
                 .scaleEffect(x: 1, y: -1)

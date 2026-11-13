@@ -56,21 +56,38 @@ extension BrowserViewController {
                 share.popoverPresentationController?.sourceView = self.view
                 self.topPresenter.present(share, animated: true)
             }
-            let host = UIHostingController(rootView: SummaryView(model: model))
+            let folds = !UIAccessibility.isReduceMotionEnabled
+            let host = UIHostingController(rootView: SummaryView(model: model, unfolds: folds))
             host.view.frame = self.view.bounds
             host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             host.view.alpha = 0
-            self.addChild(host)
-            self.view.addSubview(host.view)
-            host.didMove(toParent: self)
             self.summaryHost = host
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            // The page shrinks towards where its card sits while the summary screen comes in.
-            UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: []) {
-                host.view.alpha = 1
-                self.pageContainer.transform = Self.summaryCardTransform(in: self.view.bounds)
-            } completion: { _ in
-                self.pageContainer.transform = .identity
+            let present = {
+                self.addChild(host)
+                self.view.addSubview(host.view)
+                host.didMove(toParent: self)
+            }
+            if folds {
+                // Arc Search's fold, measured in the App Store preview (14.3–15.0 s): the page tips flat
+                // into a strip at about half height, then the card unfolds there and rises into place.
+                UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseIn]) {
+                    self.pageContainer.transform3D = Self.foldedPageTransform(in: self.view.bounds)
+                } completion: { _ in
+                    present()
+                    UIView.animate(withDuration: 0.2) { host.view.alpha = 1 } completion: { _ in
+                        self.pageContainer.transform3D = CATransform3DIdentity
+                    }
+                }
+            } else {
+                // The page shrinks towards where its card sits while the summary screen comes in.
+                present()
+                UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: []) {
+                    host.view.alpha = 1
+                    self.pageContainer.transform = Self.summaryCardTransform(in: self.view.bounds)
+                } completion: { _ in
+                    self.pageContainer.transform = .identity
+                }
             }
             Article.extract(from: page.webView) { article in
                 Task { @MainActor in
@@ -82,6 +99,16 @@ extension BrowserViewController {
                 }
             }
         }
+    }
+
+    /// The page tipped almost flat, hinged on a line at 52 % of the height (the preview's strip).
+    static func foldedPageTransform(in bounds: CGRect) -> CATransform3D {
+        var transform = CATransform3DIdentity
+        transform.m34 = -1 / 900
+        let hinge = bounds.height * (0.52 - 0.5)
+        transform = CATransform3DTranslate(transform, 0, hinge, 0)
+        transform = CATransform3DRotate(transform, .pi * 0.47, 1, 0, 0)
+        return CATransform3DTranslate(transform, 0, -hinge, 0)
     }
 
     func closeSummary() {
