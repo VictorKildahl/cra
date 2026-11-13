@@ -378,9 +378,9 @@ class PageObserver : public content::WebContentsObserver,
 // A Browser's window that holds Cra's pages: never seen, never clicked, never captured, never key or main (keys
 // would go to a window with nothing in it). Chrome still anchors bubbles to it (an extension's popup), which Cra's
 // app finds as a child of a page window (ExtensionPopupCandidate) and frames under its own button.
-BOOL NeverKey(id self, SEL _cmd) {
-  return NO;
-}
+// The windows MakeHostWindow made; Chrome's window class answers NO for them (swapped once, as Cra's app does for
+// CEF's page windows in EmbeddedPages: the window's own class may be a KVO subclass, so it isn't replaced).
+NSHashTable<NSWindow*>* g_host_windows = nil;
 
 void MakeHostWindow(NSWindow* window) {
   if (!window) {
@@ -389,17 +389,23 @@ void MakeHostWindow(NSWindow* window) {
   window.alphaValue = 0;
   window.ignoresMouseEvents = YES;
   window.sharingType = NSWindowSharingNone;
-  Class original = object_getClass(window);
-  NSString* name = [@"CraHost_" stringByAppendingString:NSStringFromClass(original)];
-  Class host = NSClassFromString(name);
-  if (!host) {
-    host = objc_allocateClassPair(original, name.UTF8String, 0);
-    class_addMethod(host, @selector(canBecomeKeyWindow), reinterpret_cast<IMP>(NeverKey), "c@:");
-    class_addMethod(host, @selector(canBecomeMainWindow), reinterpret_cast<IMP>(NeverKey), "c@:");
-    // Chrome's own code still sees its class (KVO and isKindOfClass go by the superclass chain).
-    objc_registerClassPair(host);
+  if (!g_host_windows) {
+    g_host_windows = [NSHashTable weakObjectsHashTable];
+    Class cls = [window class];
+    for (NSString* name in @[ @"canBecomeKeyWindow", @"canBecomeMainWindow" ]) {
+      SEL selector = NSSelectorFromString(name);
+      Method method = class_getInstanceMethod(cls, selector);
+      if (!method) {
+        continue;
+      }
+      using BoolIMP = BOOL (*)(id, SEL);
+      BoolIMP original = reinterpret_cast<BoolIMP>(method_getImplementation(method));
+      method_setImplementation(method, imp_implementationWithBlock(^BOOL(id me) {
+                                 return [g_host_windows containsObject:me] ? NO : original(me, selector);
+                               }));
+    }
   }
-  object_setClass(window, host);
+  [g_host_windows addObject:window];
 }
 
 // The hidden Browser that holds a profile's pages, and what arrives in it that Cra didn't put there: a
