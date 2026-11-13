@@ -215,6 +215,20 @@ Five more Google services off (SegmentationPlatform, PageInfoAboutThisSite, Auto
 VisitedURLRankingService, ModelQualityLogging) measured no change in the browser process (199–205 MB
 with and without, two interleaved rounds), so they stay on.
 
+### Looked at 13 Nov 2026, nothing to take
+
+- **Other privately copied libraries**: after the framework fix, the browser, GPU and page processes
+  have no other dirty constant region (`__DATA_CONST`/`__AUTH_CONST`) apart from 16 KB in
+  `libcef_sandbox.dylib` and the GPU driver's own.
+- **The browser process per tab**: 1 → 20 tabs adds ~85 MB, almost all in Chromium's own heap
+  (PartitionAlloc, vmmap's "Memory Tag 253"), ~4 MB a tab: the Chrome browser and window CEF makes for
+  every tab. The hidden Chrome toolbar is ~0.3 MB of it (`CRA_NO_CHROME_TOOLBAR=1`, two rounds), and
+  extension popups need it. Only leaving CEF (3 below) takes the rest. A test copy's 38 MB of
+  CoreAnimation memory comes from running in the background on the test screen; the installed app has ~5 MB.
+- **New window** (`MODES=launch`): ~270 ms from the command to the page's first paint, spread over the
+  window's layout, Core Animation commits and the spare page made after it (~20 ms, a second later);
+  no single cost to take. Start → window open: ~0.9 s.
+
 ### 3. Leave CEF (browser process, ~50 MB at 20 tabs; any Chromium version)
 
 Build Chrome's own framework with a thin Cra layer instead of CEF: one Chrome browser per profile
