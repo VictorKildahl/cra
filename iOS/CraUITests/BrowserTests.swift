@@ -629,10 +629,36 @@ final class SpacesTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
-        app.buttons["bar-spaces"].tap()
-        XCTAssertTrue(app.staticTexts["Spaces come from Cra on your Mac"].waitForExistence(timeout: 10))
+        // Arc Search's "Every tab, anywhere." card points at the Spaces button and opens the sheet.
+        let card = app.buttons["sync-card-open"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        sleep(1)
+        keep("sync-card")
+        card.tap()
+        XCTAssertTrue(app.staticTexts["sync-title"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["sync-title"].label, "Sync with Cra for Mac")
+        sleep(1)
+        keep("sync-intro")
+        app.buttons["sync-have-mac"].tap()
+        XCTAssertTrue(app.staticTexts["sync-detail-title"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["sync-detail-title"].label, "Turn on Sync on your Mac")
+        app.buttons["sync-go-back"].tap()
+        app.buttons["sync-no-mac"].tap()
+        XCTAssertTrue(app.staticTexts["Get Cra on your computer first"].waitForExistence(timeout: 3))
+        keep("sync-no-mac")
         app.buttons["spaces-close"].tap()
+        // Closed, the card stays away.
+        let close = app.buttons["sync-card-close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertFalse(card.waitForExistence(timeout: 1))
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.page("Second") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-tabs"].tap()
         XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertFalse(card.exists, "a closed card doesn't come back")
     }
 }
 

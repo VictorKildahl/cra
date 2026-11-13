@@ -41,6 +41,18 @@ enum SyncedSidebar {
         }
     }
 
+    /// Whether the Mac's Spaces are on the phone already, without asking iCloud for them.
+    static func hasSpaces(_ done: @escaping (Bool) -> Void) {
+        // Signed out of iCloud there is nothing to find, and finding the container can take seconds.
+        if LaunchOptions.value("CraSyncDir") == nil, FileManager.default.ubiquityIdentityToken == nil { return done(false) }
+        DispatchQueue.global(qos: .utility).async {
+            let state = read()
+            DispatchQueue.main.async {
+                if case .spaces = state { done(true) } else { done(false) }
+            }
+        }
+    }
+
     /// A made-up Mac sidebar for tests and screenshots: "Personal" with a pinned tab, a folder
     /// holding one, and a Today tab; and an empty "Play".
     private static func demo() -> SidebarDocument {

@@ -1074,3 +1074,24 @@ struct MobileCoachMarkTests {
         #expect(line.end == CGPoint(x: 369, y: 412))
     }
 }
+
+struct MobileSyncIntroTests {
+    @Test func theCardShowsUntilClosedOrSynced() {
+        #expect(MobileSyncIntro.showsCard(hasSpaces: false, dismissed: false))
+        #expect(!MobileSyncIntro.showsCard(hasSpaces: true, dismissed: false))
+        #expect(!MobileSyncIntro.showsCard(hasSpaces: false, dismissed: true))
+    }
+
+    @Test func theWayToSyncMentionsICloudOnlyWhenItIsOff() {
+        #expect(!MobileSyncIntro.haveMacBody(iCloud: true).contains("Sign in to iCloud"))
+        #expect(MobileSyncIntro.haveMacBody(iCloud: false).hasSuffix("Sign in to iCloud on this iPhone too."))
+    }
+
+    @Test func closingTheCardIsKeptAndOlderFilesHaveNotClosedIt() throws {
+        let old = try JSONDecoder().decode(MobileSettings.self, from: Data("{}".utf8))
+        #expect(!old.hasDismissedSyncCard)
+        var settings = MobileSettings()
+        settings.hasDismissedSyncCard = true
+        #expect(try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(settings)).hasDismissedSyncCard)
+    }
+}

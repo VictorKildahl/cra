@@ -505,6 +505,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func settleSwitcher(_ switcher: TabSwitcherView) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        offerSyncCard(in: switcher)
         UIView.animate(spring: MobileMotion.tabRowSettle) {
             switcher.expansion = 0
             switcher.layoutIfNeeded()

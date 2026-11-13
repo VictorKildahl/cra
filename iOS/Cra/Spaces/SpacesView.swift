@@ -147,24 +147,12 @@ struct SpacesView: View {
         .padding(.vertical, 10)
     }
 
-    private var empty: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "desktopcomputer").font(.system(size: 34, weight: .medium)).foregroundStyle(.secondary)
-            switch model.state {
-            case .loading:
-                ProgressView()
-            case .unavailable:
-                Text("Spaces come from Cra on your Mac").font(.system(size: 17, weight: .semibold))
-                Text("Sign in to iCloud on this iPhone, and turn on Sync in Cra on your Mac under Settings ▸ General.")
-                    .font(.system(size: 15)).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            default:
-                Text("Nothing synced yet").font(.system(size: 17, weight: .semibold))
-                Text("Turn on Sync in Cra on your Mac under Settings ▸ General, and keep iCloud Drive on for Cra on this iPhone (Settings ▸ your name ▸ iCloud ▸ iCloud Drive). Your Spaces show up here.")
-                    .font(.system(size: 15)).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            }
+    @ViewBuilder private var empty: some View {
+        if case .loading = model.state {
+            ProgressView().accessibilityIdentifier("spaces-loading")
+        } else {
+            SyncIntroView(iCloud: { if case .unavailable = model.state { return false } else { return true } }())
         }
-        .padding(.horizontal, 40)
-        .accessibilityIdentifier("spaces-empty")
     }
 
     /// The Space's colour, softened as Arc Search's sheet is.
@@ -191,5 +179,99 @@ extension UIColor {
         getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
         other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
         return UIColor(red: r1 + (r2 - r1) * amount, green: g1 + (g2 - g1) * amount, blue: b1 + (b2 - b1) * amount, alpha: 1)
+    }
+}
+
+/// Before anything has synced: Cra's version of Arc Search's "Sync with Arc Desktop" sheet
+/// (`MobileSyncIntro`), pale with a coral and blue glow at the top, the logo, the title in
+/// Arc's blue and two buttons; each leads to a page with a drawn smile and "Go back".
+struct SyncIntroView: View {
+    let iCloud: Bool
+    @State private var page: MobileSyncIntro.Page = .intro
+
+    private let blue = Color(red: 0.208, green: 0.31, blue: 1)
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.91, green: 0.94, blue: 0.99).ignoresSafeArea()
+            VStack {
+                ZStack {
+                    LinearGradient(colors: [Color(red: 0.75, green: 0.8, blue: 0.92), Color(red: 0.86, green: 0.89, blue: 0.96)], startPoint: .topLeading, endPoint: .bottom)
+                    RadialGradient(colors: [Color(red: 0.95, green: 0.55, blue: 0.57).opacity(0.85), .clear], center: .init(x: 0.75, y: 0.15), startRadius: 0, endRadius: 260)
+                }
+                .frame(height: 320)
+                .mask(LinearGradient(colors: [.black, .black, .clear], startPoint: .top, endPoint: .bottom))
+                Spacer()
+            }
+            .ignoresSafeArea()
+            Group {
+                switch page {
+                case .intro: intro
+                case .haveMac: detail(MobileSyncIntro.haveMacTitle, MobileSyncIntro.haveMacBody(iCloud: iCloud))
+                case .noMac: detail(MobileSyncIntro.noMacTitle, MobileSyncIntro.noMacBody)
+                }
+            }
+            .transition(.opacity)
+        }
+        .animation(.easeInOut(duration: 0.3), value: page)
+        .environment(\.colorScheme, .light)
+        // A container, so the identifier isn't copied onto every text inside.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("spaces-empty")
+    }
+
+    private var intro: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Image("LaunchMark").resizable().frame(width: 30, height: 30).accessibilityHidden(true)
+            Text(MobileSyncIntro.title).font(.system(size: 30, weight: .heavy)).foregroundStyle(blue).multilineTextAlignment(.center)
+                .accessibilityIdentifier("sync-title")
+            Text(MobileSyncIntro.body).font(.system(size: 16)).foregroundStyle(Color(white: 0.25)).multilineTextAlignment(.center)
+            Spacer()
+            button(MobileSyncIntro.haveMacButton, id: "sync-have-mac") { page = .haveMac }
+            button(MobileSyncIntro.noMacButton, id: "sync-no-mac") { page = .noMac }
+                .padding(.bottom, 24)
+        }
+        .padding(.horizontal, 22)
+    }
+
+    private func detail(_ title: String, _ body: String) -> some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Smile().stroke(blue, style: StrokeStyle(lineWidth: 6, lineCap: .round)).frame(width: 64, height: 56).accessibilityHidden(true)
+            Text(title).font(.system(size: 30, weight: .heavy)).foregroundStyle(blue).multilineTextAlignment(.center)
+                .accessibilityIdentifier("sync-detail-title")
+            Text(body).font(.system(size: 16)).foregroundStyle(Color(white: 0.3)).multilineTextAlignment(.center)
+            Spacer()
+            Spacer()
+            Button { page = .intro } label: {
+                Label(MobileSyncIntro.goBack, systemImage: "arrow.left").font(.system(size: 16, weight: .medium)).foregroundStyle(.black)
+            }
+            .accessibilityIdentifier("sync-go-back")
+            .padding(.bottom, 30)
+        }
+        .padding(.horizontal, 44)
+    }
+
+    private func button(_ title: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 54)
+                .background(blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+}
+
+/// Arc Search's drawn smile: two short strokes for eyes over a curve.
+private struct Smile: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.width * 0.36, y: 0)); path.addLine(to: CGPoint(x: rect.width * 0.33, y: rect.height * 0.4))
+        path.move(to: CGPoint(x: rect.width * 0.66, y: rect.height * 0.05)); path.addLine(to: CGPoint(x: rect.width * 0.66, y: rect.height * 0.38))
+        path.move(to: CGPoint(x: 0, y: rect.height * 0.7))
+        path.addQuadCurve(to: CGPoint(x: rect.width, y: rect.height * 0.85), control: CGPoint(x: rect.width * 0.45, y: rect.height * 1.15))
+        return path
     }
 }
