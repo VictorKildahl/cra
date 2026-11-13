@@ -129,6 +129,8 @@ public struct MobileSettings: Codable, Equatable {
     public var searchesWithCustom = false
     /// A first search has been made: the starter questions under the empty field go away.
     public var hasSearched = false
+    /// The "Cra just blocked N trackers" tip card has been shown (it shows once).
+    public var hasSeenBlockTip = false
 
     public init() {}
 
@@ -150,7 +152,7 @@ public struct MobileSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip
     }
 
     public init(from decoder: Decoder) throws {
@@ -166,6 +168,7 @@ public struct MobileSettings: Codable, Equatable {
         customSearchURL = (try? c.decodeIfPresent(String.self, forKey: .customSearchURL)).flatMap { MobileSearch.isValidTemplate($0) ? $0 : nil }
         searchesWithCustom = (try? c.decodeIfPresent(Bool.self, forKey: .searchesWithCustom)) ?? false
         hasSearched = (try? c.decodeIfPresent(Bool.self, forKey: .hasSearched)) ?? false
+        hasSeenBlockTip = (try? c.decodeIfPresent(Bool.self, forKey: .hasSeenBlockTip)) ?? false
         answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 

@@ -110,9 +110,12 @@ final class PageMenuView: UIView {
         footer.layer.cornerRadius = MobilePageMenu.rowCornerRadius
         footer.layer.cornerCurve = .continuous
         footer.accessibilityIdentifier = "menu-reload-without-blockers"
+        // One button for VoiceOver: the hint says what it does, the count is its value.
+        footer.isAccessibilityElement = true
+        footer.accessibilityTraits = .button
+        footer.accessibilityLabel = MobilePageMenu.restoreHint
         footer.addTarget(self, action: #selector(withoutBlockersTapped), for: .touchUpInside)
         addSubview(footer)
-        scrubbed.accessibilityIdentifier = "menu-blocked-count"
         scrubbed.isUserInteractionEnabled = false
         footer.addSubview(scrubbed)
         restore.text = MobilePageMenu.restoreHint
@@ -161,9 +164,10 @@ final class PageMenuView: UIView {
                 text.addAttribute(.font, value: UIFont.systemFont(ofSize: 17, weight: .bold), range: NSRange(range, in: label.text))
             }
             scrubbed.attributedText = text
-            scrubbed.accessibilityLabel = label.text
+            footer.accessibilityValue = label.text
             scrubbed.isHidden = false
         } else {
+            footer.accessibilityValue = nil
             scrubbed.isHidden = true
         }
         setNeedsLayout()

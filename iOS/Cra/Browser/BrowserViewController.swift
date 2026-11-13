@@ -26,6 +26,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var switcher: TabSwitcherView?
     var menuHost: SheetHost?
     var menuView: PageMenuView?
+    /// Arc Search's blocker notices (`BlockerNotices.swift`): the one-time tip, and the question
+    /// after a page was restored without blockers, with the tab that was restored.
+    var blockTip: BlockTipView?
+    var fixPill: FixQuestionPill?
+    var fixPending: UUID?
     // Swipes (BrowserGestures.swift).
     var swipeNeighbour: UIImageView?
     var swipeNeighbourStep = 0
@@ -212,6 +217,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
         bar.controlsVisibility = isSearching ? 0 : 1
+        placeBlockerNotices()
 
         let keyboard = max(keyboardHeight, safeBottom)
         let safeTop = view.safeAreaInsets.top
@@ -291,6 +297,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func setSearching(_ searching: Bool, incognito: Bool? = nil) {
         guard searching != isSearching else { return }
         if searching {
+            dropBlockerNotices()
             if let incognito { incognitoSearch = incognito }
             sheet.isIncognito = incognitoSearch
             backdrop.isIncognito = incognitoSearch
@@ -418,6 +425,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         page.appLinks = { [weak self] in self?.settings.value.openAppLinksIn ?? .nativeApp }
         guard page !== shownPage else { return }
         closeReader()
+        dropBlockerNotices()
         shownPage?.webView.removeFromSuperview()
         shownPage?.delegate = nil
         shownPage = page
@@ -462,6 +470,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     @objc func showTabs() {
         guard switcher == nil, !isSearching else { return }
+        dropBlockerNotices()
         guard let page = shownPage else { return settleSwitcher(prepareSwitcher()) }
         let id = page.tabID
         page.takeSnapshot { [weak self] image in
@@ -793,6 +802,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     @objc func showMenu() {
         guard let page = shownPage, menuHost == nil, !isSearching else { return }
+        dropBlockTip()
         let menu = PageMenuView(state: menuState(for: page))
         menu.delegate = self
         let host = SheetHost(content: menu, cornerRadius: MobilePageMenu.cornerRadius) { [weak menu] in
@@ -916,6 +926,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func pageMenuReloadWithoutBlockers() {
         shownPage?.reloadWithoutBlockers()
+        fixPending = shownPage?.tabID
         menuHost?.dismiss()
     }
 
@@ -932,6 +943,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let address = page.webView.url?.absoluteString
         store.update(page.tabID, url: address == "about:blank" ? nil : address, title: page.webView.title)
         if page === shownPage { updateBrowseToggle() }
+        if page === shownPage { blockerNoticesFollow(page) }
     }
 
     func webPage(_ page: WebPage, didFinishLoading success: Bool) {
@@ -939,6 +951,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             page.iconCandidates { [weak self] candidates in self?.favicons.fetch(for: address, candidates: candidates) }
         }
         guard page === shownPage else { return }
+        if success { pageFinishedForBlockerNotices(page) }
         if success, LaunchOptions.summarizesFirstPage, !didSummarizeFirstPage {
             didSummarizeFirstPage = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.summarize() }

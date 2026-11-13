@@ -229,9 +229,9 @@ final class BlockingTests: BrowserTestCase {
         launch(["-CraOpenURL", page, "-CraSearch", "NO"])
         waitForPage("Blocking")
         app.buttons["bar-menu"].tap()
-        let count = app.staticTexts["menu-blocked-count"]
-        XCTAssertTrue(count.waitForExistence(timeout: 10))
-        XCTAssertEqual(count.label, "Cra scrubbed 1 tracker")
+        let footer = app.buttons["menu-reload-without-blockers"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 10))
+        XCTAssertEqual(footer.value as? String, "Cra scrubbed 1 tracker")
         keep("blocked-count")
         // The page has no site of its own, so its Site Settings are the global ones.
         app.buttons["menu-row-siteSettings"].tap()
@@ -245,7 +245,7 @@ final class BlockingTests: BrowserTestCase {
         sleep(6)
         app.buttons["bar-menu"].tap()
         XCTAssertTrue(app.staticTexts["menu-host"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["menu-blocked-count"].exists)
+        XCTAssertEqual(app.buttons["menu-reload-without-blockers"].value as? String ?? "", "")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         app.buttons["bar-tabs"].tap()
         let card = app.buttons["tab-card-0"]
@@ -253,6 +253,51 @@ final class BlockingTests: BrowserTestCase {
         // Let through, the request is the network's business: it loads, or is still on its way on
         // a slow or filtered network. Stopped by a rule it would have failed at once.
         XCTAssertNotEqual(card.label, "script-stopped")
+    }
+
+    /// Arc Search 1.49's tip (Victor's recording, 1:59): the first page that had something
+    /// stopped says so over the bar, once; the × puts it away and it doesn't come back.
+    func testTheFirstBlockedPageShowsTheTipOnce() {
+        let page = "data:text/html,<meta name=viewport content='width=device-width'><title>Tracked</title><h1>Tracked</h1>"
+            + "<script src='https://www.google-analytics.com/analytics.js'></script>"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        // The tip itself says the page loaded (the page's own text reaches the test unreliably).
+        let title = app.staticTexts["block-tip-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
+        XCTAssertEqual(title.label, "Cra just blocked 1 tracker")
+        sleep(1)
+        keep("block-tip")
+        app.buttons["block-tip-close"].tap()
+        XCTAssertFalse(title.waitForExistence(timeout: 2))
+        app.buttons["bar-menu"].tap()
+        app.buttons["menu-reload"].tap()
+        sleep(4)
+        XCTAssertFalse(app.staticTexts["block-tip-title"].exists, "the tip shows once")
+    }
+
+    /// Restoring the original page asks whether that fixed it (3:20); a thumbs-up turns the
+    /// site's blockers off, kept in its Site Settings.
+    func testRestoringThePageAsksWhetherItFixedIt() {
+        launch(["-CraOpenURL", "https://example.com/", "-CraSearch", "NO"])
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 10))
+        sleep(2)
+        app.buttons["bar-menu"].tap()
+        app.buttons["menu-reload-without-blockers"].tap()
+        let yes = app.buttons["fix-yes"]
+        XCTAssertTrue(yes.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["fix-question-label"].label, "Did it fix the issue?")
+        sleep(1)
+        keep("fix-question")
+        yes.tap()
+        XCTAssertEqual(app.staticTexts["fix-question-label"].label, "Blockers disabled for example.com")
+        keep("blockers-disabled")
+        sleep(3)
+        app.buttons["bar-menu"].tap()
+        app.buttons["menu-row-siteSettings"].tap()
+        let trackers = app.switches["setting-block-trackers"]
+        XCTAssertTrue(trackers.waitForExistence(timeout: 5))
+        XCTAssertEqual(trackers.value as? String, "0")
+        XCTAssertEqual(app.switches["setting-block-ads"].value as? String, "0")
     }
 }
 

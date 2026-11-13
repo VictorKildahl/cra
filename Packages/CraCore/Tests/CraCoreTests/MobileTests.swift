@@ -1020,3 +1020,36 @@ struct MobileBrowseDynamicTypeTests {
         #expect(style.range(of: #"font-size: \d+px"#, options: .regularExpression) == nil, "no fixed text sizes")
     }
 }
+
+struct MobileBlockerNoticesTests {
+    @Test func theTipShowsOnceOnAPageThatBlockedSomethingOutsideIncognito() {
+        #expect(MobileBlockerNotices.showsTip(blocked: 14, alreadyShown: false, isIncognito: false))
+        #expect(!MobileBlockerNotices.showsTip(blocked: 0, alreadyShown: false, isIncognito: false))
+        #expect(!MobileBlockerNotices.showsTip(blocked: 14, alreadyShown: true, isIncognito: false))
+        #expect(!MobileBlockerNotices.showsTip(blocked: 14, alreadyShown: false, isIncognito: true))
+    }
+
+    @Test func theTipCountsLikeArcSearch() {
+        #expect(MobileBlockerNotices.tipTitle(14) == ("Cra just blocked 14 trackers", "14"))
+        #expect(MobileBlockerNotices.tipTitle(1) == ("Cra just blocked 1 tracker", "1"))
+    }
+
+    @Test func theTipIsRememberedInSettingsAndOlderFilesHaveNotSeenIt() throws {
+        let old = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"hasSearched":true}"#.utf8))
+        #expect(!old.hasSeenBlockTip)
+        var settings = MobileSettings()
+        settings.hasSeenBlockTip = true
+        let back = try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(settings))
+        #expect(back.hasSeenBlockTip)
+    }
+
+    @Test func aThumbsUpTurnsTheSitesBlockersOffAndLeavesOtherSitesAlone() {
+        var settings = MobileSettings()
+        settings.disableBlockers(for: "www.google.com")
+        let google = settings.options(for: "google.com")
+        #expect(!google.blockAds && !google.blockTrackers && !google.blockCookieBanners)
+        #expect(google.pinchToSummarize)
+        #expect(settings.options(for: "example.com") == MobileSiteOptions())
+        #expect(MobileBlockerNotices.disabledLabel(site: "google.com") == "Blockers disabled for google.com")
+    }
+}

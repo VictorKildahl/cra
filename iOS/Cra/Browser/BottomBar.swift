@@ -16,6 +16,11 @@ final class BottomBar: UIView {
     var mode: Mode = .page { didSet { applyMode() } }
     private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
     private let hairline = UIView()
+    /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
+    private let menuRing = UIView()
+    var ringsMenu = false {
+        didSet { menuRing.alpha = ringsMenu ? 1 : 0 }
+    }
 
     /// 1 with every control showing; 0 while the search sheet is open and only the pill's place
     /// is kept (the sheet's field stands in for it).
@@ -41,6 +46,12 @@ final class BottomBar: UIView {
         settingsButton.accessibilityIdentifier = "bar-settings"
         settingsButton.accessibilityLabel = "Settings"
         [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach(addSubview)
+        menuRing.isUserInteractionEnabled = false
+        menuRing.layer.borderColor = UIColor.white.cgColor
+        menuRing.layer.borderWidth = 3
+        menuRing.alpha = 0
+        menuRing.accessibilityIdentifier = "bar-menu-ring"
+        addSubview(menuRing)
         applyMode()
     }
 
@@ -85,6 +96,8 @@ final class BottomBar: UIView {
         spacesButton.frame = frames.tabs.insetBy(dx: 1.5, dy: 1.5)
         settingsButton.frame = frames.menu.insetBy(dx: 1.5, dy: 1.5)
         zip([tabsButton, menuButton, spacesButton, settingsButton], transforms).forEach { $0.transform = $1 }
+        menuRing.frame = frames.menu.insetBy(dx: -4, dy: -4)
+        menuRing.layer.cornerRadius = menuRing.bounds.width / 2
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
