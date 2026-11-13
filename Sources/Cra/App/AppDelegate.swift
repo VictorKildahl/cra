@@ -2413,7 +2413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 store.setMuted(c, !t.muted)
                 runtime(for: c)?.browser.setAudioMuted(!t.muted)
             }
-        case "clearToday": store.clearToday()
+        case "clearToday": store.clearToday(playing: main.sidebarUI.audibleTabIDs)
         case "pictureInPicture": main.currentBrowser?.requestPictureInPicture(automatic: false)
         case "nextTab": main.cycleTab(1)
         case "previousTab": main.cycleTab(-1)

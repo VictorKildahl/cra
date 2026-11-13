@@ -342,7 +342,7 @@ enum ShortcutDescriptions {
         "previousTab": "Switch to the previous tab.",
         "recentTab": "Open the tab switcher and cycle through recent tabs, like ⌘Tab for apps.",
         "recentTabBackward": "Cycle backwards through recent tabs in the tab switcher.",
-        "clearToday": "Archive all of today’s tabs.",
+        "clearToday": "Archive today’s tabs, except the one on screen and any playing sound.",
         "favoriteTab": "Add the tab to the favorites grid.",
         "renameTab": "Give the tab a name of your own.",
         "duplicateTab": "Open a copy of the tab.",

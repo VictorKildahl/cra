@@ -1375,6 +1375,10 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
 - Cra (27 Oct): every sidebar/toolbar/Site Control Center/PiP tooltip now uses `.arcTooltip`; tab rows,
   favorites, split rows and URL fields use the cursor anchor and show the title (Arc) instead of the URL;
   the innermost hovered control owns the tip; the Today "Clear" button got "Clear Today tabs".
+- Clear keeps tabs (GitHub #406, 13 Nov 2026): Arc 1.173.1's strings "Clear unselected Today tabs" and
+  "Tooltip; Clear unselected tabs in this list" say the selected tab stays, and the reporter saw a tab
+  playing media stay too (Arc's tab model has `isAudible`). Cra's `TodayClear` keeps each window's
+  selected tab and the speaker's audible tabs, with the split or tab group around them.
 - Added after that: a muted tab's speaker is a button ("Unmute Tab"); a red dot "This tab is using your
   camera or microphone" from CEF's OnMediaAccessChange (CraBrowser.isCapturingMedia →
   SidebarUIState.capturingTabIDs); the split close button reads "Separate from Split View" while ⌥ is held
