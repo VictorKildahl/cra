@@ -1268,9 +1268,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// window shows when the page goes past its edge beside the Library (#340).
     private func findPanelFrame(page: NSRect) -> NSRect {
         lastFindPage = page
-        let size = askOnPage.state.enabled ? askOnPage.size : CraMetrics.findBarSize, inset = CraMetrics.findBarInset
+        let inset = CraMetrics.findBarInset
         var page = page
         if let window, page.maxX > window.frame.maxX { page.size.width = max(0, window.frame.maxX - page.minX) }
+        if askOnPage.state.enabled {
+            let available = AskOnPageLayout.frame(preferred: CGSize(width: 400, height: CGFloat.greatestFiniteMagnitude), page: page, inset: inset).size
+            askOnPage.constrain(to: available)
+            return AskOnPageLayout.frame(preferred: askOnPage.size, page: page, inset: inset)
+        }
+        let size = CraMetrics.findBarSize
         return NSRect(x: page.maxX - size.width - inset, y: page.maxY - size.height - inset, width: size.width, height: size.height)
     }
 

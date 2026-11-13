@@ -260,4 +260,21 @@ struct AskOnPageToneTests {
         #expect(q.b > q.g)
         #expect(AskOnPageTone.luminance(tone.questionOnLight) < 0.2)
     }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func askLayoutCapsConversationAndFitsTheFocusedPage() {
+        for page in [CGRect(x: 100, y: 200, width: 900, height: 700), CGRect(x: -600, y: 40, width: 240, height: 160),
+                     CGRect(x: 1, y: 2, width: 8, height: 6), .zero] {
+            let panel = AskOnPageLayout.frame(preferred: CGSize(width: 400, height: 498), page: page, inset: 10)
+            #expect(panel.width >= 0 && panel.width <= 400 && panel.height >= 0)
+            #expect(panel.minX >= page.minX && panel.maxX <= page.maxX && panel.minY >= page.minY && panel.maxY <= page.maxY)
+        }
+        let wide = AskOnPageLayout.frame(preferred: CGSize(width: 400, height: 498),
+                                        page: CGRect(x: 0, y: 0, width: 900, height: 700), inset: 10)
+        #expect(wide.size == CGSize(width: 400, height: 498))
+        #expect(AskOnPageLayout.conversationHeight(content: 900, input: 48, available: 700) == 450)
+        #expect(AskOnPageLayout.conversationHeight(content: 100, input: 48, available: 700) == 100)
+        #expect(AskOnPageLayout.conversationHeight(content: 900, input: 48, available: 140) == 92)
+        #expect(AskOnPageLayout.conversationHeight(content: 900, input: 100, available: 80) == 0)
+    }
+
 }

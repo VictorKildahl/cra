@@ -27,6 +27,7 @@ enum AskOnPageServiceTests {
         }
     }
     static func main() async throws {
+        if CommandLine.arguments.contains("--real-model-extended") { try await extendedRealModel(); return }
         if CommandLine.arguments.contains("--real-model") { try await realModel(); return }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
@@ -232,6 +233,38 @@ enum AskOnPageServiceTests {
                    "older-OS byte fallback includes the actual Codable schema and refits the source")
         }
         #endif
+    }
+
+    /// Explicit root-only samples extending the existing eight real-model questions; never a CI inference gate.
+    private static func extendedRealModel() async throws {
+        expect(AskOnPageLocalModel.isAvailable, "real Apple Intelligence must be available for this explicit probe")
+        let japanese = "天文台は平日の午前9時30分に開館します。午後6時に閉館します。入口はエルム通りにあります。この文章は引用と日本語の質問を確認するための架空の資料です。"
+        let opening = "The synthetic observatory opens at 09:30 and closes at 18:00."
+        let large = opening + " " + String(repeating: "A measured record describes the quiet room, its shelves, and the afternoon light. ", count: 700)
+            + "UNSENT SUFFIX: the violet satellite sings at midnight."
+        let cases = [("CJK", japanese, "天文台は何時に開館しますか。元の文章を引用してください。", "Japanese"),
+                     ("large-context", large, "What time does the synthetic observatory open?", "English")]
+        for (name, text, question, language) in cases {
+            let page = AskOnPagePrompt.Page(url: "https://example.test/synthetic-extended", title: name, text: text)
+            guard let fitted = try await AskOnPagePrompt.fit(page: page, question: question, history: .init(), language: language,
+                currentDate: "13 November 2026", countTokens: AskOnPageLocalModel.tokenCount,
+                estimatedTokenCount: AskOnPageLocalModel.estimatesTokens) else { fatalError("Synthetic extended request did not fit") }
+            let draft = try await AskOnPageLocalModel.stream(fitted) { _ in }
+            let answer = AskOnPage.completeAnswer(draft, source: fitted.source)
+            print("Extended case: \(name)\nInput tokens: \(fitted.inputTokens), estimated: \(fitted.estimatedTokenCount), fraction: \(String(describing: fitted.fractionRead))\nFields: \(draft)\nNative: \(String(describing: answer))\n")
+            #if canImport(FoundationModels)
+            if #available(macOS 26.4, *) {
+                print("Token measurements base/schema/typed/charged: \(try await AskOnPageLocalModel.measuredCounts(instructions: fitted.instructions, prompt: fitted.prompt))")
+            }
+            #endif
+            expect(answer?.hasVerifiedQuote == true, "the extended actual model case must quote only its fitted source")
+            if name == "large-context" {
+                expect(fitted.isPartialPage && fitted.fractionRead != nil && !fitted.source.contains("UNSENT SUFFIX"),
+                       "the large actual request is fitted locally and excludes its unsent suffix")
+                expect(answer?.text.contains("09:30") == true, "the large actual request retains the supported opening time")
+            }
+        }
+        print("Ask on Page extended actual-model samples passed")
     }
 
     private static func realModel() async throws {

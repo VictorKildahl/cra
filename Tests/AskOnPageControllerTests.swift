@@ -5,8 +5,83 @@ import Observation
 @MainActor
 enum AskOnPageControllerTests {
     static func run() async {
+        await nativeInputFocusAndCommands()
         await nativeCardOwnsOneService()
         hostedCardReleasesItsOwner()
+    }
+
+    // promise: #393
+    private static func nativeInputFocusAndCommands() async {
+        let overlay = OverlayState(), browsers = BrowserManager()
+        let service = AskOnPageService(browsers: browsers, enabled: { true }, available: { true }, clock: ManualScheduler())
+        let card = AskOnPageController(overlay: overlay, service: service)
+        card.state.enabled = true; card.pageChanged(canAsk: true)
+        overlay.findQuery = "Café 👩‍🔬"; overlay.findVisible = true
+        let field = AskOnPageTextField(overlay: overlay, controller: card)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 60),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        field.frame = NSRect(x: 18, y: 12, width: 280, height: 24)
+        window.contentView!.addSubview(field)
+        AskOnPageInput(state: card.state, overlay: overlay, controller: card).update(field)
+        func turn() async { await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } } }
+        await turn()
+        guard let editor = field.currentEditor() else { preconditionFailure("the offscreen native field must own its real field editor") }
+        precondition(field.font?.pointSize == 16 && field.placeholderString == "Find or ask…", "initial input uses native medium 16 and the exact placeholder")
+        let all = NSRange(location: 0, length: (overlay.findQuery as NSString).length)
+        precondition(editor.selectedRange == all, "opening/Cmd-F selects the entire real field editor, including Unicode")
+        editor.selectedRange = NSRange(location: 1, length: 0)
+        AskOnPageInput(state: card.state, overlay: overlay, controller: card).update(field); await turn()
+        precondition(editor.selectedRange == NSRange(location: 1, length: 0), "ordinary query/style updates cannot reselect or steal focus")
+        overlay.findFocusToken += 1
+        AskOnPageInput(state: card.state, overlay: overlay, controller: card).update(field); await turn()
+        precondition(editor.selectedRange == all, "a new Cmd-F focus token selects all even when already editing")
+        editor.selectedRange = NSRange(location: 2, length: 0)
+        overlay.findFocusToken += 1; AskOnPageInput(state: card.state, overlay: overlay, controller: card).update(field); overlay.findVisible = false
+        await turn()
+        precondition(editor.selectedRange == NSRange(location: 2, length: 0), "a closed card rejects queued stale focus work")
+        overlay.findVisible = true
+        var searches: [(String, Bool)] = [], zero = false, closed = false
+        card.canAskFromFind = { _, _ in zero }
+        card.onFind = { searches.append(($0, $1)) }
+        card.onClose = { closed = true; overlay.findVisible = false; card.reset() }
+        let actions: [(Selector, NSEvent.ModifierFlags, Bool)] = [
+            (#selector(NSResponder.moveDown(_:)), [], true), (#selector(NSResponder.moveUp(_:)), [], false),
+            (#selector(NSResponder.insertNewline(_:)), [], true), (#selector(NSResponder.insertNewline(_:)), .shift, false),
+            (#selector(NSResponder.insertLineBreak(_:)), .shift, false),
+            (#selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), .shift, false)]
+        for (selector, flags, forward) in actions {
+            let count = searches.count
+            precondition(field.performCommand(selector, modifiers: flags), "the native editor must consume the supported command")
+            precondition(searches.count == count + 1 && searches.last?.0 == overlay.findQuery && searches.last?.1 == forward,
+                         "arrows/Return/Shift-Return route exactly once to the correct ordinary Find direction")
+            precondition(service.current == nil, "pending Find keyboard commands must not invent an Ask turn")
+        }
+        overlay.findQuery = ""
+        let blankCount = searches.count
+        precondition(field.performCommand(#selector(NSResponder.insertNewline(_:)), modifiers: .shift)
+                     && searches.count == blankCount + 1 && searches.last?.1 == false,
+                     "Shift-Return takes the same previous-Find path as Up, including empty input")
+        overlay.findQuery = "Café 👩‍🔬"
+        precondition(!field.performCommand(#selector(NSResponder.insertTab(_:)), modifiers: [])
+                     && !field.performCommand(#selector(NSResponder.insertNewline(_:)), modifiers: .command),
+                     "unrelated editor commands retain native AppKit handling")
+        field.stringValue = "An exact new query"
+        overlay.findMatchCount = 0
+        field.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        precondition(overlay.findQuery == field.stringValue && overlay.findMatchCount == nil,
+                     "native text changes synchronously invalidate old match authority through the real overlay")
+        zero = true
+        precondition(field.performCommand(#selector(NSResponder.insertNewline(_:)), modifiers: []), "Return is handled")
+        precondition(service.current?.question == "An exact new query" && overlay.findQuery.isEmpty,
+                     "only proven current zero allows native Return to start the existing service")
+        AskOnPageInput(state: card.state, overlay: overlay, controller: card).update(field)
+        precondition(field.font?.pointSize == 14 && field.placeholderString == "Ask a question…", "conversation input uses native medium 14 and the exact placeholder")
+        precondition(field.performCommand(#selector(NSResponder.cancelOperation(_:)), modifiers: []), "Escape is handled")
+        precondition(closed && service.current == nil && service.messages.isEmpty, "Escape uses existing close/reset ownership")
+        precondition(!field.performCommand(#selector(NSResponder.moveDown(_:)), modifiers: []), "hidden input cannot issue Find")
+        print("Ask native input: real offscreen editor, select-all/caret/stale focus, keyboard and service checks passed")
     }
 
     // promise: #393

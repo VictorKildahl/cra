@@ -6,6 +6,8 @@ import WebKit
 @MainActor
 enum AskOnPageContentTests {
     private static var checks = 0
+    // Keep the named world alive across evaluations so the lookup lease survives until its effect.
+    private static let world = WKContentWorld.world(name: "cra.ask-test")
 
     private static func expect(_ value: Bool, _ message: String) {
         checks += 1
@@ -14,7 +16,7 @@ enum AskOnPageContentTests {
 
     private static func evaluate(_ script: String, in web: WKWebView) async throws -> Any {
         try await withCheckedThrowingContinuation { done in
-            web.evaluateJavaScript(script, in: nil, in: .world(name: "cra.ask-test")) { done.resume(with: $0) }
+            web.evaluateJavaScript(script, in: nil, in: world) { done.resume(with: $0) }
         }
     }
 
@@ -33,15 +35,24 @@ enum AskOnPageContentTests {
             guard case .match(let match) = AskOnPageQuoteDOM.result(encoded) else { fatalError("fixture quote must have an exact bounded range") }
             return match
         }
+        func effect(_ text: String, lease: UUID, match: AskOnPageQuoteDOM.Match, stage: String) async throws -> Bool {
+            let value = try await evaluate(AskOnPageQuoteDOM.effect(text, url: fixture.absoluteString, lease: lease, match: match), in: web)
+            let encoded = String(data: try JSONSerialization.data(withJSONObject: ["result": ["value": value]]), encoding: .utf8)!
+            guard let found = AskOnPageQuoteDOM.effected(encoded) else {
+                throw NSError(domain: "AskOnPageContentTests", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "\(stage) expected completed quote evidence; received \(type(of: value))"])
+            }
+            return found
+        }
         let lease = UUID()
         let current = try await lookup(quote, lease: lease)
-        let found = try await evaluate(AskOnPageQuoteDOM.effect(quote, url: fixture.absoluteString, lease: lease, match: current), in: web) as! [String: Any]
-        expect(found["found"] as? Bool == true, "the exact inline quote completes its live Range operation")
+        let found = try await effect(quote, lease: lease, match: current, stage: "inline effect")
+        expect(found, "the exact inline quote completes its live Range operation")
         let selected = try await evaluate("getSelection().toString()", in: web) as! String
         expect(AskOnPage.normalized(selected) == quote, "the real selection contains the complete literal quote across inline nodes")
         _ = try await evaluate("getSelection().removeAllRanges(); document.querySelector('main').textContent = 'The original quoted source was removed before its effect.'", in: web)
-        let missing = try await evaluate(AskOnPageQuoteDOM.effect(quote, url: fixture.absoluteString, lease: lease, match: current), in: web) as! [String: Any]
-        expect(missing["found"] as? Bool == false, "DOM mutation between lookup and effect never reuses an obsolete range")
+        let missing = try await effect(quote, lease: lease, match: current, stage: "mutated effect")
+        expect(!missing, "DOM mutation between lookup and effect never reuses an obsolete range")
         let empty = try await evaluate("getSelection().toString()", in: web) as! String
         expect(empty.isEmpty, "a failed live revalidation cannot create a selection")
         try await navigation.load(fixture, in: web)
@@ -50,8 +61,8 @@ enum AskOnPageContentTests {
         _ = try await evaluate(#"document.body.innerHTML = '<p id="first">Cafe<span>\u0301 opens at 09:30. 👩‍🔬 &amp; &lt;literal&gt;</span></p><p>Café opens at 09:30. 👩‍🔬 &amp; &lt;literal&gt;</p>'"#, in: web)
         let unicode = "Café opens at 09:30. 👩‍🔬 & <literal>", unicodeLease = UUID()
         let unicodeMatch = try await lookup(unicode, lease: unicodeLease)
-        let unicodeFound = try await evaluate(AskOnPageQuoteDOM.effect(unicode, url: fixture.absoluteString, lease: unicodeLease, match: unicodeMatch), in: web) as! [String: Any]
-        expect(unicodeFound["found"] as? Bool == true, "inline decomposed Unicode and literal symbols produce a real exact range")
+        let unicodeFound = try await effect(unicode, lease: unicodeLease, match: unicodeMatch, stage: "Unicode effect")
+        expect(unicodeFound, "inline decomposed Unicode and literal symbols produce a real exact range")
         let first = try await evaluate("getSelection().anchorNode.parentElement.id", in: web) as! String
         expect(first == "first", "repeated normalized quotes use the first exact current occurrence")
         try await navigation.load(fixture, in: web)

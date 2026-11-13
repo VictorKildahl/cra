@@ -219,6 +219,24 @@ public enum AskOnPagePolicy {
     }
 }
 
+/// Ask's preferred card fits the focused page; 450 caps the conversation, not the whole panel.
+public enum AskOnPageLayout {
+    public static let maximumWidth: CGFloat = 400
+    public static let maximumConversationHeight: CGFloat = 450
+
+    public static func frame(preferred: CGSize, page: CGRect, inset: CGFloat) -> CGRect {
+        let dx = min(max(0, inset), max(0, page.width) / 2)
+        let dy = min(max(0, inset), max(0, page.height) / 2)
+        let width = min(maximumWidth, max(0, preferred.width), max(0, page.width - 2 * dx))
+        let height = min(max(0, preferred.height), max(0, page.height - 2 * dy))
+        return CGRect(x: page.maxX - dx - width, y: page.maxY - dy - height, width: width, height: height)
+    }
+
+    public static func conversationHeight(content: CGFloat, input: CGFloat, available: CGFloat) -> CGFloat {
+        min(maximumConversationHeight, max(0, content), max(0, available - input))
+    }
+}
+
 /// The card's theme colour (Arc's WindowTheme palette, read at run time there): the question, the
 /// Ask button. Arc's capture on a lavender space shows a mid purple; here it is the space's colour
 /// at a readable strength, kept to its hue. A grey space gets Max's blue.

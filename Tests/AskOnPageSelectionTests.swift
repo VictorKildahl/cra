@@ -9,6 +9,7 @@ enum AskOnPageSelectionTests {
     static func run() {
         selectionFindsOnceThroughEveryPanelPath()
         staleSelectionCannotChangeTheNewOwner()
+        narrowAskPanelFitsFocusedPage()
         print("Use Selection to Find: \(checks) production-boundary checks passed")
     }
 
@@ -52,6 +53,16 @@ enum AskOnPageSelectionTests {
     }
 
     // promise: #393
+    private static func narrowAskPanelFitsFocusedPage() {
+        let owner = SelectionWindow()
+        owner.askOnPage.state.enabled = true
+        owner.askOnPage.heightChanged(600)
+        let page = NSRect(x: 100, y: 200, width: 240, height: 160)
+        let panel = owner.measuredFindPanelFrame(page: page)
+        expect(page.contains(panel), "The actual Ask panel must remain inside a narrow focused page, including its total height")
+    }
+
+    // promise: #393
     private static func staleSelectionCannotChangeTheNewOwner() {
         let window = SelectionWindow()
         window.overlay.findQuery = "unchanged"
@@ -77,6 +88,7 @@ final class SelectionWindow {
     let shell = SelectionShell()
     let window: NSWindow? = nil
     let findPanel: FindBarPanel? = nil
+    var lastFindPage: NSRect?
     var savedFindSelection: String? { NSPasteboard.saved }
     func syncAskOnPage() { askOnPage.pageChanged(canAsk: true) }
     func refitFindPanel() {}

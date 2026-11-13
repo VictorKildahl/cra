@@ -136,7 +136,10 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-ask-on-page-service.sh`: production native card/controller/overlay ownership,
   correlated Return decisions, literal quote actions, request cancellation, streaming and failures with a
   controlled provider/manual clock. `--real-model` explicitly probes the production on-device
-  adapter with synthetic page questions; it requires available Apple Intelligence and is not a CI gate.
+  adapter with synthetic page questions. `--real-model-extended` adds Japanese and genuinely fitted
+  oversized-source cases. Both require available Apple Intelligence and are never CI inference gates.
+  `Tests/Fixtures/AskOnPage/runtime.html` supplies loopback HTTP targets for actual engine
+  inline/Unicode/repeated/long-paragraph quote, native selection and viewport checks.
   Each window service registers weak, synchronous notifications for its store's disable edge and
   model unavailability; Observation remains a sustained-state backstop. The lifecycle harness
   covers actual mutations; the controlled service harness covers request and delivery ownership.

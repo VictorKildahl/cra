@@ -17,7 +17,8 @@ def between(start, end):
 callback = between("        overlay.onFindQueryChange = { [weak self] query in", "        browsers.windowID = session.id")
 methods = [between("    func useSelectionForFind() {", "    /// Arc's (and Chrome's) Edit ▸ Find ▸ Jump to Selection"),
            between("    func showFindBar() {", "    func hideFindBar() {"),
-           between("    private func find(_ q: String, forward: Bool) {", "    /// Ask on Page or the plain find bar")]
+           between("    private func find(_ q: String, forward: Bool) {", "    /// Ask on Page or the plain find bar"),
+           between("    private func findPanelFrame(page: NSRect) -> NSRect {", "    /// Attaches the visible tabs").replace("private func findPanelFrame", "func measuredFindPanelFrame")]
 Path(sys.argv[1]).write_text("import AppKit\n\n@MainActor extension SelectionWindow {\n"
     + "    func wireProductionQueryCallback() {\n" + callback + "    }\n" + "\n".join(methods) + "}\n")
 PYCODE

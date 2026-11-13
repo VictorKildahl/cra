@@ -18,4 +18,4 @@ enum ExtensionPopupWindow {
     static func closed(by event: NSEvent?) -> Bool { false }
 }
 
-enum CraMetrics { static let findBarSize = NSSize(width: 300, height: 38) }
+enum CraMetrics { static let findBarSize = NSSize(width: 300, height: 38); static let findBarInset: CGFloat = 10 }
