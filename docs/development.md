@@ -128,6 +128,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-tidy-tabs-model.sh`: Tidy Tabs' production Foundation Models adapter and guided schema,
   including reduced-request mapping, exactly one context-overflow retry and propagated failure/cancellation.
   `--real` additionally runs synthetic samples on an available local model; fake checks do not establish quality.
+- `scripts/test-tidy-tabs.sh`: the actual grouping service/store with controlled inference and a
+  manual scheduler: failure retry, fitted empty success, minimum animation, same-turn settings/model
+  invalidation, stale tasks/timers, space/store lifetimes and independent request owners. No model or UI.
 - `scripts/test-link-summary-share.sh`: 5-Second Previews' Copy as Image (`LinkSummaryShareImage`)
   against Arc's own copy of a card: size at 3x, the picture's inset, the dashed line's pattern and place,
   the footer colour.

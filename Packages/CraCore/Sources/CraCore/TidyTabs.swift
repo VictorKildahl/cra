@@ -10,6 +10,8 @@ public enum TidyTabs {
     public static let minimumTabs = 6
     /// A model answer can't hold a sidebar's worth of tabs: the on-device model reads ~4K tokens.
     public static let maximumTabs = 60
+    /// One measured broom sweep; completion uses the store clock.
+    public static let minimumRun: TimeInterval = 0.9
     static let maximumTitleLength = 80
     static let maximumNameLength = 32
     /// Conservative byte estimate on macOS 26.0–26.3; schema/output/framing reserve is separate.

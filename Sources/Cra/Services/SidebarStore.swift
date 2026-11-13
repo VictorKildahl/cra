@@ -30,7 +30,12 @@ final class SidebarStore {
             notifyItemReaders(of: oldValue)
         }
     }
-    var settings = AppSettings() { didSet { settingsStore.save(settings) } }
+    var settings = AppSettings() {
+        didSet {
+            settingsStore.save(settings)
+            if settings.tidyTabs != oldValue.tidyTabs { tidyTabsChanged(settings.tidyTabs) }
+        }
+    }
     private(set) var history: [String: HistoryEntry] = [:]
     private(set) var ranking = RankingData()
     /// Bumped on every structural change; cheap way for AppKit code to observe.
@@ -58,6 +63,8 @@ final class SidebarStore {
     /// A tab came into a space's pinned tabs from elsewhere (⌘D, a drag, a menu): Tidy Tab Titles
     /// may give it a shorter name (TidyTitlesService).
     @ObservationIgnored var tabPinned: (UUID) -> Void = { _ in }
+    @ObservationIgnored var tidyTabsChanged: (Bool) -> Void = { _ in }
+    @ObservationIgnored var tidyTabsSpaceRemoved: (UUID) -> Void = { _ in }
     @ObservationIgnored var liveFolderChanged: (UUID) -> Void = { _ in }
     @ObservationIgnored private var liveFolderVersions: [UUID: UUID] = [:]
 
@@ -300,6 +307,7 @@ final class SidebarStore {
         pinnedPeeks[id] = nil
         if activeWindowID == id { activeWindowID = prefs.windows.first { !isStandalone(window: $0.id) }?.id ?? prefs.windows[0].id }
         if let sid = own, let space = spaces[sid] {
+            invalidateTidySpace(sid)
             var ids = Set<UUID>()
             collectSubtree(of: space, into: &ids)
             for i in ids { items[i] = nil }
@@ -825,7 +833,7 @@ final class SidebarStore {
         var kept = Set<UUID>()
         for sid in incognitoSpaceIDs.union(blankSpaceIDs) { if let s = spaces[sid] { collectSubtree(of: s, into: &kept) } }
         for id in items.all.keys where !kept.contains(id) { items[id] = nil }
-        for (id, _) in spaces where !isStandalone(space: id) { spaces[id] = nil }
+        for (id, _) in spaces where !isStandalone(space: id) { invalidateTidySpace(id); spaces[id] = nil }
         storedThemes = [:]
         previousTab = [:]
         for s in doc.spaces { spaces[s.id] = s }
@@ -2109,6 +2117,7 @@ final class SidebarStore {
     func applyTidy(_ plan: TidyTabs.Plan, tabIDs: [UUID], in sid: UUID) {
         guard let space = spaces[sid] else { return }
         let today = space.todayContainerID
+        if plan.newGroups.isEmpty && plan.joins.isEmpty { markTidied(sid, tabIDs: tabIDs); return }
         let before = items[today]?.children ?? []
         let looseOrder = Dictionary(uniqueKeysWithValues: looseTodayTabs(sid).enumerated().map { ($0.element.id, $0.offset) })
         func ids(_ indices: [Int]) -> [UUID] {
@@ -2146,15 +2155,21 @@ final class SidebarStore {
             items[today] = t
         }
         lastTidy = moved.isEmpty ? nil : (sid, before, moved)
-        let surviving = Set(tabs(under: today).map(\.id))
-        tidiedTabs[sid] = (tidiedTabs[sid] ?? []).union(tabIDs).intersection(surviving)
+        markTidied(sid, tabIDs: tabIDs)
         touch()
     }
 
-    /// A run that ended without a plan (the model failed or had nothing to say) still hides Tidy.
-    func markTidied(_ sid: UUID) {
+    /// Empty successful plans need no tree/undo mutation; every success retains its fitted IDs.
+    private func markTidied(_ sid: UUID, tabIDs: [UUID]) {
         guard let space = spaces[sid] else { return }
-        tidiedTabs[sid] = Set(tabs(under: space.todayContainerID).map(\.id))
+        let surviving = Set(tabs(under: space.todayContainerID).map(\.id))
+        tidiedTabs[sid] = (tidiedTabs[sid] ?? []).union(tabIDs).intersection(surviving)
+    }
+
+    private func invalidateTidySpace(_ sid: UUID) {
+        tidyTabsSpaceRemoved(sid)
+        tidyingSpaces.remove(sid)
+        tidiedTabs[sid] = nil
     }
 
     /// ⌘Z after a tidy: the tabs it moved go back where they were, its new groups go with them.
@@ -2296,6 +2311,7 @@ final class SidebarStore {
 
     func deleteSpace(_ id: UUID) {
         guard spaceOrder.count > 1, spaceOrder.contains(id), let space = spaces[id] else { return }
+        invalidateTidySpace(id)
         // A profile's favorites stay with the profile (Arc).
         let shared = isProfileList(space.favoritesContainerID)
         let favorites = shared ? [] : [space.favoritesContainerID]

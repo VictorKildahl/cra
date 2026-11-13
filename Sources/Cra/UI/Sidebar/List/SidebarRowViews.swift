@@ -2629,8 +2629,6 @@ enum SidebarTidyMetrics {
     /// One sweep of the broom: tips 31° clockwise from the top of its handle in 0.2 s, holds,
     /// swings 7° past upright and settles, 0.9 s in all.
     static let sweep: TimeInterval = 0.9
-    /// A tidy runs at least this long on screen: one sweep and the squiggle's ramp in.
-    static let minimumRun: TimeInterval = 0.9
 }
 
 /// The divider's squiggle (Arc's SquiggleDivider): the line becomes a travelling sine wave
