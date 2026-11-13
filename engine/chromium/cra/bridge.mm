@@ -411,7 +411,10 @@ class PageHost : public TabStripModelObserver {
       return;
     }
     KeepPlaceholderActive();
-    NSString* url = NS(page->GetVisibleURL().spec());
+    // A page's own pop-up has no visible address yet (renderer-initiated): the one it is navigating to.
+    content::NavigationEntry* pending = page->GetController().GetPendingEntry();
+    GURL target = pending ? pending->GetURL() : page->GetVisibleURL();
+    NSString* url = NS(target.spec());
     CraBrowser* from = opener ? BrowserFor(opener.get()) : nil;
     CraBrowser* host = nil;
     if (from && [from.delegate respondsToSelector:@selector(browser:popupHostForURL:inBackground:)]) {
