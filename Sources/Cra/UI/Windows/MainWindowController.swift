@@ -269,6 +269,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.positionDevToolsWindow(rect, tab: id)
         }
         shell.onPaneFrames = { [weak self] frames in self?.positionPageWindows(frames) }
+        // The find bar hangs under the floating toolbar and keeps it while the pointer is on it.
+        shell.onFloatingToolbarChange = { [weak self] animated in self?.refitFindPanel(followingToolbar: animated) }
+        shell.toolbarFollowers = { [weak self] in
+            guard let self, let find = findPanel, overlay.findVisible else { return [] }
+            return [find]
+        }
         // Only an embedded page is cut off by the window; one in its own window would show past it.
         shell.pageBesideLibrary = { [weak self] in
             guard let self, EmbeddedPages.isEnabled, sidebarUI.libraryPage != nil || sidebarUI.libraryReveal != nil else { return nil }
@@ -1285,13 +1291,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The find bar's screen frame: the top trailing corner of the focused page, of the part the
-    /// window shows when the page goes past its edge beside the Library (#340).
+    /// window shows when the page goes past its edge beside the Library (#340), and under the
+    /// floating toolbar while that is out (`FindBarPlacement`).
     private func findPanelFrame(page: NSRect) -> NSRect {
         lastFindPage = page
-        let size = askOnPage.state.enabled ? askOnPage.size : CraMetrics.findBarSize, inset = CraMetrics.findBarInset
-        var page = page
-        if let window, page.maxX > window.frame.maxX { page.size.width = max(0, window.frame.maxX - page.minX) }
-        return NSRect(x: page.maxX - size.width - inset, y: page.maxY - size.height - inset, width: size.width, height: size.height)
+        let size = askOnPage.state.enabled ? askOnPage.size : CraMetrics.findBarSize
+        return FindBarPlacement.frame(page: page, visibleMaxX: window?.frame.maxX, size: size, inset: CraMetrics.findBarInset,
+                                      toolbarOverPage: shell.floatingToolbarCover)
     }
 
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
@@ -4176,10 +4182,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The find panel takes the card's size, its top trailing corner where it was.
-    private func refitFindPanel() {
+    /// `followingToolbar`: the floating toolbar slides out or away, and the panel moves with it.
+    private func refitFindPanel(followingToolbar: Bool = false) {
         guard let window, let find = findPanel, overlay.findVisible, let page = lastFindPage else { return }
         let frame = findPanelFrame(page: page)
-        if find.parent === window, find.frame != frame { find.setFrame(frame, display: true) }
+        guard find.parent === window, find.frame != frame else { return }
+        guard followingToolbar else { find.setFrame(frame, display: true); return }
+        let out = shell.floatingToolbarCover > 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = out ? ToolbarAutoHide.revealDuration : ToolbarAutoHide.hideDuration
+            ctx.timingFunction = CAMediaTimingFunction(name: out ? .easeOut : .easeIn)
+            find.animator().setFrame(frame, display: true)
+        }
+    }
+
+    /// For `cra://debug?findBar=<label>`: whether the find bar shows, and how far its panel is
+    /// from the focused page's top and trailing edges.
+    func debugFindBar(_ label: String) -> String {
+        guard let find = findPanel, overlay.findVisible, let page = lastFindPage else { return "findBar \(label): visible=0" }
+        return "findBar \(label): visible=1 top=\(Int(page.maxY - find.frame.maxY)) trailing=\(Int(page.maxX - find.frame.maxX)) "
+            + "size=\(Int(find.frame.width))x\(Int(find.frame.height))"
     }
 
     // MARK: Sheets
