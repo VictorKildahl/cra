@@ -1047,8 +1047,9 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
       return;
     }
-    // Document Picture in Picture (a call's window): over full-screen Spaces too, as Arc's (GitHub #206).
-    if (browser->GetType() == BrowserWindowInterface::TYPE_PICTURE_IN_PICTURE) {
+    // Document Picture in Picture (a call's window, TYPE_FLOATING since Chrome 158): over full-screen Spaces too,
+    // as Arc's (GitHub #206).
+    if (browser->GetType() == BrowserWindowInterface::TYPE_FLOATING) {
       FloatOverFullScreenSpaces(window);
       return;
     }
