@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// Ask on Page's transient dialogue and citations. Browser ownership and model tasks live in the app.
 public enum AskOnPage {
