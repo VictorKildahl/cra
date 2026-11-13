@@ -57,6 +57,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
     private let toast = ShinyToast()
+    /// Back and Forward's right-click list (GitHub #416).
+    private let historyMenu = SidebarCreationMenuController()
     /// Each live tab's wait for its first response (GitHub #256), the tab whose notice the toast
     /// shows (nil once another toast took its place), and the check when the next one is due.
     private var slowResponses: [UUID: SlowResponseNotice] = [:]
@@ -334,6 +336,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         sidebarActions.goBack = { [weak self] in self?.goBack() }
         sidebarActions.goForward = { [weak self] in self?.currentBrowser?.goForward() }
+        sidebarActions.showHistoryMenu = { [weak self] id, direction, anchor in self?.showHistoryMenu(direction, tab: id, from: anchor) }
         sidebarActions.reload = { [weak self] in
             guard let b = self?.currentBrowser else { return }
             b.isLoading ? b.stopLoading() : b.reload()
@@ -2292,6 +2295,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             store.closeToReferrer(id, referrer: referrer, window: windowID)
         case .none:
             break
+        }
+    }
+
+    /// A right-click on Back or Forward: tab `id`'s list on that side, nearest first, in Arc's menu
+    /// under the button (Arc's BackForwardList, GitHub #416). The list is the page's own
+    /// (Page.getNavigationHistory, which WebKitBrowser answers too), and a row goes straight to its
+    /// entry (Page.navigateToHistoryEntry). A link's tab with nothing behind it opens no menu: its
+    /// Back closes the tab instead.
+    func showHistoryMenu(_ direction: BackForwardMenu.Direction, tab id: UUID? = nil, from anchor: NSView) {
+        guard let id = id ?? browsers.visibleTabID, let b = browsers.runtime(for: id)?.browser else { return }
+        b.sendDevToolsMethod("Page.getNavigationHistory", params: "{}") { [weak self, weak b, weak anchor] result, _ in
+            guard let self, let b, let anchor, anchor.window != nil,
+                  let history = result.flatMap({ BackForwardMenu(navigationHistory: Data($0.utf8)) }) else { return }
+            let rows = history.rows(direction)
+            guard !rows.isEmpty else { return }
+            let items = rows.map { row in
+                SidebarCreationMenuItem(title: row.title, symbol: "", shortcut: "", enabled: true,
+                                        favicon: self.app.favicons.image(for: row.url) ?? SidebarSymbols.image("globe", size: 12.8)) { [weak b] in
+                    b?.sendDevToolsMethod("Page.navigateToHistoryEntry", params: #"{"entryId":\#(row.entryID)}"#) { _, _ in }
+                }
+            }
+            let colors = SidebarCreationMenuColors(ArcMenuTones(theme: self.store.focusedSpace(window: self.windowID).theme.shown))
+            self.historyMenu.toggle(from: anchor, items: items, colors: colors, layout: ArcMenuLayout(groups: [rows.count], tail: .top),
+                                    width: SidebarCreationMenuView.listWidth, picksLastRow: false, anchorToggles: false) { _ in }
         }
     }
 

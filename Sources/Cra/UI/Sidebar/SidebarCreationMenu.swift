@@ -53,6 +53,8 @@ struct SidebarCreationMenuItem {
     let symbol: String
     let shortcut: String
     let enabled: Bool
+    /// A page's favicon in place of the symbol: the back and forward list's rows (GitHub #416).
+    var favicon: NSImage? = nil
     let action: () -> Void
 }
 
@@ -64,22 +66,37 @@ final class SidebarCreationMenuController {
     private var observers: [NSObjectProtocol] = []
     private var onOpenChange: ((Bool) -> Void)?
 
+    /// `anchorToggles`: a click on the anchor is left to it, the + button closing the menu it opened.
+    /// Otherwise it closes the menu as any click outside does (Back still goes back).
     func toggle(from anchor: NSView, items: [SidebarCreationMenuItem], colors: SidebarCreationMenuColors = .init(),
-                onOpenChange: @escaping (Bool) -> Void) {
+                layout: ArcMenuLayout = SidebarCreationMenuView.plusLayout, width: CGFloat = SidebarCreationMenuView.plusWidth,
+                picksLastRow: Bool = true, anchorToggles: Bool = true, onOpenChange: @escaping (Bool) -> Void) {
         if panel != nil { close(); return }
         guard let parent = anchor.window else { return }
-        let menu = SidebarCreationMenuView(items: items, colors: colors) { [weak self] index in
+        let menu = SidebarCreationMenuView(items: items, colors: colors, layout: layout, width: width, picksLastRow: picksLastRow) { [weak self] index in
             self?.close()
             if let index { items[index].action() }
         }
         let rect = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let screen = parent.screen?.visibleFrame ?? rect.insetBy(dx: -1000, dy: -1000)
         let size = menu.frame.size
-        // Arc 1.172.1 (live, 9 Nov 2026): the button's centre 194 pt into the fill, the tail 3.5 pt left of
-        // it, the tail's tip 10 pt above the button.
-        let x = min(max(rect.midX - Self.buttonCentre, screen.minX + 4), screen.maxX - size.width - 4)
-        let y = min(rect.maxY + 10, screen.maxY - size.height - 4)
-        menu.arrowX = min(max(rect.midX - x - 3.5, 18), size.width - 18)
+        let x: CGFloat
+        let y: CGFloat
+        switch layout.tail {
+        case .bottom:
+            // Arc 1.172.1 (live, 9 Nov 2026): the button's centre 194 pt into the fill, the tail 3.5 pt left of
+            // it, the tail's tip 10 pt above the button.
+            x = min(max(rect.midX - Self.buttonCentre, screen.minX + 4), screen.maxX - size.width - 4)
+            y = min(rect.maxY + 10, screen.maxY - size.height - 4)
+            menu.arrowX = min(max(rect.midX - x - 3.5, 18), size.width - 18)
+        case .top:
+            // Arc 1.172.1's back list (2x capture, 13 Nov 2026, #416): centred on the button, the tail's
+            // tip 27 pt under the arrow, as Arc's ••• popover hangs 10 pt under its 28 pt button: 8 pt
+            // under Cra's 32 pt one (the arrow's ink sits 3 pt above the button's centre).
+            x = min(max(rect.midX - size.width / 2, screen.minX + 4), screen.maxX - size.width - 4)
+            y = max(rect.minY - 8 - size.height, screen.minY + 4)
+            menu.arrowX = min(max(rect.midX - x, 18), size.width - 18)
+        }
         let popup = SidebarCreationMenuWindow(contentRect: NSRect(x: x, y: y, width: size.width, height: size.height),
                                               styleMask: .borderless, backing: .buffered, defer: false)
         popup.backgroundColor = .clear
@@ -104,7 +121,7 @@ final class SidebarCreationMenuController {
                 if menu.handleKey(event) { return nil }
                 self.close()
             } else if event.window !== popup {
-                let overAnchor = event.type == .leftMouseDown && event.window === parent
+                let overAnchor = anchorToggles && event.type == .leftMouseDown && event.window === parent
                     && anchor.bounds.contains(anchor.convert(event.locationInWindow, from: nil))
                 if overAnchor { return event }
                 self.close()
@@ -176,21 +193,29 @@ private final class SidebarCreationMenuWindow: NSWindow, CAAnimationDelegate {
 
 @MainActor
 final class SidebarCreationMenuView: NSView {
+    /// New Space, New Folder | New Easel, New Boost | New Split, New Tab, the tail under them.
+    nonisolated static let plusLayout = ArcMenuLayout(groups: [2, 2, 2], tail: .bottom)
+    nonisolated static let plusWidth: CGFloat = 210
+    /// The back and forward list's fill (Arc 1.172.1, 440 px in a 2x capture, GitHub #416).
+    nonisolated static let listWidth: CGFloat = 220
+
     private let items: [SidebarCreationMenuItem]
     private let onPick: (Int?) -> Void
-    private let rowOrigins: [CGFloat] = [8, 48, 105, 145, 202, 242]
+    private let layout: ArcMenuLayout
     private let colors: SidebarCreationMenuColors
-    /// Arc opens the menu with its last row (New Tab) picked, so Return makes a tab.
+    /// Arc opens the + menu with its last row (New Tab) picked, so Return makes a tab.
     private(set) var selected: Int? { didSet { needsDisplay = true } }
     private var pressed: Int?
     var arrowX: CGFloat = 190.5 { didSet { needsDisplay = true } }
 
-    init(items: [SidebarCreationMenuItem], colors: SidebarCreationMenuColors = .init(), onPick: @escaping (Int?) -> Void) {
+    init(items: [SidebarCreationMenuItem], colors: SidebarCreationMenuColors = .init(), layout: ArcMenuLayout = SidebarCreationMenuView.plusLayout,
+         width: CGFloat = SidebarCreationMenuView.plusWidth, picksLastRow: Bool = true, onPick: @escaping (Int?) -> Void) {
         self.items = items
         self.colors = colors
+        self.layout = layout
         self.onPick = onPick
-        selected = items.indices.last { items[$0].enabled }
-        super.init(frame: NSRect(x: 0, y: 0, width: 210, height: 296))
+        selected = picksLastRow ? items.indices.last { items[$0].enabled } : nil
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: layout.height))
         wantsLayer = true
         setAccessibilityRole(.menu)
         for (index, item) in items.enumerated() {
@@ -203,10 +228,19 @@ final class SidebarCreationMenuView: NSView {
             row.target = self
             row.action = #selector(choose(_:))
             row.tag = index
-            let icon = NSImageView(frame: NSRect(x: 9, y: 8, width: 24, height: 24))
-            icon.image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 20, weight: .medium))
-            icon.contentTintColor = item.enabled ? .white : colors.disabled
+            let icon: NSImageView
+            if let favicon = item.favicon {
+                // Arc's 16 pt favicon, 16 pt into the fill.
+                icon = NSImageView(frame: NSRect(x: 8, y: 12, width: 16, height: 16))
+                icon.image = favicon
+                // The globe a page without a favicon gets is a template: white, as the titles are.
+                icon.contentTintColor = .white
+            } else {
+                icon = NSImageView(frame: NSRect(x: 9, y: 8, width: 24, height: 24))
+                icon.image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)?
+                    .withSymbolConfiguration(.init(pointSize: 20, weight: .medium))
+                icon.contentTintColor = item.enabled ? .white : colors.disabled
+            }
             icon.imageScaling = .scaleProportionallyDown
             row.addSubview(icon)
             addSubview(row)
@@ -223,7 +257,8 @@ final class SidebarCreationMenuView: NSView {
     func animate(opening: Bool, delegate: CAAnimationDelegate? = nil) {
         guard let layer else { return }
         let x = arrowX - bounds.width * layer.anchorPoint.x
-        let y = bounds.height * (1 - layer.anchorPoint.y)
+        // The tail's tip: under the fill, or above it on a list hung under its button.
+        let y = layout.tail == .bottom ? bounds.height * (1 - layer.anchorPoint.y) : -bounds.height * layer.anchorPoint.y
         var small = CATransform3DMakeTranslation(x, y, 0)
         small = CATransform3DScale(small, 0.95, 0.95, 1)
         small = CATransform3DTranslate(small, -x, -y, 0)
@@ -256,16 +291,19 @@ final class SidebarCreationMenuView: NSView {
     }
 
     private func rowRect(_ index: Int) -> NSRect {
-        NSRect(x: 8, y: rowOrigins[index], width: bounds.width - 16, height: 40)
+        NSRect(x: 8, y: layout.fillTop + layout.rowTops[index], width: bounds.width - 16, height: ArcMenuLayout.rowHeight)
     }
 
     override func draw(_ dirtyRect: NSRect) {
         colors.fill.setFill()
-        NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: bounds.width, height: 290), xRadius: 12, yRadius: 12).fill()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: layout.fillTop, width: bounds.width, height: layout.fillHeight), xRadius: 12, yRadius: 12).fill()
+        // The tail starts 1 pt inside the fill.
+        let base = layout.tail == .bottom ? layout.fillHeight - 1 : layout.fillTop + 1
+        let tip = layout.tail == .bottom ? layout.height : 0
         let arrow = NSBezierPath()
-        arrow.move(to: NSPoint(x: arrowX - 6, y: 289))
-        arrow.line(to: NSPoint(x: arrowX, y: 296))
-        arrow.line(to: NSPoint(x: arrowX + 6, y: 289))
+        arrow.move(to: NSPoint(x: arrowX - 6, y: base))
+        arrow.line(to: NSPoint(x: arrowX, y: tip))
+        arrow.line(to: NSPoint(x: arrowX + 6, y: base))
         arrow.close()
         arrow.fill()
         if let selected {
@@ -273,17 +311,27 @@ final class SidebarCreationMenuView: NSView {
             NSBezierPath(roundedRect: rowRect(selected), xRadius: 7, yRadius: 7).fill()
         }
         colors.separator.setFill()
-        for y: CGFloat in [96, 193] {
-            NSRect(x: 10, y: y, width: bounds.width - 20, height: 1).fill()
+        for y in layout.separatorTops {
+            NSRect(x: 10, y: layout.fillTop + y, width: bounds.width - 20, height: 1).fill()
         }
         for (index, item) in items.enumerated() {
             let rect = rowRect(index)
             let ink = item.enabled ? NSColor.white : colors.disabled
             let shortcutInk = item.enabled ? colors.shortcut : colors.disabled
             let text = item.title as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: ink]
+            var attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: ink]
             let height = text.size(withAttributes: attributes).height
-            text.draw(at: NSPoint(x: 50, y: rect.midY - height / 2), withAttributes: attributes)
+            if item.favicon == nil {
+                text.draw(at: NSPoint(x: 50, y: rect.midY - height / 2), withAttributes: attributes)
+            } else {
+                // A page title's ink starts 41 pt into the fill (drawn from 40, as the + menu's 51 pt titles
+                // are from 50) and is cut short with an ellipsis (Arc's capture, #416).
+                let truncating = NSMutableParagraphStyle()
+                truncating.lineBreakMode = .byTruncatingTail
+                attributes[.paragraphStyle] = truncating
+                text.draw(with: NSRect(x: 40, y: rect.midY - height / 2, width: rect.maxX - 8 - 40, height: height),
+                          options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attributes)
+            }
             let shortcut = Self.shortcutText(item.shortcut) as NSString
             let shortcutAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: shortcutInk,
                                                                      .kern: 2.5]

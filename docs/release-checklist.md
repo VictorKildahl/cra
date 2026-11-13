@@ -124,6 +124,13 @@ built release app with a test profile. Note anything that fails in the release's
   history the arrow never shows; a tab with pages behind it swipes through those first. The
   `swipe-back` scenario asks the swipe's two questions (`cra://debug?swipeBack=`); only a finger
   makes the gesture.
+- **#416:** on a tab with a few pages behind it, right-click Back (the toolbar's, and the sidebar's
+  with the toolbar hidden): Arc's dark menu hangs under the button, its tail at the button, with
+  each page's favicon and title, nearest first. A row goes straight to that page, and Forward then
+  lists the ones skipped. ⌃-click does the same, and so does holding the button down for half a
+  second (letting go then doesn't go back; a quick click still does). A click elsewhere closes it. In a split, each pane's
+  Back lists its own page's history. Try a WebKit page (a DRM site) too. The harness checks the
+  menu; only the real page shows the navigation.
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.

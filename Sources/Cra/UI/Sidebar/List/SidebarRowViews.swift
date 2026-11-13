@@ -181,6 +181,12 @@ extension NSTextField {
 /// SidebarIconButton for AppKit rows: a glyph with a rounded hover fill and an Arc tooltip.
 final class SidebarGlyphButton: NSView {
     var action: () -> Void
+    /// A right-click or ⌃-click in place of a context menu, given the button: Back and Forward's
+    /// history list hangs under it (GitHub #416).
+    var contextAction: ((NSView) -> Void)?
+    private var contextClick = false
+    /// The press that runs `contextAction` once held for BackForwardMenu.holdDelay.
+    private var hold: DispatchWorkItem?
     let size: NSSize
     private let glyph = NSImageView()
     /// The + that opens the creation menu, turned 45° into an × while it is open (Arc's PlusMenuIcon).
@@ -381,14 +387,35 @@ final class SidebarGlyphButton: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func mouseDown(with event: NSEvent) {
+        contextClick = event.modifierFlags.contains(.control) && contextAction != nil
+        if contextClick { if enabled { contextAction?(self) }; return }
+        if enabled, contextAction != nil {
+            // Held down, the press opens the list instead, and letting go no longer clicks.
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.enabled, let contextAction = self.contextAction else { return }
+                    self.contextClick = true
+                    contextAction(self)
+                }
+            }
+            hold = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + BackForwardMenu.holdDelay, execute: work)
+        }
         if turnsOnPress, enabled { glyph.pressTurn(true) }
     }
     override func mouseDragged(with event: NSEvent) {
-        if turnsOnPress, enabled { glyph.pressTurn(bounds.contains(convert(event.locationInWindow, from: nil))) }
+        if !bounds.contains(convert(event.locationInWindow, from: nil)) { hold?.cancel() }
+        if !contextClick, turnsOnPress, enabled { glyph.pressTurn(bounds.contains(convert(event.locationInWindow, from: nil))) }
     }
     override func mouseUp(with event: NSEvent) {
+        hold?.cancel()
+        hold = nil
         if turnsOnPress { glyph.pressTurn(false) }
-        if enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+        if !contextClick, enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+    }
+    override func rightMouseDown(with event: NSEvent) {
+        guard let contextAction else { return super.rightMouseDown(with: event) }
+        if enabled { contextAction(self) }
     }
 }
 

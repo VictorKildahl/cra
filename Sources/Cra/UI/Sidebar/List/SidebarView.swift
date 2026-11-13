@@ -413,7 +413,7 @@ final class SidebarTopBarView: NSView {
 
     private func button(_ key: String, symbol: String, help: String, size: CGFloat, height: CGFloat, iconSize: CGFloat,
                         weight: NSFont.Weight = .regular, active: Bool?, enabled: Bool = true, animated: Bool = false,
-                        action: @escaping () -> Void) -> SidebarGlyphButton {
+                        context: ((NSView) -> Void)? = nil, action: @escaping () -> Void) -> SidebarGlyphButton {
         let b = buttons[key] ?? {
             let b = SidebarGlyphButton(symbol: symbol, size: size, height: height, iconSize: iconSize, weight: weight, help: help, colors: colors, action: action)
             buttons[key] = b
@@ -425,7 +425,13 @@ final class SidebarTopBarView: NSView {
         b.active = active
         b.enabled = enabled
         b.action = action
+        b.contextAction = context
         return b
+    }
+
+    /// Back and Forward's right-click: the tab's list on that side, under the button (GitHub #416).
+    private func history(_ direction: BackForwardMenu.Direction) -> (NSView) -> Void {
+        { [weak self] anchor in self?.actions.showHistoryMenu(nil, direction, anchor) }
     }
 
     private func apply() {
@@ -456,17 +462,17 @@ final class SidebarTopBarView: NSView {
             : button("toggle", symbol: "sidebar.left", help: help, size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }
         var shown = narrow ? [] : [toggle]
         if narrow {
-            shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
-            shown.append(button("nforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoBack, context: history(.back)) { [weak self] in self?.actions.goBack() })
+            shown.append(button("nforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoForward, context: history(.forward)) { [weak self] in self?.actions.goForward() })
             shown.append(button("more", symbol: morePanel == nil ? "ellipsis" : "xmark", help: "More options", size: 28, height: 28, iconSize: 15,
                                 weight: .semibold, active: active) { [weak self] in self?.toggleMorePanel() })
         } else if compact {
-            shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
-            shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack, context: history(.back)) { [weak self] in self?.actions.goBack() })
+            shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward, context: history(.forward)) { [weak self] in self?.actions.goForward() })
             shown.append(button("reload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 32, height: 32, iconSize: 15, active: active, animated: true) { [weak self] in self?.actions.reload() })
         } else if devNav {
-            shown.append(button("dback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoBack) { [weak self] in self?.actions.goBack() })
-            shown.append(button("dforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoForward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("dback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoBack, context: history(.back)) { [weak self] in self?.actions.goBack() })
+            shown.append(button("dforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoForward, context: history(.forward)) { [weak self] in self?.actions.goForward() })
             shown.append(button("dreload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 24, height: 24, iconSize: 15, active: nil, animated: true) { [weak self] in self?.actions.reload() })
         }
         for (k, b) in buttons where !shown.contains(where: { $0 === b }) {
@@ -1058,10 +1064,7 @@ final class SpaceDockView: NSView {
             SidebarCreationMenuItem(title: title, symbol: symbol, shortcut: KeyBindingRegistry.shared.action(id)?.primary?.display ?? "",
                                     enabled: enabled) { [actions] in actions.performAction(id) }
         }
-        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown)
-        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
-        let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
-                                               shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
+        let colors = SidebarCreationMenuColors(ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown))
         creationMenu.toggle(from: plus, items: items, colors: colors) { [weak plus] open in
             plus?.highlighted = open
             plus?.setMenuOpen(open)

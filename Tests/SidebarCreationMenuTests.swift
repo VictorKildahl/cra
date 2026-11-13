@@ -137,17 +137,92 @@ enum SidebarCreationMenuTests {
         expect(parent.childWindows?.isEmpty != false && openStates.last == false, "moving the parent dismisses its menu")
         controller.close()
 
+        try historyList(parent: parent)
+
         if let path = ProcessInfo.processInfo.environment["CRA_CREATION_MENU_SNAPSHOT"] {
             let preview = SidebarCreationMenuView(items: items) { _ in }
-            parent.setContentSize(preview.frame.size)
-            parent.contentView = preview
-            preview.layoutSubtreeIfNeeded()
-            let bitmap = preview.bitmapImageRepForCachingDisplay(in: preview.bounds)!
-            preview.cacheDisplay(in: preview.bounds, to: bitmap)
-            try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+            try snapshot(preview, in: parent, to: path)
         }
         parent.close()
         print("Sidebar creation menu: \(checks) checks passed")
+    }
+
+    // promise: #416
+    /// Back and Forward's right-click list (GitHub #416): Arc's menu in one group of favicon rows, hung
+    /// under the button with its tail on top (Arc 1.172.1, 2x capture, 13 Nov 2026).
+    @MainActor
+    private static func historyList(parent: NSWindow) throws {
+        let favicon = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            NSColor.orange.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
+        var picked: [Int] = []
+        let titles = ["Example C", "A page title long enough that Arc cuts it short", "Example A"]
+        let items = titles.enumerated().map { index, title in
+            SidebarCreationMenuItem(title: title, symbol: "", shortcut: "", enabled: true, favicon: favicon) { picked.append(index) }
+        }
+        let layout = ArcMenuLayout(groups: [items.count], tail: .top)
+        var picks: [Int?] = []
+        let list = SidebarCreationMenuView(items: items, layout: layout, width: SidebarCreationMenuView.listWidth, picksLastRow: false) { picks.append($0) }
+        expect(list.frame.size == NSSize(width: 220, height: 142), "three entries make a 220 × 136 pt fill under a 6 pt tail")
+        expect(list.selected == nil, "the list opens with no row picked: the pointer is on the button")
+        expect(list.handleKey(key(36)) && picks.isEmpty, "Return with no row picked chooses nothing")
+        _ = list.handleKey(key(125))
+        _ = list.handleKey(key(36))
+        expect(picks == [0], "Down picks the nearest entry first")
+        let rows = list.subviews.compactMap { $0 as? NSButton }
+        expect(rows.map(\.frame.minY) == [14, 54, 94] && rows.allSatisfy { $0.frame.height == 40 && $0.frame.minX == 8 && $0.frame.width == 204 },
+               "rows are 40 pt, 8 pt inside the fill, which starts under the tail")
+        let icon = rows[0].subviews.compactMap { $0 as? NSImageView }.first
+        expect(icon?.frame == NSRect(x: 8, y: 12, width: 16, height: 16) && icon?.image === favicon && icon?.contentTintColor == .white,
+               "a 16 pt favicon 16 pt into the fill; a template globe is drawn white")
+        expect(rows[1].accessibilityLabel() == titles[1], "a row reads its page's full title, however it is cut short")
+        list.arrowX = 110
+        let drawn = list.bitmapImageRepForCachingDisplay(in: list.bounds)!
+        list.cacheDisplay(in: list.bounds, to: drawn)
+        let scale = CGFloat(drawn.pixelsWide) / list.bounds.width
+        func alpha(_ x: CGFloat, _ y: CGFloat) -> CGFloat { drawn.colorAt(x: Int(x * scale), y: Int(y * scale))?.alphaComponent ?? 0 }
+        expect(alpha(110, 2) > 0.9 && alpha(30, 2) < 0.1, "the tail is drawn above the fill, at the button")
+        expect(alpha(110, 141) > 0.9, "the fill runs to the bottom, with no tail under it")
+
+        let anchor = NSView(frame: NSRect(x: 120, y: 440, width: 32, height: 32))
+        parent.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 500))
+        parent.contentView?.addSubview(anchor)
+        let controller = SidebarCreationMenuController()
+        controller.toggle(from: anchor, items: items, layout: layout, width: SidebarCreationMenuView.listWidth,
+                          picksLastRow: false, anchorToggles: false) { _ in }
+        let popup = parent.childWindows!.first!
+        let button = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        expect(popup.frame.maxY == button.minY - 8 && popup.frame.midX == button.midX,
+               "the list hangs centred under its button, the tail's tip 8 pt below it, 27 pt under the arrow as in Arc")
+        let shown = popup.contentView as! SidebarCreationMenuView
+        expect(shown.arrowX == 110, "the tail points at the button's centre")
+        let layer = shown.layer!
+        let small = ((layer.animation(forKey: "creationMenuTransform") as! CABasicAnimation).fromValue as! NSValue).caTransform3DValue
+        let tip = CGPoint(x: shown.arrowX - layer.bounds.width * layer.anchorPoint.x, y: -layer.bounds.height * layer.anchorPoint.y)
+        expect(abs(tip.x * small.m11 + small.m41 - tip.x) < 0.00001 && abs(tip.y * small.m22 + small.m42 - tip.y) < 0.00001,
+               "the tail's tip on top stays fixed while the list grows")
+        let row = shown.subviews[2] as! NSButton
+        NSApp.sendAction(row.action!, to: row.target, from: row)
+        expect(picked == [2], "picking a row goes to its entry")
+        controller.close(animated: false)
+
+        if let path = ProcessInfo.processInfo.environment["CRA_HISTORY_MENU_SNAPSHOT"] {
+            let preview = SidebarCreationMenuView(items: items, layout: layout, width: SidebarCreationMenuView.listWidth, picksLastRow: false) { _ in }
+            preview.arrowX = 110
+            try snapshot(preview, in: parent, to: path)
+        }
+    }
+
+    @MainActor
+    private static func snapshot(_ view: NSView, in window: NSWindow, to path: String) throws {
+        window.setContentSize(view.frame.size)
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
     }
 
     private static func key(_ code: UInt16, characters: String = "") -> NSEvent {

@@ -251,11 +251,13 @@ final class PaneToolbarView: NSView {
     }
 
     private func glyph(_ key: String, _ symbol: String, help: String, enabled: Bool = true, width: CGFloat = 26, iconSize: CGFloat = 13,
-                       tint: NSColor? = nil, animated: Bool = false, action: @escaping (PaneToolbarView) -> Void) -> ToolbarGlyphButton {
+                       tint: NSColor? = nil, animated: Bool = false, context: ((PaneToolbarView, NSView) -> Void)? = nil,
+                       action: @escaping (PaneToolbarView) -> Void) -> ToolbarGlyphButton {
         let b = button(key) { ToolbarGlyphButton() }
         b.configure(symbol: symbol, image: nil, help: help, enabled: enabled, width: width, iconSize: iconSize, tint: tint ?? model.fgDim,
                     hover: model.hover, animated: animated)
         b.action = { [weak self] in if let self { action(self) } }
+        b.contextAction = context.map { context in { [weak self] anchor in if let self { context(self, anchor) } } }
         return b
     }
 
@@ -292,9 +294,11 @@ final class PaneToolbarView: NSView {
                 return glyph("toggle", "sidebar.left", help: m.sidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)",
                              width: 37, iconSize: 15.5) { $0.actions.toggleSidebar() }
             case .back(let enabled):
-                return glyph("back", "arrow.left", help: wide ? "" : "Go Back (⌘[)", enabled: enabled, width: 37, iconSize: 15) { if !wide { $0.navigate("goBack") } }
+                return glyph("back", "arrow.left", help: wide ? "" : "Go Back (⌘[)", enabled: enabled, width: 37, iconSize: 15,
+                             context: wide ? nil : { $0.showHistory(.back, from: $1) }) { if !wide { $0.navigate("goBack") } }
             case .forward(let enabled):
-                return glyph("forward", "arrow.right", help: wide ? "" : "Go Forward (⌘])", enabled: enabled, width: 37, iconSize: 15) { if !wide { $0.navigate("goForward") } }
+                return glyph("forward", "arrow.right", help: wide ? "" : "Go Forward (⌘])", enabled: enabled, width: 37, iconSize: 15,
+                             context: wide ? nil : { $0.showHistory(.forward, from: $1) }) { if !wide { $0.navigate("goForward") } }
             case .reload(let loading, let enabled):
                 return glyph("reload", loading ? "xmark" : "arrow.clockwise", help: enabled ? "Refresh (⌘R)" : "", enabled: enabled, width: 37,
                              iconSize: 15, animated: enabled) { if !wide { $0.navigate("reload") } }
@@ -523,6 +527,11 @@ final class PaneToolbarView: NSView {
         }
     }
 
+    /// A right-click on Back or Forward: the tab's list on that side, under the button (GitHub #416).
+    private func showHistory(_ direction: BackForwardMenu.Direction, from anchor: NSView) {
+        actions.showHistoryMenu(paneTabID, direction, anchor)
+    }
+
     /// Arc: the developer bar edits its full URL in place (ContentPanelTextField, GitHub #42); every
     /// other bar opens the command bar.
     private func editURL() {
@@ -623,6 +632,11 @@ final class ToolbarGlyphButton: NSView {
     var action: () -> Void = {}
     /// Right-click menu (a pinned extension's icon options).
     var menuProvider: (() -> NSMenu?)?
+    /// A right-click or ⌃-click in place of a menu, given the button: Back and Forward's history
+    /// list hangs under it (GitHub #416).
+    var contextAction: ((NSView) -> Void)?
+    /// The press that runs `contextAction` once held for BackForwardMenu.holdDelay.
+    private var hold: DispatchWorkItem?
     private(set) var width: CGFloat = 26
     private let imageView = NSImageView()
     private var tip: ArcTooltipAnchorView?
@@ -715,18 +729,40 @@ final class ToolbarGlyphButton: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func mouseDown(with event: NSEvent) {
-        contextClick = event.modifierFlags.contains(.control) && menuProvider != nil
-        if contextClick, let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) }
+        contextClick = event.modifierFlags.contains(.control) && (menuProvider != nil || contextAction != nil)
+        if contextClick, let contextAction {
+            if enabled { contextAction(self) }
+        } else if contextClick, let menu = menuProvider?() {
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        } else if enabled, contextAction != nil {
+            // Held down, the press opens the list instead, and letting go no longer clicks.
+            let work = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.enabled, let contextAction = self.contextAction else { return }
+                    self.contextClick = true
+                    contextAction(self)
+                }
+            }
+            hold = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + BackForwardMenu.holdDelay, execute: work)
+        }
         if !contextClick, turnsOnPress, enabled { imageView.pressTurn(true) }
     }
     override func mouseDragged(with event: NSEvent) {
+        if !bounds.contains(convert(event.locationInWindow, from: nil)) { hold?.cancel() }
         if !contextClick, turnsOnPress, enabled { imageView.pressTurn(bounds.contains(convert(event.locationInWindow, from: nil))) }
     }
     override func mouseUp(with event: NSEvent) {
+        hold?.cancel()
+        hold = nil
         if turnsOnPress { imageView.pressTurn(false) }
         if !contextClick, enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
     override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
+    override func rightMouseDown(with event: NSEvent) {
+        guard let contextAction else { return super.rightMouseDown(with: event) }
+        if enabled { contextAction(self) }
+    }
 }
 
 /// The URL in the middle of the bar: Arc's Copy Current URL glyph and the host (the dimmer path

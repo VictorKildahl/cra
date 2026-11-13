@@ -4262,6 +4262,32 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   referrer. Forward stays Chromium's. Readout `cra://debug?swipeBack=<label>[&go=1]` calls the page's real
   delegate (scenario `swipe-back`).
 
+## Back and Forward's history list (Arc 1.172.1, 13 Nov 2026, GitHub #416)
+- [O static] The main binary has a `BackForwardList` module: `BackForwardListFeature` (State, Option, Location,
+  Item, Action, ViewAction, DelegateAction, `FaviconFetchCancellableID`) and `BackForwardListMenuManager`, whose
+  ivars are `delegate`, `storeSubscription`, `menu`, `viewStore`, `faviconSubscriptions` and `favicons`
+  (`otool -oV`, arm64). It presents through `presentMenu(store:)`, logging "Unable to find anchor to present back
+  / forward menu" without one; the anchors are `backList_sidebar` / `forwardList_sidebar` and the toolbar's
+  `backButtonView` / `forwardButtonView`. The strings sit beside `ArcMenu` / `ArcMenuWindow`, the + menu's window.
+  `BackForwardButton`, `LongPressButton` and `onLongPress` suggest a press and hold opens it too (not checked).
+- [O capture, 2x, a user's Arc, sidebar header with the toolbar hidden] Right-click on Back: Arc's menu, the
+  default theme's dark fill (4,8,49), 440 × 272 px (220 × 136 pt) for three entries, so 40 pt rows 8 pt inside
+  the fill as in the + menu, one group, no row picked. The tail is on top: 11 px rows, 22 px at its base, its
+  tip 27 pt under the back arrow's ink and centred on it, as is the menu. That is the ••• popover's 10 pt under a
+  28 pt button (below); Cra's Back is 32 pt, so the list hangs 8 pt under it (27 pt in a 2x capture of Cra too).
+  Each row: the favicon, 16 pt, 16 pt into the fill; the title, 13 pt semibold white, its ink 41 pt into the
+  fill, cut with an ellipsis about 197 pt in. Nearest entry first.
+- [U] Whether the menu narrows for short titles, how many entries it shows at most, the press-and-hold delay
+  (`longPressDuration` has no readable value in the stripped binary; ARCUI is SwiftUI, whose long press is 0.5 s),
+  and what Arc's menu does for a link's tab with nothing behind it (its Back closes the tab, #273).
+- Cra: CraCore `BackForwardMenu` (rows from Page.getNavigationHistory, nearest first, an address for an untitled
+  page, at most 12 as Chromium's BackForwardMenuModel) and `ArcMenuLayout` (the rows, separators and tail of
+  both menus). `SidebarCreationMenu` draws either: the + menu as before (byte-identical in its harness) or the
+  list, `MainWindowController.showHistoryMenu` fetching the list and sending Page.navigateToHistoryEntry for a
+  row. No CEF patch: both are DevTools methods, and WebKitBrowser answers them from `WKBackForwardList`. A
+  right-click, a ⌃-click or a press held for `BackForwardMenu.holdDelay` (0.5 s) opens it; once held, letting go
+  doesn't go back.
+
 ## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
 - [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new
   width is `round(start + translation)`; under 82 pt the sidebar hides; otherwise it's clamped to 164…500 pt.

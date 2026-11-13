@@ -88,6 +88,7 @@ gains "New Profile".
 | Folder | Paste as New Tab, Move to ▸, Duplicate, Turn "…" into Space, Copy All Links, and Arc's order (New Nested Folder… is Cra's New Folder Inside). Share Folder… done (GitHub #357): Arc stored the folder on arc.net; Cra's crabrowser.app/folder link carries it after the # (FolderShareLink), so nothing is stored and the server never sees it. Same toast, "Copied Folder URL", after Arc's "Send this Folder to anyone" warning (AppDialog.shareLink, #356) |
 | Toolbar address | Share ▸ (in the Site Control Center), Disable Shared Quotes (arc.net); the rest done. Blocked pop-ups (GitHub #357): Arc keeps Chromium's list (hasBlockedPopUp, showBlockedPopups) but its button wasn't seen yet; Cra shows Chrome's crossed-out window before the sliders, or "Pop-ups Blocked" under the sidebar's address, with Chrome's list and Always Allow as a menu |
 | Library button | Show media ▸ Documents, Desktop, Screenshots, Arc Captures, Downloads |
+| Back / Forward | all done (GitHub #416): the tab's list on that side, in Arc's menu under the button, on the sidebar's and the toolbar's buttons and each split pane's, on a right-click, ⌃-click or press and hold. Not checked against Arc yet: the hold's delay (Cra 0.5 s, SwiftUI's default), the most entries Arc lists (Cra 12, as Chromium), and whether the menu narrows for short titles |
 
 ## 4. Settings
 

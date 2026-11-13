@@ -143,7 +143,9 @@ to Markdown or `docs/` alone runs nothing.
   a reset and Reset All.
 - `scripts/test-sidebar-creation-menu.sh`: the sidebar + menu's real window and view off screen:
   rows and keys, clicks on enabled and disabled rows, Arc's open and close timings, and the +
-  turning into an × on its spring.
+  turning into an × on its spring; and Back and Forward's history list in the same window (#416):
+  its rows, favicons, keys and place under the button. `CRA_CREATION_MENU_SNAPSHOT` and
+  `CRA_HISTORY_MENU_SNAPSHOT` save each menu as a PNG.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and

@@ -836,6 +836,18 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 web.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak self] in
                     self?.reply(completion, "{}", nil)
                 }
+            case "Page.getNavigationHistory":
+                reply(completion, Self.navigationHistory(web.backForwardList), nil)
+            case "Page.navigateToHistoryEntry":
+                // An entry is known by its item's identity, so a list that moved on since it was read
+                // can't send the pick to another page.
+                let id = Self.object(params)["entryId"] as? Int
+                let list = web.backForwardList
+                guard let item = (list.backList + list.forwardList).first(where: { Self.entryID($0) == id }) else {
+                    return reply(completion, nil, "No history entry with that id")
+                }
+                web.go(to: item)
+                reply(completion, "{}", nil)
             case "Cra.setFreezingVote", "Cra.load":
                 // WebKit decides when a hidden page sleeps; tab sleeping closes the page instead.
                 reply(completion, "{}", nil)
@@ -958,6 +970,18 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             store.removeData(ofTypes: types, for: mine) { MainActor.assumeIsolated { self?.reply(completion, "{}", nil) } }
         }
     }
+
+    /// Page.getNavigationHistory's answer, from WKWebView's list: back items, the current one, then
+    /// forward items, as Chromium orders them (Back and Forward's right-click list, GitHub #416).
+    @MainActor
+    static func navigationHistory(_ list: WKBackForwardList) -> String {
+        let items = list.backList + (list.currentItem.map { [$0] } ?? []) + list.forwardList
+        let entries = items.map { ["id": entryID($0), "url": $0.url.absoluteString, "title": $0.title ?? ""] as [String: Any] }
+        let out: [String: Any] = ["currentIndex": list.currentItem == nil ? -1 : list.backList.count, "entries": entries]
+        return String(decoding: (try? JSONSerialization.data(withJSONObject: out)) ?? Data("{}".utf8), as: UTF8.self)
+    }
+
+    static func entryID(_ item: WKBackForwardListItem) -> Int { Int(bitPattern: UInt(bitPattern: ObjectIdentifier(item))) }
 
     static func object(_ json: String) -> [String: Any] {
         (try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]) ?? [:]

@@ -205,6 +205,9 @@ final class SidebarActions {
     var moveBlankWindow: (UUID) -> Void = { _ in }
     var goBack: () -> Void = {}
     var goForward: () -> Void = {}
+    /// A right-click on Back or Forward: that side of the tab's history (a split pane's tab, else the
+    /// one in front) hung under the button (GitHub #416).
+    var showHistoryMenu: (UUID?, BackForwardMenu.Direction, NSView) -> Void = { _, _, _ in }
     var reload: () -> Void = {}
     var editSpace: (Space?) -> Void = { _ in }
     /// Move to ▸ New Space… on picked tabs: the new space sheet, and the tabs go to the space it makes.
