@@ -46,6 +46,9 @@ final class TidyTabsService {
     /// Intelligence on in System Settings shows the button without a relaunch.
     private(set) var status: Status = .needsNewerMacOS
     var modelAvailable: Bool { status == .available }
+    /// Re-read at the title mutation boundary, before the cached status refreshes.
+    var currentModelAvailable: Bool { Self.currentStatus() == .available }
+    @ObservationIgnored var titlesUnavailable: () -> Void = {}
 
     @ObservationIgnored private var activation: NSObjectProtocol?
 
@@ -58,6 +61,7 @@ final class TidyTabsService {
 
     func refresh() {
         let now = Self.currentStatus()
+        if now != .available { titlesUnavailable() }
         if now != status { status = now }
     }
 

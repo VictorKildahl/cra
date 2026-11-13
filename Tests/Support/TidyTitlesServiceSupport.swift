@@ -1,11 +1,8 @@
 import Foundation
 
-/// The model and native list registry are the only unavailable app dependencies in this harness.
-@MainActor
-final class TidyTabsService {
-    static let shared = TidyTabsService()
-    var modelAvailable: Bool { true }
-    static var fakeModel: Bool { false }
+/// Only the unused Tidy Tabs animation path needs this UI constant in the service harness.
+enum SidebarTidyMetrics {
+    static let minimumRun: TimeInterval = 0.9
 }
 
 @MainActor

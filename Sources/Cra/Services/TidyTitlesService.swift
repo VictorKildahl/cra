@@ -57,7 +57,7 @@ final class TidyTitlesService {
         SpaceListView.tidyTitleLayout(for: id, window: window)
     }, generate: @escaping @MainActor (String, String, String) async -> TidyTitles.Answer? = { title, url, language in
         await TidyTitlesService.ask(title: title, url: url, language: language)
-    }, modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.modelAvailable }) {
+    }, modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.currentModelAvailable }) {
         self.titleLayout = titleLayout
         self.generate = generate
         self.modelAvailable = modelAvailable
@@ -118,6 +118,7 @@ final class TidyTitlesService {
     private func apply(_ answer: TidyTitles.Answer, to id: UUID, token: UUID, store: SidebarStore?) {
         guard let request = requests[id], request.token == token else { return }
         requests[id]?.reveal = nil
+        guard modelAvailable() else { finish(id, token: token); return }
         let now = store?.item(id)
         let shown = now.flatMap { item in
             item.tab.map { TidyTitleRules.arc.tidy(item.displayTitle, url: $0.url) }

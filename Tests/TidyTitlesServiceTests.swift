@@ -20,7 +20,20 @@ enum TidyTitlesServiceTests {
             try await adapterRecovery()
         } else if CommandLine.arguments.dropFirst().first == "owner" {
             await staleCompletionCannotRemoveNewRequest()
+        } else if CommandLine.arguments.dropFirst().first == "availability" {
+            await unavailableBeforeApply()
+            await availabilityRefresh()
+            await freshAvailabilityBeforeReveal()
+        } else if CommandLine.arguments.dropFirst().first == "availability-reveal" {
+            await unavailableBeforeApply(completedOnly: true)
+        } else if CommandLine.arguments.dropFirst().first == "availability-refresh" {
+            await availabilityRefresh()
+        } else if CommandLine.arguments.dropFirst().first == "availability-fresh" {
+            await freshAvailabilityBeforeReveal()
         } else {
+            await unavailableBeforeApply()
+            await availabilityRefresh()
+            await freshAvailabilityBeforeReveal()
             await cancelledBeforeGeneration()
             await offOnRejectsLateCompletion()
             await staleCompletionCannotRemoveNewRequest()
@@ -32,6 +45,112 @@ enum TidyTitlesServiceTests {
             try await adapterRecovery()
         }
         print("Tidy titles service: \(checks) checks passed")
+    }
+
+    @MainActor
+    private static func unavailableBeforeApply(completedOnly: Bool = false) async {
+        for completed in completedOnly ? [true] : [false, true] {
+            let f = Fixture()
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(1)
+            if completed {
+                f.generator.resolve(1, with: "Unavailable Name")
+                await turn()
+            }
+            f.available = false // The cached status need not have refreshed yet.
+            if !completed {
+                f.generator.resolve(1, with: "Unavailable Name")
+                await turn()
+            }
+            f.clock.advance(by: 1)
+            expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
+                   completed ? "a completed answer cannot reveal after model availability is lost"
+                             : "an uncooperative provider cannot rename after model availability is lost")
+        }
+    }
+
+    @MainActor
+    private static func availabilityRefresh() async {
+        let original = ProcessInfo.processInfo.environment["CRA_TIDY_FAKE_MODEL"]
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+        _ = TidyTabsService.fakeModel // Keep adapter tests on their controlled provider.
+        let availability = TidyTabsService.shared
+        defer {
+            availability.titlesUnavailable = {}
+            if let original { setenv("CRA_TIDY_FAKE_MODEL", original, 1) } else { unsetenv("CRA_TIDY_FAKE_MODEL") }
+            availability.refresh()
+        }
+        for completed in [false, true] {
+            setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
+            // First case leaves the cached status off while fresh eligibility has returned.
+            if completed { availability.refresh() }
+            let f = Fixture()
+            let service = f.service!
+            availability.titlesUnavailable = { [weak service] in service?.cancelAll() }
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(1)
+            if completed {
+                f.generator.resolve(1, with: "Stale Name")
+                await turn()
+            }
+            // The real refresh must invalidate synchronously, without an actor yield between states.
+            setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+            availability.refresh()
+            setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
+            availability.refresh()
+            if !completed {
+                f.generator.resolve(1, with: "Stale Name")
+                await turn()
+            }
+            f.clock.advance(by: 1)
+            expect(f.store.item(f.id)?.title == nil && service.effects.isEmpty,
+                   completed ? "same-turn model off/on invalidates an already completed answer's reveal"
+                             : "same-turn model off/on invalidates an uncooperative provider's token")
+
+            f.store.unpinTab(f.id)
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(2)
+            f.generator.resolve(2, with: "Current Name")
+            await turn()
+            f.clock.advance(by: 1)
+            expect(f.store.item(f.id)?.title == "Current Name" && service.effects[f.id] != nil,
+                   "new available work remains independent of the invalidated token")
+            setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+            availability.refresh()
+            expect(service.effects.isEmpty && f.store.item(f.id)?.title == "Current Name",
+                   "real unavailable refresh synchronously clears active effects while preserving saved names")
+        }
+    }
+
+    @MainActor
+    private static func freshAvailabilityBeforeReveal() async {
+        let original = ProcessInfo.processInfo.environment["CRA_TIDY_FAKE_MODEL"]
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+        _ = TidyTabsService.fakeModel
+        let availability = TidyTabsService.shared
+        defer {
+            if let original { setenv("CRA_TIDY_FAKE_MODEL", original, 1) } else { unsetenv("CRA_TIDY_FAKE_MODEL") }
+            availability.refresh()
+        }
+        setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
+        availability.refresh()
+        let f = Fixture()
+        let generator = f.generator
+        let service = TidyTitlesService(generate: { _, _, _ in await generator.next() })
+        f.store.tabPinned = { [weak service, weak store = f.store] id in
+            if let store { service?.tabPinned(id, store: store) }
+        }
+        f.store.pinTab(f.id)
+        await generator.waitFor(1)
+        generator.resolve(1, with: "Unavailable Name")
+        await turn()
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1) // No refresh: cached status still says available.
+        expect(availability.modelAvailable && !availability.currentModelAvailable,
+               "fresh eligibility detects model loss before cached availability refresh")
+        f.clock.advance(by: 1)
+        expect(f.store.item(f.id)?.title == nil && service.effects.isEmpty,
+               "the production default rechecks actual model availability before revealing a completed answer")
+        service.cancelAll()
     }
 
     @MainActor
@@ -301,6 +420,7 @@ enum TidyTitlesServiceTests {
         let generator = Generator()
         let label = NSTextField(labelWithString: "")
         var service: TidyTitlesService?
+        var available = true
         let id: UUID
 
         init() {
@@ -315,7 +435,7 @@ enum TidyTitlesServiceTests {
             label.frame.size.width = 500
             service = TidyTitlesService(titleLayout: { item, window in
                 item == id && window == origin ? TidyTitleLayout(label: label, inset: 2) : nil
-            }, generate: { _, _, _ in await generator.next() }, modelAvailable: { true })
+            }, generate: { _, _, _ in await generator.next() }, modelAvailable: { [weak self] in self?.available == true })
             store.tabPinned = { [weak service, weak store] id in
                 if let store { service?.tabPinned(id, store: store) }
             }

@@ -10,7 +10,8 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   Sources/Cra/Services/SidebarStore.swift Sources/Cra/Services/SidebarIntegrity.swift Sources/Cra/Services/Persistence.swift \
   Tests/Support/LegacyLiveFolderResults.swift Sources/Cra/Services/FaviconCache.swift Sources/Cra/Services/SafeStorage.swift \
   Sources/Cra/Services/CraLog.swift Sources/Cra/Services/Scheduler.swift \
-  Sources/Cra/Services/TidyTitlesService.swift Sources/Cra/UI/Sidebar/List/TidyTitleLayout.swift \
+  Sources/Cra/Services/TidyTitlesService.swift Sources/Cra/Services/TidyTabsService.swift \
+  Sources/Cra/UI/Sidebar/List/TidyTitleLayout.swift \
   Tests/Support/TidyTitlesServiceSupport.swift Tests/Support/ManualScheduler.swift \
   Tests/TidyTitlesServiceTests.swift -o "$TEST_DIR/tidy-titles-tests"
 "$TEST_DIR/tidy-titles-tests" "$@"
