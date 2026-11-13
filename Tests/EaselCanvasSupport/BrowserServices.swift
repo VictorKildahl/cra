@@ -9,6 +9,7 @@ protocol NativePage: AnyObject {
 @MainActor
 enum PageEngines {
     static var nativePage: ((NSRect, String, CraBrowserDelegate?, Bool, String?) -> CraBrowser?)?
+    static var isNativePage: ((String) -> Bool)?
 }
 
 enum AppPaths {

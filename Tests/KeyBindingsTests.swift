@@ -46,8 +46,33 @@ enum KeyBindingsTests {
         registry.setPluginActions([])
         expect(registry.actions.count == builtIn && registry.action(github.id) == nil, "a disabled plugin's command goes")
 
+        priorities(registry, file: file)
+
         print("Key bindings: \(checks) checks, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    /// Who gets a shortcut's keys, Cra or the page (#374): today's split until the user picks, a pick
+    /// saved on the action's chords in keybindings.json, kept through a synced reload, gone on Reset.
+    @MainActor
+    static func priorities(_ registry: KeyBindingRegistry, file: URL) {
+        expect(registry.priority(of: "closeTab") == .preferCra && registry.priority(of: "find") == .preferWebsites,
+               "reserved shortcuts prefer Cra, the rest websites")
+        registry.setPriority(.preferWebsites, for: "closeTab")
+        expect(registry.priority(of: "closeTab") == .preferWebsites, "a pick takes")
+        expect(registry.isOverridden("closeTab"), "a picked priority can be reset")
+        expect(registry.action("closeTab")?.shortcuts == [Shortcut("w", .command)], "picking keeps the keys")
+        registry.resetOverrides()
+        try! JSONEncoder().encode(KeyBindingOverrides(shortcuts: ["find": [Shortcut("f", .command)]], priorities: ["find": .useBoth]))
+            .write(to: file)
+        registry.reloadOverrides()
+        expect(registry.priority(of: "find") == .useBoth, "a synced keybindings.json brings its priorities")
+        registry.resetShortcuts(for: "find")
+        expect(registry.priority(of: "find") == .preferWebsites && !registry.isOverridden("find"), "Reset Shortcut to Default resets the priority")
+        registry.setPriority(.preferCra, for: "find")
+        registry.setPriority(.preferWebsites, for: "find")
+        expect(!registry.isOverridden("find"), "picking the default again leaves nothing to reset")
+        registry.resetOverrides()
     }
 
     @MainActor

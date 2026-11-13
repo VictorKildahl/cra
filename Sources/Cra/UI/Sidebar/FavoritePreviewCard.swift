@@ -2,12 +2,14 @@ import AppKit
 import CraCEF
 import SwiftUI
 
-/// Arc's Previews card beside a Gmail or Google Calendar favorite (Arc 1.172.1, measured on
-/// Victor's signed-in Arc, 8 Nov 2026; CraCore FavoritePreviewMetrics and FavoritePreviewMotion).
-/// It shows a moment after the pointer lands on a tile that isn't the open tab, takes the pointer
-/// (rows light up, a click opens the mail or event in the favorite), and goes once the pointer has
-/// left both the tile and the card. Gmail's card lists the unread mail with a ＋ for a new one;
-/// Calendar's is today's timeline with a gear (Last fetch, Refresh, Disable Live Calendar) and a ＋.
+/// Arc's Previews card beside a Gmail, Google Calendar, Linear, Notion, Figma or Confluence
+/// favorite or pinned tab (Arc 1.172.1, measured on Victor's signed-in Arc, 8 Nov 2026; CraCore
+/// FavoritePreviewMetrics and FavoritePreviewMotion). It shows a moment after the pointer lands on a
+/// tab that isn't the open one, takes the pointer (rows light up, a click opens the mail, event or
+/// page in the tab), and goes once the pointer has left both the tab and the card. Gmail's card
+/// lists the unread mail with a ＋ for a new one; Calendar's is today's timeline with a gear (Last
+/// fetch, Refresh, Disable Live Calendar) and a ＋; the others list the site's recent pages from
+/// the history with a ＋ for a new one (CraCore RecentPagesPreview, GitHub #376).
 @MainActor
 final class FavoritePreviewCard {
     static let shared = FavoritePreviewCard()
@@ -20,7 +22,14 @@ final class FavoritePreviewCard {
         var open: (String) -> Void
         /// Opens a URL in a new tab (Join).
         var openNewTab: (String) -> Void
-        var disableLiveCalendar: () -> Void = {}
+        /// The calendar gear's last item: Disable Live Calendar, or the preview's own checkbox.
+        var turnOff: () -> Void = {}
+        /// The site's recent pages, read when the card shows (the history is in hand).
+        var recentPages: () -> [RecentPagesPreview.Page] = { [] }
+        var favicon: (String) -> NSImage? = { _ in nil }
+        /// A pinned tab's row: the card goes right of this view (the sidebar's list), level with
+        /// the row's top, instead of under a favorite's tile.
+        weak var beside: NSView?
     }
 
     private var panel: PreviewPanel?
@@ -30,11 +39,13 @@ final class FavoritePreviewCard {
     private var closeWork: DispatchWorkItem?
     private var wantsShow = false
     private var inbox: [String: GmailPreview.Inbox] = [:]
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
 
     private init() {
-        observer = NotificationCenter.default.addObserver(forName: LiveCalendarClient.changed, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { FavoritePreviewCard.shared.contentChanged() }
+        observers = [LiveCalendarClient.changed, OutlookClient.changed].map {
+            NotificationCenter.default.addObserver(forName: $0, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { FavoritePreviewCard.shared.contentChanged() }
+            }
         }
     }
 
@@ -48,10 +59,12 @@ final class FavoritePreviewCard {
         self.target = target
         wantsShow = false
         showWork?.cancel()
-        if let feed = GmailPreview.feedURL(for: target.favorite) {
-            fetchMail(feed, profilePath: target.profilePath, for: tile)
-        } else if CalendarPreview.isCalendar(target.favorite) {
-            LiveCalendarClient.shared.refresh(favorite: target.favorite, profilePath: target.profilePath, ifOlderThan: 60)
+        switch SidebarTabPreview.card(for: target.favorite) {
+        case .gmail: GmailPreview.feedURL(for: target.favorite).map { fetchMail($0, profilePath: target.profilePath, for: tile) }
+        case .calendar, .notionCalendar:
+            LiveCalendarClient.shared.refresh(favorite: Self.googleCalendar(target), profilePath: target.profilePath, ifOlderThan: 60)
+        case .outlookMail, .outlookCalendar: OutlookClient.shared.refresh(favorite: target.favorite, profilePath: target.profilePath, ifOlderThan: 60)
+        case .recentPages, nil: break
         }
         let work = DispatchWorkItem { [weak self, weak tile] in
             guard let self, let tile, self.tile === tile, tile.window != nil else { return }
@@ -119,31 +132,82 @@ final class FavoritePreviewCard {
     }
 
     private func contentChanged() {
-        guard let target, CalendarPreview.isCalendar(target.favorite) else { return }
+        guard let target else { return }
+        switch SidebarTabPreview.card(for: target.favorite) {
+        case .calendar, .notionCalendar, .outlookMail, .outlookCalendar: break
+        default: return
+        }
         if panel != nil { refreshPanel() } else { showIfReady() }
+    }
+
+    /// The Google calendar a card reads: the favorite's own, or the profile's first for Notion
+    /// Calendar (its calendars are Google's; Arc shows them the same way).
+    private static func googleCalendar(_ target: Target) -> String {
+        SidebarTabPreview.card(for: target.favorite) == .notionCalendar ? NotionCalendarPreview.googleCalendar : target.favorite
+    }
+
+    /// The calendar card's state: Google's, or Outlook's in the same shape.
+    private func calendarState(_ target: Target) -> LiveCalendarClient.State? {
+        if SidebarTabPreview.card(for: target.favorite) == .outlookCalendar {
+            return OutlookClient.shared.state(for: target.favorite, profilePath: target.profilePath).map {
+                LiveCalendarClient.State(events: $0.events, signedOut: $0.signedOut, failed: $0.failed, fetched: $0.fetched)
+            }
+        }
+        return LiveCalendarClient.shared.state(for: Self.googleCalendar(target), profilePath: target.profilePath)
+    }
+
+    private func refreshCalendar(_ target: Target) {
+        if SidebarTabPreview.card(for: target.favorite) == .outlookCalendar {
+            OutlookClient.shared.refresh(favorite: target.favorite, profilePath: target.profilePath)
+        } else {
+            LiveCalendarClient.shared.refresh(favorite: Self.googleCalendar(target), profilePath: target.profilePath)
+        }
     }
 
     private func content() -> AnyView? {
         guard let target else { return nil }
+        if let site = RecentPagesPreview.site(for: target.favorite) {
+            return AnyView(RecentPagesPreviewView(site: site, pages: target.recentPages(), now: Date(), favicon: target.favicon,
+                                                  open: { [weak self] in self?.open($0) },
+                                                  new: { [weak self] in self?.open(site.newURL) }))
+        }
         if let feed = GmailPreview.feedURL(for: target.favorite) {
             guard let inbox = inbox[feed + "|" + (target.profilePath ?? "")] else { return nil }
             return AnyView(GmailPreviewView(inbox: inbox, now: Date(), open: { [weak self] in self?.open($0) },
                                             compose: { [weak self] in GmailPreview.composeURL(for: target.favorite).map { self?.open($0) } }))
         }
-        if CalendarPreview.isCalendar(target.favorite) {
-            let state = LiveCalendarClient.shared.state(for: target.favorite, profilePath: target.profilePath)
+        switch SidebarTabPreview.card(for: target.favorite) {
+        case .calendar, .notionCalendar, .outlookCalendar:
             // Arc's card shows its timeline whether or not the fetch worked; Cra waits for a first answer.
-            guard let state else { return nil }
-            return AnyView(CalendarPreviewView(state: state, now: Date(), actions: calendarActions(target)))
+            guard let state = calendarState(target) else { return nil }
+            let service = SidebarTabPreview.card(for: target.favorite) == .outlookCalendar ? "Outlook" : "Google Calendar"
+            return AnyView(CalendarPreviewView(state: state, now: Date(), service: service, actions: calendarActions(target)))
+        case .outlookMail:
+            guard let state = OutlookClient.shared.state(for: target.favorite, profilePath: target.profilePath) else { return nil }
+            if state.signedOut || state.inbox == nil {
+                // Arc's MailPreviewLoginView line; Cra's button opens the favorite to sign in there.
+                guard state.signedOut else { return nil }
+                return AnyView(SignInCard(text: "Sign in to your Email to see messages at a glance.") { [weak self] in self?.open(target.favorite) })
+            }
+            return AnyView(GmailPreviewView(inbox: state.inbox!, now: Date(), open: { [weak self] in self?.open($0) },
+                                            compose: { [weak self] in OutlookPreview.composeURL(for: target.favorite).map { self?.open($0) } }))
+        default:
+            return nil
         }
-        return nil
     }
 
     private func calendarActions(_ target: Target) -> CalendarPreviewView.Actions {
-        CalendarPreviewView.Actions(
-            open: { [weak self] in self?.open($0) },
+        let card = SidebarTabPreview.card(for: target.favorite)
+        let newEvent = switch card {
+        case .notionCalendar: NotionCalendarPreview.newEventURL
+        case .outlookCalendar: OutlookPreview.newEventURL(for: target.favorite)
+        default: CalendarPreview.newEventURL(for: target.favorite)
+        }
+        return CalendarPreviewView.Actions(
+            // Notion Calendar's events are Google's: a click opens Notion Calendar, not Google's page.
+            open: { [weak self] url in self?.open(card == .notionCalendar ? target.favorite : url) },
             join: { [weak self] url in self?.dismiss(animated: false); target.openNewTab(url) },
-            newEvent: { [weak self] in CalendarPreview.newEventURL(for: target.favorite).map { self?.open($0) } },
+            newEvent: { [weak self] in newEvent.map { self?.open($0) } },
             gear: { [weak self] point in self?.gearMenu(target, at: point) },
             signIn: { [weak self] in self?.open(target.favorite) })
     }
@@ -154,18 +218,18 @@ final class FavoritePreviewCard {
         t?.open(url)
     }
 
-    /// Arc's gear on the Calendar card: Last fetch, Refresh, then Disable Live Calendar.
+    /// Arc's gear on the Calendar card: Last fetch, Refresh, then Disable Live Calendar (Outlook's
+    /// and Notion Calendar's turn off their own preview).
     private func gearMenu(_ target: Target, at point: CGPoint) {
         guard let panel else { return }
         let m = NSMenu()
         m.autoenablesItems = false
-        let fetched = LiveCalendarClient.shared.state(for: target.favorite, profilePath: target.profilePath)?.fetched
-        MenuItems.add(m, CalendarPreview.lastFetch(fetched, now: Date()), enabled: false) {}
-        MenuItems.add(m, "Refresh") { LiveCalendarClient.shared.refresh(favorite: target.favorite, profilePath: target.profilePath) }
+        MenuItems.add(m, CalendarPreview.lastFetch(calendarState(target)?.fetched, now: Date()), enabled: false) {}
+        MenuItems.add(m, "Refresh") { [weak self] in self?.refreshCalendar(target) }
         m.addItem(.separator())
-        MenuItems.add(m, "Disable Live Calendar") { [weak self] in
+        MenuItems.add(m, SidebarTabPreview.card(for: target.favorite)?.turnOffTitle ?? "Disable Live Calendar") { [weak self] in
             self?.dismiss(animated: false)
-            target.disableLiveCalendar()
+            target.turnOff()
         }
         guard let view = panel.contentView else { return }
         // The menu holds the pointer: keep the card while it is up.
@@ -178,11 +242,22 @@ final class FavoritePreviewCard {
         guard wantsShow, panel == nil, let tile, let window = tile.window, let view = content() else { return }
         let p = PreviewPanel(content: view)
         let t = window.convertToScreen(tile.convert(tile.bounds, to: nil))
-        // Arc: the card's left edge 4 pt in from the tile's right edge, its top 3.5 pt above the tile's bottom.
-        p.place(cardTopLeft: NSPoint(x: t.maxX - 4, y: t.minY + 3.5))
+        if let list = target?.beside, list.window === window {
+            // A pinned tab: right of the sidebar as Arc's folder preview is, level with the row,
+            // kept inside the window.
+            let side = window.convertToScreen(list.convert(list.bounds, to: nil))
+            let height = p.cardFrame.height
+            let top = max(t.maxY, window.frame.minY + FolderPreviewMetrics.windowInset + height)
+            p.place(cardTopLeft: NSPoint(x: side.maxX + FolderPreviewMetrics.gapFromSidebar, y: top))
+        } else {
+            // Arc: the card's left edge 4 pt in from the tile's right edge, its top 3.5 pt above the tile's bottom.
+            p.place(cardTopLeft: NSPoint(x: t.maxX - 4, y: t.minY + 3.5))
+        }
         window.addChildWindow(p, ordered: .above)
         p.open()
         panel = p
+        let size = p.cardFrame.size
+        CraLog.note("preview card shown: \(Int(size.width))x\(Int(size.height))\(target?.beside == nil ? "" : " pinned")")
     }
 
     private func refreshPanel() {
@@ -221,18 +296,76 @@ final class FavoritePreviewCard {
         demo(favorite, in: window)
     }
 
-    private func demo(_ favorite: String, in window: NSWindow) {
+    /// cra://debug?outlookPreview=mail|calendar|signedOut[&unread=n]: the Outlook card, as if read.
+    func demoOutlook(_ which: String, unread: Int, in window: NSWindow) {
+        let now = Date()
+        let favorite = which == "calendar" ? "https://outlook.live.com/calendar/0/" : "https://outlook.live.com/mail/0/"
+        let mails = (0..<min(unread, 20)).map {
+            GmailPreview.Mail(from: "Sender \($0 + 1)", subject: "Subject line \($0 + 1)", snippet: "The first lines of mail \($0 + 1), long enough to run onto a second line of the card.",
+                              received: now.addingTimeInterval(-Double($0 + 1) * 2400))
+        }
+        let events = [CalendarPreview.Event(title: "Standup", start: now.addingTimeInterval(90), end: now.addingTimeInterval(990),
+                                            meetingURL: "https://teams.microsoft.com/l/meetup-join/cra-demo")]
+        OutlookClient.shared.setDemo(which == "signedOut" ? .init(signedOut: true, fetched: now)
+                                     : .init(inbox: GmailPreview.Inbox(unread: unread, mails: mails), events: events, fetched: now), favorite: favorite)
+        demo(favorite, in: window)
+    }
+
+    /// cra://debug?notionCalendarPreview=1: a Notion Calendar favorite's card (Google's events), as if read.
+    func demoNotionCalendar(in window: NSWindow) {
+        let now = Date()
+        LiveCalendarClient.shared.setDemo([CalendarPreview.Event(title: "Planning", start: now.addingTimeInterval(1800), end: now.addingTimeInterval(5400))],
+                                          favorite: NotionCalendarPreview.googleCalendar, profilePath: nil)
+        demo("https://calendar.notion.so/", in: window)
+    }
+
+    /// cra://debug?recentPages=<site>[&pages=<n>]: the site's card for n sample pages (0: Arc's
+    /// empty line), as if from the history.
+    func demoRecentPages(_ site: RecentPagesPreview.Site, count: Int, in window: NSWindow) {
+        let now = Date()
+        let favorite = switch site {
+        case .linear: "https://linear.app/cra/"
+        case .notion: "https://www.notion.so/cra/"
+        case .figma: "https://www.figma.com/"
+        case .confluence: "https://acme.atlassian.net/wiki/"
+        }
+        let pages = (0..<min(count, RecentPagesPreview.limit)).map {
+            RecentPagesPreview.Page(title: "Recent page \($0 + 1) with a title long enough to be cut", url: favorite + "demo-\($0 + 1)",
+                                    lastVisit: now.addingTimeInterval(-Double($0 + 1) * 1500))
+        }
+        demo(favorite, in: window, pages: pages)
+    }
+
+    private func demo(_ favorite: String, in window: NSWindow, pages: [RecentPagesPreview.Page] = []) {
         guard let content = window.contentView else { return }
         dismiss(animated: false)
         let anchor = NSView(frame: NSRect(x: 200, y: content.bounds.height - 44 - 47, width: 56, height: 47))
         content.addSubview(anchor)
         tile = anchor
         target = Target(favorite: favorite, profilePath: nil, open: { CraLog.note("preview opens \($0)") },
-                        openNewTab: { CraLog.note("preview joins \($0)") })
+                        openNewTab: { CraLog.note("preview joins \($0)") }, recentPages: { pages })
         wantsShow = true
         showIfReady()
         anchor.removeFromSuperview()
-        CraLog.note("preview card shown: \(panel.map { "\(Int($0.cardFrame.width))x\(Int($0.cardFrame.height))" } ?? "none")")
+        if panel == nil { CraLog.note("preview card shown: none") }
+    }
+}
+
+@MainActor
+extension FavoritePreviewCard.Target {
+    /// The card for a favorite or pinned tab: its profile, Live Calendar's off switch, and its
+    /// site's recent pages from the history (the one history_search reads) with their favicons.
+    static func sidebarTab(_ id: UUID, url: String, store: SidebarStore, favicons: FaviconCache?, beside: NSView? = nil,
+                           open: @escaping (String) -> Void, openNewTab: @escaping (String) -> Void) -> Self {
+        var t = Self(favorite: url, profilePath: store.profilePath(item: id), open: open, openNewTab: openNewTab,
+                     turnOff: { SidebarTabPreview.card(for: url)?.turnOff(&store.settings) })
+        t.recentPages = { [weak store] in store.map { RecentPagesPreview.pages(for: url, history: Array($0.history.values)) } ?? [] }
+        t.favicon = { [weak favicons] page in
+            guard let favicons else { return nil }
+            return favicons.image(for: page) ?? FaviconKey.key(for: page).flatMap { favicons.image(forKey: FaviconKey.siteKey(of: $0)) }
+        }
+        t.beside = beside
+        return t
     }
 }
 
@@ -465,6 +598,22 @@ private enum CardStyle {
     }
 }
 
+/// A card for a preview whose site isn't signed in: a line and Sign In, which opens the tab.
+private struct SignInCard: View {
+    let text: String
+    let signIn: () -> Void
+
+    var body: some View {
+        CardStyle.card(
+            VStack(spacing: 8) {
+                Text(text).font(.system(size: 13)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.78))
+                Button("Sign In", action: signIn).buttonStyle(.borderedProminent).controlSize(.small)
+            }
+            .padding(.vertical, 14).padding(.horizontal, 16)
+            .frame(width: FavoritePreviewMetrics.width))
+    }
+}
+
 /// Arc's round buttons at the card's bottom right: 32 pt, dark with a light rim (＋), or lighter (gear).
 private struct RoundButton: View {
     let symbol: String
@@ -537,6 +686,91 @@ private struct GmailPreviewView: View {
     }
 }
 
+/// Recent pages on Linear, Notion, Figma or Confluence (GitHub #376). Arc's card for these isn't
+/// visible without accounts on those sites, so the list is Cra's in the Gmail card's style: a row
+/// per page with its favicon, tidy title and how long ago you were there, a ＋ for a new page, and
+/// Arc's own line when the history has none.
+private struct RecentPagesPreviewView: View {
+    let site: RecentPagesPreview.Site
+    let pages: [RecentPagesPreview.Page]
+    let now: Date
+    let favicon: (String) -> NSImage?
+    let open: (String) -> Void
+    let new: () -> Void
+
+    var body: some View {
+        if pages.isEmpty { empty } else { list }
+    }
+
+    /// Arc's empty line, in the Gmail card's empty card.
+    private var empty: some View {
+        CardStyle.card(
+            Text(site.emptyText).font(.system(size: 13)).multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.78))
+                .padding(.vertical, 15.5).padding(.horizontal, 16)
+                .frame(width: 240))
+    }
+
+    private var list: some View {
+        let rowStep = FavoritePreviewMetrics.pageRowHeight + 1
+        // Room under the last row for the ＋, so it never sits on a row's time.
+        let room = FavoritePreviewMetrics.buttonSize + FavoritePreviewMetrics.buttonInset
+        let height = min(CGFloat(pages.count) * rowStep - 1 + room, FavoritePreviewMetrics.maxHeight)
+        return CardStyle.card(
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
+                            if i > 0 { Rectangle().fill(CardStyle.line).frame(height: 1) }
+                            PageRow(page: page, now: now, icon: favicon(page.url)) { open(page.url) }
+                        }
+                        Color.clear.frame(height: room)
+                    }
+                }
+                RoundButton(symbol: "plus", label: site.newLabel) { _ in new() }
+                    .help(site.newLabel)
+                    .padding(FavoritePreviewMetrics.buttonInset)
+            }
+            .frame(width: FavoritePreviewMetrics.width, height: height))
+    }
+}
+
+/// A recent page: favicon, title and age on one line, 11 pt in, lit like a mail row under the pointer.
+private struct PageRow: View {
+    let page: RecentPagesPreview.Page
+    let now: Date
+    let icon: NSImage?
+    let open: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let icon { Image(nsImage: icon).resizable().interpolation(.high) } else {
+                    Image(systemName: "doc.text").resizable().scaledToFit().foregroundStyle(CardStyle.secondary)
+                }
+            }
+            .frame(width: 16, height: 16)
+            Text(page.title).font(.system(size: 13)).foregroundStyle(CardStyle.text).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 0)
+            Text(GmailPreview.age(of: page.lastVisit, now: now)).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+        }
+        .padding(.horizontal, FavoritePreviewMetrics.inset)
+        .frame(maxWidth: .infinity, minHeight: FavoritePreviewMetrics.pageRowHeight, maxHeight: FavoritePreviewMetrics.pageRowHeight)
+        .background {
+            if hovered {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(CardStyle.hover).padding(FavoritePreviewMetrics.hoverInset)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .onTapGesture(perform: open)
+        .help(page.url)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
 /// Arc's mail row: sender and age, the subject, two lines of the mail, 11 pt in.
 private struct MailRow: View {
     let mail: GmailPreview.Mail
@@ -586,6 +820,8 @@ struct CalendarPreviewView: View {
 
     let state: LiveCalendarClient.State
     let now: Date
+    /// Whose sign-in the signed-out card asks for.
+    var service = "Google Calendar"
     let actions: Actions
 
     static let nowColor = Color(red: 1, green: 0.94, blue: 0.78)
@@ -598,7 +834,7 @@ struct CalendarPreviewView: View {
     private var signIn: some View {
         CardStyle.card(
             VStack(spacing: 8) {
-                Text("Sign in to Google Calendar to see today's meetings here.")
+                Text("Sign in to \(service) to see today's meetings here.")
                     .font(.system(size: 13)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.78))
                 Button("Sign In", action: actions.signIn).buttonStyle(.borderedProminent).controlSize(.small)
             }

@@ -848,6 +848,20 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   Arc in the background, and its PiP window hides when Arc is made active.
 Cra follows the limits, the scrim, the fade, the insets and the Back to Tab words
 (`PictureInPictureLayout` in CraCore) and keeps its 782×440-on-1728×1117 opening size.
+Size and displays (12 Nov, the maintainer's decision; not Arc's numbers): Cra's window can grow to
+the display's whole visible frame, not Arc's 61.7 % of the screen's width. It always rests on one
+display: let go across two, it slides onto the one most of it is on; dragged to another display, it
+takes the same share of that display's width; a display unplugged or changed, it goes back onto one
+(`PictureInPictureLayout.rest`). Past the screen's edge it still springs into the corner (#332).
+[U] A user reports that Arc shows the window on one display at a time during a drag and moves it
+back when it is let go out of bounds; not observed here. `cra.log`: `pip: onto one display, …`.
+Chromium's cap (Chromium 156 `VideoOverlayWindowViews::UpdateMaxSize`, read in the source, 12 Nov):
+Chromium keeps its own maximum of 80 % of the work area. It cuts the window down to it when that
+maximum changes (the window's display changes, or its work area does), each side on its own, and
+when the video's natural size changes (`CalculateAndUpdateWindowBounds`, in the video's shape). A
+size set from AppKit is otherwise left alone. Cra puts its own size back after either cut
+(`PictureInPictureLayout.undoingChromiumCap`, scenario `pip-full-display`); `cra.log`:
+`pip: Chromium cut …`. A swipe onto another display takes the same share of its width as a drag.
 Double click (11 Nov, reported by a user): a double click on Arc's window returns to the video's tab.
 [O live] Arc 1.172.2, 12 Nov (PR #383 review): a real double click (cliclick) on a 242×136 PiP window
 of a playing file:// video took the window away and the page's video played on; a single click on
@@ -1135,6 +1149,11 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
     cannot be deleted.", a "Never show me this again." checkbox, Cancel (ESC) and Copy Link to Folder (↩). Cancel
     pressed; the link was not made (it would be a permanent arc.net page showing the user's display name).
   - A plain click on a picked row that is also the open tab starts renaming it.
+- [O live] Arc 1.172.2, 12 Nov 2026 (issue #386, a Blank Window of throwaway example.com/org/net tabs, two of them
+  ⌘-picked): View ▸ Add Split View (⌃⇧=) ignores the picks. It adds an empty pane beside the open tab and opens the
+  command bar, as with nothing picked; the picks stay picked, and Esc closes the bar and the empty pane. Arc has no
+  key for the picks: Open in Split View in their menu is the only way to split them. Esc doesn't clear Arc's picks.
+  Cra: ⌃⇧= unchanged; the menu row is pinned by Tests/Scenarios/picked-tabs-split.scenario.
 - [O strings] The warning is Arc's Dialogs.SheetWindow (`showDialogSheetDeprecated(message:buttonTitle:icon:
   cancelButtonText:suppressionButtonText:informativeText:)`), "Alert title on privacy confirmation window for sharing
   tab collections": "Send this <type> to anyone, on any browser." with the type "Folder" for a folder and for picked
@@ -1356,6 +1375,10 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
 - Cra (27 Oct): every sidebar/toolbar/Site Control Center/PiP tooltip now uses `.arcTooltip`; tab rows,
   favorites, split rows and URL fields use the cursor anchor and show the title (Arc) instead of the URL;
   the innermost hovered control owns the tip; the Today "Clear" button got "Clear Today tabs".
+- Clear keeps tabs (GitHub #406, 13 Nov 2026): Arc 1.173.1's strings "Clear unselected Today tabs" and
+  "Tooltip; Clear unselected tabs in this list" say the selected tab stays, and the reporter saw a tab
+  playing media stay too (Arc's tab model has `isAudible`). Cra's `TodayClear` keeps each window's
+  selected tab and the speaker's audible tabs, with the split or tab group around them.
 - Added after that: a muted tab's speaker is a button ("Unmute Tab"); a red dot "This tab is using your
   camera or microphone" from CEF's OnMediaAccessChange (CraBrowser.isCapturingMedia →
   SidebarUIState.capturingTabIDs); the split close button reads "Separate from Split View" while ⌥ is held
@@ -1460,7 +1483,11 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
   Folder and section headers don't press.
 - [O] Favorites: `AppTrayItemViewAppKit.isPressed`, the same spring to 0.99 on every press, the whole tile.
 - [I] Nothing found springs a row back when a press becomes a drag; Cra does it when the drag starts.
-- Cra: CraCore SidebarRowPress, `NSView.springPress`.
+- [O] Live (Arc 1.173.1, offline copy, 12 Nov 2026, real presses held over AX reads): a plain press switches the
+  tab on the press. 250 ms into a held press the window's title is already the pressed tab's, and a press that
+  becomes a drag has switched as well. A ⌘-press changes nothing until the release.
+- Cra: CraCore SidebarRowPress (`selectsOnPress`: a plain single press on a tab row), `NSView.springPress`.
+  Picks, renames and a pinned tab's icon away from home act on the release.
 
 ### Backdrop-layer blur for light vibrant themes (25 Oct 2026, final)
 
@@ -1827,6 +1854,16 @@ from the binary (static strings, metadata and its key table; nothing run), marke
   `gmailPreviewEnabled`, `outlookCalendarPreviewEnabled`, `outlookEmailPreviewEnabled`, `recentPagesPreviewEnabled`, `cronPreviewEnabled`
   (Notion Calendar). Recent pages read the local history of notion.so, linear.app, figma.com and atlassian.net/wiki (no API);
   Notion Calendar shows Google Calendar's preview on calendar.notion.so; Outlook is OAuth with Microsoft Graph (GitHub #376).
+  Arc 1.172.2's main binary, recent pages: `Previews/RecentPagesFetcher.swift` `search(domain:tidyTitleConfiguration:browserContextID:)`
+  (per profile, titles through Tidy Tab Titles), left out: `notion.so/samlauthcallback`, `…/externalintegrationauthcallback`,
+  `…/googlepopupcallback`, `…/oauth2callback`, `figma.com/files/recent`. Empty lines "Recent Linear projects and issues appear
+  here.", "Recent Notion docs appear here.", "Recent Figma files appear here.", "Recent Confluence pages appear here."; the ＋ opens
+  linear.app/new, notion.so/new, figma.com/new, confluence.new. The card itself wasn't seen (no accounts); Cra's (CraCore
+  RecentPagesPreview) lists favicon, title and age in the Gmail card's style, on favorites and pinned tabs.
+  Notion Calendar has no fetcher of its own in the binary (only `calendar.notion.so`/`.com` and `…/event/create`): its card is
+  the Google Calendar preview. Outlook's empty mail line shares Gmail's string. Cra reads Outlook without Arc's Graph sign-in:
+  CraCore OutlookPreview borrows the sign-in headers of a hidden Outlook page's own `/owa/service.svc` requests (FindItem,
+  GetCalendarView).
 - [O] **Profiles**: a line on profiles, a list on the left ("Your Profiles", "Default — 5 Spaces", + − and rename under it, 205 pt wide)
   and the chosen profile's cards on the right: Search engine, Manage search (Search Settings…), Include search engine suggestions ·
   Archive tabs after (12 hours (default), 24 hours, 7 days, 30 days), New documents (——, Confluence Page, Google Doc, Notion Page, Word
@@ -2279,6 +2316,11 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
 
 - **List:** the focused space's tabs by `timeLastActiveAt`, newest first (checked against StorableSidebar.json: the
   JYSK space's top four plus one more JYSK tab, skipping a newer one in another space). The current tab is card 0.
+- **A tab opened in the background** (⌘-click) is card 1 at once: ⌃Tab goes to it and a second tap comes back
+  ([O live] contributor, PR #394, 12 Nov 2026). Arc's StorableSidebar.json agrees that `timeLastActiveAt` is set when
+  a tab is created: tabs there carry it equal to `createdAt` to the microsecond. Cra stamps a tab opened with
+  `select: false` when it opens and keeps the window's current tab first (`SidebarStore.recentTabs`), scenario
+  `tab-switcher-background-tab`.
 - **Keys:** ⌃Tab opens on card 1 and moves on; ⇧Tab, ← and → move too. All of them wrap at both ends. Releasing ⌃
   switches, Esc cancels (the tab stays). A tap (⌃ up 0.13 s after Tab) switches with no panel; the panel appeared
   0.18–0.26 s after the key, so there is a short show delay.
@@ -3235,16 +3277,17 @@ Reported on #233: in Arc a mouse's back and forward buttons over the sidebar swi
   back/forward runs.
 - [O static] NSEvent helpers next to `PageSwipeController` (0x100a0d608…0x100a0d6b8): `otherMouseDown` with button
   2, `otherMouseUp` with button 3 and with button 4.
-- [U] Whether `focusNextSpace` wraps at the last space or opens the Library before the first; what the Bool gate is.
-  Not checked live (Victor was using the Mac).
+- [O live] (contributor, 12 Nov 2026) Back on the first space brings the Library in and forward takes it out,
+  as a swipe does, and the ends don't wrap. [U] What the Bool gate is.
 - Cra: `MouseButtonSpaceSwitch` (CraCore) maps 3 → −1 and 4 → +1. The window's `otherMouseUp` monitor, over the
-  sidebar (docked or floating, not a Little Window), calls `focusSpace(offset:)` like Spaces ▸ Previous/Next Space
-  (which wrap) and swallows the event; anywhere else the event goes on. Scenario `mouse-buttons-switch-spaces`.
+  sidebar (docked or floating, not a Little Window), turns the sidebar's page like the wheel (`stepSidebarPage`: the
+  Library before the first space, no wrap) and swallows the event; anywhere else the event goes on. Scenarios
+  `mouse-buttons-switch-spaces`, `mouse-buttons-library`.
 - Cra, follow-up (reporter, MX Master 3S, Logi Options+ running): that mouse does not emit button 3/4. Options+
   eats the HID report; a Back keystroke assignment types ⌥← (key code 123) and Forward types ⌥→. Assigning ⌥←
   in Options+ still did nothing, because Cra only listened for `otherMouseUp`. The same type maps ⌥← / ⌥→ (Option
   alone; ⌥⌘← stays Previous Space). A `keyDown` monitor hit-tests the pointer, not the key's window (the focused
-  page): over the sidebar `focusSpace(offset:)`, otherwise `goBack`/`goForward`, and the key is left alone when a
+  page): over the sidebar `stepSidebarPage`, otherwise `goBack`/`goForward`, and the key is left alone when a
   text field has it (⌥← moves by word). Console shows `Cra: mouse key back: …` when the key arrives.
 
 ### Extension action icons, badges and tooltips (Arc 1.171, 2 Nov 2026, issue #106, offline Arc + probe)
@@ -3413,7 +3456,7 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   picks one; `SpaceTheme.palette` resolves through `SystemAppearance` (NSApp.effectiveAppearance, observed), so a macOS
   switch redraws at once. Arc imports keep both halves. The editor builds halves from its pad (`SpaceTheme.key`) with
   `SpaceThemeVariants`: the light half is the pad's colours (lifted to HSL lightness 0.9 only when they read dark),
-  the dark half keeps their hue at HSL lightness 0.064, drawn like an imported dark half (27 % over #2B2632). An
+  the dark half darkens the light ones to HSL lightness 0.064 and draws them over neutral grey (#392, below). An
   Auto theme with one set of colours (saved before 0.1.29, or from Zen) stays on the side they suit whatever macOS
   shows, and an Arc `single` without `contentOverBackgroundAppearance` imports as that side (#171).
 - Cra deviates on purpose (Victor, 6 Nov 2026, #155): the editor's Auto always builds both halves, one colour too.
@@ -3423,8 +3466,30 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   (`SpaceThemeVariants.colourless`: the imported halves of Arc's default, both on Auto, one on Light or Dark) with an
   empty `key`, so the editor reopens on "Tap to pick a color for this space". Before, − stopped at one colour.
   Pinned by `noColourIsArcsColourlessTheme` and `padButtons`.
-- [?] Not worked out: how Arc's editor maps a picked colour to its halves (the pad's `lightnessRange` and the bias
-  value). Cra's halves are fitted to Arc's default theme only.
+- [O live] How Arc treats a picked colour in dark mode (offline Arc 1.172, 12 Nov 2026, issue #392; editor driven
+  over AX, StorableSidebar.json read after each commit, window captured): the editor's sun / moon toggles are Arc's
+  app-wide View ▸ Appearance (the `appearance` default, NSAppearanceNameDarkAqua), not part of the theme, and AXPress
+  on them is unreliable; set View ▸ Appearance ▸ Dark over AX instead. With Arc on Dark, every swatch was saved as
+  itself in a `single` `blendedSingleColor` (black #000000, #1A1A1A, #333333, navy, white, red #F25E6B, pastel
+  #F1D1EC), the intensity kept, `contentOverBackgroundAppearance` dark for dark colours and light for light ones.
+  Arc never darkens a picked colour and adds no tint: on Dark a white or pastel space stays a light sidebar with dark
+  text. Drawn as Arc's one-colour recipe (below, "Solid colour"), all neutral: black at intensity 0.25 over a light
+  window read 122/121/123, at 1 read 43/43/44, at 0 156/155/157. Removing every colour deletes `windowTheme` (Arc's
+  default space theme); its dark half read 36/36/55 → 41/37/54 on this Mac.
+- [O fit] Arc's default dark half (non-vibrant, intensity 0.8): its top stop is 0.63 of #01021F (α for 0.8 in the
+  one-colour recipe) over a neutral grey #5E5E5E (~94), within 1/255. The ~27 % over purple #2B2632 that
+  ArcThemeImport uses was fitted on that purple theme alone and is locked for Arc imports (#155 tests).
+- Cra (#392): Light and Dark keep the pad's colours as they are, as Arc does on either appearance (one colour
+  Arc's one-colour fill, a gradient at the slider's intensity); the colour's own lightness picks the text
+  (`SpaceTheme.isDark` judges an editor-built Light or Dark theme by its first colour), so black on Light is a
+  dark sidebar and a pastel on Dark a light one. Only Auto (Cra only, #155) lifts and darkens: its light half
+  lifts a dark colour to HSL lightness 0.9, its half for a dark Mac keeps a colour that already reads dark
+  (luminance < 0.45) as itself and darkens a lighter one to HSL lightness 0.064 in its hue (Arc's default pair,
+  #8389FF → #01021F), drawn neutral: one colour as Arc's one-colour fill at the slider's intensity, a gradient
+  opaque at that opacity over #5E5E5E. Before, every dark half went ~73 % over #2B2632 and ignored the slider
+  (black came out #2F2A36), Dark darkened every colour and Light lifted dark ones. Pinned by
+  `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`, `darkGradientFollowsTheSlider` and
+  `lightAndDarkKeepThePickedColourAsArcDoes`.
 
 ## The theme editor's presets and commit (Arc 1.171, 4 Nov 2026, issue #170, asset catalog + strings)
 - [O static] The swatches are named colours in `ARCClients_BaseAssets.bundle`'s Assets.car (`assetutil --info`),
@@ -3936,6 +4001,59 @@ HoverCardWindow, HoverCardViewModel), pref `hoverCardsEnabled` (1 in Victor's Ar
   Always use secure connections, never in incognito spaces. Differences that stay: "Cra" in place of Arc's name in
   the copies; the emoji table is Cra's (Arc's isn't readable; it matches the four Arc produced); the model writes
   its own answers. Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
+
+## Ask on Page (Arc 1.173.1, 12 Nov 2026, GitHub #393, static only: strings, Swift field metadata, disassembly; Arc not launched)
+
+Arc Max's Ask on Page is Arc's find bar as a SwiftUI card: the FindInPage reducer holds the find state and the chat,
+the AskInPage module the model call; with the pref on, WindowContentViewController shows `AskInPageHostingView`
+instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly without a decompiler.
+- [B] Settings ▸ Max: `MaxSettingsUnit.askOnPage`, "Press Command + F on any page to ask a question and let Max answer
+  it for you in seconds." (1.173.1 says *Press*; no hold timer or threshold exists, though older Arc's text and the
+  reporter's picture say "Hold down"). Defaults key `askOnPageEnabled`; remote flag `ask-in-page-enabled`; LLM feature
+  `ask_in_page`. The `askOnPage…` hint/upsell keys belong to Dia's assistant code in the same binary.
+- [B] State: `FindInPage.State { text, numMatches?, activeMatchOrdinal?, quotesSearched: [String: loading|found|notFound],
+  isInConversation, messages, fractionOfContextUsed?, … }`; actions onQueryUpdated, onDidClickFindQuote,
+  onDidUpdateChat(messages:fractionRead:), onDidRequestNext/PreviousResult, onShouldResetToFindInPage, onDidAskLLM.
+- [B] The field: placeholder "Find in page…" on a page it can't ask about (`isValidAskPage` false), "Ask a question…" in a
+  conversation, else "Find or ask…". Typing finds (count "%lld/%lld", ↑ `arrow.up`, ↓ `arrow.down`, "No matches"); an
+  "Ask" button sends the text. ⌘F inside the field goes back to Arc (`CommandFTextField`, tag 1).
+- [B] Page text: the page's HTML through WebPageSnapshot (SwiftSoup) without `script, style, link, svg`, `[aria-hidden=true]`,
+  `nav, [aria-role=navigation], footer, header, [aria-role=banner], form, option` and alert/dialog roles, preferring
+  `[itemprop=mainEntity], article, #content, .reviews-content`. Budget: min(context tokens, 16000) × 3 characters less the
+  rules, the examples and 200; cut with "…"; `fractionRead` = cut / whole drives "This page was long, so I read the first
+  N%." (subheadline bold, primary 0.5). 49 characters or fewer: "Sorry, I can’t read this type of page."; an error: "Sorry,
+  I encountered an error".
+- [B] Prompt: the rules ("You will be acting as a research assistant… citations … using <excerpt> tags … RULES 1–8 …
+  Respond in {lang}."), the examples (solar, NYC Brooklyn, privacy policy, summary), "WEBPAGE CONTEXT FOR OUR DIALOGUE:"
+  with `<url>…</title>` (sic), `<current-date>`, `<title>`, `<content>`, then "</content>\nBEGIN DIALOGUE\n" and the
+  question. [B?] Older turns read "[Older messages hidden]". Full text in AskOnPagePrompt.
+- [B] Answer: split at `<excerpt>` into parts; a quote (trimmed of `"'“”`) in body text at primary 0.8 on a 2 pt rule at
+  primary 0.1, selectable, with "Find on Page" + `arrow.forward` (system 11 bold, hover in timingCurve(0.25, 0.1, 0.25, 1)
+  0.2 s) under it, which runs Chromium's find on the quote; not found: `exclamationmark.triangle.fill` "Quote not found.
+  Make sure it’s accurate!". The question in body bold in the space's theme colour; while waiting a redacted "Loading
+  Content" row pulses easeInOut 0.8 s. "According to the page:" and the bold term are the model's.
+- [B] Numbers: card max width 400; conversation scrolls past 450 with fades at its edges; close button 18 pt on
+  ultraThinMaterial, corner 6, 9 from top and trailing; appears with spring(0.4, 0.75, 0.1) [B?]; input row spacing 8,
+  padding 12, field padding 6; Ask in callout semibold, padding 6 × 12.
+- [?] Not read: whether Return finds or asks, the card's placement, corner, shadow and background, the theme colours,
+  fade heights. The purple border in the reporter's picture is the Arc window in a purple space, not part of the card.
+- [O] Live Arc 1.173.1 (12 Nov 2026, Victor's Arc, Blank Window on Wikipedia): Ask on Page is gone. Settings ▸ Max lists
+  Tidy Tabs, Instant Links, 5-Second Previews, Tidy Tab Titles, Tidy Downloads and ChatGPT in the Command Bar, no Ask on
+  Page row, though `askOnPageEnabled` is 1; ⌘F opens the plain dark find bar ("Find in page…", "NOT FOUND", no Ask). The
+  remote flag `ask-in-page-enabled` is presumably off. So the only look at the card is the reporter's capture of an older
+  Arc (#393, light, lavender space, apple.com's iOS 17 page), which Cra was matched to at the same width: a nearly opaque
+  white card (#FAFAFB-ish), 18 pt margins, about 17 pt between parts and 12 pt above Find on Page, a plain ✕ about 12 pt
+  level with the question, and at the bottom one grey band (corner ~8, 6 pt in from the card) holding the field and a
+  full-colour Ask button (~46 × 26 pt) that shows while the field is still empty.
+- Cra (AskOnPagePolicy, AskOnPagePrompt, AskOnPageReply in CraCore; AskOnPageService, AskOnPageCard): Arc's card in
+  ⌘F's panel, Arc's prompt on the Mac's Apple Intelligence model (rules and examples as the session's instructions),
+  Arc's budget less 600 tokens kept for the answer, checked with the model's own token count where macOS has it
+  (26.4) and cut again if a page still doesn't fit. The page text comes from a script in Cra's isolated world that
+  skips Arc's parts and hidden ones. Cra's choices where Arc's weren't readable: Return goes to the next match while the
+  text is on the page and asks otherwise (always asks in a conversation); Find on Page tries the quote's first sentence
+  and first eight words when the whole quote isn't on the page (a footnote mark between sentences, the model's slips);
+  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped; the card sits
+  where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 
@@ -4597,3 +4715,59 @@ link, toolbar hidden with ⇧⌘D), a Little Arc's link icon and the developer b
   layout and colours. A tab switch takes it down unanswered and it asks again when the tab is back
   (`PermissionAsk.stepsAside`). Cra keeps its own question ("<origin> wants to …", locked by #137 and #286).
   `cra://debug?permissionCard[=<button>]`, scenario permission-card.
+
+## Instant Links (Arc 1.172.2, 12 Nov 2026, live with Max on + binary)
+
+Arc Max's Instant Links, measured on a live Arc 1.172.2 (build 90755) with Max on: 33 runs driven through System
+Events, tabs timed by polling the window's tab ids every 0.1 s, requests read from Arc's `URLSession` cache and
+`nettop`, the new items diffed out of `StorableSidebar.json`. Captures are of the bar and the sidebar row only.
+Every phrase and every number is in GitHub #407. Tags as above: [O] observed, [B] binary (strings, Swift metadata),
+[I] inferred.
+- [O] Trigger: Shift-Return in ⌘T, only while the selected row is a search; on an "Open <space> / <tab>" row it
+  opens that tab instead. ⌥⇧↩ opens a Perplexity session (another feature) and ⌘⇧↩ does nothing.
+- [B] Since 1.47.1 ("Phasing Out Instant Links Edu") the bar shows no hint. An "Instant Open" row with the key is
+  still in the code behind the remote flag `instant-links-suggestion-enabled`, which is off.
+- [B] Settings ▸ Max row subtitle (obfuscated in the binary): "Press Shift + Enter for any web search to instantly
+  open the top result. You can also search multiple queries!"
+- [O] While it works the bar closes and a row appears at the top of Today: "Searching the web for you…" with the Max
+  flower (`AnimatedFlowerView`) spinning about once a second. A 30 fps capture of the flower: one line of four teardrop
+  petals that cross at the centre, about 16 pt, a 1.5 pt stroke in the row's text colour. [B] In the model the row is
+  `SidebarItemData.instantLinks(status: loading | error)`; on error it reads "Oops, something went wrong." The row
+  has the selected-row background (`InstantLinksCellState.isCurrentItem`): it stands for the new tab ⌘T was opening.
+- [B] Model: gpt-4o-mini at temperature 0 through The Browser Company's proxy; one call took 661 ms. The live prompt
+  is the obfuscated "V1" one (4,623 characters, 17 examples, XOR key `ObfuscatorString`); it answers
+  `{title, queries: [String], format: tab | folder | split}` and every query is a web search: maps, images, flights,
+  news and "search reddit for…" come back as Google queries ("Montauk map", "… site:reddit.com"). [B] The V2 prompt
+  (typed actions: image, map, directions, flights, news, siteSearch, history) and a navigate/search intent prompt
+  are in the binary behind `instant-links-v2-enabled` and `instant-links-intent-prototype-enabled`, both off.
+- [O] Search, one query after another: a `URLSession` GET of `google.com/search?q=…` with a Chrome 114 user agent
+  gets Google's "turn on JavaScript" page; Arc then loads the search in a hidden `WKWebView` and scrapes `#main` with
+  `.//a[.//h3[not(@role='header') and not(@aria-hidden='true')]]`, minus `div#botstuff, div#bottomads`. Nothing found
+  within about 7 s: Brave through `webresultproxy.diabrowser.engineering/api/web-results/web/search?…&count=1`. A
+  Datadog post follows each run. Google often blocks the hidden page (a fresh one with Arc's user agent lands on
+  `/sorry`), which is where the Brave waits come from.
+- [O] Opening: tabs at the top of Today in result order with the first selected; a split at the top of Today with equal
+  widths; a folder at the end of Pinned named with the response's `title`. The code asks for 1 result per query and 5
+  for a folder with a single query.
+- [O] Timing: the first tab 2.7 to 7 s after Return when Google answered, about 10 s per query when Arc fell back to
+  Brave, 18 to 30 s for three queries. Arc's cloud call is faster than the Mac's model (0.7 s against about 2.1 s;
+  the first call after launch took up to 7.7 s).
+- [O] What goes wrong in 1.172.2: when the scrape works Arc often opens every result on the page (6 to 16 tabs, for 16
+  of 27 phrases that wanted one page); counts are ignored ("give me 5 french jazz playlists on spotify" opened 1);
+  "split view of 5 lasagna recipes" asked for "lasagna recipe 1" to "lasagna recipe 5" and made one split of 12 panes.
+  Arc opened the right number of pages for 11 of 27 phrases.
+- Cra (#407; InstantLinks in CraCore, InstantLinksService, InstantLinksRowView): Shift-Return on a search row, the
+  Max row and the picture, the row with the selected-row background when the run started in new-tab mode, the
+  flower, the error row with its ✕, and Arc's placement, folder name and 5-for-a-folder rule. Where Cra differs: the
+  plan comes from the Mac's Apple Intelligence model (guided generation of `{title, format, searches: [{query,
+  count}]}`, with a session prewarmed when ⌘T opens and kept until the next run), CraCore's rules apply after it (a count only when the
+  phrase states one, a split of at most `PickedTabsMenu.maxPanes` panes, split and folder only when asked for), only
+  the top result of each search opens unless a count says otherwise, there is no Brave fallback (when Google's
+  page can't be read, a captcha or `/sorry` or nothing in time, Google's own results page opens for that search,
+  one tab whatever the count; an incognito space or an engine that isn't Google opens that engine's results page,
+  one per search whatever the count), and a model that throws (a guardrail's false positive, the context window, an unsupported language)
+  falls back to searching the phrase as typed, with its stated count and cue words, where Arc shows the error
+  row. The search runs in a windowless page in the space's profile that waits for the load to finish and asks again
+  when Google reloads its page under the script. The only data that leaves the Mac is the queries, to the search
+  engine. Not measured: the row's exact spacing, the flower's size in Arc's row, what Arc does when a second run
+  starts while the first works.

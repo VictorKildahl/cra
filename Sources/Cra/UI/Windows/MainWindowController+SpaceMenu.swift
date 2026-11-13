@@ -8,15 +8,15 @@ extension MainWindowController {
         let popover = NSPopover()
         popover.behavior = .transient
         let id = space.id, store = self.store
-        let set: (String, String?) -> Void = { [weak popover] emoji, symbol in
+        let set: (SpaceIcon) -> Void = { [weak popover] icon in
             guard var s = store.space(id) else { return }
-            s.emoji = emoji
-            s.symbol = symbol
+            s.icon = icon
             store.updateSpace(s)
             popover?.performClose(nil)
         }
-        let picker = SpaceIconPicker(current: space.emoji, currentSymbol: space.symbol, onPick: { set($0, nil) },
-                                     onPickSymbol: { set("", $0) }, onRemove: { set("", nil) })
+        let picker = SpaceIconPicker(current: space.emoji, currentSymbol: space.symbol, currentImage: space.iconImage,
+                                     onPick: { set(.emoji($0)) }, onPickSymbol: { set(.symbol($0)) },
+                                     onPickImage: { set(.image($0)) }, onRemove: { set(.none) })
         // A fixed size: NSPopover placed itself for the hosting view's first, larger size and then
         // shrank toward its bottom-left corner, which left it 52 pt low with the arrow off-centre.
         let host = NSHostingController(rootView: picker)

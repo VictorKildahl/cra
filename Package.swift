@@ -47,7 +47,9 @@ let package = Package(
             publicHeadersPath: "include",
             cxxSettings: [.unsafeFlags(cefCXXFlags + ["-fobjc-arc"])],
             linkerSettings: [
-                .unsafeFlags(cefLinkerFlags),
+                // Cra links the framework at launch, like the helpers (Sources/CraHelper/main.cc).
+                .unsafeFlags(cefLinkerFlags + ["-F", "\(cefRoot)/Release", "-Xlinker", "-needed_framework",
+                                               "-Xlinker", "Chromium Embedded Framework"]),
                 .linkedLibrary("cef_dll_wrapper"),
                 .linkedFramework("AppKit"),
                 .linkedFramework("IOSurface"),
@@ -58,9 +60,12 @@ let package = Package(
         .executableTarget(
             name: "CraHelper",
             path: "Sources/CraHelper",
+            exclude: ["ChromiumEmbeddedFramework.tbd"],
             cxxSettings: [.unsafeFlags(cefCXXFlags)],
             linkerSettings: [
-                .unsafeFlags(cefLinkerFlags),
+                // The framework is a launch-time dependency, not a dlopen (main.cc says why).
+                .unsafeFlags(cefLinkerFlags + ["-Xlinker", "-needed_library", "-Xlinker",
+                    "\(Context.packageDirectory)/Sources/CraHelper/ChromiumEmbeddedFramework.tbd"]),
                 .linkedLibrary("cef_dll_wrapper"),
                 .linkedFramework("AppKit"),
                 .linkedFramework("IOSurface"),

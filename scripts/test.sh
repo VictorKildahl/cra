@@ -22,6 +22,7 @@ if [ "${1:-}" != core ]; then
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
   suite "Extension popup window" scripts/test-extension-popup-window.sh
   suite "Peek dismiss panel" scripts/test-peek-dim-panel.sh
+  suite "Docked window accessibility" scripts/test-docked-window-accessibility.sh
   suite "Window content grabber" scripts/test-window-content-grabber.sh
   suite "5-Second Previews copy" scripts/test-link-summary-share.sh
   suite "5-Second Previews card" scripts/test-link-summary-panel.sh
@@ -37,6 +38,8 @@ if [ "${1:-}" != core ]; then
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Tidy title layout" scripts/test-tidy-title-layout.sh
   suite "Tidy title requests" scripts/test-tidy-titles.sh
+  suite "Emoji label" scripts/test-emoji-label.sh
+  suite "Chromium window corners" scripts/test-chromium-window-corners.sh
   suite "Music notes pixels" scripts/test-music-notes.sh
   suite "Live folder plugins" scripts/test-live-folder-plugins.sh
   suite "Key bindings" scripts/test-key-bindings.sh

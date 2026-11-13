@@ -44,23 +44,25 @@ struct PictureInPictureLayoutTests {
     let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
     let visible = CGRect(x: 0, y: 80, width: 1920, height: 975)
 
-    /// Arc's limits: never below 224 × 126 for 16:9 (the 223 × 125.5 window in #246 was Arc's
-    /// minimum), at most 61.7 % of the screen's width and the visible height less 20.
+    /// The limits: never below 224 × 126 for 16:9 (the 223 × 125.5 window in #246 was Arc's
+    /// minimum), at most the display's visible frame. Arc stops at 61.7 % of the screen's width;
+    /// Cra goes to the whole visible frame (the maintainer's decision, 12 Nov).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/246"))
-    func sizeStaysInArcsLimits() {
+    func sizeStaysInTheLimits() {
         let l = PictureInPictureLayout.sizeLimits(aspect: 16.0 / 9, screen: screen, visible: visible)
         #expect(l.min == CGSize(width: 224, height: 126))
-        #expect(l.max == CGSize(width: 1184, height: 955))
+        #expect(l.max == CGSize(width: 1920, height: 975))
         // Portrait: 224 wide at least, not 126 tall.
         #expect(PictureInPictureLayout.sizeLimits(aspect: 9.0 / 16, screen: screen, visible: visible).min == CGSize(width: 224, height: 398))
         // A remembered frame below the minimum (Cra allowed 160 × 90) opens at Arc's minimum.
         let small = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, screen: screen, visible: visible,
                                                         remembered: CGRect(x: 100, y: 500, width: 160, height: 90))
         #expect(small == CGRect(x: 100, y: 464, width: 224, height: 126))
-        // One wider than the screen allows opens at the widest Arc allows.
+        // One wider than the display opens as wide as the display; a 16:9 video is then as tall as
+        // 1080 pt, which the 975 pt of visible height cuts to 1733 × 975.
         let wide = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, screen: screen, visible: visible,
-                                                       remembered: CGRect(x: 0, y: 100, width: 1600, height: 900))
-        #expect(wide.size == CGSize(width: 1184, height: 666))
+                                                       remembered: CGRect(x: 0, y: 100, width: 2400, height: 1350))
+        #expect(wide.size == CGSize(width: 1733, height: 975))
     }
 
     // A built-in display at the origin and an external one to its right, AppKit coordinates.
@@ -135,8 +137,9 @@ struct PictureInPictureLayoutTests {
         #expect(landing(0, 0) == nil)
     }
 
-    /// Across two displays side by side it is on screen: it stays. Past the far edge of the second,
-    /// it goes to that display's corner, not the first one's.
+    /// Across two displays side by side it is on screen, so no corner takes it (since 12 Nov it
+    /// slides onto one display instead: `droppedAcrossDisplaysSlidesOntoOne`). Past the far edge of
+    /// the second, it goes to that display's corner, not the first one's.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/332"))
     func droppedAcrossDisplaysStaysAndPastTheFarEdgeUsesThatDisplay() {
         let size = CGSize(width: 480, height: 270)
@@ -147,6 +150,122 @@ struct PictureInPictureLayoutTests {
         // A mirrored display (the same frame twice) doesn't count as covering the part that's off.
         #expect(PictureInPictureLayout.landing(afterDropping: CGRect(origin: CGPoint(x: 1300, y: 100), size: size),
                                                displays: [builtIn, builtIn]) != nil)
+    }
+
+    /// A window always rests on one display (the maintainer's decision, 12 Nov; before, one let
+    /// go across two displays stayed across them). It slides the shortest way onto the display
+    /// most of it is on. Wholly on one display it stays, under the menu bar too.
+    @Test func droppedAcrossDisplaysSlidesOntoOne() {
+        let size = CGSize(width: 480, height: 270)
+        let both = [builtIn, external]
+        func rest(_ x: CGFloat, _ y: CGFloat) -> PictureInPictureLayout.Rest? {
+            PictureInPictureLayout.rest(afterDropping: CGRect(origin: CGPoint(x: x, y: y), size: size), from: nil, displays: both)
+        }
+        // 128 pt on the built-in display and 352 pt on the external one: onto the external one.
+        #expect(rest(1600, 300) == .init(frame: CGRect(x: 1728, y: 300, width: 480, height: 270), corner: nil))
+        // Most of it on the built-in display: back onto that one.
+        #expect(rest(1400, 300) == .init(frame: CGRect(x: 1728 - 480, y: 300, width: 480, height: 270), corner: nil))
+        #expect(rest(600, 400) == nil)
+        #expect(rest(600, 1117 - 270) == nil)
+        // Past the outer edge it still springs into the corner, as in Arc (#332).
+        #expect(rest(1728 + 1920 - 200, 100) == .init(frame: CGRect(x: 1728 + 1920 - 10 - 480, y: 10, width: 480, height: 270), corner: .bottomRight))
+    }
+
+    /// Dragged to another display, the window takes the same share of that display's width
+    /// (the maintainer's decision, 12 Nov), around its centre, and stays on that display.
+    @Test func draggedToAnotherDisplayKeepsItsShareOfTheWidth() throws {
+        let both = [builtIn, external]
+        // A quarter of the built-in display (432 of 1728) is a quarter of the external one: 480.
+        let moved = PictureInPictureLayout.rest(afterDropping: CGRect(x: 2000, y: 300, width: 432, height: 243), from: builtIn, displays: both)
+        #expect(moved == .init(frame: CGRect(x: 1976, y: 287, width: 480, height: 270), corner: nil))
+        // Let go on the display it came from: no new size.
+        #expect(PictureInPictureLayout.rest(afterDropping: CGRect(x: 600, y: 300, width: 432, height: 243), from: builtIn, displays: both) == nil)
+        // As wide as the built-in display, it is as wide as the external one allows: 1055 pt of
+        // visible height hold a 16:9 video 1876 pt wide.
+        let full = PictureInPictureLayout.rest(afterDropping: CGRect(x: 1800, y: 50, width: 1728, height: 972), from: builtIn, displays: both)
+        #expect(full?.frame.size == CGSize(width: 1876, height: 1055))
+        #expect(external.visible.contains(try #require(full).frame))
+    }
+
+    /// A window larger than its display allows (the displays changed) shrinks to fit it.
+    @Test func aWindowLargerThanItsDisplayShrinksToFit() throws {
+        let big = PictureInPictureLayout.rest(afterDropping: CGRect(x: 0, y: 0, width: 2400, height: 1350), from: nil, displays: [builtIn])
+        #expect(big?.frame.size == CGSize(width: 1728, height: 972))
+        #expect(builtIn.visible.contains(try #require(big).frame))
+    }
+
+    /// One display above another (arranged so in System Settings): a window across the line
+    /// between them slides up or down onto the one most of it is on. Exactly half on each, it
+    /// still ends wholly on one of them.
+    @Test func droppedAcrossDisplaysAboveAndBelowSlidesOntoOne() throws {
+        let above = PictureInPictureLayout.Display(id: "ABOVE", frame: CGRect(x: 0, y: 1117, width: 2560, height: 1440),
+                                                   visible: CGRect(x: 0, y: 1117, width: 2560, height: 1415))
+        let both = [builtIn, above]
+        let size = CGSize(width: 480, height: 270)
+        func rest(_ y: CGFloat) -> CGRect? {
+            PictureInPictureLayout.rest(afterDropping: CGRect(origin: CGPoint(x: 300, y: y), size: size), from: nil, displays: both)?.frame
+        }
+        // 70 pt on the built-in display, 200 pt on the one above: up onto that one.
+        #expect(rest(1117 - 70) == CGRect(x: 300, y: 1117, width: 480, height: 270))
+        // 200 pt below the line: down onto the built-in display, under its menu bar's 33 pt.
+        #expect(rest(1117 - 200) == CGRect(x: 300, y: 1084 - 270, width: 480, height: 270))
+        let half = try #require(rest(1117 - 135))
+        #expect(builtIn.visible.contains(half) || above.visible.contains(half))
+    }
+
+    /// Between displays of different shapes the share of the width can ask for more height than
+    /// the new display has: the video's shape wins and the window is as tall as that display allows.
+    @Test func aShareOfTheWidthStaysInsideTheNewDisplaysHeight() {
+        let tall = PictureInPictureLayout.Display(id: "TALL", frame: CGRect(x: 0, y: 0, width: 1080, height: 1920),
+                                                  visible: CGRect(x: 0, y: 0, width: 1080, height: 1895))
+        let wide = PictureInPictureLayout.Display(id: "WIDE", frame: CGRect(x: 1080, y: 0, width: 3440, height: 1440),
+                                                  visible: CGRect(x: 1080, y: 0, width: 3440, height: 1415))
+        // The whole width of the portrait display, 1080 × 608: 3440 × 1935 on the wide one is too
+        // tall, so 1415 pt of height in its shape.
+        #expect(PictureInPictureLayout.size(CGSize(width: 1080, height: 608), movedFrom: tall, onto: wide) == CGSize(width: 2513, height: 1415))
+        // Back the other way, a third of the wide display is a third of the portrait one.
+        #expect(PictureInPictureLayout.size(CGSize(width: 1147, height: 645), movedFrom: wide, onto: tall) == CGSize(width: 360, height: 202))
+        // Not moved: only the limits.
+        #expect(PictureInPictureLayout.size(CGSize(width: 1147, height: 645), movedFrom: nil, onto: tall) == CGSize(width: 1080, height: 607))
+        #expect(PictureInPictureLayout.size(CGSize(width: 1147, height: 645), movedFrom: wide, onto: wide) == CGSize(width: 1147, height: 645))
+    }
+
+    /// Left across two displays with no display saved (a frame from before #316), the next video
+    /// opens wholly on the one most of it was on.
+    @Test func aRememberedFrameAcrossTwoDisplaysOpensOnOne() {
+        let across = PictureInPictureLayout.Placement(frame: CGRect(x: 1600, y: 300, width: 480, height: 270), display: nil, displayFrame: nil)
+        let f = PictureInPictureLayout.initialFrame(aspect: 16.0 / 9, displays: [builtIn, external], current: builtIn, remembered: across)
+        #expect(f == CGRect(x: 1728, y: 300, width: 480, height: 270))
+    }
+
+    /// Chromium cuts its window down to 80 % of the work area when that cap changes (each side on
+    /// its own) or when the video's size changes (keeping the new shape). Cra's limits go past
+    /// it, so the size Cra gave is put back, in the video's shape, inside Cra's limits.
+    @Test func chromiumsCapIsUndone() {
+        let ext = external
+        func undo(_ was: CGSize, _ now: CGSize, cap: CGSize, changed: Bool) -> CGSize? {
+            PictureInPictureLayout.undoingChromiumCap(was: was, now: now, cap: cap, capChanged: changed, on: ext)
+        }
+        let cap = CGSize(width: 1536, height: 844)   // 80 % of the external display's work area
+        // Moved here at 1700 × 956: Chromium cut both sides to the cap, 1536 × 844 (not 16:9).
+        #expect(undo(CGSize(width: 1700, height: 956), CGSize(width: 1536, height: 844), cap: cap, changed: true) == CGSize(width: 1700, height: 956))
+        // A 3:2 window only too tall for the cap: its height was cut, its shape comes back.
+        #expect(undo(CGSize(width: 1500, height: 1000), CGSize(width: 1500, height: 844), cap: cap, changed: true) == CGSize(width: 1500, height: 1000))
+        // Wider than the external display allows: back only as far as Cra's limits.
+        #expect(undo(CGSize(width: 2400, height: 1350), cap, cap: cap, changed: true) == CGSize(width: 1876, height: 1055))
+        // The stream switched quality: Chromium fitted it into the cap in its shape; the width
+        // comes back in that shape, here a 4:3 video now.
+        #expect(undo(CGSize(width: 1800, height: 1013), CGSize(width: 1125, height: 844), cap: cap, changed: false) == CGSize(width: 1406, height: 1055))
+        #expect(undo(CGSize(width: 1800, height: 1013), CGSize(width: 1536, height: 864), cap: CGSize(width: 1536, height: 864), changed: false)
+                == CGSize(width: 1800, height: 1013))
+        // Chromium's own sizes under the cap stand: a new shape at the same width, or a window
+        // that grew.
+        #expect(undo(CGSize(width: 800, height: 450), CGSize(width: 800, height: 600), cap: cap, changed: false) == nil)
+        #expect(undo(CGSize(width: 800, height: 450), CGSize(width: 600, height: 450), cap: cap, changed: false) == nil)
+        #expect(undo(CGSize(width: 1000, height: 563), CGSize(width: 1536, height: 844), cap: cap, changed: false) == nil)
+        // Nothing to go by.
+        #expect(undo(.zero, cap, cap: cap, changed: true) == nil)
+        #expect(undo(CGSize(width: 1700, height: 956), cap, cap: .zero, changed: true) == nil)
     }
 
     /// A frame left half off the screen (0.1.38 saved where it was dropped, or the displays changed)

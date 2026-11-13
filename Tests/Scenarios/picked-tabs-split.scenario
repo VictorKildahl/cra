@@ -1,0 +1,15 @@
+# promise: #386
+# Tabs picked with ⌘/⇧-click open side by side from the picked-tabs menu's Open in Split View, as
+# Arc's does: one split of the picks in sidebar order, the first pick focused, the picks dropped.
+# Today lists the newest tab first: three, two, one.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=two
+cra://open?url=${PAGE}?n=three
+wait 2
+cra://debug?pickedMenu=2&label=split&run=Open in Split View
+expect-log picked menu split ran Open in Split View: - picks=0$
+wait 1
+cra://debug?split=picked
+expect-log split picked: panes=\S+n=three \| \S+n=two selected=\S+n=three downloads=0$

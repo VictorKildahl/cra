@@ -54,6 +54,28 @@ enum TestGesture {
         }
     }
 
+    /// A key press handed to a page's view as CraApplication.sendEvent forwards one to the page that has
+    /// the keyboard, for a background test copy, whose windows are never key: CEF's OnPreKeyEvent, the
+    /// page's own handlers and OnKeyEvent see it as they see a typed one (who gets a shortcut, #374).
+    /// The page's view is found under `roots` (Chromium's own window when Chrome hosts the page), else
+    /// it is `window`'s first responder (an embedded page that has the keyboard).
+    static func pageKey(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in roots: [NSView], window: NSWindow?) {
+        func isPage(_ v: NSView) -> Bool { NSStringFromClass(type(of: v)) == "RenderWidgetHostViewCocoa" }
+        func pageView(_ v: NSView) -> NSView? { isPage(v) ? v : v.subviews.lazy.compactMap(pageView).first }
+        let focused = (window?.firstResponder as? NSView).flatMap { isPage($0) ? $0 : nil }
+        guard let view = roots.lazy.compactMap(pageView).first ?? focused, let target = view.window else {
+            NSLog("Cra TestGesture: no page view")
+            return
+        }
+        target.makeFirstResponder(view)
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: target.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
+            target.sendEvent(e)
+        }
+    }
+
     /// Opens the menu a click (or a right-click) at a point of the window would open, without
     /// the pointer: the hit view gets the mouse-down, or the nearest view with a menu(for:)
     /// pops its menu. The menu tracks until Esc or a pick, so tests read it through AX.

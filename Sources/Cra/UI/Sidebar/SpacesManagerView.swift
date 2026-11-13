@@ -189,7 +189,7 @@ private final class SpaceManagerCard: NSView {
         withObservationTracking {
             guard let s = store.space(spaceID) else { return }
             emoji.stringValue = s.emoji
-            symbol.image = s.symbol.flatMap { SidebarSymbols.image($0, size: 13, weight: .medium) }
+            symbol.image = SpaceIconImage.glyph(for: s, points: 13)
             title.stringValue = s.title
             background.palette = s.theme.palette
             colors = SidebarColors(s.theme.palette)
