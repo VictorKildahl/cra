@@ -3,6 +3,7 @@
 #   - copies engine/chromium/cra to <src>/cra (built into Chrome's framework as //cra:core)
 #   - Chrome's hooks: chrome/browser/cra_engine_hooks.h, ChromeBrowserMainParts::Create adds Cra's startup
 #     part, ChromeBrowserMainPartsMac leaves Cra's NSApp delegate and menu alone, the framework exports CraEngineMain and the bridge's classes (framework.exports and .order), chrome_dll depends on //cra:core
+#   - Cra's branding (branding/BRANDING, Cra's icon)
 #   - Cra's changes to Chrome's own code (patches/series)
 #   - a stand-in Widevine signer (Cra plays DRM through WebKit, not Widevine)
 # docs/chromium-engine.md says what the layer is for.
@@ -17,6 +18,12 @@ cp "$HERE/../../Sources/CraCEF/include/CraCEF.h" "$SRC/cra/CraCEF.h"
 cp "$HERE/../../Sources/CraCEF/CraContentBlocker.h" "$SRC/cra/CraContentBlocker.h"
 cp "$HERE/hooks/cra_engine_hooks.h" "$SRC/chrome/browser/cra_engine_hooks.h"
 cp "$HERE/hooks/cra_permission_hook.h" "$SRC/chrome/browser/cra_permission_hook.h"
+# Cra's name, bundle id and icon for Chrome's framework and helpers ("Cra Framework", "Cra Helper (Renderer)", and
+# the Alerts helper macOS lists notifications under). Written only when different, so a rerun rebuilds nothing.
+cmp -s "$HERE/branding/BRANDING" "$SRC/chrome/app/theme/chromium/BRANDING" ||
+  cp "$HERE/branding/BRANDING" "$SRC/chrome/app/theme/chromium/BRANDING"
+cmp -s "$HERE/../../resources/AppIcon.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns" ||
+  cp "$HERE/../../resources/AppIcon.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
 # Google's Widevine signer isn't in public checkouts; an official build of Chrome's framework runs it.
 if [ ! -f "$SRC/third_party/widevine/scripts/signature_generator.py" ]; then
   mkdir -p "$SRC/third_party/widevine/scripts"

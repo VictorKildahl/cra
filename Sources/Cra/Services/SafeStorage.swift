@@ -95,12 +95,11 @@ enum SafeStorage {
     /// A framework that still looks for "Chromium Safe Storage" would make its own secret
     /// and lose everything this migration re-encrypts.
     private static var frameworkUsesCraItem: Bool {
-        guard let url = Bundle.main.privateFrameworksURL?
-                .appendingPathComponent("Chromium Embedded Framework.framework/Chromium Embedded Framework"),
+        guard let url = EngineFramework.binaryURL,
               let data = try? Data(contentsOf: url, options: .alwaysMapped) else { return false }
         let name = Array("\(service)\0".utf8)
         let found = data.withUnsafeBytes { memmem($0.baseAddress, $0.count, name, name.count) != nil }
-        if !found { NSLog("Cra: Chromium Embedded Framework does not use \(service); run scripts/fetch-cef.sh") }
+        if !found { NSLog("Cra: \(url.lastPathComponent) does not use \(service); run scripts/fetch-cef.sh") }
         return found
     }
 

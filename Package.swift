@@ -20,12 +20,12 @@ let cefLinkerFlags: [String] = [
     "-L\(cefRoot)/build/libcef_dll_wrapper",
 ]
 
-// CRA_ENGINE=chromium builds Cra on Chrome's own framework instead of CEF (docs/chromium-engine.md): CraCEF is
-// then only its header, implemented inside the framework, which CRA_ENGINE_FRAMEWORKS holds (the
-// Chromium.app/Contents/Frameworks of a scripts/build-chromium.sh build). No CraHelper: Chrome's own helpers
-// come with the framework.
-let chromiumEngine = Context.environment["CRA_ENGINE"] == "chromium"
-let engineFrameworks = Context.environment["CRA_ENGINE_FRAMEWORKS"] ?? ""
+// Cra builds on Chrome's own framework (docs/chromium-engine.md; CRA_ENGINE=cef builds on CEF instead): CraCEF is
+// then only its header, implemented inside the framework, which CRA_ENGINE_FRAMEWORKS holds (vendor/engine from
+// scripts/fetch-engine.sh by default, or the Cra.app/Contents/Frameworks of a scripts/build-chromium.sh build).
+// No CraHelper: Chrome's own helpers come with the framework.
+let chromiumEngine = Context.environment["CRA_ENGINE"] != "cef"
+let engineFrameworks = Context.environment["CRA_ENGINE_FRAMEWORKS"] ?? "\(Context.packageDirectory)/vendor/engine"
 
 // Sparkle, the updater framework Arc ships, lives in vendor/sparkle (scripts/fetch-sparkle.sh);
 // scripts/build.sh copies Sparkle.framework into Cra.app/Contents/Frameworks.
@@ -56,7 +56,7 @@ let package = Package(
             sources: ["ChromiumEngine.m"],
             publicHeadersPath: "include",
             linkerSettings: [
-                .unsafeFlags(["-F", engineFrameworks, "-Xlinker", "-needed_framework", "-Xlinker", "Chromium Framework"]),
+                .unsafeFlags(["-F", engineFrameworks, "-Xlinker", "-needed_framework", "-Xlinker", "Cra Framework"]),
                 .linkedFramework("AppKit"),
             ]
         ),

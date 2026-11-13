@@ -1,6 +1,6 @@
 #!/bin/bash
 # spike.sh <chromium out dir> <work dir>: the engine test build's run (docs/chromium-engine.md, step 1).
-# Makes CraEngine.app from the built Chromium.app with engine/host as its executable, runs the checks in
+# Makes CraEngine.app from the built Cra.app (Chrome with Cra's branding) with engine/host as its executable, runs the checks in
 # spike_checks.mm against a fresh profile folder, and prints their CRA-SPIKE lines and the exit code.
 # The test window opens on CRA_TEST_SCREEN's display (part of its name). TABS (default 20) pages are open when
 # the processes are measured; SPIKE_PAGE replaces the test's own page (scripts/perf's bench page, to compare).
@@ -10,10 +10,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$WORK/CraEngine.app"
 mkdir -p "$WORK"
 rm -rf "$APP"
-cp -c -R "$OUT/Chromium.app" "$APP"
-FW="$APP/Contents/Frameworks/Chromium Framework.framework"
+cp -c -R "$OUT/Cra.app" "$APP"
+FW="$APP/Contents/Frameworks/Cra Framework.framework"
 clang++ -arch arm64 -mmacosx-version-min=12.0 -O2 "$ROOT/engine/host/main.mm" \
-  -F "$APP/Contents/Frameworks" -framework "Chromium Framework" -o "$APP/Contents/MacOS/Chromium" || exit 1
+  -F "$APP/Contents/Frameworks" -framework "Cra Framework" -o "$APP/Contents/MacOS/Cra" || exit 1
 codesign --force --sign - "$APP" >/dev/null 2>&1
 PAGE="$WORK/page.html"
 echo '<!doctype html><title>Cra engine test</title><h1>Cra engine test</h1>' > "$PAGE"

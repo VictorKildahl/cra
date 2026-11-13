@@ -53,7 +53,7 @@ MainActor.assumeIsolated {
 
     // Chromium's language follows macOS as in Chrome and Arc: it picks the voice for speech
     // without a lang (#167), Chromium's own pages and dialogs, and pages' default date format.
-    let framework = Bundle.main.privateFrameworksURL?.appendingPathComponent("Chromium Embedded Framework.framework")
+    let framework = EngineFramework.bundleURL
     let locale = ChromiumLocale.pick(available: framework.flatMap { Bundle(url: $0) }?.localizations ?? [],
                                      preferredLanguages: Locale.preferredLanguages)
     CraLog.note("chromium locale: \(locale ?? "en-US (default)") for \(Locale.preferredLanguages.prefix(3).joined(separator: ","))")

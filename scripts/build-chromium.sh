@@ -5,7 +5,7 @@
 #   sync   the tag at depth 1 with its Mac deps and Chrome's PGO profiles, then hooks (~40 min, ~30 GB)
 #   apply  Cra's layer and hooks (engine/chromium/apply.sh)
 #   gen    out/Cra_<arch>/args.gn: official build, ThinLTO + PGO, H.264/AAC (proprietary_codecs)
-#   build  the app (Chromium.app with the framework and its helpers)
+#   build  the app (Cra.app, Cra's branding: the framework and its helpers)
 #
 # CHROMIUM_TAG (default below), CRA_ARCH (arm64 or x64; default arm64), CHROMIUM_ROOT (default
 # ~/chromium.noindex: .noindex keeps Spotlight out). Needs ~45 GB for one CPU. Never edit this file
