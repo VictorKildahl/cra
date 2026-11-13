@@ -1,0 +1,32 @@
+# Little Window focus and promotion must use its page, then return to the main page.
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"defaultLinkDestination":{"littleWindow":{}}}
+budget rss=1100 stalls50=40
+cra://debug?installExtension=${FIXTURES}/TabsQueryExtension
+relaunch
+cra://open?url=${ORIGIN}/extension-context.html?n=main
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('main')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"main current=true currentWindow=true last=true type=normal page=main active=main"
+cra://debug?externalURL=${ORIGIN}/extension-context.html?n=little
+wait 3
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('little')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"little current=true currentWindow=true last=true type=normal page=little active=little"
+cra://action/promoteLittleWindow
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('promoted')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"promoted current=true currentWindow=true last=true type=normal page=little active=little"
+cra://action/closeTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('promotion-closed')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"promotion-closed current=true currentWindow=true last=true type=normal page=main active=main"
+cra://debug?externalURL=${ORIGIN}/extension-context.html?n=closing
+wait 3
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('closing-little')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"closing-little current=true currentWindow=true last=true type=normal page=closing active=closing"
+cra://action/closeLittleWindows
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('little-closed')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"little-closed current=true currentWindow=true last=true type=normal page=main active=main"
+cra://debug?removeExtension=${TABS_QUERY_EXTENSION_ID}
+wait 1
+reject-log fault:
