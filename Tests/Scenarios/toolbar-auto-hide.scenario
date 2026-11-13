@@ -1,0 +1,48 @@
+# Settings ▸ Tabs ▸ "Hide the toolbar until you need it" (not in Arc; Zen's compact toolbar): the
+# toolbar takes no room above the page, floats over its top when asked out, and sits above the
+# page again wherever it can't float (DevTools) or isn't shown at all.
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "autoHideToolbar": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=float
+wait 3
+# Hidden: the page has the whole card (780 pt of an 800 pt window, 10 pt margins).
+cra://debug?toolbar=start
+expect-log toolbar start: floats=1 out=0 inset=0 page=780/780 barHidden=1
+# The card's top edge is 10 pt under the window's: the margin above it and the first 6 pt of the
+# page bring the bar out, the page under that and the sidebar's top don't.
+cra://debug?toolbar=at:700,4
+expect-log toolbar at:700,4: strip out=0
+cra://debug?toolbar=at:700,14
+expect-log toolbar at:700,14: strip out=0
+cra://debug?toolbar=at:700,20
+expect-log toolbar at:700,20: away out=0
+cra://debug?toolbar=at:100,4
+expect-log toolbar at:100,4: away out=0
+# Out: over the page, which keeps its size.
+cra://debug?toolbar=out
+expect-log toolbar out: floats=1 out=1 inset=0 page=780/780 barHidden=0
+# On the bar (10…42 pt) and up to 16 pt under it the pointer keeps it; further down it lets go.
+cra://debug?toolbar=at:700,30
+expect-log toolbar at:700,30: bar out=1
+cra://debug?toolbar=at:700,56
+expect-log toolbar at:700,56: bar out=1
+cra://debug?toolbar=at:700,70
+expect-log toolbar at:700,70: away out=1
+cra://debug?toolbar=in
+expect-log toolbar in: floats=1 out=0 inset=0 page=780/780 barHidden=1
+# View ▸ Hide Toolbar: nothing floats, and nothing is above the page either.
+cra://action/toggleToolbar
+wait 1
+cra://debug?toolbar=off
+expect-log toolbar off: floats=0 out=0 inset=0 page=780/780 barHidden=1
+cra://action/toggleToolbar
+wait 1
+# DevTools puts the page in a window of its own: the bar sits above it while they are open.
+cra://action/devTools
+wait 3
+cra://debug?toolbar=devtools
+expect-log toolbar devtools: floats=0 out=0 inset=32 page=748/780 barHidden=0
+cra://action/devTools
+wait 2
+cra://debug?toolbar=closed
+expect-log toolbar closed: floats=1 out=0 inset=0 page=780/780 barHidden=1

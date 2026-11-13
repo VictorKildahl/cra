@@ -45,6 +45,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **PR #269:** in Settings, the selected source-list row is inset 10 pt from both sidebar edges
   (glyph 20 pt and label 49 pt from the edge, as in Dia 1.55.1), and scrolling Performance or Advanced
   never draws under the back/forward pill or the pane title.
+- **#400 (macOS 27 only):** a white page with DevTools docked right and set to dark, toolbar shown,
+  Edge to edge on and off: no white shows at any corner of the page or DevTools. This Mac runs
+  macOS 26, where the test stands in for 27 with AppKit's own window radius; ask the reporter to confirm.
 
 ### Sidebar, tabs and the command bar
 
@@ -52,6 +55,29 @@ built release app with a test profile. Note anything that fails in the release's
   space's colour (gold on a gold space), white text and a white arrow tile; the info badge takes the
   space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
   and check every row's inks follow the selection; long titles truncate before the trailing action.
+
+- **#393, Ask on Page:** with Apple Intelligence on and Settings ▸ Max ▸ Ask on Page on, press ⌘F on a
+  long article: the card reads "Find or ask…"; typing a word finds it (count, ↑ ↓, highlights in the
+  page). Type a question and press Ask (or Return): the question in the space's colour, "This page was
+  long, so I read the first N%.", an answer with a quote on a rule. Find on Page highlights and scrolls to
+  the quote in the page, or says "Quote not found". Ask a follow-up; past 450 pt the conversation scrolls
+  with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
+  (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
+
+- **#407, Instant Links:** with Apple Intelligence on and Settings ▸ Max ▸ Instant Links on, type
+  "top 3 pizza places in naples" in ⌘T and press Shift-Return: the bar closes, "Searching the web for you…"
+  shows at the top of Today with the flower turning once a second and the selected row's fill, and about 3 s later
+  three tabs of real Google results replace it, the first selected. Try "greek and italian restaurants in a
+  split" (a split of two at the top of Today), "folder of ramen recipes" (a folder of 5 at the end of Pinned,
+  named after the phrase) and an Italian phrase ("le 4 migliori piste da sci in friuli": 4 tabs). Return on the
+  same text still searches normally, and with the setting off Shift-Return does too. Run it in a fresh profile
+  for the first run (the model's first answer is slower), in an incognito space (the engine's own results page
+  opens) and with Reduce Motion on (the flower stands still). Put the row and the flower next to Arc's on the
+  same phrase. Find a phrase the model refuses (a guardrail's false positive: "youtube mkbhd" did once) or one
+  in a language it doesn't support, and check it opens the phrase as a plain search, not the error row.
+  Google blocks hidden pages now and then: with its page unreadable (a captcha or `/sorry`) a search opens
+  Google's results page as one tab, whatever the count, and four searches at once in one profile ("greek, italian,
+  thai and indian restaurants in a split") can trip Google's `/sorry`, so try that once and note what opened.
 
 - **PR #324, 5-Second Previews:** with Apple Intelligence on and Settings ▸ Max ▸ 5-Second Previews
   on, rest 1 s on a story title on Hacker News, a Google result and a link in a post on X: a loading
@@ -294,7 +320,6 @@ issue when a change touches that code anyway.
 | #47 | Move `SpaceListView.revealActiveRow` (scroll the least that shows the row) |
 | #139 | Move `navigatedAway` (pinned, URL differs from the saved one) out of `SpaceListView` |
 | #3 #21 #86 #195 | Default bindings (⇧⌘J, ⌃⌘1–9, ⇧⌘T, ⌥⌘N) live in `App/KeyBindings.swift`, a known exception |
-| #194 | `AppDelegate.reservedActions` must hold `copyURL` and `copyURLMarkdown`: a `reserved=<action>` hook or a move |
 | #192 | A `validate=pasteAsPlainText` hook logging whether the item is enabled while a page has focus |
 | #21 | An `undoKey` hook logging whether ⌘Z undoes typing or reopens a tab |
 | #49 | `SuggestionEngine` (at most five rows, never the current tab), a known exception |

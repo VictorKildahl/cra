@@ -61,19 +61,15 @@ struct ImportSource: Identifiable, Hashable {
                      dataDir: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Safari", isDirectory: true)),
     ]
 
-    /// Installed with data to bring over. Arc, Dia and Zen only need their data
-    /// (the import also runs after they are deleted); Safari is always there.
+    /// Has data to bring over. The import reads only the profile on disk, so a browser
+    /// someone already deleted is still offered while its data is there; Safari is always there.
     var isAvailable: Bool {
         switch kind {
         case .arc: return ArcImporter.isAvailable
         case .dia: return DiaImporter.isAvailable
         case .safari: return true
-        case .chromium:
-            return isInstalled && !ChromiumImporter.profiles(userData: dataDir).isEmpty
-        case .firefox:
-            return isInstalled && FirefoxImporter.defaultProfile(root: dataDir) != nil
-        case .zen:
-            return FirefoxImporter.defaultProfile(root: dataDir) != nil
+        case .chromium: return !ChromiumImporter.profiles(userData: dataDir).isEmpty
+        case .firefox, .zen: return FirefoxImporter.defaultProfile(root: dataDir) != nil
         }
     }
 

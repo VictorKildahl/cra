@@ -37,9 +37,11 @@ struct MCPProtocolTests {
         #expect(MCPProtocol.problem(name: "page_click", arguments: ["tabId": "id", "x": -1, "y": 2]) == "x must not be negative.")
         #expect(MCPProtocol.problem(name: "page_click", arguments: ["tabId": "id", "selector": "a", "button": "back"]) == "button must be one of left, right, middle.")
         #expect(MCPProtocol.problem(name: "page_click", arguments: ["tabId": "id", "selector": "a", "clickCount": 4]) == "clickCount must be at most 3.")
-        // Points only where an element isn't needed to act on.
+        // Points only where an element isn't needed to act on, and for page_upload, which takes
+        // the element there (a label's text in a shadow root has no ref) to find its file input.
         #expect(!MCPProtocol.validate(name: "page_fill", arguments: ["tabId": "id", "x": 1, "y": 1, "text": "a"]))
-        #expect(!MCPProtocol.validate(name: "page_upload", arguments: ["tabId": "id", "x": 1, "y": 1, "paths": ["/tmp/a"]]))
+        #expect(MCPProtocol.validate(name: "page_upload", arguments: ["tabId": "id", "x": 1, "y": 1, "paths": ["/tmp/a"]]))
+        #expect(MCPProtocol.problem(name: "page_upload", arguments: ["tabId": "id", "paths": ["/tmp/a"]]) == "page_upload needs a target: ref, selector or x/y.")
         // Typing and keys without a target go to what has focus; scrolling to the middle.
         #expect(MCPProtocol.validate(name: "page_type", arguments: ["tabId": "id", "text": "hello"]))
         #expect(MCPProtocol.validate(name: "page_scroll", arguments: ["tabId": "id", "dy": 300]))

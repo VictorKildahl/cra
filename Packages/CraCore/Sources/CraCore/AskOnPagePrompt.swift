@@ -25,6 +25,7 @@ public enum AskOnPagePrompt {
     public struct Fitted: Equatable, Sendable {
         public let instructions: String
         public let prompt: String
+        public let question: String
         /// The exact unescaped prefix supplied to the model, and the only source for citations.
         public let source: String
         public let inputTokens: Int
@@ -97,7 +98,7 @@ public enum AskOnPagePrompt {
             return lines.joined(separator: "\n")
         }
         func result(_ source: String, prompt: String, tokens: Int) -> Fitted {
-            Fitted(instructions: instructions, prompt: prompt, source: source, inputTokens: tokens,
+            Fitted(instructions: instructions, prompt: prompt, question: question, source: source, inputTokens: tokens,
                    estimatedTokenCount: countTokens == nil || estimatedTokenCount, olderMessagesHidden: hidden,
                    isPartialPage: page.wasTruncated || source != page.text,
                    fractionRead: page.wasTruncated ? nil : page.text.isEmpty ? 1 : Double(source.count) / Double(page.text.count))
@@ -142,6 +143,16 @@ public enum AskOnPagePrompt {
         }
         return result(best, prompt: bestPrompt, tokens: bestTokens)
     }
+
+    /// Arc's visible page-character disclosure, separate from the local model's token budget.
+    public static func fractionLine(_ fraction: Double?) -> String? {
+        guard let fraction, fraction < 1 else { return nil }
+        let percent = max(1, min(99, Int((fraction * 100).rounded(.down))))
+        return "This page was long, so I read the first \(percent)%."
+    }
+
+    public static let unreadable = "Sorry, I can’t read this type of page."
+    public static let failed = "Sorry, I encountered an error"
 
     static func escaped(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")

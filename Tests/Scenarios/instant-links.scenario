@@ -1,0 +1,94 @@
+# promise: #407
+# Arc Max's Instant Links (Arc 1.172.2, live with Max on, 12 Nov 2026): Shift-Return on a search in ⌘T
+# makes the model plan the phrase, searches Google in a page nobody sees and opens the top results.
+# While it works the sidebar shows "Searching the web for you…" at the top of Today, drawn as the open
+# row when the run came from ⌘T's new-tab bar; the results then replace it. Tabs open at the top of
+# Today in result order with the first selected; a split lands at the top of Today; a folder of one
+# search opens 5 pages at the end of Pinned, named by the plan. When nothing can be opened the row reads
+# "Oops, something went wrong." until its ✕ is pressed (cra://debug?instantLinksDismiss=1 here). Cra
+# goes past Arc in two places: the stated count is honoured, and a model that throws (a guardrail's false
+# positive, a language it doesn't speak) falls back to searching the phrase as typed, where Arc shows the
+# error. With the setting off Shift-Return is a plain Return. The model is Cra's test model, the
+# search is the fixture page shaped like Google's results (CRA_INSTANT_LINKS_SEARCH).
+budget rss=900 stalls50=30 perfcpu=0.5
+pace 0.5
+port 8765
+env CRA_TIDY_FAKE_MODEL=1
+env CRA_INSTANT_LINKS_SEARCH=http://127.0.0.1:8765/instant-links.html?q={searchTerms}
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "instantLinks": true}
+
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+# Cra makes a spare page 1 s after the last page (SparePages); let it be made before the bar opens,
+# or the scripted Return can miss the bar in this background copy.
+wait 2
+cra://debug?instantLinks=before
+expect-log Cra instant links before: available=true rows=0 status=- current=0 plan=- opened=- fellback=0 today=\[x\*\] pinned=\[\]$
+
+# Shift-Return: the row stands for the new tab ⌘T was opening, and is replaced by three tabs at the
+# top of Today, in result order, the first selected (the open page moves down).
+cra://commandbar?query=top%203%20pizza%20places%20in%20naples
+wait 1
+cra://debug?key=%0D,36,131072
+wait 0.5
+cra://debug?instantLinks=working
+expect-log Cra instant links working: available=true rows=1 status=loading current=1 plan=- opened=-
+wait 6
+cra://debug?instantLinks=tabs
+expect-log Cra instant links tabs: available=true rows=0 status=- current=0 plan=tab/1/3 opened=3 fellback=0 today=\[1\*,2,3,x\] pinned=\[\]$
+
+# A split of three results: one row at the top of Today, the first pane selected.
+cra://commandbar?query=top%203%20greek%20restaurants%20in%20a%20split
+wait 1
+cra://debug?key=%0D,36,131072
+wait 6
+cra://debug?instantLinks=split
+expect-log Cra instant links split: .*plan=split/1/3 opened=3 fellback=0 today=\[1\*\+2\+3,1,2,3,x\] pinned=\[\]$
+
+# A folder of one search opens 5 pages (Arc's rule) at the end of Pinned, named by the plan, and
+# nothing is added to Today; the first page, inside it, is the selected one. A second folder goes after the first.
+cra://commandbar?query=folder%20of%20pizza
+wait 1
+cra://debug?key=%0D,36,131072
+wait 6
+cra://debug?instantLinks=folder
+expect-log Cra instant links folder: .*plan=folder/1/5 opened=5 .*today=\[1\+2\+3,1,2,3,x\] pinned=\["Pizza"\{1\*,2,3,4,5\}\]$
+cra://commandbar?query=folder%20of%20pasta
+wait 1
+cra://debug?key=%0D,36,131072
+wait 6
+cra://debug?instantLinks=folders
+expect-log Cra instant links folders: .*pinned=\["Pizza"\{1,2,3,4,5\},"Pasta"\{1\*,2,3,4,5\}\]$
+
+# Nothing could be opened: the row turns into the error, stays until dismissed, and opens nothing.
+cra://debug?instantLinksFail=plan
+cra://commandbar?query=top%203%20pizza%20places
+wait 1
+cra://debug?key=%0D,36,131072
+wait 4
+cra://debug?instantLinks=error
+expect-log Cra instant links error: available=true rows=1 status=error current=1 plan=- opened=-
+cra://debug?instantLinksDismiss=1
+cra://debug?instantLinks=dismissed
+expect-log Cra instant links dismissed: available=true rows=0 status=-
+
+# The model throws (a guardrail's false positive, say): the phrase is searched as typed, with its
+# stated count, and the results open as tabs. Only the failure's kind is logged.
+cra://debug?instantLinksFail=model
+cra://commandbar?query=top%202%20youtube%20mkbhd
+wait 1
+cra://debug?key=%0D,36,131072
+wait 6
+cra://debug?instantLinks=fallback
+expect-log Instant Links: the model failed \(test\); searching the phrase as typed
+expect-log Cra instant links fallback: available=true rows=0 status=- current=0 plan=tab/1/2 opened=2 fellback=1 today=\[1\*,2,1\+2\+3,1,2,3,x\]
+
+# With the setting off Shift-Return is a plain Return: no row, no run.
+cra://debug?instantLinksFail=none
+cra://debug?instantLinksSetting=off
+cra://commandbar?query=top%203%20pizza%20places
+wait 1
+cra://debug?key=%0D,36,131072
+wait 2
+cra://debug?instantLinks=off
+expect-log Cra instant links off: available=false rows=0 status=- current=0 plan=tab/1/2 opened=2 fellback=1 today=\[x\*,1,2,1\+2\+3,

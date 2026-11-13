@@ -30,6 +30,8 @@ enum AskOnPageServiceTests {
         if CommandLine.arguments.contains("--real-model") { try await realModel(); return }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
+        AskOnPageSelectionTests.run()
+        await AskOnPageControllerTests.run()
         await streamingAndHistory()
         await invalidationAndTimeout()
         await synchronousConfigurationInvalidation()

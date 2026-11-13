@@ -1,0 +1,41 @@
+{
+  "closeTab" : [
+    {
+      "key" : "w",
+      "modifiers" : 1048576,
+      "priority" : "low"
+    }
+  ],
+  "find" : [
+    {
+      "key" : "f",
+      "modifiers" : 1048576,
+      "priority" : "promptAfterConsumedByWebView"
+    }
+  ],
+  "newTab" : [
+    {
+      "key" : "t",
+      "modifiers" : 1048576
+    }
+  ],
+  "nextTab" : [
+    {
+      "key" : "\t",
+      "modifiers" : 262144,
+      "priority" : "overrideWebView"
+    },
+    {
+      "key" : "",
+      "modifiers" : 1572864,
+      "priority" : "overrideWebView"
+    }
+  ],
+  "reload" : [
+    {
+      "key" : "r",
+      "modifiers" : 1048576,
+      "priority" : "askEveryTime"
+    }
+  ]
+}

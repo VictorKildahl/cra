@@ -59,6 +59,12 @@ struct TabsPane: View {
                 SettingsSwitchRow("Edge to edge",
                                   detail: "Pages fill the window, with no margin or rounded corners around them.",
                                   isOn: $store.settings.edgeToEdgeContent) { SettingsArt.edgeToEdge }
+                SettingsCardDivider()
+                // Not in Arc (#404): the toolbar floats over the page (ToolbarAutoHide).
+                SettingsSwitchRow("Hide the toolbar until you need it",
+                                  detail: "The page takes the toolbar’s room. Move the pointer to the top of the page and the toolbar slides in over it.",
+                                  isOn: $store.settings.autoHideToolbar,
+                                  enabled: store.settings.addressBarPlacement == .toolbar) { SettingsArt.autoHideToolbar }
             }
 
             SettingsHeader("Tabs and Favorites").padding(.top, 20)

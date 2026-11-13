@@ -52,6 +52,28 @@ public enum AskOnPage {
         }
     }
 
+    /// The existing deterministic UI fixture model, returning native fields from the fitted source.
+    /// It never certifies model quality, and it does not invent punctuation outside that source.
+    public static func fixtureDraft(question: String, source: String) -> Draft {
+        let words = Set(question.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .filter { $0.count > 3 }.map(String.init))
+        var sentences: [String] = [], sentence = ""
+        for character in source {
+            sentence.append(character)
+            if ".!?\n".contains(character) {
+                let text = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.count > 12 { sentences.append(text) }
+                sentence = ""
+            }
+        }
+        let tail = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tail.count > 12 { sentences.append(tail) }
+        guard let quote = sentences.first(where: { sentence in words.contains { sentence.lowercased().contains($0) } }) ?? sentences.first else {
+            return .init(excerpts: [], answer: "I think it is not on the page, so this is just a guess.")
+        }
+        return .init(excerpts: [quote], answer: quote, keyAnswer: String(quote.split(separator: " ").prefix(4).joined(separator: " ")))
+    }
+
     public struct Turn: Equatable, Sendable {
         public let question: String
         public let answer: String
@@ -156,5 +178,125 @@ public enum AskOnPage {
             end = text.index(after: end)
         }
         return String(text[..<end])
+    }
+}
+
+
+/// Presentation decisions for the existing Find or Ask card. Document eligibility is refined
+/// separately; generation still requires BrowserManager's guarded current-page snapshot.
+public enum AskOnPagePolicy {
+    public enum ReturnKey: Equatable, Sendable { case nextMatch, ask }
+
+    public static func canAsk(page: URL?) -> Bool {
+        guard let scheme = page?.scheme?.lowercased() else { return false }
+        return ["http", "https", "file"].contains(scheme)
+    }
+
+    public static func placeholder(canAsk: Bool, inConversation: Bool) -> String {
+        if !canAsk { return "Find in page…" }
+        return inConversation ? "Ask a question…" : "Find or ask…"
+    }
+
+    /// Display counts cannot prove ownership. Only the manager's correlated final zero may ask.
+    public static func returnKey(query: String, finalZero: Bool, inConversation: Bool,
+                                 canAsk: Bool, forward: Bool) -> ReturnKey? {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard forward, canAsk else { return .nextMatch }
+        return inConversation || finalZero ? .ask : .nextMatch
+    }
+
+    public static func showsAskButton(query: String, canAsk: Bool) -> Bool {
+        canAsk && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+/// The card's theme colour (Arc's WindowTheme palette, read at run time there): the question, the
+/// Ask button. Arc's capture on a lavender space shows a mid purple; here it is the space's colour
+/// at a readable strength, kept to its hue. A grey space gets Max's blue.
+///
+/// The card follows macOS, not the space (its panel isn't in the space's shell), so a light space
+/// on a dark Mac has a dark card (#408). Both questions are made, the card picks by its own
+/// appearance, and each one reads at least 4.5:1 (WCAG AA) on its card: a colour too dark for the
+/// dark card is lifted, then washed toward white; one too light for the light card is darkened.
+/// The Ask button carries white text, so it takes the light card's question in both appearances.
+public struct AskOnPageTone {
+    public typealias RGB = (r: Double, g: Double, b: Double)
+
+    public static let minimumContrast = 4.5
+    /// The card's grey in each appearance (it is 96–97 % opaque over the page).
+    public static func card(dark: Bool) -> Double { dark ? 0.16 : 0.985 }
+
+    public let questionOnLight: RGB
+    public let questionOnDark: RGB
+    /// The Ask button's fill, under white text.
+    public var button: RGB { questionOnLight }
+
+    public func question(dark: Bool) -> RGB { dark ? questionOnDark : questionOnLight }
+
+    public init(themeHex: String) {
+        let c = HexColor.components(themeHex) ?? (0.5, 0.5, 0.5)
+        var (h, s, _) = Self.hsb(c.r, c.g, c.b)
+        var light = (s: max(s, 0.55), v: 0.62), dark = (s: max(s, 0.45), v: 0.92)
+        if s < 0.08 {
+            // Max's blue: (0.22, 0.24, 1) on light, (0.47, 0.50, 1) on dark.
+            (h, s, _) = Self.hsb(0.22, 0.24, 1)
+            light = (s, 1)
+            dark = (Self.hsb(0.47, 0.50, 1).1, 1)
+        }
+        let lightCard = Self.card(dark: false), darkCard = Self.card(dark: true)
+        questionOnLight = Self.readable(h: h, s: light.s, v: light.v, on: (lightCard, lightCard, lightCard), lighter: false)
+        questionOnDark = Self.readable(h: h, s: dark.s, v: dark.v, on: (darkCard, darkCard, darkCard), lighter: true)
+    }
+
+    /// WCAG 2 contrast ratio of two sRGB colours (1 to 21).
+    public static func contrast(_ a: RGB, _ b: RGB) -> Double {
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    static func luminance(_ c: RGB) -> Double {
+        func lin(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+    }
+
+    /// The hue at s, v, stepped until it reads on bg: lighter raises v, then lowers s (toward
+    /// white); darker lowers v (toward black). Both ends always read on the card's greys.
+    static func readable(h: Double, s: Double, v: Double, on bg: RGB, lighter: Bool) -> RGB {
+        var s = s, v = v
+        while true {
+            let c = rgb(h: h, s: s, v: v)
+            if contrast(c, bg) >= minimumContrast { return c }
+            if lighter {
+                if v < 1 { v = min(1, v + 0.01) } else if s > 0 { s = max(0, s - 0.01) } else { return c }
+            } else {
+                if v > 0 { v = max(0, v - 0.01) } else { return c }
+            }
+        }
+    }
+
+    static func hsb(_ r: Double, _ g: Double, _ b: Double) -> (Double, Double, Double) {
+        let mx = max(r, g, b), mn = min(r, g, b), d = mx - mn
+        var h = 0.0
+        if d > 0 {
+            if mx == r { h = ((g - b) / d).truncatingRemainder(dividingBy: 6) }
+            else if mx == g { h = (b - r) / d + 2 }
+            else { h = (r - g) / d + 4 }
+            h /= 6
+            if h < 0 { h += 1 }
+        }
+        return (h, mx == 0 ? 0 : d / mx, mx)
+    }
+
+    static func rgb(h: Double, s: Double, v: Double) -> (r: Double, g: Double, b: Double) {
+        let i = Int(h * 6) % 6, f = h * 6 - Double(Int(h * 6))
+        let p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s)
+        switch i {
+        case 0: return (v, t, p)
+        case 1: return (q, v, p)
+        case 2: return (p, v, t)
+        case 3: return (p, q, v)
+        case 4: return (t, p, v)
+        default: return (v, p, q)
+        }
     }
 }

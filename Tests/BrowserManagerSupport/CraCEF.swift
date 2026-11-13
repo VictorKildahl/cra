@@ -12,6 +12,13 @@ public protocol CraBrowserDelegate: AnyObject {
 
 public final class CraDownloadInfo {}
 
+/// The runtime switches BrowserManager's helpers read.
+@MainActor
+public enum CraCEFRuntime {
+    public static var hosting = true
+    public static func chromeHosting() -> Bool { hosting }
+}
+
 @objc public enum CraLinkWindow: Int { case new, incognito, little }
 @objc public enum CraFindAction: Int { case show, next, previous }
 
@@ -55,6 +62,20 @@ open class CraBrowser {
     public convenience init(frame: NSRect, url: String, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
                             history: [String: Any]?) {
         self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
+        restoredHistory = history
+    }
+
+    /// A page made ahead for the next tab (SparePages); `takenURL` is what the tab that took it loads.
+    public private(set) var isSpare = false
+    public private(set) var takenURL: String?
+    public convenience init(spareWithFrame frame: NSRect, profilePath: String?) {
+        self.init(frame: frame, url: "", delegate: nil, incognito: false, profilePath: profilePath)
+        isSpare = true
+    }
+    public func takeSpare(withURL url: String, history: [String: Any]?) {
+        isSpare = false
+        takenURL = url
+        currentURL = url
         restoredHistory = history
     }
 

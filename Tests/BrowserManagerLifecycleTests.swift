@@ -76,6 +76,7 @@ enum BrowserManagerLifecycleTests {
 
     @MainActor
     static func main() async {
+        await sparePagesCase()
         await tabFaviconsCase()
         let store = SidebarStore()
         let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
@@ -731,6 +732,33 @@ enum BrowserManagerLifecycleTests {
         manager.sleepIdleTabs(TabSleepPolicy(hiddenFor: 60))
         expect(runtime.browser.replies.contains { $0.method == isolatedProbe }, "a refused page is probed again after the back-off")
         manager.closeAll()
+    }
+
+    /// Pages made ahead (SparePages): a tab that needs a page takes its profile's spare, made
+    /// SparePage.refillDelay after the last page was made, instead of waiting for CEF's window.
+    @MainActor
+    private static func sparePagesCase() async {
+        SparePages.shared.dropAll()
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let first = store.createTab(url: "https://example.test/one").id
+        let one = manager.ensureRuntime(for: first)!
+        expect(one.browser.takenURL == nil && !one.browser.isSpare, "with no spare yet, the page is made on the spot")
+        expect(SparePages.shared.take(profilePath: nil) == nil, "the next spare isn't made on the same click")
+        clock.advance(by: SparePage.refillDelay)
+        let second = store.createTab(url: "https://example.test/two").id
+        let two = manager.ensureRuntime(for: second)!
+        expect(two.browser.takenURL == "https://example.test/two", "the next tab takes the spare made after the first and loads its address")
+        expect(two.browser.delegate === manager && manager.runtime(for: second)?.browser === two.browser,
+               "the taken spare is the tab's page, reporting to its window")
+        expect(SparePages.shared.take(profilePath: nil) == nil, "a taken spare is no longer kept")
+        clock.advance(by: SparePage.refillDelay)
+        let spare = SparePages.shared.take(profilePath: nil)
+        expect(spare?.isSpare == true, "another spare is made after it was taken")
+        spare?.close()
+        manager.closeAll()
+        SparePages.shared.dropAll()
     }
 
     // promise: #32

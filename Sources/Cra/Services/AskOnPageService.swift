@@ -30,6 +30,16 @@ final class AskOnPageService {
     private(set) var current: Message?
     private(set) var olderMessagesHidden = false
     var isLoading: Bool { phase == .reading || phase == .answering }
+    var failureText: String? {
+        guard case .failed(let failure) = phase else { return nil }
+        switch failure {
+        case .unreadablePage: return AskOnPagePrompt.unreadable
+        case .inputTooLong: return "This question is too long. Try a shorter question."
+        case .unavailable: return "Apple Intelligence isn’t available right now."
+        case .timedOut: return "Sorry, the answer took too long. Try again."
+        default: return AskOnPagePrompt.failed
+        }
+    }
 
     @ObservationIgnored private let browsers: BrowserManager
     @ObservationIgnored private let enabled: @MainActor () -> Bool
@@ -169,18 +179,22 @@ final class AskOnPageService {
 @MainActor
 enum AskOnPageLocalModel {
     static var isAvailable: Bool {
+        if TidyTabsService.fakeModel { return true }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *), case .available = SystemLanguageModel.default.availability { return true }
         #endif
         return false
     }
     static var estimatesTokens: Bool {
+        if TidyTabsService.fakeModel { return true }
         if #available(macOS 26.4, *) { return false }
         return true
     }
     static var tokenCount: AskOnPagePrompt.TokenCount {
         { instructions, prompt in
             try Task.checkCancellation()
+            // Deterministic UI fixture only: no tokenizer or on-device model is invoked.
+            if TidyTabsService.fakeModel { return (instructions.utf8.count + prompt.utf8.count + 2) / 3 + 256 }
             #if canImport(FoundationModels)
             if #available(macOS 26.0, *) {
                 if #available(macOS 26.4, *) {
@@ -226,6 +240,14 @@ enum AskOnPageLocalModel {
 
     static func stream(_ fitted: AskOnPagePrompt.Fitted, update: @escaping @MainActor (AskOnPage.Draft) -> Void) async throws -> AskOnPage.Draft {
         guard isAvailable else { throw AskOnPageService.Failure.unavailable }
+        if TidyTabsService.fakeModel {
+            let draft = AskOnPage.fixtureDraft(question: fitted.question, source: fitted.source)
+            update(.init(excerpts: draft.excerpts, answer: nil))
+            await Task.yield()
+            try Task.checkCancellation()
+            update(draft)
+            return draft
+        }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             do {

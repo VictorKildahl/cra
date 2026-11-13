@@ -8,8 +8,11 @@ import SwiftUI
 struct SpaceIconPicker: View {
     let current: String
     let currentSymbol: String?
+    /// The user's own picture (Space.iconImage), if that is the space's icon (not in Arc).
+    var currentImage: Data? = nil
     let onPick: (String) -> Void
     let onPickSymbol: (String) -> Void
+    var onPickImage: (Data) -> Void = { _ in }
     let onRemove: () -> Void
 
     @State private var tab = 0
@@ -25,10 +28,11 @@ struct SpaceIconPicker: View {
                 Picker("", selection: $tab) {
                     Text("Emoji").tag(0)
                     Text("Icon").tag(1)
+                    Text("Image").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 105)
+                .frame(width: 160)
                 Button(action: onRemove) {
                     Image(systemName: "trash").font(.system(size: 14, weight: .regular))
                 }
@@ -50,13 +54,15 @@ struct SpaceIconPicker: View {
                 .padding(.horizontal, 8)
                 .padding(.top, 9.5)
                 emojiGrid
-            } else {
+            } else if tab == 1 {
                 SpaceSymbolGrid(current: currentSymbol, onPick: onPickSymbol)
+            } else {
+                SpaceImageTab(current: currentImage, onPick: onPickImage)
             }
         }
         .frame(width: 272, height: 272)
         .onAppear {
-            tab = currentSymbol == nil ? 0 : 1
+            tab = currentImage != nil ? 2 : (currentSymbol == nil ? 0 : 1)
             searchFocused = true
         }
     }
@@ -161,5 +167,56 @@ struct SpaceSymbolGrid: View {
         .padding(.horizontal, 11)
         .padding(.top, 11)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// The Image tab (not in Arc): a PNG or SVG, or any picture, from a file chooser or dropped on the
+/// tile. It is scaled down once and kept in the space, so the original file can go.
+struct SpaceImageTab: View {
+    let current: Data?
+    let onPick: (Data) -> Void
+    @State private var targeted = false
+    @State private var failed = false
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(targeted ? Color.accentColor : Color.primary.opacity(0.25),
+                                  style: StrokeStyle(lineWidth: targeted ? 2 : 1, dash: current == nil ? [5, 4] : []))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.05)))
+                if let current, let image = SpaceIconImage.image(current, points: 64) {
+                    Image(nsImage: image)
+                } else {
+                    VStack(spacing: 6) {
+                        Image(systemName: "photo.badge.plus").font(.system(size: 22, weight: .regular)).foregroundStyle(.secondary)
+                        Text("Drop a PNG or SVG here").font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(width: 120, height: 120)
+            .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
+                guard let provider = providers.first else { return false }
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    DispatchQueue.main.async {
+                        guard let url, let data = SpaceIconImage.normalized(from: url) else { failed = true; return }
+                        failed = false
+                        onPick(data)
+                    }
+                }
+                return true
+            }
+            Button(current == nil ? "Choose Image…" : "Choose Another…") {
+                failed = false
+                SpaceIconImage.choose(completion: onPick)
+            }
+            Text(failed ? "That file isn't a picture Cra can read." : "Shown in full colour when the space is open, faded when it isn't.")
+                .font(.system(size: 11))
+                .foregroundStyle(failed ? Color.red : Color.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.top, 6)
     }
 }

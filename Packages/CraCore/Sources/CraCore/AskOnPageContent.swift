@@ -78,8 +78,8 @@ public enum AskOnPageContent {
     }
 
     public static func supportsURL(_ url: String) -> Bool {
-        guard url.utf8.count <= 8192, let scheme = URL(string: url)?.scheme?.lowercased() else { return false }
-        return ["http", "https", "file"].contains(scheme)
+        guard url.utf8.count <= 8192 else { return false }
+        return AskOnPagePolicy.canAsk(page: URL(string: url))
     }
 
     private struct Evaluation: Decodable {

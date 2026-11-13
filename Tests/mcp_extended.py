@@ -85,11 +85,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 else: self.wfile.write(delayed_body if delayed_body else b'Cra authenticated sample\n')
             except (BrokenPipeError, ConnectionResetError): pass
             return
+        page = {'/shadow-upload': 'shadow-upload.html', '/upload-frame': 'upload-frame.html', '/upload-components.js': 'upload-components.js'}.get(self.path, 'transfers.html')
         self.send_response(200)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Type', 'text/javascript' if page.endswith('.js') else 'text/html; charset=utf-8')
         if self.path == '/normal': self.send_header('Set-Cookie', 'mcp_fixture=session; Path=/; HttpOnly; SameSite=Strict')
         self.end_headers()
-        try: self.wfile.write((Path(__file__).parent / 'Fixtures/MCP/transfers.html').read_bytes())
+        try: self.wfile.write((Path(__file__).parent / 'Fixtures/MCP' / page).read_bytes())
         except (BrokenPipeError, ConnectionResetError): pass
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
@@ -286,6 +287,41 @@ try:
     check('hidden file input uses native selection',js(client,agent,'document.querySelector("#hidden-upload").files[0].name')=='sample.txt')
     fail('single input refuses multiple files',client.tool('page_upload',{'tabId':agent,'selector':'#hidden-upload','paths':[str(f) for f in files]}))
     fail('disabled file input refused',client.tool('page_upload',{'tabId':agent,'selector':'#disabled-upload','paths':[str(files[0])]}))
+    # Uploaders inside open shadow roots, as reddit.com's community and profile image uploaders are
+    # (12 Nov 2026): the input is hidden and has no ref, so page_upload takes the uploader's button,
+    # label, host or slotted control, and still selects through Chromium with a trusted change event.
+    shadow=value(client.tool('tab_open',{'url':url+'/shadow-upload','windowless':True}))['tabId'];ready(client,shadow)
+    eventually(lambda:js(client,shadow,'document.querySelector("#frame").contentDocument?.querySelector("settings-dropzone")?.shadowRoot ? 1 : 0')==1)
+    rows=value(client.tool('page_snapshot',{'tabId':shadow}))['elements']
+    def shadow_ref(name,frame=None):
+        found=[r['ref'] for r in rows if r.get('name')==name and r.get('ref') and r.get('frame')==frame]
+        assert len(found)==1,(name,[r for r in rows if r.get('name')==name])
+        return found[0]
+    def shown(selector,frame=False):
+        return js(client,shadow,('document.querySelector("#frame").contentDocument' if frame else 'document')+'.querySelector("'+selector+'").textContent')
+    result=value(client.tool('page_upload',{'tabId':shadow,'ref':shadow_ref('Drag and drop or browse your device'),'paths':[str(files[0])]}))
+    check('shadow-root dropzone button selects its hidden input natively',shown('#avatar-result')=='trusted sample.txt' and result['trustedEvents']['change']>0)
+    value(client.tool('page_upload',{'tabId':shadow,'selector':'avatar-upload','paths':[str(files[1])]}))
+    check('component host selector reaches the input in its shadow roots',shown('#avatar-result')=='trusted other.txt')
+    # A label has no ref of its own (only its text row): point at it in a screenshot instead.
+    shot=json.loads(client.tool('page_screenshot',{'tabId':shadow})['result']['content'][1]['text'])
+    box=js(client,shadow,'(r=>[r.x+r.width/2,r.y+r.height/2])(document.querySelector("#banner").shadowRoot.querySelector("label").getBoundingClientRect())')
+    check('screenshot pixels are CSS pixels here',shot['width']==1280)
+    value(client.tool('page_upload',{'tabId':shadow,'x':box[0],'y':box[1],'paths':[str(files[0])]}))
+    check('label in a shadow root, by x/y, selects its own control of two',shown('#banner-result')=='trusted sample.txt'
+          and js(client,shadow,'document.querySelector("#banner").shadowRoot.querySelector("#banner-extra").files.length')==0)
+    value(client.tool('page_upload',{'tabId':shadow,'selector':'#slotted-button','paths':[str(files[0])]}))
+    check('button slotted into a component selects the component input',shown('#slotted-result')=='trusted sample.txt')
+    value(client.tool('page_upload',{'tabId':shadow,'selector':'#light-label','paths':[str(files[1])]}))
+    check('label selects its file input',shown('#light-result')=='trusted other.txt')
+    value(client.tool('page_upload',{'tabId':shadow,'ref':shadow_ref('Drag and drop or browse your device',1),'paths':[str(files[1])]}))
+    check('dropzone in a same-site iframe selects natively',shown('#frame-result',True)=='trusted other.txt')
+    fail('two inputs behind one button refused',client.tool('page_upload',{'tabId':shadow,'ref':shadow_ref('Browse either'),'paths':[str(files[0])]}))
+    fail('text field near no uploader refused',client.tool('page_upload',{'tabId':shadow,'selector':'#note','paths':[str(files[0])]}))
+    fail('plain text refused',client.tool('page_upload',{'tabId':shadow,'selector':'#plain-text','paths':[str(files[0])]}))
+    check('the frame is on screen',js(client,shadow,'document.querySelector("#frame").getBoundingClientRect().bottom')<800)
+    fail('x/y over a frame refused',client.tool('page_upload',{'tabId':shadow,'x':box[0],'y':js(client,shadow,'(r=>r.y+20)(document.querySelector("#frame").getBoundingClientRect())'),'paths':[str(files[0])]}))
+    value(client.tool('tab_close',{'tabId':shadow}))
     link=folder/'symlink.txt';link.symlink_to(files[0])
     fail('upload symlink refused',client.tool('page_upload',{'tabId':agent,'selector':'#upload','paths':[str(link)]}))
     fail('upload directory refused',client.tool('page_upload',{'tabId':agent,'selector':'#upload','paths':[str(folder)]}))

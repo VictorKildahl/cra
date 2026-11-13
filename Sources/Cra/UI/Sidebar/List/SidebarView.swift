@@ -1327,6 +1327,11 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     /// An Icon-tab glyph (Space.symbol) in the emoji's place.
     private let symbol = NSImageView()
     private var symbolName: String?
+    /// A picture the user chose (Space.iconImage) in the emoji's place. It sits in `emojiHolder`, so
+    /// it gets the same dimming and desaturation as an emoji while the cell isn't lit, and shows in
+    /// its own colours while it is.
+    private let picture = NSImageView()
+    private var pictureData: Data?
     /// Arc's dot, outside `emojiHolder` so its own ink sets how faint it is.
     private let dot = CALayer()
     private var icon = SpaceIcon.none
@@ -1336,6 +1341,7 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         switch mark {
         case .emoji(let e): return e
         case .symbol(let s): return s
+        case .image: return "image"
         case .dot(let d): return "dot\(Int(d))"
         }
     }
@@ -1399,12 +1405,19 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         case .emoji(let e):
             emoji.stringValue = e
             showSymbol(nil)
+            showPicture(nil)
         case .symbol(let name):
             emoji.stringValue = ""
             showSymbol(name)
+            showPicture(nil)
+        case .image(let data):
+            emoji.stringValue = ""
+            showSymbol(nil)
+            showPicture(data)
         case .dot:
             emoji.stringValue = ""
             showSymbol(nil)
+            showPicture(nil)
         }
         emojiHolder.isHidden = { if case .dot = mark { return true } else { return false } }()
         dot.isHidden = !emojiHolder.isHidden
@@ -1425,6 +1438,14 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         if symbol.superview == nil { symbol.imageScaling = .scaleNone; emojiHolder.addSubview(symbol) }
     }
 
+    private func showPicture(_ data: Data?) {
+        guard pictureData != data else { return }
+        pictureData = data
+        picture.image = data.flatMap { SpaceIconImage.image($0, points: 16) }
+        picture.isHidden = data == nil
+        if picture.superview == nil { picture.imageScaling = .scaleNone; emojiHolder.addSubview(picture) }
+    }
+
     /// Arc's hovered/pressed cell on a dark space: white at ~7.8%, 6 pt corners.
     private func refreshFill(_ on: Bool? = nil) {
         let fill = colors.isDark ? NSColor.white.withAlphaComponent(0.078) : NSColor.black.withAlphaComponent(0.05)
@@ -1439,8 +1460,9 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         let size: CGFloat = 13
         if emoji.font?.pointSize != size { emoji.font = .systemFont(ofSize: size) }
         let h = emoji.intrinsicContentSize.height
-        emoji.frame = NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h)
+        emoji.frame = emoji.frameHoldingInk(NSRect(x: 0, y: (bounds.height - h) / 2, width: bounds.width, height: h))
         symbol.frame = bounds
+        picture.frame = bounds
         symbol.symbolConfiguration = .init(pointSize: size - 2, weight: .medium)
         if case .dot(let d) = mark {
             dot.bounds = CGRect(x: 0, y: 0, width: d, height: d)

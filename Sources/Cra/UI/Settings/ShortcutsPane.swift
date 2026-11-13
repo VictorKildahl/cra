@@ -4,9 +4,9 @@ import SwiftUI
 /// Arc's Shortcuts tab (Arc 1.172.2, GitHub #372): "Start with the basics" and a button for the Essential Shortcuts,
 /// a card with a search field (an action's name, or its keys as words: "command e") over one flat list of actions
 /// with their keys on white caps, and a column on the right with the chosen action's keys as two big caps, its name
-/// and what it does, "Reset Shortcut to Default" and a "…" menu. What Arc has beyond this, the choice of who gets a
-/// key, Arc or the website, is GitHub #374.
+/// and what it does, who gets its keys when a page wants them too (#374), "Reset Shortcut to Default" and a "…" menu.
 struct ShortcutsPane: View {
+    let nav: SettingsNavigation
     let actions: SettingsActions
     @Environment(KeyBindingRegistry.self) private var bindings
     @State private var query = ""
@@ -28,6 +28,16 @@ struct ShortcutsPane: View {
         .padding(.top, SettingsMetrics.paneTop)
         .padding(.bottom, SettingsMetrics.paneBottom)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear(perform: openRequested)
+        .onChange(of: nav.shortcut) { _, _ in openRequested() }
+    }
+
+    /// Use Both's "Edit the shortcut" opens the pane on its action.
+    private func openRequested() {
+        guard let id = nav.shortcut else { return }
+        nav.shortcut = nil
+        query = ""
+        selectedID = id
     }
 
     // MARK: Basics
@@ -132,7 +142,7 @@ struct ShortcutsPane: View {
             }
             Text(a?.name ?? "Custom Shortcuts").font(.system(size: 14, weight: .semibold))
                 .padding(.top, 22)
-            Text(a.map { ShortcutDescriptions.text(for: $0) } ?? "Change shortcuts for your favorite actions.")
+            Text(a.map { ShortcutDescriptions.text(for: $0) } ?? "Change shortcuts for your favorite actions, and even choose whether Cra or a website takes priority.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
@@ -146,6 +156,7 @@ struct ShortcutsPane: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 8)
                 }
+                if !a.shortcuts.isEmpty { priority(a) }
             }
             Spacer(minLength: 8)
             HStack(spacing: 6) {
@@ -171,6 +182,25 @@ struct ShortcutsPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Arc 1.172.2: under a rule, a pop-up of who gets the keys when the page wants them too, and a
+    /// line saying what that means. Only for an action with a shortcut.
+    private func priority(_ a: KeyAction) -> some View {
+        let p = bindings.priority(of: a.id)
+        return VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(Color.settingsHairline).frame(height: 1)
+                .padding(.top, 22)
+            Picker("Priority", selection: Binding(get: { p }, set: { bindings.setPriority($0, for: a.id) })) {
+                ForEach(ShortcutPriority.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .labelsHidden().fixedSize()
+            .padding(.top, 16)
+            Text(p.subtitle)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+        }
     }
 }
 
@@ -312,7 +342,7 @@ enum ShortcutDescriptions {
         "previousTab": "Switch to the previous tab.",
         "recentTab": "Open the tab switcher and cycle through recent tabs, like ⌘Tab for apps.",
         "recentTabBackward": "Cycle backwards through recent tabs in the tab switcher.",
-        "clearToday": "Archive all of today’s tabs.",
+        "clearToday": "Archive today’s tabs, except the one on screen and any playing sound.",
         "favoriteTab": "Add the tab to the favorites grid.",
         "renameTab": "Give the tab a name of your own.",
         "duplicateTab": "Open a copy of the tab.",

@@ -5,7 +5,7 @@ import Testing
 struct AskOnPagePromptTests {
     private let page = AskOnPagePrompt.Page(url: "https://example.com/article", title: "An article", text: "A supported sentence on this page.")
 
-    @Test func promptRetainsArcsQuoteGuessLanguageAndTransformationContract() async throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func promptRetainsArcsQuoteGuessLanguageAndTransformationContract() async throws {
         let fitted = try #require(await AskOnPagePrompt.fit(page: page, question: "What does it say?", language: "French", currentDate: "12 November 2026",
                                                           countTokens: { ($0.utf8.count + $1.utf8.count + 3) / 4 }))
         #expect(fitted.instructions.contains("Respond in French."))

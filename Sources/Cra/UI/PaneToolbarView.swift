@@ -555,6 +555,12 @@ final class PaneToolbarView: NSView {
                 self?.store.settings.toolbarShowsFullURL.toggle()
             }))
         }
+        // The page's own toolbar, not a split pane's or the developer bar: those never hide.
+        if ui.splitPaneIDs.count <= 1, model.kind == .normal {
+            let hides = ToolbarMenuAction.item("Automatically Hide Toolbar", { [weak self] in self?.store.settings.autoHideToolbar.toggle() })
+            hides.state = store.settings.autoHideToolbar ? .on : .off
+            menu.addItem(hides)
+        }
         menu.addItem(ToolbarMenuAction.item("Hide Toolbar", shortcut: "toggleToolbar", { [weak self] in self?.store.settings.showToolbar = false }))
         return menu
     }

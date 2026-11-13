@@ -1,4 +1,4 @@
-import CraCore
+@testable import CraCore
 import Foundation
 import Testing
 
@@ -57,7 +57,7 @@ struct AskOnPageTests {
         #expect(restoresOrdinary, "restoring ordinary Find uses a new session")
     }
 
-    @Test func quotesRequireTheExactTransmittedSource() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func quotesRequireTheExactTransmittedSource() throws {
         let draft = AskOnPage.Draft(excerpts: ["The answer is solar power."], answer: "Mostly solar power.", keyAnswer: "solar power")
         let valid = try #require(AskOnPage.completeAnswer(draft, source: "The answer is solar\n\t power."))
         #expect(valid.quotes.first?.state == .verified && valid.hasVerifiedQuote)
@@ -79,7 +79,7 @@ struct AskOnPageTests {
         #expect(AskOnPage.completeAnswer(.init(excerpts: [encoded], answer: "Budget is below €40.", keyAnswer: "€40"), source: source)?.hasVerifiedQuote == false)
     }
 
-    @Test func partialFieldsNeverEnableEvidence() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func partialFieldsNeverEnableEvidence() {
         let partial = AskOnPage.partialAnswer(.init(excerpts: ["A fact."], answer: "A fact", keyAnswer: "fact"))
         #expect(!partial.isComplete && !partial.hasVerifiedQuote && partial.quotes.first?.state == .unverified)
         #expect(AskOnPage.partialAnswer(.init()).text.isEmpty)
@@ -129,7 +129,7 @@ struct AskOnPageTests {
         #expect(AskOnPage.completeAnswer(.init(excerpts: Array(repeating: "A fact.", count: 5), answer: "Fact", keyAnswer: "Fact"), source: "A fact.") == nil)
     }
 
-    @Test func historyEvictsWholePairsAndRemembersTheOmission() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func historyEvictsWholePairsAndRemembersTheOmission() {
         var history = AskOnPage.History()
         for n in 0...12 { history.append(.init(question: "Question \(n)", answer: "Answer \(n)")) }
         #expect(history.turns.count == 12)
@@ -141,5 +141,117 @@ struct AskOnPageTests {
         history.append(.init(question: "Small question", answer: "Small answer"))
         #expect(history.turns == [.init(question: "Small question", answer: "Small answer")])
         #expect(history.olderMessagesHidden)
+    }
+}
+
+struct AskOnPageNativePresentationTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func fixtureQuotesTheActualFittedSentenceWithoutRepair() throws {
+        let source = "Welcome to the page. Reactions fill the camera frame with effects! Other things here."
+        let draft = AskOnPage.fixtureDraft(question: "How do reactions work?", source: source)
+        let answer = try #require(AskOnPage.completeAnswer(draft, source: source))
+        #expect(answer.quotes.map(\.text) == ["Reactions fill the camera frame with effects!"])
+        #expect(answer.quotes.first?.state == .verified)
+        #expect(!answer.text.contains("<excerpt>"))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func pageFractionDisclosureKeepsItsVisibleWording() {
+        #expect(AskOnPagePrompt.fractionLine(0.81) == "This page was long, so I read the first 81%.")
+        #expect(AskOnPagePrompt.fractionLine(nil) == nil)
+        #expect(AskOnPagePrompt.fractionLine(1) == nil)
+        #expect(AskOnPagePrompt.fractionLine(0.999) == "This page was long, so I read the first 99%.")
+        #expect(AskOnPagePrompt.fractionLine(0.001) == "This page was long, so I read the first 1%.")
+    }
+}
+
+struct AskOnPagePolicyTests {
+    @Test func asksOnlyAboutWebPagesAndFiles() {
+        #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://example.com/a")))
+        #expect(AskOnPagePolicy.canAsk(page: URL(string: "http://example.com")))
+        #expect(AskOnPagePolicy.canAsk(page: URL(string: "file:///Users/a/b.html")))
+        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "cra://settings")))
+        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "chrome://version")))
+        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "about:blank")))
+        #expect(!AskOnPagePolicy.canAsk(page: nil))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func placeholdersAreArcs() {
+        #expect(AskOnPagePolicy.placeholder(canAsk: false, inConversation: false) == "Find in page…")
+        #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: false) == "Find or ask…")
+        #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: true) == "Ask a question…")
+    }
+
+    @Test func askOnPageIsOffByDefaultAndRoundTrips() throws {
+        #expect(AppSettings().askOnPage == false)
+        #expect(try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8)).askOnPage == false)
+        var on = AppSettings()
+        on.askOnPage = true
+        #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(on)).askOnPage)
+        #expect(UsageStats.reportedSettings.contains("askOnPage"))
+    }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func returnRequiresAnOwnedFinalZeroAndNeverAsksBackward() {
+        let r = AskOnPagePolicy.returnKey
+        #expect(r("", true, false, true, true) == nil)
+        #expect(r("   ", true, true, true, true) == nil)
+        #expect(r("solar", false, false, true, true) == .nextMatch)
+        #expect(r("how do reactions work", false, false, true, true) == .nextMatch)
+        #expect(r("how do reactions work", true, false, true, true) == .ask)
+        #expect(r("how do reactions work", true, false, true, false) == .nextMatch)
+        #expect(r("solar", false, true, true, true) == .ask)
+        #expect(r("solar", true, true, true, false) == .nextMatch)
+        #expect(r("question", true, false, false, true) == .nextMatch)
+        #expect(AskOnPagePolicy.showsAskButton(query: "why", canAsk: true))
+        #expect(!AskOnPagePolicy.showsAskButton(query: " ", canAsk: true))
+        #expect(!AskOnPagePolicy.showsAskButton(query: "why", canAsk: false))
+    }
+}
+
+struct AskOnPageToneTests {
+    @Test func theSpacesHueAtAReadableStrength() {
+        // Arc's lavender space (#B9A3D9-ish) gives a mid purple: blue and red over green.
+        let purple = AskOnPageTone(themeHex: "#B9A3D9").questionOnLight
+        #expect(purple.b > purple.r && purple.r > purple.g)
+        #expect(max(purple.r, purple.g, purple.b) == 0.62)
+        let grey = AskOnPageTone(themeHex: "#DDDDDD").questionOnLight
+        #expect(abs(grey.r - 0.22) < 0.005 && abs(grey.g - 0.24) < 0.005 && abs(grey.b - 1) < 0.005)
+        // On the dark card the same purple is light and keeps its hue.
+        let onDark = AskOnPageTone(themeHex: "#B9A3D9").questionOnDark
+        #expect(onDark.b > onDark.r && onDark.r > onDark.g && onDark.b >= 0.92)
+    }
+
+    /// Every preset's colours and the hue wheel at several strengths, on both cards: the question
+    /// reads at WCAG AA, and so does the Ask button's white text. Before #408 the dark card showed
+    /// the light card's purple at 2–3:1, and a saturated blue space read 1.5:1 even on its own card.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/408")) func everyQuestionReadsOnItsCard() {
+        var swatches = SpaceTheme.presets.flatMap { [$0.accent].compactMap { $0 } + $0.colors }
+        swatches += ["#DDDDDD", "#000000", "#FFFFFF", "#C7CAFF", "#0000FF", "#FFFF00", "#00FF00", "#FF0000"]
+        for hue in stride(from: 0, to: 360, by: 15) {
+            for (s, v) in [(0.2, 0.9), (0.6, 0.6), (1.0, 1.0), (1.0, 0.3)] {
+                let c = AskOnPageTone.rgb(h: Double(hue) / 360, s: s, v: v)
+                swatches.append(String(format: "#%02X%02X%02X", Int(c.r * 255), Int(c.g * 255), Int(c.b * 255)))
+            }
+        }
+        let white: AskOnPageTone.RGB = (1, 1, 1)
+        for hex in swatches {
+            let tone = AskOnPageTone(themeHex: hex)
+            for dark in [false, true] {
+                let card = AskOnPageTone.card(dark: dark)
+                let ratio = AskOnPageTone.contrast(tone.question(dark: dark), (card, card, card))
+                #expect(ratio >= 4.5, "\(hex) on the \(dark ? "dark" : "light") card: \(ratio)")
+            }
+            #expect(AskOnPageTone.contrast(tone.button, white) >= 4.5, "Ask on \(hex)")
+        }
+    }
+
+    /// The reporter's case: a light space (Arc's lavender preset) with macOS dark. The dark card's
+    /// question is a light lavender, not the light card's purple.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/408")) func lightSpaceOnDarkMacGetsALightQuestion() {
+        let tone = AskOnPageTone(themeHex: "#C8CAFF")
+        let q = tone.questionOnDark
+        #expect(AskOnPageTone.luminance(q) > 0.25)
+        #expect(q.b > q.g)
+        #expect(AskOnPageTone.luminance(tone.questionOnLight) < 0.2)
     }
 }

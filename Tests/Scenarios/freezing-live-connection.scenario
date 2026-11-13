@@ -1,0 +1,17 @@
+# Background pages past the five used last are frozen, except a page holding a WebSocket: a freeze
+# closes its socket (Blink fails it as the page enters the back/forward cache state), so a chat or
+# mail tab left in the background lost its connection. The quiet page freezes, which shows freezing
+# is on; the WebSocket page keeps running with its connection open (page-live-connections.patch).
+cra://open?url=${PAGE}?n=quiet
+wait 2
+cra://open?url=${ORIGIN}/websocket.html?ws=${WS}
+wait 3
+repeat 6 cra://open?url=${PAGE}?n=${i}
+wait 8
+cra://debug?freezingState=1
+expect-log freezing state .*n=quiet title=.*: frozen=true
+expect-log freezing state .*websocket\.html.* title=ws open: frozen=false liveConnection=true
+# The freeze closes the socket some seconds later; the server logs it.
+wait 20
+expect-log ^ws open
+reject-log ^ws closed
