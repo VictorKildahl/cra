@@ -3883,6 +3883,27 @@ Apple Intelligence is on, so it's free and nothing leaves the Mac).
 - [?] Not seen: Arc's real grouping (the server is gone), what Arc does with a model answer naming an existing
   group, whether a header can be dragged, and the arrow Arc sometimes draws before "Clear" (offline copy).
 
+- [Cra validation, 13 Nov 2026] Stable captured group UUIDs and fitted tab IDs survive asynchronous
+  application; failed/cancelled runs remain retryable, while successful empty results consume only
+  their fitted snapshot. Store settings, observed model unavailability and target deletion invalidate
+  owned work/effects synchronously. Controlled production service/store tests cover stale results,
+  arrivals, singleton groups and exact undo order. The new local `tidy-tabs` scenario checks the five/six
+  offer boundary, three host-fake groups (including one singleton), group removal and URL order after
+  undo. The strict scenario passed. Inspected native 1x/2x captures show the light offer/running,
+  light/dark three-group result and dark undo/reoffer; short H.264 clips retain the running motion.
+  The light undo still after an appearance switch is unhovered, so it does not visibly prove reoffer.
+  An immediate one-shot undo snapshot originally found an attached old/fading header; actual persisted
+  groups were already removed and loose order restored. Fresh existing-view polling resolved the
+  probe timing without product changes. A fake host grouping is not a semantic test.
+- [Local model, B3] The final production-adapter synthetic pass reproduced Movies [0,5], Toaster
+  Shopping [1,2,3], Calendar [4] and reordered English pairs. Japanese IDs were retained, but the two
+  Kyoto travel pages became separate singleton topics; earlier omission/misgrouping runs are retained.
+  Actual SDK preflight kept 60 English tabs at reserved 3421/4096 tokens and reduced Unicode stress
+  from 41 to the same 20-ID prefix at reserved 3249/4096. These are bounded input/sample observations,
+  not a general quality pass or a real observed overflow-retry incident. The B4 lifecycle changes moved
+  the existing minimum-animation constant without changing the B3 prompt/schema/adapter. No new
+  inference or newly paired Arc/Cra geometry/motion measurement is claimed by this QA slice.
+
 ## Tidy titles and Tidy Tab Titles (Arc 1.171, 4 Nov 2026, Swift metadata + strings, Victor's Arc, 60 fps recordings)
 
 Two things share the name. Arc tidies every tab's displayed title by per-site rules, always; Arc Max's Tidy Tab

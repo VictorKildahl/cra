@@ -187,3 +187,21 @@ The production adapter has a separate SDK-compiled harness; raw real-model passe
 Final B3 budget accounting: macOS 26.0–26.3 starts with at most 2304 combined text bytes, then conservatively estimates one token per text byte plus 512 schema tokens, 256 framing tokens and `max(768, 32 × fitted tab count)` response tokens; captured prefixes reduce until the estimated sum fits actual context size. The response value is a bounded generation cap/reserve, not a tokenizer guarantee or a new group-count rule. macOS 26.4+ starts with at most 8192 bytes and counts actual instructions/prompt/schema tokens before adding those dynamic response/framing reserves. Live production-adapter evidence retained all 60 ordinary English tabs at a total reserved cost of 3421/4096; Unicode stress reduced 41 captured tabs (5578 reserved tokens) to the original 20-ID prefix (3249/4096). No newer-SDK byte-fallback restriction was applied to the English batch.
 
 The final prompt pass reproduced the recovered Movies [0,5], Toaster Shopping [1,2,3], Calendar [4] sample and the reordered English shopping/calendar/movie pairs; it retained all Japanese IDs but split the two Kyoto travel pages into separate singleton groups. Earlier misgrouping/omission logs remain available. This is limited synthetic evidence, not a general quality or complete native-parity claim. Generation-failure action consumption and service lifecycle cancellation remain the explicitly deferred next batch; this context/prompt slice does not claim to fix them.
+
+
+## B4 completion and B5 final QA boundary (13 Nov 2026)
+
+B4 now implements the deferred failure/retry and service ownership slice, with independent review
+and coordinator full native build/full WMO suite passing. Its only Core/UI timing relocation preserves
+the existing 0.9 s minimum; B3 instructions, examples, schema and adapter are unchanged. The earlier
+B3 paragraph's deferred lifecycle limitation describes that historical batch, not current B4 behavior.
+
+B5 adds the local production `tidy-tabs` offer/group/undo scenario using existing debug/fake surfaces,
+and dated parity/release notes. It adds no production readout or new golden image. The five-tab direct
+entry is rejected, six tabs offer, the host fake yields three groups including a singleton, and undo
+must remove headers/restore exact URL order and offer. The coordinator's strict scene passed; inspected
+native 1x/2x evidence includes light offer/running, light/dark result, dark undo/reoffer and short motion
+clips. The light undo still is unhovered, and no fresh paired Arc motion measurement is claimed.
+An immediate external undo snapshot raced list refresh/fading old rows; actual persisted groups were
+already gone, and fresh existing-view polling resolved the probe without a product change. Retain
+those attempts and all B3 real-model outcomes/semantic limits above; no new inference was needed.

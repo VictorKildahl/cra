@@ -277,6 +277,17 @@ built release app with a test profile. Note anything that fails in the release's
   zh-CN` and chrome://version shows `--lang=zh-CN`.
 - **#133:** pick Google in Settings ▸ Privacy ▸ Secure DNS. Without a relaunch, cra.log says
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
+- **Tidy Tabs (13 Nov 2026):** run `scripts/scenario.sh tidy-tabs` on a release test copy with
+  disposable data and the existing fake model. Check five tabs offer no Tidy; six total Today tabs do.
+  Capture idle/offered/running/result/undo at native 1x/2x in light/dark where available: no squiggle
+  left after completion/opt-out, three fake host groups including the singleton, and exact original
+  loose order plus renewed offer after undo. A layer snapshot is not a native-scale or motion pass.
+  Retain the measured divider/header/broom geometry; record unavailable capture dimensions honestly.
+  The strict scene and native 1x/2x checks passed: light offer/running, light/dark groups, dark
+  undo/reoffer and short motion clips. Light undo after appearance switching is unhovered, not visibly
+  offered. These are current Cra checks, not newly paired Arc motion measurements.
+  B3 actual-model samples and their Japanese split-topic/earlier omission limits remain separate from
+  fake grouping. Arc's server/final native validator are not newly verified by these checks.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
