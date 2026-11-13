@@ -59,6 +59,28 @@ framework `ChromeMain` owns the whole run, start to quit. So:
 - The bridge's Objective-C classes live in the framework (`//cra`), exported in `framework.exports`; the SwiftPM
   `CraCEF` target keeps `include/CraCEF.h` and, for this engine, only links Chrome's framework.
 
+## Waiting on the bridge
+
+Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, with its test.
+
+- **The sidebar player follows the media session (#411's follow-up, 13 Nov 2026).** Arc's card holds the media
+  session's status (active, ducking, suspended, inactive; `webContents:didChangeMediaSessionState:`). CEF gives
+  Cra only the audible state and `MediaSessionImpl::IsControllable()` with it, so today:
+  - a ding or Web Audio sound in a tab with a paused card turns the card to playing (`didChangeAudible` and
+    `resumesCard` in `BrowserManager` trust any sound);
+  - a card stays after its media ended, as if paused.
+
+  The bridge observes the session (`MediaSessionObserver::MediaSessionInfoChanged`) and sends its state and
+  whether it's controllable. A card is created only for a controllable session, as now. It shows playing only
+  while the session is active. It leaves 2.5 s after the session goes inactive, which is how long Chrome's media
+  controls wait (`kFreezeTimerDelay`, `media_session_notification_item.cc`). New playback within that wait keeps
+  the card. A pause keeps it however long. Tests, locked to #411:
+  - a track that ends: the card is gone after the wait and the tab stays open;
+  - a pause of more than 5 s, buffering or a quiet stretch: the card stays;
+  - a new track within the wait: the card stays, and the old timer can't remove the new one;
+  - a ding after a pause or an end: the speaker shows it, the card stays paused or gone;
+  - media just under, at and over 5 s, and a short clip with a media session `playbackState`: which get a card.
+
 ## Status
 
 - 13 Nov 2026: decided; CEF 158 not built.
