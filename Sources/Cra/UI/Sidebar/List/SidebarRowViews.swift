@@ -202,6 +202,9 @@ final class SidebarGlyphButton: NSView {
     var tint: NSColor? { didSet { if tint != oldValue { refresh() } } }
     /// Keeps the hover fill while what it opened is open (the player's volume drawer).
     var highlighted = false { didSet { if highlighted != oldValue { refresh() } } }
+    /// Right-click, ⌃-click or a held press (ButtonHold): Back and Forward's history (#416).
+    var secondaryAction: ((NSView) -> Void)?
+    private let hold = ButtonHold()
 
     init(symbol: String, size: CGFloat, height: CGFloat? = nil, iconSize: CGFloat, weight: NSFont.Weight = .medium, help: String,
          optionHelp: String? = nil, colors: SidebarColors, action: @escaping () -> Void) {
@@ -381,6 +384,7 @@ final class SidebarGlyphButton: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func mouseDown(with event: NSEvent) {
+        if hold.down(event, enabled: enabled, secondary: secondaryAction.map { f in { [weak self] in if let self { f(self) } } }) { return }
         if turnsOnPress, enabled { glyph.pressTurn(true) }
     }
     override func mouseDragged(with event: NSEvent) {
@@ -388,7 +392,12 @@ final class SidebarGlyphButton: NSView {
     }
     override func mouseUp(with event: NSEvent) {
         if turnsOnPress { glyph.pressTurn(false) }
+        if hold.up() { return }
         if enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+    }
+    override func rightMouseDown(with event: NSEvent) {
+        guard enabled, let secondaryAction else { return super.rightMouseDown(with: event) }
+        secondaryAction(self)
     }
 }
 

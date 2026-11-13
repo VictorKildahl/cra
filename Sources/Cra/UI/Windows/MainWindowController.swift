@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 @MainActor
 final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserManagerDelegate {
     unowned let app: AppDelegate
+    /// Back and Forward's history menu (#416).
+    let backForwardMenu = SidebarCreationMenuController()
     var store: SidebarStore { app.store }
     let sidebarUI = SidebarUIState()
     let sidebarActions = SidebarActions()
@@ -334,6 +336,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         sidebarActions.goBack = { [weak self] in self?.goBack() }
         sidebarActions.goForward = { [weak self] in self?.currentBrowser?.goForward() }
+        sidebarActions.showBackForwardMenu = { [weak self] tab, direction, anchor in
+            self?.showBackForwardMenu(tab: tab, direction: direction, anchor: anchor)
+        }
         sidebarActions.reload = { [weak self] in
             guard let b = self?.currentBrowser else { return }
             b.isLoading ? b.stopLoading() : b.reload()
@@ -2327,6 +2332,56 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .none:
             break
         }
+    }
+
+    /// Right-click or hold Back or Forward (#416): the pages that way in tab `tab`'s history (a
+    /// split pane's, or the tab in front), in Arc's menu under the button; a row goes straight to
+    /// its page. Chromium's history comes over DevTools, so the main thread never waits for it.
+    func showBackForwardMenu(tab: UUID?, direction: BackForwardMenu.Direction, anchor: NSView) {
+        guard let id = tab ?? browsers.visibleTabID, let b = browsers.runtime(for: id)?.browser else { return }
+        ArcTooltipController.shared.dismiss()
+        b.sendDevToolsMethod("Page.getNavigationHistory", params: "{}") { [weak self, weak anchor] result, _ in
+            MainActor.assumeIsolated {
+                guard let self, let anchor, let parent = anchor.window, let result else { return }
+                let rows = BackForwardMenu.rows(history: result, direction: direction)
+                CraLog.note("back-forward menu: \(direction == .back ? "back" : "forward"), \(rows.count) rows")
+                guard !rows.isEmpty else { return }
+                let favicons = self.app.favicons
+                let items = rows.map { row in
+                    let key = FaviconKey.key(for: row.url)
+                    return BackForwardMenuItem(title: row.title, icon: favicons.image(forKey: key), flip: favicons.glyphIsDark(forKey: key) == true)
+                }
+                let tones = ArcMenuTones(theme: self.store.focusedSpace(window: self.windowID).theme.shown)
+                func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
+                let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
+                                                       shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
+                let menu = BackForwardMenuView(items: items, colors: colors) { [weak self] index in
+                    guard let self else { return }
+                    self.backForwardMenu.close()
+                    guard let index, let b = self.browsers.runtime(for: id)?.browser else { return }
+                    if tab != nil, self.selectedTabID != id { self.store.selectTab(id, window: self.windowID) }
+                    b.sendDevToolsMethod("Page.navigateToHistoryEntry", params: "{\"entryId\":\(rows[index].entryID)}") { _, error in
+                        if let error { CraLog.note("back-forward menu: \(error)") }
+                    }
+                }
+                let rect = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+                let screen = parent.screen?.visibleFrame ?? rect.insetBy(dx: -1000, dy: -1000)
+                let place = BackForwardMenu.Layout.placement(button: rect, screen: screen, rows: items.count)
+                menu.arrowX = place.tailX
+                self.backForwardMenu.present(menu, frame: place.frame, from: anchor, systemShadow: false)
+            }
+        }
+    }
+
+    /// cra://debug?historyMenu=<label> (#416): the history menu's rows, width, the tail's offset
+    /// from the button's centre and the gap from the button's bottom to the tail's tip, in points.
+    func backForwardMenuReadout(_ label: String) -> String {
+        guard let menu = backForwardMenu.content as? BackForwardMenuView, let frame = menu.window?.frame,
+              let anchor = backForwardMenu.anchor, let parent = anchor.window else { return "history menu \(label): closed" }
+        let button = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        let m = BackForwardMenu.Layout.margin
+        return "history menu \(label): rows=\(menu.rowCount) width=\(Int(frame.width - 2 * m)) tail=\(Int((frame.minX + menu.arrowX - button.midX).rounded()))"
+            + " gap=\(Int((button.minY - frame.maxY + m).rounded())) selected=\(menu.selected ?? -1)"
     }
 
     /// The tab whose page `event` landed on: a Chromium page in its own host window, or the pane

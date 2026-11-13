@@ -48,6 +48,9 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var inPictureInPicture = false
     private var pictureInPicturePlaying = false
     private var hoverURL = ""
+    /// Page.getNavigationHistory's entry ids for this page's back-forward items (#416).
+    private var historyIDs: [ObjectIdentifier: Int] = [:]
+    private var historyItems: [Int: WKBackForwardListItem] = [:]
     private var findQuery = ""
     private var findCount = 0
     private var findIndex = 0
@@ -836,6 +839,16 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 web.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak self] in
                     self?.reply(completion, "{}", nil)
                 }
+            case "Page.getNavigationHistory":
+                reply(completion, navigationHistory(web.backForwardList), nil)
+            case "Page.navigateToHistoryEntry":
+                let id = Self.object(params)["entryId"] as? Int ?? -1
+                let list = web.backForwardList
+                guard let item = historyItems[id], (list.backList + list.forwardList).contains(where: { $0 === item }) else {
+                    return reply(completion, nil, "no history entry \(id)")
+                }
+                web.go(to: item)
+                reply(completion, "{}", nil)
             case "Cra.setFreezingVote", "Cra.load":
                 // WebKit decides when a hidden page sleeps; tab sleeping closes the page instead.
                 reply(completion, "{}", nil)
@@ -844,6 +857,27 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 reply(completion, nil, "\(method) is not available in a WebKit page")
             }
         }
+    }
+
+    /// Page.getNavigationHistory as Chromium answers it, from WebKit's back-forward list: the
+    /// pages oldest first, `currentIndex` the one showing. An item keeps its id while it lives.
+    @MainActor
+    private func navigationHistory(_ list: WKBackForwardList) -> String {
+        guard let current = list.currentItem else { return #"{"currentIndex":0,"entries":[]}"# }
+        let items = list.backList + [current] + list.forwardList
+        var live: [ObjectIdentifier: Int] = [:]
+        var byID: [Int: WKBackForwardListItem] = [:]
+        let entries: [[String: Any]] = items.map { item in
+            let key = ObjectIdentifier(item)
+            let id = historyIDs[key] ?? ((historyIDs.values.max() ?? 0) + live.count + 1)
+            live[key] = id
+            byID[id] = item
+            return ["id": id, "url": item.url.absoluteString, "title": item.title ?? ""]
+        }
+        historyIDs = live
+        historyItems = byID
+        let object: [String: Any] = ["currentIndex": list.backList.count, "entries": entries]
+        return (try? JSONSerialization.data(withJSONObject: object)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
     }
 
     /// Completions come on the main queue, a turn later, as CraCEF's do.

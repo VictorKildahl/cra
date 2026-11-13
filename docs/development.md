@@ -144,6 +144,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-sidebar-creation-menu.sh`: the sidebar + menu's real window and view off screen:
   rows and keys, clicks on enabled and disabled rows, Arc's open and close timings, and the +
   turning into an × on its spring.
+- `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
+  keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
+  button closing it, and the button's hold (⌃-click stays a plain click).
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and
