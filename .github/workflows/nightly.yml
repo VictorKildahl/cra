@@ -25,15 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Read pinned CEF version
-        id: cef
-        run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache CEF
+      - name: Cache the engine
         uses: actions/cache@v6
         with:
-          path: vendor/cef
-          key: cef-${{ runner.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+          path: vendor/engine
+          key: engine-${{ runner.arch }}-${{ hashFiles('scripts/fetch-engine.sh') }}
 
       # Release, as users run it: the scenario budgets (the recorder's 0.1 % of a core above all)
       # are a release build's. A debug build's recorder alone costs 0.16–0.22 %.

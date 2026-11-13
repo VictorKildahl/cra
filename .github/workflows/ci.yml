@@ -60,15 +60,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Read pinned CEF version
-        id: cef
-        run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache CEF
+      - name: Cache the engine
         uses: actions/cache@v6
         with:
-          path: vendor/cef
-          key: cef-${{ runner.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+          path: vendor/engine
+          key: engine-${{ runner.arch }}-${{ hashFiles('scripts/fetch-engine.sh') }}
 
       - name: Build (debug, ad-hoc signed)
         run: scripts/build.sh debug
@@ -107,15 +103,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Read pinned CEF version
-        id: cef
-        run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache CEF
+      - name: Cache the engine
         uses: actions/cache@v6
         with:
-          path: vendor/cef-x86_64
-          key: cef-x86_64-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+          path: vendor/engine-x86_64
+          key: engine-x86_64-${{ hashFiles('scripts/fetch-engine.sh') }}
 
       - name: Build (debug, ad-hoc signed)
         run: CRA_ARCH=x86_64 scripts/build.sh debug

@@ -54,16 +54,12 @@ jobs:
       - name: Normalise version
         run: echo "CRA_VERSION=${CRA_VERSION#v}" >> "$GITHUB_ENV"
 
-      - name: Read pinned CEF version
-        id: cef
-        run: echo "version=$(sed -n 's/^CEF_VERSION="${CEF_VERSION:-\(.*\)}"$/\1/p' scripts/fetch-cef.sh)" >> "$GITHUB_OUTPUT"
-
-      # build.sh keeps the runner's own CPU in vendor/cef and the other one in vendor/cef-<arch>.
-      - name: Cache CEF
+      # build.sh keeps the runner's own CPU in vendor/engine and the other one in vendor/engine-<arch>.
+      - name: Cache the engine
         uses: actions/cache@v6
         with:
-          path: ${{ matrix.arch == 'arm64' && 'vendor/cef' || format('vendor/cef-{0}', matrix.arch) }}
-          key: cef-${{ matrix.arch }}-${{ steps.cef.outputs.version }}-${{ hashFiles('scripts/fetch-cef.sh') }}
+          path: ${{ matrix.arch == 'arm64' && 'vendor/engine' || format('vendor/engine-{0}', matrix.arch) }}
+          key: engine-${{ matrix.arch }}-${{ hashFiles('scripts/fetch-engine.sh') }}
 
       - name: Import signing certificate
         id: cert
@@ -97,9 +93,9 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           CRA_GOOGLE_API_KEY: ${{ secrets.CRA_GOOGLE_API_KEY }}
-          # The repository variable CRA_ALLOW_OLD_CEF=1 ships the pinned CEF past release.sh's check
-          # (docs/release.md, "A release ships the newest CEF"). Delete the variable after the release.
-          CRA_ALLOW_OLD_CEF: ${{ vars.CRA_ALLOW_OLD_CEF }}
+          # The repository variable CRA_ALLOW_OLD_ENGINE=1 ships the pinned engine past release.sh's check
+          # (docs/release.md). Delete the variable after the release.
+          CRA_ALLOW_OLD_ENGINE: ${{ vars.CRA_ALLOW_OLD_ENGINE }}
         run: scripts/release.sh
 
       - name: Upload artifacts
