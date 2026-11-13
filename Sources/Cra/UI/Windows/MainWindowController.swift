@@ -4043,8 +4043,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.findHost.isHidden = enabled
         askOnPage.view.isHidden = !enabled
         let theme = focusedSpace.theme.shown
-        let c = AskOnPageTone.accent(themeHex: theme.accent ?? theme.colors.first ?? "#DDDDDD", dark: theme.isDark)
-        askOnPage.setAccent(c)
+        // Not theme.isDark: the card follows macOS, so it makes a question for each appearance (#408).
+        askOnPage.setTone(themeHex: theme.accent ?? theme.colors.first ?? "#DDDDDD")
         let tab = browsers.visibleTabID
         askOnPage.pageChanged(tab: tab, url: tab.flatMap { store.item($0)?.tab?.url }.flatMap(URL.init(string:)))
         refitFindPanel()

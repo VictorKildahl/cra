@@ -28,8 +28,9 @@ final class AskOnPageState {
     var canAsk = false
     var messages: [Message] = []
     var quotes: [String: QuoteSearch] = [:]
-    /// The space's colour for the question and the Ask button.
-    var accent = Color(.sRGB, red: 0.22, green: 0.24, blue: 1)
+    /// The space's colour for the question and the Ask button, one question per card appearance:
+    /// the card follows macOS, not the space (#408).
+    var tone = AskOnPageTone(themeHex: "#DDDDDD")
     /// The card's height as laid out, which its panel follows.
     var height: CGFloat = AskOnPageMetrics.rowHeight
 
@@ -71,8 +72,8 @@ final class AskOnPageController {
 
     var size: NSSize { NSSize(width: AskOnPageMetrics.width, height: state.height) }
 
-    func setAccent(_ c: (r: Double, g: Double, b: Double)) {
-        state.accent = Color(.sRGB, red: c.r, green: c.g, blue: c.b)
+    func setTone(themeHex: String) {
+        state.tone = AskOnPageTone(themeHex: themeHex)
     }
 
     private func makeView() -> NSView {
@@ -219,6 +220,20 @@ final class AskOnPageController {
         findQuote(quotes[n - 1].text)
     }
 
+    /// cra://debug?askTone=<label>: the card's appearance (its own, as SwiftUI sees it), the question's
+    /// colour on it with their contrast, and the Ask button's against its white text (#408).
+    func toneReadout(_ label: String) -> String {
+        let dark = view.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let card = AskOnPageTone.card(dark: dark)
+        let q = state.tone.question(dark: dark), b = state.tone.button
+        func hex(_ c: AskOnPageTone.RGB) -> String {
+            String(format: "#%02X%02X%02X", Int((c.r * 255).rounded()), Int((c.g * 255).rounded()), Int((c.b * 255).rounded()))
+        }
+        return String(format: "ask tone %@: card=%@ question=%@ contrast=%.1f button=%@ white=%.1f", label,
+                      dark ? "dark" : "light", hex(q), AskOnPageTone.contrast(q, (card, card, card)),
+                      hex(b), AskOnPageTone.contrast(b, (1, 1, 1)))
+    }
+
     /// cra://debug readout: messages, the last reply's parts and the read line.
     func readout(_ label: String) -> String {
         guard let last = state.messages.last else { return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=0" }
@@ -255,7 +270,7 @@ struct AskOnPageView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         // Arc's card is nearly opaque (the reporter's capture): the material only shows at its edge.
         .background(RoundedRectangle(cornerRadius: AskOnPageMetrics.radius, style: .continuous)
-            .fill(scheme == .dark ? Color(white: 0.16).opacity(0.96) : Color(white: 0.985).opacity(0.97)))
+            .fill(Color(white: AskOnPageTone.card(dark: scheme == .dark)).opacity(scheme == .dark ? 0.96 : 0.97)))
         .overlay(alignment: .topTrailing) {
             if state.inConversation { closeButton.padding([.top, .trailing], 12) }
         }
@@ -305,7 +320,7 @@ struct AskOnPageView: View {
                 Button { if ready { controller.ask(overlay.findQuery) } } label: {
                     Text("Ask").font(.callout.weight(.semibold)).foregroundStyle(.white)
                         .padding(.vertical, 5).padding(.horizontal, 12)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(state.accent))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color(state.tone.button)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("askOnPageAsk")
@@ -375,11 +390,12 @@ private struct AskOnPageMessageView: View {
     let message: AskOnPageState.Message
     @Bindable var state: AskOnPageState
     let controller: AskOnPageController
+    @Environment(\.colorScheme) private var scheme
     @State private var pulse = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(message.question).font(.body.bold()).foregroundStyle(state.accent)
+            Text(message.question).font(.body.bold()).foregroundStyle(Color(state.tone.question(dark: scheme == .dark)))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.trailing, 24)
                 .textSelection(.enabled)
@@ -454,4 +470,8 @@ private struct AskOnPageQuote: View {
         }
         .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+private extension Color {
+    init(_ c: AskOnPageTone.RGB) { self.init(.sRGB, red: c.r, green: c.g, blue: c.b) }
 }

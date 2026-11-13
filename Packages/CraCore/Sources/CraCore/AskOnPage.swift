@@ -331,12 +331,65 @@ public enum AskOnPageReply {
 /// The card's theme colour (Arc's WindowTheme palette, read at run time there): the question, the
 /// Ask button. Arc's capture on a lavender space shows a mid purple; here it is the space's colour
 /// at a readable strength, kept to its hue. A grey space gets Max's blue.
-public enum AskOnPageTone {
-    public static func accent(themeHex: String, dark: Bool) -> (r: Double, g: Double, b: Double) {
+///
+/// The card follows macOS, not the space (its panel isn't in the space's shell), so a light space
+/// on a dark Mac has a dark card (#408). Both questions are made, the card picks by its own
+/// appearance, and each one reads at least 4.5:1 (WCAG AA) on its card: a colour too dark for the
+/// dark card is lifted, then washed toward white; one too light for the light card is darkened.
+/// The Ask button carries white text, so it takes the light card's question in both appearances.
+public struct AskOnPageTone {
+    public typealias RGB = (r: Double, g: Double, b: Double)
+
+    public static let minimumContrast = 4.5
+    /// The card's grey in each appearance (it is 96–97 % opaque over the page).
+    public static func card(dark: Bool) -> Double { dark ? 0.16 : 0.985 }
+
+    public let questionOnLight: RGB
+    public let questionOnDark: RGB
+    /// The Ask button's fill, under white text.
+    public var button: RGB { questionOnLight }
+
+    public func question(dark: Bool) -> RGB { dark ? questionOnDark : questionOnLight }
+
+    public init(themeHex: String) {
         let c = HexColor.components(themeHex) ?? (0.5, 0.5, 0.5)
-        let (h, s, _) = hsb(c.r, c.g, c.b)
-        if s < 0.08 { return dark ? (0.47, 0.50, 1) : (0.22, 0.24, 1) }
-        return rgb(h: h, s: max(s, dark ? 0.45 : 0.55), v: dark ? 0.92 : 0.62)
+        var (h, s, _) = Self.hsb(c.r, c.g, c.b)
+        var light = (s: max(s, 0.55), v: 0.62), dark = (s: max(s, 0.45), v: 0.92)
+        if s < 0.08 {
+            // Max's blue: (0.22, 0.24, 1) on light, (0.47, 0.50, 1) on dark.
+            (h, s, _) = Self.hsb(0.22, 0.24, 1)
+            light = (s, 1)
+            dark = (Self.hsb(0.47, 0.50, 1).1, 1)
+        }
+        let lightCard = Self.card(dark: false), darkCard = Self.card(dark: true)
+        questionOnLight = Self.readable(h: h, s: light.s, v: light.v, on: (lightCard, lightCard, lightCard), lighter: false)
+        questionOnDark = Self.readable(h: h, s: dark.s, v: dark.v, on: (darkCard, darkCard, darkCard), lighter: true)
+    }
+
+    /// WCAG 2 contrast ratio of two sRGB colours (1 to 21).
+    public static func contrast(_ a: RGB, _ b: RGB) -> Double {
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    static func luminance(_ c: RGB) -> Double {
+        func lin(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+    }
+
+    /// The hue at s, v, stepped until it reads on bg: lighter raises v, then lowers s (toward
+    /// white); darker lowers v (toward black). Both ends always read on the card's greys.
+    static func readable(h: Double, s: Double, v: Double, on bg: RGB, lighter: Bool) -> RGB {
+        var s = s, v = v
+        while true {
+            let c = rgb(h: h, s: s, v: v)
+            if contrast(c, bg) >= minimumContrast { return c }
+            if lighter {
+                if v < 1 { v = min(1, v + 0.01) } else if s > 0 { s = max(0, s - 0.01) } else { return c }
+            } else {
+                if v > 0 { v = max(0, v - 0.01) } else { return c }
+            }
+        }
     }
 
     static func hsb(_ r: Double, _ g: Double, _ b: Double) -> (Double, Double, Double) {
