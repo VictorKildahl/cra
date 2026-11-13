@@ -70,6 +70,8 @@ struct SpacesView: View {
             .accessibilityLabel("Close")
             .accessibilityIdentifier("spaces-close")
         }
+        // White text on a dark Space, as Arc Search draws it (`MobileSpaces.sheetStyle`).
+        .environment(\.colorScheme, style(for: spaces.first { $0.id == model.selected })?.lightText == true ? .dark : .light)
         .animation(.easeInOut(duration: 0.25), value: model.selected)
         .onAppear { model.load() }
     }
@@ -78,8 +80,8 @@ struct SpacesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text(space.title)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.primary.opacity(0.5))
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.9))
                     .padding(.top, 22)
                     .padding(.bottom, 10)
                     .accessibilityIdentifier("space-title")
@@ -167,8 +169,12 @@ struct SpacesView: View {
 
     /// The Space's colour, softened as Arc Search's sheet is.
     private func tint(for space: MobileSpaces.SpaceView?) -> Color {
-        guard let hex = space?.colors.first, let color = UIColor(hex: hex) else { return Color(.systemGroupedBackground) }
-        return Color(color.blended(with: .white, by: 0.35))
+        guard let fill = style(for: space)?.fill, let color = UIColor(hex: fill) else { return Color(.systemGroupedBackground) }
+        return Color(color)
+    }
+
+    private func style(for space: MobileSpaces.SpaceView?) -> MobileSpaces.SheetStyle? {
+        space.flatMap { MobileSpaces.sheetStyle(colors: $0.colors) }
     }
 }
 

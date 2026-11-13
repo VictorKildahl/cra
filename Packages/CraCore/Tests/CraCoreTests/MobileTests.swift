@@ -967,3 +967,14 @@ struct MobileBrowseFollowUpTests {
         #expect(html.contains("<h2>Sources</h2>") && html.contains("https://ovens.example/guide"))
     }
 }
+
+/// The Spaces sheet's colour and text.
+struct MobileSpacesSheetTests {
+    @Test func darkSpacesGetWhiteTextAndLightOnesDark() {
+        let phantom = MobileSpaces.sheetStyle(colors: ["#181818", "#262626"])
+        #expect(phantom == .init(fill: "#696969", lightText: true))
+        #expect(MobileSpaces.sheetStyle(colors: ["#8A57B5"])?.lightText == true, "a purple like Arc Search's")
+        #expect(MobileSpaces.sheetStyle(colors: ["#C7CAFF", "#FFE5E5"])?.lightText == false)
+        #expect(MobileSpaces.sheetStyle(colors: []) == nil)
+    }
+}

@@ -70,6 +70,29 @@ public enum MobileSpaces {
     }
 }
 
+extension MobileSpaces {
+    /// The Spaces sheet's colour and its text: the Space's first colour softened a third of the
+    /// way to white, and white text where that comes out dark enough (Arc Search's purple Space,
+    /// #a687c8 in TidBITS' screenshot, has white text).
+    public struct SheetStyle: Equatable {
+        public var fill: String
+        public var lightText: Bool
+
+        public init(fill: String, lightText: Bool) {
+            self.fill = fill
+            self.lightText = lightText
+        }
+    }
+
+    public static func sheetStyle(colors: [String]) -> SheetStyle? {
+        guard let first = colors.first, let c = HexColor.components(first) else { return nil }
+        func softened(_ v: Double) -> Double { v + (1 - v) * 0.35 }
+        let (r, g, b) = (softened(c.r), softened(c.g), softened(c.b))
+        let fill = String(format: "#%02X%02X%02X", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
+        return SheetStyle(fill: fill, lightText: (HexColor.luminance(fill) ?? 1) < 0.62)
+    }
+}
+
 /// "Favorite in App": the sites the phone keeps under the empty search field. `favorites.json`.
 public struct MobileFavorites: Codable, Equatable {
     public struct Site: Codable, Equatable, Identifiable {
