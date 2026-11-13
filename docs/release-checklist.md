@@ -63,6 +63,10 @@ built release app with a test profile. Note anything that fails in the release's
   the quote in the page, or says "Quote not found". Ask a follow-up; past 450 pt the conversation scrolls
   with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
   (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
+  Record the separate exact native quote-highlight/selection, field-editor key/focus and 1x/2x
+  appearance gates in [Ask validation](ask-on-page-validation.md). A passing basic scenario, native
+  count or script-only DOM Range test does not close these gates. Preserve conversation during
+  quote navigation and ordinary Find restoration; clear it on a genuine document/owner change.
 
 - **#407, Instant Links:** with Apple Intelligence on and Settings ▸ Max ▸ Instant Links on, type
   "top 3 pizza places in naples" in ⌘T and press Shift-Return: the bar closes, "Searching the web for you…"

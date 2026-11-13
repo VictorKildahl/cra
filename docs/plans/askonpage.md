@@ -1,7 +1,7 @@
 # Ask on Page implementation plan
 
-Status: B1–B3 Core, bounded current-page context and guided service, plus B4 correlated Find, are independently reviewed and committed through `ea28e0832aa6b8d817c8d224e6fe1e0611748ab7`. The 13 November upstream reconciliation amendment below is a new plan-only proposal awaiting independent review. No merge, source implementation, commit or push is authorized by this amendment. Earlier status, transport, UI ownership, eligibility and batch statements are historical where this amendment supersedes them.
-Branch: `askonpage`, original base `fccc893`; reconciliation target `upstream/main` at `426c34552a72a1e30da672e42811a90943e190a7`.
+Status (13 November): the R0 reconciliation plan was approved. R1 native integration, R2 eligibility/synchronous ownership, R3a guarded exact DOM quote operation, R3b native input/layout and R3c standalone CoreGraphics import are independently reviewed and committed through `653ed22bf6c5f4482fca9ceaf8a9143ace6eea8e`. R4 adds integrated tests and the [validation record](../ask-on-page-validation.md). Root release builds, the full WMO suite, actual isolated CEF/WebKit script matrices and bounded native routing/generation journeys passed. The reviewed implementation may be published with the recorded limitations; native full-literal highlighting/selection, physical Find-panel key/focus and visual/motion acceptance remain OPEN. Model quality failures remain recorded. Neither complete parity nor the overall goal is complete. Earlier design/batch statements remain historical where the approved reconciliation amendment supersedes them.
+Branch: `askonpage`, original base `fccc893`; upstream `426c34552a72a1e30da672e42811a90943e190a7` merged by reviewed R1.
 Worktree: `/Users/varunaditya/.codex/worktrees/cra-askonpage/cra`.
 
 ## Outcome and scope
@@ -735,5 +735,6 @@ shared full build/test/runtime/display resources; no author app launch or global
 | Visual and tone | Historical/reference and isolated Cra captures on same display at 1x/2x, dark/light including light space on dark Mac, hover/loading/quote errors, growth/450 cap/narrow clamp, focus and reduced motion. Keep #408 readout/scenario and inspect actual pixels/effective appearance. Record unresolved compositing separately. |
 | Model and final checks | Actual typed on-device opening/follow-up, unsupported background, summary/translation/multiple-source/literal-symbol/CJK/large-context samples with native fields/schema/input counts and explicit failures. Focused tests/lint/promises/diff, coordinator full suite/build and whole-branch review. Fake samples, successful compilation or HTTP responses alone cannot close runtime/visual/model gates. |
 
-Current status after this author amendment: documentation only. No source changed, no merge
-performed, no native/model/runtime/display verification rerun, no commit and no push.
+Status at the original R0 author amendment: documentation only; no source/merge/runtime action
+had occurred. The current reviewed implementation and open acceptance gates are recorded at
+the top of this plan and in [Ask validation](../ask-on-page-validation.md).

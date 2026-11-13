@@ -743,6 +743,7 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::placeholdersAreArcs  bd66b23c595c
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::quotesRequireTheExactTransmittedSource  434aa85918b2
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnRequiresAnOwnedFinalZeroAndNeverAsksBackward  0f6a20126e6d
+#393   Tests/AskOnPageContentTests.swift::liveQuoteEdgeMatrix  5ad5d62f9672
 #393   Tests/AskOnPageContentTests.swift::liveQuoteRanges  16f2952c7b97
 #393   Tests/AskOnPageControllerTests.swift::hostedCardReleasesItsOwner  919f26c7bce2
 #393   Tests/AskOnPageControllerTests.swift::nativeCardOwnsOneService  24fbeac223ff
@@ -759,7 +760,7 @@
 #393   Tests/AskOnPageSelectionTests.swift::selectionFindsOnceThroughEveryPanelPath  1cab26ba4550
 #393   Tests/AskOnPageSelectionTests.swift::staleSelectionCannotChangeTheNewOwner  2b4dbec3c27c
 #393   Tests/BrowserManagerLifecycleTests.swift::askOnPageQuoteCase  89183fa8a8fa
-#393   Tests/Scenarios/ask-on-page.scenario  f8c87a909b54
+#393   Tests/Scenarios/ask-on-page.scenario  715a3bae0368
 #399   Tests/EmojiLabelTests.swift::wholeEmojiWhenClipped  bec18dc87181
 #400   Tests/ChromiumWindowCornersTests.swift::squareWhenAppKitRoundsTheWindow  a137d1f29319
 #401   Packages/CraCore/Tests/CraCoreTests/SwitcherWindowsTests.swift::switchersListWindowsWithButtonsOrAStandardSubrole  9f9f67f53678

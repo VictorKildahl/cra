@@ -1,9 +1,9 @@
 # promise: #393
-# Arc Max's Ask on Page (Arc 1.173.1, read from its binary): with the setting on, ⌘F's bar is a
-# "Find or ask…" card. Typing still finds; Return on text that isn't on the page asks the model
-# (Cra's test model here) about the page's text, which leaves out navigation, headers, footers and
-# hidden parts as Arc's WebPageSnapshot does. The answer's quote gets Find on Page, which runs the
-# page's find on it. A long page is read in part and the card says how much.
+# Guided per-window Ask integration over HTTP. This exercises production query/submit/quote
+# commands, correlated quote completion and ordinary Find restoration. Exact native
+# highlighted-text/selection, physical keys/UI and ownership have separate R4 gates in
+# docs/ask-on-page-validation.md; native counts do not satisfy the literal selection gate.
+# Fake guided fields are not local-model quality evidence.
 pace 0.5
 env CRA_TIDY_FAKE_MODEL=1
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "askOnPage": true}
@@ -15,45 +15,60 @@ cra://action/find
 cra://debug?askOnPage=open
 expect-log ask open: enabled=true canAsk=true messages=0$
 
-# Text on the page finds, as the plain bar does.
-cra://debug?askQuery=StandBy
-wait 1
+# Native ordinary Find remains ordinary. Counts attest this command path, not literal selection.
+cra://debug?findQuery=StandBy
+expect-log find generation=[0-9A-F-]+ identifier=[0-9]+ count=1 ordinal=1 final=true purpose=ordinary
 cra://debug?askOnPage=found
 expect-log ask found: enabled=true canAsk=true messages=0$
 
-# A question isn't on the page: Return asks. The test model quotes the first sentence sharing a word
-# with the question; the nav's and the hidden paragraph's "reactions" come first on the page but are
-# never read, so it quotes the article's ("fireworks" has "work").
-cra://debug?askQuery=How do reactions work?
+# Set the absent query first and wait for its final ordinary zero. Re-submit unchanged input
+# through the existing Return policy; nil/pending counts must not be used as auto-Ask evidence.
+cra://debug?findQuery=How%20do%20reactions%20work%3F
+expect-log find generation=[0-9A-F-]+ identifier=[0-9]+ count=0 ordinal=0 final=true purpose=ordinary
+cra://debug?askQuery=How%20do%20reactions%20work%3F
 wait 2
 cra://debug?askOnPage=asked
-expect-log ask asked: enabled=true canAsk=true messages=1 finished=true quotes=1 read=- search=\[\] quote="Add a reaction that fills the camera fra" height=\d+$
+expect-log ask asked: enabled=true canAsk=true messages=1 finished=true quotes=1 read=- search=\[\] height=[0-9]+$
 reject-log ask asked: .*height=48$
 
+# Find the complete verified plain quote and preserve the conversation. The found status is
+# from the current guarded DOM operation. CEF native Find clears window.getSelection(); the
+# separate full-literal native highlight/selection gate must remain open until observed.
 cra://debug?askFindQuote=1
+expect-log find generation=[0-9A-F-]+ identifier=[0-9]+ count=1 ordinal=1 final=true purpose=quote
 wait 1
 cra://debug?askOnPage=quote
-expect-log ask quote: .*search=\[found\]
-expect-log Ask on Page: quote found
+expect-log ask quote: enabled=true canAsk=true messages=1 finished=true quotes=1 read=- search=\[found\] height=[0-9]+$
 
-# A long page: only the first part fits, and the card says how much it read.
-cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const a=document.querySelector('article');for(let i=0;i<40;i++){const p=document.createElement('p');p.textContent='Padding paragraph number '+i+' that makes the page much longer than the model can read in one go.';a.append(p)}return 'long'})()"}
-expect-log Cra cdp Runtime.evaluate .*"value":"long"
-cra://debug?ask=What is StandBy?
+# Explicit ordinary next restores its own input/query after quote purpose without closing chat.
+cra://debug?findQuery=StandBy&findStep=next
+expect-log find generation=[0-9A-F-]+ identifier=[0-9]+ count=1 ordinal=1 final=true purpose=ordinary
+wait 0.5
+cra://debug?askOnPage=restored
+expect-log ask restored: enabled=true canAsk=true messages=1 finished=true quotes=1
+
+# Keep the actual DOM under the bounded extraction ceiling, but above the local fitted budget,
+# so the fraction has a known denominator. Do not expect the old server's 16k-token allowance.
+cra://debug?cdp=Runtime.evaluate&params=%7B%22expression%22%3A%22%28%28%29%3D%3E%7Bconst%20a%3Ddocument.querySelector%28%27article%27%29%3Bfor%28let%20i%3D0%3Bi%3C140%3Bi%2B%2B%29%7Bconst%20p%3Ddocument.createElement%28%27p%27%29%3Bp.textContent%3D%27Padding%20%27%2Bi%2B%27%3A%20the%20measured%20record%20describes%20the%20quiet%20room%2C%20its%20shelves%2C%20and%20afternoon%20light.%27%3Ba.append%28p%29%7Dconst%20n%3Da.innerText.length%3Breturn%20%27ask-long-fixture%20bounded%3D%27%2B%28n%3E11000%26%26n%3C16000%29%7D%29%28%29%22%2C%22returnByValue%22%3Atrue%7D
+expect-log Cra cdp Runtime.evaluate .*"value":"ask-long-fixture bounded=true"
+cra://debug?ask=What%20is%20StandBy%3F
 wait 2
 cra://debug?askOnPage=long
-expect-log ask long: enabled=true canAsk=true messages=2 finished=true quotes=1 read=This page was long, so I read the first \d\d%\.
+expect-log ask long: enabled=true canAsk=true messages=2 finished=true quotes=1 read=This page was long, so I read the first [0-9]+%\.
 
-# Another page ends the conversation.
+# A genuine new document clears the captured owner and completed conversation.
 cra://navigate?url=${ORIGIN}/ask.html?n=2
-expect-log Ask on Page: another page, the conversation ends
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
 cra://debug?askOnPage=navigated
 expect-log ask navigated: enabled=true canAsk=true messages=0$
 
-# Closing ends the conversation; the next ⌘F starts from the find bar.
-cra://debug?ask=What is StandBy?
+# Close uses the production close/reset route; reopening begins with an empty conversation.
+cra://debug?ask=What%20is%20StandBy%3F
 wait 2
-cra://dismiss
+cra://debug?askOnPage=before-close
+expect-log ask before-close: enabled=true canAsk=true messages=1 finished=true quotes=1
+cra://debug?findStep=close
 cra://action/find
 cra://debug?askOnPage=again
 expect-log ask again: enabled=true canAsk=true messages=0$
