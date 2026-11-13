@@ -9,6 +9,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
@@ -115,9 +116,9 @@ void NotifyExtensionSettings() {
 class Profiles : public ProfileManagerObserver, public ProfileObserver {
  public:
   void Start() {
-    ProfileManager* manager = g_browser_process->profile_manager();
-    manager->AddObserver(this);
-    for (Profile* profile : manager->GetLoadedProfiles()) {
+    manager_ = g_browser_process->profile_manager();
+    manager_->AddObserver(this);
+    for (Profile* profile : manager_->GetLoadedProfiles()) {
       Added(profile, /*notify=*/false);
     }
     local_state_.Init(g_browser_process->local_state());
@@ -135,7 +136,9 @@ class Profiles : public ProfileManagerObserver, public ProfileObserver {
   void OnProfileAdded(Profile* profile) override { Added(profile, /*notify=*/true); }
   void OnProfileManagerDestroying() override {
     observations_.RemoveAllObservations();
-    g_browser_process->profile_manager()->RemoveObserver(this);
+    // The manager being destroyed: g_browser_process no longer returns it.
+    manager_->RemoveObserver(this);
+    manager_ = nullptr;
     Stop();
   }
 
@@ -167,6 +170,7 @@ class Profiles : public ProfileManagerObserver, public ProfileObserver {
     }
   }
 
+  raw_ptr<ProfileManager> manager_ = nullptr;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> observations_{this};
   PrefChangeRegistrar local_state_;
   std::map<Profile*, std::unique_ptr<PrefChangeRegistrar>> extension_settings_;

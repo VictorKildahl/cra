@@ -1240,8 +1240,17 @@ bool CDPPipeSetUp() {
 
 namespace cra {
 
+// Chrome closes its windows at quit: the hidden ones leave Cra's windows first.
+void DetachHostWindows() {
+  for (auto& [profile, host] : Hosts()) {
+    NSWindow* hidden = host->window();
+    [hidden.parentWindow removeChildWindow:hidden];
+  }
+}
+
 void StopBridge() {
   g_quitting = true;
+  DetachHostWindows();
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->RemoveObserver(&Captures());
 }
 
@@ -2395,6 +2404,7 @@ void RunReadyBlocks() {
   }
   g_quitting = true;
   cra::StopProfilePrefs();
+  cra::DetachHostWindows();
   delete g_keep_alive;
   g_keep_alive = nullptr;
   // Chrome keeps running while a --remote-debugging-pipe client is attached: hang up.

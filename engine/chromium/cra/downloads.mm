@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,9 +25,9 @@ class Downloads : public ProfileManagerObserver,
  public:
   void Start(DownloadUpdated updated) {
     updated_ = updated;
-    ProfileManager* manager = g_browser_process->profile_manager();
-    manager->AddObserver(this);
-    for (Profile* profile : manager->GetLoadedProfiles()) {
+    manager_ = g_browser_process->profile_manager();
+    manager_->AddObserver(this);
+    for (Profile* profile : manager_->GetLoadedProfiles()) {
       Watch(profile);
       for (Profile* off_the_record : profile->GetAllOffTheRecordProfiles()) {
         WatchManager(off_the_record);
@@ -60,7 +61,9 @@ class Downloads : public ProfileManagerObserver,
   void OnProfileAdded(Profile* profile) override { Watch(profile); }
   void OnProfileManagerDestroying() override {
     profiles_.RemoveAllObservations();
-    g_browser_process->profile_manager()->RemoveObserver(this);
+    // The manager being destroyed: g_browser_process no longer returns it.
+    manager_->RemoveObserver(this);
+    manager_ = nullptr;
   }
 
   // ProfileObserver:
@@ -103,6 +106,7 @@ class Downloads : public ProfileManagerObserver,
   }
 
   DownloadUpdated updated_ = nullptr;
+  raw_ptr<ProfileManager> manager_ = nullptr;
   base::ScopedMultiSourceObservation<Profile, ProfileObserver> profiles_{this};
   std::map<content::DownloadManager*, Profile*> managers_;
 };
