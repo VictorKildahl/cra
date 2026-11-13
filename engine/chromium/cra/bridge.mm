@@ -42,6 +42,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/devtools/devtools_toggle_action.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/cra_engine_hooks.h"
 #include "chrome/browser/cra_permission_hook.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -110,6 +112,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
 @property(nonatomic) BOOL inPageFullscreen;
+- (void)devToolsOpened:(BrowserWindowInterface*)devtools;
+- (void)devToolsClosed:(BrowserWindowInterface*)devtools;
 @end
 
 namespace {
@@ -504,6 +508,10 @@ bool TargetURL(content::WebContents* contents, const GURL& url) {
   return true;
 }
 
+bool IsCraPage(const content::WebContents* contents) {
+  return BrowserFor(const_cast<content::WebContents*>(contents)) != nil;
+}
+
 // Cra's translate UI (patches/translate-ui.patch): false for a page that isn't Cra's.
 bool TranslateState(content::WebContents* contents, const std::string& state) {
   CraBrowser* browser = BrowserFor(contents);
@@ -551,6 +559,14 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       return;
     }
     NSWindow* window = browser->GetWindow()->GetNativeWindow().GetNativeNSWindow();
+    if (browser->GetType() == BrowserWindowInterface::TYPE_DEVTOOLS) {
+      // A page of Cra's DevTools (patches/cra-devtools.patch): never shown; Cra takes its frontend once Chrome
+      // has put it in.
+      window.alphaValue = 0;
+      window.ignoresMouseEvents = YES;
+      Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
+      return;
+    }
     if (browser->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
       if (window) {
         if (!g_extension_windows) {
@@ -570,7 +586,36 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
                               const TabStripModelChange& change,
                               const TabStripSelectionChange& selection) override {}
 
+  void OnBrowserClosed(BrowserWindowInterface* browser) override {
+    auto it = devtools_.find(browser);
+    if (it == devtools_.end()) {
+      return;
+    }
+    CraBrowser* page = it->second;
+    devtools_.erase(it);
+    [page devToolsClosed:browser];
+  }
+
  private:
+  void TakeDevTools(base::WeakPtr<BrowserWindowInterface> browser) {
+    if (!browser) {
+      return;
+    }
+    DevToolsWindow* devtools = DevToolsWindow::AsDevToolsWindow(browser.get());
+    CraBrowser* page = devtools ? BrowserFor(devtools->GetInspectedWebContents()) : nil;
+    if (!page) {
+      // Not a page of Cra's (an extension's background page, say): Chrome's own DevTools window.
+      NSWindow* window = browser->GetWindow()->GetNativeWindow().GetNativeNSWindow();
+      window.alphaValue = 1;
+      window.ignoresMouseEvents = NO;
+      return;
+    }
+    devtools_[browser.get()] = page;
+    [page devToolsOpened:browser.get()];
+  }
+
+  std::map<BrowserWindowInterface*, CraBrowser* __weak> devtools_;
+
   // Once Chrome has put the window's pages in (they start loading as they go in).
   void TakePages(base::WeakPtr<BrowserWindowInterface> browser) {
     if (!browser) {
@@ -738,6 +783,7 @@ void RunReadyBlocks() {
   g_page_fullscreen = &PageFullscreen;
   g_page_is_fullscreen = &PageIsFullscreen;
   g_target_url = &TargetURL;
+  g_is_cra_page = &IsCraPage;
   StartDownloads(&ReportDownload);
   Strays().Start();
   StartProfilePrefs();
@@ -781,6 +827,10 @@ void RunReadyBlocks() {
   // takes it.
   std::unique_ptr<content::WebContents> _spareContents;
   raw_ptr<Profile> _spareProfile;
+  // The page's DevTools: Chrome's DevTools window (never shown) and the window Cra docks, which holds the
+  // frontend's view.
+  base::WeakPtr<BrowserWindowInterface> _devToolsBrowser;
+  NSWindow* _devToolsHost;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate {
@@ -1247,13 +1297,96 @@ void RunReadyBlocks() {
     _contents->ExitFullscreen(/*will_cause_resize=*/true);
   }
 }
-- (void)showDevToolsInspectingPoint:(NSPoint)point {
+#pragma mark DevTools
+
+// What Chrome's DevTools open on: the action the app set (DevToolsToggle), as Chrome's DevToolsToggleAction.
+- (DevToolsToggleAction)toggleAction {
+  NSString* action = self.devToolsAction;
+  self.devToolsAction = nil;
+  if ([action isEqualToString:@"console"]) {
+    return DevToolsToggleAction::ShowConsolePanel();
+  }
+  if ([action isEqualToString:@"elements"]) {
+    return DevToolsToggleAction::ShowElementsPanel();
+  }
+  if ([action isEqualToString:@"inspect"]) {
+    return DevToolsToggleAction::Inspect();
+  }
+  return DevToolsToggleAction::Show();
 }
+
 - (void)showDevTools {
+  if (!_contents) {
+    return;
+  }
+  // The app gives the area DevTools dock in; Cra's window for them goes there once Chrome has made them.
+  [_delegate devToolsHostViewForBrowser:self];
+  DevToolsWindow::OpenDevToolsWindow(_contents, [self toggleAction], DevToolsOpenedByAction::kUnknown);
 }
+
+- (void)showDevToolsInspectingPoint:(NSPoint)point {
+  if (!_contents) {
+    return;
+  }
+  if (!DevToolsWindow::GetInstanceForInspectedWebContents(_contents)) {
+    [_delegate devToolsHostViewForBrowser:self];
+  }
+  DevToolsWindow::InspectElement(_contents->GetPrimaryMainFrame(), static_cast<int>(point.x),
+                                 static_cast<int>(point.y));
+}
+
 - (void)applyDevToolsAction {
+  if (_contents && DevToolsWindow::GetInstanceForInspectedWebContents(_contents)) {
+    DevToolsWindow::OpenDevToolsWindow(_contents, [self toggleAction], DevToolsOpenedByAction::kUnknown);
+  }
 }
+
 - (void)closeDevTools {
+  if (_devToolsBrowser) {
+    _devToolsBrowser->GetWindow()->Close();
+  }
+}
+
+// Chrome made the page's DevTools window: its frontend moves into a borderless window of Cra's, which the app
+// docks in the page's card (as the CEF bridge's hidden window was).
+- (void)devToolsOpened:(BrowserWindowInterface*)devtools {
+  DevToolsWindow* window = DevToolsWindow::AsDevToolsWindow(devtools);
+  content::WebContents* frontend = window ? window->GetDevToolsWebContents().get() : nullptr;
+  if (!frontend) {
+    return;
+  }
+  _devToolsBrowser = devtools->GetWeakPtr();
+  frontend->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
+  if (!_devToolsHost) {
+    _devToolsHost = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 400)
+                                                styleMask:NSWindowStyleMaskBorderless
+                                                  backing:NSBackingStoreBuffered
+                                                    defer:NO];
+    _devToolsHost.releasedWhenClosed = NO;
+    _devToolsHost.contentView.autoresizesSubviews = YES;
+  }
+  NSView* view = frontend->GetNativeView().GetNativeNSView();
+  [view removeFromSuperview];
+  view.frame = _devToolsHost.contentView.bounds;
+  view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [_devToolsHost.contentView addSubview:view];
+  _hasDevTools = YES;
+  [_delegate browser:self didCreateDevToolsView:_devToolsHost.contentView];
+  if ([_delegate respondsToSelector:@selector(browser:devToolsDocked:)]) {
+    [_delegate browser:self devToolsDocked:YES];
+  }
+}
+
+- (void)devToolsClosed:(BrowserWindowInterface*)devtools {
+  _devToolsBrowser = nullptr;
+  _hasDevTools = NO;
+  [_devToolsHost.parentWindow removeChildWindow:_devToolsHost];
+  [_devToolsHost orderOut:nil];
+  [_delegate browserDidCloseDevTools:self];
+}
+
+- (NSWindow*)devToolsWindow {
+  return _hasDevTools ? _devToolsHost : nil;
 }
 - (double)zoomLevel {
   auto* zoom = _contents ? zoom::ZoomController::FromWebContents(_contents) : nullptr;

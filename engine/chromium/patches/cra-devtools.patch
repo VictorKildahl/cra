@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtools/devtools_window.cc
+--- a/chrome/browser/devtools/devtools_window.cc
++++ b/chrome/browser/devtools/devtools_window.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/devtools/devtools_window.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -1418,6 +1420,10 @@
+     if (!devtools_ui_controller || !devtools_ui_controller->CanDockDevtools()) {
+       can_dock = false;
+     }
++    // Cra: its pages' DevTools open in a window of their own, which Cra docks in its card.
++    if (cra::g_is_cra_page && cra::g_is_cra_page(inspected_web_contents)) {
++      can_dock = false;
++    }
+   }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 

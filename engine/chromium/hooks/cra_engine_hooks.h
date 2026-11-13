@@ -74,6 +74,11 @@ inline PageIsFullscreenHook g_page_is_fullscreen = nullptr;
 using TargetURLHook = bool (*)(content::WebContents* contents, const GURL& url);
 inline TargetURLHook g_target_url = nullptr;
 
+// Whether a page is one of Cra's. Its DevTools never dock into Chrome's window: they open in a DevTools window
+// of their own, which Cra's layer takes over (patches/cra-devtools.patch).
+using IsCraPageHook = bool (*)(const content::WebContents* contents);
+inline IsCraPageHook g_is_cra_page = nullptr;
+
 }  // namespace cra
 
 #endif  // CHROME_BROWSER_CRA_ENGINE_HOOKS_H_
