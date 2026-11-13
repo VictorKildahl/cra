@@ -641,8 +641,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         pb.writeObjects([item])
         guard let link = SpaceListView.link(on: pb) else { CraLog.note("dropLink: refused \(url)"); return }
         guard let point = l.testDropPoint(row: text, onto: onto) else { CraLog.note("dropLink: no row with \(text ?? "")"); return }
+        let drop = l.resolve(dragged: SidebarListDrop.link, at: point)
+        CraLog.note("dropLink: line \(l.testLineInsets(drop))")
         // Where the tab landed, read back from the store: its folder's name, or its section, and its place there.
-        guard let tab = l.dropLink(link, drop: l.resolve(dragged: SidebarListDrop.link, at: point)), let parent = tab.parentID.flatMap(store.item) else {
+        guard let tab = l.dropLink(link, drop: drop), let parent = tab.parentID.flatMap(store.item) else {
             CraLog.note("dropLink: refused \(link.url)"); return
         }
         let place = parent.isFolder ? (parent.title ?? "folder") : (store.isPinned(tab.id) ? "Pinned" : "Today")

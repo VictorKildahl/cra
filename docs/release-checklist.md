@@ -56,6 +56,11 @@ built release app with a test profile. Note anything that fails in the release's
   space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
   and check every row's inks follow the selection; long titles truncate before the trailing action.
 
+- **#419/#422, insertion line:** drag a tab between two Today rows, then a page's link, with a real
+  pointer, on a dark space and a light one: a hollow ring 2 pt before the favicons, then a line to 3 pt
+  inside the row, near-white on dark. Put it next to Arc's on the same spaces; Arc's ink was measured
+  only on a dark space (#EFEFEC over #383830), so check the light one.
+
 - **#393, Ask on Page:** with Apple Intelligence on and Settings ▸ Max ▸ Ask on Page on, press ⌘F on a
   long article: the card reads "Find or ask…"; typing a word finds it (count, ↑ ↓, highlights in the
   page). Type a question and press Ask (or Return): the question in the space's colour, "This page was

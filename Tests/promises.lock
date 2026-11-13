@@ -769,6 +769,6 @@
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aFollowUpIsItsOwnTurnAfterThePage  69092337b9ab
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelIsNotToldToWriteADialogue  00c89cbe584e
 #419   Packages/CraCore/Tests/CraCoreTests/SidebarLinkDropTests.swift::whichLinkBecomesTheTab  74f055957ef6
-#419   Tests/Scenarios/drop-link.scenario  4f112feb473b
+#419   Tests/Scenarios/drop-link.scenario  42faf84636ae
 #421   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::typedURLFollowsSpaceRoutes  cfbe95a599dd
 #421   Tests/Scenarios/command-bar-route.scenario  e9c6c3f45f79

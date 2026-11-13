@@ -76,7 +76,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     private var hairlineState = (top: false, bottom: false)
     private let pinnedHighlight = CALayer()
     private let todayHighlight = CALayer()
-    private let dropLine = CALayer()
+    private let dropLine = CAShapeLayer()
     private let jumpPill = SidebarJumpPill()
     private var syncQueued = false
     private var synced = false
@@ -145,7 +145,9 @@ final class SpaceListView: NSView, NSDraggingSource {
             l.opacity = 0
             document.layer?.addSublayer(l)
         }
-        dropLine.cornerRadius = 1
+        dropLine.fillColor = nil
+        dropLine.lineWidth = SidebarListMetrics.dropLineWidth
+        dropLine.actions = ["path": NSNull(), "strokeColor": NSNull()]
         dropLine.zPosition = 5
         dropLine.opacity = 0
         document.layer?.addSublayer(dropLine)
@@ -620,19 +622,34 @@ final class SpaceListView: NSView, NSDraggingSource {
         pinnedHighlight.opacity = highlightPinned ? 1 : 0
         todayHighlight.opacity = highlightToday ? 1 : 0
         if let line = dropLineSpec {
-            dropLine.backgroundColor = colors.textPrimary.withAlphaComponent(0.5).cgColor
+            dropLine.strokeColor = colors.textPrimary.withAlphaComponent(SidebarListMetrics.dropLineAlpha).cgColor
+            let ring = SidebarListMetrics.dropRing
+            let frame = NSRect(x: line.minX, y: line.y - ring / 2, width: max(ring, line.maxX - line.minX), height: ring)
             if dropLine.opacity == 0 {
                 CATransaction.setDisableActions(true)
-                dropLine.frame = NSRect(x: line.minX, y: line.y - 1, width: max(0, line.maxX - line.minX), height: 2)
+                dropLine.frame = frame
                 CATransaction.setDisableActions(false)
             } else {
-                dropLine.frame = NSRect(x: line.minX, y: line.y - 1, width: max(0, line.maxX - line.minX), height: 2)
+                dropLine.frame = frame
             }
+            dropLine.path = Self.dropLinePath(width: frame.width)
             dropLine.opacity = 1
         } else {
             dropLine.opacity = 0
         }
         CATransaction.commit()
+    }
+
+    /// Arc's insertion line is AppKit's between-rows drop indicator: a hollow ring where the row's
+    /// content starts, then the line (Arc 1.172.1, 2x capture, 13 Nov 2026, measured by Hritish
+    /// Mahajan in #422). Tab drags and link drops (#419) share it.
+    private static func dropLinePath(width: CGFloat) -> CGPath {
+        let ring = SidebarListMetrics.dropRing, stroke = SidebarListMetrics.dropLineWidth
+        let p = CGMutablePath()
+        p.addEllipse(in: CGRect(x: stroke / 2, y: stroke / 2, width: ring - stroke, height: ring - stroke))
+        p.move(to: CGPoint(x: ring, y: ring / 2))
+        p.addLine(to: CGPoint(x: width, y: ring / 2))
+        return p
     }
 
     // MARK: Scrolling
@@ -1018,6 +1035,14 @@ final class SpaceListView: NSView, NSDraggingSource {
         return CGPoint(x: todayFrame.midX, y: (rows.map(\.frame.maxY).max() ?? todayFrame.maxY) + 40)
     }
 
+    /// `cra://debug?dropLink`: where the insertion line for `drop` starts and ends, from the left of
+    /// a top-level row's favicon and from the row's right edge (Arc: 2 before, 3 inside).
+    func testLineInsets(_ drop: SidebarListDrop) -> String {
+        guard let line = drop.line else { return "none" }
+        let fmt = { (v: CGFloat) in String(format: "%g", Double(v)) }
+        return "lead=\(fmt(todayFrame.minX + CraMetrics.rowLeading - line.minX)) trail=\(fmt(todayFrame.maxX - line.maxX))"
+    }
+
     func dragUpdated(_ info: NSDraggingInfo, entered: Bool) -> NSDragOperation {
         // A link has no row: it lands where a row would, between rows, in Pinned or at the end of Today.
         if draggedLink(info) != nil {
@@ -1213,7 +1238,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         guard let y else { return drop }
         // A group's tabs sit at its header's depth (Arc doesn't indent them).
         let depth = items.first { $0.itemID == parent }.map { $0.depth + (store.item(parent)?.isTabGroup == true ? 0 : 1) } ?? 0
-        drop.line = .init(y: y, minX: todayFrame.minX + CraMetrics.rowLeading + CGFloat(depth) * CraMetrics.indent, maxX: todayFrame.maxX - 6)
+        // Arc: the ring's outer edge 2 pt before the favicon, the line's end 3 pt inside the row.
+        drop.line = .init(y: y, minX: todayFrame.minX + CraMetrics.rowLeading - SidebarListMetrics.dropLead + CGFloat(depth) * CraMetrics.indent,
+                          maxX: todayFrame.maxX - SidebarListMetrics.dropTrail)
         drop.rowAbove = items.last { $0.frame.maxY <= y + 1 }?.itemID
         drop.rowBelow = items.first { $0.frame.minY >= y - 1 }?.itemID
         return drop
@@ -1223,6 +1250,14 @@ final class SpaceListView: NSView, NSDraggingSource {
 enum SidebarListMetrics {
     /// Rows either side of the insertion line ease this far apart.
     static let nudge: CGFloat = 3
+    /// The insertion line's ring (outer size) and stroke, and its ink over the sidebar: Arc 1.172.1
+    /// draws #EFEFEC over a #383830 fill, 92 % of the way to white (2x capture, 13 Nov 2026, #422).
+    static let dropRing: CGFloat = 8
+    static let dropLineWidth: CGFloat = 2
+    static let dropLineAlpha: CGFloat = 0.92
+    /// The ring starts this far before a row's favicon; the line stops this far inside the row.
+    static let dropLead: CGFloat = 2
+    static let dropTrail: CGFloat = 3
     /// SwiftUI's .snappy(duration: 0.22, extraBounce: 0), which the list's changes used.
     static let duration: TimeInterval = 0.22
     static let timing = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
