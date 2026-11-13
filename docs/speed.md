@@ -132,6 +132,11 @@ and opening a site from 36 to 16 ms; and **tabs switch on the press**, as Arc do
 
 ### 2. A newer Chromium (page processes, ~7 MB a page)
 
+13 Nov 2026: CEF has a 158 branch (8127, Chromium 158.0.8127.18, 10 Nov), still a beta engine; Cra takes
+stable CEF only (check-cef-update.sh, the release gate), so it waits for Chrome 158 stable unless Victor
+decides otherwise. Building it needs ~80 GB beside the 156 checkout (44 GB free that day; the plain
+Chromium output in out/Chrome_arm64, 12 GB, can go first).
+
 CEF skipped 157: its master went from 156 to 158 (158.0.8127.0, 4 Nov 2026) and only 156 has a
 release branch (8078). The daily CEF update check opens the issue when a stable 158 branch exists;
 take it with `scripts/update-cef.sh` as soon as it does, and measure the page processes against 156.
