@@ -43,6 +43,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/printing/print_view_manager_common.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -73,6 +74,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/find_in_page/find_result_observer.h"
@@ -574,6 +577,23 @@ bool BlockRequest(const GURL& url, const content::GlobalRenderFrameHostId& frame
   return cra_blocker::ShouldBlock(cra_blocker::WebHost(url.spec()), page);
 }
 
+// The pop-ups Chrome's blocker holds back on a page, oldest first (patches/blocked-popups.patch), for Cra's
+// toolbar button.
+void BlockedPopupsChanged(content::WebContents* contents) {
+  CraBrowser* browser = BrowserFor(contents);
+  auto* blocker = blocked_content::PopupBlockerTabHelper::FromWebContents(contents);
+  if (!browser || !blocker || ![browser.delegate respondsToSelector:@selector(browser:didChangeBlockedPopups:urls:)]) {
+    return;
+  }
+  NSMutableArray<NSNumber*>* ids = [NSMutableArray array];
+  NSMutableArray<NSString*>* urls = [NSMutableArray array];
+  for (const auto& [id, url] : blocker->GetBlockedPopupRequests()) {
+    [ids addObject:@(id)];
+    [urls addObject:NS(url.spec())];
+  }
+  [browser.delegate browser:browser didChangeBlockedPopups:ids urls:urls];
+}
+
 bool IsCraPage(const content::WebContents* contents) {
   return BrowserFor(const_cast<content::WebContents*>(contents)) != nil;
 }
@@ -851,6 +871,7 @@ void RunReadyBlocks() {
   g_target_url = &TargetURL;
   g_is_cra_page = &IsCraPage;
   g_block_request = &BlockRequest;
+  blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(base::BindRepeating(&BlockedPopupsChanged));
   StartDownloads(&ReportDownload);
   Strays().Start();
   StartProfilePrefs();
@@ -1392,7 +1413,26 @@ void RunReadyBlocks() {
 }
 - (void)cancelAgentDownload {
 }
+// Chrome keys the setting by the page that opens the pop-up.
+- (BOOL)popupsAllowed {
+  if (!_contents) {
+    return NO;
+  }
+  GURL url = _contents->GetLastCommittedURL();
+  auto* settings = HostContentSettingsMapFactory::GetForProfile(_contents->GetBrowserContext());
+  return settings && settings->GetContentSetting(url, url, ContentSettingsType::POPUPS) == CONTENT_SETTING_ALLOW;
+}
+
 - (void)setPopupsAllowed:(BOOL)allowed {
+  if (!_contents) {
+    return;
+  }
+  GURL url = _contents->GetLastCommittedURL();
+  auto* settings = HostContentSettingsMapFactory::GetForProfile(_contents->GetBrowserContext());
+  if (settings && url.is_valid()) {
+    settings->SetContentSettingDefaultScope(url, url, ContentSettingsType::POPUPS,
+                                            allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_DEFAULT);
+  }
 }
 - (void)exitFullscreen {
   if (_contents) {
