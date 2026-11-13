@@ -41,7 +41,7 @@ final class LinkSummaryService {
         self.summarize = answer ?? { await Self.ask(url: $0, content: $1, searchQuery: $2, language: $3, partial: $4) }
     }
 
-    var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.modelAvailable }
+    var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.currentModelAvailable }
 
     /// Capture the output language once, so cache lookup and generation cannot disagree.
     static func request(link: URL, profilePath: String?, httpsOnly: Bool, searchQuery: String?) -> LinkSummaryRequest {
@@ -66,9 +66,15 @@ final class LinkSummaryService {
             if !Task.isCancelled { update(Card(title: host, host: host, finished: true)) }
             return
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, isAvailable else {
+            if !Task.isCancelled { update(Card(title: host, host: host, finished: true)) }
+            return
+        }
         let content = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: page.html) }.value
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, isAvailable else {
+            if !Task.isCancelled { update(Card(title: host, host: host, finished: true)) }
+            return
+        }
         final class Box { var card: Card; init(_ c: Card) { card = c } }
         let box = Box(Card(title: content.title ?? host, host: host))
         update(box.card)
@@ -76,7 +82,7 @@ final class LinkSummaryService {
         let imageURL = content.imageURL(page: page.url).map { LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }
         let imageTask: Task<Void, Never>? = imageURL.map { url in
             Task { @MainActor in
-                guard !Task.isCancelled, let image = await self.fetchImage(url, request.httpsOnly), !Task.isCancelled,
+                guard !Task.isCancelled, self.isAvailable, let image = await self.fetchImage(url, request.httpsOnly), !Task.isCancelled, self.isAvailable,
                       !box.card.finished || box.card.result != nil else { return }
                 box.card.image = image
                 if box.card.finished { self.remember(image, for: request) }
@@ -86,7 +92,7 @@ final class LinkSummaryService {
         await withTaskCancellationHandler {
             defer { imageTask?.cancel() }
             let final = await summarize(page.url, content, request.searchQuery, request.language) { answer in
-                guard !Task.isCancelled, !box.card.finished else { return }
+                guard !Task.isCancelled, !box.card.finished, self.isAvailable else { return }
                 if let answer {
                     guard let result = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
                     box.card.result = result
@@ -97,7 +103,7 @@ final class LinkSummaryService {
                 update(box.card)
             }
             guard !Task.isCancelled else { return }
-            box.card.result = final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0, final: true) }
+            box.card.result = isAvailable ? final.flatMap { LinkSummaryPrompt.result(url: link, title: content.title, answer: $0, final: true) } : nil
             box.card.finished = true
             if box.card.result == nil { box.card.image = nil }
             cards.store(box.card.result, for: request)
@@ -117,9 +123,9 @@ final class LinkSummaryService {
     func title(_ request: LinkSummaryRequest) async -> String? {
         guard !Task.isCancelled, isAvailable else { return nil }
         if let known = titles[request] { return known }
-        guard let page = await fetchPage(request), !Task.isCancelled else { return nil }
+        guard let page = await fetchPage(request), !Task.isCancelled, isAvailable else { return nil }
         let title = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: page.html).title }.value
-        guard !Task.isCancelled else { return nil }
+        guard !Task.isCancelled, isAvailable else { return nil }
         if let title {
             if titles.count >= 40 { titles.removeAll() }
             titles[request] = title

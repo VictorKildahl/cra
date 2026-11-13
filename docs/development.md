@@ -134,6 +134,9 @@ to Markdown or `docs/` alone runs nothing.
   and controlled fetch/model completions: context isolation, stale inspections/results, cancellation,
   optional image lifetime, finite loading and bounded per-hop redirect/cancellation policy.
   No CEF request or model inference; no clipboard actions.
+- `scripts/test-link-summary-hooks.sh`: the actual `SidebarStore`, model availability resolver/refresh
+  and production bootstrap binding: same-turn opt-out/off-on, repeated unavailable refresh and fresh
+  eligibility before page fetch/final cache publication. Manual clock, no CEF/model inference.
 - `scripts/test-link-summary-cef.sh`: the actual native preview token's byte/cancellation/readiness
   callback contract, compiled with installed CEF headers/wrapper; skips when they are absent.
   Does not boot Chromium or prove wire behavior; validate the dedicated route on a native test app.

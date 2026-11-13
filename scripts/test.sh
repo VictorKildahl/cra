@@ -27,6 +27,7 @@ if [ "${1:-}" != core ]; then
   suite "5-Second Previews copy" scripts/test-link-summary-share.sh
   suite "5-Second Previews card" scripts/test-link-summary-panel.sh
   suite "5-Second Previews lifecycle" scripts/test-link-summary-service.sh
+  suite "5-Second Previews eligibility hooks" scripts/test-link-summary-hooks.sh
   suite "5-Second Previews CEF callbacks" scripts/test-link-summary-cef.sh
   suite "5-Second Previews image transport" scripts/test-link-summary-image.sh
   suite "Capture overlay" scripts/test-capture-overlay.sh

@@ -30,7 +30,13 @@ final class SidebarStore {
             notifyItemReaders(of: oldValue)
         }
     }
-    var settings = AppSettings() { didSet { settingsStore.save(settings) } }
+    var settings = AppSettings() {
+        didSet {
+            settingsStore.save(settings)
+            if settings.fiveSecondPreviews != oldValue.fiveSecondPreviews { fiveSecondPreviewsChanged(settings.fiveSecondPreviews) }
+        }
+    }
+    @ObservationIgnored var fiveSecondPreviewsChanged: (Bool) -> Void = { _ in }
     private(set) var history: [String: HistoryEntry] = [:]
     private(set) var ranking = RankingData()
     /// Bumped on every structural change; cheap way for AppKit code to observe.

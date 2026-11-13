@@ -46,7 +46,10 @@ final class TidyTabsService {
     /// Intelligence on in System Settings shows the button without a relaunch.
     private(set) var status: Status = .needsNewerMacOS
     var modelAvailable: Bool { status == .available }
+    /// Mutation/request eligibility must not rely on the last availability shown in Settings.
+    var currentModelAvailable: Bool { Self.currentStatus() == .available }
 
+    @ObservationIgnored var previewsUnavailable: () -> Void = {}
     @ObservationIgnored private var activation: NSObjectProtocol?
 
     private init() {
@@ -59,6 +62,8 @@ final class TidyTabsService {
     func refresh() {
         let now = Self.currentStatus()
         if now != status { status = now }
+        // Even an unchanged cached unavailable state must revoke an intervening request.
+        if now != .available { previewsUnavailable() }
     }
 
     private static func currentStatus() -> Status {
