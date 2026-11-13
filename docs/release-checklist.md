@@ -64,6 +64,11 @@ built release app with a test profile. Note anything that fails in the release's
   with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
   (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
 
+- **#417, Ask on Page follow-ups:** on a long article ask something the page can't answer ("why did el
+  salvador succeed?"), then "Summarize the key points of this article in bullet points": the second answer
+  is a summary, not the first answer again, and no answer starts with "BEGIN DIALOGUE", "Human:" or a made-up
+  question. Then a factual follow-up gets its own quote. The model is on-device and varies, so ask a few times.
+
 - **#407, Instant Links:** with Apple Intelligence on and Settings ▸ Max ▸ Instant Links on, type
   "top 3 pizza places in naples" in ⌘T and press Shift-Return: the bar closes, "Searching the web for you…"
   shows at the top of Today with the flower turning once a second and the selected row's fill, and about 3 s later

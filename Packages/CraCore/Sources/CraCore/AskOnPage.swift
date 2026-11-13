@@ -87,16 +87,18 @@ public enum AskOnPagePolicy {
 }
 
 /// What the model is asked: Arc's rules and examples (AskInPageChat), the page between Arc's
-/// tags, then the dialogue. Arc sends it all as one message; here the rules and examples are the
-/// session's instructions and the rest its prompt.
+/// tags, then the question. Arc sends it all as one message, the conversation written into it as
+/// "BEGIN DIALOGUE", "Human: …", "Assistant: …". Here the rules and examples are the session's
+/// instructions, the page goes with the first question, and each question and answer is a turn of
+/// its own. The on-device model, given Arc's dialogue as text, writes a dialogue back: made-up
+/// "Human:" questions, or the last answer again word for word (#417).
 public enum AskOnPagePrompt {
     public static func rules(language: String) -> String {
         """
         You will be acting as a research assistant. I will give you the content of a webpage, and you will concisely answer \
         questions from a human using information from that page. You will provide citations for all answers using <excerpt> tags.
 
-        When I write BEGIN DIALOGUE you will enter this role, and all further input from the "Human:" will be from a user \
-        seeking answers about a webpage.
+        \(userLine)
 
         RULES:
         1. stay in your role throughout the dialogue
@@ -111,6 +113,11 @@ public enum AskOnPagePrompt {
         8. You may perform translations, summaries or other textual transformations for the user if asked.
         """
     }
+
+    /// In place of Arc's "When I write BEGIN DIALOGUE you will enter this role, and all further input
+    /// from the "Human:" will be from a user seeking answers about a webpage." The on-device model
+    /// takes that as the shape of its answer and writes a dialogue (#417).
+    public static let userLine = "After the page, each message is a question from a user seeking answers about the webpage."
 
     /// Arc's examples. Its privacy-policy one links an Arc page; Cra's links a placeholder address.
     public static let examples = """
@@ -148,26 +155,48 @@ public enum AskOnPagePrompt {
         }
     }
 
-    /// How many earlier answers stay in the prompt; older ones read "[Older messages hidden]", as
+    /// How many earlier answers are sent again; older ones read "[Older messages hidden]", as
     /// Arc's do, so a long conversation leaves the page room.
     public static let keptAnswers = 2
+    public static let hiddenAnswer = "[Older messages hidden]"
 
-    /// The dialogue after the page: earlier turns, then the question.
-    public static func dialogue(turns: [Turn], question: String) -> String {
-        var lines = ["BEGIN DIALOGUE"]
-        for (i, turn) in turns.enumerated() {
-            let hidden = i < turns.count - keptAnswers
-            lines.append("Human: \(turn.question)")
-            lines.append("Assistant: \(hidden ? "[Older messages hidden]" : turn.answer)")
+    /// One turn the model already took: what it was asked and what it answered.
+    public struct Exchange: Equatable, Sendable {
+        public var prompt: String
+        public var response: String
+        public init(prompt: String, response: String) {
+            self.prompt = prompt
+            self.response = response
         }
-        lines.append(turns.isEmpty ? question : "Human: \(question)")
-        return lines.joined(separator: "\n")
     }
 
-    /// The prompt: Arc's page context (it closes <url> with </title>, kept), then the dialogue.
-    public static func prompt(url: String, title: String?, date: String, text: String, turns: [Turn], question: String) -> String {
+    /// What the model gets: the turns before, then the prompt it answers now. The page goes with
+    /// the conversation's first question, so it comes before every answer that quotes it.
+    public struct Conversation: Equatable, Sendable {
+        public var earlier: [Exchange]
+        public var prompt: String
+    }
+
+    /// Arc's page context (it closes <url> with </title>, kept).
+    public static func context(url: String, title: String?, date: String, text: String) -> String {
         "WEBPAGE CONTEXT FOR OUR DIALOGUE:\n<url>\(url)</title>\n<current-date>\(date)</current-date>\n<title>\(title ?? "")</title>\n<content>\n\(text)\n</content>\n"
-            + dialogue(turns: turns, question: question)
+    }
+
+    public static func conversation(url: String, title: String?, date: String, text: String, turns: [Turn], question: String) -> Conversation {
+        let page = context(url: url, title: title, date: date, text: text)
+        let earlier = turns.enumerated().map { i, turn in
+            Exchange(prompt: i == 0 ? page + turn.question : turn.question,
+                     response: i < turns.count - keptAnswers ? hiddenAnswer : turn.answer)
+        }
+        return Conversation(earlier: earlier, prompt: turns.isEmpty ? page + question : question)
+    }
+
+    /// What is sent besides the page and the instructions: the questions and the answers kept.
+    public static func dialogue(turns: [Turn], question: String) -> String {
+        let earlier = turns.enumerated().flatMap { i, turn in
+            [turn.question, i < turns.count - keptAnswers ? hiddenAnswer : turn.answer]
+        }
+        return (earlier + [question]).joined(separator: "\n")
     }
 
     /// Room left for the answer, in tokens. Arc asks for up to 4,096 from a far bigger model; the

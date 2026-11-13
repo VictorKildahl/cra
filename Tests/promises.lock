@@ -737,7 +737,7 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::answersSplitIntoTextAndQuotes  1c355ddc4248
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::longPagesAreCutAndSaySo  87740165fd46
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::placeholdersAreArcs  bd66b23c595c
-#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::promptIsArcsWithThePageBetweenItsTags  e71bcdedf363
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::promptIsArcsWithThePageBetweenItsTags  c8dc8768726c
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnFindsTextOnThePageAndAsksTheRest  60bb9ecd33c9
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelsEchoOfTheDialogueIsLeftOut  c7e6334433dd
 #393   Tests/Scenarios/ask-on-page.scenario  f8c87a909b54
@@ -759,5 +759,7 @@
 #413   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::incognitoSpaceOffersNoProfile  ba6e000f474d
 #413   Tests/Scenarios/incognito-space-menu.scenario  6a20db2d4b60
 #413   Tests/StoreTests.swift::incognitoSpaceKeepsItsContext  8803458c0f95
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aFollowUpIsItsOwnTurnAfterThePage  69092337b9ab
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theModelIsNotToldToWriteADialogue  00c89cbe584e
 #419   Packages/CraCore/Tests/CraCoreTests/SidebarLinkDropTests.swift::whichLinkBecomesTheTab  74f055957ef6
 #419   Tests/Scenarios/drop-link.scenario  0996196ed840

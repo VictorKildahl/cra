@@ -242,7 +242,10 @@ final class AskOnPageController {
         let line = AskOnPagePrompt.fractionLine(last.fractionRead) ?? "-"
         let found = state.quotes.values.map { "\($0)" }.sorted().joined(separator: ",")
         let first = parts.first(where: \.isQuote).map { String($0.text.prefix(40)) } ?? "-"
+        // The last answer shows an earlier one again (#417); only said when it does.
+        let repeats = state.messages.dropLast().contains { AskOnPageReply.parts($0.reply, question: $0.question) == parts }
         return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=\(state.messages.count) finished=\(last.finished) quotes=\(quotes) read=\(line) search=[\(found)] quote=\"\(first)\" height=\(Int(state.height))"
+            + (repeats ? " repeats=true" : "")
     }
 }
 

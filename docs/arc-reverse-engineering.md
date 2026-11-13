@@ -4039,7 +4039,12 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   skips Arc's parts and hidden ones. Cra's choices where Arc's weren't readable: Return goes to the next match while the
   text is on the page and asks otherwise (always asks in a conversation); Find on Page tries the quote's first sentence
   and first eight words when the whole quote isn't on the page (a footnote mark between sentences, the model's slips);
-  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped; the card sits
+  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped. Not Arc's, on
+  purpose (#417): Arc's "When I write BEGIN DIALOGUE … the "Human:"" paragraph is replaced by "After the page, each
+  message is a question…", the page goes with the first question without "BEGIN DIALOGUE", and each earlier question
+  and answer is a turn of its own in the session's transcript. Given Arc's dialogue as text, the on-device model wrote
+  a dialogue back (made-up questions, "Human:"/"Assistant:" lines, or an earlier answer word for word): 30 of 40
+  answers in ten 4-question conversations on a 10,500-character article, 0 of 40 as turns (13 Nov 2026, macOS 26.7). The card sits
   where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)

@@ -43,9 +43,10 @@ struct AskOnPageTests {
         #expect(rules.contains("7. Respond in Danish."))
         #expect(rules.contains("using an <excerpt> tag on its own line"))
         #expect(AskOnPagePrompt.instructions(language: "English").contains("EXAMPLES OF RESPONSES FOR A HYPOTHETICAL WEBPAGE:"))
-        let p = AskOnPagePrompt.prompt(url: "https://apple.com/ios", title: "iOS 17", date: "12/11/2026, 18:00",
-                                       text: "React with your hands.", turns: [], question: "How do reactions work?")
-        #expect(p == """
+        let c = AskOnPagePrompt.conversation(url: "https://apple.com/ios", title: "iOS 17", date: "12/11/2026, 18:00",
+                                             text: "React with your hands.", turns: [], question: "How do reactions work?")
+        #expect(c.earlier.isEmpty)
+        #expect(c.prompt == """
         WEBPAGE CONTEXT FOR OUR DIALOGUE:
         <url>https://apple.com/ios</title>
         <current-date>12/11/2026, 18:00</current-date>
@@ -53,23 +54,46 @@ struct AskOnPageTests {
         <content>
         React with your hands.
         </content>
-        BEGIN DIALOGUE
         How do reactions work?
         """)
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func theModelIsNotToldToWriteADialogue() {
+        // Arc's "When I write BEGIN DIALOGUE … the "Human:"" made the on-device model write a dialogue
+        // of its own: made-up questions, or the answer before word for word.
+        let instructions = AskOnPagePrompt.instructions(language: "English")
+        #expect(!instructions.contains("BEGIN DIALOGUE"))
+        #expect(!instructions.contains("\"Human:\""))
+        #expect(instructions.contains(AskOnPagePrompt.userLine))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func aFollowUpIsItsOwnTurnAfterThePage() {
+        // The reporter's conversation: the first answer stays a turn of its own, the follow-up is
+        // asked alone, and no text says "Human:" or "Assistant:" for the model to carry on.
+        let first = AskOnPagePrompt.Turn(question: "why el salvador succeed?",
+                                         answer: "It cannot be determined from the page.\n<excerpt>The real measure of success.</excerpt>")
+        let c = AskOnPagePrompt.conversation(url: "https://example.com/haiti", title: "Haiti", date: "13/11/2026, 12:00",
+                                             text: "The real measure of success.", turns: [first],
+                                             question: "Summarize the key points of this entire article in detailed bullet points.")
+        #expect(c.prompt == "Summarize the key points of this entire article in detailed bullet points.")
+        #expect(c.earlier == [.init(prompt: AskOnPagePrompt.context(url: "https://example.com/haiti", title: "Haiti", date: "13/11/2026, 12:00",
+                                                                     text: "The real measure of success.") + "why el salvador succeed?",
+                                    response: first.answer)])
+        let sent = ([c.prompt] + c.earlier.flatMap { [$0.prompt, $0.response] }).joined(separator: "\n")
+        for framing in ["BEGIN DIALOGUE", "Human:", "Assistant:"] { #expect(!sent.contains(framing)) }
+    }
+
     @Test func followUpsKeepTheLastAnswersAndHideOlderOnes() {
         let turns = (1...3).map { AskOnPagePrompt.Turn(question: "q\($0)", answer: "a\($0)") }
-        #expect(AskOnPagePrompt.dialogue(turns: turns, question: "q4") == """
-        BEGIN DIALOGUE
-        Human: q1
-        Assistant: [Older messages hidden]
-        Human: q2
-        Assistant: a2
-        Human: q3
-        Assistant: a3
-        Human: q4
-        """)
+        let c = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page", turns: turns, question: "q4")
+        let page = AskOnPagePrompt.context(url: "u", title: nil, date: "d", text: "page")
+        #expect(c.earlier == [
+            .init(prompt: page + "q1", response: "[Older messages hidden]"),
+            .init(prompt: "q2", response: "a2"),
+            .init(prompt: "q3", response: "a3"),
+        ])
+        #expect(c.prompt == "q4")
+        #expect(AskOnPagePrompt.dialogue(turns: turns, question: "q4") == "q1\n[Older messages hidden]\nq2\na2\nq3\na3\nq4")
     }
 
     @Test func budgetIsArcsLessTheAnswersRoom() {

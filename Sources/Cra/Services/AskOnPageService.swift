@@ -81,16 +81,16 @@ final class AskOnPageService {
             // prompt still too long is cut by the share it is over and tried again.
             for attempt in 0..<3 {
                 let cut = AskOnPagePrompt.truncate(page.text, budget: budget, total: page.total)
-                let prompt = AskOnPagePrompt.prompt(url: page.url, title: page.title, date: date, text: cut.text, turns: turns, question: question)
-                if attempt == 0, let counted = await Self.tokens(model, instructions: instructions, prompt: prompt) {
+                let conversation = AskOnPagePrompt.conversation(url: page.url, title: page.title, date: date, text: cut.text, turns: turns, question: question)
+                if attempt == 0, let counted = await Self.tokens(model, instructions: instructions, conversation: conversation) {
                     let allowed = Self.contextSize(model) - AskOnPagePrompt.answerTokens
                     let smaller = AskOnPagePrompt.shrink(budget: min(budget, cut.text.count), promptTokens: counted, allowedTokens: allowed)
                     if smaller < min(budget, cut.text.count) { budget = smaller; continue }
                 }
                 do {
-                    let session = LanguageModelSession(model: model, instructions: instructions)
+                    let session = Self.session(model, instructions: instructions, earlier: conversation.earlier)
                     var last = ""
-                    for try await snapshot in session.streamResponse(to: prompt) {
+                    for try await snapshot in session.streamResponse(to: conversation.prompt) {
                         if Task.isCancelled { return nil }
                         last = snapshot.content
                         update(last, cut.fractionRead)
@@ -120,10 +120,25 @@ final class AskOnPageService {
         return 4_096
     }
 
+    /// A session that has already taken the conversation's earlier turns, each a turn of its own
+    /// rather than "Human:"/"Assistant:" text, which the model copied into its answer (#417).
     @available(macOS 26.0, *)
-    private static func tokens(_ model: SystemLanguageModel, instructions: String, prompt: String) async -> Int? {
+    private static func session(_ model: SystemLanguageModel, instructions: String, earlier: [AskOnPagePrompt.Exchange]) -> LanguageModelSession {
+        guard !earlier.isEmpty else { return LanguageModelSession(model: model, instructions: instructions) }
+        func text(_ s: String) -> [Transcript.Segment] { [.text(Transcript.TextSegment(content: s))] }
+        var entries: [Transcript.Entry] = [.instructions(Transcript.Instructions(segments: text(instructions), toolDefinitions: []))]
+        for turn in earlier {
+            entries.append(.prompt(Transcript.Prompt(segments: text(turn.prompt))))
+            entries.append(.response(Transcript.Response(assetIDs: [], segments: text(turn.response))))
+        }
+        return LanguageModelSession(model: model, transcript: Transcript(entries: entries))
+    }
+
+    @available(macOS 26.0, *)
+    private static func tokens(_ model: SystemLanguageModel, instructions: String, conversation: AskOnPagePrompt.Conversation) async -> Int? {
         guard #available(macOS 26.4, *) else { return nil }
-        guard let a = try? await model.tokenCount(for: Instructions(instructions)), let b = try? await model.tokenCount(for: prompt) else { return nil }
+        let sent = (conversation.earlier.flatMap { [$0.prompt, $0.response] } + [conversation.prompt]).joined(separator: "\n")
+        guard let a = try? await model.tokenCount(for: Instructions(instructions)), let b = try? await model.tokenCount(for: sent) else { return nil }
         return a + b
     }
     #endif
