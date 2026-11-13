@@ -460,6 +460,24 @@ final class BrowseQueryEditTests: BrowserTestCase {
     }
 }
 
+final class StarterQuestionsTests: BrowserTestCase {
+    /// Someone new sees Arc Search's sample questions under the empty field until a first search.
+    func testStarterQuestionsShowUntilTheFirstSearch() {
+        launch(["-CraFakeModel", "YES"])
+        let starter = app.staticTexts["things to do in paris"]
+        XCTAssertTrue(starter.waitForExistence(timeout: 10), "the starter questions are there")
+        keep("starter-questions")
+        app.buttons["browse-for-me"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["browse-query"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["browse-query"].label, "things to do in paris")
+        XCTAssertTrue(app.webViews.staticTexts["About things to do in paris"].waitForExistence(timeout: 15))
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
+        // The page behind shows the question too: look at the sheet's first row.
+        XCTAssertFalse(app.descendants(matching: .any)["suggestion-0"].waitForExistence(timeout: 2), "gone after the first search")
+    }
+}
+
 final class IncognitoTests: BrowserTestCase {
     /// The mask in the search field turns the sheet incognito; a page opened then stays out of
     /// the tab row and out of the Archive, and is gone once it is left.

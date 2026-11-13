@@ -117,6 +117,14 @@ public enum MobileSuggestions {
         return bare(host) + path + (url.query.map { "?" + $0 } ?? "")
     }
 
+    /// Arc Search 1.13's "initial search suggestions" for someone new: with nothing typed, no
+    /// favorites and no search made yet, sample questions fill the rows (Arc Search's own examples).
+    public static func starterRows(favorites: Int, hasSearched: Bool, incognito: Bool,
+                                   limit: Int = MobileSearchSheet.visibleRows) -> [Row] {
+        guard favorites == 0, !hasSearched, !incognito else { return [] }
+        return MobileOnboarding.sampleQueries.prefix(limit).map { Row(kind: .search, text: $0) }
+    }
+
     /// Scrolling the list: rows pass up under the field one by one and the field takes each
     /// one's text; scrolled back to the top it shows what was typed (60fps.design's clip).
     public enum Scroll {

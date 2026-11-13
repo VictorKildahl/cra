@@ -298,6 +298,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.setRows([])
             sheet.offersBrowseForMe = BrowseForMe.isAvailable
             sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
+            sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
+                                                            hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
             sheet.isHidden = false
             bar.pill.alpha = 0
             // Starts from the pill: lay the closed state out before anything animates.
@@ -351,11 +353,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         MobileSuggestions.destination(forTyped: typed, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe)
     }
 
+    /// A search made from the sheet: the starter questions are done with.
+    private func noteSearched() {
+        if !settings.value.hasSearched { settings.update { $0.hasSearched = true } }
+    }
+
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String) {
+        noteSearched()
         open(searchDestination(text))
     }
 
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row) {
+        noteSearched()
         open(MobileSuggestions.destination(for: row, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe))
     }
 
@@ -364,6 +373,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row) {
+        noteSearched()
         open(MobileBrowseForMe.tabAddress(query: row.text))
     }
 

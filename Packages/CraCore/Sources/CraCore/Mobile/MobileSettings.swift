@@ -127,6 +127,8 @@ public struct MobileSettings: Codable, Equatable {
     /// A custom search engine's address (`%s` for the query), and whether searches go there.
     public var customSearchURL: String?
     public var searchesWithCustom = false
+    /// A first search has been made: the starter questions under the empty field go away.
+    public var hasSearched = false
 
     public init() {}
 
@@ -148,7 +150,7 @@ public struct MobileSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched
     }
 
     public init(from decoder: Decoder) throws {
@@ -163,6 +165,7 @@ public struct MobileSettings: Codable, Equatable {
         searchesWithBrowseForMe = try c.decodeIfPresent(Bool.self, forKey: .searchesWithBrowseForMe) ?? false
         customSearchURL = (try? c.decodeIfPresent(String.self, forKey: .customSearchURL)).flatMap { MobileSearch.isValidTemplate($0) ? $0 : nil }
         searchesWithCustom = (try? c.decodeIfPresent(Bool.self, forKey: .searchesWithCustom)) ?? false
+        hasSearched = (try? c.decodeIfPresent(Bool.self, forKey: .hasSearched)) ?? false
         answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 

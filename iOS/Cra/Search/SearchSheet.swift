@@ -57,6 +57,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     var siteIcon: (String) -> UIImage? = { _ in nil }
     /// The favorites shown under the field while it is empty, with their icons.
     private var favorites: [(MobileFavorites.Site, UIImage?)] = []
+    /// Sample questions for someone new, in place of favorites while there are none.
+    private var starters: [MobileSuggestions.Row] = []
     /// A favorite being dragged to a new place (TapSmart: favorites can be dragged to reorder):
     /// its picture follows the finger while the rows make room.
     private var dragged: (picture: UIView, from: Int, at: Int, grab: CGFloat)?
@@ -169,6 +171,13 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
 
     private var showsFavorites: Bool { text.isEmpty && !isIncognito }
+    /// Starter questions stand where favorites go, when there are none.
+    private var showsStarters: Bool { showsFavorites && favorites.isEmpty && !starters.isEmpty }
+
+    func setStarters(_ rows: [MobileSuggestions.Row]) {
+        starters = rows
+        showRows()
+    }
 
     private func showRows() {
         let count = showsFavorites ? min(favorites.count, rowsInView) : rows.count
@@ -176,6 +185,17 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         list.contentSize = CGSize(width: list.bounds.width, height: showsFavorites ? CGFloat(count) * MobileSearchSheet.rowHeight
             : MobileSuggestions.Scroll.contentHeight(count: count, rowHeight: MobileSearchSheet.rowHeight, visibleHeight: list.bounds.height))
         for (index, view) in rowViews.enumerated() {
+            if showsStarters {
+                if index < min(starters.count, rowsInView) {
+                    view.configure(starters[index])
+                    view.emphasizesChip = index == 0
+                    view.isHidden = false
+                } else {
+                    view.isHidden = true
+                }
+                continue
+            }
+            view.emphasizesChip = false
             if showsFavorites, index < min(favorites.count, rowsInView) {
                 view.configure(favorite: favorites[index].0, icon: favorites[index].1)
                 view.isHidden = false
@@ -193,6 +213,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
 
     private func pick(_ index: Int) {
+        if showsStarters {
+            guard index < starters.count else { return }
+            return delegate?.searchSheet(self, didPick: starters[index]) ?? ()
+        }
         if showsFavorites {
             guard index < favorites.count else { return }
             return delegate?.searchSheet(self, didPickFavorite: favorites[index].0) ?? ()
@@ -202,8 +226,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
 
     private func browse(_ index: Int) {
-        guard index < rows.count else { return }
-        delegate?.searchSheet(self, didAskToBrowseFor: rows[index])
+        let list = showsStarters ? starters : rows
+        guard index < list.count else { return }
+        delegate?.searchSheet(self, didAskToBrowseFor: list[index])
     }
 
     @objc private func textChanged() {
@@ -512,6 +537,16 @@ final class SuggestionRowView: UIControl {
     var onPick: (() -> Void)?
     var onBrowseForMe: (() -> Void)?
     var showsBrowseForMe = false { didSet { chip.isHidden = !showsBrowseForMe; setNeedsLayout() } }
+    /// The first starter question's chip is filled blue, as in Arc Search's first-run picture.
+    var emphasizesChip = false {
+        didSet {
+            guard emphasizesChip != oldValue else { return }
+            chip.backgroundColor = emphasizesChip ? Palette.accent : Palette.chipFill
+            chip.setAttributedTitle(NSAttributedString(string: "Browse for Me", attributes: [
+                .font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: emphasizesChip ? UIColor.white : Palette.primaryText,
+            ]), for: .normal)
+        }
+    }
 
     private let icon = UIImageView()
     private let label = UILabel()

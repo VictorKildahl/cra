@@ -990,3 +990,14 @@ struct MobileBrowseQueryEditTests {
         #expect(html.contains("class=\"query\" href=\"\(address)\""))
     }
 }
+
+/// Starter questions for someone new (Arc Search 1.13).
+struct MobileStarterRowsTests {
+    @Test func someoneNewSeesSampleQuestionsUntilTheirFirstSearch() {
+        let rows = MobileSuggestions.starterRows(favorites: 0, hasSearched: false, incognito: false)
+        #expect(rows.map(\.text) == ["things to do in paris", "who are the beatles", "romantic shakespearean reply", "risotto vs paella"])
+        #expect(MobileSuggestions.starterRows(favorites: 1, hasSearched: false, incognito: false).isEmpty)
+        #expect(MobileSuggestions.starterRows(favorites: 0, hasSearched: true, incognito: false).isEmpty)
+        #expect(MobileSuggestions.starterRows(favorites: 0, hasSearched: false, incognito: true).isEmpty)
+    }
+}
