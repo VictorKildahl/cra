@@ -85,6 +85,8 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "net/base/net_errors.h"
 #include "ui/base/base_window.h"
+#include "extensions/browser/view_type_utils.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/views/controls/webview/cra_hosted_page.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
@@ -771,6 +773,14 @@ void RunReadyBlocks() {
   BOOL _audioMuted;
   BOOL _closeRequested;
   BOOL _pendingFocus;
+  // The saved back and forward list the page opens with (GitHub #273), until it has gone in.
+  NSDictionary<NSString*, id>* _pendingHistory;
+  // An extension's side panel page (initWithFrame:extensionSidePanelURL:…).
+  BOOL _sidePanel;
+  // A spare page's contents, made ahead and kept out of the tab strip (so out of extensions' sight) until a tab
+  // takes it.
+  std::unique_ptr<content::WebContents> _spareContents;
+  raw_ptr<Profile> _spareProfile;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame url:(NSString*)url delegate:(id<CraBrowserDelegate>)delegate {
@@ -802,14 +812,14 @@ void RunReadyBlocks() {
         extensionSidePanelURL:(NSString*)url
                      delegate:(id<CraBrowserDelegate>)delegate
                   profilePath:(NSString*)profilePath {
-  // Not yet: marked as a side panel, so extensions don't see it as a tab.
+  // Marked as a side panel before it loads, so it has no tab for extensions (GitHub #265).
+  _sidePanel = YES;
   return [self initWithFrame:frame url:url delegate:delegate incognito:NO profilePath:profilePath history:nil];
 }
 
 - (instancetype)initSpareWithFrame:(NSRect)frame profilePath:(NSString*)profilePath {
-  self = [self initWithFrame:frame url:@"" delegate:nil incognito:NO profilePath:profilePath history:nil];
   _isSpare = YES;
-  return self;
+  return [self initWithFrame:frame url:@"" delegate:nil incognito:NO profilePath:profilePath history:nil];
 }
 
 - (instancetype)initWithFrame:(NSRect)frame
@@ -822,8 +832,8 @@ void RunReadyBlocks() {
   if (!self) {
     return nil;
   }
-  // Not yet: `history` (the saved back and forward list) is left out; the page loads `url`.
   _delegate = delegate;
+  _pendingHistory = url && !incognito && [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
   _isIncognito = incognito;
   _profilePath = incognito ? nil : [profilePath copy];
   _container = [[NSView alloc] initWithFrame:frame];
@@ -864,6 +874,20 @@ void RunReadyBlocks() {
   if (_isIncognito) {
     profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   }
+  if (_isSpare) {
+    // Made now, while nothing waits on it; it goes in a tab strip when a tab takes it (takeSpareWithURL:).
+    _spareProfile = profile;
+    _spareContents = content::WebContents::Create(content::WebContents::CreateParams(profile));
+    return;
+  }
+  if (_pendingHistory || _sidePanel) {
+    std::unique_ptr<content::WebContents> made = content::WebContents::Create(content::WebContents::CreateParams(profile));
+    if (_sidePanel) {
+      extensions::SetViewType(made.get(), extensions::mojom::ViewType::kExtensionSidePanel);
+    }
+    [self insertContents:std::move(made) profile:profile];
+    return;
+  }
   PageHost* host = HostFor(profile);
   GURL url(_pendingURL.length ? UTF8(_pendingURL) : std::string(url::kAboutBlankURL));
   g_adding_own_page = true;
@@ -871,6 +895,37 @@ void RunReadyBlocks() {
   g_adding_own_page = false;
   _pendingURL = nil;
   [self contentsCreated:contents];
+}
+
+// A page the bridge made itself goes in its profile's tab strip (Chrome's tab helpers attach there), then
+// loads: its saved history (GitHub #273), else its address.
+- (void)insertContents:(std::unique_ptr<content::WebContents>)made profile:(Profile*)profile {
+  PageHost* host = HostFor(profile);
+  content::WebContents* contents = made.get();
+  g_adding_own_page = true;
+  host->browser()->GetTabStripModel()->AppendWebContents(std::move(made), /*foreground=*/false);
+  g_adding_own_page = false;
+  [self contentsCreated:contents];
+  if (_pendingHistory) {
+    NSDictionary* history = _pendingHistory;
+    _pendingHistory = nil;
+    std::string error;
+    int count = cra::RestorePageHistory(contents, UTF8(history[@"history"]), [history[@"index"] intValue], &error);
+    if ([_delegate respondsToSelector:@selector(browser:didRestoreHistoryEntries:error:)]) {
+      [_delegate browser:self
+          didRestoreHistoryEntries:count
+                             error:count > 0 ? nil : (error.empty() ? @"nothing restored" : NS(error))];
+    }
+    if (count > 0) {
+      _pendingURL = nil;
+      return;
+    }
+  }
+  NSString* url = _pendingURL;
+  _pendingURL = nil;
+  if (url.length) {
+    [self loadURL:url];
+  }
 }
 
 - (void)adoptContents:(content::WebContents*)contents {
@@ -1166,8 +1221,19 @@ void RunReadyBlocks() {
 #pragma mark Not yet
 
 - (void)takeSpareWithURL:(NSString*)url history:(NSDictionary<NSString*, id>*)history {
+  if (!_isSpare) {
+    return;
+  }
   _isSpare = NO;
-  [self loadURL:url];
+  _currentURL = [url copy];
+  _pendingURL = [url copy];
+  _pendingHistory = [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
+  if (_spareContents && _spareProfile && !g_quitting) {
+    Profile* profile = _spareProfile;
+    _spareProfile = nullptr;
+    [self insertContents:std::move(_spareContents) profile:profile];
+  }
+  // Taken before its profile loaded: createPageInProfile: makes it as a tab's page.
 }
 - (BOOL)startAgentDownload:(NSString*)url path:(NSString*)path update:(void (^)(CraDownloadInfo*))update {
   return NO;

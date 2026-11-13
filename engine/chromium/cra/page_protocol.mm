@@ -326,6 +326,15 @@ void HandleCraMethod(content::WebContents* contents,
 
 }  // namespace
 
+int RestorePageHistory(content::WebContents* contents, const std::string& history, int index, std::string* error) {
+  base::DictValue params;
+  params.Set("history", history);
+  params.Set("index", index);
+  base::DictValue result;
+  RestoreHistory(contents, &params, &result, error);
+  return error->empty() ? result.FindInt("restored").value_or(0) : 0;
+}
+
 PageSession::PageSession(content::WebContents* contents, ProtocolEvent events)
     : contents_(contents), events_([events copy]), pending_([NSMutableDictionary dictionary]) {}
 
