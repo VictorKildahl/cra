@@ -15,6 +15,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private(set) var browsers: BrowserManager!
     private(set) var shell: ShellView!
     private var commandPanel: CommandBarPanel!
+    /// The ⌘T bar's panel while it is open: where a scripted key press goes (cra://debug?key=…).
+    var openCommandPanel: NSWindow? { commandBar.isOpen ? commandPanel : nil }
     private var commandHost: CommandBarView!
     let tabSwitcher = TabSwitcher()
     private let tabSwitcherPanel = TabSwitcherPanel()
@@ -479,6 +481,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onOpenInBackground = { [weak self] s, typed in self?.openInBackground(s, typed: typed) ?? false }
         commandBar.onOpenInSplit = { [weak self] s, typed in self?.openInSplit(s, typed: typed) ?? false }
+        commandBar.onInstantLinks = { [weak self] phrase, engine in self?.runInstantLinks(phrase, engine: engine) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .profiles) }
         commandBar.onNoticeLearnMore = { [weak self] in self?.openTab(Self.privacyPage) }
@@ -3855,6 +3858,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .moveToFolder(let id):
             if let t = selectedTabID { store.moveItem(t, to: id, index: nil) }
         }
+    }
+
+    /// Shift-Return on a search in the bar (Instant Links, #407): the row, the plan and the results go to
+    /// the space this window shows.
+    private func runInstantLinks(_ phrase: String, engine: ChromiumSearchEngine) {
+        InstantLinksService.shared.run(phrase: phrase, space: focusedSpaceID, engine: engine, store: store,
+                                       host: .init(windowID: windowID, load: { [weak self] id in self?.browsers.ensureRuntime(for: id) }),
+                                       asNewTab: sidebarUI.newTabPlaceholderActive)
     }
 
     /// ⌘Return in the bar (Arc): the row's page in a new background tab, the current tab staying

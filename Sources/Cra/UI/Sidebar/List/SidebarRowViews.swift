@@ -2156,6 +2156,156 @@ final class LiveStatusRowView: SidebarRowView {
     }
 }
 
+struct InstantLinksRowModel: Equatable {
+    var id: UUID
+    var failed: Bool
+    /// Drawn as the open row, with the selected row's fill (the run started from ⌘T's new-tab bar).
+    var current = false
+}
+
+/// Instant Links' row (#407, Arc Max): "Searching the web for you…" at the top of Today as tall as a tab,
+/// Arc Max's flower where the favicon goes, turning once a second until the results replace the row.
+/// When the search fails it reads "Oops, something went wrong.", stops, and has a ✕ that removes it.
+final class InstantLinksRowView: SidebarRowView {
+    private(set) var model: InstantLinksRowModel?
+    private let spinner = CALayer()
+    private let flower = CAShapeLayer()
+    private let titleLabel = NSTextField.sidebarLabel(size: 14)
+    private lazy var closeButton: SidebarGlyphButton = {
+        let b = SidebarGlyphButton(symbol: "xmark", size: 24, iconSize: 13, help: "", colors: colors) { [weak self] in
+            guard let id = self?.model?.id else { return }
+            InstantLinksService.shared.dismiss(id)
+        }
+        b.setCloseMark(minus: false, help: "")
+        return b
+    }()
+    private var showsClose = false
+
+    override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
+        super.init(key: key, list: list, colors: colors)
+        spinner.bounds = CGRect(x: 0, y: 0, width: CraMetrics.favicon, height: CraMetrics.favicon)
+        flower.frame = spinner.bounds
+        flower.fillColor = nil
+        flower.lineWidth = 1.5
+        flower.lineJoin = .round
+        flower.path = Self.flowerPath(in: spinner.bounds)
+        flower.actions = ["strokeColor": NSNull()]
+        spinner.addSublayer(flower)
+        layer?.addSublayer(spinner)
+        addSubview(titleLabel)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Arc Max's flower, as drawn in its 30 fps capture: one line of four teardrop petals that start at
+    /// the centre, round out and cross the next petal's line on the way back, leaving a small diamond
+    /// in the middle.
+    static func flowerPath(in rect: CGRect) -> CGPath {
+        let path = CGMutablePath()
+        let reach = rect.width * 0.47
+        let belly = reach * 0.44
+        for k in 0..<4 {
+            let turn = CGAffineTransform(translationX: rect.midX, y: rect.midY)
+                .rotated(by: CGFloat(k) * .pi / 2 + .pi / 9)
+            let petal = CGMutablePath()
+            petal.move(to: .zero)
+            petal.addCurve(to: CGPoint(x: 0, y: reach), control1: CGPoint(x: -belly * 1.7, y: reach * 0.05), control2: CGPoint(x: -belly * 1.2, y: reach))
+            petal.addCurve(to: .zero, control1: CGPoint(x: belly * 1.2, y: reach), control2: CGPoint(x: belly * 1.7, y: reach * 0.05))
+            path.addPath(petal, transform: turn)
+        }
+        return path
+    }
+
+    func apply(_ m: InstantLinksRowModel) {
+        guard m != model else { return }
+        model = m
+        titleLabel.stringValue = m.failed ? InstantLinks.errorTitle : InstantLinks.searchingTitle
+        setAccessibilityLabel(titleLabel.stringValue)
+        refreshColors()
+        refreshBackground()
+        refreshSpin()
+        rebuildClose()
+        needsLayout = true
+    }
+
+    private func refreshColors() {
+        titleLabel.textColor = colors.textPrimary
+        flower.strokeColor = colors.textPrimary.cgColor
+    }
+
+    override func baseFill() -> NSColor { model?.current == true ? colors.selectedFill : .clear }
+
+    override func refreshBackground() {
+        super.refreshBackground()
+        setLifted(model?.current == true)
+    }
+
+    override func setColors(_ c: SidebarColors) {
+        guard c != colors else { return }
+        super.setColors(c)
+        refreshColors()
+        closeButton.colors = c
+    }
+
+    /// One turn a second, linear, for as long as it works; Reduce Motion leaves it still.
+    private func refreshSpin() {
+        let spins = model?.failed == false && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if !spins { spinner.removeAnimation(forKey: "spin"); return }
+        guard spinner.animation(forKey: "spin") == nil else { return }
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = 0
+        turn.toValue = 2 * Double.pi
+        turn.duration = 1
+        turn.timingFunction = CAMediaTimingFunction(name: .linear)
+        turn.repeatCount = .infinity
+        turn.isRemovedOnCompletion = false
+        spinner.add(turn, forKey: "spin")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Core Animation drops a layer's animations when its view leaves a window.
+        spinner.removeAnimation(forKey: "spin")
+        refreshSpin()
+    }
+
+    private func rebuildClose() {
+        let shown = model?.failed == true && isHovered
+        guard shown != showsClose else { return }
+        showsClose = shown
+        if shown { addSubview(closeButton) } else { closeButton.removeFromSuperview() }
+        needsLayout = true
+    }
+
+    override func hoverChanged() {
+        super.hoverChanged()
+        rebuildClose()
+    }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        let x = CraMetrics.rowLeading
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        spinner.position = CGPoint(x: x + CraMetrics.favicon / 2, y: h / 2)
+        CATransaction.commit()
+        let textX = x + CraMetrics.favicon + 11
+        var right = bounds.width - TabRowTrailing.endInset
+        if showsClose {
+            let s = closeButton.size
+            closeButton.frame = NSRect(x: right - s.width, y: (h - s.height) / 2, width: s.width, height: s.height)
+            right = closeButton.frame.minX - TabRowTrailing.controlGap
+        } else {
+            right = bounds.width - TabRowTrailing.restingTail
+        }
+        let th = titleLabel.intrinsicContentSize.height
+        titleLabel.frame = NSRect(x: textX - SidebarText.inset, y: (h - th) / 2, width: max(0, right - textX) + 2 * SidebarText.inset, height: th)
+    }
+}
+
 final class NewTabRowView: SidebarRowView {
     private let plus = NSImageView()
     private let label = NSTextField.sidebarLabel(size: 14)

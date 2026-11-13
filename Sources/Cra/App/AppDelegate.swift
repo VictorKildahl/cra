@@ -1081,7 +1081,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags,
                                         in: [page.hostWindow?.contentView, page.containerView].compactMap { $0 }, window: w)
                 } else {
-                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: w)
+                    // The ⌘T bar, while it is open, has the keyboard.
+                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: main.openCommandPanel ?? w)
                 }
                 return
             }
@@ -1101,6 +1102,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.showFindBar()
                 main.overlay.findQuery = q
                 main.askOnPage.submit(shift: false)
+                return
+            }
+            // instantLinks=<label>: the Instant Links row and the last run, as one line (#407).
+            if let v = dict["instantLinksSetting"] { store.settings.instantLinks = v == "on"; return }
+            if let v = dict["instantLinksFail"] {
+                InstantLinksService.failsOnPurpose = v == "plan"
+                InstantLinksService.modelFailsOnPurpose = v == "model"
+                return
+            }
+            if dict["instantLinksDismiss"] != nil { InstantLinksService.shared.dismissFailed(); return }
+            if let label = dict["instantLinks"] {
+                CraLog.note("Cra " + InstantLinksService.shared.readout(label, store: store, space: store.focusedSpaceID(window: main.windowID)))
                 return
             }
             if let n = dict["askFindQuote"].flatMap(Int.init) { main.askOnPage.debugFindQuote(n); return }

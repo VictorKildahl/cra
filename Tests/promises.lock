@@ -750,6 +750,7 @@
 #406   Packages/CraCore/Tests/CraCoreTests/TodayClearTests.swift::splitStaysWhole  e45654607849
 #406   Tests/Scenarios/clear-today-keeps.scenario  669596089ac8
 #406   Tests/StoreTests.swift::clearTodayKeepsSelectedAndPlaying  632d1e0b24a9
+#407   Tests/Scenarios/instant-links.scenario  6cf20ad42d70
 #408   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::everyQuestionReadsOnItsCard  4700f64b8bc7
 #408   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::lightSpaceOnDarkMacGetsALightQuestion  462fb908f263
 #408   Tests/Scenarios/ask-on-page-dark-card.scenario  b4f7984975ed
