@@ -25,6 +25,7 @@
 #include "cra/profile_prefs.h"
 
 #include <fcntl.h>
+#include <objc/runtime.h>
 #include <unistd.h>
 
 #include <map>
@@ -367,6 +368,33 @@ class PageObserver : public content::WebContentsObserver,
   raw_ptr<find_in_page::FindTabHelper> find_ = nullptr;
 };
 
+// A Browser's window that holds Cra's pages: never seen, never clicked, never captured, never key or main (keys
+// would go to a window with nothing in it). Chrome still anchors bubbles to it (an extension's popup), which Cra's
+// app finds as a child of a page window (ExtensionPopupCandidate) and frames under its own button.
+BOOL NeverKey(id self, SEL _cmd) {
+  return NO;
+}
+
+void MakeHostWindow(NSWindow* window) {
+  if (!window) {
+    return;
+  }
+  window.alphaValue = 0;
+  window.ignoresMouseEvents = YES;
+  window.sharingType = NSWindowSharingNone;
+  Class original = object_getClass(window);
+  NSString* name = [@"CraHost_" stringByAppendingString:NSStringFromClass(original)];
+  Class host = NSClassFromString(name);
+  if (!host) {
+    host = objc_allocateClassPair(original, name.UTF8String, 0);
+    class_addMethod(host, @selector(canBecomeKeyWindow), reinterpret_cast<IMP>(NeverKey), "c@:");
+    class_addMethod(host, @selector(canBecomeMainWindow), reinterpret_cast<IMP>(NeverKey), "c@:");
+    // Chrome's own code still sees its class (KVO and isKindOfClass go by the superclass chain).
+    objc_registerClassPair(host);
+  }
+  object_setClass(window, host);
+}
+
 // The hidden Browser that holds a profile's pages, and what arrives in it that Cra didn't put there: a
 // page's popup or link opened in a new tab, which becomes a Cra tab through the opener's delegate.
 class PageHost : public TabStripModelObserver {
@@ -376,9 +404,26 @@ class PageHost : public TabStripModelObserver {
     chrome::AddTabAt(browser, GURL(url::kAboutBlankURL), -1, true);
     placeholder_ = browser->GetTabStripModel()->GetActiveWebContents();
     browser->GetTabStripModel()->AddObserver(this);
+    MakeHostWindow(window());
   }
 
   BrowserWindowInterface* browser() { return browser_; }
+
+  NSWindow* window() {
+    return browser_ ? browser_->GetWindow()->GetNativeWindow().GetNativeNSWindow() : nil;
+  }
+
+  // The window rides along with the Cra window of the page in use, as a child, so a bubble Chrome anchors to it
+  // (an extension's popup) is found where Cra looks for it.
+  void FollowWindow(NSWindow* cra) {
+    NSWindow* hidden = window();
+    if (!hidden || !cra || hidden.parentWindow == cra) {
+      return;
+    }
+    [hidden.parentWindow removeChildWindow:hidden];
+    [hidden setFrame:cra.frame display:NO];
+    [cra addChildWindow:hidden ordered:NSWindowAbove];
+  }
 
   // Makes the blank page the active one, so a popup that opened in front leaves Chrome's window before Cra
   // marks it as its own and takes its view.
@@ -1368,6 +1413,7 @@ void RunReadyBlocks() {
   if (index != TabStripModel::kNoTab && tabs->active_index() != index) {
     tabs->ActivateTabAt(index);
   }
+  host->FollowWindow(_container.window);
 }
 
 // Cra's scripts in every frame before the page's own (PageScript.swift), as the CEF bridge installed them: the
@@ -2355,7 +2401,13 @@ void RunReadyBlocks() {
 + (BOOL)isExtensionWindow:(NSWindow*)window {
   return [g_extension_windows containsObject:window];
 }
+// The hidden window of a profile's Browser (it hosts Chrome's bubbles for Cra's pages).
 + (BOOL)isPageWindow:(NSWindow*)window {
+  for (auto& [profile, host] : Hosts()) {
+    if (host->window() == window) {
+      return YES;
+    }
+  }
   return NO;
 }
 + (void)floatOverFullScreenSpaces:(NSWindow*)window {
