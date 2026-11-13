@@ -1387,6 +1387,10 @@ void RunReadyBlocks() {
     return self;
   }
   _pendingURL = [url copy];
+  // Quitting: Chrome is tearing down (its profile manager may be gone); the page is never made, as with CEF.
+  if (g_quitting || !g_browser_process || !g_browser_process->profile_manager()) {
+    return self;
+  }
   ProfileManager* profiles = g_browser_process->profile_manager();
   base::FilePath dir = ProfileDir(_profilePath);
   if (Profile* profile = profiles->GetProfileByPath(dir)) {
