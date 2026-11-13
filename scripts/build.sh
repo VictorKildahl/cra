@@ -15,7 +15,7 @@
 #   CRA_ENGINE=chromium scripts/build.sh
 #                               builds Cra on Chrome's own framework instead of CEF (docs/chromium-engine.md)
 #                               into build/engine/Cra.app, from CRA_ENGINE_OUT (default
-#                               ~/chromium.noindex/src/out/Cra_arm64, scripts/build-chromium.sh); a test app
+#                               ~/chromium.noindex/src/out/Cra_<cpu>, scripts/build-chromium.sh); a test app
 #                               of its own (dk.kildahl.cra.engine, executable CraEngine) until the switch
 # Dev builds are version 0.0.0-dev and stay unregistered with LaunchServices, so
 # opening Cra (or a cra:// link) always picks the installed release.
@@ -48,10 +48,11 @@ fi
 ENGINE="${CRA_ENGINE:-cef}"
 EXE=Cra
 if [ "$ENGINE" = chromium ]; then
-  ENGINE_OUT="${CRA_ENGINE_OUT:-$HOME/chromium.noindex/src/out/Cra_arm64}"
+  ENGINE_CPU=$([ "$ARCH" = x86_64 ] && echo x64 || echo arm64)
+  ENGINE_OUT="${CRA_ENGINE_OUT:-$HOME/chromium.noindex/src/out/Cra_$ENGINE_CPU}"
   export CRA_ENGINE=chromium CRA_ENGINE_FRAMEWORKS="$ENGINE_OUT/Chromium.app/Contents/Frameworks"  # read by Package.swift
   [ -d "$CRA_ENGINE_FRAMEWORKS/Chromium Framework.framework" ] || { echo "No Chrome framework in $ENGINE_OUT" >&2; exit 1; }
-  FINAL_APP="$ROOT/build/engine/Cra.app"
+  FINAL_APP="$ROOT/build/engine$([ "$ARCH" = "$(uname -m)" ] || echo "-$ARCH")/Cra.app"
   SWIFT_ARGS=(-c "$CONFIG" --arch "$ARCH" --scratch-path "$ROOT/build/swiftpm-engine-$ARCH")
   EXE=CraEngine
 else
