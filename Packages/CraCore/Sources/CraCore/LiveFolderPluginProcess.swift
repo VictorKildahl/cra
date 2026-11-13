@@ -18,6 +18,8 @@ public struct LiveFolderPluginResponse: Codable, Sendable {
     }
 }
 
+// Runs the plugin host as a child process, which only the Mac allows.
+#if os(macOS)
 public enum LiveFolderPluginProcess {
     public static func invoke(executable: URL, script: String, method: String, input: Data,
                               origins: [LiveFolderSessionOrigin], timeout: TimeInterval = 30,
@@ -99,3 +101,4 @@ public enum LiveFolderPluginProcess {
         .executionFailed(message)
     }
 }
+#endif

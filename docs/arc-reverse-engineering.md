@@ -16,7 +16,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 
 ## Sidebar data model (StorableSidebar.json)
 - [O] `sidebar.containers` = [ {global}, {spaces, topAppsContainerIDs, items} ]. Lists are flat [id, object, id, object...].
-- [O] SpaceModel: id, title, profile, containerIDs = ["pinned", <id>, "unpinned", <id>], customInfo.iconType {emoji_v2, emoji},
+- [O] SpaceModel: id, title, profile, containerIDs = ["pinned", <id>, "unpinned", <id>], customInfo.iconType {emoji_v2, emoji}
+  or {icon: <SymbolIconType>} (the Icon tab: star, bookmark … train in picker order, plus rss, github, linear, figma, search)
+  or {symbol}; Cra maps them in CraCore `ArcSpaceIcon`,
   customInfo.windowTheme = blendedGradient { baseColors[2], overlayColors, modifiers{noiseFactor,intensityFactor,overlay:"grain"},
   wheel: analogous|complimentary, translucencyStyle light|dark } with appearanceBased light/dark variants, plus a
   semanticColorPalette (foregroundPrimary/Secondary/Tertiary, backgroundExtra, maxContrastColor...).
@@ -507,6 +509,20 @@ No decompiler, so property names and types are observed; the algorithms are infe
   background containers) after `splitDropTargetDelaySatisfied`; dropping makes a split item. Flags:
   `drag-to-combine-tabs-into-split-enabled`, `sidebar-drag-to-split-preview-ui-enabled`, `win-drag-to-split-enabled`.
   Onboarding copy: "Drag a tab from your sidebar into the middle of the screen to create a Split View."
+
+- [M] Measured in Arc 1.173.1 (13 Nov 2026, live Arc, Blank Window, real HID drags; Cra `SplitDropProposal`):
+  - A sidebar tab over a lone page: the region opens on the side of the nearest edge (left/right → side by side,
+    top/bottom → stacked), half the pane, at once (no delay). Over the first ~25 pt next to the sidebar nothing
+    opens (50 pt does). The open region keeps the drag while the pointer is on it, so the middle of the page shows
+    whichever side opened first. The page shows the tab from before the row press (the press switched to the
+    dragged tab) while the region is open; off the panes the dragged tab shows again.
+  - The region: an empty card, the window's backdrop through it, a light 1 pt rim, rounded like a pane; a dragger
+    pill in its gap. The drag image becomes a black card (~216 × 238 pt, ~90 %) with the favicon and title centred.
+  - A tab over a two-pane split: 20 pt in from a pane's side and the gap open the region between the panes (or at
+    either end); the pane's middle, its quarter points, and its top and bottom 25–40 pt ring that pane (replace).
+    A split never flips its direction on a drop.
+  - A page's link dragged over the page: nothing anywhere (the page keeps it).
+  - Not measured: a replace drop's result (the scripted release never landed in a split), the exact edge depth.
 
 ### Commands, menus, entry points
 - [O] `WindowAction.SplitViewAction`: `addPanel(index: InsertionLocation, showCommandBar: Bool)`,
@@ -2120,6 +2136,12 @@ the arm64 slice. [O] = observed, [I] = inferred.
   under "Little Window"; the page loads in that space's profile and "Open in" / ⌘O names it. Saved as
   `{"littleWindow": {"space": "<id>"}}` (`{}` without one, as before), which older Cra reads as a plain Little
   Window. An imported `littleArc(space(id))` keeps its space.
+- [O, Arc 1.173.1, reporter of #421 via AppleScript] A URL typed in ⌘T goes through the routes too: a `meet.google.com`
+  or `youtube.com` route to Personal, typed from Homelab, switched the window to Personal with the tab there. A typed
+  URL that matches nothing stays in the space in use (the Little Arc default does not apply). Not checked: ⌘L on an
+  open tab, the sidebar address pill, a typed URL whose first match is a Little Arc route. Cra
+  (`AppSettings.space(forTypedURL:)`, `MainWindowController.handleCommit`) routes the ⌘T new-tab case only, and only
+  to a space; scenario `command-bar-route`.
 
 ## Extension popups and extension windows (Arc 1.170, 26 Oct 2026, static)
 
@@ -2778,6 +2800,16 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   `PlaybackControlForeground` = black 50 % (light) / white 66 % (dark). Long strings: "Close Mini Player", "Open
   Picture in Picture", "Adjust Tab Volume", "Toggle Microphone"; symbols backward/forward.end.fill,
   speaker.wave.3.fill / speaker.wave.1.fill, video.slash.fill (short ones are inline, read live instead).
+- [S] Which sound gets a card (13 Nov 2026, Arc 1.172.2, #411): the card's state is only the media session's
+  (`MediaSessionState` {status: `MediaSessionStatus` active/ducking/suspended/inactive, hasNext/PreviousTrack,
+  canToggleMicrophone/Camera, isCameraOn/MicrophoneOn, volume, position}, from `webContents:didChangeMediaSessionState:`);
+  the audible state (`webContents:didChangeAudibleState:`) is a separate signal. So a card needs Chromium's media
+  session, which Chrome's global media controls offer only while `MediaSessionImpl::IsControllable()`: a media
+  element over 5 s or of unknown length (`media::DurationToMediaContentType`, loop not counted), or a page media
+  session with a playback state. A 1 s `new Audio().play()` ding or Web Audio alone is not. Not measured live (no
+  decompiler; whether Arc also drops a non-controllable active session is inferred from Chrome's rule). Cra:
+  "Cra.audible" carries IsControllable (audible-state.patch), `CraBrowser.hasUncontrollableSound`, scenario
+  player-skips-dings.
 - [O] Now playing, live: a card appears for an audio tab once it is off screen (a video in Picture in Picture has
   none). Cards 8 pt in, bottom where the list ends (50 pt above the window bottom), 6 pt corners, filled with the
   palette's `backgroundExtra` for the space's scheme: dark = 15 % of `shadedDark` (#110D00 for #6F5600), light =
@@ -4027,7 +4059,20 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   skips Arc's parts and hidden ones. Cra's choices where Arc's weren't readable: Return goes to the next match while the
   text is on the page and asks otherwise (always asks in a conversation); Find on Page tries the quote's first sentence
   and first eight words when the whole quote isn't on the page (a footnote mark between sentences, the model's slips);
-  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped; the card sits
+  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped. Not Arc's, on
+  purpose (#417): Arc's "When I write BEGIN DIALOGUE … the "Human:"" paragraph is replaced by "After the page, each
+  message is a question…", the page goes with the first question without "BEGIN DIALOGUE", and each earlier question
+  and answer is a turn of its own in the session's transcript. Given Arc's dialogue as text, the on-device model wrote
+  a dialogue back (made-up questions, "Human:"/"Assistant:" lines, or an earlier answer word for word): 30 of 40
+  answers in ten 4-question conversations on a 10,500-character article, 0 of 40 as turns (13 Nov 2026, macOS 26.7).
+  Arc's four examples aren't sent either: on a question the page can't answer, the model quoted the solar example as
+  the page's (9 of 20; labelled "never quote these" 6 of 20; placeholders copied as placeholders), 0 of 20 without
+  them, and answerable questions quote the page as often (19 of 20). A long answer may use the rest of the context
+  (`maximumResponseTokens`) and keeps what it wrote if it overflows anyway; it reaches the card at most ten times a
+  second, line by line while it streams. A follow-up ends with "Quote the page in an <excerpt> tag if it answers
+  this.": after a summary (no quotes) the model kept answering without them (9 of 24 follow-ups quoted, 16 with it).
+  An earlier answer is sent again up to 800 characters: a summary that filled the context left the next questions
+  20 % of the page. The card sits
   where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)

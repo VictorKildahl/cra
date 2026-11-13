@@ -60,6 +60,7 @@ enum StoreTests {
         try arcItemListedTwice()
         try arcLiveFolderImportsLive()
         try arcSpaceWithoutAnIconImportsAsADot()
+        try arcSpaceIconTabGlyphImports()
         littleWindowProfile()
         tidyTabs()
         pinHook()
@@ -81,6 +82,7 @@ enum StoreTests {
         openLinkInSplit()
         backToReferrer()
         recentTabsTakeBackgroundTabs()
+        incognitoSpaceKeepsItsContext()
         print("Store: \(checks) checks passed")
     }
 
@@ -941,6 +943,35 @@ enum StoreTests {
         let store = AppComposition(clock: ManualScheduler()).store
         let ids = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs
         expect(ids.first.flatMap { store.space($0) }?.icon == SpaceIcon.none, "the imported space has no icon, a dot in the dock (#252)")
+        for id in ids { store.deleteSpace(id) }
+    }
+
+    /// An Arc space with a glyph from the Icon tab of Arc's picker (`iconType.icon`, e.g. "star")
+    /// imports with the SF Symbol in the same slot of Cra's Icon tab, not 🗂️, so nobody picks it
+    /// again. A name Cra has no symbol for (Arc's "github") still gets 🗂️.
+    @MainActor
+    private static func arcSpaceIconTabGlyphImports() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var spaces = containers[main]["spaces"] as! [Any]
+        for (title, icon) in [("Home", "star"), ("Work", "github")] {
+            let i = spaces.firstIndex { ($0 as? [String: Any])?["title"] as? String == title }!
+            var space = spaces[i] as! [String: Any]
+            space["customInfo"] = ["iconType": ["icon": icon]]
+            spaces[i] = space
+        }
+        containers[main]["spaces"] = spaces
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+
+        let store = AppComposition(clock: ManualScheduler()).store
+        let ids = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs
+        let icons = ids.map { store.space($0)?.icon }
+        expect(icons == [.symbol("star.fill"), .emoji("🗂️")], "Arc's Icon-tab star imports as Cra's star, an unknown glyph as 🗂️ (\(icons))")
         for id in ids { store.deleteSpace(id) }
     }
 
@@ -2517,6 +2548,25 @@ enum StoreTests {
                "and land in the archive")
         store.archiveTabsBelow(pinned.id)
         expect(store.item(pinned.id) != nil, "a pinned tab archives nothing below it (Arc offers it on Today tabs only)")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// An incognito window's pages all load in one off-the-record context, whatever profile its
+    /// space would name, so the space takes no profile; and Export into Folder can't carry its
+    /// tabs into a saved space (#413).
+    // promise: #413
+    @MainActor
+    private static func incognitoSpaceKeepsItsContext() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Work")
+        let home = store.createSpace(title: "Home", emoji: "🏠").id
+        let incognito = store.addIncognitoWindow(frame: nil)
+        let sid = incognito.focusedSpaceID!
+        let secret = store.createTab(url: "https://example.com/secret", window: incognito.id)
+        store.setProfile(work.id, forSpace: sid)
+        expect(store.space(sid)?.profileID == nil, "an incognito space takes no profile")
+        expect(store.exportSpace(sid, intoFolderIn: home) == nil, "an incognito space doesn't export into a saved space")
+        expect(store.isIncognito(item: secret.id) && store.spaceID(ofItem: secret.id) == sid, "its tab stays in the incognito window")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 

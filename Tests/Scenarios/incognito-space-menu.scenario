@@ -1,0 +1,16 @@
+# promise: #413
+# An incognito window's pages all load in one off-the-record context, so its space header's menu
+# offers no Set Profile (the checkmark moved and nothing changed), and none of what the window's
+# Spaces menu turns off there: Live Folders, Export into Folder, Manage Spaces…, Delete Space
+# (GitHub #413). A normal window's header keeps Arc's whole menu.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=normal
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?spaceMenu=normal
+expect-log space menu normal: Change Space Icon…\|Rename Space…\|Edit Theme Color…\|Set Profile ▸\|Search Engine ▸\|──\|.*Live Folders ▸\|──\|Export .*\|Delete Space$
+cra://action/newIncognitoWindow
+wait 2
+cra://debug?spaceMenu=incognito&window=incognito
+expect-log space menu incognito: Change Space Icon…\|Rename Space…\|Edit Theme Color…\|Search Engine ▸\|──\|New Folder[^|]*$

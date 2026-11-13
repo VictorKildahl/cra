@@ -18,6 +18,20 @@ struct SpaceMenuLayoutTests {
         #expect(SpaceMenuLayout.sections(spaceCount: 1)[3] == [.manageSpaces, .hideSpaceHeader])
     }
 
+    /// An incognito window's space menu leaves out what an incognito space can't do, as Spaces ▸
+    /// Change Profile, Delete Space and Manage Spaces… are off in its window: its pages load in
+    /// one off-the-record context whatever profile it names, its tabs never move into a saved
+    /// space (Export), and live folders aren't made there (#413).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/413"))
+    func incognitoSpaceOffersNoProfile() {
+        for count in [1, 3] {
+            #expect(SpaceMenuLayout.sections(spaceCount: count, incognito: true) == [
+                [.changeIcon, .rename, .editTheme, .searchEngine],
+                [.newFolder],
+            ])
+        }
+    }
+
     /// From the dock on another space, Edit Theme Color…, Rename Space… and New Folder open that
     /// space first; Change Space Icon… points at the icon and the open space stays open.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/339"))

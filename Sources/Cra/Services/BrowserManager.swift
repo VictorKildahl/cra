@@ -1077,7 +1077,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if let np = nowPlaying {
             if np.entries.contains(where: { $0.id == id }) {
                 np.update(id) { $0.playing = audible }
-            } else if audible {
+            } else if audible && !browser.hasUncontrollableSound {
                 np.entries.append(.init(id: id, playing: true))
             }
             if audible { refreshMediaControls(id) }
@@ -1093,7 +1093,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.soundPlaying = playing
         let resumesCard = playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
         if resumesCard { nowPlaying?.update(id) { $0.playing = true } }
-        guard changed || resumesCard else { return }
+        // A ding made no card (#411); media starting within its hold has no audible edge of its own.
+        let startsCard = playing && browser.isAudible && !browser.hasUncontrollableSound
+            && nowPlaying?.entries.contains(where: { $0.id == id }) == false
+        if startsCard {
+            nowPlaying?.entries.append(.init(id: id, playing: true))
+            refreshMediaControls(id)
+        }
+        guard changed || resumesCard || startsCard else { return }
         delegate?.browserManagerDidUpdate(id)
     }
 

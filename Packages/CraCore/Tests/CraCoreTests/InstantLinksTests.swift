@@ -286,6 +286,13 @@ struct InstantLinksTests {
         }
     }
 
+    /// Google's `/goto?url=` opens its "verifying your request" page for seconds before it redirects
+    /// (seen in the 0.1.43 release clip): a result opens its own page, as `/url?q=` does.
+    @Test func gotoLinksOpenTheirOwnPage() {
+        let json = #"{"links": ["https://www.google.com/goto?url=https%3A%2F%2Fexample.com%2Fb%3Fx%3D1", "https://www.google.dk/goto?url=CAESAQ"]}"#
+        #expect(InstantLinks.results(fromJSON: json, limit: 5).links.map(\.absoluteString) == ["https://example.com/b?x=1"])
+    }
+
     @Test func resultsAreTheUsableLinksOfTheScriptsAnswer() {
         let json = """
         {"links": [
@@ -306,7 +313,7 @@ struct InstantLinksTests {
         #expect(r.blocked == false)
         #expect(r.links.map(\.absoluteString) == [
             "https://example.com/a?x=1",
-            "https://www.google.com/goto?url=https%3A%2F%2Fexample.com%2Fb",
+            "https://example.com/b",
             "https://docs.google.com/document/d/1",
             "https://example.org/c",
             "https://example.net/d",

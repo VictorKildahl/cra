@@ -20,6 +20,9 @@ final class SidebarUIState {
     /// filled like the selected tab, which loses its fill (Arc: isCommandBarNewTabPlaceholderActive).
     var newTabPlaceholderActive = false
     var draggingID: UUID?
+    /// The tab that was open before the press that switched to the row being dragged: Arc shows it
+    /// again while the drag over the page offers a split, and splits the dragged tab with it.
+    var tabBeforePress: UUID?
     /// Loading progress per tab (0...1), fed by the browser manager.
     var progress: [UUID: Double] = [:]
     var loadedTabIDs: Set<UUID> = []
@@ -205,6 +208,9 @@ final class SidebarActions {
     var moveBlankWindow: (UUID) -> Void = { _ in }
     var goBack: () -> Void = {}
     var goForward: () -> Void = {}
+    /// Right-click (or hold) Back or Forward: the tab's history that way, hung under the button
+    /// (#416). The tab is a split pane's, or nil for the one in front.
+    var showBackForwardMenu: (UUID?, BackForwardMenu.Direction, NSView) -> Void = { _, _, _ in }
     var reload: () -> Void = {}
     var editSpace: (Space?) -> Void = { _ in }
     /// Move to ▸ New Space… on picked tabs: the new space sheet, and the tabs go to the space it makes.

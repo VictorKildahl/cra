@@ -23,6 +23,8 @@ struct ImportedItem {
 struct ImportedSpace {
     var title: String
     var emoji: String
+    /// An SF Symbol shown instead of `emoji` (then empty): Arc's Icon-tab glyphs.
+    var symbol: String? = nil
     var theme: SpaceTheme?
     /// The space's own favorites (Arc: the top apps of the space's profile).
     var favorites: [ImportedItem] = []
@@ -204,14 +206,9 @@ enum ArcImporter {
         for (sid, space) in pairs(main["spaces"]) {
             let title = space["title"] as? String ?? "Space"
             spaceTitleByID[sid] = title
-            // No iconType is Remove Icon in Arc, a dot in its dock: keep it icon-less, which Cra's
-            // dock draws as the same dot (#252). An icon this can't read gets 🗂️.
-            var emoji = ""
-            if let info = space["customInfo"] as? [String: Any], let icon = info["iconType"] as? [String: Any] {
-                emoji = "🗂️"
-                if let e = icon["emoji_v2"] as? String { emoji = e }
-                else if let code = icon["emoji"] as? Int, let scalar = UnicodeScalar(code) { emoji = String(Character(scalar)) }
-            }
+            // An emoji, an Icon-tab glyph as Cra's symbol in that slot, or no icon (a dot, #252).
+            let icon = ArcSpaceIcon.icon((space["customInfo"] as? [String: Any])?["iconType"] as? [String: Any],
+                                         symbolExists: { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil })
             var pinnedID: String?, todayID: String?
             if let ids = space["containerIDs"] as? [Any] {
                 var i = 0
@@ -224,7 +221,7 @@ enum ArcImporter {
             }
             // A space without a theme is Arc's default dark purple, close to Ink. Not the next
             // preset: that shifted every later space onto another colour (issue #30).
-            var sp = ImportedSpace(title: title, emoji: emoji, theme: ArcThemeImport.theme(from: space) ?? SpaceTheme.presets[0])
+            var sp = ImportedSpace(title: title, emoji: icon.emoji, symbol: icon.symbol, theme: ArcThemeImport.theme(from: space) ?? SpaceTheme.presets[0])
             let profile = space["profile"] as? NSDictionary
             sp.favorites = favoritesByProfile.first { $0.profile.isEqual(profile) }?.items ?? allFavorites
             sp.profile = ImportProfileMap.arcProfileFolder(space["profile"]).map { ImportedProfile(folder: $0, name: profileNames[$0] ?? $0) }
@@ -544,7 +541,7 @@ extension SidebarStore {
 
         // A source profile's spaces go on the Cra profile of its name; the rest stay on Default.
         for sp in plan.spaces {
-            let space = createSpace(title: freeTitle(sp.title), emoji: sp.emoji, theme: sp.theme, focus: false)
+            let space = createSpace(title: freeTitle(sp.title), emoji: sp.emoji, symbol: sp.symbol, theme: sp.theme, focus: false)
             if let source = sp.profile {
                 let folder = result.profiles.folders[source.folder] ?? importedProfile(named: source.name).directoryName
                 result.profiles.folders[source.folder] = folder

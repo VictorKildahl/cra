@@ -251,11 +251,15 @@ final class PaneToolbarView: NSView {
     }
 
     private func glyph(_ key: String, _ symbol: String, help: String, enabled: Bool = true, width: CGFloat = 26, iconSize: CGFloat = 13,
-                       tint: NSColor? = nil, animated: Bool = false, action: @escaping (PaneToolbarView) -> Void) -> ToolbarGlyphButton {
+                       tint: NSColor? = nil, animated: Bool = false, history: BackForwardMenu.Direction? = nil,
+                       action: @escaping (PaneToolbarView) -> Void) -> ToolbarGlyphButton {
         let b = button(key) { ToolbarGlyphButton() }
         b.configure(symbol: symbol, image: nil, help: help, enabled: enabled, width: width, iconSize: iconSize, tint: tint ?? model.fgDim,
                     hover: model.hover, animated: animated)
         b.action = { [weak self] in if let self { action(self) } }
+        b.secondaryAction = history.map { direction in
+            { [weak self] view in if let self { self.actions.showBackForwardMenu(self.paneTabID, direction, view) } }
+        }
         return b
     }
 
@@ -292,9 +296,11 @@ final class PaneToolbarView: NSView {
                 return glyph("toggle", "sidebar.left", help: m.sidebarVisible ? "Hide Sidebar (⌘S)" : "Show Sidebar (⌘S)",
                              width: 37, iconSize: 15.5) { $0.actions.toggleSidebar() }
             case .back(let enabled):
-                return glyph("back", "arrow.left", help: wide ? "" : "Go Back (⌘[)", enabled: enabled, width: 37, iconSize: 15) { if !wide { $0.navigate("goBack") } }
+                return glyph("back", "arrow.left", help: wide ? "" : "Go Back (⌘[)", enabled: enabled, width: 37, iconSize: 15,
+                             history: wide ? nil : .back) { if !wide { $0.navigate("goBack") } }
             case .forward(let enabled):
-                return glyph("forward", "arrow.right", help: wide ? "" : "Go Forward (⌘])", enabled: enabled, width: 37, iconSize: 15) { if !wide { $0.navigate("goForward") } }
+                return glyph("forward", "arrow.right", help: wide ? "" : "Go Forward (⌘])", enabled: enabled, width: 37, iconSize: 15,
+                             history: wide ? nil : .forward) { if !wide { $0.navigate("goForward") } }
             case .reload(let loading, let enabled):
                 return glyph("reload", loading ? "xmark" : "arrow.clockwise", help: enabled ? "Refresh (⌘R)" : "", enabled: enabled, width: 37,
                              iconSize: 15, animated: enabled) { if !wide { $0.navigate("reload") } }
@@ -623,6 +629,9 @@ final class ToolbarGlyphButton: NSView {
     var action: () -> Void = {}
     /// Right-click menu (a pinned extension's icon options).
     var menuProvider: (() -> NSMenu?)?
+    /// Right-click, ⌃-click or a held press (ButtonHold): Back and Forward's history (#416).
+    var secondaryAction: ((NSView) -> Void)?
+    private let hold = ButtonHold()
     private(set) var width: CGFloat = 26
     private let imageView = NSImageView()
     private var tip: ArcTooltipAnchorView?
@@ -715,6 +724,10 @@ final class ToolbarGlyphButton: NSView {
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
     override func mouseDown(with event: NSEvent) {
+        if hold.down(event, enabled: enabled, secondary: secondaryAction.map { f in { [weak self] in if let self { f(self) } } }) {
+            contextClick = true
+            return
+        }
         contextClick = event.modifierFlags.contains(.control) && menuProvider != nil
         if contextClick, let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) }
         if !contextClick, turnsOnPress, enabled { imageView.pressTurn(true) }
@@ -724,7 +737,12 @@ final class ToolbarGlyphButton: NSView {
     }
     override func mouseUp(with event: NSEvent) {
         if turnsOnPress { imageView.pressTurn(false) }
+        if hold.up() { return }
         if !contextClick, enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+    }
+    override func rightMouseDown(with event: NSEvent) {
+        guard enabled, let secondaryAction else { return super.rightMouseDown(with: event) }
+        secondaryAction(self)
     }
     override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
 }

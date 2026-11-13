@@ -1,0 +1,129 @@
+import UIKit
+
+/// A sheet of Cra's own: a dimmed page above, a rounded panel rising from the bottom edge, put
+/// away by a tap on the dimmed part or a drag downwards. Arc Search's page menu is one of these
+/// rather than a system sheet (it has no grabber and sits at one height).
+final class SheetHost: UIView, UIGestureRecognizerDelegate {
+    let panel = UIView()
+    private let dim = UIControl()
+    /// Light: nearly white (Arc Search's 2024 screenshots). Dark: Victor's recording (a phone in
+    /// dark mode), grey ~130 over a white page dimmed to 206, its boxes a little lighter.
+    private let material = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
+    private let content: UIView
+    /// Holds the content: it scrolls only when the panel is taller than the screen (landscape).
+    private let scroller = UIScrollView()
+    private let panelHeight: (CGFloat) -> CGFloat
+    private var shown = false
+    private var dragOffset: CGFloat = 0
+    var onDismiss: (() -> Void)?
+
+    /// `height` gets the bottom safe area and returns the panel's height.
+    init(content: UIView, cornerRadius: CGFloat, height: @escaping (CGFloat) -> CGFloat) {
+        self.content = content
+        panelHeight = height
+        super.init(frame: .zero)
+        dim.backgroundColor = UIColor(white: 0, alpha: 0.21)
+        dim.alpha = 0
+        dim.addTarget(self, action: #selector(dismissTapped), for: .touchUpInside)
+        dim.accessibilityIdentifier = "sheet-dim"
+        addSubview(dim)
+        panel.layer.cornerRadius = cornerRadius
+        panel.layer.cornerCurve = .continuous
+        panel.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        panel.clipsToBounds = true
+        addSubview(panel)
+        panel.addSubview(material)
+        let wash = UIView()
+        wash.backgroundColor = Palette.dynamic(light: UIColor(white: 1, alpha: 0.45), dark: UIColor(white: 1, alpha: 0.02))
+        wash.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        material.contentView.addSubview(wash)
+        scroller.showsVerticalScrollIndicator = false
+        scroller.alwaysBounceVertical = false
+        scroller.contentInsetAdjustmentBehavior = .never
+        panel.addSubview(scroller)
+        scroller.addSubview(content)
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+        pan.delegate = self
+        panel.addGestureRecognizer(pan)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        dim.frame = bounds
+        // The panel's own height, but never past the top of the screen: what doesn't fit scrolls.
+        let full = panelHeight(safeAreaInsets.bottom)
+        let height = min(full, bounds.height - safeAreaInsets.top - 8)
+        let top = shown ? bounds.height - height + dragOffset : bounds.height
+        // On iPad the panel keeps a phone-like width, centred (Arc Search's iPad menu was not seen).
+        let width = min(bounds.width, 540)
+        panel.frame = CGRect(x: (bounds.width - width) / 2, y: top, width: width, height: height)
+        material.frame = panel.bounds
+        scroller.frame = panel.bounds
+        content.frame = CGRect(x: 0, y: 0, width: width, height: full)
+        scroller.contentSize = content.frame.size
+        scroller.isScrollEnabled = full > height
+        dim.alpha = shown ? max(0, 1 - dragOffset / max(1, height)) : 0
+    }
+
+    func present(in parent: UIView) {
+        frame = parent.bounds
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        parent.addSubview(self)
+        layoutIfNeeded()
+        shown = true
+        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0,
+                       options: [.allowUserInteraction]) {
+            self.setNeedsLayout()
+            self.layoutIfNeeded()
+        }
+    }
+
+    func dismiss(animated: Bool = true, then: (() -> Void)? = nil) {
+        guard shown else { return }
+        shown = false
+        let finish = {
+            self.removeFromSuperview()
+            self.onDismiss?()
+            then?()
+        }
+        guard animated else { return finish() }
+        UIView.animate(withDuration: 0.26, delay: 0, options: [.curveEaseIn, .beginFromCurrentState]) {
+            self.setNeedsLayout()
+            self.layoutIfNeeded()
+        } completion: { _ in finish() }
+    }
+
+    @objc private func dismissTapped() { dismiss() }
+
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard let pan = gesture as? UIPanGestureRecognizer else { return true }
+        // While the content scrolls, a drag down first scrolls it back to the top.
+        if scroller.isScrollEnabled, scroller.contentOffset.y > 0 { return false }
+        let velocity = pan.velocity(in: self)
+        return velocity.y > abs(velocity.x)
+    }
+
+    @objc private func panned(_ pan: UIPanGestureRecognizer) {
+        switch pan.state {
+        case .changed:
+            dragOffset = max(0, pan.translation(in: self).y)
+            setNeedsLayout()
+            layoutIfNeeded()
+        case .ended, .cancelled:
+            let away = pan.state == .ended && (dragOffset > panel.bounds.height * 0.3 || pan.velocity(in: self).y > 800)
+            if away {
+                dismiss()
+            } else {
+                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: []) {
+                    self.dragOffset = 0
+                    self.setNeedsLayout()
+                    self.layoutIfNeeded()
+                }
+            }
+            if away { dragOffset = 0 }
+        default: break
+        }
+    }
+}

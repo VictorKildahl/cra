@@ -1,0 +1,42 @@
+# promise: #421
+# Air Traffic Control on a URL typed in ⌘T (#421, Arc 1.173.1 as the reporter measured it): the routes
+# apply as they do to a link from another app, first match wins, and a route to a space opens the new
+# tab there and switches the window to it. The default never applies: a typed URL that matches no route
+# opens in the space in use (Arc's default is Little Arc and a typed URL still opens a normal tab).
+# Home holds home; a route sends n=routed to Work. Typed from Home it lands in Work; typed from Work
+# with no match it stays in Work; typed from Home again with no match it stays in Home.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "defaultLinkDestination": {"littleWindow": {}}, "linkRoutes": [{"id": "E0000000-0000-0000-0000-000000000001", "match": "contains", "text": "n=routed", "destination": {"space": {"_0": "A0000000-0000-0000-0000-000000000002"}}}]}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=home
+wait 2
+cra://debug?browserWindows=start
+expect-log Cra browser windows start: kind=normal space=Home .*open=\S*n=home 
+
+# Routed: Work, with the tab in front.
+cra://commandbar?query=${PAGE}?n=routed
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+cra://debug?browserWindows=routed
+expect-log Cra browser windows routed: kind=normal space=Work .*tabs=\[\S*n=routed\] open=\S*n=routed 
+
+# No route from Work: stays in Work.
+cra://commandbar?query=${PAGE}?n=work-plain
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+cra://debug?browserWindows=work-plain
+expect-log Cra browser windows work-plain: kind=normal space=Work .*open=\S*n=work-plain 
+
+# Back in Home, no route: Home, not the default's Little Window.
+cra://action/previousSpace
+wait 1
+cra://commandbar?query=${PAGE}?n=home-plain
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+cra://debug?browserWindows=home-plain
+expect-log Cra browser windows home-plain: kind=normal space=Home .*open=\S*n=home-plain 
+cra://debug?littleShown=none
+expect-log little shown none: windows=0
