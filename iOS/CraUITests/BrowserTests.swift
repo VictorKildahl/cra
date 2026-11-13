@@ -551,13 +551,18 @@ final class StarterQuestionsTests: BrowserTestCase {
     /// Someone new sees Arc Search's sample questions under the empty field until a first search.
     func testStarterQuestionsShowUntilTheFirstSearch() {
         launch(["-CraFakeModel", "YES"])
-        let starter = app.staticTexts["things to do in paris"]
+        let starter = app.staticTexts["how do i make my boss like me"]
         XCTAssertTrue(starter.waitForExistence(timeout: 10), "the starter questions are there")
+        // Arc Search 1.49's coach mark points at the first question's Browse for Me.
+        XCTAssertTrue(app.staticTexts["coach-mark"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["coach-mark"].label, "Tap Browse for Me for a faster answer")
+        sleep(1)
         keep("starter-questions")
         app.buttons["browse-for-me"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["browse-query"].waitForExistence(timeout: 8))
-        XCTAssertEqual(app.staticTexts["browse-query"].label, "things to do in paris")
-        XCTAssertTrue(app.webViews.staticTexts["About things to do in paris"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.staticTexts["browse-query"].label, "how do i make my boss like me")
+        XCTAssertFalse(app.staticTexts["coach-mark"].exists, "the coach mark goes with the sheet")
+        XCTAssertTrue(app.webViews.staticTexts["About how do i make my boss like me"].waitForExistence(timeout: 15))
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5))
         // The page behind shows the question too: look at the sheet's first row.

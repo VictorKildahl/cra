@@ -31,6 +31,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var blockTip: BlockTipView?
     var fixPill: FixQuestionPill?
     var fixPending: UUID?
+    /// "Tap Browse for Me for a faster answer" over the sheet while the starter questions show.
+    let coachMark = CoachMarkView()
     // Swipes (BrowserGestures.swift).
     var swipeNeighbour: UIImageView?
     var swipeNeighbourStep = 0
@@ -97,6 +99,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.siteIcon = { [weak self] address in self?.favicons.icon(for: address) }
         sheet.isHidden = true
         view.addSubview(sheet)
+        view.addSubview(coachMark)
 
         installGestures()
 
@@ -218,6 +221,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         bar.frame = barFrame
         bar.controlsVisibility = isSearching ? 0 : 1
         placeBlockerNotices()
+        placeCoachMark()
 
         let keyboard = max(keyboardHeight, safeBottom)
         let safeTop = view.safeAreaInsets.top
@@ -332,6 +336,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func searchSheet(_ sheet: SearchSheet, didChangeText text: String) {
+        defer { placeCoachMark() }
         let engine = settings.value.search
         // Incognito keeps what is typed on the phone until Go, and leaves the phone's own pages out.
         let sites = incognitoSearch ? [] : knownSites()

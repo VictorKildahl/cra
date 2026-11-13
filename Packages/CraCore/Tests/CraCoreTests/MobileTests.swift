@@ -1003,7 +1003,7 @@ struct MobileBrowseQueryEditTests {
 struct MobileStarterRowsTests {
     @Test func someoneNewSeesSampleQuestionsUntilTheirFirstSearch() {
         let rows = MobileSuggestions.starterRows(favorites: 0, hasSearched: false, incognito: false)
-        #expect(rows.map(\.text) == ["things to do in paris", "who are the beatles", "romantic shakespearean reply", "risotto vs paella"])
+        #expect(rows.map(\.text) == ["how do i make my boss like me", "lebron vs lebron jr", "tips for seasonal depression", "will tiktok be banned"])
         #expect(MobileSuggestions.starterRows(favorites: 1, hasSearched: false, incognito: false).isEmpty)
         #expect(MobileSuggestions.starterRows(favorites: 0, hasSearched: true, incognito: false).isEmpty)
         #expect(MobileSuggestions.starterRows(favorites: 0, hasSearched: false, incognito: true).isEmpty)
@@ -1051,5 +1051,20 @@ struct MobileBlockerNoticesTests {
         #expect(google.pinchToSummarize)
         #expect(settings.options(for: "example.com") == MobileSiteOptions())
         #expect(MobileBlockerNotices.disabledLabel(site: "google.com") == "Blockers disabled for google.com")
+    }
+}
+
+struct MobileCoachMarkTests {
+    @Test func itShowsWithTheStarterQuestionsWhenBrowseForMeCanBePicked() {
+        #expect(MobileCoachMark.shows(startersShown: true, offersBrowseForMe: true))
+        #expect(!MobileCoachMark.shows(startersShown: false, offersBrowseForMe: true))
+        #expect(!MobileCoachMark.shows(startersShown: true, offersBrowseForMe: false))
+    }
+
+    @Test func theLineDropsRunsAcrossAndStopsAboveTheChip() {
+        let line = MobileCoachMark.path(from: CGPoint(x: 220, y: 273), toChipTop: CGPoint(x: 369, y: 418))
+        #expect(line.firstTurn == CGPoint(x: 220, y: 320))
+        #expect(line.secondTurn == CGPoint(x: 369, y: 320))
+        #expect(line.end == CGPoint(x: 369, y: 412))
     }
 }

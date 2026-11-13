@@ -117,12 +117,17 @@ public enum MobileSuggestions {
         return bare(host) + path + (url.query.map { "?" + $0 } ?? "")
     }
 
+    /// The questions Arc Search 1.49 puts under the empty field after its onboarding (Victor's
+    /// recording, 1:21), in its order.
+    public static let starterQueries = ["how do i make my boss like me", "lebron vs lebron jr", "tips for seasonal depression",
+                                        "will tiktok be banned"]
+
     /// Arc Search 1.13's "initial search suggestions" for someone new: with nothing typed, no
     /// favorites and no search made yet, sample questions fill the rows (Arc Search's own examples).
     public static func starterRows(favorites: Int, hasSearched: Bool, incognito: Bool,
                                    limit: Int = MobileSearchSheet.visibleRows) -> [Row] {
         guard favorites == 0, !hasSearched, !incognito else { return [] }
-        return MobileOnboarding.sampleQueries.prefix(limit).map { Row(kind: .search, text: $0) }
+        return starterQueries.prefix(limit).map { Row(kind: .search, text: $0) }
     }
 
     /// Scrolling the list: rows pass up under the field one by one and the field takes each

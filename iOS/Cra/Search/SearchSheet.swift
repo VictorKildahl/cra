@@ -174,6 +174,15 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// Starter questions stand where favorites go, when there are none.
     private var showsStarters: Bool { showsFavorites && favorites.isEmpty && !starters.isEmpty }
 
+    /// Where the coach mark points: the top centre of the first starter question's Browse for Me
+    /// chip, and the field's frame, in this view; nil when the coach mark has nothing to show.
+    var coachTarget: (chipTop: CGPoint, field: CGRect)? {
+        guard MobileCoachMark.shows(startersShown: showsStarters, offersBrowseForMe: offersBrowseForMe),
+              let first = rowViews.first, !first.isHidden else { return nil }
+        let chip = first.convert(first.chipFrame, to: self)
+        return (CGPoint(x: chip.midX, y: chip.minY), fieldBackground.frame)
+    }
+
     func setStarters(_ rows: [MobileSuggestions.Row]) {
         starters = rows
         showRows()
@@ -553,6 +562,7 @@ final class SuggestionRowView: UIControl {
     private let icon = UIImageView()
     private let label = UILabel()
     private let chip = UIButton(type: .custom)
+    var chipFrame: CGRect { chip.frame }
     private let pin = UIImageView(image: UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)))
     /// Shows a site's icon (20 pt) in place of a search glyph.
     private var isSite = false
