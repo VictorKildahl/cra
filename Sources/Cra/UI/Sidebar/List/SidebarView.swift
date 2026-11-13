@@ -1323,7 +1323,7 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     private let spaceID: UUID
     private let store: SidebarStore
     private let ui: SidebarUIState
-    private let emoji = NSTextField.sidebarLabel(size: 13)
+    private let emoji = EmojiLabel.sidebar(size: 13)
     private let emojiHolder = NSView()
     /// An Icon-tab glyph (Space.symbol) in the emoji's place.
     private let symbol = NSImageView()

@@ -114,7 +114,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private let store: SidebarStore
     private let ui: SidebarUIState
     private let actions: SidebarActions
-    private let emoji = NSTextField.sidebarLabel(size: 14)
+    private let emoji = EmojiLabel.sidebar(size: 14)
     private let title = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     /// An Icon-tab glyph in the emoji's place.
     private let symbol = NSImageView()
