@@ -211,6 +211,7 @@ enum BrowserManagerLifecycleTests {
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
         permissionPopoverStepsAsideCase()
+        await askOnPageQuoteCase()
         await askOnPageSnapshotCase()
         findCorrelationCase()
         print("Browser manager lifecycle: \(checks) checks passed")
@@ -284,6 +285,83 @@ enum BrowserManagerLifecycleTests {
         browser.replies.removeLast().completion(reply, nil)
         // The production native callback enqueues its complete mutation before this FIFO marker.
         await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+    }
+
+    // promise: #393
+    @MainActor
+    private static func askOnPageQuoteCase() async {
+        let store = SidebarStore(), observer = Observer()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.delegate = observer
+        let tab = store.createTab(url: "https://example.test/article").id
+        manager.show(tab, focus: false)
+        await resolveAskDocument(manager)
+        let browser = manager.visibleRuntime!.browser
+        let text = "The café opens at 09:30."
+        let hit = #"{"result":{"value":{"found":true,"startNode":0,"startOffset":0,"endNode":0,"endOffset":24}}}"#
+        let yes = #"{"result":{"value":{"found":true}}}"#, no = #"{"result":{"value":{"found":false}}}"#
+        func turn() async { await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } } }
+        var results: [Bool?] = [], usable = true
+        func start() -> AskOnPage.FindRequest {
+            manager.clearAskOnPageQuote()
+            let request = manager.prepareFind(text, matchCase: true, purpose: .quote)!
+            manager.findAskOnPageQuote(text, in: manager.askOnPageContext()!, request: request,
+                                      isCurrent: { usable }) { results.append($0) }
+            return request
+        }
+        let request = start()
+        expect(browser.guardedEvaluations.removeFirst()(), "current lookup passes its final setup authorization")
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        expect(results.isEmpty && manager.findState.request == request, "lookup alone cannot report found or replace quote generation")
+        manager.browser(browser, didFindMatches: 99, activeMatch: 1, generation: request.id, quote: true, identifier: 7, finalUpdate: true)
+        expect(results.isEmpty, "generic native Find counts never complete a quote DOM operation")
+        expect(browser.guardedEvaluations.removeFirst()(), "current effect passes its final setup authorization")
+        browser.replies.removeLast().completion(yes, nil); await turn()
+        expect(results.count == 1 && results[0] == true && manager.findState.request == request,
+               "only the completed current effect reports found using the same quote generation")
+        manager.find("ordinary input", forward: false)
+        let ordinary = manager.findState.request!
+        manager.find("ordinary input", forward: true)
+        expect(ordinary.purpose == .ordinary && manager.findState.request == ordinary,
+               "ordinary input restores its own generation and repeated next/previous keeps it")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(no, nil); await turn()
+        expect(results.count == 1 && results[0] == false && browser.guardedEvaluations.isEmpty,
+               "a completed exact not-found lookup has no effect phase or native highlight")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        usable = false
+        expect(!browser.guardedEvaluations.removeFirst()(), "revoked service authority rejects a late effect setup before dispatch")
+        await turn()
+        expect(results.count == 1 && results[0] == nil, "unavailable/disabled authority retires status rather than inventing not-found")
+        usable = true; results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        _ = browser.guardedEvaluations.removeFirst()()
+        let committedEffect = browser.replies.removeLast().completion
+        manager.find("current ordinary", forward: true)
+        let afterCommit = manager.findState
+        committedEffect(yes, nil); await turn()
+        expect(results.count == 1 && results[0] == nil && manager.findState == afterCommit,
+               "invalidation after IPC commit still rejects status/native Find and cannot steal ordinary ownership")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        let late = browser.replies.removeLast().completion
+        manager.find("restored question", forward: true)
+        let restored = manager.findState
+        late(hit, nil); await turn()
+        expect(results.count == 1 && results[0] == nil && manager.findState == restored && browser.guardedEvaluations.isEmpty,
+               "ordinary Find retires pending quote effects and late lookup cannot steal restored ownership")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        browser.setLoading(true); browser.setLoading(false)
+        expect(!browser.guardedEvaluations.removeFirst()(), "same-URL new navigation invalidates effect setup")
+        await turn()
+        expect(results.count == 1 && results[0] == nil, "a retired document never publishes quote status")
+        manager.closeAll()
     }
 
     @MainActor

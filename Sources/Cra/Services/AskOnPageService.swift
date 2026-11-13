@@ -22,6 +22,14 @@ final class AskOnPageService {
         var fractionRead: Double?
         var olderMessagesHidden = false
     }
+    enum QuoteStatus: String { case loading, found, notFound }
+    struct QuoteNavigation {
+        let messageID: UUID
+        let index: Int
+        let request: AskOnPage.FindRequest
+        var status: QuoteStatus
+    }
+    private(set) var quoteNavigation: QuoteNavigation?
     typealias Generate = @MainActor (AskOnPagePrompt.Fitted, @escaping @MainActor (AskOnPage.Draft) -> Void) async throws -> AskOnPage.Draft
     static let requestTimeout: TimeInterval = 90
 
@@ -101,7 +109,7 @@ final class AskOnPageService {
     func clear() {
         let pending = task, timer = deadline
         task = nil; deadline = nil
-        context = nil; current = nil; messages = []; olderMessagesHidden = false; phase = .idle
+        context = nil; current = nil; messages = []; olderMessagesHidden = false; phase = .idle; quoteNavigation = nil
         browsers.clearAskOnPageQuote()
         pending?.cancel(); timer?.cancel()
     }
@@ -110,12 +118,44 @@ final class AskOnPageService {
         if !enabled() || !available() || context.map({ !browsers.isCurrentAskOnPage($0) }) == true { clear() }
     }
 
+    /// A citation action is authorized by this completed native message, never by copied quote text.
+    func findQuote(messageID: UUID, index: Int) {
+        refresh()
+        guard enabled(), available(), let context, browsers.isCurrentAskOnPage(context),
+              let message = messages.first(where: { $0.id == messageID }), let answer = message.answer,
+              answer.isComplete, answer.quotes.indices.contains(index), answer.quotes[index].state == .verified else { return }
+        let text = answer.quotes[index].text
+        browsers.clearAskOnPageQuote()
+        guard let request = browsers.prepareFind(text, matchCase: true, purpose: .quote) else { return }
+        quoteNavigation = QuoteNavigation(messageID: messageID, index: index, request: request, status: .loading)
+        browsers.findAskOnPageQuote(text, in: context, request: request, isCurrent: { [weak self] in
+            guard let self else { return false }
+            return self.ownsQuote(messageID: messageID, index: index, request: request, context: context)
+        }) { [weak self] found in
+            guard let self else { return }
+            guard self.ownsQuote(messageID: messageID, index: index, request: request, context: context) else {
+                self.refresh()
+                return
+            }
+            guard let found else { self.quoteNavigation = nil; return }
+            self.quoteNavigation?.status = found ? .found : .notFound
+        }
+    }
+
+    private func ownsQuote(messageID: UUID, index: Int, request: AskOnPage.FindRequest, context: AskOnPageContext) -> Bool {
+        quoteNavigation?.messageID == messageID && quoteNavigation?.index == index && quoteNavigation?.request == request
+            && enabled() && available() && self.context == context && browsers.isCurrentAskOnPage(context)
+            && messages.contains(where: { $0.id == messageID })
+    }
+
     @discardableResult
     func ask(_ question: String, language: String) -> Bool {
         refresh()
         guard enabled(), available(), !isLoading,
               !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let pageContext = browsers.askOnPageContext() else { return false }
+        quoteNavigation = nil
+        browsers.clearAskOnPageQuote()
         context = pageContext
         let id = UUID()
         current = Message(id: id, question: question)

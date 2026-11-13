@@ -62,6 +62,77 @@ extension BrowserManager {
         askOnPageDocumentRead = nil
     }
 
+    /// One quote operation reuses the existing native Find generation. Only its completed DOM result is status evidence.
+    func findAskOnPageQuote(_ text: String, in context: AskOnPageContext, request: AskOnPage.FindRequest,
+                            isCurrent: @escaping () -> Bool, completion: @escaping (Bool?) -> Void) {
+        guard request.purpose == .quote, request.query == text, findState.request == request,
+              isCurrentAskOnPage(context), isCurrent(), let browser = runtimes[context.tabID]?.browser else {
+            completion(nil); return
+        }
+        retireAskOnPageQuote()
+        askOnPageQuoteOperation = AskOnPageQuoteOperation(context: context, request: request,
+                                                        isCurrent: isCurrent, completion: completion)
+        let current = { [weak self] in
+            MainActor.assumeIsolated { self?.ownsAskOnPageQuote(context, request: request) == true }
+        }
+        browser.evaluate(inIsolatedWorld: PageScript.world,
+            params: Self.quoteEvaluation(AskOnPageQuoteDOM.lookup(text, url: context.url, lease: request.id)), ifCurrent: current) { [weak self, weak browser] result, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.ownsAskOnPageQuote(context, request: request), let browser else {
+                    self.rejectAskOnPageQuote(request); return
+                }
+                guard error == nil, let lookup = AskOnPageQuoteDOM.result(result) else { self.finishAskOnPageQuote(nil); return }
+                guard case .match(let match) = lookup else { self.finishAskOnPageQuote(false); return }
+                // The guarded overload repeats native authorization after CEF's asynchronous world setup.
+                // Its final dispatch is the IPC commit point. JS binds this effect to the lookup document lease.
+                browser.evaluate(inIsolatedWorld: PageScript.world,
+                    params: Self.quoteEvaluation(AskOnPageQuoteDOM.effect(text, url: context.url, lease: request.id, match: match)),
+                    ifCurrent: current) { [weak self] result, error in
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            guard self.ownsAskOnPageQuote(context, request: request) else { self.rejectAskOnPageQuote(request); return }
+                            guard error == nil, let found = AskOnPageQuoteDOM.effected(result) else { self.finishAskOnPageQuote(nil); return }
+                            if found {
+                                // Native highlighting uses the exact literal and the already-authorized generation.
+                                self.find(text, forward: true, matchCase: request.matchCase, purpose: .quote)
+                            }
+                            self.finishAskOnPageQuote(found)
+                        }
+                    }
+            }
+        }
+    }
+
+    private static func quoteEvaluation(_ script: String) -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]), encoding: .utf8)!
+    }
+
+    private func ownsAskOnPageQuote(_ context: AskOnPageContext, request: AskOnPage.FindRequest) -> Bool {
+        guard let operation = askOnPageQuoteOperation else { return false }
+        return operation.context == context && operation.request == request && findState.request == request
+            && isCurrentAskOnPage(context) && operation.isCurrent()
+    }
+
+    private func rejectAskOnPageQuote(_ request: AskOnPage.FindRequest) {
+        if askOnPageQuoteOperation?.request == request { finishAskOnPageQuote(nil) }
+    }
+
+    private func finishAskOnPageQuote(_ found: Bool?) {
+        let operation = askOnPageQuoteOperation
+        askOnPageQuoteOperation = nil
+        operation?.completion(found)
+    }
+
+    func retireAskOnPageQuote() {
+        guard let operation = askOnPageQuoteOperation else { return }
+        askOnPageQuoteOperation = nil
+        // A compare-and-clear lease cannot revoke a newer quote or a new document.
+        runtimes[operation.context.tabID]?.browser.evaluate(inIsolatedWorld: PageScript.world,
+            params: Self.quoteEvaluation(AskOnPageQuoteDOM.retire(operation.request.id))) { _, _ in }
+        operation.completion(nil)
+    }
+
     /// Revoke quote-purpose Find authority without disturbing ordinary Find when Ask is cleared.
     func clearAskOnPageQuote() {
         if findState.request?.purpose == .quote { stopFinding(false) }
@@ -114,4 +185,12 @@ enum AskOnPageDocument {
         if type.conforms(to: .html) { return .html }
         return .other
     }
+}
+
+/// Transient callback ownership only; request.id is the existing Find generation, not a second token registry.
+struct AskOnPageQuoteOperation {
+    let context: AskOnPageContext
+    let request: AskOnPage.FindRequest
+    let isCurrent: () -> Bool
+    let completion: (Bool?) -> Void
 }

@@ -1151,7 +1151,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         c.canAskFromFind = { [weak self] query, forward in
             self?.browsers.canAskFind(query: query, enabled: true, forward: forward) ?? false
         }
-        c.onFindQuote = { [weak self] quote in self?.browsers.find(quote, forward: true, purpose: .quote) }
         c.onResize = { [weak self] in self?.refitFindPanel() }
         return c
     }()

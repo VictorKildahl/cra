@@ -824,6 +824,14 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         MainActor.assumeIsolated { evaluate(params, in: WKContentWorld.world(name: world), completion: completion) }
     }
 
+    override func evaluate(inIsolatedWorld world: String, params: String, ifCurrent: @escaping () -> Bool,
+                           completion: @escaping (String?, String?) -> Void) {
+        MainActor.assumeIsolated {
+            guard ifCurrent() else { reply(completion, nil, "retired evaluation"); return }
+            evaluate(params, in: WKContentWorld.world(name: world), ifCurrent: ifCurrent, completion: completion)
+        }
+    }
+
     override func sendDevToolsMethod(_ method: String, params: String, completion: @escaping (String?, String?) -> Void) {
         MainActor.assumeIsolated {
             guard let web = webView, !closed else { return reply(completion, nil, "\(method): the page is closed") }
@@ -869,13 +877,14 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     /// Chromium does: {"result":{"type":…,"value":…}} or {"exceptionDetails":{…}}. Scripts run as a
     /// user gesture (WebKit's evaluateJavaScript always does), so play() and requestPictureInPicture work.
     @MainActor
-    private func evaluate(_ params: String, in world: WKContentWorld, completion: @escaping (String?, String?) -> Void) {
+    private func evaluate(_ params: String, in world: WKContentWorld, ifCurrent: (() -> Bool)? = nil, completion: @escaping (String?, String?) -> Void) {
         guard let web = webView, !closed else { return reply(completion, nil, "the page is closed") }
         let p = Self.object(params)
         guard let expression = p["expression"] as? String else { return reply(completion, nil, "no expression") }
         let done: (Result<Any, Error>) -> Void = { [weak self] r in
             MainActor.assumeIsolated { self?.reply(completion, Self.evaluationResult(r), nil) }
         }
+        guard ifCurrent?() != false else { return reply(completion, nil, "retired evaluation") }
         if p["awaitPromise"] as? Bool == true {
             web.callAsyncJavaScript("return await (\n\(expression)\n);", arguments: [:], in: nil, in: world, completionHandler: done)
         } else {

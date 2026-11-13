@@ -9,19 +9,28 @@ struct AskOnPageContext: Equatable {
 }
 @MainActor final class BrowserManager {
     var context: AskOnPageContext? = AskOnPageContext()
+    var quotePending: ((Bool?) -> Void)?
+    var quoteText: String?
+    var quoteIsCurrent: (() -> Bool)?
     var pending: ((AskOnPagePrompt.Page?) -> Void)?
     private(set) var selectionFindState = AskOnPage.FindState()
     private(set) var selectionFinds: [AskOnPage.FindRequest] = []
     func findPageContext() -> AskOnPageContext? { context }
-    @discardableResult func prepareFind(_ query: String) -> AskOnPage.FindRequest {
-        selectionFindState.begin(query)
+    @discardableResult func prepareFind(_ query: String, matchCase: Bool = false, purpose: AskOnPage.FindPurpose = .ordinary) -> AskOnPage.FindRequest? {
+        selectionFindState.begin(query, matchCase: matchCase, purpose: purpose)
     }
     func find(_ query: String, forward: Bool) {
-        selectionFinds.append(prepareFind(query))
+        selectionFinds.append(prepareFind(query)!)
     }
     func stopFinding(_ clearSelection: Bool) { selectionFindState.clear() }
     func prepareQuote(_ text: String) { selectionFindState.begin(text, purpose: .quote) }
+    func findAskOnPageQuote(_ text: String, in context: AskOnPageContext, request: AskOnPage.FindRequest,
+                            isCurrent: @escaping () -> Bool, completion: @escaping (Bool?) -> Void) {
+        quoteText = text; quoteIsCurrent = isCurrent; quotePending = completion
+    }
     func clearAskOnPageQuote() {
+        let done = quotePending; quotePending = nil; quoteIsCurrent = nil
+        done?(nil)
         if selectionFindState.request?.purpose == .quote { selectionFindState.clear() }
     }
     func askOnPageContext() -> AskOnPageContext? { context }

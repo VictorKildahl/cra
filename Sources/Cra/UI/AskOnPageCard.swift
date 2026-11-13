@@ -33,7 +33,6 @@ final class AskOnPageController {
     var onFind: (String, Bool) -> Void = { _, _ in }
     var onClose: () -> Void = {}
     var canAskFromFind: (String, Bool) -> Bool = { _, _ in false }
-    var onFindQuote: (String) -> Void = { _ in }
     var onResize: () -> Void = {}
     private(set) lazy var view: NSView = makeView()
 
@@ -91,13 +90,9 @@ final class AskOnPageController {
         onFind("", true)
     }
 
-    /// R3 adds identity-checked live-DOM lookup and search status. Native counts are not quote proof.
     func findQuote(messageID: UUID, index: Int) {
-        service.refresh()
-        guard state.enabled, state.canAsk, let message = service.messages.first(where: { $0.id == messageID }),
-              let answer = message.answer, answer.isComplete, answer.quotes.indices.contains(index),
-              answer.quotes[index].state == .verified else { return }
-        onFindQuote(answer.quotes[index].text)
+        guard state.enabled, state.canAsk else { return }
+        service.findQuote(messageID: messageID, index: index)
     }
 
     var findsWhileTyping: Bool { !state.enabled || !state.inConversation }
@@ -135,7 +130,8 @@ final class AskOnPageController {
         }
         let quotes = last.answer?.quotes.count ?? 0
         let line = AskOnPagePrompt.fractionLine(last.fractionRead) ?? "-"
-        return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=\(messages) finished=\(last.answer?.isComplete == true) quotes=\(quotes) read=\(line) height=\(Int(state.height))"
+        let search = service.quoteNavigation.map { $0.status.rawValue } ?? ""
+        return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=\(messages) finished=\(last.answer?.isComplete == true) quotes=\(quotes) read=\(line) search=[\(search)] height=\(Int(state.height))"
     }
 }
 
@@ -306,7 +302,8 @@ private struct AskOnPageMessageView: View {
             }
             if let answer = message.answer {
                 ForEach(Array(answer.quotes.enumerated()), id: \.offset) { index, quote in
-                    AskOnPageQuote(quote: quote, finished: answer.isComplete) {
+                    AskOnPageQuote(quote: quote, finished: answer.isComplete,
+                        status: state.service.quoteNavigation.flatMap { $0.messageID == message.id && $0.index == index ? $0.status : nil }) {
                         controller?.findQuote(messageID: message.id, index: index)
                     }
                 }
@@ -338,6 +335,7 @@ private struct AskOnPageMessageView: View {
 private struct AskOnPageQuote: View {
     let quote: AskOnPage.Quote
     let finished: Bool
+    let status: AskOnPageService.QuoteStatus?
     let find: () -> Void
     @State private var hovered = false
 
@@ -348,7 +346,7 @@ private struct AskOnPageQuote: View {
                 Text(quote.text).font(.body).foregroundStyle(.primary.opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 if finished {
-                    if quote.state == .notFound {
+                    if quote.state == .notFound || status == .notFound {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
                             Text("Quote not found. Make sure it’s accurate!")
@@ -358,6 +356,7 @@ private struct AskOnPageQuote: View {
                     } else if quote.state == .verified {
                         Button(action: find) {
                             HStack(spacing: 4) {
+                                if status == .loading { ProgressView().controlSize(.mini) }
                                 Text("Find on Page")
                                 Image(systemName: "arrow.forward")
                             }

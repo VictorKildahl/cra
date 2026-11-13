@@ -356,6 +356,11 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// where the isolated document start script runs.
 - (void)evaluateInIsolatedWorld:(NSString *)world params:(NSString *)params
                      completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
+/// Ask's effect authorization is checked again after isolated-world setup, immediately before IPC.
+/// A dispatched renderer command cannot be atomically revoked; callers also fence the document in JS.
+- (void)evaluateInIsolatedWorld:(NSString *)world params:(NSString *)params
+                      ifCurrent:(BOOL (^)(void))ifCurrent
+                     completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
 /// Chrome DevTools Protocol call on this browser's own session (no DevTools window).
 /// `params` is a JSON object string; the completion gets the result JSON or an error.
 - (void)sendDevToolsMethod:(NSString *)method params:(NSString *)params

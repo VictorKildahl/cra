@@ -127,6 +127,9 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-ask-on-page-content.sh`: the production bounded Ask on Page script in a real
   WebKit isolated world, using a loopback HTTP fixture, including hidden/large DOM and Unicode bounds.
+- `scripts/test-ask-on-page-quotes.sh`: production quote lookup/effect scripts on a controlled DOM surface
+  in Node (no added product dependency). Covers inline Unicode, repeated/mutated text, leases and bounds;
+  actual engine selection/scroll remains a separate CEF/WebKit gate.
 - `scripts/test-ask-on-page-lifecycle.sh`: actual SidebarStore individual/replacement/master settings
   writes and real model-status refresh, two window services, same-turn off/on, late provider delivery,
   completed history/source and teardown. Notifications run inline at the real mutation boundaries.

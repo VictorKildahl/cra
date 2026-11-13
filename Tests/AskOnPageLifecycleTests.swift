@@ -30,6 +30,7 @@ enum AskOnPageLifecycleTests {
             return
         }
         await profileMutationPaths()
+        await quotesRespectRealEdges()
         await realStoreOffOn()
         await streamsAndStoreIdentity()
         await completedAndMasterReplacement()
@@ -133,6 +134,33 @@ enum AskOnPageLifecycleTests {
             neighbor.service.clear(); neighbor.provider.finish(1, draft: answer)
             foreign.service.clear(); foreign.provider.finish(1, draft: answer)
         }
+    }
+
+    // promise: #393
+    private static func quotesRespectRealEdges() async {
+        let shared = store(), other = store()
+        let first = Window(shared), second = Window(shared), foreign = Window(other)
+        for window in [first, second, foreign] {
+            await window.start("Completed quote")
+            window.provider.finish(1, draft: answer); await settled(window.service)
+            window.service.findQuote(messageID: window.service.messages[0].id, index: 0)
+            expect(window.service.quoteNavigation?.status == .loading, "a real completed owner begins its specific quote operation")
+        }
+        let oldFirst = first.browsers.quotePending!, oldSecond = second.browsers.quotePending!
+        let foreignID = foreign.service.quoteNavigation?.request.id
+        shared.settings.askOnPage = false; shared.settings.askOnPage = true
+        expect(first.service.quoteNavigation == nil && second.service.quoteNavigation == nil && first.service.messages.isEmpty,
+            "actual same-turn store off/on synchronously revokes both pending quote statuses and source authority")
+        oldFirst(true); oldSecond(true)
+        expect(first.service.quoteNavigation == nil && second.service.quoteNavigation == nil,
+            "cancellation-ignoring old DOM effects cannot return found status after off/on")
+        expect(foreign.service.quoteNavigation?.request.id == foreignID, "another store's quote operation keeps its owner")
+        foreign.browsers.quotePending?(true)
+        expect(foreign.service.quoteNavigation?.status == .found, "the unaffected exact operation can complete")
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1); TidyTabsService.shared.refresh()
+        setenv("CRA_TIDY_FAKE_MODEL", "1", 1); TidyTabsService.shared.refresh()
+        expect(foreign.service.quoteNavigation == nil && foreign.service.messages.isEmpty,
+            "actual model unavailability revokes completed quote status before availability returns")
     }
 
     // promise: #393

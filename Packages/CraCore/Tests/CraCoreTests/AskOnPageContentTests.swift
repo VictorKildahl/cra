@@ -38,4 +38,21 @@ struct AskOnPageContentTests {
     func invalidOrExceptionalEvaluationsNeverBecomeContext(result: String?) {
         #expect(AskOnPageContent.page(evaluation: result, expectedURL: url) == nil)
     }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func quoteResultsRequireCompletedBoundedDOMEvidence() throws {
+        let hit = #"{"result":{"value":{"found":true,"startNode":0,"startOffset":2,"endNode":1,"endOffset":4}}}"#
+        guard case .match = AskOnPageQuoteDOM.result(hit) else { Issue.record("a complete exact range must decode"); return }
+        #expect(AskOnPageQuoteDOM.result(#"{"result":{"value":{"found":false}}}"#) == .notFound)
+        #expect(AskOnPageQuoteDOM.effected(#"{"result":{"value":{"found":true}}}"#) == true)
+        for bad in [nil, "{}", #"{"result":{"value":{"found":true}}}"#,
+                    hit.replacingOccurrences(of: "\"startNode\":0", with: "\"startNode\":-1"),
+                    hit.replacingOccurrences(of: "\"endOffset\":4", with: "\"endOffset\":65537"),
+                    #"{"result":{"value":{"found":true}},"exceptionDetails":{}}"#] {
+            #expect(AskOnPageQuoteDOM.result(bad) == nil)
+        }
+        #expect(AskOnPageQuoteDOM.effected(#"{"result":{"value":{"count":7}}}"#) == nil)
+        #expect(AskOnPageQuoteDOM.effected(#"{"result":{"value":{"found":1}}}"#) == nil)
+        #expect(AskOnPageQuoteDOM.effected(#"{"result":{"value":{"found":true}},"exceptionDetails":{}}"#) == nil)
+    }
+
 }

@@ -3307,6 +3307,13 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 // execution context (createIsolatedWorld returns the existing world of that name), then evaluate.
 - (void)evaluateInIsolatedWorld:(NSString*)world params:(NSString*)params
                      completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+    [self evaluateInIsolatedWorld:world params:params ifCurrent:^BOOL { return YES; } completion:completion];
+}
+
+- (void)evaluateInIsolatedWorld:(NSString*)world params:(NSString*)params ifCurrent:(BOOL (^)(void))ifCurrent
+                     completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+    CEF_REQUIRE_UI_THREAD();
+    if (!CefCurrentlyOn(TID_UI) || !ifCurrent()) { completion(nil, @"retired evaluation"); return; }
     __weak CraBrowser* weakSelf = self;
     id (^parse)(NSString*) = ^id(NSString* json) {
         return json ? [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
@@ -3314,19 +3321,22 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     [self sendDevToolsMethod:@"Page.getFrameTree" params:@"{}" completion:^(NSString* tree, NSString* error) {
         NSString* frameID = [parse(tree) valueForKeyPath:@"frameTree.frame.id"];
         CraBrowser* s = weakSelf;
-        if (!s || ![frameID isKindOfClass:NSString.class]) { completion(nil, error ?: @"no frame"); return; }
+        if (!s || !ifCurrent()) { completion(nil, @"retired evaluation"); return; }
+        if (![frameID isKindOfClass:NSString.class]) { completion(nil, error ?: @"no frame"); return; }
         NSData* body = [NSJSONSerialization dataWithJSONObject:@{@"frameId": frameID, @"worldName": world} options:0 error:nil];
         [s sendDevToolsMethod:@"Page.createIsolatedWorld" params:[[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding]
                    completion:^(NSString* made, NSString* error) {
             NSNumber* context = [parse(made) valueForKey:@"executionContextId"];
             NSMutableDictionary* evaluate = [parse(params) mutableCopy];
             CraBrowser* s = weakSelf;
-            if (!s || ![context isKindOfClass:NSNumber.class] || ![evaluate isKindOfClass:NSMutableDictionary.class]) {
+            if (!s || !ifCurrent()) { completion(nil, @"retired evaluation"); return; }
+            if (![context isKindOfClass:NSNumber.class] || ![evaluate isKindOfClass:NSMutableDictionary.class]) {
                 completion(nil, error ?: @"no isolated world");
                 return;
             }
             evaluate[@"contextId"] = context;
             NSData* json = [NSJSONSerialization dataWithJSONObject:evaluate options:0 error:nil];
+            if (!ifCurrent()) { completion(nil, @"retired evaluation"); return; }
             [s sendDevToolsMethod:@"Runtime.evaluate" params:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]
                        completion:completion];
         }];

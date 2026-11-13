@@ -45,13 +45,32 @@ enum AskOnPageControllerTests {
         precondition(service.messages.count == 1 && service.current == nil && card.state.inConversation,
                      "A complete native answer is the same visible conversation owned by the service")
         let message = service.messages[0]
-        var quote: String?
-        card.onFindQuote = { quote = $0 }
         card.findQuote(messageID: message.id, index: 0)
-        precondition(quote == "The museum opens at 09:30." && overlay.findQuery == "A second question"
+        precondition(browsers.quoteText == "The museum opens at 09:30." && overlay.findQuery == "A second question"
                      && service.messages.count == 1,
                      "Quote navigation preserves literal punctuation, ordinary input and conversation")
-        card.findQuote(messageID: message.id, index: -1)
+        precondition(card.readout("quote").contains("search=[loading]") && service.quoteNavigation?.request.matchCase == true,
+                     "An accepted current quote has its own loading status before any native Find count")
+        let completeQuote = browsers.quotePending!
+        completeQuote(true)
+        precondition(card.readout("quote").contains("search=[found]"), "Only the exact completed DOM operation marks a quote found")
+        card.findQuote(messageID: message.id, index: 0)
+        let retiredQuote = browsers.quotePending!
+        card.findQuote(messageID: message.id, index: 0)
+        retiredQuote(true)
+        precondition(service.quoteNavigation?.status == .loading, "a retired same-text quote cannot complete a newer quote generation")
+        browsers.quotePending?(false)
+        precondition(card.readout("quote").contains("search=[notFound]"), "an exact completed not-found operation has its own status")
+        card.reset()
+        retiredQuote(true)
+        precondition(service.quoteNavigation == nil && service.messages.isEmpty, "A retired quote completion cannot restore status or dialogue")
+        // Reconstruct the original completed conversation for the remaining lifecycle checks.
+        card.ask("What time does it open?")
+        browsers.reply(page)
+        await gate.started()
+        gate.finish(.init(excerpts: ["The museum opens at 09:30."], answer: "It opens at 09:30."))
+        await settled(service)
+        card.findQuote(messageID: service.messages[0].id, index: -1)
         precondition(service.messages.count == 1, "An invalid quote action cannot replace native history")
         card.reset()
         precondition(service.messages.isEmpty && service.current == nil && !card.state.inConversation,

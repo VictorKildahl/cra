@@ -133,6 +133,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private var findOwner: AskOnPageContext?
     /// One current document's type probe, never page text or a URL-wide cache.
     var askOnPageDocument: AskOnPageDocumentSnapshot?
+    var askOnPageQuoteOperation: AskOnPageQuoteOperation?
     var askOnPageDocumentRead: (id: UUID, context: AskOnPageContext)?
     /// Every tab on screen, in pane order (one entry outside split view).
     private(set) var visibleTabIDs: [UUID] = []
@@ -1466,6 +1467,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if findOwner != owner { stopFinding(false); findOwner = owner }
         let previous = findState
         let request = findState.begin(query, matchCase: matchCase, purpose: purpose)
+        if previous.request != request { retireAskOnPageQuote() }
         if previous != findState { delegate?.browserManager(findState: findState) }
         return request
     }
@@ -1478,6 +1480,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func stopFinding(_ clearSelection: Bool) {
+        retireAskOnPageQuote()
         let browser = findOwner.flatMap { owner in
             runtimes[owner.tabID].flatMap { ObjectIdentifier($0) == owner.runtime ? $0.browser : nil }
         }

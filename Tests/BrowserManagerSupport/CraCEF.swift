@@ -120,6 +120,15 @@ open class CraBrowser {
         lastIsolatedParams = params
         replies.append(("\(world):Runtime.evaluate", completion))
     }
+    public var guardedEvaluations: [() -> Bool] = []
+    public func evaluate(inIsolatedWorld world: String, params: String, ifCurrent: @escaping () -> Bool,
+                         completion: @escaping (String?, String?) -> Void) {
+        guardedEvaluations.append { [weak self] in
+            guard let self, ifCurrent() else { completion(nil, "retired evaluation"); return false }
+            self.evaluate(inIsolatedWorld: world, params: params, completion: completion)
+            return true
+        }
+    }
     public func reply(to method: String, with result: String?) {
         guard let index = replies.firstIndex(where: { $0.method == method }) else { fatalError("No pending \(method)") }
         replies.remove(at: index).completion(result, nil)

@@ -102,3 +102,137 @@ public enum AskOnPageContent {
         }
     }
 }
+
+/// Bounded literal quote lookup. A lookup has no effects; effects rebuild the live range from scratch.
+public enum AskOnPageQuoteDOM {
+    public struct Match: Codable, Equatable, Sendable {
+        public let startNode: Int
+        public let startOffset: Int
+        public let endNode: Int
+        public let endOffset: Int
+    }
+    public enum Lookup: Equatable { case notFound, match(Match) }
+
+    public static func lookup(_ quote: String, url: String, lease: UUID) -> String {
+        expression(quote, url: url, lease: lease, match: nil)
+    }
+
+    public static func effect(_ quote: String, url: String, lease: UUID, match: Match) -> String {
+        expression(quote, url: url, lease: lease, match: match)
+    }
+
+    public static func result(_ evaluation: String?) -> Lookup? {
+        guard let value = value(evaluation) else { return nil }
+        if !value.found { return .notFound }
+        guard let start = value.startNode, let startOffset = value.startOffset,
+              let end = value.endNode, let endOffset = value.endOffset,
+              (0..<12000).contains(start), (start..<12000).contains(end),
+              (0...65536).contains(startOffset), (0...65536).contains(endOffset),
+              start != end || startOffset < endOffset else { return nil }
+        return .match(Match(startNode: start, startOffset: startOffset, endNode: end, endOffset: endOffset))
+    }
+
+    public static func retire(_ lease: UUID) -> String {
+        "if (globalThis.__craAskQuote === '\(lease.uuidString)') globalThis.__craAskQuote = null;"
+    }
+
+    public static func effected(_ evaluation: String?) -> Bool? { value(evaluation)?.found }
+
+    private struct Value: Decodable {
+        let found: Bool
+        let startNode: Int?, startOffset: Int?, endNode: Int?, endOffset: Int?
+    }
+    private struct Evaluation: Decodable {
+        struct Remote: Decodable { let value: Value? }
+        let result: Remote
+        enum CodingKeys: String, CodingKey { case result, exceptionDetails }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            guard !c.contains(.exceptionDetails) else {
+                throw DecodingError.dataCorruptedError(forKey: .exceptionDetails, in: c, debugDescription: "Quote evaluation failed")
+            }
+            result = try c.decode(Remote.self, forKey: .result)
+        }
+    }
+    private static func value(_ evaluation: String?) -> Value? {
+        guard let evaluation, evaluation.utf8.count <= 1024 else { return nil }
+        return (try? JSONDecoder().decode(Evaluation.self, from: Data(evaluation.utf8)))?.result.value
+    }
+
+    private static func expression(_ quote: String, url: String, lease: UUID, match: Match?) -> String {
+        let parameters: [String: Any] = ["quote": AskOnPage.normalized(quote), "url": url, "lease": lease.uuidString,
+            "match": match.flatMap { try? JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()]
+        let json = String(decoding: try! JSONSerialization.data(withJSONObject: parameters), as: UTF8.self)
+        return "(p => {\n" + body + "\n})(" + json + ")"
+    }
+
+    private static let body = #"""
+      if (document.URL !== p.url || !document.body ||
+          !['text/html', 'application/xhtml+xml'].includes(document.contentType) ||
+          !p.quote || p.quote.length > 8192 || typeof Intl.Segmenter !== 'function') return null;
+      if (p.match && globalThis.__craAskQuote !== p.lease) return null;
+      if (!p.match) globalThis.__craAskQuote = p.lease;
+      const excluded = new Set(['SCRIPT', 'STYLE', 'SVG', 'NOSCRIPT', 'TEMPLATE', 'NAV', 'HEADER', 'FOOTER',
+        'INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'IFRAME', 'OBJECT', 'EMBED']);
+      const blocks = new Set(['block', 'flow-root', 'flex', 'grid', 'list-item', 'table', 'table-row',
+        'table-row-group', 'table-header-group', 'table-footer-group', 'table-caption', 'table-cell']);
+      const nodes = [], spans = [], stack = [{node: document.body, exit: false}];
+      let raw = '', work = 0;
+      const boundary = () => { if (raw && !raw.endsWith('\n')) raw += '\n'; };
+      while (stack.length) {
+        if (++work > 12000 || raw.length > 65536) return null;
+        const {node, exit, block} = stack.pop();
+        if (exit) { if (block) boundary(); continue; }
+        if (node !== document.body && node.nextSibling) stack.push({node: node.nextSibling, exit: false});
+        let isBlock = false;
+        if (node.nodeType === 1) {
+          if (excluded.has(node.tagName) || node.hasAttribute('hidden') || node.getAttribute('aria-hidden') === 'true') continue;
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') continue;
+          isBlock = blocks.has(style.display) || style.display.startsWith('block ');
+          if (isBlock || node.tagName === 'BR') boundary();
+        } else if (node.nodeType === 3) {
+          if (node.length > 65536 - raw.length) return null;
+          const index = nodes.length;
+          nodes.push(node); spans.push({index, start: raw.length, end: raw.length + node.length});
+          raw += node.substringData(0, node.length);
+        }
+        stack.push({node, exit: true, block: isBlock});
+        if (node.firstChild) stack.push({node: node.firstChild, exit: false});
+      }
+      // Normalize complete graphemes, including combining sequences split across inline nodes.
+      // Each normalized UTF-16 boundary maps back to the original DOM text, never transport spelling.
+      let text = '', pendingSpace = null;
+      const starts = new Map(), ends = new Map();
+      for (const part of new Intl.Segmenter(undefined, {granularity: 'grapheme'}).segment(raw)) {
+        const piece = part.segment.normalize('NFC'), end = part.index + part.segment.length;
+        if (/^\p{White_Space}+$/u.test(piece)) { pendingSpace = pendingSpace ?? part.index; continue; }
+        if (pendingSpace !== null && text) text += ' ';
+        pendingSpace = null;
+        starts.set(text.length, part.index);
+        text += piece;
+        ends.set(text.length, end);
+      }
+      let at = text.indexOf(p.quote);
+      while (at >= 0 && (!starts.has(at) || !ends.has(at + p.quote.length))) at = text.indexOf(p.quote, at + 1);
+      if (at < 0) return {found: false};
+      const start = starts.get(at), end = ends.get(at + p.quote.length);
+      const a = spans.find(s => start >= s.start && start < s.end);
+      const b = spans.find(s => end > s.start && end <= s.end);
+      if (!a || !b) return {found: false};
+      const match = {startNode: a.index, startOffset: start - a.start, endNode: b.index, endOffset: end - b.start};
+      if (!p.match) return {found: true, ...match};
+      if (!Object.keys(match).every(key => match[key] === p.match[key])) return {found: false};
+      const first = nodes[a.index], last = nodes[b.index];
+      if (!first.isConnected || !last.isConnected || first.ownerDocument !== document || last.ownerDocument !== document) return {found: false};
+      if (globalThis.__craAskQuote !== p.lease || document.URL !== p.url) return null;
+      const range = document.createRange();
+      range.setStart(first, match.startOffset); range.setEnd(last, match.endOffset);
+      const selection = getSelection();
+      if (!selection || range.collapsed || !range.getClientRects().length) return {found: false};
+      // No await/callback between the fresh traversal, endpoint validation and effects.
+      selection.removeAllRanges(); selection.addRange(range);
+      first.parentElement.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'instant'});
+      return {found: true};
+    """#
+}

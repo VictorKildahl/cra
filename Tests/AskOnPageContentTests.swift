@@ -24,6 +24,39 @@ enum AskOnPageContentTests {
         return (AskOnPageContent.page(evaluation: result, expectedURL: web.url!.absoluteString), value)
     }
 
+    // promise: #393
+    private static func liveQuoteRanges(_ web: WKWebView, fixture: URL, navigation: Navigation) async throws {
+        let quote = "The synthetic article contains a supported sentence across inline elements."
+        func lookup(_ text: String, lease: UUID) async throws -> AskOnPageQuoteDOM.Match {
+            let value = try await evaluate(AskOnPageQuoteDOM.lookup(text, url: fixture.absoluteString, lease: lease), in: web)
+            let encoded = String(data: try JSONSerialization.data(withJSONObject: ["result": ["value": value]]), encoding: .utf8)!
+            guard case .match(let match) = AskOnPageQuoteDOM.result(encoded) else { fatalError("fixture quote must have an exact bounded range") }
+            return match
+        }
+        let lease = UUID()
+        let current = try await lookup(quote, lease: lease)
+        let found = try await evaluate(AskOnPageQuoteDOM.effect(quote, url: fixture.absoluteString, lease: lease, match: current), in: web) as! [String: Any]
+        expect(found["found"] as? Bool == true, "the exact inline quote completes its live Range operation")
+        let selected = try await evaluate("getSelection().toString()", in: web) as! String
+        expect(AskOnPage.normalized(selected) == quote, "the real selection contains the complete literal quote across inline nodes")
+        _ = try await evaluate("getSelection().removeAllRanges(); document.querySelector('main').textContent = 'The original quoted source was removed before its effect.'", in: web)
+        let missing = try await evaluate(AskOnPageQuoteDOM.effect(quote, url: fixture.absoluteString, lease: lease, match: current), in: web) as! [String: Any]
+        expect(missing["found"] as? Bool == false, "DOM mutation between lookup and effect never reuses an obsolete range")
+        let empty = try await evaluate("getSelection().toString()", in: web) as! String
+        expect(empty.isEmpty, "a failed live revalidation cannot create a selection")
+        try await navigation.load(fixture, in: web)
+        let stale = try await evaluate(AskOnPageQuoteDOM.effect(quote, url: fixture.absoluteString, lease: lease, match: current), in: web)
+        expect(stale is NSNull, "same-URL new document globals reject the old lookup lease")
+        _ = try await evaluate(#"document.body.innerHTML = '<p id="first">Cafe<span>\u0301 opens at 09:30. 👩‍🔬 &amp; &lt;literal&gt;</span></p><p>Café opens at 09:30. 👩‍🔬 &amp; &lt;literal&gt;</p>'"#, in: web)
+        let unicode = "Café opens at 09:30. 👩‍🔬 & <literal>", unicodeLease = UUID()
+        let unicodeMatch = try await lookup(unicode, lease: unicodeLease)
+        let unicodeFound = try await evaluate(AskOnPageQuoteDOM.effect(unicode, url: fixture.absoluteString, lease: unicodeLease, match: unicodeMatch), in: web) as! [String: Any]
+        expect(unicodeFound["found"] as? Bool == true, "inline decomposed Unicode and literal symbols produce a real exact range")
+        let first = try await evaluate("getSelection().anchorNode.parentElement.id", in: web) as! String
+        expect(first == "first", "repeated normalized quotes use the first exact current occurrence")
+        try await navigation.load(fixture, in: web)
+    }
+
     static func main() async throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
@@ -50,6 +83,7 @@ enum AskOnPageContentTests {
         expect(page?.text.contains("secret") == false && page?.text.contains("Navigation should") == false
                && page?.text.contains("Footer chrome") == false, "hidden/chrome/control/script text stays out of context")
         expect(page?.title == "Synthetic Ask on Page article" && page?.wasTruncated == false, "title and complete readable document are reported")
+        try await liveQuoteRanges(web, fixture: fixture, navigation: navigation)
         _ = try await evaluate("document.querySelector('main').append(Object.assign(document.createElement('p'), {textContent: 'Added after loading: this authenticated-style DOM text is current context.'}))", in: web)
         let (changed, _) = try await snapshot(web)
         expect(changed?.text.contains("Added after loading") == true, "the already loaded DOM is read again without a URL fetch")
