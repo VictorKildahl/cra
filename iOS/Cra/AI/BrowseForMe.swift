@@ -1,5 +1,6 @@
 import CraCore
 import Foundation
+import UIKit
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
@@ -8,16 +9,29 @@ import FoundationModels
 /// Apple Intelligence model or not at all: the search and the pages are fetched by the phone, and
 /// nothing typed or read is sent to an AI service. `MobileBrowseForMe` has the rules.
 enum BrowseForMe {
-    /// Whether this device can answer: Apple Intelligence present and switched on.
-    static var isAvailable: Bool {
-        if LaunchOptions.fakeModel { return true }
+    /// Where the on-device model stands (`MobileAIState`).
+    static var state: MobileAIState {
+        if let forced = LaunchOptions.aiState { return forced }
+        if LaunchOptions.fakeModel { return .ready }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
-            if case .available = SystemLanguageModel.default.availability { return true }
+            switch SystemLanguageModel.default.availability {
+            case .available: return .ready
+            case .unavailable(.appleIntelligenceNotEnabled): return .turnedOff
+            case .unavailable(.modelNotReady): return .preparing
+            case .unavailable: return .unsupported
+            }
         }
         #endif
-        return false
+        return .unsupported
     }
+
+    /// Whether this device can answer now: Apple Intelligence present, switched on and ready.
+    static var isAvailable: Bool { state.canRun }
+
+    /// Whether the Browse for Me and Summarize buttons show: on every phone that can run Apple
+    /// Intelligence, switched on or not (a tap asks to switch it on).
+    static var isOffered: Bool { state.offersFeatures }
 
     enum Step {
         /// The sites being read, in order.
@@ -152,3 +166,26 @@ private struct GeneratedSection {
     var text: String
 }
 #endif
+
+extension BrowserViewController {
+    /// True when the on-device model can answer. Otherwise says why (switch Apple Intelligence on,
+    /// or wait for it) and returns false.
+    func appleIntelligenceIsReady() -> Bool {
+        let state = BrowseForMe.state
+        guard let prompt = MobileAI.prompt(for: state) else { return state.canRun }
+        let alert = UIAlertController(title: prompt.title, message: prompt.message, preferredStyle: .alert)
+        if prompt.opensSettings {
+            alert.addAction(UIAlertAction(title: "Not Now", style: .cancel))
+            // iOS has no public link to its Apple Intelligence page; this opens Settings at Cra's.
+            let open = UIAlertAction(title: "Open Settings", style: .default) { _ in
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+            alert.addAction(open)
+            alert.preferredAction = open
+        } else {
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+        }
+        topPresenter.present(alert, animated: true)
+        return false
+    }
+}

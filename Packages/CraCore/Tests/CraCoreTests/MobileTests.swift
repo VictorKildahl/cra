@@ -1095,3 +1095,23 @@ struct MobileSyncIntroTests {
         #expect(try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(settings)).hasDismissedSyncCard)
     }
 }
+
+struct MobileAITests {
+    @Test func everyPhoneThatCanRunAppleIntelligenceGetsTheButtons() {
+        #expect(MobileAIState.ready.offersFeatures)
+        #expect(MobileAIState.turnedOff.offersFeatures)
+        #expect(MobileAIState.preparing.offersFeatures)
+        #expect(!MobileAIState.unsupported.offersFeatures)
+        #expect(MobileAIState.ready.canRun && !MobileAIState.turnedOff.canRun && !MobileAIState.preparing.canRun)
+    }
+
+    @Test func aTapAsksToSwitchItOnOrToWait() {
+        #expect(MobileAI.prompt(for: .ready) == nil)
+        #expect(MobileAI.prompt(for: .unsupported) == nil)
+        let off = MobileAI.prompt(for: .turnedOff)
+        #expect(off?.title == "Turn on Apple Intelligence")
+        #expect(off?.opensSettings == true)
+        #expect(off?.message.contains("Settings \u{25B8} Apple Intelligence & Siri") == true)
+        #expect(MobileAI.prompt(for: .preparing)?.opensSettings == false)
+    }
+}

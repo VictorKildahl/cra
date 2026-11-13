@@ -95,6 +95,17 @@ enum LaunchOptions {
     static var fakeVoice: String? { LaunchOptions.value("CraFakeVoice") }
     static var showsVoiceOverlay: Bool { LaunchOptions.value("CraShowVoice") == "YES" }
     static var summarizesFirstPage: Bool { LaunchOptions.value("CraSummarize") == "YES" }
+    /// `-CraAIState off|preparing|unsupported` stands in for Apple Intelligence's state in tests.
+    static var aiState: MobileAIState? {
+        switch LaunchOptions.value("CraAIState") {
+        case "off": return .turnedOff
+        case "preparing": return .preparing
+        case "unsupported": return .unsupported
+        case "ready": return .ready
+        default: return nil
+        }
+    }
+
     /// `-CraAppearance dark` or `light`.
     static var appearance: UIUserInterfaceStyle? {
         switch LaunchOptions.value("CraAppearance") {

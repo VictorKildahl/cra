@@ -307,7 +307,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             backdrop.isIncognito = incognitoSearch
             sheet.text = ""
             sheet.setRows([])
-            sheet.offersBrowseForMe = BrowseForMe.isAvailable
+            sheet.offersBrowseForMe = BrowseForMe.isOffered
             sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
             sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
                                                             hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
@@ -385,6 +385,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row) {
+        guard appleIntelligenceIsReady() else { return }
         noteSearched()
         open(MobileBrowseForMe.tabAddress(query: row.text))
     }
@@ -567,7 +568,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // MARK: Onboarding and launch actions
 
     func showOnboarding() {
-        let model = OnboardingModel(canUseAI: BrowseForMe.isAvailable, icon: MobileAppIcon(alternateName: UIApplication.shared.alternateIconName))
+        let model = OnboardingModel(canUseAI: BrowseForMe.isOffered, icon: MobileAppIcon(alternateName: UIApplication.shared.alternateIconName))
         model.setIcon = { AppIconPicker.apply($0) }
         model.openDefaultBrowserSettings = {
             if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -671,7 +672,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     /// `host` is the page's site; a page without one (a `data:` page, say) edits the global options.
     func presentSettings(site host: String?, startingAtSite: Bool) {
-        let model = SettingsModel(store: settings, host: host, canSummarize: BrowseForMe.isAvailable)
+        let model = SettingsModel(store: settings, host: host, canSummarize: BrowseForMe.isOffered)
         model.done = { [weak self] in self?.dismiss(animated: true) }
         model.showArchive = { [weak self] in self?.showArchive() }
         model.showOnboarding = { [weak self] in self?.showOnboarding() }
@@ -835,7 +836,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let host = page.webView.url?.host.map(MobileSettings.siteKey) ?? ""
         return PageMenuState(host: host, canGoBack: page.webView.canGoBack, canGoForward: page.webView.canGoForward,
                              zoom: Double(page.webView.pageZoom), isDesktopSite: page.wantsDesktopSite,
-                             canSummarize: BrowseForMe.isAvailable, blockedCount: page.blockedCount,
+                             canSummarize: BrowseForMe.isOffered, blockedCount: page.blockedCount,
                              isFavorite: page.webView.url.map { favorites.value.contains($0.absoluteString) } ?? false,
                              isTranslated: page.isTranslated, isReader: readerView != nil)
     }
@@ -901,6 +902,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             }
         case .summarize:
             menuHost?.dismiss()
+            guard appleIntelligenceIsReady() else { return }
             summarize()
         }
     }

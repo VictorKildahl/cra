@@ -1244,3 +1244,35 @@ final class FavoriteOrderTests: BrowserTestCase {
         XCTAssertLessThan(starred.frame.minY, shared.frame.minY, "the new order is kept")
     }
 }
+
+final class AppleIntelligenceTests: BrowserTestCase {
+    /// An iPhone that can run Apple Intelligence shows Browse for Me even with it switched off;
+    /// a tap asks to switch it on instead of browsing (Victor, 13 Nov).
+    func testWithAppleIntelligenceOffBrowseForMeAsksToTurnItOn() {
+        launch(["-CraAIState", "off"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), "the button shows")
+        chip.tap()
+        let alert = app.alerts["Turn on Apple Intelligence"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.buttons["Open Settings"].exists)
+        sleep(1)
+        keep("apple-intelligence-off")
+        alert.buttons["Not Now"].tap()
+        XCTAssertFalse(alert.waitForExistence(timeout: 1))
+        XCTAssertFalse(app.staticTexts["browse-query"].exists, "nothing was browsed")
+    }
+
+    /// A phone that can't run Apple Intelligence has no Browse for Me at all.
+    func testAPhoneWithoutAppleIntelligenceHasNoBrowseForMe() {
+        launch(["-CraAIState", "unsupported"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        XCTAssertTrue(app.staticTexts["pizza ovens"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["browse-for-me"].exists)
+    }
+}
