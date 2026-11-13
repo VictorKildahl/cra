@@ -119,7 +119,9 @@ to Markdown or `docs/` alone runs nothing.
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-tidy-downloads.sh`: the production Tidy Downloads service and `SidebarStore`,
   suspended local-model responses, and real temporary files: opt-out, cancellation, unavailable
-  model, owner teardown, duplicate notifications and obsolete completions without sleeps.
+  model, owner teardown, duplicate notifications and obsolete completions without sleeps. Compiles
+  the real `DownloadHistory` with a minimal CEF control stub; checks serial filesystem collisions,
+  move errors, cancellation before/after physical moves, and asynchronous stale/repeated undo.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image

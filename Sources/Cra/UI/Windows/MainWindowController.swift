@@ -987,7 +987,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let id = download.identifier
             TidyDownloadsService.shared.finished(id, path: download.fullPath, downloadURL: download.url, window: windowID, store: store,
                 ownerEligible: { [weak self] in self?.window != nil && self?.isPutAway == false }) { [weak self] path in
-                guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id else { return }
+                guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id, recent.path == download.fullPath else { return }
                 recent.path = path
                 self.sidebarUI.recentDownload = recent
             }

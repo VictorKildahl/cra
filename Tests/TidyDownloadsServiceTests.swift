@@ -37,10 +37,12 @@ private final class DownloadFixture {
     let folder: URL
     var available = true
     var ownerPresent = true
+    var moveFile: TidyDownloadsService.MoveFile = { await TidyDownloadFiles.shared.move(from: $0, name: $1, eligible: $2) }
     private(set) var moved: [UInt32: String] = [:]
-    lazy var service = TidyDownloadsService(modelAvailable: { [weak self] in self?.available == true }, generate: model.answer)
+    lazy var service = TidyDownloadsService(modelAvailable: { [weak self] in self?.available == true }, generate: model.answer, moveFile: moveFile)
 
-    init(_ root: URL) throws {
+    init(_ root: URL, moveFile: TidyDownloadsService.MoveFile? = nil) throws {
+        if let moveFile { self.moveFile = moveFile }
         folder = root.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         store.settings.tidyDownloads = true
@@ -56,7 +58,8 @@ private final class DownloadFixture {
 
     @discardableResult
     func finish(_ id: UInt32 = 1, path: String, window: UUID? = nil) -> Task<Void, Never>? {
-        service.finished(id, path: path, downloadURL: "https://example.test/report", window: window ?? store.activeWindowID,
+        DownloadHistory.shared.add(path: path)
+        return service.finished(id, path: path, downloadURL: "https://example.test/report", window: window ?? store.activeWindowID,
                          store: store, ownerEligible: { [weak self] in self?.ownerPresent == true }) { [weak self] path in
             self?.moved[id] = path
         }
@@ -88,6 +91,40 @@ private final class DownloadFixture {
 
 }
 
+/// Suspends at the actual filesystem seam, without sleeps or fake move outcomes.
+@MainActor
+private final class MoveGate {
+    let afterMove: Bool
+    private var entered = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    private var resumeMove: CheckedContinuation<Void, Never>?
+
+    init(afterMove: Bool) { self.afterMove = afterMove }
+
+    func move(_ path: String, _ name: String, _ eligible: @escaping @MainActor @Sendable () -> Bool) async -> TidyDownloadFiles.Move? {
+        if !afterMove { await pause() }
+        let result = await TidyDownloadFiles.shared.move(from: path, name: name, eligible: eligible)
+        if afterMove { await pause() }
+        return result
+    }
+
+    private func pause() async {
+        await withCheckedContinuation { continuation in
+            resumeMove = continuation
+            entered = true
+            waiter?.resume()
+            waiter = nil
+        }
+    }
+
+    func wait() async {
+        if entered { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func release() { resumeMove?.resume(); resumeMove = nil }
+}
+
 @MainActor
 @main
 enum TidyDownloadsServiceTests {
@@ -97,6 +134,13 @@ enum TidyDownloadsServiceTests {
         defer { try? FileManager.default.removeItem(at: root) }
         setenv("CRA_DATA_DIR", root.appendingPathComponent("profile").path, 1)
         setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+        try await hiddenHistoryMustNotMoveNewerRow(root)
+        try await undoHiddenHistoryPathReuse(root)
+        try await failedUndoKeepsCard(root)
+        try await filesystemOutcomes(root)
+        try await cancellationAtMove(root)
+        try await undoConsistency(root)
+        try await undoInFlight(root)
         try await optOut(root)
         try await offThenOn(root)
         try await unavailable(root)
@@ -111,7 +155,194 @@ enum TidyDownloadsServiceTests {
         try await sourceTabCloses(root)
         try await rejectedAnswers(root)
         try await storeLifetime(root)
-        print("Tidy Downloads lifecycle: 14 cases passed")
+        print("Tidy Downloads lifecycle/filesystem/undo: 21 cases passed")
+    }
+
+    private static func hiddenHistoryMustNotMoveNewerRow(_ root: URL) async throws {
+        let gate = MoveGate(afterMove: true)
+        let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2) }), path = try f.file()
+        let task = f.finish(path: path)
+        await f.model.waitForRequests()
+        let original = DownloadHistory.shared.entries.last!
+        DownloadHistory.shared.hide(.finished(original))
+        f.model.complete(with: "Annual Report.pdf")
+        await gate.wait()
+        try Data("new download bytes".utf8).write(to: URL(fileURLWithPath: path))
+        let newer = DownloadHistory.shared.add(path: path)
+        gate.release()
+        await task?.value
+        let actual = DownloadHistory.shared.entries.first(where: { $0.id == newer.id })!
+        precondition(actual.path == path,
+                     "a completed move without its history row must not rename a newer row at the reused source path")
+        let newerBytes = try String(contentsOfFile: path, encoding: .utf8)
+        precondition(newerBytes == "new download bytes")
+        let destination = f.folder.appendingPathComponent("Annual Report.pdf").path
+        let movedBytes = try String(contentsOfFile: destination, encoding: .utf8)
+        precondition(movedBytes == "original bytes: report_123.pdf" && f.moved[1] == destination,
+                     "a completed move still reconciles its actual destination without a history row")
+        let card = f.service.card!
+        let undo = await f.service.revert(card) { _, _ in preconditionFailure("absent history cannot authorize undo") }
+        precondition(!undo && f.service.card == card && FileManager.default.fileExists(atPath: destination))
+    }
+
+    private static func failedUndoKeepsCard(_ root: URL) async throws {
+        let f = try DownloadFixture(root), path = try f.file()
+        let task = f.finish(path: path)
+        await f.model.waitForRequests()
+        f.model.complete(with: "Annual Report.pdf")
+        await task?.value
+        let card = f.service.card!
+        try FileManager.default.removeItem(atPath: card.newPath)
+        let success = await f.service.revert(card) { _, _ in preconditionFailure("failed undo cannot publish") }
+        precondition(!success && f.service.card == card, "failed undo must preserve the current rename card")
+    }
+
+    private static func filesystemOutcomes(_ root: URL) async throws {
+        let f = try DownloadFixture(root)
+        let a = try f.file("first.pdf"), b = try f.file("second.pdf")
+        let occupied = try f.file("Report.pdf")
+        async let first = TidyDownloadFiles.shared.move(from: a, name: "Report.pdf", eligible: { true })
+        async let second = TidyDownloadFiles.shared.move(from: b, name: "Report.pdf", eligible: { true })
+        let results = await [first, second].compactMap { $0 }
+        precondition(Set(results.map { ($0.to as NSString).lastPathComponent }) == ["Report (1).pdf", "Report (2).pdf"], "serial concurrent moves choose distinct actual destinations")
+        for result in results {
+            let bytes = try String(contentsOfFile: result.to, encoding: .utf8)
+            precondition(bytes == "original bytes: \((result.from as NSString).lastPathComponent)")
+            precondition(!FileManager.default.fileExists(atPath: result.from))
+        }
+        let collisionBytes = try String(contentsOfFile: occupied, encoding: .utf8)
+        precondition(collisionBytes == "original bytes: Report.pdf", "colliding file is untouched")
+        let missing = await TidyDownloadFiles.shared.move(from: a, name: "Missing.pdf", eligible: { true })
+        precondition(missing == nil)
+        let source = try f.file("source.pdf")
+        let failed = await TidyDownloadFiles.shared.move(from: source, name: "nonexistent/Report.pdf", eligible: { true })
+        precondition(failed == nil && FileManager.default.fileExists(atPath: source), "move error preserves source")
+        for index in 0...100 { _ = try f.file(index == 0 ? "Full.pdf" : "Full (\(index)).pdf") }
+        let full = await TidyDownloadFiles.shared.move(from: source, name: "Full.pdf", eligible: { true })
+        precondition(full == nil && FileManager.default.fileExists(atPath: source), "101 occupied candidates return no move")
+        try FileManager.default.removeItem(atPath: f.folder.appendingPathComponent("Full (100).pdf").path)
+        let last = await TidyDownloadFiles.shared.move(from: source, name: "Full.pdf", eligible: { true })
+        precondition(last?.to == f.folder.appendingPathComponent("Full (100).pdf").path)
+    }
+
+    private static func cancellationAtMove(_ root: URL) async throws {
+        for afterMove in [false, true] {
+            let gate = MoveGate(afterMove: afterMove)
+            let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2) }), path = try f.file()
+            let task = f.finish(path: path)
+            await f.model.waitForRequests()
+            f.model.complete(with: "Annual Report.pdf")
+            await gate.wait()
+            // Synchronous preference invalidation cancels even when disk work is queued/running.
+            f.store.settings.tidyDownloads = false
+            gate.release()
+            await task?.value
+            if afterMove {
+                let destination = f.folder.appendingPathComponent("Annual Report.pdf").path
+                precondition(!FileManager.default.fileExists(atPath: path) && FileManager.default.fileExists(atPath: destination))
+                precondition(DownloadHistory.shared.entries.last?.path == destination && f.moved[1] == destination,
+                             "cancellation after physical move must still reconcile real history and recent publication")
+                precondition(f.service.card == nil, "cancelled move suppresses stale card only")
+            } else {
+                try f.unchanged(path)
+                precondition(DownloadHistory.shared.entries.last?.path == path)
+            }
+        }
+    }
+
+    private static func undoConsistency(_ root: URL) async throws {
+        let f = try DownloadFixture(root), path = try f.file()
+        let unrelated = DownloadHistory.shared.add(path: try f.file("unrelated.pdf"))
+        let task = f.finish(path: path)
+        await f.model.waitForRequests()
+        f.model.complete(with: "Annual Report.pdf")
+        await task?.value
+        let card = f.service.card!
+        let history = DownloadHistory.shared.entries.last!
+        let duplicate = DownloadHistory.shared.add(path: card.newPath)
+        _ = try f.file() // The original path was reused: undo must choose the next Arc candidate.
+        var published: (String, String)?
+        let success = await f.service.revert(card) { published = ($0, $1) }
+        let back = f.folder.appendingPathComponent("report_123 (1).pdf").path
+        precondition(success && published?.0 == card.newPath && published?.1 == back && f.service.card == nil)
+        let restored = try String(contentsOfFile: back, encoding: .utf8)
+        precondition(restored == "original bytes: report_123.pdf")
+        precondition(DownloadHistory.shared.entries.contains(where: { $0.id == history.id && $0.path == back }))
+        precondition(DownloadHistory.shared.entries.contains(duplicate), "undo updates its recorded history ID, not a newer row at the same path")
+        precondition(DownloadHistory.shared.entries.contains(unrelated), "undo preserves unrelated real history entries")
+        let repeated = await f.service.revert(card) { _, _ in preconditionFailure("repeated undo cannot publish") }
+        precondition(!repeated && FileManager.default.fileExists(atPath: path))
+        let next = f.finish(2, path: try f.file("other.pdf"))
+        await f.model.waitForRequests(2)
+        f.model.complete(1, with: "Other Report.pdf")
+        await next?.value
+        let current = f.service.card!
+        let stale = await f.service.revert(card) { _, _ in preconditionFailure("stale undo cannot publish") }
+        precondition(!stale && f.service.card == current)
+        DownloadHistory.shared.move(from: current.newPath, to: "different-recorded-path")
+        let mismatched = await f.service.revert(current) { _, _ in preconditionFailure("mismatched history cannot publish") }
+        precondition(!mismatched && f.service.card == current && FileManager.default.fileExists(atPath: current.newPath))
+    }
+
+    private static func undoInFlight(_ root: URL) async throws {
+        let gate = MoveGate(afterMove: true)
+        let f = try DownloadFixture(root, moveFile: { path, name, eligible in
+            if name == "report_123.pdf" { return await gate.move(path, name, eligible) }
+            return await TidyDownloadFiles.shared.move(from: path, name: name, eligible: eligible)
+        })
+        let path = try f.file()
+        let task = f.finish(path: path)
+        await f.model.waitForRequests()
+        f.model.complete(with: "Annual Report.pdf")
+        await task?.value
+        let card = f.service.card!
+        let undo = Task { await f.service.revert(card) { _, back in
+            precondition(back == path)
+        } }
+        await gate.wait()
+        let repeated = await f.service.revert(card) { _, _ in preconditionFailure("parallel undo cannot publish") }
+        precondition(!repeated)
+        let nextPath = try f.file("another.pdf")
+        let next = f.finish(2, path: nextPath)
+        await f.model.waitForRequests(2)
+        f.model.complete(1, with: "Newer Report.pdf")
+        await next?.value
+        let newer = f.service.card!
+        undo.cancel()
+        gate.release()
+        let success = await undo.value
+        precondition(success && f.service.card == newer
+                     && DownloadHistory.shared.entries.contains(where: { $0.id == card.historyID && $0.path == path }),
+                     "completed undo reconciles despite cancellation and preserves a newer card")
+    }
+
+    private static func undoHiddenHistoryPathReuse(_ root: URL) async throws {
+        let gate = MoveGate(afterMove: true)
+        let f = try DownloadFixture(root, moveFile: { path, name, eligible in
+            if name == "report_123.pdf" { return await gate.move(path, name, eligible) }
+            return await TidyDownloadFiles.shared.move(from: path, name: name, eligible: eligible)
+        })
+        let path = try f.file()
+        let task = f.finish(path: path)
+        await f.model.waitForRequests()
+        f.model.complete(with: "Annual Report.pdf")
+        await task?.value
+        let card = f.service.card!
+        var published: String?
+        let undo = Task { await f.service.revert(card) { _, back in published = back } }
+        await gate.wait()
+        let original = DownloadHistory.shared.entries.first(where: { $0.id == card.historyID })!
+        DownloadHistory.shared.hide(.finished(original))
+        try Data("new download bytes".utf8).write(to: URL(fileURLWithPath: card.newPath))
+        let newer = DownloadHistory.shared.add(path: card.newPath)
+        gate.release()
+        let success = await undo.value
+        precondition(success && published == path && f.service.card == nil,
+                     "a completed undo still reconciles its actual destination after its history is hidden")
+        precondition(DownloadHistory.shared.entries.contains(newer), "completed undo must preserve newer history at the reused source path")
+        let newerBytes = try String(contentsOfFile: card.newPath, encoding: .utf8)
+        let restoredBytes = try String(contentsOfFile: path, encoding: .utf8)
+        precondition(newerBytes == "new download bytes" && restoredBytes == "original bytes: report_123.pdf")
     }
 
     private static func optOut(_ root: URL) async throws {

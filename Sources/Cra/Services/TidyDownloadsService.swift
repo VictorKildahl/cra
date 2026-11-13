@@ -18,6 +18,7 @@ final class TidyDownloadsService {
         let id = UUID()
         var download: UInt32
         var window: UUID
+        var historyID: UUID?
         var oldPath: String
         var newPath: String
         var oldName: String { (oldPath as NSString).lastPathComponent }
@@ -44,11 +45,16 @@ final class TidyDownloadsService {
     /// Only downloads still running keep source context; inference owns its bounded snapshot.
     @ObservationIgnored private var sources: [Key: TidyDownloads.Source] = [:]
     @ObservationIgnored private var requests: [Key: Request] = [:]
+    typealias MoveFile = @Sendable (String, String, @escaping @MainActor @Sendable () -> Bool) async -> TidyDownloadFiles.Move?
+    @ObservationIgnored private let moveFile: MoveFile
+    @ObservationIgnored private var reverting: UUID?
     @ObservationIgnored private let modelAvailable: @MainActor () -> Bool
     @ObservationIgnored private let generate: @MainActor (TidyDownloads.Request) async -> String?
 
     init(modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.currentModelAvailable },
-         generate: @escaping @MainActor (TidyDownloads.Request) async -> String? = { await TidyDownloadsService.ask($0) }) {
+         generate: @escaping @MainActor (TidyDownloads.Request) async -> String? = { await TidyDownloadsService.ask($0) },
+         moveFile: @escaping MoveFile = { await TidyDownloadFiles.shared.move(from: $0, name: $1, eligible: $2) }) {
+        self.moveFile = moveFile
         self.modelAvailable = modelAvailable
         self.generate = generate
     }
@@ -110,25 +116,24 @@ final class TidyDownloadsService {
             // A cancelled provider may still finish after a newer request has taken this key.
             defer { if self.requests[key]?.token == token { self.requests[key] = nil } }
             guard let answer, let name = TidyDownloads.clean(answer, original: original) else { return }
-            let folder = (path as NSString).deletingLastPathComponent
-            let fm = FileManager.default
-            guard let free = TidyDownloads.unique(name, existing: {
-                fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0))
-            }) else { return }
-            let newPath = (folder as NSString).appendingPathComponent(free)
-            // No suspension separates this last eligibility check from the existing move boundary.
-            guard !Task.isCancelled, self.requests[key]?.token == token,
-                  self.requests[key]?.path == path, let store, store.settings.tidyDownloads,
-                  self.modelAvailable(), ownerEligible(), store.prefs.windows.contains(where: { $0.id == window }),
-                  fm.fileExists(atPath: path) else { return }
-            guard (try? fm.moveItem(atPath: path, toPath: newPath)) != nil else {
-                CraLog.note("Tidy Downloads: the file couldn't be renamed")
-                return
+            let historyID = DownloadHistory.shared.entries.last(where: { $0.path == path })?.id
+            let eligible: @MainActor @Sendable () -> Bool = { [weak self, weak store] in
+                guard let self, let store else { return false }
+                return self.requests[key]?.token == token && self.requests[key]?.path == path
+                    && store.settings.tidyDownloads && self.modelAvailable() && ownerEligible()
+                    && store.prefs.windows.contains(where: { $0.id == window })
             }
-            DownloadHistory.shared.move(from: path, to: newPath)
-            moved(newPath)
-            CraLog.note("Tidy Downloads: renamed a download (\(original.count) → \(free.count) characters)")
-            self.show(Rename(download: id, window: window, oldPath: path, newPath: newPath))
+            guard let result = await self.moveFile(path, name, eligible) else { return }
+            // A physical move is authoritative even if cancellation/teardown happened during IO.
+            // Always reconcile history/recent; eligibility now controls only the transient card.
+            if let historyID {
+                DownloadHistory.shared.move(from: result.from, to: result.to, id: historyID)
+            }
+            moved(result.to)
+            CraLog.note("Tidy Downloads: renamed a download (\(original.count) → \((result.to as NSString).lastPathComponent.count) characters)")
+            if !Task.isCancelled, eligible() {
+                self.show(Rename(download: id, window: window, historyID: historyID, oldPath: result.from, newPath: result.to))
+            }
         }
         requests[key] = request
         return request.task
@@ -177,18 +182,18 @@ final class TidyDownloadsService {
     }
 
     /// Arc's "Revert to original name": the file takes its old name back (or the next free one).
-    func revert(_ r: Rename, moved: (String, String) -> Void) -> Bool {
-        dismiss()
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: r.newPath) else { return false }
-        let folder = (r.oldPath as NSString).deletingLastPathComponent
-        guard let free = TidyDownloads.unique(r.oldName, existing: {
-            fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0))
+    func revert(_ r: Rename, moved: (String, String) -> Void) async -> Bool {
+        guard card?.id == r.id, reverting == nil, let historyID = r.historyID,
+              DownloadHistory.shared.entries.contains(where: { $0.id == historyID && $0.path == r.newPath }) else { return false }
+        reverting = r.id
+        defer { if reverting == r.id { reverting = nil } }
+        guard let result = await moveFile(r.newPath, r.oldName, { [weak self] in
+            self?.card?.id == r.id && DownloadHistory.shared.entries.contains(where: { $0.id == historyID && $0.path == r.newPath })
         }) else { return false }
-        let back = (folder as NSString).appendingPathComponent(free)
-        guard (try? fm.moveItem(atPath: r.newPath, toPath: back)) != nil else { return false }
-        DownloadHistory.shared.move(from: r.newPath, to: back)
-        moved(r.newPath, back)
+        DownloadHistory.shared.move(from: result.from, to: result.to, id: historyID)
+        moved(result.from, result.to)
+        // A newer completion may have presented another card while this move was running.
+        if card?.id == r.id { dismiss() }
         return true
     }
 
