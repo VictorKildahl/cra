@@ -183,10 +183,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // list the tab had (PageHistory, #273): after a relaunch or a close, Back goes where it went.
         let incognito = store.isIncognito(item: tabID)
         let history = incognito ? nil : PageHistoryStore.shared.load(tabID)
-        let browser = Perf.time(.pageCreate) {
-            PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
-                                    profilePath: store.profilePath(item: tabID), history: history)
+        let profilePath = store.profilePath(item: tabID)
+        // The profile's spare page if there is one (SparePages): made ahead, so this click doesn't
+        // wait for CEF to make the page's window.
+        let fill = PageEngines.spareFill(url: tab.url, incognito: incognito, history: history)
+        let browser = Perf.time(.pageCreate) { () -> CraBrowser in
+            if fill.canTake, let spare = SparePages.shared.take(profilePath: profilePath) {
+                spare.delegate = self
+                spare.takeSpare(withURL: tab.url, history: fill.history)
+                log(tabID, "takes a spare page")
+                return spare
+            }
+            return PageEngines.makeBrowser(frame: container.bounds, url: tab.url, delegate: self, incognito: incognito,
+                                           profilePath: profilePath, history: history)
         }
+        if !incognito { SparePages.shared.refill(profilePath: profilePath, frame: container.bounds, clock: clock) }
         return register(browser: browser, tabID: tabID)
     }
 
@@ -505,6 +516,26 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.browser.close()
         delegate?.browserManagerDidUpdate(tabID)
         delegate?.browserManagerPageWindowsChanged(focus: false)
+        scheduleMemoryReclaim()
+    }
+
+    private var memoryReclaimWork: ScheduledWork?
+    /// Chromium's browser process returns what closed pages freed, once closing has settled and
+    /// nobody is typing (MemoryReclaim). Any page can carry the call: it acts on the whole process.
+    private func scheduleMemoryReclaim(after delay: TimeInterval = MemoryReclaim.settle) {
+        memoryReclaimWork?.cancel()
+        memoryReclaimWork = clock.after(delay) { [weak self] in
+            guard let self else { return }
+            let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+            guard MemoryReclaim.runsNow(secondsSinceInput: idle) else {
+                self.scheduleMemoryReclaim(after: MemoryReclaim.retry)
+                return
+            }
+            guard let carrier = self.runtimes.values.first(where: { $0.browser.isCreated && !$0.browser.isClosed })?.browser else { return }
+            carrier.sendDevToolsMethod("Cra.reclaimMemory", params: "{}") { _, error in
+                if let error { CraLog.note("memory reclaim: \(error)") }
+            }
+        }
     }
 
     // MARK: Tab sleeping
@@ -703,6 +734,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     private static var loggedFreezingError = false
+
+    /// cra://debug?freezingState=1: each page's freezing state as Chromium has it, for scenarios.
+    /// The title comes from the browser side, which a frozen page doesn't hold up.
+    func logFreezingStates() {
+        for rt in runtimes.values where rt.browser.isCreated && !rt.browser.isClosed {
+            let title = rt.browser.currentTitle, url = rt.browser.currentURL
+            rt.browser.sendDevToolsMethod("Cra.getFreezingState", params: "{}") { result, error in
+                let r = (result?.data(using: .utf8)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+                let line = "freezing state \(url) title=\(title): frozen=\(r["frozen"] as? Bool ?? false)"
+                    + " liveConnection=\(r["liveConnection"] as? Bool ?? false)"
+                    + " reasons=\((r["reasons"] as? [String] ?? []).joined(separator: ","))\(error.map { " error=\($0)" } ?? "")"
+                DispatchQueue.main.async { CraLog.note(line) }
+            }
+        }
+    }
 
     /// Arc never freezes or discards the pages of the 10 tabs used last, however long ago that
     /// was (TabSleepPolicy.protectedRecentTabs, GitHub #136).

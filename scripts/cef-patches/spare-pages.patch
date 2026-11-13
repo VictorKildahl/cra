@@ -1,0 +1,34 @@
+diff --git a/chrome/browser/extensions/browser_extension_window_controller.cc b/chrome/browser/extensions/browser_extension_window_controller.cc
+--- a/chrome/browser/extensions/browser_extension_window_controller.cc
++++ b/chrome/browser/extensions/browser_extension_window_controller.cc
+@@ -18,9 +18,12 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/common/extensions/api/tabs.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "components/sessions/core/session_id.h"
++#include "content/public/browser/cra_live_connection.h"
++#include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_features.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
+@@ -205,6 +208,17 @@
+     return false;
+   }
+ 
++#if BUILDFLAG(ENABLE_CEF)
++  // Cra: a spare page (Cra.setSpare) is no tab yet: Cra keeps it ready for the
++  // next tab that needs a page, and its window is hidden until then.
++  if (const TabStripModel* tabs = browser_->GetTabStripModel()) {
++    for (int i = 0; i < tabs->count(); ++i) {
++      if (tabs->GetWebContentsAt(i)->GetUserData(content::CraSparePageKey())) {
++        return false;
++      }
++    }
++  }
++#endif
+   return (window_type_ != api::tabs::WindowType::kDevtools) ||
+          allow_dev_tools_windows;
+ }

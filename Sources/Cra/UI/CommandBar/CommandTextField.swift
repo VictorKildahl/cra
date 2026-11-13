@@ -149,7 +149,12 @@ final class CommandTextField {
                 controller.moveSelection(by: -1); return true
             case #selector(NSResponder.insertNewline(_:)):
                 acceptSelectedCompletion(textView)
-                controller.commit()
+                // Shift-Return: Instant Links on a search row; Return everywhere else.
+                if NSApp.currentEvent.map({ $0.type == .keyDown && $0.modifierFlags.intersection([.shift, .control, .option, .command]) == .shift }) == true {
+                    controller.commitInstantLinks()
+                } else {
+                    controller.commit()
+                }
                 return true
             // The key bindings have nothing for ⌘Return, so the field editor sends noop:, never
             // insertNewline: (GitHub #85).

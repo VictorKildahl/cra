@@ -1,0 +1,37 @@
+# promise: #374
+# Who gets a shortcut's keys when the page wants them too, picked per shortcut in Settings ▸ Shortcuts
+# (Arc's Prefer Arc / Use Both / Prefer Websites, saved as `priority` on the chords in keybindings.json).
+# The page here keeps ⌘R, ⌘W and ⌘F (preventDefault) and counts them; ⌘G it leaves alone.
+# Refresh prefers Cra: Cra reloads before the page sees ⌘R (its default prefers websites).
+# Close Tab prefers websites: the page keeps ⌘W and the tab stays (its default prefers Cra).
+# Find uses both: the page keeps the first ⌘F, Cra offers it and takes the second before the page.
+# Find Next uses both, but the page leaves ⌘G: it comes back to Cra and nothing is offered.
+budget rss=700 stalls50=10
+seed keybindings.json {"reload":[{"key":"r","modifiers":1048576,"priority":"overrideWebView"}],"closeTab":[{"key":"w","modifiers":1048576,"priority":"low"}],"find":[{"key":"f","modifiers":1048576,"priority":"promptAfterConsumedByWebView"}],"findNext":[{"key":"g","modifiers":1048576,"priority":"promptAfterConsumedByWebView"}]}
+cra://debug?windowSize=1280x800
+wait 2
+cra://open?url=${PAGE}?n=keys
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{window.kept={r:0,w:0,f:0,g:0};window.seen={g:0};addEventListener('keydown',e=>{if(!e.metaKey)return;if('rwf'.includes(e.key)){e.preventDefault();kept[e.key]++}if(e.key==='g')seen.g++},true);return 'listening-'+document.hasFocus()})()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"listening-
+cra://debug?key=w,13,1048576&page=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'closeTab-kept-'+kept.w"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"closeTab-kept-1"
+cra://debug?key=f,3,1048576&page=1
+wait 1
+expect-log shortcut find: the page kept it, Use Both offers the next press
+cra://debug?key=f,3,1048576&page=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'find-kept-'+kept.f"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"find-kept-1"
+cra://debug?key=g,5,1048576&page=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'findNext-seen-'+seen.g"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"findNext-seen-1"
+reject-log shortcut findNext: the page kept it
+cra://debug?key=r,15,1048576&page=1
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'reloaded-'+(typeof window.kept==='undefined')"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"reloaded-true"

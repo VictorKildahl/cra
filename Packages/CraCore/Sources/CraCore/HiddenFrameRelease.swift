@@ -5,12 +5,31 @@ import Foundation
 /// Every Cra tab is its own Chromium window. A tab's window that is ordered out has its compositor
 /// suspended with its last frame, and that frame keeps the page's surface, and the page's ~15 MB of
 /// tiles, alive after Chromium evicts it. Chromium (HideDelegatedFrameHostMac) evicts a hidden page's
-/// frame past its saved-frame cap (10, the most recently hidden first kept) and once it has been
+/// frame past its saved-frame cap (5, the most recently hidden first kept) and once it has been
 /// hidden 5 minutes, on a 5-minute timer, so by 10 minutes. Chrome detaches a background tab from its
 /// window instead, so nothing keeps it. A window that draws once after the eviction releases it.
 public enum HiddenFrameRelease {
-    /// Chromium's saved-frame cap with plenty of memory (FrameEvictionManager: 2 × 5).
-    public static let savedFrames = 10
+    /// Chromium's baseline saved-frame cap (FrameEvictionManager: 5). Cra turns off its doubling with
+    /// plenty of memory (ScalableFrameEviction, CraCEF.mm): the five tabs used last are the ones tab
+    /// freezing keeps running, and each saved frame held ~15 MB of GPU memory. A tab further back
+    /// draws its page again when shown.
+    public static let savedFrames = 5
+    /// How long after the page windows change (a switch, a new tab) the release runs, besides the
+    /// once-a-minute pass: a tab past the saved-frame cap is evicted as it is hidden, so its ~15 MB
+    /// can go at once, and opening twenty tabs no longer held ~240 MB more in the GPU process for up
+    /// to a minute. Long enough that a burst of switches draws nothing until it ends.
+    public static let afterPageChange: TimeInterval = 2
+    /// Page windows drawing at once. Each goes in as a child of the browser window, and AppKit
+    /// sorts all of that window's children on every order in and out: 45 at once (fifty tabs
+    /// opened quickly) held the main thread 2.3-3.2 s. In passes of a few it stays a few ms each.
+    public static let perPass = 4
+    /// Between passes, after a pass's draws are done (0.25 s).
+    public static let passGap: TimeInterval = 0.4
+
+    /// The windows to draw in this pass, and whether another pass is needed after it.
+    public static func pass(_ due: [UUID]) -> (now: [UUID], more: Bool) {
+        (Array(due.prefix(perPass)), due.count > perPass)
+    }
     /// Chromium's culling delay (5 min) plus one timer period: evicted by then whenever it was hidden.
     public static let evictedAfter: TimeInterval = 10 * 60 + 30
 

@@ -71,13 +71,14 @@ public enum PictureInPictureLayout {
         return TopBar(back: back, close: close, address: address)
     }
 
-    /// Arc's limits on the window's size (Arc 1.172 binary): at least 224 × 126 pt for the
-    /// video's shape (a 16:9 video can't be made smaller than that), at most 61.7 % of the
-    /// screen's width and the visible frame's height less 20 pt. The window keeps the video's
-    /// aspect ratio inside them.
+    /// The limits on the window's size: at least 224 × 126 pt for the video's shape, as in Arc
+    /// 1.172 (a 16:9 video can't be made smaller than that), at most the display's visible frame.
+    /// Arc stops at 61.7 % of the screen's width and the visible height less 20 pt; Cra goes to
+    /// the whole visible frame on purpose (the maintainer's decision, 12 Nov). The window keeps
+    /// the video's aspect ratio inside them. `screen` is the display's whole frame.
     public static func sizeLimits(aspect a: CGFloat, screen: CGRect, visible: CGRect) -> (min: CGSize, max: CGSize) {
         let minW = max(224, 126 * a)
-        let maxW = max(224, (0.617 * screen.width).rounded(.down)), maxH = max(126, visible.height - 20)
+        let maxW = max(224, visible.width.rounded(.down)), maxH = max(126, visible.height.rounded(.down))
         return (CGSize(width: minW, height: (minW / a).rounded()), CGSize(width: maxW, height: maxH))
     }
 
@@ -155,7 +156,7 @@ extension PictureInPictureLayout {
     /// displays changed since) opens in the nearest corner instead, as a drop there lands (#332).
     public static func initialFrame(aspect: CGFloat, displays: [Display], current: Display, remembered: Placement?) -> CGRect {
         let frame = rememberedFrame(aspect: aspect, displays: displays, current: current, remembered: remembered)
-        return landing(afterDropping: frame, displays: displays.isEmpty ? [current] : displays)?.frame ?? frame
+        return rest(afterDropping: frame, from: nil, displays: displays.isEmpty ? [current] : displays)?.frame ?? frame
     }
 
     static func rememberedFrame(aspect: CGFloat, displays: [Display], current: Display, remembered: Placement?) -> CGRect {
@@ -202,14 +203,98 @@ extension PictureInPictureLayout {
         var screens: [CGRect] = []
         for d in displays where !screens.contains(d.frame) { screens.append(d.frame) }
         let shown = screens.reduce(0) { $0 + overlap($1, frame) }
-        guard shown < frame.width * frame.height - 0.5 else { return nil }
-        let centre = CGPoint(x: frame.midX, y: frame.midY)
-        let display = displays.max { a, b in
-            let oa = overlap(a.frame, frame), ob = overlap(b.frame, frame)
-            return oa != ob ? oa < ob : distance(centre, a.frame) > distance(centre, b.frame)
-        }!
+        guard shown < frame.width * frame.height - 0.5, let display = display(holding: frame, in: displays) else { return nil }
         let corner = PictureInPictureThrow.corner(for: frame, velocity: .zero, in: display.visible)
         return Landing(corner: corner, frame: PictureInPictureThrow.frame(in: corner, size: frame.size, visible: display.visible, margin: edgeMargin))
+    }
+
+    /// The display most of `frame` is on; of two with as much, the one nearer its centre.
+    public static func display(holding frame: CGRect, in displays: [Display]) -> Display? {
+        let centre = CGPoint(x: frame.midX, y: frame.midY)
+        return displays.max { a, b in
+            let oa = overlap(a.frame, frame), ob = overlap(b.frame, frame)
+            return oa != ob ? oa < ob : distance(centre, a.frame) > distance(centre, b.frame)
+        }
+    }
+
+    /// Where a window comes to rest and why it moves: `corner` is set when it was past the
+    /// screen's edge and springs into a corner.
+    public struct Rest: Equatable, Sendable {
+        public var frame: CGRect
+        public var corner: PictureInPictureThrow.Corner?
+
+        public init(frame: CGRect, corner: PictureInPictureThrow.Corner?) {
+            self.frame = frame
+            self.corner = corner
+        }
+    }
+
+    /// Where a window let go at `frame` comes to rest, or nil when it stays there. It always
+    /// rests on one display, the one most of it is on:
+    /// - Dragged from another display (`from`), it takes the same share of the new display's
+    ///   width as it had of the old one's, inside the size limits.
+    /// - Larger than the display allows, it shrinks to fit.
+    /// - Partly past the screen's edge (off every display), it springs into the nearest corner,
+    ///   10 pt in, as Arc's does (#332).
+    /// - Across two displays, it slides the shortest way onto its display's visible frame.
+    /// Wholly on one display it stays, under the menu bar or the Dock too.
+    public static func rest(afterDropping frame: CGRect, from: Display?, displays: [Display]) -> Rest? {
+        guard !frame.isEmpty, let display = display(holding: frame, in: displays) else { return nil }
+        let size = size(frame.size, movedFrom: from, onto: display)
+        if let corner = landing(afterDropping: frame, displays: displays) {
+            return Rest(frame: self.frame(in: corner.corner, size: size, on: display), corner: corner.corner)
+        }
+        // The new size grows or shrinks around the window's centre.
+        let sized = CGRect(x: (frame.midX - size.width / 2).rounded(), y: (frame.midY - size.height / 2).rounded(), width: size.width, height: size.height)
+        guard sized.size != frame.size || !display.frame.contains(sized) else { return nil }
+        let end = fit(sized, into: display.visible)
+        return end == frame ? nil : Rest(frame: end, corner: nil)
+    }
+
+    /// The size a window of `size` has once it moved from `from` onto `display`: the same share of
+    /// that display's visible width as it had of the old one's (the maintainer's decision, 12 Nov),
+    /// inside `display`'s limits. Without `from`, or on the same display, only the limits apply.
+    public static func size(_ size: CGSize, movedFrom from: Display?, onto display: Display) -> CGSize {
+        let aspect = size.width / max(size.height, 1)
+        var width = size.width
+        if let from, from.frame != display.frame, from.visible.width > 0 {
+            width = (size.width / from.visible.width * display.visible.width).rounded()
+        }
+        return clamp(width: width, aspect: aspect, limits: sizeLimits(aspect: aspect, screen: display.frame, visible: display.visible))
+    }
+
+    /// The window in `corner` of `display`, 10 pt in from its visible frame's edges. A window as
+    /// large as the visible frame has no room for the margin and fills it.
+    public static func frame(in corner: PictureInPictureThrow.Corner, size: CGSize, on display: Display) -> CGRect {
+        fit(PictureInPictureThrow.frame(in: corner, size: size, visible: display.visible, margin: edgeMargin), into: display.visible)
+    }
+
+    /// `r` moved the shortest way into `v`; one larger than `v` starts at its bottom left.
+    static func fit(_ r: CGRect, into v: CGRect) -> CGRect {
+        CGRect(x: min(max(r.minX, v.minX), max(v.maxX - r.width, v.minX)), y: min(max(r.minY, v.minY), max(v.maxY - r.height, v.minY)),
+               width: r.width, height: r.height)
+    }
+
+    /// Chromium keeps its Picture in Picture window inside 80 % of the work area
+    /// (`VideoOverlayWindowViews::UpdateMaxSize`), which Cra's limits go past. It cuts the window
+    /// down to that cap when the cap changes (the window reached another display, or the Dock
+    /// moved), each side on its own, so the video's shape is lost; and when the video's size
+    /// changes (a stream switching quality), keeping the new shape. Given the size Cra last gave
+    /// the window (`was`), the one Chromium just gave it (`now`), Chromium's cap and whether the
+    /// cap had just changed, this is the size to put back on `display`: `was`'s width in the
+    /// video's shape, inside Cra's limits. Nil when Chromium's size stands: it didn't cut the
+    /// window down to the cap.
+    public static func undoingChromiumCap(was: CGSize, now: CGSize, cap: CGSize, capChanged: Bool, on display: Display) -> CGSize? {
+        guard now.width > 0, now.height > 0, was.width > 0, was.height > 0, cap.width > 0, cap.height > 0 else { return nil }
+        let atCap = abs(now.width - cap.width) <= 1 || abs(now.height - cap.height) <= 1
+        let cut = now.width < was.width - 1 || now.height < was.height - 1
+        guard atCap, cut else { return nil }
+        // A cut to a changed cap trims each side on its own: the shape is `was`'s. Otherwise
+        // Chromium fitted the video's new shape into the cap.
+        let shape = capChanged ? was : now
+        let aspect = shape.width / max(shape.height, 1)
+        let size = clamp(width: was.width, aspect: aspect, limits: sizeLimits(aspect: aspect, screen: display.frame, visible: display.visible))
+        return size == now ? nil : size
     }
 
     static func distance(_ p: CGPoint, _ r: CGRect) -> CGFloat {

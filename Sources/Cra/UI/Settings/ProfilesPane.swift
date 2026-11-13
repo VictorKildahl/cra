@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Arc's Profiles tab (Arc 1.172.2, GitHub #372): a line on what a profile is, the list of profiles on the left
 /// ("Your Profiles", how many Spaces use each, + − and rename under it) and the chosen profile's cards on the right:
-/// its search engine, how long tabs stay before they are archived, where downloads go, and "Your Data and Settings",
-/// which open Chromium's pages for that profile. Arc only deletes profiles no space uses, and never Default.
+/// its search engine, how long tabs stay before they are archived, the app "New …" documents open in (#375), where
+/// downloads go, and "Your Data and Settings", which open Chromium's pages for that profile. Arc only deletes profiles no space uses, and never Default.
 /// Cra adds the website languages and "Rebuild from Arc…" to the right-hand cards.
 struct ProfilesPane: View {
     let nav: SettingsNavigation
@@ -138,6 +138,9 @@ struct ProfilesPane: View {
                     .labelsHidden().fixedSize()
                 }
                 SettingsCardDivider()
+                // Arc's "New documents": the app the command bar's "New …" command opens (#375).
+                SettingsCardRow { Text("New documents").font(.system(size: 13)).fixedSize() } trailing: { documentPicker(profileID) }
+                SettingsCardDivider()
                 SettingsCardRow { Text("Download location").font(.system(size: 13)).fixedSize() } trailing: { downloadPicker(profileID) }
                 SettingsCardDivider()
                 // Not in Arc's card: the website languages are Chromium's, per profile (#209).
@@ -223,6 +226,19 @@ struct ProfilesPane: View {
         .labelsHidden()
         .fixedSize()
         .help(folder.path)
+    }
+
+    /// Arc's pop-up, "Default Document App": "——" (none), then its four apps.
+    private func documentPicker(_ profileID: UUID?) -> some View {
+        let app = Binding<NewDocumentApp?>(
+            get: { store.settings.newDocumentApp(profileID: profileID) },
+            set: { store.settings.setNewDocumentApp($0, profileID: profileID) })
+        return Picker("Default Document App", selection: app) {
+            Text("——").tag(NewDocumentApp?.none)
+            ForEach(NewDocumentApp.allCases) { Text($0.name).tag(NewDocumentApp?.some($0)) }
+        }
+        .labelsHidden()
+        .fixedSize()
     }
 
     private func languageRow(profileID: UUID?) -> some View {

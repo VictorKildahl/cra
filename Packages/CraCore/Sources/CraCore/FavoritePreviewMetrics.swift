@@ -8,6 +8,9 @@ public enum FavoritePreviewMetrics {
     public static let maxHeight: CGFloat = 270
     /// A mail row: 84 pt with a 1 pt line under it, its text 11 pt in from the card's edges.
     public static let mailRowHeight: CGFloat = 84
+    /// A recent page's row (Linear, Notion, Figma, Confluence; Cra's, as Arc's card wasn't seen):
+    /// favicon, title and age on one line.
+    public static let pageRowHeight: CGFloat = 36
     public static let inset: CGFloat = 11
     /// The pointer's row: a lighter rounded card, 3 pt in from the row.
     public static let hoverInset: CGFloat = 3

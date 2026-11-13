@@ -122,6 +122,13 @@ for exe in "$APP/Contents/MacOS/Cra" "$APP/Contents/MacOS/CraPluginHost" "$APP"/
   lipo "$exe" -verify_arch "$ARCH" || { echo "$exe has no $ARCH code: $(lipo -archs "$exe")" >&2; exit 1; }
 done
 
+# Helpers link the framework at launch (Sources/CraHelper/main.cc says why: ~12 MB less in each
+# page, GPU and utility process). The path has to resolve inside the bundle or no page starts.
+HELPER_EXE="$APP/Contents/Frameworks/Cra Helper.app/Contents/MacOS/Cra Helper"
+FW_LINK="$(otool -L "$HELPER_EXE" | grep -o '@executable_path/.*Chromium Embedded Framework' || true)"
+[ -n "$FW_LINK" ] && [ -f "$(dirname "$HELPER_EXE")/${FW_LINK#@executable_path/}" ] ||
+  { echo "Cra Helper doesn't link the framework at launch (${FW_LINK:-no load command})" >&2; exit 1; }
+
 # Code signing, innermost first. Ad-hoc by default; set CRA_SIGN_IDENTITY to a
 # "Developer ID Application: …" identity for a distributable build with the
 # hardened runtime, timestamps and the CEF entitlements. scripts/release.sh

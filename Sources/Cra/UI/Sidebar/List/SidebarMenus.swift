@@ -515,7 +515,7 @@ enum SidebarMenus {
         addLiveFolderPlugins(to: liveFolders, space: space, store: store, window: list.window)
         menu.addItem(.separator())
         if let s = store.space(space), !store.children(of: s.todayContainerID).isEmpty {
-            add(menu, action: "clearToday") { store.clearToday(space) }
+            add(menu, action: "clearToday") { store.clearToday(space, playing: list.ui.audibleTabIDs) }
         }
         if let s = store.space(space) {
             add(menu, action: "editSpace") { actions.editSpace(s) }

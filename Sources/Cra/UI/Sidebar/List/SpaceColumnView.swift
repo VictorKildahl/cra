@@ -199,7 +199,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         withObservationTracking {
             guard let space = store.space(spaceID) else { return }
             emoji.stringValue = space.emoji
-            symbol.image = space.symbol.flatMap { SidebarSymbols.image($0, size: 13, weight: .medium) }
+            symbol.image = SpaceIconImage.glyph(for: space, points: 13)
             title.stringValue = space.title
             blank = space.standaloneWindowID != nil
             colors = SidebarColors(space.theme.palette)
@@ -289,7 +289,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         let h = bounds.height, w = bounds.width
         let es = emoji.intrinsicContentSize
         let ew = emoji.attributedStringValue.size().width
-        emoji.frame = NSRect(x: 18.25 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 1.25, width: ew + 2 * SidebarText.inset, height: es.height)
+        emoji.frame = emoji.frameHoldingInk(NSRect(x: 18.25 - ew / 2 - SidebarText.inset, y: (h - es.height) / 2 - 1.25,
+                                                   width: ew + 2 * SidebarText.inset, height: es.height))
         symbol.frame = iconRect
         // Turned right, Arc's chevron sits a little higher than chevron.down turned about its centre.
         let (cx, cy): (CGFloat, CGFloat) = collapsed ? (18.5, h / 2 - 0.25) : (18.25, h / 2 + 0.5)
@@ -375,7 +376,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
                 guard store.isBlank(space: spaceID) else { return }
                 actions.moveBlankWindow(space.id)
             }
-            if let sym = space.symbol { item.image = SidebarSymbols.image(sym, size: 13, weight: .medium) }
+            item.image = SpaceIconImage.glyph(for: space, points: 13)
             m.addItem(item)
         }
         return m
@@ -1341,7 +1342,11 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private var press: NSEvent?
     private var pushedIn = false
     /// Scenarios (cra://debug?hover=FavoriteTileView,n): the tile as the pointer leaves it hovered (#293).
-    func debugHover() { hovering = true }
+    func debugHover() {
+        hovering = true
+        // Its Previews card comes as for the pointer (#376).
+        if let url = previewURL, let store = grid?.store { FavoritePreviewCard.shared.hover(self, target: previewTarget(url, store: store)) }
+    }
     /// Scenarios (cra://debug?favoriteBadges=): the Peek badge's frame in the tile, nil without one (#381).
     var peekBadgeReadout: String? {
         guard let b = peekBadge else { return nil }
@@ -1584,15 +1589,14 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         FavoritePreviewCard.shared.leave(self)
     }
 
-    /// A Gmail favorite with Previews on, or a Calendar favorite with Live Calendar's hover
-    /// preview: Arc shows the card instead of the name tooltip, and none on the open tab.
+    /// A favorite with one of Arc's Previews on (CraCore SidebarTabPreview: Gmail, Live Calendar's
+    /// hover preview, recent pages): Arc shows the card instead of the name tooltip, and none on the open tab.
     private var previewURL: String? {
         // Not while the Library covers the sidebar (the tile is still under the pointer's path there).
         guard let store = grid?.store, grid?.ui.libraryPage == nil, grid?.ui.libraryReveal == nil, !isHiddenOrHasHiddenAncestor,
-              model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url else { return nil }
-        if GmailPreview.feedURL(for: url) != nil { return store.settings.favoritePreviews ? url : nil }
-        if CalendarPreview.isCalendar(url) { return store.settings.liveCalendar && store.settings.calendarHoverPreview ? url : nil }
-        return nil
+              model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url,
+              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return nil }
+        return url
     }
 
     /// The favorite's Google Calendar address while Live Calendar is on for it.
@@ -1613,12 +1617,9 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     }
 
     private func previewTarget(_ url: String, store: SidebarStore) -> FavoritePreviewCard.Target {
-        let id = itemID
-        return FavoritePreviewCard.Target(
-            favorite: url, profilePath: store.profilePath(item: id),
-            open: { [weak self] u in self?.openInFavorite(u) },
-            openNewTab: { [weak grid] u in grid?.actions.openURL(u) },
-            disableLiveCalendar: { store.settings.liveCalendar = false })
+        .sidebarTab(itemID, url: url, store: store, favicons: grid?.favicons,
+                    open: { [weak self] u in self?.openInFavorite(u) },
+                    openNewTab: { [weak grid] u in grid?.actions.openURL(u) })
     }
 
     /// A mail, event or new draft from the card: the favorite opens on it.
@@ -1725,7 +1726,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
 
     // MARK: Menu
 
-    override func menu(for event: NSEvent) -> NSMenu? {
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenu() }
+
+    /// The tile's right-click menu, also read by `cra://debug?favoriteMenu=` (#387).
+    func contextMenu() -> NSMenu? {
         guard let grid, let item = grid.store.item(itemID) else { return nil }
         let store = grid.store, ui = grid.ui, actions = grid.actions, favicons = grid.favicons
         let id = itemID
@@ -1745,6 +1749,13 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         }
         MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
+        // Arc's favorite menu has Mute after Rename… (Unmute on a muted tab), as a tab's menu does (#387).
+        if let t = item.tab {
+            MenuItems.add(m, action: "muteTab", title: t.muted ? "Unmute" : "Mute") {
+                store.setMuted(id, !t.muted)
+                actions.performAction("muteTab:\(id)")
+            }
+        }
         if let t = item.tab, t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
         }

@@ -138,19 +138,22 @@ struct SpaceEditorView: View {
         .help("Change Icon")
         .accessibilityLabel("Change Icon")
         .popover(isPresented: $pickingIcon, arrowEdge: .bottom) {
-            SpaceIconPicker(current: icon.emoji, currentSymbol: icon.symbol,
+            SpaceIconPicker(current: icon.emoji, currentSymbol: icon.symbol, currentImage: icon.image,
                             onPick: { icon = .emoji($0); pickingIcon = false },
                             onPickSymbol: { icon = .symbol($0); pickingIcon = false },
+                            onPickImage: { icon = .image($0); pickingIcon = false },
                             onRemove: { icon = .none; pickingIcon = false })
         }
     }
 
-    /// The icon as the sidebar draws it: an emoji, or a symbol in the space's text colour.
+    /// The icon as the sidebar draws it: an emoji, a symbol in the space's text colour, or the user's picture in its own colours.
     @ViewBuilder
     private func glyph(size: CGFloat, color: Color) -> some View {
         switch icon {
         case .emoji(let e): Text(e).font(.system(size: size))
         case .symbol(let name): Image(systemName: name).font(.system(size: size - 2, weight: .medium)).foregroundStyle(color)
+        case .image(let data):
+            if let image = SpaceIconImage.image(data, points: size + 2) { Image(nsImage: image) }
         case .none: EmptyView()
         }
     }
