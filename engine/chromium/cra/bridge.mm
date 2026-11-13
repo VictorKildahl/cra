@@ -1256,15 +1256,15 @@ void RunReadyBlocks() {
   }
   _closeRequested = YES;
   if (!_contents) {
+    _spareContents.reset();
     [self didClose];
     return;
   }
-  for (auto& [profile, host] : Hosts()) {
+  // A forced close, as CEF's CloseBrowser(true): no "Leave site?" (beforeunload), which would keep a closed tab's
+  // page alive. Deleting the page closes its DevTools too.
+  if (PageHost* host = HostOf(_contents)) {
     TabStripModel* tabs = host->browser()->GetTabStripModel();
-    if (tabs->GetIndexOfWebContents(_contents) != TabStripModel::kNoTab) {
-      chrome::CloseWebContents(host->browser(), _contents, /*add_to_history=*/false);
-      return;
-    }
+    tabs->DetachAndDeleteWebContentsAt(tabs->GetIndexOfWebContents(_contents));
   }
 }
 
