@@ -1,7 +1,7 @@
 # Ask on Page implementation plan
 
-Status: Core and bounded current-page context independently reviewed and committed. The guided-output amendment below is independently reviewed with the explicit empty-citation/history clarifications recorded below. Only this plan-document diff is ready for its reviewed commit; the uncommitted string-streaming service prototype remains frozen until coordinator authorization, and this document alone authorizes no guided schema implementation or source commit.
-Branch: `askonpage`, base `fccc893`.
+Status: B1–B3 Core, bounded current-page context and guided service, plus B4 correlated Find, are independently reviewed and committed through `ea28e0832aa6b8d817c8d224e6fe1e0611748ab7`. The 13 November upstream reconciliation amendment below is a new plan-only proposal awaiting independent review. No merge, source implementation, commit or push is authorized by this amendment. Earlier status, transport, UI ownership, eligibility and batch statements are historical where this amendment supersedes them.
+Branch: `askonpage`, original base `fccc893`; reconciliation target `upstream/main` at `426c34552a72a1e30da672e42811a90943e190a7`.
 Worktree: `/Users/varunaditya/.codex/worktrees/cra-askonpage/cra`.
 
 ## Outcome and scope
@@ -44,11 +44,12 @@ Public primary references:
 The release notes were checked live. The launch URL could not be fetched by the web tool;
 its segment timestamp is also recorded in `reports/ai-online-history.md:7`. Before claiming
 visual parity, inspect the actual historical segment in the browser and save reference stills
-or a clip. Current Arc cannot demonstrate a feature removed in 2025. No exact Ask panel width,
-height, duration or easing has been established. Existing Find measurements (300 × 38 pt) are
-current Cra facts, not evidence of historical Ask dimensions. Conversation layout values below
-are implementation choices to be calibrated against historical footage, and must be labelled
-as inferred if footage cannot resolve them. Static metadata establishes state, not pixels.
+or a clip. Current Arc cannot demonstrate a feature removed in 2025. The later 1.109 executable recovery
+establishes individual layout constraints, typography and animation arguments listed in the
+13 November amendment below. It does not establish the complete effective panel geometry,
+runtime palette or compositing. Existing Find measurements (300 × 38 pt) are current Cra facts.
+Historical/runtime comparisons at 1x and 2x remain mandatory; static constants alone do not
+establish visible parity.
 
 ## User-visible behavior
 
@@ -535,3 +536,204 @@ not satisfy that integration gate.
 Independent plan-only review: approved with these explicit constraints. No source/test changes,
 engine runtime check, build, commit or push was performed by this refinement review. Record:
 `/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/plan-askonpage-find-correlation.md`.
+
+
+## Proposed upstream reconciliation amendment, 13 November 2026
+
+This section supersedes conflicting earlier implementation/batch instructions. It changes the
+plan only and awaits fresh independent review. The coordinator must relay that review and
+separately authorize source work before the author merges or implements anything.
+
+### Checked source boundaries and evidence
+
+| Boundary | What was inspected and what remains unproved |
+| --- | --- |
+| Branch `ea28e0832aa6b8d817c8d224e6fe1e0611748ab7` | B1–B3 bounded extraction/current-document identity/guided service and B4 native Find correlation. Read `reviews/code-askonpage-03.md`, `code-askonpage-04.md` and its follow-up under the external validation directory. Those approvals cover their exact source checkpoints only. |
+| Upstream `426c34552a72a1e30da672e42811a90943e190a7` | Existing `AskOnPagePolicy/Prompt/Reply/Tone`, singleton service, `AskOnPageCard.swift` state/controller/view, settings/fixtures, six-feature Max master switch, MainWindowController layout/debug paths and #393/#408 tests/scenarios. Keep this one integrated UI. |
+| Merge simulation | Read-only `git merge-tree --write-tree HEAD upstream/main` reports six conflicted paths: Core `AskOnPage.swift`, Core `AskOnPageTests.swift`, app `AskOnPageService.swift`, MainWindowController, `CraCEF.mm`, and `Tests/test-browser-manager.sh`. A clean textual merge elsewhere is not semantic verification. No working-tree merge was performed. |
+| Arc 1.109.0 build 67185 | Read `legacy-arc/reports/ask-ui.md`, `ask-logic.md`, `ask-entry-gate.md` and the external `ask-legacy-plan-amendment-recommendations.md`. Thin arm64 executable SHA-256 is `be46bebbf6a14a5b8b8b6381630b4aa3c1acfe5b3ae97312ec6f40608bec1f6c`. These are literal bytes, metadata and machine-code arguments with recovered interpretations, not original Swift source or live backend/pixel evidence. |
+
+All external paths in this amendment are relative to
+`/Users/varunaditya/Desktop/arc-decomp/`, except `reviews/`, which means
+`/Users/varunaditya/Desktop/arc-decomp/cra-validation/reviews/`.
+The coordinator owns the full native build/full suite, app launch, actual-engine/model journeys
+and display captures. The amendment author runs none of those and does not change global input,
+clipboard, system AI state or display configuration.
+
+### One native card, one per-window conversation owner
+
+Resolve the add/add conflicts by keeping the existing branch native values and guided service
+and folding the needed upstream policy/tone helpers into them. Reuse upstream's native
+`AskOnPageController`, `AskOnPageState`, `AskOnPageView` and MainWindowController integration.
+Do not introduce another card, controller, model adapter, prompt/parser or ownership tree.
+
+| Production file/API | Concrete reconciliation |
+| --- | --- |
+| Core `AskOnPage.swift` | Retain `AskOnPage` native Draft/Answer/Quote/History/FindRequest/FindState. Add the upstream `AskOnPagePolicy` presentation decisions and retain `AskOnPageTone` with #408 assertions. Remove policy extraction script and quote trimming once all consumers use `AskOnPageContent` and literal native quotes. |
+| Core `AskOnPagePrompt.swift` | Keep this branch's single `AskOnPagePrompt`, `Page`, `Fitted`, `fit`, SDK-accounted limits and literal-context construction. Retain needed visible fraction/error wording as small helpers here. Do not retain the upstream second enum, raw `Turn`/dialogue/prompt fitter, server allowance, raw-string fake reply or compatibility wrappers with no production caller. |
+| Core tests | Resolve test add/add by retaining branch native ownership/fitting tests and unaffected upstream placeholder/tone/settings checks. Replace only intentionally superseded raw/heuristic promises as specified below. Keep no dead raw parser merely to keep old tests callable. |
+| `AskOnPageService.swift` | Keep one instantiable per-window `AskOnPageService` with `ask(_:language:)`, `refresh()`, `clear()`, observable completed `messages`, `current` and `phase`, plus the existing single `AskOnPageLocalModel` adapter. Remove upstream `.shared`, `Page`, `read` and raw `answer` implementation. This is conflict resolution within the same service file, not a parallel replacement service. |
+| `AskOnPageController` | Construct exactly one service for the existing window controller, using its BrowserManager, setting closure and current model availability. The card/controller receives that instance. Delete controller `asking`, subject/current tab+URL pairs and raw reply/history storage. Service current/completed messages are the only question/answer/source history. |
+| `AskOnPageState` / view | Keep enabled/canAsk/tone/height and quote-navigation presentation state. Observe the same service directly; derive conversation state from completed messages or its current message. Render native answer/excerpts and optional literal emphasis directly. No native-to-Markdown-to-parser conversion and no second copied message array. |
+| MainWindowController | Keep upstream's existing card hosting, tone, resize, debug and settings entry points. Replace `AskOnPageService.shared` calls and tab+URL refresh with that same per-window service and captured BrowserManager context. Keep B4 correlated Find delegate/state and query invalidation. Remove upstream `lastFindText`, `findCountText` and generic `matchesUpdated` association after migration. Fold the harmless double `prepareFind` into visible-find versus hidden-prepare branches only while touching this path. |
+| CEF/WebKit/harness conflicts | Retain B4 generation/purpose capture, UI-thread guards, real identifier/finalUpdate, Stop-before-tag ordering and native-false WebKit zero rule. Preserve unrelated upstream changes and include every required production support file once in the harness script. A merged compile cannot certify native ordering. |
+| Settings/Max/sharing | Use upstream's existing opt-in field/row, defaults, fixtures and six-feature master switch, including Instant Links. Do not re-add the former five-feature implementation or change upstream's sharing classification, settings format or unrelated feature behavior. |
+| Debug/scenarios | Adapt existing upstream Ask readouts/quote commands to native fields and bounded messages. Keep diagnostics synthetic and avoid page/question/answer text logging. Keep the existing dark-card scenario and its #408 behavior. Deterministic fake-model generation, if needed for that existing journey, returns native typed fields through the existing injected generation seam; it does not restore a raw fake parser path. |
+
+The current upstream one-off SwiftUI hosting tree remains the starting implementation. The
+older plan to add a separate AppKit conversation/NSScrollView is superseded. Use the existing
+native input/control seams for the required keyboard/focus behavior, without an unrelated UI
+technology rewrite or a new motion framework.
+
+### Entry, page eligibility and Find behavior
+
+Choose the recovered legacy page restrictions for the user-facing Ask eligibility. This is an
+intentional change from the earlier branch plan and upstream's HTTP(S)/file predicate.
+Ordinary Find remains available on every page it already supports.
+
+| Decision | Exact contract and minimal API choice |
+| --- | --- |
+| Global enablement | Existing local opt-in AND current local model availability replace Arc's remote flag AND preference. Do not add a remote flag, cloud account or network request. Off/unavailable shows ordinary Find and never extracts/generates. |
+| Combined surface | When enabled, retain upstream's combined card even if Ask is ineligible. `isValidAskPage` controls Ask only; it does not force the disabled-feature native Find factory. Exact placeholders are `Find in page…`, `Find or ask…`, then `Ask a question…`. |
+| Pure eligibility | Extend the existing `AskOnPagePolicy.canAsk` to accept URL, incognito and resolved document-kind evidence, with no permissive private default. Allow HTTP(S) in a normal non-incognito browsing context; exclude exact `search.arc.net`, PDF, image and movie types. `AskOnPageContent.supportsURL` delegates URL restrictions to this policy instead of keeping a second scheme predicate. |
+| Type evidence | Resolve available browser MIME/document kind through AppKit-side `UTType` conformance, with URL content/resource type and filename-extension fallback where available. Pass only pure classification to Core. Use current document evidence rather than a suffix-only assertion. Unknown type can pass this preliminary gate as in Arc, but the existing bounded snapshot decoder still requires actual HTML/XHTML before generation. No URL refetch, synchronous remote resource lookup or unrelated type infrastructure. |
+| Captured identity | `askOnPageContext` rejects private/ineligible pages before extraction, while `findPageContext` still supports ordinary Find there. Retain runtime, tab, focus/navigation revision, actual URL, profile and incognito identity at every callback. Reload/same-URL history/runtime replacement remain invalidating changes. Recheck content type and identity after extraction and before generation. |
+| Initial plain Return | Change `AskOnPagePolicy.returnKey` to receive proven final-zero eligibility from `AskOnPage.FindState`, plus forward/backward intent, rather than guessing from an optional display count. Ask only for unchanged nonblank ordinary input and exact-generation final zero. Pending/nil/partial/negative/stale/quote results perform ordinary Find; they never arm deferred Ask. Explicit Ask remains available for valid nonblank input independent of match count. |
+| Conversation Return | Plain Return submits one nonblank follow-up through the same service, which rejects a second simultaneous request. Follow-up re-extracts this same current document and uses bounded complete pairs. Blank-follow-up rejection is the approved local adaptation; legacy canAsk alone did not establish it. |
+| Keyboard | Down/Up and Shift-Return call next/previous Find, including in conversation; they never submit Ask. Cmd-G/Shift-Cmd-G retain their existing Find actions. Cmd-F refocuses/selects the existing field through the actual native editor/responder path, without reset or submit. Tab/Shift-Tab and Escape retain usable focus/close behavior. Do not infer unimplemented modifier submits from the legacy enum alone. |
+| Quote navigation | A `Find on Page` action keeps the conversation open. It searches the native quote's plain text, with no punctuation stripping, sentence/eight-word fallback, Markdown reparsing or generic count-as-found claim. Navigation within the page preserves conversation; an actual captured document/ownership change clears it. |
+
+Add deterministic Core tables for valid HTTP/HTTPS, exact host exclusion, file/internal schemes,
+incognito, resolved PDF/image/movie, unknown kind and HTML. Test filename/content-type mismatch
+and the guarded actual HTML check. Move the deterministic browser fixture to local HTTP for
+eligible Ask journeys; retain explicit file/private denial cases. A file-loaded fixture must
+not be counted as a successful eligible Ask test after this change.
+
+For quotes, extend the existing BrowserManager Ask extension with one operation
+`findAskOnPageQuote(_:in:request:completion:)`, taking literal quote text, captured
+`AskOnPageContext` and the quote-purpose `AskOnPage.FindRequest` returned by existing
+`prepareFind`. This reuses B4's request generation rather than adding a second token registry.
+It performs bounded normalized live-DOM text lookup across inline nodes. The lookup is read-only;
+before issuing Range/scroll/native highlight effects, recheck both the current context and
+`findState.request` against the captured request. Existing
+`BrowserManager.find(... purpose: .quote)` then uses that same generation. Its Boolean
+completion describes that exact DOM lookup, not a generic Find callback. The controller
+accepts a completed service message ID and quote index, refreshes/checks the same service's
+current page ownership, and permits only that specific native verified quote. A newer quote,
+ordinary Find, close or owner change invalidates the captured generation. Reject stale/retired
+quote callbacks before any highlight or presentation mutation; prove this with actual delayed
+DOM delivery and effect tests. Key quote presentation by message ID and quote index, not shared
+raw text. Remove upstream quote candidates, pending raw quote, DispatchWorkItem timeout and
+count-based retry path together.
+
+Keep `overlay.findQuery` as the ordinary/follow-up input. Quote navigation does not overwrite
+it. The next ordinary query/next/previous action exits quote purpose and starts/restores the
+ordinary generation as needed. Repeated same-generation next/previous retain native active
+match/selection and wrap behavior. Use Selection captures/rechecks the original browser/page
+before changing the field or find pasteboard. Closing follows existing selection/focus policy
+and calls the same service's `clear()`.
+
+### Synchronous invalidation is mandatory
+
+Observation is a sustained-state backstop. It cannot detect a same-main-actor off/on edge that
+coalesces before observation delivery. A final value check is insufficient.
+
+Use the existing NotificationCenter mechanism with feature-specific notifications, without a
+new owner registry. In `SidebarStore.settings.didSet`, when Ask transitions true to false,
+synchronously post the Ask-disable event for that store before the setter returns. Preserve
+existing persistence and unrelated setting effects. At the actual `TidyTabsService.status`
+write boundary, when model availability becomes false, synchronously post the matching
+unavailability event. All production status writes, including refresh, must cross that hook.
+Each per-window owner registers a weak synchronous main-actor callback with no dispatch/Task
+hop, filters the settings event to its store, and calls its own service `clear()` immediately.
+Remove observer tokens on teardown. Never instantiate a second service from a notification.
+A later same-turn enable/available write starts clean. Existing refresh/Observation remains a
+backstop; it does not replace either mutation hook.
+
+Page/runtime/focus/profile/private invalidation also calls `refresh` or `clear` from existing
+actual mutation paths, before a replacement owner can accept work. The callback guards remain
+necessary for providers that ignore cancellation. Do not rely solely on a later UI refresh or
+current Boolean equality to prove these transitions were seen.
+
+The required regression compiles the production SidebarStore and window-owned service path:
+start pending extraction or a cancellation-ignoring stream, set the real store Ask off then on
+in one main-actor turn, release the old delivery, and assert old current/completed content is
+absent and a new request remains correct. Cover two window owners of that store, model-loss
+write hooks, window teardown and late extraction/partial/final/error. Existing closure-only
+service regressions are useful but cannot certify this integration. Recreate the missing-hook
+version and show this real-store test fails before fixing it.
+
+### Historical request behavior and the approved local adaptation
+
+| Exact legacy fact | Cra decision |
+| --- | --- |
+| Shared budget `max(1, roundTiesAway(clientLimit * 0.8) - 50)` | FRINTA is ties away from zero, not truncation. This corrects the older 1.171 interpretation too. Record it as historical behavior; do not substitute it for Apple's shared context contract. |
+| Initial target `3 * min(budget, 16000) - (instructions.count + examples.count + 200)` | Swift character counts and post-prefix ellipsis explain legacy page fractions. Keep local bounded extraction, actual schema/typed request accounting and 4096 total / 768 output / 256 framing reserves. Never import a server 16k allowance into the local model. |
+| First grounding user part is nonomittable, priority 999; later lower-priority history can omit | Keep explicit complete-pair history bounds/eviction and older-message disclosure. Do not keep raw upstream turns/history beside native service messages. |
+| First question appears in joined grounding text and serializer suffix | Preserve this established static oddity in the research account. Include the current question once in Cra's approved local request. |
+| Literal URL fragment closes with `</title>`; privacy example is malformed Markdown | Preserve original bytes as evidence. Keep the approved literal-page fence/escaped metadata and typed fields, without adding malformed templates to the local request. |
+| Raw lowercase excerpt splitter publishes open-tag quote parts during streaming | Keep guided fields in production schema order `excerpts`, `answer`, optional `keyAnswer`. Replace cumulative snapshots; require complete raw SDK content/full native construction for final acceptance. No raw echo cleanup/tag parser or formatting-repair generation. |
+| Guess disclosure, transformations, concise answer and bold term | Keep these semantics. A missing/unusable optional literal emphasis hint renders the unchanged plain answer. Empty or rejected citations do not alone invalidate an otherwise complete answer/history. A source-present quote proves textual presence, not semantic support. |
+
+Retain the already-reviewed one-overflow retry, current-request guards, per-turn fitted-source
+validation, output cap, older-OS schema-byte fallback and newer typed/schema token measurement.
+Partial quotations remain unverified/non-actionable. No resource/validation weakening is
+justified by legacy's permissive parser. Preserve the actual-model failures recorded by B3,
+including unrelated source-present quotes on a background answer and the literal-symbol
+full-sentence probe failure. Later actual-model acceptance must report their disposition.
+A fake-model journey proves deterministic wiring, never model quality or historical pixels.
+
+### Shipped promises and granular source sequence after approval
+
+The user-authorized fidelity reconciliation deliberately replaces #393 pending multiword
+Ask, raw prompt/tag parser/echo cleanup and shortened-quote transport expectations. This is a
+named shipped-behavior change, not an accidental conflict resolution. Keep unaffected #393
+placeholders, ordinary matching Find, explicit Ask/follow-up, visible quote action/disclosure
+and scenario coverage. Retain every #408 tone assertion and its dark-card scenario unchanged
+in behavior. Keep all unrelated upstream promises and features.
+
+For each intentionally changed #393 test/scenario, list the old/new contract in its commit,
+retain relevant `.bug` / promise tags on replacement coverage, run
+`scripts/promises.py --update`, and inspect that only those intended entries change.
+Name `#393` in the commit subject whenever changing its locked behavior. Do not bulk refresh
+the lock or delete required behavior to obtain a passing check. The user has authorized the
+fidelity change; the review gate does not require asking again for that decision.
+
+| Batch | Small compiling boundary and proposed subject | Required review evidence |
+| --- | --- | --- |
+| R0 | Plan only, `docs(ask): reconcile upstream and legacy contracts` | Independent review of this exact amended document and external handoff. No source/merge/commit until coordinator relay/authorization. |
+| R1 | Upstream reconciliation, `fix(ask): reconcile native ownership for #393` | Resolve the six conflicts, adapt existing card/controller directly to the one service/native fields, merge policy/tone and only required native fake/debug consumers, retain B4 and unrelated upstream. Include necessary #393 replacements/lock updates and focused Core/service/manager checks. This minimum compile-preserving integration is one review boundary; split only if each smaller boundary compiles and leaves no unused parallel implementation. |
+| R2 | Eligibility and synchronous lifecycle, `fix(ask): enforce document and disable ownership for #393` | Legacy policy and HTTP fixture; actual store/status mutation hooks; real-store same-turn/two-window cancellation-ignoring regressions, page/profile/private transitions and existing defaults/master-switch tests. Put the defect back and record the regression failure. |
+| R3 | Quote/keyboard/layout fidelity, `fix(ask): match native find and quote behavior for #393` | One bounded live-DOM quote/Range operation, exact-source native highlight, restored ordinary Find, native keyboard/focus paths and measured legacy constraints below. Remove migrated fallback code in this same batch. Production control/layout harness and existing/new HTTP journeys; no parser/second controller. |
+| R4 | Integrated evidence, `test(ask): verify reconciled browser journeys` | Coordinator-owned actual CEF/WebKit adversarial/native-ownership gates, ordinary find-selection, same-document Range/selection/scroll, window/split/profile/lifecycle, #408 appearance and actual local-model samples. Tests stay with R1–R3 where possible; this adds only integrated journeys/evidence. |
+| R5 | Final parity record, `docs(ask): record reconciled validation` | Current source/build/runtime/model/display evidence with remaining limitations and release checklist/clip. Independent whole-branch review plus root-coordinated full suite/build before final publication. |
+
+Each exact source diff receives independent Sol correctness/regression/redundancy review after
+focused meaningful checks and before commit/push. Existing B3/B4 approval does not transfer to
+merged changes. Use isolated scratch paths and `--jobs 2` for focused Swift checks. Root owns
+shared full build/test/runtime/display resources; no author app launch or global input.
+
+### Concrete UI constraints and acceptance gates
+
+| Legacy executable constraint | Apply to the existing upstream card |
+| --- | --- |
+| Content max width 400; conversation max width 400 and max height 450 | Treat these as maxima. Input/outer layout add height. Clamp the same preferred size to the visible focused page on embedded/detached, resize/animated, Library/split/DevTools paths. Do not fix total panel size at 400×450 or retain a page-sized input-blocking panel. |
+| Shared conversation spacing 18 | Replace current upstream 24 with the recovered 18 in this path. |
+| Input first-text-baseline row, spacing 8; all-edge padding 12 plus leading 6 | Use these constraints, with system medium 16 before conversation and 14 during it. Keep rounded system medium 13 for count/no-match and dynamic callout semibold Ask label. |
+| Radius 10 outer; conversation input radius 4/padding 6; close radius 6/top-trailing padding 9 | Reuse the existing card construction and controls. Shared unresolved material/stroke/shadow values remain inferred. |
+| Quote leading rule 2 at primary opacity .1; body text primary opacity .8 | Use plain selectable quote text. `Find on Page` plus `arrow.forward`, 11 bold and 4 top padding. Preserve loading/found/notFound states and exact warning `Quote not found. Make sure it’s accurate!`; legacy error is red. No quote collapse interaction. |
+| Spring .4/.75/.1; conversation easeInOut; pulse easeInOut .8 autoreverse; quote hover timingCurve(.25,.1,.25,1) .2 | Apply through existing UI technology and respect reduced motion. Static arguments do not prove runtime motion parity. |
+| Palette is unresolved at runtime | Keep upstream #408 tone, effective card appearance and contrast behavior from measured capture. A static `legacyColorScheme` helper does not prove the view's effective runtime palette. Do not replace #408 with inferred dark/light values. |
+
+| Gate before complete-feature acceptance | Concrete required evidence |
+| --- | --- |
+| Native Find fence | Real pinned CEF Stop(false)/tag/Find transaction and callback-entry capture under reentry and delayed delivery; actual identifiers/final/count/ordinal, A/B/C and A/B/A, old zero/new positive and inverse, partial zero/final positive or negative, short/empty/CR-only query, no renderer/cancel, close/reopen, runtime/reload/history/focus/split/window/profile changes. SDK/source tests do not certify engine behavior. |
+| Exclusive Find ownership | Inventory and exercise native key/menu/Chrome commands, extensions including chrome.find if exposed, page window.find and DevTools frontend/target search. Route competitors through app Find or synchronously invalidate ownership. Intercepting three command IDs is not proof of exclusivity. An unobservable competitor blocks auto-Ask completion and must be reported, without deleting intended functionality to hide the blocker. |
+| Actual WebKit | Native false alone authorizes zero; test delayed native completion/script count, positive native with zero/failing script/iframe count, next/previous ordinal/selection/wrap and stale query/owner rejection. |
+| Lifecycle | Actual settings off/on in one actor turn and model availability write loss clear every window owner synchronously. Late extraction/partial/final/error/quote deliveries cannot revive or resize old state. Real profile/private mutation paths, close/deinit and new request are covered. |
+| Quotes and ordinary Find | Actual HTTP DOM spans with angle brackets, ampersands, quotes, literal excerpt-like markers, Unicode, repeated/removed/mutated quotes. DOM lookup and native Range/scroll/highlight use the same literal validated text. Conversation persists during quote navigation; ordinary query is restored and actual document change clears it. Preserve Use Selection, Jump to Selection, Cmd-F/Cmd-G, Down/Up, Return/Shift-Return and Escape. |
+| Visual and tone | Historical/reference and isolated Cra captures on same display at 1x/2x, dark/light including light space on dark Mac, hover/loading/quote errors, growth/450 cap/narrow clamp, focus and reduced motion. Keep #408 readout/scenario and inspect actual pixels/effective appearance. Record unresolved compositing separately. |
+| Model and final checks | Actual typed on-device opening/follow-up, unsupported background, summary/translation/multiple-source/literal-symbol/CJK/large-context samples with native fields/schema/input counts and explicit failures. Focused tests/lint/promises/diff, coordinator full suite/build and whole-branch review. Fake samples, successful compilation or HTTP responses alone cannot close runtime/visual/model gates. |
+
+Current status after this author amendment: documentation only. No source changed, no merge
+performed, no native/model/runtime/display verification rerun, no commit and no push.
