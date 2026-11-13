@@ -962,8 +962,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func browserManager(download: CraDownloadInfo) {
         let name = (download.fullPath as NSString).lastPathComponent.isEmpty ? download.suggestedName : (download.fullPath as NSString).lastPathComponent
-        if let tab = browsers.downloadSourceTab, let item = store.item(tab), let t = item.tab {
-            TidyDownloadsService.shared.noteSource(download.identifier, tab: t,
+        if download.state == .inProgress, !finishedDownloads.contains(download.identifier),
+           let tab = browsers.downloadSourceTab, let item = store.item(tab), let t = item.tab {
+            TidyDownloadsService.shared.noteSource(download.identifier, window: windowID, tab: t,
                 referrer: t.referrerID.flatMap { store.item($0)?.tab })
         }
         if windowDownloads.insert(download.identifier).inserted {
@@ -976,12 +977,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                       cancelled: download.state == .cancelled, failed: download.state == .interrupted,
                                       paused: download.paused)
         updateRecentDownload(download)
+        if download.state == .cancelled || download.state == .interrupted || (download.state == .complete && download.fullPath.isEmpty) {
+            TidyDownloadsService.shared.cancel(download.identifier, window: windowID)
+        }
         if download.state == .complete, !download.fullPath.isEmpty, finishedDownloads.insert(download.identifier).inserted {
             DownloadHistory.shared.add(path: download.fullPath, profile: browsers.downloadSourceTab.map(store.profileDirectoryName(item:)) ?? profileDirectoryName)
             // The address's scheme only, never the file: scenarios wait for this line.
             CraLog.note("Download finished from a \(URL(string: download.url)?.scheme ?? "unknown"): address")
             let id = download.identifier
-            TidyDownloadsService.shared.finished(id, path: download.fullPath, downloadURL: download.url, window: windowID, store: store) { [weak self] path in
+            TidyDownloadsService.shared.finished(id, path: download.fullPath, downloadURL: download.url, window: windowID, store: store,
+                ownerEligible: { [weak self] in self?.window != nil && self?.isPutAway == false }) { [weak self] path in
                 guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id else { return }
                 recent.path = path
                 self.sidebarUI.recentDownload = recent
@@ -4324,6 +4329,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
         LinkSummaryPreviewController.shared.stop()
+        TidyDownloadsService.shared.cancel(window: windowID)
         tabSwitcher.cancel()
         app.mainWindowWillClose(self)
     }
@@ -4340,6 +4346,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func putAway() {
         guard !isPutAway else { return }
         isPutAway = true
+        TidyDownloadsService.shared.cancel(window: windowID)
         dismissTransientUI()
         sidePanel.hide()
         for p in peeks { p.closeWindow() }

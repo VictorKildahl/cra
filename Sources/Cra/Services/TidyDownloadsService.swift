@@ -30,45 +30,108 @@ final class TidyDownloadsService {
     /// Arc 1.171 (27 Oct 2026): the card leaves 8 s after it comes in.
     static let cardShown: TimeInterval = 8
 
-    /// The tab a download started from: its title and address, for the prompt.
-    @ObservationIgnored private var sources: [UInt32: TidyDownloads.Source] = [:]
-    @ObservationIgnored private var asked: Set<UInt32> = []
-
-    private init() {}
-
-    func noteSource(_ id: UInt32, tab: TabData, referrer: TabData?) {
-        if sources[id] == nil { sources[id] = TidyDownloads.Source(tab: tab, referrer: referrer) }
+    private struct Key: Hashable {
+        var download: UInt32
+        var window: UUID
     }
 
-    /// A download finished at `path`. Rename it if the setting is on and the model can run; `moved`
-    /// tells the window the file's new path.
+    private struct Request {
+        let token = UUID()
+        let path: String
+        var task: Task<Void, Never>?
+    }
+
+    /// Only downloads still running keep source context; inference owns its bounded snapshot.
+    @ObservationIgnored private var sources: [Key: TidyDownloads.Source] = [:]
+    @ObservationIgnored private var requests: [Key: Request] = [:]
+    @ObservationIgnored private let modelAvailable: @MainActor () -> Bool
+    @ObservationIgnored private let generate: @MainActor (TidyDownloads.Request) async -> String?
+
+    init(modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.currentModelAvailable },
+         generate: @escaping @MainActor (TidyDownloads.Request) async -> String? = { await TidyDownloadsService.ask($0) }) {
+        self.modelAvailable = modelAvailable
+        self.generate = generate
+    }
+
+    deinit {
+        for request in requests.values { request.task?.cancel() }
+        dismissal?.cancel()
+    }
+
+    /// Called only for a running download. Terminal notifications must not recapture a source.
+    func noteSource(_ id: UInt32, window: UUID, tab: TabData, referrer: TabData?) {
+        let key = Key(download: id, window: window)
+        if sources[key] == nil, requests[key] == nil {
+            sources[key] = TidyDownloads.Source(tab: tab, referrer: referrer)
+        }
+    }
+
+    /// Opt-out and an unavailable model invalidate inference synchronously. Source snapshots for
+    /// downloads still running remain until their terminal notification or their owner's teardown.
+    func cancelAll() {
+        let pending = Array(requests.values)
+        requests.removeAll()
+        pending.forEach { $0.task?.cancel() }
+    }
+
+    func cancel(_ id: UInt32, window: UUID) {
+        let key = Key(download: id, window: window)
+        sources[key] = nil
+        requests.removeValue(forKey: key)?.task?.cancel()
+    }
+
+    func cancel(window: UUID) {
+        sources = sources.filter { $0.key.window != window }
+        let keys = requests.keys.filter { $0.window == window }
+        for key in keys { requests.removeValue(forKey: key)?.task?.cancel() }
+    }
+
+    /// MainWindowController's finishedDownloads gate delivers each terminal completion once.
+    /// The service also rejects duplicate finishes while inference is pending, without retaining
+    /// a process-lifetime set of completed Chromium identifiers.
+    @discardableResult
     func finished(_ id: UInt32, path: String, downloadURL: String, window: UUID, store: SidebarStore,
-                  moved: @escaping (String) -> Void) {
-        guard store.settings.tidyDownloads, TidyTabsService.shared.modelAvailable, !asked.contains(id), !path.isEmpty else { return }
-        asked.insert(id)
-        let source = sources.removeValue(forKey: id)
+                  ownerEligible: @escaping () -> Bool, moved: @escaping (String) -> Void) -> Task<Void, Never>? {
+        let key = Key(download: id, window: window)
+        let source = sources.removeValue(forKey: key)
+        guard requests[key] == nil, store.settings.tidyDownloads, modelAvailable(), ownerEligible(),
+              store.prefs.windows.contains(where: { $0.id == window }), !path.isEmpty else { return nil }
         let original = (path as NSString).lastPathComponent
         let language = Locale.preferredLanguages.first.flatMap {
             Locale(identifier: "en").localizedString(forLanguageCode: Locale(identifier: $0).language.languageCode?.identifier ?? "en")
         } ?? "English"
-        let request = TidyDownloads.Request(file: original, source: source, downloadURL: downloadURL, language: language)
-        Task { @MainActor in
-            guard let answer = await Self.ask(request), let name = TidyDownloads.clean(answer, original: original) else { return }
+        let input = TidyDownloads.Request(file: original, source: source, downloadURL: downloadURL, language: language)
+        let generate = self.generate
+        var request = Request(path: path)
+        let token = request.token
+        request.task = Task { @MainActor [weak self, weak store] in
+            let answer = await generate(input)
+            guard let self else { return }
+            // A cancelled provider may still finish after a newer request has taken this key.
+            defer { if self.requests[key]?.token == token { self.requests[key] = nil } }
+            guard let answer, let name = TidyDownloads.clean(answer, original: original) else { return }
             let folder = (path as NSString).deletingLastPathComponent
             let fm = FileManager.default
             guard let free = TidyDownloads.unique(name, existing: {
                 fm.fileExists(atPath: (folder as NSString).appendingPathComponent($0))
             }) else { return }
             let newPath = (folder as NSString).appendingPathComponent(free)
-            guard fm.fileExists(atPath: path), (try? fm.moveItem(atPath: path, toPath: newPath)) != nil else {
+            // No suspension separates this last eligibility check from the existing move boundary.
+            guard !Task.isCancelled, self.requests[key]?.token == token,
+                  self.requests[key]?.path == path, let store, store.settings.tidyDownloads,
+                  self.modelAvailable(), ownerEligible(), store.prefs.windows.contains(where: { $0.id == window }),
+                  fm.fileExists(atPath: path) else { return }
+            guard (try? fm.moveItem(atPath: path, toPath: newPath)) != nil else {
                 CraLog.note("Tidy Downloads: the file couldn't be renamed")
                 return
             }
             DownloadHistory.shared.move(from: path, to: newPath)
             moved(newPath)
             CraLog.note("Tidy Downloads: renamed a download (\(original.count) → \(free.count) characters)")
-            show(Rename(download: id, window: window, oldPath: path, newPath: newPath))
+            self.show(Rename(download: id, window: window, oldPath: path, newPath: newPath))
         }
+        requests[key] = request
+        return request.task
     }
 
     /// When the card goes by itself, and the timer that takes it.
@@ -145,7 +208,7 @@ final class TidyDownloadsService {
                 let r = try await session.respond(to: TidyDownloads.prompt(request), generating: TidyDownloadAnswer.self, options: GenerationOptions(sampling: .greedy))
                 return r.content.newName
             } catch {
-                CraLog.note("Tidy Downloads: the model failed: \(error)")
+                CraLog.note("Tidy Downloads: the model failed")
                 return nil
             }
         }
