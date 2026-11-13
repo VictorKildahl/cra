@@ -974,6 +974,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let url = q("url") { main.loadInSelectedTab(url) }
         case "open":
             guard let url = q("url") else { break }
+            // As for a link from another app (openExternalURL): its tab is what the window shows, so the bar
+            // that was waiting for a new tab goes. CEF's new page window took the bar's key and closed it anyway.
+            if !background, !little, store.settings.startOnNewTab, let m = main, m.commandBar.isOpen, m.selectedTab == nil {
+                m.commandBar.close()
+            }
             // space=<id> (#168): a real, normal space, as Air Traffic Control routes to; an unknown
             // or incognito one opens where it did before, in the space in use.
             let space = openableSpace(q("space").flatMap(UUID.init(uuidString:)))
