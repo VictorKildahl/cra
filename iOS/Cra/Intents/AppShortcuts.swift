@@ -60,7 +60,8 @@ struct SearchIntent: AppIntent {
 
 struct BrowseForMeIntent: AppIntent {
     static let title: LocalizedStringResource = "Browse for Me"
-    static let description = IntentDescription("Reads pages about your question and makes one page of the answer, on this iPhone. Without Apple Intelligence it searches instead.")
+    // App Store processing refuses "Apple" and "iPhone" in an intent's description (ITMS-90626).
+    static let description = IntentDescription("Reads pages about your question and makes one page of the answer, on this device. Where it can't, it searches instead.")
     static let openAppWhenRun = true
 
     @Parameter(title: "Question")

@@ -56,7 +56,14 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$options" "${auth[@]}" 2>&1 |
   grep -E "error|Upload|EXPORT (SUCCEEDED|FAILED)|Progress" || true
 if [ "$destination" = "upload" ]; then
-  echo "uploaded build $BUILD_NUMBER: it appears under TestFlight once Apple has processed it"
+  echo "uploaded build $BUILD_NUMBER; waiting for App Store Connect to process it…"
+  # An upload that went through can still be rejected in processing (ITMS errors by email):
+  # wait for the verdict, which needs the API key.
+  if [ -n "${ASC_KEY_PATH:-}" ]; then
+    swift scripts/ios-build-status.swift "${CRA_ASC_APP_ID:-6834101298}" "$BUILD_NUMBER"
+  else
+    echo "(no API key given: check the build's state in App Store Connect before calling it done)"
+  fi
 else
   ls "$EXPORT"/*.ipa
 fi
