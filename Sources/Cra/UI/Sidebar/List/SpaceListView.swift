@@ -1007,10 +1007,12 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     /// `cra://debug?dropLink`: where a link is let go, in the list's coordinates: on the upper
-    /// part of the row whose tab's address holds `text`, on its middle (`onto`), or below the last row.
+    /// part of the row whose tab's address holds `text` (or the folder named `text`), on its middle
+    /// (`onto`), or below the last row.
     func testDropPoint(row text: String?, onto: Bool) -> CGPoint? {
         if let text {
-            guard let r = rows.first(where: { $0.itemID.flatMap { store.item($0)?.tab?.url.contains(text) } == true }) else { return nil }
+            guard let r = rows.first(where: { $0.itemID.flatMap(store.item).map { $0.tab?.url.contains(text) ?? ($0.isFolder && $0.title == text) } == true })
+            else { return nil }
             return CGPoint(x: r.frame.midX, y: onto ? r.frame.midY : r.frame.minY + r.frame.height * 0.1)
         }
         return CGPoint(x: todayFrame.midX, y: (rows.map(\.frame.maxY).max() ?? todayFrame.maxY) + 40)
@@ -1056,7 +1058,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         autoscroller.stop()
         if let link = draggedLink(info) {
             let point = document.convert(info.draggingLocation, from: nil)
-            return dropLink(link, drop: ui.listDrop.flatMap { $0.isLink ? $0 : nil } ?? resolve(dragged: SidebarListDrop.link, at: point))
+            return dropLink(link, drop: ui.listDrop.flatMap { $0.isLink ? $0 : nil } ?? resolve(dragged: SidebarListDrop.link, at: point)) != nil
         }
         guard let id = ui.draggingID, store.item(id) != nil else { return false }
         let point = document.convert(info.draggingLocation, from: nil)
@@ -1086,11 +1088,16 @@ final class SpaceListView: NSView, NSDraggingSource {
 
     /// A link let go on the list opens there as a new tab, behind the page you're on (Arc 1.172.1, #419).
     @discardableResult
-    func dropLink(_ link: SidebarLinkDrop.Tab, drop: SidebarListDrop) -> Bool {
+    func dropLink(_ link: SidebarLinkDrop.Tab, drop: SidebarListDrop) -> SidebarItem? {
         ui.listDrop = nil
-        guard case .insert(let parent, let index)? = drop.target else { return false }
-        store.createTab(url: link.url, title: link.title, in: spaceID, select: false, parent: parent, index: index, window: ui.windowID)
-        return true
+        let place: (parent: UUID, index: Int)
+        switch drop.target {
+        case .insert(let parent, let index)?: place = (parent, index)
+        // Into a folder at the top, which stays as it was, as a tab dropped there goes (#266).
+        case .into(let folder)? where store.item(folder)?.isFolder == true: place = (folder, 0)
+        default: return nil
+        }
+        return store.createTab(url: link.url, title: link.title, in: spaceID, select: false, parent: place.parent, index: place.index, window: ui.windowID)
     }
 
     private func applyDrop(_ drop: SidebarListDrop) {
@@ -1128,9 +1135,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// Top and bottom quarters of a row insert before/after it; the middle combines: a folder
     /// takes the item, a tab, pinned or not, makes a split in its place (the dragged tab goes on
     /// the side of the row it hovers), a split row takes a pane. A link (`SidebarListDrop.link`)
-    /// only goes between rows: a tab's top quarter before it, its bottom quarter after, nothing on
-    /// its middle (Arc 1.173.1); a folder's upper half before it, its lower half after or into an
-    /// open folder at the top.
+    /// combines with nothing: a tab's or split's middle takes nothing, a folder's middle takes it in
+    /// at the top (Arc 1.173.1, measured on a closed folder).
     func resolve(dragged id: UUID, at p: CGPoint) -> SidebarListDrop {
         guard let space = store.space(spaceID) else { return SidebarListDrop(draggedID: id) }
         let items = rows.filter { $0.itemID != nil }
@@ -1149,8 +1155,8 @@ final class SpaceListView: NSView, NSDraggingSource {
             if group.contains(rid) || isInside(rid, id) {
                 target = nil
             } else if item.isFolder {
-                if f < (combines ? 0.25 : 0.5) { target = before }
-                else if f >= 0.75 || !combines { target = store.isExpanded(rid) ? .insert(parent: rid, index: 0) : after }
+                if f < 0.25 { target = before }
+                else if f >= 0.75 { target = store.isExpanded(rid) ? .insert(parent: rid, index: 0) : after }
                 else { target = .into(rid) }
             } else if middle && isTab && item.isTab {
                 // Arc combines two tabs into a split wherever the target sits (#191), in the

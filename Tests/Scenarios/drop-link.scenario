@@ -1,8 +1,8 @@
 # promise: #419
 # A link dragged onto the tab list from a page or another app opens as a new tab where it is let
 # go, behind the page you're on, as in Arc (1.173.1, measured): below the last row it is the end of
-# Today, on a row's top quarter it goes before that row. Arc takes nothing on a tab's middle, and
-# only web pages are taken.
+# Today, on a row's top quarter it goes before that row. Arc takes nothing on a tab's middle, puts
+# a link let go on a folder's middle in the folder at the top, and takes only web pages.
 budget rss=800 stalls50=30
 pace 0.5
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
@@ -26,3 +26,10 @@ expect-log Cra applescript → .*\[ 'utxt'\("[^"]*n=shown"\), 'utxt'\("[^"]*n=be
 # The page you were on stays in front.
 cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20acTa%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
 expect-log Cra applescript → .*n=shown
+# A closed folder's middle takes the link in, at the top, and the folder stays closed (Arc 1.173.1).
+cra://action/newFolder
+wait 1
+cra://action/collapseAllFolders
+wait 1
+cra://debug?dropLink=${PAGE}?n=infolder&onto=New%20Folder
+expect-log dropLink: opened \S*n=infolder in New Folder at 0

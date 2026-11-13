@@ -641,7 +641,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         pb.writeObjects([item])
         guard let link = SpaceListView.link(on: pb) else { CraLog.note("dropLink: refused \(url)"); return }
         guard let point = l.testDropPoint(row: text, onto: onto) else { CraLog.note("dropLink: no row with \(text ?? "")"); return }
-        CraLog.note("dropLink: \(l.dropLink(link, drop: l.resolve(dragged: SidebarListDrop.link, at: point)) ? "opened" : "refused") \(link.url)")
+        // Where the tab landed, read back from the store: its folder's name, or its section, and its place there.
+        guard let tab = l.dropLink(link, drop: l.resolve(dragged: SidebarListDrop.link, at: point)), let parent = tab.parentID.flatMap(store.item) else {
+            CraLog.note("dropLink: refused \(link.url)"); return
+        }
+        let place = parent.isFolder ? (parent.title ?? "folder") : (store.isPinned(tab.id) ? "Pinned" : "Today")
+        CraLog.note("dropLink: opened \(link.url) in \(place) at \(parent.children.firstIndex(of: tab.id) ?? -1)")
     }
 
     /// `cra://debug?pickedMenu=<n>`: picks the focused space's first n listed tabs, as ⌘-click does,
