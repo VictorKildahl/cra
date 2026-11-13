@@ -60,6 +60,9 @@ void ApplySettings(Profile* profile) {
   prefs->SetString("webrtc.ip_handling_policy", "default_public_interface_only");
   // Cra shows downloads in its own sidebar.
   prefs->SetBoolean("download_bubble.partial_view_enabled", false);
+  // Every download asks where to go, and Cra's app answers (its save panel or its Downloads folder;
+  // patches/cra-downloads.patch).
+  prefs->SetBoolean("download.prompt_for_download", true);
   prefs->SetBoolean("https_only_mode_enabled", g_https_only);
   if (prefs->FindPreference(kFingerprintingProtection)) {
     prefs->SetBoolean(kFingerprintingProtection, g_fingerprinting);

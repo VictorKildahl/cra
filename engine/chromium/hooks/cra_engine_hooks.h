@@ -4,7 +4,11 @@
 #define CHROME_BROWSER_CRA_ENGINE_HOOKS_H_
 
 #include <memory>
+#include <optional>
 #include <string>
+
+#include "base/files/file_path.h"
+#include "base/functional/callback.h"
 
 class ChromeBrowserMainExtraParts;
 
@@ -13,6 +17,9 @@ class WebContents;
 }
 namespace input {
 struct NativeWebKeyboardEvent;
+}
+namespace download {
+class DownloadItem;
 }
 
 namespace cra {
@@ -44,6 +51,14 @@ using KeyEventHook = int (*)(content::WebContents* contents,
                              const input::NativeWebKeyboardEvent& event,
                              bool unhandled);
 inline KeyEventHook g_key_event = nullptr;
+
+// Where a download is saved: Cra's app decides (its save panel, or its Downloads folder) instead of Chrome's
+// save panel, for every download (Cra sets download.prompt_for_download). `done` gets the path, or nothing to
+// cancel (patches/cra-downloads.patch).
+using DownloadPathHook = void (*)(download::DownloadItem* download,
+                                  const base::FilePath& suggested_path,
+                                  base::OnceCallback<void(std::optional<base::FilePath>)> done);
+inline DownloadPathHook g_download_path = nullptr;
 
 }  // namespace cra
 

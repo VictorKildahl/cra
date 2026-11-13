@@ -17,6 +17,7 @@
 #import "cra/CraCEF.h"
 
 #include "cra/bridge.h"
+#include "cra/downloads.h"
 #include "cra/page_protocol.h"
 #include "cra/profile_prefs.h"
 
@@ -69,6 +70,8 @@
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/zoom/zoom_controller.h"
+#include "components/download/public/common/download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/ssl_status.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
@@ -130,6 +133,7 @@ ScopedKeepAlive* g_keep_alive = nullptr;
 // The app's handlers (CraCEF.h says what each is for).
 CraBrowser* _Nullable (^g_extension_tab_handler)(NSString*, NSString* _Nullable, BOOL, CraBrowser* _Nullable) = nil;
 void (^g_stray_page_handler)(NSString*, NSString* _Nullable) = nil;
+void (^g_download_destination_handler)(NSString* _Nullable, NSString*, void (^)(NSString* _Nullable)) = nil;
 // Chrome windows an extension opened as popups (windows.create type popup), which stay Chrome's.
 NSHashTable<NSWindow*>* g_extension_windows = nil;
 // Set while the bridge makes one of its own hidden Browsers.
@@ -384,6 +388,57 @@ int KeyEvent(content::WebContents* contents, const input::NativeWebKeyboardEvent
   return [NSApp.mainMenu performKeyEquivalent:key] ? 1 : 0;
 }
 
+// A download's progress, for the page that started it (the CEF bridge's OnDownloadUpdated).
+void ReportDownload(download::DownloadItem* item) {
+  CraBrowser* browser = BrowserFor(content::DownloadItemUtils::GetWebContents(item));
+  if (!browser) {
+    return;
+  }
+  CraDownloadInfo* info = [[CraDownloadInfo alloc] init];
+  info.identifier = item->GetId();
+  info.paused = item->IsPaused();
+  info.url = NS(item->GetURL().spec());
+  info.fullPath = NS(item->GetTargetFilePath().value());
+  info.suggestedName = NS(item->GetFileNameToReportUser().value());
+  info.receivedBytes = item->GetReceivedBytes();
+  info.totalBytes = item->GetTotalBytes();
+  info.percent = item->PercentComplete();
+  switch (item->GetState()) {
+    case download::DownloadItem::COMPLETE:
+      info.state = CraDownloadStateComplete;
+      break;
+    case download::DownloadItem::CANCELLED:
+      info.state = CraDownloadStateCancelled;
+      break;
+    case download::DownloadItem::INTERRUPTED:
+      info.state = CraDownloadStateInterrupted;
+      break;
+    default:
+      info.state = CraDownloadStateInProgress;
+  }
+  [browser.delegate browser:browser didUpdateDownload:info];
+}
+
+// Where a download goes (patches/cra-downloads.patch): the app's handler, with the page's profile folder (nil
+// for Default and off the record) and the name Chrome suggests; without one, where Chrome suggests.
+void DownloadPath(download::DownloadItem* item,
+                  const base::FilePath& suggested,
+                  base::OnceCallback<void(std::optional<base::FilePath>)> done) {
+  if (!g_download_destination_handler) {
+    std::move(done).Run(suggested);
+    return;
+  }
+  CraBrowser* browser = BrowserFor(content::DownloadItemUtils::GetWebContents(item));
+  NSString* profile = browser && !browser.isIncognito ? browser.profilePath : nil;
+  NSString* name = NS(suggested.BaseName().value());
+  __block base::OnceCallback<void(std::optional<base::FilePath>)> answer = std::move(done);
+  g_download_destination_handler(profile, name.length ? name : @"download", ^(NSString* path) {
+    if (answer) {
+      std::move(answer).Run(path.length ? std::optional<base::FilePath>(base::FilePath(UTF8(path))) : std::nullopt);
+    }
+  });
+}
+
 // Cra's translate UI (patches/translate-ui.patch): false for a page that isn't Cra's.
 bool TranslateState(content::WebContents* contents, const std::string& state) {
   CraBrowser* browser = BrowserFor(contents);
@@ -613,6 +668,8 @@ void RunReadyBlocks() {
   g_page_activation = &PageActivation;
   g_translate_state = &TranslateState;
   g_key_event = &KeyEvent;
+  g_download_path = &DownloadPath;
+  StartDownloads(&ReportDownload);
   Strays().Start();
   StartProfilePrefs();
   g_keep_alive = new ScopedKeepAlive(KeepAliveOrigin::APP_CONTROLLER, KeepAliveRestartOption::DISABLED);
@@ -1433,9 +1490,13 @@ void RunReadyBlocks() {
   return NO;
 }
 + (void)setDownloadDestinationHandler:(void (^)(NSString* _Nullable, NSString*, void (^)(NSString* _Nullable)))handler {
+  g_download_destination_handler = [handler copy];
 }
 + (BOOL)controlDownload:(uint32_t)identifier action:(CraDownloadControl)action {
-  return NO;
+  cra::DownloadControl control = action == CraDownloadControlPause    ? cra::DownloadControl::kPause
+                                 : action == CraDownloadControlResume ? cra::DownloadControl::kResume
+                                                                      : cra::DownloadControl::kCancel;
+  return cra::ControlDownload(identifier, control);
 }
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
 }

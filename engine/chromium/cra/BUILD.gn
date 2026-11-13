@@ -6,6 +6,8 @@ source_set("core") {
     "CraCEF.h",
     "bridge.h",
     "bridge.mm",
+    "downloads.h",
+    "downloads.mm",
     "engine_main.mm",
     "page_protocol.h",
     "page_protocol.mm",

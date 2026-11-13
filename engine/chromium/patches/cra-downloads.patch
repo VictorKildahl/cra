@@ -1,0 +1,38 @@
+diff --git a/chrome/browser/download/chrome_download_manager_delegate.cc b/chrome/browser/download/chrome_download_manager_delegate.cc
+--- a/chrome/browser/download/chrome_download_manager_delegate.cc
++++ b/chrome/browser/download/chrome_download_manager_delegate.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/download/chrome_download_manager_delegate.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -1727,6 +1729,25 @@
+   return;
+ 
+ #else   // BUILDFLAG(IS_ANDROID)
++  // Cra: its app picks the path (cra::g_download_path); Chrome's save panel would hang off its never-shown
++  // window.
++  if (cra::g_download_path) {
++    cra::g_download_path(
++        download, suggested_path,
++        base::BindOnce(
++            [](DownloadTargetDeterminerDelegate::ConfirmationCallback callback,
++               std::optional<base::FilePath> path) {
++              if (path) {
++                std::move(callback).Run(DownloadConfirmationResult::CONFIRMED,
++                                        ui::SelectedFileInfo(*path));
++              } else {
++                std::move(callback).Run(DownloadConfirmationResult::CANCELED,
++                                        ui::SelectedFileInfo());
++              }
++            },
++            std::move(callback)));
++    return;
++  }
+   ShowFilePickerWithUserTakeover(download, suggested_path, std::move(callback));
+ #endif  // BUILDFLAG(IS_ANDROID)
+ }
