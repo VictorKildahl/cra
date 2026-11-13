@@ -3970,12 +3970,33 @@ HoverCardWindow, HoverCardViewModel), pref `hoverCardsEnabled` (1 in Victor's Ar
   8 pt corners, #191B1F text, #BBBBBC symbols, a dashed #CFD0FB line (4 pt on, 6 off, a 3 pt gap first) and a 50 pt
   #F6F6FF footer with the favicon and host left and "Arc Browser" bold right, both #9A9AB3.
 - Cra (LinkSummaryPolicy, LinkSummaryPrompt, LinkSummaryCardLayout, LinkSummaryShare in CraCore; LinkSummaryService,
-  LinkSummaryPreview, LinkSummaryShareImage): all of the above, on the Mac's Apple Intelligence model with Arc's
-  prompt and schema (streamed). The page script checks Arc's selectors on the hovered link. Chromium fetches the page in
-  the tab's profile only once a card opens, never for hosts on the Mac or the local network, upgraded to https with
-  Always use secure connections, never in incognito spaces. Differences that stay: "Cra" in place of Arc's name in
-  the copies; the emoji table is Cra's (Arc's isn't readable; it matches the four Arc produced); the model writes
-  its own answers. Settings ▸ Max ▸ 5-Second Previews, off by default like Arc Max.
+  LinkSummaryPreview, LinkSummaryShareImage): retains the measured card construction, selectors, entry timing and
+  share menu, with Arc's two instruction sentences and a streamed guided schema on Apple Intelligence. Quick summary
+  and search-derived focus are optional; a static optional focus field adapts Arc's conditional schema fragment.
+  Request-keyed summary/title/image caches include profile, URL/HTTPS policy, query and language. Presentation
+  generations reject stale work; actual Max-setting and observed model-availability changes revoke the current card.
+- Cra transport/extraction: only an eligible opened card fetches, using the tab's Chromium profile. Each page/image
+  redirect is validated against the public-host URL policy and Always use secure connections; incognito is suppressed.
+  HTML is capped at 1 MiB across at most five redirects and 20 s including profile readiness. Regex extraction reads
+  at most 400,000 HTML characters and 2,400 body characters; it is not Arc's rendered DOM snapshot. The exact preview
+  snapshot field for Arc's >49-character threshold remains unresolved, so no guessed cutoff was added. The complete
+  local prompt is fitted to 1,536 UTF-8 bytes; 26.4+ uses actual SDK token preflight, earlier systems a conservative
+  fallback. One typed context-overflow retry halves the prompt in a fresh session and resets partials. The model
+  phase has one 18 s deadline; output reserves 1,024 tokens plus a 256-token context safety margin. These are Cra limits,
+  not measured Arc timeouts. Optional images are cookie/cache-free, capped during receipt at 4,000,000 bytes and 8 s;
+  image failure leaves a usable summary. URL policy is not a DNS-rebinding firewall, and no public-CDN/TLS or decoded
+  image pixel-allocation guarantee is established by the controlled wire tests.
+- Cra evidence, 13 Nov 2026: B1–B7 source reviews, current native build and full suite pass. Earlier actual CEF/profile
+  and image-wire receipts retain their original source scope. Four genuine production-model samples support basic
+  English facts, English access focus and requested Spanish/Japanese output; Spanish invented a hidden opening-time
+  question without a query, Japanese repeated most of its source paragraph in the quick summary and labeled access
+  as transport, and some symbol names use the renderer fallback. Brevity, one-word focus and universal answer quality
+  are not guaranteed. The blocked current-binary B8 attempt produced no card captures or completed checks. Current
+  1x/2x card appearance, motion, sharing and visible Max revocation remain pending in the
+  [validation record](plans/5secondpreviews.md#current-validation-record-13-november-2026).
+- Retained differences: Cra attribution replaces Arc's name; the emoji table is Cra's (Arc's isn't readable; it
+  matches the four Arc produced); the local model writes its own answers. Settings ▸ Max ▸ 5-Second Previews remains
+  off by default like Arc Max. The Arc measurements above remain historical observations, not a current Cra pass.
 
 ## Ask on Page (Arc 1.173.1, 12 Nov 2026, GitHub #393, static only: strings, Swift field metadata, disassembly; Arc not launched)
 

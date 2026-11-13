@@ -85,8 +85,15 @@ built release app with a test profile. Note anything that fails in the release's
   on the same link (arc-reverse-engineering.md has its measurements). A story's "comments" link, a
   Google side-panel link and a plain hover on any other site show nothing; Shift held as the pointer
   reaches a link shows the answer, or the small card for a link within the site. Leaving the link
-  closes it at once unless the pointer is on the card. Share ▸ Copy as Text and Copy as Image paste as
-  Arc's do. Check a beige and a dark space, 1x and 2x.
+  closes it at once unless the pointer is on the card. Share ▸ Copy as Text and Copy as Image paste with
+  the retained Cra attribution/emoji differences. Check a beige and a dark space, 1x and 2x.
+  **13 Nov status: PENDING native acceptance.** Current source, native build and full suite pass; four
+  genuine model samples have documented quality limits. B8 attempt `previews-b8-native-2x-03` stopped
+  before card opening because unrelated security dialogs covered the test area; it supplies no card
+  or wire pass. Follow the finite [operator checklist](plans/5secondpreviews.md#remaining-native-operator-checklist).
+  The external driver uses fake generation and does not select Copy as Text/Image or change the actual
+  Max setting. Record pasted text/image, visible-card revocation on Max off, observed motion, small-card/
+  Shift behavior and real-site status separately. Do not mark those complete from harnesses or shell captures.
 
 - **Music notes:** on a release build, play a favorite on YouTube Music, SoundCloud or Spotify
   (the 1x/2x side-by-side with Arc used nts.live and a local tone, 11–12 Nov). Notes rise from the

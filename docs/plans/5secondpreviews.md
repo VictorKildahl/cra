@@ -1,6 +1,6 @@
 # 5-Second Previews implementation plan
 
-Status: independently reviewed with bounded lifecycle/transport clarifications applied below. Coordinator may authorize implementation; this document alone authorizes no implementation or commit.
+Status, 13 November 2026: B1–B7 implementation independently reviewed and committed; current native build and full suite pass. Whole-feature acceptance and B8 documentation approval remain **PENDING** the bounded native/manual observations below. This documentation draft adds no source behavior and claims no new runtime pass.
 
 Branch: `5secondpreviews`, base `fccc893ca3989ebed0485dd9a67622fa7950f0c9`.
 Worktree: `/Users/varunaditya/.codex/worktrees/cra-5secondpreviews/cra`.
@@ -48,7 +48,9 @@ Retained documented adaptations: Apple Intelligence replaces Arc's cloud model; 
 
 Existing `LinkSummaryCardLayout`, sharing layout and drawing stay unchanged unless a reproduced feature regression requires a precise change. Preserve existing panel/share tests.
 
-## Current defects and intended design
+## Approved implementation design
+
+The following design and regression matrix preserve the reviewed implementation plan. They are historical requirements, not a list of newly unimplemented source tasks. Current dispositions and evidence appear below.
 
 ### 1. Identity, isolation and cache outcomes
 
@@ -153,10 +155,62 @@ After root coordination, run repository-required `scripts/test.sh`, build releas
 2. Controlled CEF: test cancellation before profile ready and during download, oversized/endless body, redirect hop limit and blocked target. Prove the blocked target receives no request. Confirm ordinary authenticated public pages use their own disposable profile cookies, and a second profile cannot reuse their data. Validate images separately.
 3. Neighbor regression: exercise an existing live folder and restricted plugin fetch with disposable fixtures; existing generic behavior remains intact.
 4. Availability: AI off/preparing/ineligible keeps the feature hidden/unavailable; no model inference/network fetch begins for disabled or incognito requests.
-5. Real AI: host AI is currently reported off. Do not enable system settings without authorization or label fake outputs as quality verification. On an eligible AI-on Mac, compare real summaries against Arc for article/product/reference/blocked pages, Google focus and non-English output. Record model latency, overflow recovery and factual/card quality; model answers may differ.
+5. Real AI: actual model availability was `available` for the retained four-sample production-model receipt. Those samples establish inference/token/schema execution and limited factual/focus/language behavior, with the quality limits below. They do not establish a broad article/product/reference/blocked-page benchmark, paired Arc answer quality, genuine overflow recovery or end-to-end hover latency. Do not enable system settings without authorization or label fake native outputs as model-quality verification. Further broad inference is not a finalization requirement.
 6. Update release checklist only for checks that require a real site, GPU or human view. If AI-on/1x hardware/Arc live validation cannot run, mark those exact checks unverified and report them; passing tests/builds alone does not establish parity.
 
-Completion requires independent plan approval; reviewed granular implementation; regression failure/recovery evidence; scoped tests and coordinated full checks; measured UI comparison; no stale/cross-profile data; bounded/cancelled page/image work; and honest separation of any unavailable real-model validation.
+Completion requires the reviewed implementation and existing regression/build/full-suite evidence, the remaining bounded native observations below, and independent review of the exact final documentation/branch. Any unverified manual, real-site, hardware or model behavior must remain explicitly unverified. Source approval does not complete native acceptance.
+
+## Current validation record, 13 November 2026
+
+Evidence root: `/Users/varunaditya/Desktop/arc-decomp/cra-validation`. Paths in the table are relative to it. These are retained local artifacts, not checked-in portable receipts. Source checkpoint: HEAD `310b84ac4de6807a3d2169ac2066665d60223e75`, tree `097bf07fcc14da7d0f1002ec6eb6750d625b9d95`. Documentation edits change the eventual tree; these identifiers describe the source checkpoint, not a future docs commit.
+
+| Area | Status and exact scope | Receipt |
+| --- | --- | --- |
+| B1–B6 implementation | PASS independent source reviews: request/cache isolation, stale hover ownership, bounded CEF transport, optional image transport, optional-summary/search-focus schema, fitting and one overflow retry. | `reviews/code-5secondpreviews-01.md` through `-06.md` |
+| B7 eligibility | PASS exact source review: synchronous actual setting callback, fresh availability publication guards and repeated observed-off revocation. Actual store/model/bootstrap hook harness: 15 checks; service/controller/SDK harness: 121 checks. Negative parent/callback-removal runs fail the intended assertions. | `reviews/code-5secondpreviews-07.md`, `review-5secondpreviews-07/` |
+| Current native build | PASS frozen B7 source. Binary SHA-256 `39bf6524fe7637e19c8f5652690d31c458f956211027d0bbc8f1024f64c42054`. | `logs/5secondpreviews-07-final-native-build.log` |
+| Current full suite | PASS coordinated full WMO suite, ending “All tests passed.” No repeated full run needed for this docs-only draft. | `logs/5secondpreviews-07-final-suite-wmo.log` |
+| Actual page/profile wire | PASS earlier B3 actual CEF normal/redirect hops, blocked-target zero hits, hop/loop bounds, over-cap disconnect, leave cancellation, aggregate deadline, A/B cookies/cache and restricted-plugin/live-folder smoke. Original source/binary scope retained; no relabeling as current B7 on-screen evidence. | `wire/run-b3-01/handoff.md`, `result.json` |
+| Actual image wire | PASS earlier B4 actual URLSession streamed cap, redirect policy, cookie/cache suppression, cancellation and aggregate deadline. Does not establish a current visible banner. | `reviews/code-5secondpreviews-04.md` and its wire receipts |
+| Actual model | PASS inference executed with available model through production ask/respond/generate/tokenCount; four typed usable samples. Input totals 594/609/595/602 include schema 364 and instructions 51; B7 preserves this B6 generation/Core path. | `runtime/previews-b7-real-model/readout.json` |
+| Current native acceptance | **PENDING.** B8 attempt 03 stopped at readiness: `checks=[]`, `captures=[]`. Main-window 2x/theme/DOM readiness does not prove card pixels or a wire journey. | `runtime/previews-b8-native-2x-03/result.json`, `root-interruption.json`, `capture-diagnostic-summary.json` |
+| Final docs/branch review | **PENDING.** This B8 draft must incorporate genuine new native receipts before independent exact-diff review and root-owned finalization. | `reviews/5secondpreviews-final-gap-assessment.md` |
+
+### Model-output disposition and retained limits
+
+| Sample | Observed result | Limit |
+| --- | --- | --- |
+| Ordinary English | Source-supported access, hours, ticket and tour facts; 6.04 s model-probe completion. | One small synthetic page; no native fetch/hover latency claim. |
+| Focused English | Access/elevator facts prioritized; 2.60 s. | Hidden focus contains multiple words; no enforced one-word or universal focus-quality claim. |
+| Spanish | Requested-language summary/details; 3.16 s. | Invented an opening-time `userQuestion` without a query. This guidance field is hidden; it is not substituted for quick summary. |
+| Japanese | Requested-language values; 5.45 s. | 178-character quick summary largely repeats the source paragraph; access row labeled transport. |
+
+Some generated SF Symbol names use the existing fallback. These observations justify documenting local-model quality limits; they do not require a new model search. Genuine overflow/refusal, older-OS inference, broad site/language quality and paired Arc answers remain unverified. Earlier systems use the compiled/tested conservative fitting fallback; no older-hardware inference claim follows.
+
+Implemented Cra boundaries: regex HTML extraction rather than a rendered DOM snapshot; unresolved exact preview text field for Arc's >49-character cutoff; 1 MiB/20 s page budget and five redirects; 4,000,000-byte/8 s cookie-free optional image budget; 1,536-byte fitted prompt, one compact retry and 18 s model deadline. On 26.4+ actual SDK preflight counts instructions/schema/prompt/transcript and reserves 1,024 output tokens plus 256 safety tokens; earlier systems use conservative fixed overhead. These are local policies, not recovered Arc timings. Controlled public-shaped loopback wire hosts do not establish DNS-rebinding defenses, public-CDN/TLS or decoded-image pixel-allocation limits. Cra attribution, emoji mapping and locally generated answers remain deliberate differences.
+
+### Remaining native operator checklist
+
+All items are **PENDING**. Run only after the user has cleared the unrelated LuLu/Safe Storage and queued helper dialogs. Do not choose security/password/firewall actions, hide or terminate unrelated workflows, or reinterpret an occluded/black child-host capture as a product defect. Preserve failed external fixture attempts as such.
+
+1. **Confirm identity/readiness.** Verify the frozen binary hash above and current source checkpoint; record driver/capture-helper hashes. Use a fresh output directory per attempt. Root owns the existing display wrappers and native app. Confirm the actual preview can be unobstructed before continuing any pointer checkpoint.
+2. **Run one complete 2x journey.** In the existing root-owned 2x display setup, run the command below with a new directory. At `checkpoint-ready.json`, inspect `ready-family.png` through CUA, verify the broad fixture page/link is disabled, safely place the pointer in empty right-center page area and create `continue-ready`. Follow only the checkpoint's observed empty-area placement instructions; never select a copy/share action during this script.
+3. **Inspect every correlated card.** Review the pinned unique panel captures and their actual dimensions/scale against historical Arc reference: loading/progression/final/terminal, delayed banner before/after, light and dark, 300 pt card, top-anchored growth and above/below placement. The driver seeds Auto light `#C8CAFF`; its beige page alone does not establish a beige space. Add a bounded native beige-space card capture in the disposable profile. A 340 pt outer window includes margins; it alone is not proof of a 300 pt rendered card. Record actual banner arrival or optional-image failure honestly. Verify A/B request cookies/current cache reuse and ordinary leave cancellation from the new log/hit receipts. Do not convert a requested capture label into an observed progressive frame.
+4. **Complete interactive checkpoints.** Observe pointer transfer retaining the card, pointer leave dismissing it, share-menu contents and above/below placements. Retain CUA observations/menu screenshots separately from the script continuation tokens. Record representative opening/closing frames/timestamps against the retained .25/.14 s timing contract; no timing claim follows from still images.
+5. **Repeat appearance at 1x.** Use a second fresh output directory under the existing root-owned 1x setup, with `--expected-scale 1 --interactive --quick`. Inspect the same card/theme/placement/pointer/menu states and native beige-space card at the independently recorded scale. `--quick` skips the repeated transport-deadline phase only; the first run must retain that phase.
+6. **Observe actual eligibility and entry.** In disposable native state, open a current card, turn Settings ▸ Max ▸ 5-Second Previews off and verify that visible card stops, including while the pointer was on it. Restore the disposable setting only for the remaining smoke. Check Shift sampled on entry, same-site small card, and one representative supported-site selector. Record HN/Google/X live-site checks individually as observed or unverified; do not expand into an exhaustive external-site matrix. The driver does not automate this actual-setting or small-card/Shift check.
+7. **Check native pasted output only when authorized.** The prepared driver never copies. An authorized bounded manual check must select Copy as Text and Copy as Image, paste into a disposable target and inspect content/current identity, attribution, image and layout. Record both actual pasted outputs. If clipboard use remains unavailable or unauthorized, leave this item **UNVERIFIED**; panel/share harnesses and opening the menu cannot complete it.
+8. **Close the record.** Link actual run directories, inspected captures, motion/menu/setting/paste observations and explicit unverified items here and in the release checklist. If a real product defect appears, make only the scoped correction and obtain source re-review. Otherwise obtain independent final docs/exact-branch review. Root alone stages/commits/pushes under the user's authorization; no PR, merge or force-push is part of this checklist.
+
+Prepared command (root executes; this draft did not run it):
+
+```sh
+python3 /Users/varunaditya/Desktop/arc-decomp/cra-validation/scripts/previews-b7/native-wire-probe.py \
+  --run /Users/varunaditya/Desktop/arc-decomp/cra-validation/runtime/NEW_B8_2X_DIRECTORY \
+  --expected-scale 2 --interactive
+```
+
+The driver uses actual CEF/profile/image transport and fake generation. It does not change displays, inject global input, copy the clipboard or alter system DNS/proxy settings. Root's physical pointer checkpoints are separate observed native actions. No new product hooks, scenario framework, model benchmark or rerun of the entire old transport matrix is required for finalization.
 
 ## Review record
 
