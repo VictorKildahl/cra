@@ -21,6 +21,7 @@ struct NativeWebKeyboardEvent;
 namespace download {
 class DownloadItem;
 }
+class GURL;
 
 namespace cra {
 
@@ -59,6 +60,19 @@ using DownloadPathHook = void (*)(download::DownloadItem* download,
                                   const base::FilePath& suggested_path,
                                   base::OnceCallback<void(std::optional<base::FilePath>)> done);
 inline DownloadPathHook g_download_path = nullptr;
+
+// Element fullscreen in a page of Cra's (a video's fullscreen button): Cra's window shows it, Chrome's never
+// does. `g_page_fullscreen` enters or leaves (false for a page that isn't Cra's); `g_page_is_fullscreen` is -1
+// for a page that isn't Cra's, else 0 or 1 (patches/cra-fullscreen-status.patch).
+using PageFullscreenHook = bool (*)(content::WebContents* contents, bool enter);
+inline PageFullscreenHook g_page_fullscreen = nullptr;
+using PageIsFullscreenHook = int (*)(const content::WebContents* contents);
+inline PageIsFullscreenHook g_page_is_fullscreen = nullptr;
+
+// The link under the pointer in a page of Cra's (empty when none), for Cra's own status line. False for a page
+// that isn't Cra's.
+using TargetURLHook = bool (*)(content::WebContents* contents, const GURL& url);
+inline TargetURLHook g_target_url = nullptr;
 
 }  // namespace cra
 

@@ -64,6 +64,8 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -105,6 +107,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageBackgroundColor;
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
+@property(nonatomic) BOOL inPageFullscreen;
 @end
 
 namespace {
@@ -466,6 +469,39 @@ std::unique_ptr<permissions::PermissionPrompt> MakeCraPrompt(content::WebContent
       });
 }
 
+// Element fullscreen (patches/cra-fullscreen-status.patch): Cra's window shows it, as from CEF's
+// OnFullscreenModeChange; the page then lays out at its new size.
+bool PageFullscreen(content::WebContents* contents, bool enter) {
+  CraBrowser* browser = BrowserFor(contents);
+  if (!browser) {
+    return false;
+  }
+  if (browser.inPageFullscreen == enter) {
+    return true;
+  }
+  browser.inPageFullscreen = enter;
+  [browser.delegate browser:browser didChangeFullscreen:enter];
+  if (content::RenderWidgetHostView* view = contents->GetRenderWidgetHostView()) {
+    view->GetRenderWidgetHost()->SynchronizeVisualProperties();
+  }
+  return true;
+}
+
+int PageIsFullscreen(const content::WebContents* contents) {
+  CraBrowser* browser = BrowserFor(const_cast<content::WebContents*>(contents));
+  return browser ? (browser.inPageFullscreen ? 1 : 0) : -1;
+}
+
+// The link under the pointer, for Cra's status line ("" when none).
+bool TargetURL(content::WebContents* contents, const GURL& url) {
+  CraBrowser* browser = BrowserFor(contents);
+  if (!browser) {
+    return false;
+  }
+  [browser.delegate browser:browser didChangeStatusMessage:url.is_empty() ? @"" : NS(url.spec())];
+  return true;
+}
+
 // Cra's translate UI (patches/translate-ui.patch): false for a page that isn't Cra's.
 bool TranslateState(content::WebContents* contents, const std::string& state) {
   CraBrowser* browser = BrowserFor(contents);
@@ -697,6 +733,9 @@ void RunReadyBlocks() {
   g_key_event = &KeyEvent;
   g_download_path = &DownloadPath;
   g_permission_prompt = &MakeCraPrompt;
+  g_page_fullscreen = &PageFullscreen;
+  g_page_is_fullscreen = &PageIsFullscreen;
+  g_target_url = &TargetURL;
   StartDownloads(&ReportDownload);
   Strays().Start();
   StartProfilePrefs();

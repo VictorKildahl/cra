@@ -1,0 +1,64 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -814,6 +814,10 @@
+ 
+ void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
+                                                  const GURL& url) {
++  // Cra: its own status line (cra::g_target_url).
++  if (cra::g_target_url && cra::g_target_url(source, url)) {
++    return;
++  }
+   std::vector<StatusBubble*> status_bubbles =
+       browser_ui_controller_->GetStatusBubbles();
+   for (StatusBubble* status_bubble : status_bubbles) {
+@@ -1203,6 +1207,12 @@
+ 
+ bool BrowserWebContentsDelegate::CanEnterFullscreenModeForTab(
+     content::RenderFrameHost* requesting_frame) {
++  // Cra: its pages go fullscreen in Cra's window (cra::g_page_fullscreen).
++  if (cra::g_page_is_fullscreen &&
++      cra::g_page_is_fullscreen(
++          content::WebContents::FromRenderFrameHost(requesting_frame)) >= 0) {
++    return true;
++  }
+   // If the tab strip isn't editable then a drag session is in progress, and it
+   // is not safe to enter fullscreen. https://crbug.com/40059349
+   if (!browser_->GetTabStripModel()->delegate()->IsTabStripEditable()) {
+@@ -1216,12 +1226,20 @@
+ void BrowserWebContentsDelegate::EnterFullscreenModeForTab(
+     content::RenderFrameHost* requesting_frame,
+     const blink::mojom::FullscreenOptions& options) {
++  if (cra::g_page_fullscreen &&
++      cra::g_page_fullscreen(
++          content::WebContents::FromRenderFrameHost(requesting_frame), true)) {
++    return;
++  }
+   exclusive_access_manager_->fullscreen_controller()->EnterFullscreenModeForTab(
+       requesting_frame, FullscreenTabParams{options.display_id});
+ }
+ 
+ void BrowserWebContentsDelegate::ExitFullscreenModeForTab(
+     content::WebContents* web_contents) {
++  if (cra::g_page_fullscreen && cra::g_page_fullscreen(web_contents, false)) {
++    return;
++  }
+   exclusive_access_manager_->fullscreen_controller()->ExitFullscreenModeForTab(
+       web_contents);
+ }
+@@ -1235,6 +1253,15 @@
+ 
+ content::FullscreenState BrowserWebContentsDelegate::GetFullscreenState(
+     const content::WebContents* web_contents) const {
++  if (int cra_fullscreen = cra::g_page_is_fullscreen
++                               ? cra::g_page_is_fullscreen(web_contents)
++                               : -1;
++      cra_fullscreen >= 0) {
++    content::FullscreenState state;
++    state.target_mode = cra_fullscreen ? content::FullscreenMode::kContent
++                                       : content::FullscreenMode::kWindowed;
++    return state;
++  }
+   return exclusive_access_manager_->fullscreen_controller()->GetFullscreenState(
+       web_contents);
+ }
