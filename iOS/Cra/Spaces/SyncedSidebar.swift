@@ -23,10 +23,21 @@ enum SyncedSidebar {
     }
 
     /// Reads the synced sidebar off the main thread (finding the iCloud container can take a moment).
+    /// When the Mac's file isn't on the phone yet, iCloud is asked for it (a metadata query finds
+    /// it, then it is downloaded) and it is read once it arrives, giving up after 30 seconds:
+    /// iOS doesn't fetch another device's files until an app asks.
     static func load(_ done: @escaping (State) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let state = read()
-            DispatchQueue.main.async { done(state) }
+            DispatchQueue.main.async {
+                guard case .nothingSynced = state, LaunchOptions.value("CraSyncDir") == nil else { return done(state) }
+                ICloudFetch.shared.fetch(SettingsSync.sidebarName, timeout: 30) {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let again = read()
+                        DispatchQueue.main.async { done(again) }
+                    }
+                }
+            }
         }
     }
 
@@ -70,5 +81,57 @@ enum SyncedSidebar {
         NSFileCoordinator().coordinate(readingItemAt: file, options: [], error: &error) { url in data = try? Data(contentsOf: url) }
         guard let data, let document = MobileSpaces.document(from: data) else { return .nothingSynced }
         return .spaces(document)
+    }
+}
+
+/// Asks iCloud for a file in Cra's container that another device wrote: finds it with a
+/// metadata query (which also makes iCloud fetch the folder's listing), starts its download, and
+/// calls back once it is on the phone, or when time is up.
+final class ICloudFetch: NSObject {
+    static let shared = ICloudFetch()
+    private var query: NSMetadataQuery?
+    private var waiting: [() -> Void] = []
+    private var deadline: DispatchWorkItem?
+
+    func fetch(_ name: String, timeout: TimeInterval, done: @escaping () -> Void) {
+        waiting.append(done)
+        guard query == nil else { return }
+        let query = NSMetadataQuery()
+        query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
+        query.predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, name)
+        NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .NSMetadataQueryDidFinishGathering, object: query)
+        NotificationCenter.default.addObserver(self, selector: #selector(changed), name: .NSMetadataQueryDidUpdate, object: query)
+        self.query = query
+        query.start()
+        let deadline = DispatchWorkItem { [weak self] in self?.finish() }
+        self.deadline = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: deadline)
+    }
+
+    @objc private func changed() {
+        guard let query else { return }
+        query.disableUpdates()
+        defer { query.enableUpdates() }
+        for case let item as NSMetadataItem in query.results {
+            guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { continue }
+            let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
+            if status == NSMetadataUbiquitousItemDownloadingStatusCurrent {
+                return finish()
+            }
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        }
+    }
+
+    private func finish() {
+        deadline?.cancel()
+        deadline = nil
+        if let query {
+            query.stop()
+            NotificationCenter.default.removeObserver(self, name: nil, object: query)
+        }
+        query = nil
+        let callbacks = waiting
+        waiting = []
+        callbacks.forEach { $0() }
     }
 }

@@ -453,6 +453,7 @@ final class BrowseQueryEditTests: BrowserTestCase {
         field.typeText("pizza ovens")
         app.buttons["browse-for-me"].firstMatch.tap()
         XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+        sleep(1) // the page slides up into place as the loading screen fades
         app.webViews.links["pizza ovens"].firstMatch.tap()
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, "pizza ovens", "the question is ready to change")

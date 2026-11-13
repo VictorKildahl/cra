@@ -159,7 +159,7 @@ struct SpacesView: View {
                     .font(.system(size: 15)).foregroundStyle(.secondary).multilineTextAlignment(.center)
             default:
                 Text("Nothing synced yet").font(.system(size: 17, weight: .semibold))
-                Text("Turn on Sync in Cra on your Mac under Settings ▸ General. Your Spaces show up here.")
+                Text("Turn on Sync in Cra on your Mac under Settings ▸ General, and keep iCloud Drive on for Cra on this iPhone (Settings ▸ your name ▸ iCloud ▸ iCloud Drive). Your Spaces show up here.")
                     .font(.system(size: 15)).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
         }
