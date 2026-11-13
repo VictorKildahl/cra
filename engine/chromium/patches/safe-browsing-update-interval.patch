@@ -1,0 +1,29 @@
+Cra: Safe Browsing list updates at most once a day while Cra runs, plus the
+one shortly after launch. All of Cra shares one Google API key and its daily
+quota (10,000 list updates); Chrome's ~30 minute interval would cover a few
+hundred installs. A new phishing site can take until the next launch or day
+to be blocked.
+
+diff --git a/components/safe_browsing/core/browser/db/v4_update_protocol_manager.cc b/components/safe_browsing/core/browser/db/v4_update_protocol_manager.cc
+--- a/components/safe_browsing/core/browser/db/v4_update_protocol_manager.cc
++++ b/components/safe_browsing/core/browser/db/v4_update_protocol_manager.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "components/safe_browsing/core/browser/db/v4_update_protocol_manager.h"
+ 
++#include <algorithm>
++
+ #include "base/base64url.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+@@ -185,6 +187,10 @@
+     }
+     next_update_interval_ = base::Seconds(minimum_wait_duration_seconds);
+   }
++  // Cra: every Cra shares one API key's daily quota, so after a successful
++  // update the next one waits at least 24 hours (Google asks for ~30 minutes,
++  // a minimum). The first update after launch still comes 1-5 minutes in.
++  next_update_interval_ = std::max(next_update_interval_, base::Hours(24));
+ 
+   for (ListUpdateResponse& list_update_response :
+        *response.mutable_list_update_responses()) {

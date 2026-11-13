@@ -1,0 +1,36 @@
+diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+--- a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
++++ b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -12,6 +14,7 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/no_destructor.h"
+ #include "base/scoped_observation.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
+@@ -635,6 +638,15 @@
+   DCHECK(!popped_out_action_.has_value());
+   popped_out_action_ = action_id;
+   UpdateIconVisibility(action_id);
++  // Cra: Chrome's toolbar is never shown in Cra's app, so nobody sees the icon pop out, and waiting for its
++  // 250 ms animation only delays the popup. Snap to the new layout and open the popup right away.
++  if (cra::g_embedder_owns_app) {
++    UpdateContainerVisibility();
++    GetAnimatingLayoutManager()->ResetLayout();
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
++                                                             std::move(closure));
++    return;
++  }
+   GetAnimatingLayoutManager()->PostOrQueueAction(std::move(closure));
+   UpdateContainerVisibility();
+ }

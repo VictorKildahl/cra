@@ -1,0 +1,167 @@
+diff --git a/chrome/browser/translate/chrome_translate_client.cc b/chrome/browser/translate/chrome_translate_client.cc
+--- a/chrome/browser/translate/chrome_translate_client.cc
++++ b/chrome/browser/translate/chrome_translate_client.cc
+@@ -8,6 +8,8 @@
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/json/json_writer.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+@@ -67,6 +69,7 @@
+ #include "components/variations/service/variations_service.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/web_contents.h"
++#include "chrome/browser/cra_engine_hooks.h"
+ #include "third_party/metrics_proto/translate_event.pb.h"
+ #include "url/gurl.h"
+ 
+@@ -124,6 +127,60 @@
+          type == translate::TranslationType::kForcedTranslationByCommandline;
+ }
+ #endif  // BUILDFLAG(IS_ANDROID)
++
++// Cra: Cra draws Arc's translate UI itself, so the page's translate steps and state go to it
++// (cra::g_translate_state) instead of Chrome's bubble.
++const char* CraTranslateStepName(translate::TranslateStep step) {
++  switch (step) {
++    case translate::TRANSLATE_STEP_BEFORE_TRANSLATE:
++      return "offer";
++    case translate::TRANSLATE_STEP_TRANSLATING:
++      return "translating";
++    case translate::TRANSLATE_STEP_AFTER_TRANSLATE:
++      return "translated";
++    case translate::TRANSLATE_STEP_AFTER_UNDO:
++      return "reverted";
++    case translate::TRANSLATE_STEP_TRANSLATE_ERROR:
++      return "error";
++  }
++  return "";
++}
++
++// Sends the state, with `step` empty for a plain state change. False when the page isn't one of Cra's, which
++// then keeps Chrome's bubble.
++bool CraSendTranslateState(ChromeTranslateClient* client,
++                           std::string_view step,
++                           translate::TranslateErrors error,
++                           bool user_gesture) {
++  if (!cra::g_translate_state || !client->web_contents()) {
++    return false;
++  }
++  base::DictValue state = client->CraTranslateState();
++  state.Set("step", step);
++  state.Set("error", static_cast<int>(error));
++  state.Set("userGesture", user_gesture);
++  return cra::g_translate_state(client->web_contents(),
++                                base::WriteJson(state).value_or("{}"));
++}
++
++class CraTranslationObserver
++    : public translate::ContentTranslateDriver::TranslationObserver {
++ public:
++  explicit CraTranslationObserver(ChromeTranslateClient* client)
++      : client_(client) {}
++
++  void OnIsPageTranslatedChanged(content::WebContents* source) override {
++    CraSendTranslateState(client_, "", translate::TranslateErrors::NONE,
++                          false);
++  }
++  void OnTranslateEnabledChanged(content::WebContents* source) override {
++    CraSendTranslateState(client_, "", translate::TranslateErrors::NONE,
++                          false);
++  }
++
++ private:
++  raw_ptr<ChromeTranslateClient> client_;
++};
+ 
+ }  // namespace
+ 
+@@ -267,9 +324,12 @@
+               ->GetPrimaryModel())) {
+   translate_driver_->AddLanguageDetectionObserver(this);
+   translate_driver_->set_translate_manager(translate_manager_.get());
++  cra_translation_observer_ = std::make_unique<CraTranslationObserver>(this);
++  translate_driver_->AddTranslationObserver(cra_translation_observer_.get());
+ }
+ 
+ ChromeTranslateClient::~ChromeTranslateClient() {
++  translate_driver_->RemoveTranslationObserver(cra_translation_observer_.get());
+   translate_driver_->RemoveLanguageDetectionObserver(this);
+   translate_driver_->set_translate_manager(nullptr);
+ #if !BUILDFLAG(IS_ANDROID)
+@@ -287,6 +347,27 @@
+ 
+ const translate::LanguageState& ChromeTranslateClient::GetLanguageState() {
+   return *translate_manager_->GetLanguageState();
++}
++
++base::DictValue ChromeTranslateClient::CraTranslateState() {
++  base::DictValue state;
++  if (!translate_manager_ || !web_contents()) {
++    return state;
++  }
++  const translate::LanguageState& language = GetLanguageState();
++  std::string source, target;
++  GetTranslateLanguages(web_contents(), &source, &target,
++                        /*for_display=*/false);
++  const GURL& url = web_contents()->GetLastCommittedURL();
++  state.Set("url", url.spec());
++  state.Set("source", source);
++  state.Set("current", language.current_language());
++  state.Set("target", target);
++  state.Set("available", language.translate_enabled());
++  state.Set("translated", language.IsPageTranslated());
++  state.Set("pending", language.translation_pending());
++  state.Set("neverSite", url.has_host() && GetTranslatePrefs()->IsSiteOnNeverPromptList(url.host()));
++  return state;
+ }
+ 
+ // static
+@@ -413,6 +494,11 @@
+     return false;
+   }
+ 
++  if (CraSendTranslateState(this, CraTranslateStepName(step), error_type,
++                            triggered_from_menu)) {
++    return true;
++  }
++
+   ShowTranslateBubbleResult result = ShowBubble(
+       step, source_language, target_language, error_type, triggered_from_menu);
+   if (result != ShowTranslateBubbleResult::kSuccess &&
+diff --git a/chrome/browser/translate/chrome_translate_client.h b/chrome/browser/translate/chrome_translate_client.h
+--- a/chrome/browser/translate/chrome_translate_client.h
++++ b/chrome/browser/translate/chrome_translate_client.h
+@@ -11,6 +11,7 @@
+ #include "base/functional/callback_forward.h"
+ #include "base/gtest_prod_util.h"
+ #include "base/i18n/language_tag.h"
++#include "base/values.h"
+ #include "base/memory/weak_ptr.h"
+ #include "build/build_config.h"
+ #include "components/language/core/browser/accept_languages_service.h"
+@@ -138,6 +139,10 @@
+   // bubble.
+   void UndoTranslate();
+ 
++  // Cra: the page's translate state for Cra's own translate UI (Arc's): languages, whether translation is
++  // offered or done, and whether the site is on the never-translate list.
++  base::DictValue CraTranslateState();
++
+   // TranslateDriver::LanguageDetectionObserver implementation.
+   void OnLanguageDetermined(
+       const translate::LanguageDetectionDetails& details) override;
+@@ -175,6 +180,10 @@
+       language_detection_driver_;
+   std::unique_ptr<translate::TranslateManager> translate_manager_;
+ 
++  // Cra: tells Cra when the translate state changes.
++  std::unique_ptr<translate::ContentTranslateDriver::TranslationObserver>
++      cra_translation_observer_;
++
+ #if BUILDFLAG(IS_ANDROID)
+   // Whether to trigger a manual translation when ready.
+   // See ChromeTranslateClient::ManualTranslateOnReady

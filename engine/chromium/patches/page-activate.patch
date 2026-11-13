@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include "base/check_deref.h"
+ #include "base/metrics/histogram_macros.h"
+@@ -744,6 +746,12 @@
+     return;
+   }
+   browser_->GetTabStripModel()->ActivateTabAt(index);
++  // Cra: the page asked to come to the front (window.focus(), or clients.focus() after a notification
++  // click). Cra selects its tab and brings its own window forward; Chrome's window never shows.
++  if (cra::g_page_activation) {
++    cra::g_page_activation(contents, /*by_page=*/true);
++    return;
++  }
+   window_->Activate();
+ }
+ 

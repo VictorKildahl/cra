@@ -1,0 +1,24 @@
+# Cra's changes to Chrome's own code, applied in this order by apply.sh. Each comes from
+# scripts/cef-patches (the CEF engine's), without the parts that change CEF; a patch that isn't listed
+# here isn't ported yet (docs/chromium-engine.md, step 2).
+auto-pip-tab-hidden.patch
+blocked-popups.patch
+extension-profiles.patch
+extension-reload-location.patch
+extension-side-panels.patch
+extensions-action-updates.patch
+extensions-manifest-v2.patch
+keychain-service-name.patch
+page-live-connections.patch
+safe-browsing-update-interval.patch
+settings-no-on-startup.patch
+speech-on-device.patch
+webauthn-keychain-access-group.patch
+extension-install-ui-null-tab.patch
+# fingerprinting-protection.patch: rebased to 157; listed with the next full rebuild (it touches Blink's web preferences)
+cra-hosted-pages.patch
+page-activate.patch
+extension-tab-activate.patch
+extension-popup-no-popout-wait.patch
+translate-ui.patch
+cra-prefs.patch

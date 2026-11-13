@@ -1,0 +1,477 @@
+diff --git a/chrome/browser/devtools/inspector_protocol_config.json b/chrome/browser/devtools/inspector_protocol_config.json
+--- a/chrome/browser/devtools/inspector_protocol_config.json
++++ b/chrome/browser/devtools/inspector_protocol_config.json
+@@ -39,7 +39,7 @@
+             },
+             {
+                 "domain": "Extensions",
+-                "include": [ "triggerAction", "loadUnpacked", "getStorageItems", "setStorageItems", "removeStorageItems", "clearStorageItems", "uninstall", "getExtensions" ],
++                "include": [ "triggerAction", "setActionUpdatesEnabled", "loadUnpacked", "getStorageItems", "setStorageItems", "removeStorageItems", "clearStorageItems", "uninstall", "getExtensions" ],
+                 "async": [ "loadUnpacked", "getStorageItems", "setStorageItems", "removeStorageItems", "clearStorageItems", "uninstall" ]
+             },
+             {
+diff --git a/chrome/browser/devtools/protocol/extensions_handler.cc b/chrome/browser/devtools/protocol/extensions_handler.cc
+--- a/chrome/browser/devtools/protocol/extensions_handler.cc
++++ b/chrome/browser/devtools/protocol/extensions_handler.cc
+@@ -5,17 +5,26 @@
+ #include "chrome/browser/devtools/protocol/extensions_handler.h"
+ 
+ #include <memory>
++#include <set>
+ #include <string>
+ 
++#include "base/base64.h"
+ #include "base/files/file_path.h"
+ #include "base/functional/bind.h"
++#include "base/no_destructor.h"
++#include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
+ #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
+ #include "chrome/browser/devtools/devtools_browser_context_manager.h"
+ #include "chrome/browser/devtools/protocol/extensions.h"
+ #include "chrome/browser/devtools/protocol/protocol.h"
+ #include "chrome/browser/extensions/browser_window_util.h"
++#include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
++#include "chrome/browser/extensions/extension_action_dispatcher.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/extensions/extension_util.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/extensions/extension_action_view_model.h"
+ #include "chrome/browser/ui/extensions/extensions_container.h"
+ #include "chrome/browser/ui/toolbar/toolbar_action_view_model.h"
+@@ -23,9 +32,15 @@
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/browser/api/storage/storage_area_namespace.h"
+ #include "extensions/browser/api/storage/storage_utils.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
+ #include "extensions/browser/extension_registrar.h"
+ #include "extensions/browser/unpacked_installer.h"
+ #include "extensions/common/manifest.h"
++#include "ui/gfx/codec/png_codec.h"
++#include "ui/gfx/image/image.h"
++#include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/image/image_skia_rep.h"
+ 
+ namespace {
+ 
+@@ -160,8 +175,269 @@ GetExtensionAndStorageFrontendResult GetExtensionAndStorageFrontend(
+   return result;
+ }
+ 
++// Cra: `image` as a PNG data: URL from its largest scale, empty when it has
++// none.
++std::string PngDataUrl(const gfx::Image& image) {
++  if (image.IsEmpty()) {
++    return std::string();
++  }
++  // image_reps() returns a copy: keep it alive while `best` points into it.
++  const std::vector<gfx::ImageSkiaRep> reps = image.AsImageSkia().image_reps();
++  const gfx::ImageSkiaRep* best = nullptr;
++  for (const gfx::ImageSkiaRep& rep : reps) {
++    if (!best || rep.scale() > best->scale()) {
++      best = &rep;
++    }
++  }
++  if (!best || best->GetBitmap().drawsNothing()) {
++    return std::string();
++  }
++  std::optional<std::vector<uint8_t>> png = gfx::PNGCodec::EncodeBGRASkBitmap(
++      best->GetBitmap(), /*discard_transparency=*/false);
++  return png ? "data:image/png;base64," + base::Base64Encode(*png)
++             : std::string();
++}
++
+ }  // namespace
+ 
++// Cra: the handlers with action updates on, which also take side panel
++// requests.
++std::set<ExtensionsHandler*>& SidePanelHandlers() {
++  static base::NoDestructor<std::set<ExtensionsHandler*>> handlers;
++  return *handlers;
++}
++
++// Cra: forwards one profile's action changes to the handler.
++class ExtensionsHandler::ActionWatch
++    : public extensions::ExtensionActionDispatcher::Observer {
++ public:
++  ActionWatch(ExtensionsHandler* handler,
++              extensions::ExtensionActionDispatcher* dispatcher)
++      : handler_(handler) {
++    observation_.Observe(dispatcher);
++  }
++
++  bool IsWatching(extensions::ExtensionActionDispatcher* dispatcher) const {
++    return observation_.IsObservingSource(dispatcher);
++  }
++
++  void OnExtensionActionUpdated(
++      extensions::ExtensionAction* extension_action,
++      content::WebContents* web_contents,
++      content::BrowserContext* browser_context) override {
++    handler_->ReportAction(*extension_action, web_contents, browser_context);
++  }
++
++  void OnShuttingDown() override { observation_.Reset(); }
++
++ private:
++  raw_ptr<ExtensionsHandler> handler_;
++  base::ScopedObservation<extensions::ExtensionActionDispatcher,
++                          extensions::ExtensionActionDispatcher::Observer>
++      observation_{this};
++};
++
++protocol::DispatchResponse ExtensionsHandler::SetActionUpdatesEnabled(
++    bool enabled) {
++  if (!allow_loading_extensions_) {
++    return protocol::Response::ServerError("Method not available.");
++  }
++  if (!enabled) {
++    action_watches_.clear();
++    profile_manager_observation_.Reset();
++    reported_actions_.clear();
++    SidePanelHandlers().erase(this);
++    return protocol::Response::Success();
++  }
++  SidePanelHandlers().insert(this);
++  extensions::side_panel_util::SetCraSidePanelHandler(
++      &ExtensionsHandler::ForwardSidePanelRequest);
++  ProfileManager* profile_manager = g_browser_process->profile_manager();
++  if (!profile_manager) {
++    return protocol::Response::ServerError("No profile manager.");
++  }
++  if (!profile_manager_observation_.IsObserving()) {
++    profile_manager_observation_.Observe(profile_manager);
++  }
++  for (Profile* profile : profile_manager->GetLoadedProfiles()) {
++    WatchActions(profile);
++  }
++  return protocol::Response::Success();
++}
++
++void ExtensionsHandler::OnProfileAdded(Profile* profile) {
++  WatchActions(profile);
++}
++
++void ExtensionsHandler::OnProfileManagerDestroying() {
++  action_watches_.clear();
++  profile_manager_observation_.Reset();
++}
++
++// Observes `profile`'s actions and reports their tab-independent state.
++void ExtensionsHandler::WatchActions(Profile* profile) {
++  extensions::ExtensionActionDispatcher* dispatcher =
++      extensions::ExtensionActionDispatcher::Get(profile);
++  if (!dispatcher) {
++    return;
++  }
++  for (const auto& watch : action_watches_) {
++    if (watch->IsWatching(dispatcher)) {
++      return;
++    }
++  }
++  action_watches_.push_back(std::make_unique<ActionWatch>(this, dispatcher));
++  extensions::ExtensionActionManager* manager =
++      extensions::ExtensionActionManager::Get(profile);
++  extensions::ExtensionRegistry* registry =
++      extensions::ExtensionRegistry::Get(profile);
++  if (!manager || !registry) {
++    return;
++  }
++  for (const auto& extension : registry->enabled_extensions()) {
++    if (extensions::ExtensionAction* action =
++            manager->GetExtensionAction(*extension)) {
++      ReportAction(*action, nullptr, profile);
++    }
++  }
++}
++
++// Reports what the extension set for a tab (only that tab's own values), or
++// with no `web_contents` its tab-independent values.
++void ExtensionsHandler::ReportAction(const extensions::ExtensionAction& action,
++                                     content::WebContents* web_contents,
++                                     content::BrowserContext* context) {
++  if (!frontend_ || !context) {
++    return;
++  }
++  const std::string profile = Profile::FromBrowserContext(context)
++                                  ->GetOriginalProfile()
++                                  ->GetBaseName()
++                                  .AsUTF8Unsafe();
++  int tab_id = extensions::ExtensionAction::kDefaultTabId;
++  std::optional<std::string> target_id;
++  if (web_contents) {
++    // Cra knows a tab by its page target; one DevTools never listed has none.
++    if (!content::DevToolsAgentHost::HasFor(web_contents)) {
++      return;
++    }
++    target_id =
++        content::DevToolsAgentHost::GetOrCreateFor(web_contents)->GetId();
++    tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents);
++  }
++  const std::string key = profile + "/" + action.extension_id() + "/" +
++                          target_id.value_or(std::string());
++  if (web_contents && web_contents->IsBeingDestroyed()) {
++    reported_actions_.erase(key);
++    return;
++  }
++  const bool for_tab = target_id.has_value();
++  const std::string icon = PngDataUrl(
++      !for_tab || action.HasIcon(tab_id) ? action.GetExplicitlySetIcon(tab_id)
++                                         : action.GetDeclarativeIcon(tab_id));
++  const std::string title =
++      !for_tab || action.HasTitle(tab_id) ? action.GetTitle(tab_id) : "";
++  // A tab's badge is its own text, else the declarativeNetRequest action
++  // count when the extension asked for it.
++  const std::string badge_text =
++      !for_tab ? action.GetExplicitlySetBadgeText(tab_id)
++      : action.HasBadgeText(tab_id) || action.HasDNRActionCount(tab_id)
++          ? action.GetDisplayBadgeText(tab_id)
++          : "";
++  auto hex = [](SkColor color) {
++    return base::StringPrintf("#%02X%02X%02X%02X", SkColorGetR(color),
++                              SkColorGetG(color), SkColorGetB(color),
++                              SkColorGetA(color));
++  };
++  const std::string badge_color =
++      !for_tab || action.HasBadgeBackgroundColor(tab_id)
++          ? hex(action.GetBadgeBackgroundColor(tab_id))
++          : "";
++  const std::string badge_text_color =
++      !for_tab || action.HasBadgeTextColor(tab_id)
++          ? hex(action.GetBadgeTextColor(tab_id))
++          : "";
++  const std::string state = icon + "\n" + title + "\n" + badge_text + "\n" +
++                            badge_color + "\n" + badge_text_color;
++  const bool empty = icon.empty() && title.empty() && badge_text.empty() &&
++                     badge_color.empty() && badge_text_color.empty();
++  auto it = reported_actions_.find(key);
++  if (it == reported_actions_.end() ? (empty && for_tab) : it->second == state) {
++    return;
++  }
++  if (empty) {
++    reported_actions_.erase(key);
++  } else {
++    reported_actions_[key] = state;
++  }
++  frontend_->ActionUpdated(action.extension_id(), profile, icon, title,
++                           badge_text, badge_color, badge_text_color,
++                           std::move(target_id));
++}
++
++// static
++bool ExtensionsHandler::ForwardSidePanelRequest(
++    content::WebContents* web_contents,
++    const extensions::ExtensionId& extension_id,
++    extensions::side_panel_util::CraSidePanelRequest request) {
++  bool taken = false;
++  // A copy: a handler can't go away while it reports, but stay safe.
++  const std::set<ExtensionsHandler*> handlers = SidePanelHandlers();
++  for (ExtensionsHandler* handler : handlers) {
++    taken = handler->ReportSidePanelRequest(web_contents, extension_id,
++                                            request) ||
++            taken;
++  }
++  return taken;
++}
++
++// Reports the request with the panel page for `web_contents`'s tab; false
++// (Chrome keeps it) when the extension has no panel enabled there.
++bool ExtensionsHandler::ReportSidePanelRequest(
++    content::WebContents* web_contents,
++    const extensions::ExtensionId& extension_id,
++    extensions::side_panel_util::CraSidePanelRequest request) {
++  using Request = extensions::side_panel_util::CraSidePanelRequest;
++  if (!frontend_ || !web_contents) {
++    return false;
++  }
++  content::BrowserContext* context = web_contents->GetBrowserContext();
++  extensions::ExtensionRegistry* registry =
++      extensions::ExtensionRegistry::Get(context);
++  const extensions::Extension* extension =
++      registry ? registry->enabled_extensions().GetByID(extension_id)
++               : nullptr;
++  if (!extension) {
++    return false;
++  }
++  std::string url;
++  if (request != Request::kClose) {
++    extensions::SidePanelService* service =
++        extensions::SidePanelService::Get(context);
++    if (!service) {
++      return false;
++    }
++    extensions::api::side_panel::PanelOptions options = service->GetOptions(
++        *extension, extensions::ExtensionTabUtil::GetTabId(web_contents));
++    if (!options.path || options.path->empty() ||
++        (options.enabled.has_value() && !*options.enabled)) {
++      return false;
++    }
++    url = extension->ResolveExtensionURL(*options.path).spec();
++  }
++  const std::string profile = Profile::FromBrowserContext(context)
++                                  ->GetOriginalProfile()
++                                  ->GetBaseName()
++                                  .AsUTF8Unsafe();
++  const std::string kind = request == Request::kToggle ? "toggle"
++                           : request == Request::kOpen ? "open"
++                                                       : "close";
++  frontend_->SidePanelRequested(
++      extension_id, profile, kind, url,
++      content::DevToolsAgentHost::GetOrCreateFor(web_contents)->GetId());
++  return true;
++}
++
+ protocol::DispatchResponse ExtensionsHandler::TriggerAction(
+     const std::string& extension_id,
+     const std::string& target_id) {
+@@ -219,9 +495,14 @@ ExtensionsHandler::ExtensionsHandler(protocol::UberDispatcher* dispatcher,
+     : target_id_(target_id),
+       allow_loading_extensions_(allow_loading_extensions) {
+   protocol::Extensions::Dispatcher::wire(dispatcher, this);
++  // Cra: actionUpdated needs a frontend.
++  frontend_ =
++      std::make_unique<protocol::Extensions::Frontend>(dispatcher->channel());
+ }
+ 
+-ExtensionsHandler::~ExtensionsHandler() = default;
++ExtensionsHandler::~ExtensionsHandler() {
++  SidePanelHandlers().erase(this);
++}
+ 
+ void ExtensionsHandler::LoadUnpacked(
+     const protocol::String& path,
+diff --git a/chrome/browser/devtools/protocol/extensions_handler.h b/chrome/browser/devtools/protocol/extensions_handler.h
+--- a/chrome/browser/devtools/protocol/extensions_handler.h
++++ b/chrome/browser/devtools/protocol/extensions_handler.h
+@@ -5,13 +5,32 @@
+ #ifndef CHROME_BROWSER_DEVTOOLS_PROTOCOL_EXTENSIONS_HANDLER_H_
+ #define CHROME_BROWSER_DEVTOOLS_PROTOCOL_EXTENSIONS_HANDLER_H_
+ 
++#include <map>
++#include <vector>
++
++#include "base/scoped_observation.h"
+ #include "chrome/browser/devtools/protocol/extensions.h"
+ #include "chrome/browser/devtools/protocol/protocol.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "chrome/browser/profiles/profile_manager_observer.h"
++#include "chrome/browser/ui/extensions/extension_side_panel_utils.h"
+ #include "extensions/browser/api/storage/storage_frontend.h"
+ #include "extensions/common/extension.h"
+ 
++class Profile;
++
++namespace content {
++class BrowserContext;
++class WebContents;
++}  // namespace content
++
++namespace extensions {
++class ExtensionAction;
++}  // namespace extensions
++
+ // Implements the Extensions domain for Chrome DevTools Protocol.
+-class ExtensionsHandler : public protocol::Extensions::Backend {
++class ExtensionsHandler : public protocol::Extensions::Backend,
++                          public ProfileManagerObserver {
+  public:
+   explicit ExtensionsHandler(protocol::UberDispatcher* dispatcher,
+                              const std::string& target_id,
+@@ -26,6 +45,24 @@ class ExtensionsHandler : public protocol::Extensions::Backend {
+   protocol::DispatchResponse TriggerAction(
+       const protocol::String& extendsion_id,
+       const protocol::String& target_id) override;
++  // Cra: actionUpdated for chrome.action.setIcon and friends.
++  protocol::DispatchResponse SetActionUpdatesEnabled(bool enabled) override;
++  // ProfileManagerObserver:
++  void OnProfileAdded(Profile* profile) override;
++  void OnProfileManagerDestroying() override;
++  void WatchActions(Profile* profile);
++  void ReportAction(const extensions::ExtensionAction& action,
++                    content::WebContents* web_contents,
++                    content::BrowserContext* context);
++  // Cra: sidePanelRequested, for every handler with action updates on.
++  static bool ForwardSidePanelRequest(
++      content::WebContents* web_contents,
++      const extensions::ExtensionId& extension_id,
++      extensions::side_panel_util::CraSidePanelRequest request);
++  bool ReportSidePanelRequest(
++      content::WebContents* web_contents,
++      const extensions::ExtensionId& extension_id,
++      extensions::side_panel_util::CraSidePanelRequest request);
+   void LoadUnpacked(const protocol::String& path,
+                     std::optional<bool> enable_in_incognito,
+                     std::unique_ptr<LoadUnpackedCallback> callback) override;
+@@ -83,6 +120,15 @@ class ExtensionsHandler : public protocol::Extensions::Backend {
+   bool allow_loading_extensions_;
+ 
+   std::unique_ptr<protocol::Extensions::Frontend> frontend_;
++
++  // Cra: one observer per profile's ExtensionActionDispatcher.
++  class ActionWatch;
++  std::vector<std::unique_ptr<ActionWatch>> action_watches_;
++  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
++      profile_manager_observation_{this};
++  // The last reported state of each action that has one, by profile, extension
++  // and page target, so a navigation that clears nothing reports nothing.
++  std::map<std::string, std::string> reported_actions_;
+   base::WeakPtrFactory<ExtensionsHandler> weak_factory_{this};
+ };
+ 
+diff --git a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
+--- a/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
++++ b/third_party/blink/public/devtools_protocol/domains/Extensions.pdl
+@@ -22,6 +22,51 @@ experimental domain Extensions
+       # A tab target ID to trigger the default extension action on.
+       string targetId
+ 
++  # Cra: reports changes to extensions' toolbar actions (chrome.action.setIcon,
++  # setTitle, setBadgeText) in every profile as `actionUpdated`. Turning it on
++  # first reports each enabled extension's tab-independent state.
++  command setActionUpdatesEnabled
++    parameters
++      boolean enabled
++
++  # Cra: an extension changed its toolbar action. Empty values are ones the
++  # extension did not set: the manifest's default applies, or for a tab, the
++  # tab-independent value.
++  event actionUpdated
++    parameters
++      # Extension id.
++      string id
++      # Profile directory name ("Default", "Profile 1").
++      string profile
++      # The icon the extension set, as a PNG data: URL at its largest scale.
++      string icon
++      string title
++      string badgeText
++      # Badge background as #RRGGBBAA.
++      string badgeColor
++      # Badge text colour (chrome.action.setBadgeTextColor) as #RRGGBBAA.
++      string badgeTextColor
++      # Page target of the tab the change is for; absent for the
++      # tab-independent state.
++      optional string targetId
++
++  # Cra: with action updates on, an extension's request to show, hide or toggle
++  # its side panel for a page CEF hosts (its toolbar action with
++  # openPanelOnActionClick, chrome.sidePanel.open or close) comes here instead
++  # of to Chrome's side panel, which CEF never shows.
++  event sidePanelRequested
++    parameters
++      # Extension id.
++      string id
++      # Profile directory name ("Default", "Profile 1").
++      string profile
++      # "toggle", "open" or "close".
++      string request
++      # The panel's page for that tab (chrome-extension://…); empty for "close".
++      string url
++      # Page target of the tab the request is for.
++      string targetId
++
+   # Installs an unpacked extension from the filesystem similar to
+   # --load-extension CLI flags. Returns extension ID once the extension
+   # has been installed.

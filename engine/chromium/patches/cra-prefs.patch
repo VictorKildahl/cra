@@ -1,0 +1,15 @@
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -1993,6 +1993,11 @@
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+                           const std::string& locale) {
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
++  // Cra: its own profile prefs, which Cra's engine layer sets (as the CEF bridge registered them):
++  // Settings ▸ Privacy ▸ Fingerprinting protection (fingerprinting-protection.patch reads it), and whether the
++  // notification blocks Cra 0.1.27 and older made have gone back to Ask.
++  registry->RegisterBooleanPref("cra.fingerprinting_protection", false);
++  registry->RegisterBooleanPref("cra.notification_blocks_cleared", false);
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);

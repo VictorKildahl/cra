@@ -7,6 +7,10 @@ source_set("core") {
     "bridge.h",
     "bridge.mm",
     "engine_main.mm",
+    "page_protocol.h",
+    "page_protocol.mm",
+    "profile_prefs.h",
+    "profile_prefs.mm",
     "spike_checks.h",
     "spike_checks.mm",
   ]
@@ -25,6 +29,8 @@ source_set("core") {
     "//chrome/browser/lifetime:lifetime",
     "//chrome/browser/ui:browser_tabstrip",
     "//url",
+    "//chrome/browser/picture_in_picture:picture_in_picture",
+    "//chrome/browser/translate:translate",
     "//base/version_info",
     "//chrome/common:constants",
     "//components/tabs:public",
@@ -32,5 +38,12 @@ source_set("core") {
     "//ui/base",
     "//chrome/browser:chrome_browser_application_mac",
     "//components/keep_alive_registry",
+    "//components/prefs",
+    "//components/translate/content/browser",
+    "//components/translate/core/browser",
+    "//components/performance_manager",
+    "//components/sessions",
+    "//extensions/browser",
+    "//extensions/common:mojom",
   ]
 }

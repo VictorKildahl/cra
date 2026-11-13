@@ -2,9 +2,10 @@
 // engine/chromium/apply.sh), the same surface Cra's Swift app drives on CEF. docs/chromium-engine.md has
 // the plan; step 3 fills this in method by method.
 //
-// Shape: one hidden Chrome Browser per profile holds that profile's pages as tabs. Its first tab is a
-// blank page that stays the active one, so Chrome's (never shown) window never takes a page's view; every
-// page of Cra's is a background tab whose view Cra puts in its own windows (containerView).
+// Shape: one hidden Chrome Browser per profile holds that profile's pages as tabs, behind a blank first tab
+// that keeps the Browser open when Cra has no page in it. Each of Cra's pages carries views::CraHostedPageKey,
+// so Chrome's (never shown) window never attaches its view (patches/cra-hosted-pages.patch); Cra puts it in
+// its own windows (containerView), and Chrome's active tab follows the page Cra focuses.
 //
 // What isn't done yet does nothing and returns an empty answer. Each such method says "Not yet".
 
@@ -16,8 +17,14 @@
 #import "cra/CraCEF.h"
 
 #include "cra/bridge.h"
+#include "cra/page_protocol.h"
+#include "cra/profile_prefs.h"
+
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -38,8 +45,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/common/chrome_result_codes.h"
@@ -54,6 +63,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/net_errors.h"
+#include "ui/base/base_window.h"
+#include "ui/views/controls/webview/cra_hosted_page.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -89,6 +100,7 @@ NSString* g_log_path = nil;
 NSString* g_locale = nil;
 BOOL g_mock_keychain = NO;
 NSArray<NSString*>* g_extension_paths = nil;
+NSString* g_extension_profiles = nil;
 int g_exit_code = 0;
 bool g_ready = false;
 bool g_quitting = false;
@@ -96,6 +108,19 @@ NSMutableArray<void (^)(void)>* g_ready_blocks = nil;
 // Chrome quits once nothing keeps it alive; in Chrome AppController does, which Cra's app replaces. Held from
 // start-up to Cra's quit.
 ScopedKeepAlive* g_keep_alive = nullptr;
+
+// The app's handlers (CraCEF.h says what each is for).
+CraBrowser* _Nullable (^g_extension_tab_handler)(NSString*, NSString* _Nullable, BOOL, CraBrowser* _Nullable) = nil;
+void (^g_stray_page_handler)(NSString*, NSString* _Nullable) = nil;
+// Chrome windows an extension opened as popups (windows.create type popup), which stay Chrome's.
+NSHashTable<NSWindow*>* g_extension_windows = nil;
+// Set while the bridge makes one of its own hidden Browsers.
+bool g_making_host = false;
+
+// The profile folder's name ("Default", "Profile 1"), nil off the record: what the app's handlers take.
+NSString* ProfileFolder(Profile* profile) {
+  return profile->IsOffTheRecord() ? nil : base::SysUTF8ToNSString(profile->GetBaseName().AsUTF8Unsafe());
+}
 
 // Every CraBrowser that has a page, by its page.
 std::map<content::WebContents*, CraBrowser* __weak>& PagesByContents() {
@@ -153,7 +178,7 @@ class PageObserver : public content::WebContentsObserver {
 class PageHost : public TabStripModelObserver {
  public:
   explicit PageHost(BrowserWindowInterface* browser) : browser_(browser) {
-    // The blank page that stays active, so Chrome never puts one of Cra's pages in its own window.
+    // The blank page: the Browser stays open with no page of Cra's in it.
     chrome::AddTabAt(browser, GURL(url::kAboutBlankURL), -1, true);
     placeholder_ = browser->GetTabStripModel()->GetActiveWebContents();
     browser->GetTabStripModel()->AddObserver(this);
@@ -161,7 +186,8 @@ class PageHost : public TabStripModelObserver {
 
   BrowserWindowInterface* browser() { return browser_; }
 
-  // Makes the blank page the active one again (a popup that opened in front took its place).
+  // Makes the blank page the active one, so a popup that opened in front leaves Chrome's window before Cra
+  // marks it as its own and takes its view.
   void KeepPlaceholderActive() {
     TabStripModel* tabs = browser_->GetTabStripModel();
     int index = tabs->GetIndexOfWebContents(placeholder_);
@@ -193,23 +219,35 @@ class PageHost : public TabStripModelObserver {
         }
       }
       bool background = model->GetActiveWebContents() != page;
+      // The page in front before this one came: an extension's tab opens beside it (its "current window").
+      content::WebContents* before = selection.old_contents;
       Later(base::BindOnce(&PageHost::Adopt, base::Unretained(this), page->GetWeakPtr(),
-                           opener ? opener->GetWeakPtr() : base::WeakPtr<content::WebContents>(), background));
+                           opener ? opener->GetWeakPtr() : base::WeakPtr<content::WebContents>(),
+                           before ? before->GetWeakPtr() : base::WeakPtr<content::WebContents>(), background));
     }
   }
 
   void OnTabStripModelDestroyed(TabStripModel* model) override;
 
  private:
-  void Adopt(base::WeakPtr<content::WebContents> page, base::WeakPtr<content::WebContents> opener, bool background) {
+  void Adopt(base::WeakPtr<content::WebContents> page,
+             base::WeakPtr<content::WebContents> opener,
+             base::WeakPtr<content::WebContents> before,
+             bool background) {
     if (!page) {
       return;
     }
     KeepPlaceholderActive();
+    NSString* url = NS(page->GetVisibleURL().spec());
     CraBrowser* from = opener ? BrowserFor(opener.get()) : nil;
     CraBrowser* host = nil;
     if (from && [from.delegate respondsToSelector:@selector(browser:popupHostForURL:inBackground:)]) {
-      host = [from.delegate browser:from popupHostForURL:NS(page->GetVisibleURL().spec()) inBackground:background];
+      host = [from.delegate browser:from popupHostForURL:url inBackground:background];
+    } else if (!from && g_extension_tab_handler) {
+      // No page of Cra's opened it: an extension's chrome.tabs.create. Cra opens it as one of its tabs, and the
+      // extension keeps this page (its tab id) (GitHub #292).
+      Profile* profile = Profile::FromBrowserContext(page->GetBrowserContext());
+      host = g_extension_tab_handler(url, ProfileFolder(profile), background, before ? BrowserFor(before.get()) : nil);
     }
     if (!host) {
       // Not Cra's to show (blocked, or no page of Cra's opened it): it goes.
@@ -241,15 +279,120 @@ void PageHost::OnTabStripModelDestroyed(TabStripModel* model) {
   placeholder_ = nullptr;
 }
 
+// The page's tab in its host Browser, or nullptr.
+PageHost* HostOf(content::WebContents* contents) {
+  for (auto& [profile, host] : Hosts()) {
+    if (host->browser() && host->browser()->GetTabStripModel()->GetIndexOfWebContents(contents) != TabStripModel::kNoTab) {
+      return host;
+    }
+  }
+  return nullptr;
+}
+
+void PageActivation(content::WebContents* contents, bool by_page) {
+  CraBrowser* browser = BrowserFor(contents);
+  if ([browser.delegate respondsToSelector:@selector(browserRequestsActivation:byPage:)]) {
+    [browser.delegate browserRequestsActivation:browser byPage:by_page];
+  }
+}
+
+// Cra's translate UI (patches/translate-ui.patch): false for a page that isn't Cra's.
+bool TranslateState(content::WebContents* contents, const std::string& state) {
+  CraBrowser* browser = BrowserFor(contents);
+  if (!browser) {
+    return false;
+  }
+  if ([browser.delegate respondsToSelector:@selector(browser:didChangeTranslateState:)]) {
+    [browser.delegate browser:browser didChangeTranslateState:NS(state)];
+  }
+  return true;
+}
+
 PageHost* HostFor(Profile* profile) {
   auto it = Hosts().find(profile);
   if (it != Hosts().end()) {
     return it->second;
   }
+  g_making_host = true;
   BrowserWindowInterface* browser = CreateBrowserWindow(BrowserWindowCreateParams(*profile, false));
+  g_making_host = false;
   auto* host = new PageHost(browser);
   Hosts()[profile] = host;
   return host;
+}
+
+bool IsHost(BrowserWindowInterface* browser) {
+  for (auto& [profile, host] : Hosts()) {
+    if (host->browser() == browser) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Chrome windows Cra didn't make (the CEF bridge's stray page handling): a normal one, which Chrome opens for an
+// extension's windows.create or a welcome page after an extension loads, is never shown; its page becomes a
+// Cra tab through the app's stray page handler and the window closes. A popup one (windows.create type
+// popup) stays Chrome's window, as in Arc.
+class StrayWindows : public BrowserCollectionObserver, public TabStripModelObserver {
+ public:
+  void OnBrowserCreated(BrowserWindowInterface* browser) override {
+    if (g_making_host || IsHost(browser)) {
+      return;
+    }
+    NSWindow* window = browser->GetWindow()->GetNativeWindow().GetNativeNSWindow();
+    if (browser->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
+      if (window) {
+        if (!g_extension_windows) {
+          g_extension_windows = [NSHashTable weakObjectsHashTable];
+        }
+        [g_extension_windows addObject:window];
+      }
+      return;
+    }
+    window.alphaValue = 0;
+    window.ignoresMouseEvents = YES;
+    browser->GetTabStripModel()->AddObserver(this);
+    Later(base::BindOnce(&StrayWindows::TakePages, base::Unretained(this), browser->GetWeakPtr()));
+  }
+
+  void OnTabStripModelChanged(TabStripModel* model,
+                              const TabStripModelChange& change,
+                              const TabStripSelectionChange& selection) override {}
+
+ private:
+  // Once Chrome has put the window's pages in (they start loading as they go in).
+  void TakePages(base::WeakPtr<BrowserWindowInterface> browser) {
+    if (!browser) {
+      return;
+    }
+    TabStripModel* tabs = browser->GetTabStripModel();
+    NSString* profile = ProfileFolder(browser->GetProfile());
+    for (int i = 0; i < tabs->count(); ++i) {
+      std::string url = tabs->GetWebContentsAt(i)->GetVisibleURL().spec();
+      // Chrome's own empty tab (after a Web Store install): nobody asked for it.
+      if (url.empty() || url == url::kAboutBlankURL || base::StartsWith(url, "chrome://newtab") ||
+          base::StartsWith(url, "chrome://new-tab-page")) {
+        continue;
+      }
+      if (g_stray_page_handler) {
+        g_stray_page_handler(NS(url), profile);
+      }
+    }
+    tabs->RemoveObserver(this);
+    browser->GetWindow()->Close();
+  }
+};
+
+StrayWindows& Strays() {
+  static auto* strays = new StrayWindows();
+  return *strays;
+}
+
+// Profiles asked for that haven't loaded yet.
+std::set<base::FilePath>& LoadingProfiles() {
+  static auto* loading = new std::set<base::FilePath>();
+  return *loading;
 }
 
 base::FilePath ProfileDir(NSString* profilePath) {
@@ -257,11 +400,128 @@ base::FilePath ProfileDir(NSString* profilePath) {
   return profilePath.length ? base::FilePath(UTF8(profilePath)) : profiles->user_data_dir().AppendASCII("Default");
 }
 
+// AuthServerAllowlist as an MDM sets it for Chrome or Edge (e.g. "*.example.com"), which Cra's own bundle id
+// doesn't get; CRA_AUTH_SERVER_ALLOWLIST overrides it for machines without such a profile.
+NSString* ManagedAuthServerAllowlist() {
+  NSString* env = NSProcessInfo.processInfo.environment[@"CRA_AUTH_SERVER_ALLOWLIST"];
+  if (env.length) {
+    return env;
+  }
+  for (NSString* domain in @[ @"com.google.Chrome", @"com.microsoft.Edge" ]) {
+    for (NSString* key in @[ @"AuthServerAllowlist", @"AuthServerWhitelist" ]) {
+      id value = CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)domain));
+      if ([value isKindOfClass:NSString.class] && [value length]) {
+        return value;
+      }
+    }
+  }
+  return nil;
+}
+
+// MARK: Browser-level DevTools pipe
+//
+// With --remote-debugging-pipe Chrome reads protocol messages from fd 3 and writes replies to fd 4,
+// NUL-terminated. Chrome runs in this process, so Cra holds the other ends: a trusted client with no port open
+// to anyone else (the CEF bridge's, as it was).
+int g_cdp_write_fd = -1;
+dispatch_source_t g_cdp_read_source;
+NSMutableData* g_cdp_buffer = nil;
+NSMutableDictionary<NSNumber*, void (^)(NSString*, NSString*)>* g_cdp_pending = nil;
+int g_cdp_next_id = 0;
+void (^g_cdp_event_handler)(NSString*, NSString*, NSString*) = nil;
+
+NSString* JSONString(id object) {
+  return [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:object ?: @{} options:0 error:nil]
+                               encoding:NSUTF8StringEncoding];
+}
+
+void CDPDeliver(NSData* chunk) {
+  NSDictionary* message = [NSJSONSerialization JSONObjectWithData:chunk options:0 error:nil];
+  if (![message isKindOfClass:NSDictionary.class]) {
+    return;
+  }
+  NSNumber* key = [message[@"id"] isKindOfClass:NSNumber.class] ? message[@"id"] : nil;
+  if (!key) {
+    if (g_cdp_event_handler && [message[@"method"] isKindOfClass:NSString.class]) {
+      g_cdp_event_handler(message[@"method"], JSONString(message[@"params"]), message[@"sessionId"]);
+    }
+    return;
+  }
+  void (^done)(NSString*, NSString*) = g_cdp_pending[key];
+  [g_cdp_pending removeObjectForKey:key];
+  if (!done) {
+    return;
+  }
+  NSString* json = JSONString(message[@"error"] ?: message[@"result"]);
+  message[@"error"] ? done(nil, json) : done(json, nil);
+}
+
+// Makes the pipe pair on fds 3 and 4. False (and no pipe) when either is in use.
+bool CDPPipeSetUp() {
+  if (g_cdp_write_fd >= 0) {
+    return true;
+  }
+  if (fcntl(3, F_GETFD) != -1 || fcntl(4, F_GETFD) != -1) {
+    return false;
+  }
+  int to_chrome[2];
+  int from_chrome[2];
+  if (pipe(to_chrome) != 0) {
+    return false;
+  }
+  if (pipe(from_chrome) != 0) {
+    close(to_chrome[0]);
+    close(to_chrome[1]);
+    return false;
+  }
+  // Every end above 10 first: pipe() itself may have handed out 3 or 4.
+  int our_write = fcntl(to_chrome[1], F_DUPFD_CLOEXEC, 10);
+  int our_read = fcntl(from_chrome[0], F_DUPFD_CLOEXEC, 10);
+  int chrome_read = fcntl(to_chrome[0], F_DUPFD, 10);
+  int chrome_write = fcntl(from_chrome[1], F_DUPFD, 10);
+  for (int fd : {to_chrome[0], to_chrome[1], from_chrome[0], from_chrome[1]}) {
+    close(fd);
+  }
+  dup2(chrome_read, 3);
+  dup2(chrome_write, 4);
+  close(chrome_read);
+  close(chrome_write);
+  g_cdp_write_fd = our_write;
+  g_cdp_buffer = [NSMutableData data];
+  g_cdp_pending = [NSMutableDictionary dictionary];
+  g_cdp_read_source = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, our_read, 0, dispatch_get_main_queue());
+  dispatch_source_set_event_handler(g_cdp_read_source, ^{
+    char buffer[65536];
+    ssize_t n = read(our_read, buffer, sizeof buffer);
+    if (n <= 0) {
+      dispatch_source_cancel(g_cdp_read_source);
+      return;
+    }
+    [g_cdp_buffer appendBytes:buffer length:static_cast<NSUInteger>(n)];
+    for (;;) {
+      NSRange nul = [g_cdp_buffer rangeOfData:[NSData dataWithBytes:"" length:1]
+                                      options:0
+                                        range:NSMakeRange(0, g_cdp_buffer.length)];
+      if (nul.location == NSNotFound) {
+        break;
+      }
+      CDPDeliver([g_cdp_buffer subdataWithRange:NSMakeRange(0, nul.location)]);
+      [g_cdp_buffer replaceBytesInRange:NSMakeRange(0, nul.location + 1) withBytes:NULL length:0];
+    }
+  });
+  dispatch_resume(g_cdp_read_source);
+  return true;
+}
+
 }  // namespace
 
 namespace cra {
 
 void RunReadyBlocks() {
+  g_page_activation = &PageActivation;
+  g_translate_state = &TranslateState;
+  GlobalBrowserCollection::GetInstance()->AddObserver(&Strays());
+  StartProfilePrefs();
   g_keep_alive = new ScopedKeepAlive(KeepAliveOrigin::APP_CONTROLLER, KeepAliveRestartOption::DISABLED);
   g_ready = true;
   NSArray<void (^)(void)>* blocks = g_ready_blocks;
@@ -287,6 +547,8 @@ void RunReadyBlocks() {
   NSView* _container;
   raw_ptr<content::WebContents> _contents;
   std::unique_ptr<PageObserver> _observer;
+  // The page's DevTools protocol session, made on the first -sendDevToolsMethod:.
+  std::unique_ptr<cra::PageSession> _session;
   NSString* _pendingURL;
   BOOL _waitingForPopup;
   BOOL _audioMuted;
@@ -366,7 +628,9 @@ void RunReadyBlocks() {
     [self createPageInProfile:profile];
   } else {
     CraBrowser* __weak weakSelf = self;
+    LoadingProfiles().insert(dir);
     profiles->CreateProfileAsync(dir, base::BindOnce(^(Profile* loaded) {
+                                   LoadingProfiles().erase(dir);
                                    if (loaded) {
                                      [weakSelf createPageInProfile:loaded];
                                    }
@@ -388,7 +652,6 @@ void RunReadyBlocks() {
   g_adding_own_page = true;
   content::WebContents* contents = chrome::AddAndReturnTabAt(host->browser(), url, -1, /*foreground=*/false);
   g_adding_own_page = false;
-  host->KeepPlaceholderActive();
   _pendingURL = nil;
   [self contentsCreated:contents];
 }
@@ -400,8 +663,23 @@ void RunReadyBlocks() {
   [self pageTitleChanged];
 }
 
+// Chrome's active tab follows the page Cra focuses, so extensions see the tab the user is on. A page Cra hosts
+// is never attached to Chrome's window (cra_hosted_page.h), so this moves nothing.
+- (void)makeChromeActiveTab {
+  PageHost* host = _contents ? HostOf(_contents) : nullptr;
+  if (!host) {
+    return;
+  }
+  TabStripModel* tabs = host->browser()->GetTabStripModel();
+  int index = tabs->GetIndexOfWebContents(_contents);
+  if (index != TabStripModel::kNoTab && tabs->active_index() != index) {
+    tabs->ActivateTabAt(index);
+  }
+}
+
 - (void)contentsCreated:(content::WebContents*)contents {
   _contents = contents;
+  contents->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
   _observer = std::make_unique<PageObserver>(contents, self);
   PagesByContents()[contents] = self;
   _isCreated = YES;
@@ -527,6 +805,7 @@ void RunReadyBlocks() {
 
 - (void)pageDestroyed {
   _closedByPage = !_closeRequested && !g_quitting;
+  _session.reset();
   PagesByContents().erase(_contents.get());
   _observer.reset();
   _contents = nullptr;
@@ -598,6 +877,7 @@ void RunReadyBlocks() {
   if (window && !window.isKeyWindow && window.canBecomeKeyWindow) {
     [window makeKeyWindow];
   }
+  [self makeChromeActiveTab];
   _contents->Focus();
 }
 
@@ -698,15 +978,90 @@ void RunReadyBlocks() {
     [self executeJavaScript:script];
   }
 }
-- (void)evaluateInIsolatedWorld:(NSString*)world
-                         params:(NSString*)params
-                     completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
-  completion(nil, @"not yet on Chrome's framework");
-}
+#pragma mark DevTools protocol
+
 - (void)sendDevToolsMethod:(NSString*)method
                     params:(NSString*)params
                 completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
-  completion(nil, @"not yet on Chrome's framework");
+  if (!_contents) {
+    completion(nil, @"no browser");
+    return;
+  }
+  if (!_session) {
+    CraBrowser* __weak weakSelf = self;
+    _session = std::make_unique<cra::PageSession>(_contents, ^(NSString* event, NSString* eventParams) {
+      [weakSelf protocolEvent:event params:eventParams];
+    });
+  }
+  _session->Send(UTF8(method), UTF8(params), completion);
+}
+
+// As the CEF bridge: an MCP drag's payload (Input.dragIntercepted) is kept for the drag; the client's own
+// events go to devToolsEventHandler while one is set.
+- (void)protocolEvent:(NSString*)method params:(NSString*)params {
+  if (![method isEqualToString:@"Input.dragIntercepted"]) {
+    if (self.devToolsEventHandler && params.length <= 262144) {
+      self.devToolsEventHandler(method, params);
+    }
+    return;
+  }
+  if (params.length > 65536) {
+    self.interceptedDragData = @"{\"oversized\":true}";
+    return;
+  }
+  NSDictionary* payload = [NSJSONSerialization JSONObjectWithData:[params dataUsingEncoding:NSUTF8StringEncoding]
+                                                          options:0
+                                                            error:nil];
+  NSDictionary* drag = [payload isKindOfClass:NSDictionary.class] ? payload[@"data"] : nil;
+  if (![drag isKindOfClass:NSDictionary.class]) {
+    return;
+  }
+  NSData* encoded = [NSJSONSerialization dataWithJSONObject:drag options:0 error:nil];
+  self.interceptedDragData = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+}
+
+// Runtime.evaluate in the main frame's isolated world `world`, as the CEF bridge does it.
+- (void)evaluateInIsolatedWorld:(NSString*)world
+                         params:(NSString*)params
+                     completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+  CraBrowser* __weak weakSelf = self;
+  id (^parse)(NSString*) = ^id(NSString* json) {
+    return json ? [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding]
+                                                  options:0
+                                                    error:nil]
+                : nil;
+  };
+  [self sendDevToolsMethod:@"Page.getFrameTree"
+                    params:@"{}"
+                completion:^(NSString* tree, NSString* error) {
+                  NSString* frameID = [parse(tree) valueForKeyPath:@"frameTree.frame.id"];
+                  CraBrowser* strong = weakSelf;
+                  if (!strong || ![frameID isKindOfClass:NSString.class]) {
+                    completion(nil, error ?: @"no frame");
+                    return;
+                  }
+                  NSData* body = [NSJSONSerialization dataWithJSONObject:@{@"frameId" : frameID, @"worldName" : world}
+                                                                 options:0
+                                                                   error:nil];
+                  [strong sendDevToolsMethod:@"Page.createIsolatedWorld"
+                                      params:[[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding]
+                                  completion:^(NSString* made, NSString* madeError) {
+                                    NSNumber* context = [parse(made) valueForKey:@"executionContextId"];
+                                    NSMutableDictionary* evaluate = [parse(params) mutableCopy];
+                                    CraBrowser* again = weakSelf;
+                                    if (!again || ![context isKindOfClass:NSNumber.class] ||
+                                        ![evaluate isKindOfClass:NSMutableDictionary.class]) {
+                                      completion(nil, madeError ?: @"no isolated world");
+                                      return;
+                                    }
+                                    evaluate[@"contextId"] = context;
+                                    NSData* json = [NSJSONSerialization dataWithJSONObject:evaluate options:0 error:nil];
+                                    [again sendDevToolsMethod:@"Runtime.evaluate"
+                                                       params:[[NSString alloc] initWithData:json
+                                                                                    encoding:NSUTF8StringEncoding]
+                                                   completion:completion];
+                                  }];
+                }];
 }
 - (CraSSLStatus*)sslStatus {
   return nil;
@@ -751,10 +1106,33 @@ void RunReadyBlocks() {
   for (NSString* arg in given) {
     args.push_back(UTF8(arg));
   }
+  // The CEF bridge's switches (OnBeforeCommandLineProcessing), which say why each is there.
   args.push_back("--user-data-dir=" + UTF8(g_cache_path));
   args.push_back("--no-first-run");
   args.push_back("--no-default-browser-check");
   args.push_back("--no-startup-window");
+  args.push_back("--disable-session-crashed-bubble");
+  args.push_back("--hide-crash-restore-bubble");
+  args.push_back("--profile-directory=Default");
+  args.push_back("--autoplay-policy=document-user-activation-required");
+  // --remote-debugging-pipe turns on navigator.webdriver in pages, and Google sign-in then refuses; Chrome
+  // copies this switch to every renderer.
+  args.push_back("--disable-blink-features=AutomationControlled");
+  std::string disabled =
+      "WebRtcHideLocalIpsWithMdns,WebUIOmniboxPopup,WebUIOmniboxAimPopup,AutofillAiWalletPrivatePasses,"
+      "ScalableFrameEviction,OptimizationHints,PreloadingHeuristicsMLModel,HistoryEmbeddings,Glic,LensOverlay";
+  // CraEngineMain adds AperitifHelpers to this one.
+  args.push_back("--enable-features=ForceWebRequestProxyForTest,WebContentsDiscard,InfiniteTabsFreezing,"
+                 "VideoPipForceTrustedForMediaPlaybackForTesting,HideDelegatedFrameHostMac");
+  if (NSString* allowlist = ManagedAuthServerAllowlist()) {
+    args.push_back("--auth-server-allowlist=" + UTF8(allowlist));
+  }
+  // The browser-level DevTools protocol over a private pipe: the trusted client Chrome requires for
+  // Extensions.triggerAction (toolbar extension buttons).
+  if (CDPPipeSetUp()) {
+    args.push_back("--remote-debugging-pipe");
+    args.push_back("--enable-unsafe-extension-debugging");
+  }
   if (g_locale.length) {
     args.push_back("--lang=" + UTF8(g_locale));
   }
@@ -768,8 +1146,13 @@ void RunReadyBlocks() {
   }
   if (g_extension_paths.count) {
     args.push_back("--load-extension=" + UTF8([g_extension_paths componentsJoinedByString:@","]));
-    args.push_back("--disable-features=DisableLoadExtensionCommandLineSwitch");
+    disabled += ",DisableLoadExtensionCommandLineSwitch";
+    // Which profiles load each (extension-profiles.patch).
+    if (g_extension_profiles.length) {
+      args.push_back("--cra-load-extension-profiles=" + UTF8(g_extension_profiles));
+    }
   }
+  args.push_back("--disable-features=" + disabled);
   std::vector<const char*> argv;
   for (const std::string& arg : args) {
     argv.push_back(arg.c_str());
@@ -792,8 +1175,14 @@ void RunReadyBlocks() {
     return;
   }
   g_quitting = true;
+  cra::StopProfilePrefs();
   delete g_keep_alive;
   g_keep_alive = nullptr;
+  // Chrome keeps running while a --remote-debugging-pipe client is attached: hang up.
+  if (g_cdp_write_fd >= 0) {
+    close(g_cdp_write_fd);
+    g_cdp_write_fd = -1;
+  }
   // What Chrome's AppController does for Cmd-Q. (chrome::AttemptExit would send -terminate: back here.)
   chrome::CloseAllBrowsersAndQuit();
 }
@@ -815,8 +1204,8 @@ void RunReadyBlocks() {
 }
 
 + (void)setExtensionPaths:(NSArray<NSString*>*)paths profiles:(NSString*)profiles {
-  // Not yet: `profiles` (which profiles load each extension); every profile loads all of them.
   g_extension_paths = [paths copy];
+  g_extension_profiles = [profiles copy];
 }
 
 + (void)setChromeHosting:(BOOL)enabled {
@@ -845,29 +1234,7 @@ void RunReadyBlocks() {
 + (BOOL)contentBlockingEnabled {
   return NO;
 }
-+ (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
-}
-+ (void)setFingerprintingProtectionEnabled:(BOOL)enabled {
-}
-+ (void)setWebsiteAppearance:(NSInteger)mode {
-}
-+ (NSInteger)websiteAppearance {
-  return 0;
-}
-+ (NSString*)secureDNSMode {
-  return nil;
-}
-+ (NSString*)secureDNSTemplates {
-  return nil;
-}
-+ (BOOL)setSecureDNSMode:(NSString*)mode templates:(NSString*)templates {
-  return NO;
-}
-+ (BOOL)secureDNSIsManaged {
-  return NO;
-}
-+ (void)setSecureDNSChangeHandler:(void (^)(void))handler {
-}
+
 + (void)setBlockedDomains:(NSArray<NSString*>*)domains {
 }
 + (void)loadBlockedDomainsFromFile:(NSString*)path completion:(void (^)(NSInteger))completion {
@@ -887,8 +1254,10 @@ void RunReadyBlocks() {
 }
 + (void)setExtensionTabHandler:(CraBrowser* _Nullable (^)(NSString*, NSString* _Nullable, BOOL,
                                                           CraBrowser* _Nullable))handler {
+  g_extension_tab_handler = [handler copy];
 }
 + (void)setStrayPageHandler:(void (^)(NSString*, NSString* _Nullable))handler {
+  g_stray_page_handler = [handler copy];
 }
 + (void)setPageWindowStartHandler:(NSRect (^)(NSSize))handler {
 }
@@ -907,7 +1276,7 @@ void RunReadyBlocks() {
 + (void)setProcessEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
 }
 + (BOOL)isExtensionWindow:(NSWindow*)window {
-  return NO;
+  return [g_extension_windows containsObject:window];
 }
 + (BOOL)isPageWindow:(NSWindow*)window {
   return NO;
@@ -918,20 +1287,41 @@ void RunReadyBlocks() {
   return @"shown=0 away=0 animated=0";
 }
 + (BOOL)hasBrowserDevTools {
-  return NO;
+  return g_cdp_write_fd >= 0;
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method
                            params:(NSString*)params
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
-  completion(nil, @"not yet on Chrome's framework");
+  [self sendBrowserDevToolsMethod:method params:params sessionID:nil completion:completion];
 }
 + (void)sendBrowserDevToolsMethod:(NSString*)method
                            params:(NSString*)params
                         sessionID:(NSString*)sessionID
                        completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
-  completion(nil, @"not yet on Chrome's framework");
+  if (g_cdp_write_fd < 0) {
+    completion(nil, @"no DevTools pipe");
+    return;
+  }
+  int message_id = ++g_cdp_next_id;
+  g_cdp_pending[@(message_id)] = [completion copy];
+  NSString* session = sessionID.length ? [NSString stringWithFormat:@",\"sessionId\":\"%@\"", sessionID] : @"";
+  NSString* message = [NSString stringWithFormat:@"{\"id\":%d,\"method\":\"%@\",\"params\":%@%@}", message_id, method,
+                                                 params.length ? params : @"{}", session];
+  NSMutableData* data = [[message dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
+  [data appendBytes:"" length:1];
+  const char* bytes = static_cast<const char*>(data.bytes);
+  for (size_t sent = 0; sent < data.length;) {
+    ssize_t n = write(g_cdp_write_fd, bytes + sent, data.length - sent);
+    if (n <= 0) {
+      [g_cdp_pending removeObjectForKey:@(message_id)];
+      completion(nil, @"pipe write failed");
+      return;
+    }
+    sent += static_cast<size_t>(n);
+  }
 }
 + (void)setBrowserDevToolsEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
+  g_cdp_event_handler = [handler copy];
 }
 + (void)fetchURL:(NSString*)url
          headers:(NSDictionary<NSString*, NSString*>*)headers
@@ -945,28 +1335,70 @@ void RunReadyBlocks() {
             completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
   completion(0, url, @"", @"");
 }
-+ (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
-  return nil;
-}
-+ (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
-  return nil;
-}
-+ (BOOL)setPreference:(NSString*)name json:(NSString*)json forProfile:(NSString*)profilePath {
-  return NO;
-}
-+ (BOOL)resetPreference:(NSString*)name forProfile:(NSString*)profilePath {
-  return NO;
-}
 + (NSInteger)loadStateOfProfile:(NSString*)profilePath {
-  if (!g_ready) {
+  if (!g_ready || g_quitting) {
     return 0;
   }
-  Profile* profile = g_browser_process->profile_manager()->GetProfileByPath(ProfileDir(profilePath));
-  return profile ? 2 : 0;
+  base::FilePath dir = ProfileDir(profilePath);
+  if (g_browser_process->profile_manager()->GetProfileByPath(dir)) {
+    return 2;
+  }
+  return LoadingProfiles().count(dir) ? 1 : 0;
+}
+
+#pragma mark Preferences
+
+// A loaded profile (nil path: Default), or nullptr: these never load one.
++ (Profile*)loadedProfile:(NSString*)profilePath {
+  if (!g_ready || g_quitting) {
+    return nullptr;
+  }
+  return g_browser_process->profile_manager()->GetProfileByPath(ProfileDir(profilePath));
+}
++ (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
+  cra::SetHttpsOnly(enabled);
+}
++ (void)setFingerprintingProtectionEnabled:(BOOL)enabled {
+  cra::SetFingerprintingProtection(enabled);
+}
++ (void)setWebsiteAppearance:(NSInteger)mode {
+  cra::SetWebsiteAppearance(mode);
+}
++ (NSInteger)websiteAppearance {
+  return cra::WebsiteAppearance();
+}
++ (NSString*)secureDNSMode {
+  return g_quitting ? nil : cra::SecureDNSPreference("dns_over_https.mode");
+}
++ (NSString*)secureDNSTemplates {
+  return g_quitting ? nil : cra::SecureDNSPreference("dns_over_https.templates");
+}
++ (BOOL)setSecureDNSMode:(NSString*)mode templates:(NSString*)templates {
+  return !g_quitting && cra::SetSecureDNS(mode, templates);
+}
++ (BOOL)secureDNSIsManaged {
+  return cra::SecureDNSIsManaged();
+}
++ (void)setSecureDNSChangeHandler:(void (^)(void))handler {
+  cra::SetSecureDNSHandler(handler);
+}
++ (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
+  return cra::PreferenceJSON([self loadedProfile:profilePath], @"extensions.settings");
+}
++ (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
+  return cra::PreferenceJSON([self loadedProfile:profilePath], name);
+}
++ (BOOL)setPreference:(NSString*)name json:(NSString*)json forProfile:(NSString*)profilePath {
+  return cra::SetPreferenceJSON([self loadedProfile:profilePath], name, json);
+}
++ (BOOL)resetPreference:(NSString*)name forProfile:(NSString*)profilePath {
+  return cra::ResetPreference([self loadedProfile:profilePath], name);
 }
 + (void)setProfileLoadedHandler:(void (^)(NSString*))handler {
+  cra::SetProfileLoadedHandler(handler);
 }
 + (void)setExtensionSettingsChangeHandler:(void (^)(void))handler {
+  cra::SetExtensionSettingsHandler(handler);
 }
 
 @end

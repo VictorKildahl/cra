@@ -1,0 +1,55 @@
+diff --git a/ui/views/controls/webview/cra_hosted_page.h b/ui/views/controls/webview/cra_hosted_page.h
+new file mode 100644
+--- /dev/null
++++ b/ui/views/controls/webview/cra_hosted_page.h
+@@ -0,0 +1,17 @@
++// Copyright 2026 Cra. Use of this source code is governed by the MIT license (Cra's LICENSE).
++#ifndef UI_VIEWS_CONTROLS_WEBVIEW_CRA_HOSTED_PAGE_H_
++#define UI_VIEWS_CONTROLS_WEBVIEW_CRA_HOSTED_PAGE_H_
++
++namespace views {
++
++// Cra (docs/chromium-engine.md in the Cra repository): a page Cra shows in its own windows carries this user
++// data key. A WebView never attaches such a page's native view, so Chrome's (never shown) window doesn't take
++// it from Cra's, whichever tab Chrome has active.
++inline const void* CraHostedPageKey() {
++  static const int key = 0;
++  return &key;
++}
++
++}  // namespace views
++
++#endif  // UI_VIEWS_CONTROLS_WEBVIEW_CRA_HOSTED_PAGE_H_
+diff --git a/ui/views/controls/webview/BUILD.gn b/ui/views/controls/webview/BUILD.gn
+--- a/ui/views/controls/webview/BUILD.gn
++++ b/ui/views/controls/webview/BUILD.gn
+@@ -9,6 +9,7 @@
+ 
+ component("webview") {
+   sources = [
++    "cra_hosted_page.h",
+     "simple_web_view.h",
+     "simple_web_view_dialog_delegate.h",
+     "unhandled_keyboard_event_handler.cc",
+diff --git a/ui/views/controls/webview/webview.cc b/ui/views/controls/webview/webview.cc
+--- a/ui/views/controls/webview/webview.cc
++++ b/ui/views/controls/webview/webview.cc
+@@ -27,6 +27,7 @@
+ #include "ui/events/event.h"
+ #include "ui/views/accessibility/tree/widget_ax_manager.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
+ #include "ui/views/controls/webview/web_contents_set_background_color.h"
+ #include "ui/views/focus/focus_manager.h"
+ #include "ui/views/views_delegate.h"
+@@ -602,6 +603,10 @@
+   if (!GetWidget() || !web_contents()) {
+     return;
+   }
++  // Cra: its pages stay in Cra's windows (cra_hosted_page.h).
++  if (web_contents()->GetUserData(CraHostedPageKey())) {
++    return;
++  }
+ 
+   gfx::NativeView view_to_attach = web_contents()->GetNativeView();
+   OnBoundsChanged(bounds());

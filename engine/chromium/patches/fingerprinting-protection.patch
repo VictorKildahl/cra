@@ -1,0 +1,562 @@
+diff --git a/third_party/blink/public/common/web_preferences/web_preferences.h b/third_party/blink/public/common/web_preferences/web_preferences.h
+--- a/third_party/blink/public/common/web_preferences/web_preferences.h
++++ b/third_party/blink/public/common/web_preferences/web_preferences.h
+@@ -109,6 +109,9 @@
+   bool allow_running_insecure_content = false;
+   // If true, taints all <canvas> elements, regardless of origin.
+   bool disable_reading_from_canvas = false;
++  // Cra: fingerprinting protection. Zero when off; otherwise a seed for this
++  // profile and launch that Blink mixes with the top-level site.
++  uint64_t cra_fingerprinting_seed = 0;
+   // Strict mixed content checking disables both displaying and running insecure
+   // mixed content, and disables embedder notifications that such content was
+   // requested (thereby preventing user override).
+diff --git a/third_party/blink/public/mojom/webpreferences/web_preferences.mojom b/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
+--- a/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
++++ b/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
+@@ -172,6 +172,8 @@
+   bool allow_running_insecure_content;
+   // If true, taint32s all <canvas> elements, regardless of origin.
+   bool disable_reading_from_canvas;
++  // Cra: fingerprinting protection seed, 0 when off.
++  uint64 cra_fingerprinting_seed;
+   // Strict mixed content checking disables both displaying and running insecure
+   // mixed content, and disables embedder notifications that such content was
+   // requested (thereby preventing user override).
+diff --git a/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h b/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h
+--- a/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h
++++ b/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h
+@@ -258,6 +258,11 @@
+     return r.disable_reading_from_canvas;
+   }
+ 
++  static uint64_t cra_fingerprinting_seed(
++      const blink::web_pref::WebPreferences& r) {
++    return r.cra_fingerprinting_seed;
++  }
++
+   static bool strict_mixed_content_checking(
+       const blink::web_pref::WebPreferences& r) {
+     return r.strict_mixed_content_checking;
+diff --git a/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc b/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc
+--- a/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc
++++ b/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc
+@@ -101,6 +101,7 @@
+   out->container_culling_enabled = data.container_culling_enabled();
+   out->allow_running_insecure_content = data.allow_running_insecure_content();
+   out->disable_reading_from_canvas = data.disable_reading_from_canvas();
++  out->cra_fingerprinting_seed = data.cra_fingerprinting_seed();
+   out->strict_mixed_content_checking = data.strict_mixed_content_checking();
+   out->allow_geolocation_on_insecure_origins =
+       data.allow_geolocation_on_insecure_origins();
+diff --git a/third_party/blink/renderer/core/frame/settings.json5 b/third_party/blink/renderer/core/frame/settings.json5
+--- a/third_party/blink/renderer/core/frame/settings.json5
++++ b/third_party/blink/renderer/core/frame/settings.json5
+@@ -835,6 +835,12 @@
+     {
+       name: "disableReadingFromCanvas",
+       initial: false,
++    },
++    // Cra: fingerprinting protection seed, 0 when off.
++    {
++      name: "craFingerprintingSeed",
++      type: "uint64_t",
++      initial: 0,
+     },
+     {
+       name: "strictMixedContentChecking",
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -1710,6 +1710,8 @@
+   settings->SetAllowRunningOfInsecureContent(
+       prefs.allow_running_insecure_content);
+   settings->SetDisableReadingFromCanvas(prefs.disable_reading_from_canvas);
++  web_view_impl->GetPage()->GetSettings().SetCraFingerprintingSeed(
++      prefs.cra_fingerprinting_seed);
+   settings->SetStrictMixedContentChecking(prefs.strict_mixed_content_checking);
+ 
+   settings->SetStrictlyBlockBlockableMixedContent(
+diff --git a/third_party/blink/renderer/core/workers/worker_settings.h b/third_party/blink/renderer/core/workers/worker_settings.h
+--- a/third_party/blink/renderer/core/workers/worker_settings.h
++++ b/third_party/blink/renderer/core/workers/worker_settings.h
+@@ -29,6 +29,9 @@
+   static std::unique_ptr<WorkerSettings> Copy(WorkerSettings*);
+ 
+   bool DisableReadingFromCanvas() const { return disable_reading_from_canvas_; }
++  // Cra: fingerprinting protection seed, 0 when off. Shared and service
++  // workers have no frame to copy it from and keep 0.
++  uint64_t CraFingerprintingSeed() const { return cra_fingerprinting_seed_; }
+   bool GetStrictMixedContentChecking() const {
+     return strict_mixed_content_checking_;
+   }
+@@ -51,6 +54,7 @@
+   // For dedicated workers these flag values must remain unchanged throughout
+   // the parent document lifecycle.
+   bool disable_reading_from_canvas_ = false;
++  uint64_t cra_fingerprinting_seed_ = 0;
+   bool strict_mixed_content_checking_ = false;
+   bool allow_running_of_insecure_content_ = false;
+   bool strictly_block_blockable_mixed_content_ = false;
+diff --git a/third_party/blink/renderer/core/workers/worker_settings.cc b/third_party/blink/renderer/core/workers/worker_settings.cc
+--- a/third_party/blink/renderer/core/workers/worker_settings.cc
++++ b/third_party/blink/renderer/core/workers/worker_settings.cc
+@@ -32,6 +32,8 @@
+       std::make_unique<WorkerSettings>(nullptr);
+   new_settings->disable_reading_from_canvas_ =
+       old_settings->disable_reading_from_canvas_;
++  new_settings->cra_fingerprinting_seed_ =
++      old_settings->cra_fingerprinting_seed_;
+   new_settings->strict_mixed_content_checking_ =
+       old_settings->strict_mixed_content_checking_;
+   new_settings->allow_running_of_insecure_content_ =
+@@ -45,6 +47,7 @@
+ 
+ void WorkerSettings::CopyFlagValuesFromSettings(Settings* settings) {
+   disable_reading_from_canvas_ = settings->GetDisableReadingFromCanvas();
++  cra_fingerprinting_seed_ = settings->GetCraFingerprintingSeed();
+   strict_mixed_content_checking_ = settings->GetStrictMixedContentChecking();
+   allow_running_of_insecure_content_ =
+       settings->GetAllowRunningOfInsecureContent();
+diff --git a/third_party/blink/renderer/core/canvas_interventions/build.gni b/third_party/blink/renderer/core/canvas_interventions/build.gni
+--- a/third_party/blink/renderer/core/canvas_interventions/build.gni
++++ b/third_party/blink/renderer/core/canvas_interventions/build.gni
+@@ -3,6 +3,8 @@
+ # found in the LICENSE file.
+ 
+ blink_core_sources_canvas_interventions = [
++  "cra_fingerprinting.cc",
++  "cra_fingerprinting.h",
+   "noise_hash.cc",
+   "noise_hash.h",
+   "noise_helper.cc",
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -60,6 +60,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_image_encode_options.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_update_element_geometry_options.h"
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
+ #include "third_party/blink/renderer/core/css/css_font_selector.h"
+ #include "third_party/blink/renderer/core/css/style_change_reason.h"
+ #include "third_party/blink/renderer/core/css/style_engine.h"
+@@ -1458,6 +1459,9 @@
+       ImageEncoderUtils::ToEncodingMimeType(mime_type);
+ 
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
++  if (source_buffer == kBackBuffer) {
++    image_bitmap = CraNoiseImage(GetExecutionContext(), std::move(image_bitmap));
++  }
+   if (image_bitmap) {
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
+@@ -1561,7 +1565,8 @@
+       ImageEncoderUtils::ToEncodingMimeType(mime_type);
+ 
+   CanvasAsyncBlobCreator* async_creator = nullptr;
+-  scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
++  scoped_refptr<StaticBitmapImage> image_bitmap =
++      CraNoiseImage(GetExecutionContext(), Snapshot(kBackBuffer));
+   if (image_bitmap) {
+     auto* options = ImageEncodeOptions::Create();
+     options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
+diff --git a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+--- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
++++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+@@ -20,6 +20,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_element_image_default_size.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_update_element_geometry_options.h"
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
+ #include "third_party/blink/renderer/core/css/css_font_selector.h"
+ #include "third_party/blink/renderer/core/css/offscreen_font_selector.h"
+ #include "third_party/blink/renderer/core/css/style_engine.h"
+@@ -586,7 +587,8 @@
+   }
+ 
+   base::TimeTicks start_time = base::TimeTicks::Now();
+-  scoped_refptr<StaticBitmapImage> image_bitmap = context_->GetImage();
++  scoped_refptr<StaticBitmapImage> image_bitmap = CraNoiseImage(
++      ExecutionContext::From(script_state), context_->GetImage());
+   if (image_bitmap) {
+     auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Blob>>(
+         script_state, exception_state.GetContext());
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -42,6 +42,7 @@
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_font_variant_caps.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_text_rendering.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_draw_element_image_options.h"
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
+ #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
+ #include "third_party/blink/renderer/core/css/style_change_reason.h"
+ #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+@@ -560,6 +561,17 @@
+       SkIRect bounds =
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
++    } else if (image_data_pixmap.info().bytesPerPixel() == 4 &&
++               image_data_pixmap.rowBytes() ==
++                   static_cast<size_t>(image_data_pixmap.width()) * 4) {
++      // SAFETY: the pixmap is ImageData's own buffer, height rows of
++      // width * 4 bytes.
++      CraNoisePixels(GetTopExecutionContext(),
++                     UNSAFE_BUFFERS(base::span(
++                         static_cast<uint8_t*>(
++                             image_data_pixmap.writable_addr()),
++                         image_data_pixmap.computeByteSize())),
++                     image_data_pixmap.width(), image_data_pixmap.height());
+     }
+   }
+ 
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -74,6 +74,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlcanvaselement_offscreencanvas.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_webgl_copy_element_image_config.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/webgl_any.h"
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+@@ -5372,6 +5373,28 @@
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
+   }
++  // Cra: RGBA bytes packed row after row (WebGL2's pack row length and skips
++  // left at 0) get the same noise as a 2D canvas readback.
++  if (buffer || width <= 0 || height <= 0 || format != GL_RGBA ||
++      type != GL_UNSIGNED_BYTE || (width * 4) % pack_alignment_ != 0 ||
++      !CraFingerprintingKey(GetExecutionContext())) {
++    return;
++  }
++  if (IsWebGL2()) {
++    GLint row_length = 0, skip_pixels = 0, skip_rows = 0;
++    ContextGL()->GetIntegerv(GL_PACK_ROW_LENGTH, &row_length);
++    ContextGL()->GetIntegerv(GL_PACK_SKIP_PIXELS, &skip_pixels);
++    ContextGL()->GetIntegerv(GL_PACK_SKIP_ROWS, &skip_rows);
++    if (row_length || skip_pixels || skip_rows) {
++      return;
++    }
++  }
++  // SAFETY: ValidateReadPixelsFuncParameters checked that |data| holds height
++  // rows of width * 4 bytes.
++  CraNoisePixels(
++      GetExecutionContext(),
++      UNSAFE_BUFFERS(base::span(data, static_cast<size_t>(width) * height * 4)),
++      width, height);
+ }
+ 
+ void WebGLRenderingContextBase::RenderbufferStorageImpl(
+diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+--- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+@@ -33,6 +33,7 @@
+ #include "media/base/audio_glitch_info.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_offline_audio_context_options.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_union_audiocontextrendersizecategory_unsignedlong.h"
+ #include "third_party/blink/renderer/core/dom/dom_exception.h"
+@@ -583,6 +584,13 @@
+   Member<AudioBuffer> rendered_buffer = pending_render_targets_.TakeFirst();
+ 
+   CHECK(rendered_buffer);
++  // Cra: Fingerprinting protection's noise, before the page sees the buffer.
++  for (unsigned i = 0; i < rendered_buffer->numberOfChannels(); ++i) {
++    NotShared<DOMFloat32Array> channel = rendered_buffer->getChannelData(i);
++    if (channel) {
++      CraNoiseAudio(GetExecutionContext(), channel->AsSpan(), i);
++    }
++  }
+   resolver->Resolve(rendered_buffer.Get());
+ 
+   if (IsRenderComplete()) {
+diff --git a/third_party/blink/renderer/core/execution_context/navigator_base.cc b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+--- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
++++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+@@ -7,6 +7,7 @@
+ #include "base/feature_list.h"
+ #include "build/build_config.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
+ #include "third_party/blink/renderer/core/probe/core_probes.h"
+@@ -87,6 +88,11 @@
+ unsigned int NavigatorBase::hardwareConcurrency() const {
+   unsigned int hardware_concurrency =
+       NavigatorConcurrentHardware::hardwareConcurrency();
++  // Cra: with fingerprinting protection on, every Mac says 8 (the most common
++  // count on Apple silicon).
++  if (CraFingerprintingKey(GetExecutionContext())) {
++    hardware_concurrency = 8;
++  }
+ 
+   probe::ApplyHardwareConcurrencyOverride(
+       probe::ToCoreProbeSink(GetExecutionContext()), hardware_concurrency);
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -10,6 +10,7 @@
+ #include <memory>
+ #include <optional>
+ #include <set>
++#include <sstream>
+ #include <string_view>
+ #include <tuple>
+ #include <utility>
+@@ -25,6 +26,8 @@
+ #include "base/containers/fixed_flat_set.h"
+ #include "base/containers/to_vector.h"
+ #include "base/dcheck_is_on.h"
++#include "base/hash/hash.h"
++#include "base/rand_util.h"
+ #include "base/feature_list.h"
+ #include "base/files/file_path.h"
+ #include "base/functional/bind.h"
+@@ -4816,6 +4819,24 @@
+     web_prefs->strict_mixed_content_checking = true;
+   }
+ 
++  // Cra: fingerprinting protection (Settings > Privacy), a pref Cra registers
++  // on every profile. The seed is new each launch and differs per profile, so
++  // a site can't match this profile's canvas, audio and so on to another
++  // profile's or to an earlier launch; Blink mixes in the top-level site.
++  if (const PrefService::Preference* pref =
++          prefs->FindPreference("cra.fingerprinting_protection");
++      pref && pref->GetValue()->is_bool() && pref->GetValue()->GetBool()) {
++    static const uint64_t launch_secret = base::RandUint64();
++    std::ostringstream id;
++    id << profile->GetPath().AsUTF8Unsafe();
++    if (profile->IsOffTheRecord()) {
++      id << "/" << profile->GetOTRProfileID();
++    }
++    const uint64_t seed =
++        base::HashInts64(launch_secret, base::FastHash(id.str()));
++    web_prefs->cra_fingerprinting_seed = seed ? seed : 1;
++  }
++
+   web_prefs->data_saver_enabled = IsDataSaverEnabled(profile);
+   web_prefs->battery_saver_enabled = battery::IsBatterySaverEnabled();
+   web_prefs->preloading_disabled = prefetch::GetPreloadPagesState(*prefs) ==
+diff --git a/chrome/browser/ui/prefs/pref_watcher.cc b/chrome/browser/ui/prefs/pref_watcher.cc
+--- a/chrome/browser/ui/prefs/pref_watcher.cc
++++ b/chrome/browser/ui/prefs/pref_watcher.cc
+@@ -92,6 +92,8 @@
+ #endif
+     prefs::kPageColorsBlockList,
+     prefs::kXSLTDeprecationBannerSuppressed,
++    // Cra: Settings > Privacy > Fingerprinting protection, live in open pages.
++    "cra.fingerprinting_protection",
+ };
+ 
+ }  // namespace
+diff --git a/third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h b/third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h
+new file mode 100644
+--- /dev/null
++++ b/third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h
+@@ -0,0 +1,50 @@
++// Copyright 2026 The Cra Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_CRA_FINGERPRINTING_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_CRA_FINGERPRINTING_H_
++
++#include <cstdint>
++
++#include "base/containers/span.h"
++#include "base/memory/scoped_refptr.h"
++#include "third_party/blink/renderer/core/core_export.h"
++
++namespace blink {
++
++class ExecutionContext;
++class StaticBitmapImage;
++
++// Cra's fingerprinting protection (Settings > Privacy). The browser gives every
++// page a seed for its profile and launch (WebPreferences::
++// cra_fingerprinting_seed, 0 when off). The key mixes that seed with the
++// top-level site, so one site gets the same answers all session, while two
++// sites, two profiles or two launches get different ones.
++
++// 0 when the protection is off for |context|. Windows and dedicated workers
++// have a key; shared and service workers and worklets don't.
++CORE_EXPORT uint64_t CraFingerprintingKey(ExecutionContext* context);
++
++// Canvas readback (toDataURL, toBlob, convertToBlob, getImageData, WebGL
++// readPixels) carries Chromium's canvas noise: drawn pixels move by up to three
++// levels per channel, the same way for the same drawing.
++CORE_EXPORT scoped_refptr<StaticBitmapImage> CraNoiseImage(
++    ExecutionContext* context,
++    scoped_refptr<StaticBitmapImage> image);
++// |pixels| holds |width| x |height| tightly packed 8-bit RGBA or BGRA pixels.
++CORE_EXPORT void CraNoisePixels(ExecutionContext* context,
++                                base::span<uint8_t> pixels,
++                                int width,
++                                int height);
++
++// OfflineAudioContext output: each non-zero sample moves by at most a
++// hundred-thousandth of itself (about -100 dB), the same way for the same
++// rendering.
++CORE_EXPORT void CraNoiseAudio(ExecutionContext* context,
++                               base::span<float> samples,
++                               unsigned channel);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CANVAS_INTERVENTIONS_CRA_FINGERPRINTING_H_
+diff --git a/third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.cc b/third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.cc
+new file mode 100644
+--- /dev/null
++++ b/third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.cc
+@@ -0,0 +1,144 @@
++// Copyright 2026 The Cra Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/canvas_interventions/cra_fingerprinting.h"
++
++#include <bit>
++#include <cmath>
++
++#include "base/compiler_specific.h"
++#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
++#include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/execution_context/security_context.h"
++#include "third_party/blink/renderer/core/frame/frame.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
++#include "third_party/blink/renderer/core/workers/worker_settings.h"
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
++#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
++#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkImage.h"
++
++namespace blink {
++
++namespace {
++
++constexpr uint64_t kFnvOffset = 0xcbf29ce484222325ull;
++constexpr uint64_t kFnvPrime = 0x00000100000001b3ull;
++
++// The seed hashed with the top-level site (its registrable domain, or the host
++// for IP addresses and localhost).
++uint64_t KeyForSite(uint64_t seed, const SecurityOrigin* top) {
++  if (!seed || !top) {
++    return 0;
++  }
++  top = top->GetOriginOrPrecursorOriginIfOpaque();
++  String site = top->RegistrableDomain();
++  if (site.empty()) {
++    site = top->Host();
++  }
++  uint64_t hash = (kFnvOffset ^ seed) * kFnvPrime;
++  for (char c : site.Utf8()) {
++    hash ^= static_cast<uint8_t>(c);
++    hash *= kFnvPrime;
++  }
++  return hash ? hash : 1;
++}
++
++}  // namespace
++
++uint64_t CraFingerprintingKey(ExecutionContext* context) {
++  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
++    LocalFrame* frame = window->GetFrame();
++    if (!frame || !frame->GetSettings() || !frame->Top()) {
++      return 0;
++    }
++    const SecurityContext* top = frame->Top()->GetSecurityContext();
++    return KeyForSite(frame->GetSettings()->GetCraFingerprintingSeed(),
++                      top ? top->GetSecurityOrigin() : nullptr);
++  }
++  if (auto* worker = DynamicTo<WorkerGlobalScope>(context)) {
++    WorkerSettings* settings = worker->GetWorkerSettings();
++    return settings ? KeyForSite(settings->CraFingerprintingSeed(),
++                                 worker->top_level_frame_security_origin())
++                    : 0;
++  }
++  return 0;
++}
++
++scoped_refptr<StaticBitmapImage> CraNoiseImage(
++    ExecutionContext* context,
++    scoped_refptr<StaticBitmapImage> image) {
++  const uint64_t key = CraFingerprintingKey(context);
++  if (!key || !image) {
++    return image;
++  }
++  PaintImage paint_image = image->PaintImageForCurrentFrame();
++  const int width = paint_image.width();
++  const int height = paint_image.height();
++  if (width <= 0 || height <= 0) {
++    return image;
++  }
++  const SkImageInfo info = SkImageInfo::Make(
++      width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType,
++      paint_image.GetSkImageInfo().refColorSpace());
++  SkBitmap bitmap;
++  if (!bitmap.tryAllocPixels(info) ||
++      !paint_image.readPixels(info, bitmap.getPixels(), bitmap.rowBytes(), 0,
++                              0)) {
++    return image;
++  }
++  // SAFETY: tryAllocPixels(info) allocated computeByteSize() bytes, rows of
++  // exactly width * 4 bytes.
++  NoisePixels(NoiseHash(NoiseToken(key)),
++              UNSAFE_BUFFERS(base::span(
++                  static_cast<uint8_t*>(bitmap.getPixels()),
++                  bitmap.computeByteSize())),
++              width, height);
++  bitmap.setImmutable();
++  return UnacceleratedStaticBitmapImage::Create(
++      SkImages::RasterFromBitmap(bitmap), image->Orientation());
++}
++
++void CraNoisePixels(ExecutionContext* context,
++                    base::span<uint8_t> pixels,
++                    int width,
++                    int height) {
++  if (width <= 0 || height <= 0 ||
++      pixels.size() != static_cast<size_t>(width) * height * 4) {
++    return;
++  }
++  const uint64_t key = CraFingerprintingKey(context);
++  if (!key) {
++    return;
++  }
++  NoisePixels(NoiseHash(NoiseToken(key)), pixels, width, height);
++}
++
++void CraNoiseAudio(ExecutionContext* context,
++                   base::span<float> samples,
++                   unsigned channel) {
++  const uint64_t key = CraFingerprintingKey(context);
++  if (!key) {
++    return;
++  }
++  for (size_t i = 0; i < samples.size(); ++i) {
++    const float sample = samples[i];
++    if (sample == 0.0f || !std::isfinite(sample)) {
++      continue;
++    }
++    NoiseHash hash{NoiseToken(key)};
++    hash.Update((uint64_t{channel} << 32) ^ i);
++    hash.Update(std::bit_cast<uint32_t>(sample));
++    const double scale = 1.0 + (hash.GetValueBelow(2001) - 1000) * 1e-8;
++    samples[i] = static_cast<float>(sample * scale);
++  }
++}
++
++}  // namespace blink

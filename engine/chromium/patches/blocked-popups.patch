@@ -1,0 +1,100 @@
+diff --git a/components/blocked_content/popup_blocker_tab_helper.cc b/components/blocked_content/popup_blocker_tab_helper.cc
+index 1f155a7cee..3f1a38e90b 100644
+--- a/components/blocked_content/popup_blocker_tab_helper.cc
++++ b/components/blocked_content/popup_blocker_tab_helper.cc
+@@ -7,7 +7,9 @@
+ #include <iterator>
+ #include <string>
+ 
++#include "base/functional/callback.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/no_destructor.h"
+ #include "build/build_config.h"
+ #include "components/back_forward_cache/back_forward_cache_disable.h"
+ #include "components/blocked_content/list_item_position.h"
+@@ -27,6 +29,26 @@
+ namespace blocked_content {
+ const size_t kMaximumNumberOfPopups = 25;
+ 
++namespace {
++base::RepeatingCallback<void(content::WebContents*)>& CraListChanged() {
++  static base::NoDestructor<base::RepeatingCallback<void(content::WebContents*)>>
++      callback;
++  return *callback;
++}
++}  // namespace
++
++// static
++void PopupBlockerTabHelper::SetCraListChangedCallback(
++    base::RepeatingCallback<void(content::WebContents*)> callback) {
++  CraListChanged() = std::move(callback);
++}
++
++void PopupBlockerTabHelper::NotifyCraListChanged() {
++  if (CraListChanged()) {
++    CraListChanged().Run(web_contents());
++  }
++}
++
+ struct PopupBlockerTabHelper::BlockedRequest {
+   BlockedRequest(std::unique_ptr<PopupNavigationDelegate> delegate,
+                  const blink::mojom::WindowFeatures& window_features,
+@@ -63,6 +85,7 @@ void PopupBlockerTabHelper::DidFinishNavigation(
+   if (!blocked_popups_.empty()) {
+     blocked_popups_.clear();
+     HidePopupNotification();
++    NotifyCraListChanged();
+ 
+     // With back-forward cache we can restore the page, but |blocked_popups_|
+     // are lost here and can't be restored at the moment.
+@@ -103,6 +126,7 @@ void PopupBlockerTabHelper::AddBlockedPopup(
+   auto* raw_delegate = blocked_popups_[id]->delegate.get();
+ 
+   manager_.NotifyObservers(id, raw_delegate->GetURL());
++  NotifyCraListChanged();
+ 
+   raw_delegate->OnPopupBlocked(web_contents(), GetBlockedPopupsCount());
+ }
+@@ -144,6 +168,7 @@ void PopupBlockerTabHelper::ShowBlockedPopup(
+   blocked_popups_.erase(id);
+   if (blocked_popups_.empty())
+     HidePopupNotification();
++  NotifyCraListChanged();
+ }
+ 
+ void PopupBlockerTabHelper::ShowAllBlockedPopups() {
+diff --git a/components/blocked_content/popup_blocker_tab_helper.h b/components/blocked_content/popup_blocker_tab_helper.h
+index 132714620b..a2273e5206 100644
+--- a/components/blocked_content/popup_blocker_tab_helper.h
++++ b/components/blocked_content/popup_blocker_tab_helper.h
+@@ -11,6 +11,7 @@
+ #include <map>
+ #include <memory>
+ 
++#include "base/functional/callback_forward.h"
+ #include "components/blocked_content/popup_blocker.h"
+ #include "components/blocked_content/url_list_manager.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -84,6 +85,12 @@ class PopupBlockerTabHelper
+ 
+   blocked_content::UrlListManager* manager() { return &manager_; }
+ 
++  // Cra: run with the tab's WebContents whenever its blocked list changes (a
++  // popup blocked or shown, or the list cleared by a navigation), so the
++  // embedder can show the list without Chrome's location bar.
++  static void SetCraListChangedCallback(
++      base::RepeatingCallback<void(content::WebContents*)> callback);
++
+  private:
+   struct BlockedRequest;
+   friend class content::WebContentsUserData<PopupBlockerTabHelper>;
+@@ -93,6 +100,9 @@ class PopupBlockerTabHelper
+   // Called when the blocked popup notification is hidden.
+   void HidePopupNotification();
+ 
++  // Cra: runs the callback SetCraListChangedCallback set, if any.
++  void NotifyCraListChanged();
++
+   blocked_content::UrlListManager manager_;
+ 
+   // Note, this container should be sorted based on the position in the popup

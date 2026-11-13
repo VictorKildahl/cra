@@ -3,6 +3,7 @@
 #   - copies engine/chromium/cra to <src>/cra (built into Chrome's framework as //cra:core)
 #   - Chrome's hooks: chrome/browser/cra_engine_hooks.h, ChromeBrowserMainParts::Create adds Cra's startup
 #     part, ChromeBrowserMainPartsMac leaves Cra's NSApp delegate and menu alone, the framework exports CraEngineMain and the bridge's classes (framework.exports and .order), chrome_dll depends on //cra:core
+#   - Cra's changes to Chrome's own code (patches/series)
 #   - a stand-in Widevine signer (Cra plays DRM through WebKit, not Widevine)
 # docs/chromium-engine.md says what the layer is for.
 set -euo pipefail
@@ -19,6 +20,14 @@ if [ ! -f "$SRC/third_party/widevine/scripts/signature_generator.py" ]; then
   mkdir -p "$SRC/third_party/widevine/scripts"
   cp "$HERE/hooks/widevine_signature_generator.py" "$SRC/third_party/widevine/scripts/signature_generator.py"
 fi
+
+# Cra's changes to Chrome's own code (patches/series). One already in is left alone.
+grep -v '^#' "$HERE/patches/series" | while read -r patch; do
+  [ -n "$patch" ] || continue
+  if git -C "$SRC" apply --reverse --check "$HERE/patches/$patch" 2>/dev/null; then continue; fi
+  git -C "$SRC" apply "$HERE/patches/$patch" || { echo "apply.sh: $patch doesn't apply" >&2; exit 1; }
+  echo "patched $patch"
+done
 
 python3 -I - "$SRC" <<'EOF'
 import sys

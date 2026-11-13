@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+--- a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
++++ b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+@@ -127,6 +127,16 @@
+     return;
+   }
+ 
++  // Cra: no post-install dialog, as in Arc. It anchors to the extension's
++  // button in Chrome's toolbar, which Cra's pages don't show, so it fell back
++  // to a window with no parent: half off the screen, covered by its own title
++  // bar, with no way to close it (GitHub #349). The extension shows in Cra's
++  // Extensions menu and Site Control Center at once. Returning before
++  // FindOrCreateVisibleBrowser also keeps it from opening a browser window.
++  if (!extension->is_app()) {
++    return;
++  }
++
+   // Extensions aren't enabled by default in incognito so we confirm
+   // the install in a normal window.
+   Profile* current_profile = profile()->GetOriginalProfile();
