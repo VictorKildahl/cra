@@ -6,6 +6,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CraBrowser;
 
+/// One bounded single-hop preview GET. All methods and completion delivery use the main thread.
+/// Cancelling is idempotent, physically cancels CEF and completes once with status 0.
+@interface CraPreviewRequest : NSObject
+- (void)cancel;
+@end
+
 typedef NS_ENUM(NSInteger, CraDownloadState) {
     CraDownloadStateInProgress = 0,
     CraDownloadStateComplete = 1,
@@ -498,6 +504,13 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 + (void)fetchURL:(NSString *)url headers:(nullable NSDictionary<NSString *, NSString *> *)headers
      profilePath:(nullable NSString *)profilePath
       completion:(void (^)(NSInteger status, NSString *finalURL, NSString *mimeType, NSString *body))completion;
+/// Preview-only GET: stored credentials from this profile, no automatic redirects, at most
+/// 1 MiB of response bytes. Timeout includes waiting for profile readiness. Location is raw;
+/// Swift validates/resolves it before requesting another hop. Completion may be synchronous.
++ (CraPreviewRequest *)fetchPreviewURL:(NSString *)url profilePath:(nullable NSString *)profilePath
+                        maximumBytes:(NSUInteger)maximumBytes timeout:(NSTimeInterval)timeout
+                          completion:(void (^)(NSInteger status, NSString *finalURL, NSString *location,
+                                               NSString *mimeType, NSString *body, NSUInteger receivedBytes))completion;
 + (void)fetchPluginURL:(NSString *)url headers:(nullable NSDictionary<NSString *, NSString *> *)headers
           profilePath:(nullable NSString *)profilePath
            completion:(void (^)(NSInteger status, NSString *finalURL, NSString *mimeType, NSString *body))completion;

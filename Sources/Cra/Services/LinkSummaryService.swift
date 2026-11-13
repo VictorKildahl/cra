@@ -1,5 +1,4 @@
 import AppKit
-import CraCEF
 import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
@@ -31,15 +30,16 @@ final class LinkSummaryService {
     /// Banner pictures come over a session that keeps nothing on disk and sends no cookies.
     private static let imageSession = URLSession(configuration: .ephemeral)
 
-    private let fetchPage: (URL, String?) async -> String?
+    private let fetchPage: (LinkSummaryRequest) async -> LinkSummaryFetch.Page?
     private let fetchImage: (URL) async -> NSImage?
     private let summarize: (URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?
 
     /// Concrete fetch/model boundaries also let the production lifecycle run on controlled input.
-    init(fetch: ((URL, String?) async -> String?)? = nil,
+    init(fetch: ((LinkSummaryRequest) async -> LinkSummaryFetch.Page?)? = nil,
          image: ((URL) async -> NSImage?)? = nil,
          answer: ((URL, LinkSummaryContent.Extracted, String?, String, @escaping (LinkSummaryPrompt.Answer) -> Void) async -> LinkSummaryPrompt.Answer?)? = nil) {
-        self.fetchPage = fetch ?? Self.fetch
+        let transport = LinkSummaryFetch()
+        self.fetchPage = fetch ?? { request in await transport.load(request) }
         self.fetchImage = image ?? Self.image
         self.summarize = answer ?? Self.ask
     }
@@ -65,18 +65,18 @@ final class LinkSummaryService {
         let started = Date()
         let link = request.link
         let host = LinkSummaryPrompt.displayHost(link)
-        guard isAvailable, let html = await fetchPage(request.fetchURL, request.profilePath) else {
+        guard isAvailable, let page = await fetchPage(request) else {
             if !Task.isCancelled { update(Card(title: host, host: host, finished: true)) }
             return
         }
         guard !Task.isCancelled else { return }
-        let content = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html) }.value
+        let content = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: page.html) }.value
         guard !Task.isCancelled else { return }
         final class Box { var card: Card; init(_ c: Card) { card = c } }
         let box = Box(Card(title: content.title ?? host, host: host))
         update(box.card)
 
-        let imageURL = content.imageURL(page: request.fetchURL).map { LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }
+        let imageURL = content.imageURL(page: page.url).map { LinkSummaryPolicy.fetchURL(for: $0, httpsOnly: request.httpsOnly) }
         let imageTask: Task<Void, Never>? = imageURL.map { url in
             Task { @MainActor in
                 guard !Task.isCancelled, let image = await self.fetchImage(url), !Task.isCancelled,
@@ -88,7 +88,7 @@ final class LinkSummaryService {
         }
         await withTaskCancellationHandler {
             defer { imageTask?.cancel() }
-            let final = await summarize(request.fetchURL, content, request.searchQuery, request.language) { answer in
+            let final = await summarize(page.url, content, request.searchQuery, request.language) { answer in
                 guard !Task.isCancelled, !box.card.finished, let partial = LinkSummaryPrompt.result(url: link, title: content.title, answer: answer) else { return }
                 box.card.result = partial
                 update(box.card)
@@ -114,25 +114,14 @@ final class LinkSummaryService {
     func title(_ request: LinkSummaryRequest) async -> String? {
         guard !Task.isCancelled, isAvailable else { return nil }
         if let known = titles[request] { return known }
-        guard let html = await fetchPage(request.fetchURL, request.profilePath), !Task.isCancelled else { return nil }
-        let title = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: html).title }.value
+        guard let page = await fetchPage(request), !Task.isCancelled else { return nil }
+        let title = await Task.detached(priority: .userInitiated) { LinkSummaryContent.extractText(from: page.html).title }.value
         guard !Task.isCancelled else { return nil }
         if let title {
             if titles.count >= 40 { titles.removeAll() }
             titles[request] = title
         }
         return title
-    }
-
-    /// The page's HTML, or nil when it isn't an HTML page that loaded.
-    private static func fetch(_ url: URL, profilePath: String?) async -> String? {
-        await withCheckedContinuation { (c: CheckedContinuation<String?, Never>) in
-            CraCEFRuntime.fetchURL(url.absoluteString, headers: ["Accept": "text/html,application/xhtml+xml"], profilePath: profilePath) {
-                status, _, mime, body in
-                let html = (200..<300).contains(status) && (mime.isEmpty || mime.contains("html")) && !body.isEmpty
-                c.resume(returning: html ? body : nil)
-            }
-        }
     }
 
     /// The banner: a picture of at most 4 MB.

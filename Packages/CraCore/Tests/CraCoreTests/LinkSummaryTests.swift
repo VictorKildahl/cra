@@ -80,6 +80,18 @@ struct LinkSummaryTests {
         #expect(LinkSummaryPolicy.isPublicHost("crabrowser.app."))
     }
 
+    @Test func everyFetchTargetIsCanonicalPublicAndCredentialFree() {
+        let base = u("https://EXAMPLE.com/directory/page")
+        #expect(LinkSummaryFetchPolicy.target("../final#quote", relativeTo: base, httpsOnly: true) == u("https://example.com/final"))
+        #expect(LinkSummaryFetchPolicy.target("http://example.com:80", httpsOnly: true) == u("https://example.com/"))
+        #expect(LinkSummaryFetchPolicy.target("https://example.com:443/", httpsOnly: false) == u("https://example.com/"))
+        for raw in ["http://127.0.0.1/", "http://0177.0.0.1/", "http://0x7f.0.0.1/", "http://2130706433/",
+                    "http://10.0.0.1/", "http://printer.local/", "http://[::1]/", "file:///tmp/page.html",
+                    "https://user@example.com/", "https://:password@example.com/", "javascript:alert(1)"] {
+            #expect(LinkSummaryFetchPolicy.target(raw, httpsOnly: false) == nil, "no request may start for \(raw)")
+        }
+    }
+
     @Test func httpsOnlyUpgradesTheFetch() {
         #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com/a?b=1"), httpsOnly: true) == u("https://example.com/a?b=1"))
         #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com:80/a"), httpsOnly: true) == u("https://example.com/a"))

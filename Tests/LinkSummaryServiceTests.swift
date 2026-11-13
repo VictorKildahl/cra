@@ -1,6 +1,6 @@
 import AppKit
 
-@MainActor private final class Gate<Value> {
+@MainActor final class Gate<Value> {
     private var waiting: CheckedContinuation<Value, Never>?
     private var value: Value?
     func wait() async -> Value {
@@ -40,11 +40,13 @@ import AppKit
     static func main() async {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
+        await LinkSummaryFetchTests.run(expect)
         await failedAndBlockedLoadsFinish()
         await cancelledImageCannotPublish()
         await imageArrivesAfterSummary()
         await cancelledModelCannotCache()
         await titleAndModelUseTheirRequestContext()
+        await finalPageURLReachesMetadataAndModel()
         await cancelledTitleCannotStartFetching()
         await generationsRejectOldInspectionsAndResults()
         await hardStopClearsCompletedSharing()
@@ -54,12 +56,12 @@ import AppKit
     }
 
     private static func failedAndBlockedLoadsFinish() async {
-        let failure = LinkSummaryService(fetch: { _, _ in nil })
+        let failure = LinkSummaryService(fetch: { _ in nil })
         var cards: [LinkSummaryService.Card] = []
         await failure.load(request()) { cards.append($0) }
         expect(cards.count == 1 && cards.last?.finished == true && cards.last?.result == nil, "HTML failure must end loading with the existing empty state")
         expect(failure.cached(request()) == nil, "HTML failure must remain retryable")
-        let blocked = LinkSummaryService(fetch: { _, _ in html }, image: { _ in nil }, answer: { _, _, _, _, partial in
+        let blocked = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, partial in
             partial(answer)
             return .init(blocked: true, quickSummary: "Blocked", details: [])
         })
@@ -72,7 +74,7 @@ import AppKit
 
     private static func cancelledImageCannotPublish() async {
         let imageStarted = Gate<Void>(), imageResult = Gate<NSImage?>(), finished = Gate<Void>()
-        let service = LinkSummaryService(fetch: { _, _ in html }, image: { _ in
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in
             imageStarted.resolve(())
             return await imageResult.wait() // Deliberately ignores cancellation until released.
         }, answer: { _, _, _, _, _ in answer })
@@ -93,7 +95,7 @@ import AppKit
 
     private static func imageArrivesAfterSummary() async {
         let imageStarted = Gate<Void>(), imageResult = Gate<NSImage?>(), finished = Gate<Void>()
-        let service = LinkSummaryService(fetch: { _, _ in html }, image: { _ in
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in
             imageStarted.resolve(())
             return await imageResult.wait()
         }, answer: { _, _, _, _, _ in answer })
@@ -115,7 +117,7 @@ import AppKit
 
     private static func cancelledModelCannotCache() async {
         let started = Gate<Void>(), final = Gate<LinkSummaryPrompt.Answer?>()
-        let service = LinkSummaryService(fetch: { _, _ in html }, image: { _ in nil }, answer: { _, _, _, _, partial in
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, partial in
             started.resolve(())
             let value = await final.wait()
             if let value { partial(value) }
@@ -132,7 +134,7 @@ import AppKit
     }
 
     private static func titleAndModelUseTheirRequestContext() async {
-        let service = LinkSummaryService(fetch: { _, profile in "<head><title>\(profile ?? "Default")</title></head><body>Useful body text.</body>" },
+        let service = LinkSummaryService(fetch: { request in .init(html: "<head><title>\(request.profilePath ?? "Default")</title></head><body>Useful body text.</body>", url: request.fetchURL) },
                                          image: { _ in nil }, answer: { _, _, query, language, _ in
             .init(blocked: false, quickSummary: "\(query ?? "No query") / \(language)", details: answer.details)
         })
@@ -146,9 +148,22 @@ import AppKit
         expect(service.cached(request(profile: "/profiles/A", query: "reviews", language: "Danish")) == nil, "another query cannot reuse the completed answer")
     }
 
+    private static func finalPageURLReachesMetadataAndModel() async {
+        let finalURL = URL(string: "https://destination.example/articles/final")!
+        let redirectedHTML = "<head><title>Final</title><meta property='og:image' content='hero.png'></head><body>Useful final content.</body>"
+        var imageURL: URL?
+        let service = LinkSummaryService(fetch: { _ in .init(html: redirectedHTML, url: finalURL) }, image: { url in imageURL = url; return nil },
+                                         answer: { url, _, _, _, _ in .init(blocked: false, quickSummary: url.absoluteString, details: answer.details) })
+        var result: LinkSummaryResult?
+        await service.load(request()) { result = $0.result }
+        expect(result?.quickSummary == finalURL.absoluteString, "generation receives the actual final page URL")
+        expect(imageURL == URL(string: "https://destination.example/articles/hero.png"), "service resolves relative metadata against the final page")
+        expect(result?.url == link.absoluteString, "the original hovered URL remains the displayed/shared link")
+    }
+
     private static func cancelledTitleCannotStartFetching() async {
         var fetches = 0
-        let service = LinkSummaryService(fetch: { _, _ in fetches += 1; return html })
+        let service = LinkSummaryService(fetch: { request in fetches += 1; return .init(html: html, url: request.fetchURL) })
         let cancelled = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return await service.title(request())
@@ -162,7 +177,7 @@ import AppKit
         let clock = ManualScheduler()
         let started = Gate<Void>(), final = Gate<LinkSummaryPrompt.Answer?>()
         var oldPartial: ((LinkSummaryPrompt.Answer) -> Void)?
-        let service = LinkSummaryService(fetch: { _, _ in html }, image: { _ in nil }, answer: { _, _, _, _, partial in
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, partial in
             oldPartial = partial
             started.resolve(())
             return await final.wait()
@@ -213,7 +228,7 @@ import AppKit
 
     private static func hardStopClearsCompletedSharing() async {
         let clock = ManualScheduler()
-        let service = LinkSummaryService(fetch: { _, _ in html }, image: { _ in nil }, answer: { _, _, _, _, _ in answer })
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, _ in answer })
         await service.load(request()) { _ in }
         let controller = LinkSummaryPreviewController(clock: clock, service: service)
         let parent = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -239,7 +254,7 @@ import AppKit
     private static func deadlineRejectsLateModelPartials() async {
         let clock = ManualScheduler(), started = Gate<Void>(), final = Gate<LinkSummaryPrompt.Answer?>(), returned = Gate<Void>()
         var partial: ((LinkSummaryPrompt.Answer) -> Void)?
-        let service = LinkSummaryService(fetch: { _, _ in html }, image: { _ in nil }, answer: { _, _, _, _, update in
+        let service = LinkSummaryService(fetch: { request in .init(html: html, url: request.fetchURL) }, image: { _ in nil }, answer: { _, _, _, _, update in
             partial = update
             started.resolve(())
             let result = await final.wait()
@@ -273,11 +288,11 @@ import AppKit
 
     private static func deadlineEndsIgnoringFetch() async {
         let clock = ManualScheduler(), started = Gate<Void>(), htmlResult = Gate<String?>(), released = Gate<Void>()
-        let service = LinkSummaryService(fetch: { _, _ in
+        let service = LinkSummaryService(fetch: { request in
             started.resolve(())
             let result = await htmlResult.wait()
             released.resolve(())
-            return result
+            return result.map { .init(html: $0, url: request.fetchURL) }
         },
                                          image: { _ in nil }, answer: { _, _, _, _, _ in answer })
         let controller = LinkSummaryPreviewController(clock: clock, service: service)

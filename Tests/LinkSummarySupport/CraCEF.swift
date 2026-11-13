@@ -1,9 +1,15 @@
 import Foundation
 
-// LinkSummaryService is compiled unchanged; real CEF transport behavior is validated separately.
+public final class CraPreviewRequest {
+    public init() {}
+    public func cancel() {}
+}
+
+// The production Swift transport is compiled unchanged; real CEF wire behavior is validated separately.
 public enum CraCEFRuntime {
-    public static func fetchURL(_ url: String, headers: [String: String], profilePath: String?,
-                                completion: (Int, String, String, String) -> Void) {
-        completion(0, url, "", "")
+    public static func fetchPreviewURL(_ url: String, profilePath: String?, maximumBytes: UInt, timeout: TimeInterval,
+                                      completion: (Int, String, String, String, String, UInt) -> Void) -> CraPreviewRequest {
+        completion(0, url, "", "", "", 0)
+        return CraPreviewRequest()
     }
 }

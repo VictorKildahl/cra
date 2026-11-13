@@ -156,6 +156,37 @@ public enum LinkSummaryPolicy {
     }
 }
 
+/// Preview-only network policy. Every hop is validated before it is requested; these limits
+/// bound the whole page load and are Cra choices, not recovered Arc timeout values.
+public enum LinkSummaryFetchPolicy {
+    public static let maximumBytes = 1_048_576
+    public static let maximumRedirects = 5
+    public static let timeout: TimeInterval = 20
+
+    public static func target(_ raw: String, relativeTo base: URL? = nil, httpsOnly: Bool) -> URL? {
+        guard let parsed = URL(string: raw, relativeTo: base)?.absoluteURL,
+              var parts = URLComponents(url: parsed, resolvingAgainstBaseURL: false),
+              parts.user == nil, parts.password == nil,
+              LinkSummaryPolicy.canPreview(link: parsed), let host = parsed.host()?.lowercased() else { return nil }
+        // Chromium accepts legacy hexadecimal and octal IPv4 forms. Reject ambiguous literals
+        // before CEF canonicalizes them to a private address after the initial host check.
+        let labels = host.trimmingCharacters(in: CharacterSet(charactersIn: ".")).split(separator: ".")
+        let numeric = labels.allSatisfy { part in
+            part.allSatisfy(\.isNumber) || (part.lowercased().hasPrefix("0x") && part.dropFirst(2).allSatisfy(\.isHexDigit))
+        }
+        if numeric && labels.contains(where: { $0.count > 1 && $0.first == "0" }) { return nil }
+        parts.fragment = nil
+        parts.host = host
+        parts.scheme = parts.scheme?.lowercased()
+        if parts.path.isEmpty { parts.path = "/" }
+        guard let url = parts.url else { return nil }
+        let secure = LinkSummaryPolicy.fetchURL(for: url, httpsOnly: httpsOnly)
+        guard var canonical = URLComponents(url: secure, resolvingAgainstBaseURL: false) else { return nil }
+        if (canonical.scheme == "http" && canonical.port == 80) || (canonical.scheme == "https" && canonical.port == 443) { canonical.port = nil }
+        return canonical.url
+    }
+}
+
 /// The text of a fetched page for the model.
 public enum LinkSummaryContent {
     public struct Extracted: Equatable, Sendable {

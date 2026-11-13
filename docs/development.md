@@ -132,7 +132,11 @@ to Markdown or `docs/` alone runs nothing.
   a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
 - `scripts/test-link-summary-service.sh`: production preview controller/service with a manual clock
   and controlled fetch/model completions: context isolation, stale inspections/results, cancellation,
-  optional image lifetime and finite loading. No CEF request or model inference; no clipboard actions.
+  optional image lifetime, finite loading and bounded per-hop redirect/cancellation policy.
+  No CEF request or model inference; no clipboard actions.
+- `scripts/test-link-summary-cef.sh`: the actual native preview token's byte/cancellation/readiness
+  callback contract, compiled with installed CEF headers/wrapper; skips when they are absent.
+  Does not boot Chromium or prove wire behavior; validate the dedicated route on a native test app.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
   at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and
