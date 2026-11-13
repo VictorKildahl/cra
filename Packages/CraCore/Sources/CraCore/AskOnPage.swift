@@ -252,13 +252,21 @@ public enum AskOnPagePrompt {
     /// How many points the test model's summary has.
     public static let fakeSummaryPoints = 28
     public static let minimumText = 50
+    /// How many times a reply that only copies the page block back is asked for again.
+    public static let echoRetries = 2
 
     /// The test model's answer (CRA_TIDY_FAKE_MODEL=1): the first sentence on the page that shares
     /// a word with the question, quoted the way Arc's answers are. Asked for a summary, it lists the
     /// page's first sentences as bullets, as long as the real model's summaries run. Asked to make
     /// something up, it quotes a sentence the page doesn't have, as the real model sometimes does.
-    public static func fakeAnswer(question: String, text: String) -> String {
+    /// Asked to repeat the page, its first answer (`attempt` 0) is the page block copied back, as
+    /// the real model's sometimes is; asked again, it answers.
+    public static func fakeAnswer(question: String, text: String, attempt: Int = 0) -> String {
         let asked = question.lowercased()
+        if asked.contains("repeat the page") {
+            if attempt == 0 { return "<url>https://example.test/</title>\n<current-date>today</current-date>\n<content>\n\(text.prefix(200))" }
+            return fakeAnswer(question: "", text: text)
+        }
         if asked.contains("make up") || asked.contains("made-up") {
             return "According to the page:\n<excerpt>\(fakeMadeUpQuote)</excerpt>\nSo, **a guess**."
         }
@@ -351,13 +359,28 @@ public enum AskOnPageReply {
             }
             break
         }
+        let rest = lines.joined(separator: "\n")
+        if echoesPrompt(rest) { return "" }
         // A streamed line still being written may be the start of "BEGIN DIALOGUE", "Human:" or the
-        // question again: it waits for the rest.
+        // question again, or of the page block coming back: it waits for the rest.
         if lines.count == 1, let only = lines.first {
+            let t = only.trimmingCharacters(in: .whitespaces)
+            if !t.isEmpty, pageBlockMarkers.contains(where: { $0.hasPrefix(t) }) { return "" }
             if ["BEGIN DIALOGUE", "Human:", "Assistant:"].contains(where: { $0.hasPrefix(only) && !only.isEmpty }) { return "" }
             if !reply.hasSuffix("\n"), let asked, !normalized(only).isEmpty, asked.hasPrefix(normalized(only)) { return "" }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// How the prompt's page block starts its lines (AskOnPagePrompt.context).
+    static let pageBlockMarkers = ["WEBPAGE CONTEXT", "<url>", "<current-date>", "<title>", "<content>"]
+
+    /// Whether the reply is the prompt's page block coming back instead of an answer: the on-device
+    /// model sometimes copies its input from `<url>` on (Wikipedia's Bauhaus page, cut to 18 %: 1 run
+    /// in 10). An answer never starts with one of the block's tags.
+    public static func echoesPrompt(_ reply: String) -> Bool {
+        let t = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        return pageBlockMarkers.contains { t.hasPrefix($0) }
     }
 
     static func normalized(_ s: String) -> String {

@@ -197,6 +197,37 @@ struct AskOnPageTests {
         #expect(AskOnPageReply.parts("Reactions are", question: "How do reactions work?") == [.init(text: "Reactions are", isQuote: false)])
     }
 
+    /// On Wikipedia's Bauhaus page (cut to 18 %), "when did the bauhaus close?" got the prompt's own
+    /// page block back as the answer, 1 run in 10 on the on-device model and 2 of 2 in the 0.1.43
+    /// release clips. An echo is no answer: the card shows none of it, and the service asks again.
+    @Test func theModelsEchoOfThePageIsNoAnswer() {
+        let page = AskOnPagePrompt.context(url: "https://en.wikipedia.org/wiki/Bauhaus", title: "Bauhaus - Wikipedia",
+                                           date: "13/11/2026, 19.39", text: "From Wikipedia, the free encyclopedia\nThe Bauhaus was a school.")
+        let echo = String(page.dropFirst("WEBPAGE CONTEXT FOR OUR DIALOGUE:\n".count))
+        for reply in [page, echo, "\n" + echo, String(echo.prefix(60)), "<current-date>13/11/2026</current-date>\n<title>Bauhaus</title>"] {
+            #expect(AskOnPageReply.echoesPrompt(reply), "\(reply.prefix(30))")
+            #expect(AskOnPageReply.parts(reply) == [], "\(reply.prefix(30))")
+        }
+        // While it streams, the start of a tag waits: it may be the page block coming back.
+        #expect(AskOnPageReply.parts("<ur") == [])
+        #expect(AskOnPageReply.parts("WEBPAGE CON") == [])
+        #expect(!AskOnPageReply.echoesPrompt("<ur"))
+        // An answer is never taken for one, even one that names a tag or quotes the page.
+        for reply in ["<excerpt>The Bauhaus was a school.</excerpt>\nIt was **a school**.", "The page’s <title> is Bauhaus.", "Walter Gropius."] {
+            #expect(!AskOnPageReply.echoesPrompt(reply))
+            #expect(!AskOnPageReply.parts(reply).isEmpty)
+        }
+        #expect(AskOnPagePrompt.echoRetries >= 1)
+    }
+
+    @Test func theTestModelEchoesThePageOnceWhenAskedTo() {
+        let text = "The Bauhaus was a school. It closed in 1933."
+        #expect(AskOnPageReply.echoesPrompt(AskOnPagePrompt.fakeAnswer(question: "Repeat the page back", text: text, attempt: 0)))
+        #expect(!AskOnPageReply.echoesPrompt(AskOnPagePrompt.fakeAnswer(question: "Repeat the page back", text: text, attempt: 1)))
+        #expect(AskOnPagePrompt.fakeAnswer(question: "When did it close?", text: text, attempt: 0)
+                == AskOnPagePrompt.fakeAnswer(question: "When did it close?", text: text))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func aQuoteSplitByThePagesFootnoteIsFoundByItsFirstSentence() {
         // Wikipedia shows "…9% of global electricity.[3] In 2024, …": the whole quote isn't on the page.
         let quote = "In 2025, solar power generated 9% of global electricity. In 2024, solar generated 7% of global electricity and over 1% of primary energy."

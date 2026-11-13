@@ -63,24 +63,33 @@ final class AskOnPageService {
 
         if TidyTabsService.fakeModel {
             let cut = AskOnPagePrompt.truncate(page.text, budget: 4_000, total: page.total)
-            let reply = AskOnPagePrompt.fakeAnswer(question: question, text: page.text)
-            // About a token every 20 ms, as the on-device model streams a long answer.
-            for end in stride(from: 5, to: reply.count, by: 5) {
-                try? await Task.sleep(for: .milliseconds(20))
-                if Task.isCancelled { return nil }
-                update(String(reply.prefix(end)), cut.fractionRead)
+            echo: for attempt in 0...AskOnPagePrompt.echoRetries {
+                let reply = AskOnPagePrompt.fakeAnswer(question: question, text: page.text, attempt: attempt)
+                // About a token every 20 ms, as the on-device model streams a long answer.
+                for end in stride(from: 5, to: reply.count, by: 5) {
+                    try? await Task.sleep(for: .milliseconds(20))
+                    if Task.isCancelled { return nil }
+                    let part = String(reply.prefix(end))
+                    if AskOnPageReply.echoesPrompt(part) { Self.noteEcho(attempt); continue echo }
+                    update(part, cut.fractionRead)
+                }
+                if AskOnPageReply.echoesPrompt(reply) { Self.noteEcho(attempt); continue }
+                update(reply, cut.fractionRead)
+                return reply
             }
-            update(reply, cut.fractionRead)
-            return reply
+            update(AskOnPagePrompt.failed, nil)
+            return AskOnPagePrompt.failed
         }
 
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             let model = SystemLanguageModel.default
             var budget = AskOnPagePrompt.characterBudget(contextTokens: Self.contextSize(model), instructions: instructions, dialogue: dialogue)
+            var echoes = 0
             // Three characters a token is Arc's estimate; the model counts for real where it can, and a
-            // prompt still too long is cut by the share it is over and tried again.
-            for attempt in 0..<3 {
+            // prompt still too long is cut by the share it is over and tried again. A reply that copies
+            // the page block back is asked for again.
+            for attempt in 0..<(3 + AskOnPagePrompt.echoRetries) {
                 let cut = AskOnPagePrompt.truncate(page.text, budget: budget, total: page.total)
                 let conversation = AskOnPagePrompt.conversation(url: page.url, title: page.title, date: date, text: cut.text, turns: turns, question: question)
                 let counted = await Self.tokens(model, instructions: instructions, conversation: conversation)
@@ -95,10 +104,18 @@ final class AskOnPageService {
                     // A long answer (a summary) ends where the context does instead of overflowing it.
                     let options = AskOnPagePrompt.responseTokens(contextTokens: Self.contextSize(model), promptTokens: counted)
                         .map { GenerationOptions(maximumResponseTokens: $0) } ?? GenerationOptions()
+                    var echoed = false
                     for try await snapshot in session.streamResponse(to: conversation.prompt, options: options) {
                         if Task.isCancelled { return nil }
                         last = snapshot.content
+                        if AskOnPageReply.echoesPrompt(last) { echoed = true; break }
                         update(last, cut.fractionRead)
+                    }
+                    if echoed {
+                        Self.noteEcho(echoes)
+                        echoes += 1
+                        if echoes > AskOnPagePrompt.echoRetries { break }
+                        continue
                     }
                     CraLog.note(String(format: "Ask on Page: answered in %.1f s (%d of %d characters read)",
                                        Date().timeIntervalSince(started), min(cut.text.count, page.total), page.total))
@@ -122,6 +139,10 @@ final class AskOnPageService {
         #endif
         update(AskOnPagePrompt.failed, nil)
         return AskOnPagePrompt.failed
+    }
+
+    private static func noteEcho(_ attempt: Int) {
+        CraLog.note("Ask on Page: the answer repeated the page; " + (attempt < AskOnPagePrompt.echoRetries ? "asking again" : "giving up"))
     }
 
     #if canImport(FoundationModels)
