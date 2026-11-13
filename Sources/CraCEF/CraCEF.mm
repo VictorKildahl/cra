@@ -3627,6 +3627,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 
 + (void)runMessageLoop { CefRunMessageLoop(); }
++ (void)whenReady:(void (^)(void))block { block(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }
 + (void)shutdown {
     g_quitting = true;

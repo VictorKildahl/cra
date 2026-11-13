@@ -13,6 +13,10 @@ namespace cra {
 using ExtraPartsFactory = std::unique_ptr<ChromeBrowserMainExtraParts> (*)();
 inline ExtraPartsFactory g_extra_parts_factory = nullptr;
 
+// Cra's app made NSApp, its delegate and its main menu before ChromeMain: Chrome's AppController
+// (NSApp's delegate in Chrome) and Chrome's main menu are never made (chrome_browser_main_mac.mm).
+inline bool g_embedder_owns_app = false;
+
 }  // namespace cra
 
 #endif  // CHROME_BROWSER_CRA_ENGINE_HOOKS_H_

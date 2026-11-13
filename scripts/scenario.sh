@@ -81,7 +81,9 @@ fi
 NAME="${1:?usage: scripts/scenario.sh <name>|all}"
 FILE="Tests/Scenarios/$NAME.scenario"
 [ -f "$FILE" ] || { echo "No scenario $FILE"; exit 2; }
-[ -x "$APP/Contents/MacOS/Cra" ] || { echo "No Cra at $APP (scripts/build.sh; budgets are a release build's)"; exit 2; }
+# The app's executable: Cra, or CraEngine for a build on Chrome's own framework (CRA_ENGINE=chromium).
+EXE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist" 2>/dev/null || echo Cra)"
+[ -x "$EXE" ] || { echo "No Cra at $APP (scripts/build.sh; budgets are a release build's)"; exit 2; }
 if grep -q '^requires screen' "$FILE" && [ "${CRA_SCENARIO_SCREEN:-}" != "1" ]; then
   echo "$NAME: skipped (takes over the screen; CRA_SCENARIO_SCREEN=1 runs it)"; exit 0
 fi
@@ -242,7 +244,7 @@ for i in "${!app_env[@]}"; do app_env[$i]="$(expand "${app_env[$i]}")"; done
 
 CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
   CRA_ARC_DIR="$FIXTURES/Arc" CRA_FLAGS="${CRA_FLAGS:-}" \
-  "${app_env[@]}" "$APP/Contents/MacOS/Cra" ${app_args[@]+"${app_args[@]}"} >"$OUT/stdout.log" 2>&1 &
+  "${app_env[@]}" "$EXE" ${app_args[@]+"${app_args[@]}"} >"$OUT/stdout.log" 2>&1 &
 PID=$!
 PIDS+=("$PID")
 

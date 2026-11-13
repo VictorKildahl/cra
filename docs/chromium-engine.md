@@ -90,3 +90,20 @@ framework `ChromeMain` owns the whole run, start to quit. So:
   `engine/spike.sh` passes all 12 checks again. 20 tabs of the bench page: total 702 MB, browser process 101 MB,
   GPU 111 MB, pages 16 MB each (median), the framework's `__DATA_CONST` clean in the pages. Cra's patches and
   ungoogled-chromium's service patches are not in yet.
+- 13 Nov 2026, step 3 started: **Cra's own app runs on Chrome's framework.** `CRA_ENGINE=chromium scripts/build.sh`
+  builds `build/engine/Cra.app` (its own bundle id and executable, CraEngine, so it never meets an installed
+  Cra) with the bridge, `engine/chromium/cra/bridge.mm`, inside Chrome's framework; `CRA_APP=… scripts/scenario.sh`
+  runs scenarios on it. A framework relink after a change to the layer takes ~2 min.
+  - Start-up: Cra makes NSApp (`CraApplication`, a `BrowserCrApplication`), its delegate and menus, then
+    `runMessageLoop` runs `ChromeMain`; `+[CraCEFRuntime whenReady:]` runs main.swift's after-start part in
+    `PostBrowserStart`. Chrome skips its AppController and main menu (`cra::g_embedder_owns_app`), the bridge holds
+    the keep-alive AppController would, and quitting is Chrome's `CloseAllBrowsersAndQuit`.
+  - Pages: a hidden Browser per profile holds them as background tabs behind a blank active one, so Chrome never
+    takes a page's view; Cra shows `containerView` (the embedded-page path, `chromeHosting` NO). Load, address,
+    title, loading, progress, back/forward, failures, sound, focus, popups (adopted through the opener's
+    `popupHostForURL`) and close work; everything else answers "not yet".
+  - Scenarios passing: fifty-tabs, restore-windows-off, library-width, solid-spaces. Failing: start-on-new-tab (the
+    command bar stays open in a background test copy: CEF's page focus takes key from the non-activating panel,
+    a plain `makeKeyWindow` doesn't in an inactive app), sleep-tabs (tab sleep not in the bridge yet).
+  - Next: the methods the scenarios need, in the order of step 3; extensions see a blank active tab until Cra's
+    selected page is Chrome's active tab without Chrome taking its view.

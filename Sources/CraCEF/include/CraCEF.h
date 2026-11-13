@@ -1,6 +1,14 @@
-// CraCEF: the Objective-C surface Swift uses to drive Chromium (CEF).
+// CraCEF: the Objective-C surface Swift uses to drive Chromium. Two engines implement it: CEF
+// (CraCEF.mm) and Chrome's own framework (engine/chromium/cra/bridge, docs/chromium-engine.md).
 // Everything here runs on the main thread.
 #import <Cocoa/Cocoa.h>
+
+// The classes are exported from Chrome's framework, which hides everything else.
+#define CRA_EXPORT __attribute__((visibility("default")))
+// Chrome's framework needs NSApp to be its BrowserCrApplication; CEF only needs an NSApplication.
+#ifndef CRA_APPLICATION_SUPERCLASS
+#define CRA_APPLICATION_SUPERCLASS NSApplication
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -37,7 +45,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
     CraChromiumStringSearchWebForImage = 2,
 };
 
-@interface CraDownloadInfo : NSObject
+CRA_EXPORT @interface CraDownloadInfo : NSObject
 @property (nonatomic) uint32_t identifier;
 @property (nonatomic, copy) NSString *url;
 @property (nonatomic, copy) NSString *fullPath;
@@ -51,7 +59,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 @end
 
 /// The connection of the page on screen (Chromium's SSL status of the visible navigation entry).
-@interface CraSSLStatus : NSObject
+CRA_EXPORT @interface CraSSLStatus : NSObject
 /// The page came over a connection with a certificate (https, whatever the certificate's errors).
 @property (nonatomic) BOOL secureConnection;
 /// net::CertStatus bits: the certificate's errors and notes.
@@ -188,7 +196,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;
 @end
 
-@interface CraBrowser : NSObject
+CRA_EXPORT @interface CraBrowser : NSObject
 @property (nonatomic, weak, nullable) id<CraBrowserDelegate> delegate;
 /// Embedded (Alloy) hosting: a plain NSView that owns the Chromium view. Put
 /// it in your hierarchy and size it; Chromium follows.
@@ -354,7 +362,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)close;
 @end
 
-@interface CraCEFRuntime : NSObject
+CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// Call once, after NSApplication exists, before creating browsers.
 /// Experiment: a Chrome-style (extension-capable) Views window; the handler gets its NSWindow.
 + (void)spikeChromeWindowWithURL:(NSString *)url handler:(void (^)(NSWindow *))handler;
@@ -429,6 +437,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
                   useMockKeychain:(BOOL)useMockKeychain;
 /// Runs the Chromium-integrated AppKit run loop. Returns after -quitMessageLoop.
 + (void)runMessageLoop;
+/// Runs `block` once Chromium is up and before the app finishes launching: at once with CEF (initialize
+/// starts Chromium), from inside -runMessageLoop with Chrome's framework (ChromeMain starts it there).
++ (void)whenReady:(void (^)(void))block;
 + (void)quitMessageLoop;
 + (void)shutdown;
 /// Closes every browser, then quits the message loop once they are gone.
@@ -437,8 +448,8 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// The last incognito window closed: the next incognito page starts a fresh
 /// off-the-record profile (no cookies or storage carried over).
 + (void)endIncognitoSession;
-/// YES when initialize failed because another Cra is running and was told
-/// about this launch (exit quietly).
+/// YES when another Cra is running and was told about this launch (exit quietly): after initialize
+/// fails with CEF, after -runMessageLoop returns with Chrome's framework.
 + (BOOL)anotherInstanceWasNotified;
 /// Called in the running instance when another launch is handed over.
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString *> *urls))handler;
@@ -544,7 +555,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 
 /// NSApplication subclass CEF requires (CefAppProtocol). Set as
 /// NSPrincipalClass and created with +sharedApplication before anything else.
-@interface CraApplication : NSApplication
+CRA_EXPORT @interface CraApplication : CRA_APPLICATION_SUPERCLASS
 /// How many requests to bring Cra to the front, made while it was in the background, went
 /// through (a background test copy counts them, then refuses them all).
 @property (class, readonly) NSInteger backgroundActivations;

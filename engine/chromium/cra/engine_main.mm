@@ -5,16 +5,31 @@
 #include <string>
 #include <vector>
 
+#include "base/command_line.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/cra_engine_hooks.h"
+#include "cra/bridge.h"
 #include "cra/spike_checks.h"
 
 extern "C" int ChromeMain(int argc, const char** argv);
 
 namespace {
 
+// Cra's part of the browser process's start-up: the app's ready blocks once Chrome is up, and the engine
+// test's checks when it runs (--cra-spike).
+class CraParts : public ChromeBrowserMainExtraParts {
+ public:
+  void PostBrowserStart() override {
+    cra::RunReadyBlocks();
+    spike_->PostBrowserStart();
+  }
+
+ private:
+  std::unique_ptr<ChromeBrowserMainExtraParts> spike_ = cra::MakeSpikeParts();
+};
+
 std::unique_ptr<ChromeBrowserMainExtraParts> MakeCraParts() {
-  return cra::MakeSpikeParts();
+  return std::make_unique<CraParts>();
 }
 
 // Features Cra always runs with, added to the browser's --enable-features (Chromium reads only one).
@@ -42,6 +57,10 @@ extern "C" __attribute__((visibility("default"))) int CraEngineMain(int argc, co
   auto& pointers = *new std::vector<const char*>();
   for (const std::string& arg : args) {
     pointers.push_back(arg.c_str());
+  }
+  // The placeholder +[CraApplication load] made goes; Chrome reads this one.
+  if (base::CommandLine::InitializedForCurrentProcess()) {
+    base::CommandLine::Reset();
   }
   return ChromeMain(static_cast<int>(pointers.size()), pointers.data());
 }

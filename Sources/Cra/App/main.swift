@@ -64,39 +64,46 @@ MainActor.assumeIsolated {
                                            locale: locale,
                                            useChromeStyle: useChromeStyle,
                                            useMockKeychain: !SafeStorage.usesKeychain)
-    if !started && CraCEFRuntime.anotherInstanceWasNotified() {
-        // The running Cra got our command line; just activate it.
-        NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "dk.kildahl.cra")
-            .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?
-            .activate()
-        exit(0)
-    }
-    if !started {
+    // Chromium didn't start: another Cra is running and got our command line (just activate it), or it failed.
+    @MainActor func didNotStart() -> Never {
+        if CraCEFRuntime.anotherInstanceWasNotified() {
+            NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "dk.kildahl.cra")
+                .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?
+                .activate()
+            exit(0)
+        }
         let alert = AppDialog(title: "Cra could not start Chromium",
-                              message: "Chromium Embedded Framework failed to initialize. See \(AppPaths.log.path).")
+                              message: "Chromium failed to initialize. See \(AppPaths.log.path).")
         alert.runModal()
         exit(1)
     }
+    if !started { didNotStart() }
 
-    ChromiumBluetoothCache.install()
-    ChromiumDockTile.install()
-    ChromiumHistorySwipe.install()
+    // Once Chromium is up: at once with CEF, inside runMessageLoop with Chrome's framework.
+    var ready = false
+    CraCEFRuntime.whenReady {
+        ready = true
+        ChromiumBluetoothCache.install()
+        ChromiumDockTile.install()
+        ChromiumHistorySwipe.install()
 
-    // Only now: the "another Cra is running" and failed-start exits above leave no session marker.
-    Perf.phase("chromiumStarted")
-    let info = Bundle.main.infoDictionary
-    PerfRecorder.configure(owner: profileIsFree,
-                           recording: PerfSessionRules.recording(setting: delegate.store.settings.perfRecording,
-                                                                 environment: ProcessInfo.processInfo.environment),
-                           config: .init(folder: AppPaths.file("Perf"), chromiumFolder: AppPaths.chromiumCache),
-                           craVersion: "\(info?["CFBundleShortVersionString"] as? String ?? "dev") (\(info?["CFBundleVersion"] as? String ?? "?"))",
-                           chromiumVersion: CraCEFRuntime.chromiumVersion(), onboarding: delegate.needsOnboarding)
+        // Only now: the "another Cra is running" and failed-start exits above leave no session marker.
+        Perf.phase("chromiumStarted")
+        let info = Bundle.main.infoDictionary
+        PerfRecorder.configure(owner: profileIsFree,
+                               recording: PerfSessionRules.recording(setting: delegate.store.settings.perfRecording,
+                                                                     environment: ProcessInfo.processInfo.environment),
+                               config: .init(folder: AppPaths.file("Perf"), chromiumFolder: AppPaths.chromiumCache),
+                               craVersion: "\(info?["CFBundleShortVersionString"] as? String ?? "dev") (\(info?["CFBundleVersion"] as? String ?? "?"))",
+                               chromiumVersion: CraCEFRuntime.chromiumVersion(), onboarding: delegate.needsOnboarding)
 
-    // Belt and braces: Chromium's run loop drives NSApplication and should call
-    // applicationDidFinishLaunching, but bootstrapping is idempotent either way.
-    DispatchQueue.main.async { delegate.bootstrapIfNeeded() }
-    HitchMonitor.startIfRequested()
+        // Belt and braces: Chromium's run loop drives NSApplication and should call
+        // applicationDidFinishLaunching, but bootstrapping is idempotent either way.
+        DispatchQueue.main.async { delegate.bootstrapIfNeeded() }
+        HitchMonitor.startIfRequested()
+    }
     CraCEFRuntime.runMessageLoop()
+    if !ready { didNotStart() }
     PerfRecorder.quit()
     // A log that ends without this line ended in a crash or a forced quit.
     CraLog.note("Cra quits")

@@ -3,6 +3,9 @@
 
 source_set("core") {
   sources = [
+    "CraCEF.h",
+    "bridge.h",
+    "bridge.mm",
     "engine_main.mm",
     "spike_checks.h",
     "spike_checks.mm",
@@ -22,5 +25,12 @@ source_set("core") {
     "//chrome/browser/lifetime:lifetime",
     "//chrome/browser/ui:browser_tabstrip",
     "//url",
+    "//base/version_info",
+    "//chrome/common:constants",
+    "//components/tabs:public",
+    "//net",
+    "//ui/base",
+    "//chrome/browser:chrome_browser_application_mac",
+    "//components/keep_alive_registry",
   ]
 }
