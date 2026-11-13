@@ -2778,6 +2778,16 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   `PlaybackControlForeground` = black 50 % (light) / white 66 % (dark). Long strings: "Close Mini Player", "Open
   Picture in Picture", "Adjust Tab Volume", "Toggle Microphone"; symbols backward/forward.end.fill,
   speaker.wave.3.fill / speaker.wave.1.fill, video.slash.fill (short ones are inline, read live instead).
+- [S] Which sound gets a card (13 Nov 2026, Arc 1.172.2, #411): the card's state is only the media session's
+  (`MediaSessionState` {status: `MediaSessionStatus` active/ducking/suspended/inactive, hasNext/PreviousTrack,
+  canToggleMicrophone/Camera, isCameraOn/MicrophoneOn, volume, position}, from `webContents:didChangeMediaSessionState:`);
+  the audible state (`webContents:didChangeAudibleState:`) is a separate signal. So a card needs Chromium's media
+  session, which Chrome's global media controls offer only while `MediaSessionImpl::IsControllable()`: a media
+  element over 5 s or of unknown length (`media::DurationToMediaContentType`, loop not counted), or a page media
+  session with a playback state. A 1 s `new Audio().play()` ding or Web Audio alone is not. Not measured live (no
+  decompiler; whether Arc also drops a non-controllable active session is inferred from Chrome's rule). Cra:
+  "Cra.audible" carries IsControllable (audible-state.patch), `CraBrowser.hasUncontrollableSound`, scenario
+  player-skips-dings.
 - [O] Now playing, live: a card appears for an audio tab once it is off screen (a video in Picture in Picture has
   none). Cards 8 pt in, bottom where the list ends (50 pt above the window bottom), 6 pt corners, filled with the
   palette's `backgroundExtra` for the space's scheme: dark = 15 % of `shadedDark` (#110D00 for #6F5600), light =
