@@ -46,7 +46,7 @@ struct OnboardingView: View {
                     .id(model.step)
                 Button(action: model.next) {
                     Text(MobileOnboarding.buttonTitle(for: model.step))
-                        .font(.system(size: 18, weight: .semibold))
+                        .scaledFont(size: 18, weight: .semibold, relativeTo: .body)
                         .foregroundStyle(model.step == .welcome ? Color(red: 0.2, green: 0.16, blue: 0.75) : .white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -57,7 +57,7 @@ struct OnboardingView: View {
                 .accessibilityIdentifier("onboarding-next")
                 if model.step == .defaultBrowser {
                     Button(MobileOnboarding.defaultBrowserSkip) { model.finish(model.blocksAdsAndTrackers) }
-                        .font(.system(size: 16, weight: .medium))
+                        .scaledFont(size: 16, weight: .medium, relativeTo: .body)
                         .foregroundStyle(.secondary)
                         .padding(.top, 14)
                         .accessibilityIdentifier("onboarding-skip")
@@ -84,7 +84,7 @@ struct OnboardingView: View {
             VStack(spacing: 28) {
                 Image("LaunchMark").resizable().frame(width: 96, height: 96)
                 Text(MobileOnboarding.welcomeTitle)
-                    .font(.system(size: 38, weight: .bold))
+                    .scaledFont(size: 38, weight: .bold, relativeTo: .largeTitle)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
@@ -101,8 +101,8 @@ struct OnboardingView: View {
                                 .frame(width: 40, height: 40)
                                 .background(Color.accentColor.opacity(0.12), in: Circle())
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(card.title).font(.system(size: 17, weight: .semibold))
-                                Text(card.detail).font(.system(size: 15)).foregroundStyle(.secondary)
+                                Text(card.title).scaledFont(size: 17, weight: .semibold, relativeTo: .body)
+                                Text(card.detail).scaledFont(size: 15, weight: .regular, relativeTo: .subheadline).foregroundStyle(.secondary)
                             }
                             Spacer(minLength: 0)
                         }
@@ -119,7 +119,7 @@ struct OnboardingView: View {
                     ForEach(Array(MobileOnboarding.sampleQueries.enumerated()), id: \.offset) { index, query in
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium))
-                            Text(query).font(.system(size: 16, weight: .medium)).lineLimit(1)
+                            Text(query).scaledFont(size: 16, weight: .medium, relativeTo: .body).lineLimit(1)
                             Spacer(minLength: 4)
                             Text("Browse for Me")
                                 .font(.system(size: 12, weight: .semibold))
@@ -140,7 +140,7 @@ struct OnboardingView: View {
         case .pinch:
             VStack(spacing: 22) {
                 Text("\(Text("Pinch").italic()) to summarize any web page")
-                    .font(.system(size: 30, weight: .bold))
+                    .scaledFont(size: 30, weight: .bold, relativeTo: .largeTitle)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
@@ -162,7 +162,7 @@ struct OnboardingView: View {
                 Toggle(isOn: $model.blocksAdsAndTrackers) {
                     HStack(spacing: 14) {
                         SettingIcon(symbol: "hand.raised.fill", color: Color(red: 1, green: 0.22, blue: 0.33))
-                        Text(MobileOnboarding.blockingSwitch).font(.system(size: 17, weight: .medium))
+                        Text(MobileOnboarding.blockingSwitch).scaledFont(size: 17, weight: .medium, relativeTo: .body)
                     }
                 }
                 .padding(16)
@@ -179,7 +179,7 @@ struct OnboardingView: View {
                         HStack(spacing: 12) {
                             Text("\(index + 1)").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
                                 .frame(width: 22, height: 22).background(Color.accentColor, in: Circle())
-                            Text(step).font(.system(size: 17, weight: .medium))
+                            Text(step).scaledFont(size: 17, weight: .medium, relativeTo: .body)
                         }
                     }
                 }
@@ -190,7 +190,7 @@ struct OnboardingView: View {
 
     private func title(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 30, weight: .bold))
+            .scaledFont(size: 30, weight: .bold, relativeTo: .largeTitle)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 28)
             .accessibilityIdentifier("onboarding-title")
@@ -323,5 +323,28 @@ struct PinchDemo: View {
         }
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+}
+
+
+/// A fixed design size that grows and shrinks with the phone's text size (Dynamic Type), as
+/// Arc Search's onboarding does since 1.22.2.
+private struct ScaledFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+
+    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
+    }
+}
+
+extension View {
+    func scaledFont(size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(ScaledFont(size: size, weight: weight, relativeTo: style))
     }
 }
