@@ -3924,12 +3924,34 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   ↶ renamed the file back at once (git-consortium-master.zip). Not captured: the reverted toast (Cra shows
   "Download name reverted!" in its one toast), the card in a light space (Cra: white, from Arc's Max picture), and
   whether hovering holds it.
-- Cra: TidyDownloads (CraCore: prompt with Cra's own examples, the name's checks, a free name), TidyDownloadsService
+- Cra: TidyDownloads (CraCore: the recovered nine examples, source/language input, final-dot suffix checks and bounded sibling names), TidyDownloadsService
   (FoundationModels, renames the file, DownloadHistory.move, revert), DownloadRenameCard (SidebarView, over the bin).
   Settings ▸ Max ▸ Tidy Downloads, off by default. Deviations Victor asked for (5 Nov 2026): the body is 71 pt
   (the old name's baseline as far from the bottom as the label's cap top from the top), and the card stays while the
   pointer is on it, then for what was left of its 8 s but at least 3 s. On a dark space the label and the old name are #929BFF, not
   Arc's #343BD1, which reads at 2.6:1 on the card (PR #197, Quinn Battersby; Victor, 5 Nov 2026).
+
+- [Cra validation, 13 Nov 2026] The production service uses captured source context, current request/owner
+  eligibility, off-main serial file moves and history UUID matching. Forward/reverse results reconcile actual
+  disk destinations; failed Revert retains the current card and returns no success. Controlled production
+  tests cover real file bytes/history, stale ownership and post-move path reuse. This is Cra correctness
+  evidence, not recovery of Arc's unresolved full undo callback edge.
+- [Native Cra validation, 13 Nov 2026] On disposable profiles/homes, actual card Revert restored the
+  original file bytes/path and matching history UUID after source navigation/closure. With the renamed
+  file withheld, Revert kept the current card/history and showed no success toast; after restoration,
+  retry succeeded while a newer Swatch's file/history remained unchanged. Actual 1x/2x captures and
+  the strict long/short/bin scenario passed. The first two native runs used the dark Personal space: a per-app
+  light appearance command did not establish a light-space palette. A separate true light Auto-space
+  run at each of 1x/2x passed the same checks with the white card/failure retention. Exact recent-path callback
+  ownership and mid-download captured inputs remain source/controlled-harness evidence; native bin
+  captures and closure after completion prove narrower behavior. No new paired Arc motion claim.
+- [Local model, 13 Nov 2026] The exact production private adapter/schema on an available 4096-token model
+  returned English `Dogfooding notes from Example Studio` (the deterministic cleaner restores `.png`),
+  Spanish `Informe anual del Museo del Prado.pdf` and
+  Japanese `京都の秋の庭園写真資料.png` from synthetic inputs. The AdobeStock/ladybug sample returned nil
+  twice, including one targeted retry; its cause is not classified. Counts were 552 instruction, 51–69
+  prompt and 89 schema tokens, excluding framework framing/output. These few outputs do not establish universal cleanup, date retention, translation quality
+  or exact context safety; native checks above use deterministic fake names and do not establish model quality.
 
 ## 5-Second Previews (Arc 1.171, 10 Nov 2026, Arc's binary + Victor's Arc: Hacker News, Google, example.com; 2x, 60 fps)
 

@@ -277,6 +277,16 @@ built release app with a test profile. Note anything that fails in the release's
   zh-CN` and chrome://version shows `--lang=zh-CN`.
 - **#133:** pick Google in Settings ▸ Privacy ▸ Secure DNS. Without a relaunch, cra.log says
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
+- **Tidy Downloads (13 Nov 2026):** in a disposable data/home folder, capture long/short rename cards
+  and the bin at native 1x and 2x, in light/dark; retain the approved 71 pt body, dark secondary text
+  and hover hold. The 13 Nov native checks passed at both scales on the dark Personal space; the
+  per-app light run did not verify a true light-space palette. A separate true light Auto-space/white-card
+  run passed at each of 1x/2x. The strict long/short/bin scenario passed. Use the actual card's Revert control: verify file bytes, path and matching history UUID
+  restore; on a missing-file failure retain the card and show no reverted toast. A newer download's
+  history/recent presentation must survive undo of the older card. Navigate/close the source tab while
+  keeping its owner window; distinguish captured-input harness evidence from observed native behavior.
+  The production prompt/schema has limited English/Spanish/Japanese samples, including a photo returning nil
+  twice; record further actual outcomes without treating fake names or component counts as quality/token guarantees.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it

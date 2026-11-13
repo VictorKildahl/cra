@@ -14,7 +14,13 @@ snapshot DownloadRenameCard download-rename-long
 cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
 cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
 expect-log Tidy Downloads: renamed a download \(11
+# The completed rename belongs to its window, so closing its source tab must retain the card.
+# Reopen and check a unique DOM marker; file-load logs intentionally omit paths/queries.
+cra://action/closeTab
+cra://open?url=file://${FIXTURES}/Pages/downloads.html?qa=dock
 wait 1
+cra://debug?cdp=Runtime.evaluate&params=%7B%22expression%22%3A%22location.search%3D%3D%3D%27%3Fqa%3Ddock%27%26%26document.querySelectorAll%28%27a%27%29.length%3D%3D%3D3%3F%27tidy-downloads-dock-ready%27%3A%27not-ready%27%22%7D
+expect-log Cra cdp Runtime.evaluate .*"value":"tidy-downloads-dock-ready"
 snapshot DownloadRenameCard download-rename-short
 # After the rename card leaves, the download preview still sits over the Library button.
 # The Library button must not clip it: the bin reaches past the glyph's top and right edges.
