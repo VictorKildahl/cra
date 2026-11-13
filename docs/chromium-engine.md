@@ -129,3 +129,27 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
     a plain `makeKeyWindow` doesn't in an inactive app), sleep-tabs (tab sleep not in the bridge yet).
   - Next: the methods the scenarios need, in the order of step 3; extensions see a blank active tab until Cra's
     selected page is Chrome's active tab without Chrome taking its view.
+- 13 Nov 2026, evening: the bridge covers most of CraCEF.h. On top of start-up and pages: each page's DevTools
+  protocol session with Cra.* (freezing, discard, history, translate, automatic PiP, spare, side panel), the
+  browser DevTools pipe, the CEF bridge's switches and features, keys (Cra's shortcuts before and after the page,
+  never Chrome's), favicons, theme and background colours, find, zoom, SSL status, element fullscreen and the
+  link status line, prefs (HTTPS-only, fingerprinting, appearance, secure DNS, any pref as JSON), downloads
+  (Cra's destination, progress, pause/resume/cancel), permission prompts (Cra's card), DevTools (Chrome's
+  DevTools window hidden, its frontend docked in Cra's card), Picture in Picture and print, blocked pop-ups and the
+  site's pop-up setting, ad and tracker blocking, the camera/microphone indicator, process events, browser
+  fetches with a profile's cookies, Arc's page menu, document start scripts, restored history, spare and side
+  panel pages, extension tabs and windows, stray windows, a second launch's URLs.
+  - engine/chromium/patches: 19 of Cra's CEF patches (their CEF hooks now call Cra's layer) and 13 of the
+    layer's own (cra-hosted-pages, cra-keys, cra-downloads, cra-download-tabs, cra-permissions,
+    cra-fullscreen-status, cra-devtools, cra-content-blocking, cra-page-menu, cra-relaunch, cra-prefs, …).
+    fingerprinting-protection is rebased and waits for a full rebuild; spare-pages isn't needed (spares stay out
+    of the tab strip); gcm-enabled, extension-trigger-action-null-checks and extensions-normal-windows aren't
+    needed on 157.
+  - Scenarios passing on the new engine: fifty-tabs, sleep-tabs, cookie-banners, restore-windows-off,
+    library-width, solid-spaces, dev-mode, developer-bar, find-selection, app-shortcuts, devtools-close-tab,
+    permission-card, download-actions, app-icon-download. Not yet: start-on-new-tab (background command bar),
+    blocked-popups (fix in, not rerun). The whole suite runs whenever the Mac is idle.
+  - Still to do: Cra.mediaSession and Cra.installFromWebStore, agent pages and agent downloads, extension
+    popups (Chrome's hidden window still shows for one), runChromeCommand, ungoogled-chromium's service patches,
+    the Intel build, then step 4.
+
