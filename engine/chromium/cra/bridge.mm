@@ -63,6 +63,17 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "components/favicon/content/content_favicon_driver.h"
+#include "components/favicon/core/favicon_driver_observer.h"
+#include "components/find_in_page/find_result_observer.h"
+#include "components/find_in_page/find_tab_helper.h"
+#include "components/find_in_page/find_types.h"
+#include "components/zoom/zoom_controller.h"
+#include "content/public/browser/ssl_status.h"
+#include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/image/image.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "net/base/net_errors.h"
@@ -85,6 +96,10 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageAudible:(BOOL)audible;
 - (void)pageFocused;
 - (void)pageDestroyed;
+- (void)pageThemeColor;
+- (void)pageBackgroundColor;
+- (void)pageFavicon:(NSImage*)image url:(NSString*)url;
+- (void)pageFindResult;
 @end
 
 namespace {
@@ -143,11 +158,57 @@ void Later(base::OnceClosure task) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE, std::move(task));
 }
 
-// A page of Cra's tells its CraBrowser what happens to it.
-class PageObserver : public content::WebContentsObserver {
+// "#RRGGBB", or "" for no colour.
+NSString* Hex(std::optional<SkColor> color) {
+  if (!color) {
+    return @"";
+  }
+  return [NSString stringWithFormat:@"#%02X%02X%02X", SkColorGetR(*color), SkColorGetG(*color), SkColorGetB(*color)];
+}
+
+// A page of Cra's tells its CraBrowser what happens to it: the page itself, its favicon and its find results.
+class PageObserver : public content::WebContentsObserver,
+                     public favicon::FaviconDriverObserver,
+                     public find_in_page::FindResultObserver {
  public:
   PageObserver(content::WebContents* contents, CraBrowser* owner)
-      : content::WebContentsObserver(contents), owner_(owner) {}
+      : content::WebContentsObserver(contents), owner_(owner) {
+    if (auto* favicons = favicon::ContentFaviconDriver::FromWebContents(contents)) {
+      favicons->AddObserver(this);
+      favicons_ = favicons;
+    }
+    if (auto* find = find_in_page::FindTabHelper::FromWebContents(contents)) {
+      find->AddObserver(this);
+      find_ = find;
+    }
+  }
+
+  ~PageObserver() override {
+    if (favicons_) {
+      favicons_->RemoveObserver(this);
+    }
+    if (find_) {
+      find_->RemoveObserver(this);
+    }
+  }
+
+  // favicon::FaviconDriverObserver:
+  void OnFaviconUpdated(favicon::FaviconDriver* driver,
+                        NotificationIconType type,
+                        const GURL& icon_url,
+                        bool icon_url_changed,
+                        const gfx::Image& image) override {
+    if (type == NON_TOUCH_16_DIP && !image.IsEmpty()) {
+      [owner_ pageFavicon:image.ToNSImage() url:base::SysUTF8ToNSString(icon_url.spec())];
+    }
+  }
+
+  // find_in_page::FindResultObserver:
+  void OnFindResultAvailable(content::WebContents* contents) override { [owner_ pageFindResult]; }
+  void OnFindTabHelperDestroyed(find_in_page::FindTabHelper* helper) override { find_ = nullptr; }
+
+  void DidChangeThemeColor() override { [owner_ pageThemeColor]; }
+  void OnBackgroundColorChanged() override { [owner_ pageBackgroundColor]; }
 
   void DidStartNavigation(content::NavigationHandle* handle) override {
     if (handle->IsInPrimaryMainFrame() && !handle->IsSameDocument()) {
@@ -174,6 +235,8 @@ class PageObserver : public content::WebContentsObserver {
 
  private:
   CraBrowser* __weak owner_;
+  raw_ptr<favicon::ContentFaviconDriver> favicons_ = nullptr;
+  raw_ptr<find_in_page::FindTabHelper> find_ = nullptr;
 };
 
 // The hidden Browser that holds a profile's pages, and what arrives in it that Cra didn't put there: a
@@ -748,6 +811,10 @@ void RunReadyBlocks() {
     [_delegate browser:self didChangeCommittedLoad:NO];
   }
   [self pageAddressChanged];
+  // A new page: its colour isn't known until it reports one (CraBrowser.pageCanvasColor shows meanwhile).
+  if ([_delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)]) {
+    [_delegate browser:self didReportBackgroundColor:@""];
+  }
 }
 
 // The address the page shows (Chrome's visible URL: a typed address as its load starts), as CEF's
@@ -827,6 +894,29 @@ void RunReadyBlocks() {
   if ([_delegate respondsToSelector:@selector(browser:didChangeAudible:)]) {
     [_delegate browser:self didChangeAudible:audible];
   }
+}
+
+- (void)pageThemeColor {
+  [_delegate browser:self didReportThemeColor:Hex(_contents->GetThemeColor())];
+}
+
+- (void)pageBackgroundColor {
+  if ([_delegate respondsToSelector:@selector(browser:didReportBackgroundColor:)]) {
+    [_delegate browser:self didReportBackgroundColor:Hex(_contents->GetBackgroundColor())];
+  }
+}
+
+- (void)pageFavicon:(NSImage*)image url:(NSString*)url {
+  [_delegate browser:self didLoadFavicon:image forURL:url];
+}
+
+- (void)pageFindResult {
+  auto* find = find_in_page::FindTabHelper::FromWebContents(_contents);
+  if (!find || ![_delegate respondsToSelector:@selector(browser:didFindMatches:activeMatch:)]) {
+    return;
+  }
+  const find_in_page::FindNotificationDetails& result = find->find_result();
+  [_delegate browser:self didFindMatches:result.number_of_matches() activeMatch:result.active_match_ordinal()];
 }
 
 - (void)pageFocused {
@@ -963,6 +1053,9 @@ void RunReadyBlocks() {
 - (void)setPopupsAllowed:(BOOL)allowed {
 }
 - (void)exitFullscreen {
+  if (_contents) {
+    _contents->ExitFullscreen(/*will_cause_resize=*/true);
+  }
 }
 - (void)showDevToolsInspectingPoint:(NSPoint)point {
 }
@@ -973,13 +1066,24 @@ void RunReadyBlocks() {
 - (void)closeDevTools {
 }
 - (double)zoomLevel {
-  return 0;
+  auto* zoom = _contents ? zoom::ZoomController::FromWebContents(_contents) : nullptr;
+  return zoom ? zoom->GetZoomLevel() : 0;
 }
 - (void)setZoomLevel:(double)level {
+  if (auto* zoom = _contents ? zoom::ZoomController::FromWebContents(_contents) : nullptr) {
+    zoom->SetZoomLevel(level);
+  }
 }
 - (void)findText:(NSString*)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext {
+  // Chrome's find helper tells a new search from the next match of the same one itself.
+  if (auto* find = _contents ? find_in_page::FindTabHelper::FromWebContents(_contents) : nullptr) {
+    find->StartFinding(base::SysNSStringToUTF16(text), forward, matchCase, /*find_match=*/true);
+  }
 }
 - (void)stopFinding:(BOOL)clearSelection {
+  if (auto* find = _contents ? find_in_page::FindTabHelper::FromWebContents(_contents) : nullptr) {
+    find->StopFinding(clearSelection ? find_in_page::SelectionAction::kClear : find_in_page::SelectionAction::kKeep);
+  }
 }
 - (void)requestPictureInPictureAutomatic:(BOOL)automatic {
 }
@@ -999,9 +1103,18 @@ void RunReadyBlocks() {
   return NO;
 }
 - (void)probeBackgroundColor {
+  if (_contents) {
+    [self pageBackgroundColor];
+  }
 }
+// Arc's black while websites are dark, white while they are light.
 + (NSColor*)pageCanvasColor {
-  return NSColor.whiteColor;
+  NSInteger mode = cra::WebsiteAppearance();
+  BOOL dark = mode == 2 || (mode == 0 && [NSApp.effectiveAppearance
+                                             bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua,
+                                                                                  NSAppearanceNameDarkAqua ]] ==
+                                             NSAppearanceNameDarkAqua);
+  return dark ? NSColor.blackColor : NSColor.whiteColor;
 }
 - (void)executeJavaScript:(NSString*)script inDevTools:(BOOL)inDevTools {
   if (!inDevTools) {
@@ -1094,7 +1207,28 @@ void RunReadyBlocks() {
                 }];
 }
 - (CraSSLStatus*)sslStatus {
-  return nil;
+  content::NavigationEntry* entry = _contents ? _contents->GetController().GetLastCommittedEntry() : nullptr;
+  if (!entry || entry->IsInitialEntry()) {
+    return nil;
+  }
+  const content::SSLStatus& ssl = entry->GetSSL();
+  CraSSLStatus* status = [[CraSSLStatus alloc] init];
+  status.secureConnection = ssl.certificate != nullptr;
+  status.certStatus = ssl.cert_status;
+  status.contentStatus = static_cast<NSUInteger>(ssl.content_status);
+  NSMutableArray<NSData*>* certificates = [NSMutableArray array];
+  if (ssl.certificate) {
+    auto add = [&](const CRYPTO_BUFFER* buffer) {
+      base::span<const uint8_t> der = net::x509_util::CryptoBufferAsSpan(buffer);
+      [certificates addObject:[NSData dataWithBytes:der.data() length:der.size()]];
+    };
+    add(ssl.certificate->cert_buffer());
+    for (const auto& intermediate : ssl.certificate->intermediate_buffers()) {
+      add(intermediate.get());
+    }
+  }
+  status.certificates = certificates;
+  return status;
 }
 - (void)notifyMoveOrResizeStarted {
 }

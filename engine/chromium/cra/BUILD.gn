@@ -29,6 +29,8 @@ source_set("core") {
     "//chrome/browser/lifetime:lifetime",
     "//chrome/browser/ui:browser_tabstrip",
     "//url",
+    "//components/find_in_page:find_in_page",
+    "//components/favicon/content:content",
     "//chrome/browser/picture_in_picture:picture_in_picture",
     "//chrome/browser/translate:translate",
     "//base/version_info",
