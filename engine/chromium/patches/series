@@ -24,6 +24,7 @@ cra-prefs.patch
 cra-keys.patch
 cra-downloads.patch
 cra-permissions.patch
+cra-permission-tabs.patch
 cra-fullscreen-status.patch
 cra-devtools.patch
 cra-download-tabs.patch

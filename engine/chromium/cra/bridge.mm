@@ -93,6 +93,7 @@
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "components/infobars/content/content_infobar_manager.h"
+#include "components/permissions/cra_permission_tabs.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -1588,6 +1589,8 @@ void RunReadyBlocks() {
   g_external_protocol = &ExternalProtocol;
   g_navigation_throttles = &AddNavigationThrottles;
   g_download_intercept = &DownloadIntercept;
+  // Cra's app holds a request from a tab behind until its tab shows (BrowserManager, PermissionAsk), as on CEF.
+  permissions::cra::g_asks_from_any_tab = [](content::WebContents* contents) { return BrowserFor(contents) != nil; };
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->AddObserver(&Captures());
   blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(base::BindRepeating(&BlockedPopupsChanged));
   StartDownloads(&ReportDownload);

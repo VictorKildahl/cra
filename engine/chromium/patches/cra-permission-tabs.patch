@@ -1,0 +1,47 @@
+diff --git a/components/permissions/permission_request_manager.cc b/components/permissions/permission_request_manager.cc
+--- a/components/permissions/permission_request_manager.cc
++++ b/components/permissions/permission_request_manager.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "components/permissions/permission_request_manager.h"
++
++#include "components/permissions/cra_permission_tabs.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -1268,7 +1270,8 @@
+   DCHECK(!web_contents()->HasUncommittedNavigationInPrimaryMainFrame());
+   DCHECK(current_request_ui_to_use_);
+ 
+-  if (!tab_is_active_) {
++  if (!tab_is_active_ && !(permissions::cra::g_asks_from_any_tab &&
++                            permissions::cra::g_asks_from_any_tab(web_contents()))) {
+     NotifyPromptCreationFailedHiddenTab();
+     return;
+   }
+diff --git a/components/permissions/cra_permission_tabs.h b/components/permissions/cra_permission_tabs.h
+new file mode 100644
+--- /dev/null
++++ b/components/permissions/cra_permission_tabs.h
+@@ -0,0 +1,20 @@
++// Cra's hook into the permission request manager (engine/chromium in the Cra repository). //cra sets it; Chrome
++// itself never does, so nothing here changes Chrome's behaviour.
++#ifndef COMPONENTS_PERMISSIONS_CRA_PERMISSION_TABS_H_
++#define COMPONENTS_PERMISSIONS_CRA_PERMISSION_TABS_H_
++
++namespace content {
++class WebContents;
++}
++
++namespace permissions::cra {
++
++// A page of Cra's hands its requests on at once, from any tab: Cra's app decides when a tab behind asks (it waits
++// for its tab, GitHub #286), as on CEF. Chrome holds a request while its tab isn't the active one, and Cra's
++// active tab is only ever the page the user is on.
++using AsksFromAnyTabHook = bool (*)(content::WebContents* contents);
++inline AsksFromAnyTabHook g_asks_from_any_tab = nullptr;
++
++}  // namespace permissions::cra
++
++#endif  // COMPONENTS_PERMISSIONS_CRA_PERMISSION_TABS_H_
