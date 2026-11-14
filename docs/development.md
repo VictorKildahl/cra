@@ -160,6 +160,9 @@ to Markdown or `docs/` alone runs nothing.
   platform stand-ins: related-view/request ownership, source privacy, nested opener lifetime,
   close return paths, and private-tab persistence/cleanup. Native POST and opener behavior is
   exercised separately by `CraUITests/PopupTests` with `iOS/Tests/popup_server.py` on loopback.
+- `scripts/test-shared-download-replacement.sh`: the production download service, history and
+  destination callback with suspended inference and disposable files: replacement ownership,
+  resource aliases, preparation scheduling, original history identity and safe undo.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and
