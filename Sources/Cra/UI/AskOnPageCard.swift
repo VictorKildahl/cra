@@ -297,7 +297,6 @@ struct AskOnPageView: View {
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
             AskOnPageInput(state: state, overlay: overlay, controller: controller)
                 .frame(minWidth: 0, maxWidth: .infinity)
-                .layoutPriority(1)
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     (dimensions.height - ascent + descent) / 2 + ascent
                 }
@@ -321,7 +320,7 @@ struct AskOnPageView: View {
                 Text(countLabel)
                     .font(.system(size: 13, weight: .medium, design: .rounded)).monospacedDigit()
                     .foregroundStyle(.primary.opacity(0.5))
-                    .lineLimit(1).truncationMode(.middle).layoutPriority(-1)
+                    .lineLimit(1).truncationMode(.middle)
                     .help(countLabel).accessibilityLabel(countLabel)
                 if matches > 0 {
                     iconButton("arrow.up", label: "Previous") { controller?.onFind(overlay.findQuery, false) }
@@ -333,6 +332,7 @@ struct AskOnPageView: View {
                 let ready = AskOnPagePolicy.showsAskButton(query: overlay.findQuery, canAsk: state.canAsk)
                 Button { if ready { controller?.ask(overlay.findQuery) } } label: {
                     Text("Ask").font(.callout.weight(.semibold)).foregroundStyle(.white)
+                        .fixedSize()
                         .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color(state.tone.button)))
                 }
