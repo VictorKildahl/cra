@@ -140,9 +140,9 @@ staples the DMG, checks it with `spctl` and writes that CPU's appcast. Both CPUs
 build number. Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
 
 `CRA_ARCH=x86_64 scripts/build.sh` builds the other CPU on its own: the host CPU keeps
-`vendor/cef` and `build/Cra.app`, the other one gets `vendor/cef-<arch>` (that CPU's CEF,
-read by `Package.swift` through `CRA_CEF_DIR`), `build/swiftpm-<arch>` and
-`build/<arch>/Cra.app`. `build.sh` stops if any executable in the bundle lacks that CPU's
+`vendor/engine` and `build/Cra.app`, the other one gets `vendor/engine-<arch>` (that CPU's
+engine from `scripts/fetch-engine.sh`, read by `Package.swift` through
+`CRA_ENGINE_FRAMEWORKS`), `build/swiftpm-engine-<arch>` and `build/<arch>/Cra.app`. `build.sh` stops if any executable in the bundle lacks that CPU's
 code. An Intel build runs on Apple silicon under Rosetta, which is enough for a launch
 check; Intel-only problems still need a real Intel Mac.
 
@@ -163,21 +163,21 @@ It installs a pinned dmgbuild into `build/dmgbuild-venv` on first use.
 
 Order matters because each signature seals what is inside it:
 
-1. every `.dylib` in `Chromium Embedded Framework.framework/Libraries`
+1. the engine's helpers inside `Cra Framework.framework/Versions/Current/Helpers`: each helper
+   app (pages, GPU, utilities, alerts, and the Aperitif ones that link the framework at launch)
+   with `resources/CraHelper.entitlements`, then `chrome_crashpad_handler`, `app_mode_loader`
+   and `web_app_shortcut_copier`
 2. the framework itself
 3. Sparkle's `Autoupdate` and `Updater.app`, then `Sparkle.framework` (its XPC services are
    removed: they are only for sandboxed apps)
-4. the five helper apps, each with `resources/CraHelper.entitlements`
-5. `Cra.app` with `resources/Cra.entitlements`
+4. `Cra.app` with `resources/Cra.entitlements`
 
 The entitlements are the hardened-runtime exceptions Chromium needs (JIT, unsigned
 executable memory, library validation off, dyld environment variables), plus camera,
 microphone and location so sites can ask for them.
 
-The helpers run in Chromium's own macOS sandbox (seatbelt): `CraHelper` enters it through
-`CefScopedSandboxContext` (which loads the framework's `Libraries/libcef_sandbox.dylib`)
-before loading CEF, and `CefSettings.no_sandbox` is off. Renderer, GPU, network, storage
-and audio processes are sandboxed, video capture is not (Chrome's choice too).
+The helpers are Chrome's own and run in Chrome's macOS sandbox (seatbelt), as in Chrome:
+renderer, GPU, network, storage and audio processes are sandboxed, video capture is not.
 
 ## Passkeys
 
@@ -187,7 +187,7 @@ with a provisioning profile, the way Chrome, Arc and Dia ship:
 
 | Entitlement | Turns on |
 |---|---|
-| `keychain-access-groups` = `<team>.dk.kildahl.cra.webauthn` | Chromium's Touch ID passkeys, stored in Cra's keychain group. `scripts/cef-patches/webauthn-keychain-access-group.patch` derives the group from the app's `application-identifier` (Chromium's branding has no team ID). |
+| `keychain-access-groups` = `<team>.dk.kildahl.cra.webauthn` | Chromium's Touch ID passkeys, stored in Cra's keychain group. `engine/chromium/patches/webauthn-keychain-access-group.patch` derives the group from the app's `application-identifier` (Chromium's branding has no team ID). |
 | `com.apple.developer.web-browser.public-key-credential` | iCloud Keychain passkeys (Passwords app), through Chromium's own iCloud Keychain code. Managed: Apple must approve it. |
 
 One-time setup, as the Account Holder:
@@ -252,13 +252,13 @@ without a warning.
 2. Locally: `CRA_GOOGLE_API_KEY=<key>` next to `CRA_SIGN_IDENTITY`. In CI: the
    `CRA_GOOGLE_API_KEY` secret. Never commit it.
 
-`build.sh` writes it to Info.plist as `CraGoogleAPIKey`, and CraCEF sets
-`GOOGLE_API_KEY` from it before Chromium starts.
+`build.sh` writes it to Info.plist as `CraGoogleAPIKey`, and the engine's bridge sets
+`GOOGLE_API_KEY` from it before Chrome starts.
 
 The key lives in the Google Cloud project `cra-browser`, restricted to the Safe Browsing
 API. Every install shares its quota: 10,000 list updates and 10,000 lookups a day. A
 running Cra fetches list updates 1–5 minutes after launch and then once a day
-(`scripts/cef-patches/safe-browsing-update-interval.patch`; Chrome uses Google's ~30
+(`engine/chromium/patches/safe-browsing-update-interval.patch`; Chrome uses Google's ~30
 minutes), plus a full-hash lookup when a URL matches a list: about 1–3 updates per
 install per day. An alert policy in the project emails at 7,000 a day; ask for more on
 the API's Quotas page in the Cloud console (the Cloud Quotas API can't). Once the quota

@@ -2521,7 +2521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return """
         Cra \(info?["CFBundleShortVersionString"] as? String ?? "") (\(info?["CFBundleVersion"] as? String ?? ""))
-        Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())
+        \(EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()))
         macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)
         """
     }
@@ -2774,7 +2774,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.windowsMenu = window
 
         let help = NSMenu(title: "Help")
-        help.addItem(withTitle: "Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())", action: nil, keyEquivalent: "")
+        help.addItem(withTitle: EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()), action: nil, keyEquivalent: "")
         help.addItem(.separator())
         help.addItem(item("essentialShortcuts"))
         for (title, url) in [("Cra Help", "https://crabrowser.app/help"), ("Release Notes", "https://crabrowser.app/release-notes"),

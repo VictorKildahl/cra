@@ -1,0 +1,19 @@
+# A site's session cookie (no expiry: many sign-ins keep theirs so) outlasts a relaunch, as CEF's
+# persist_session_cookies kept it. Chrome keeps one only with "Continue where you left off", which Cra
+# never sets (it restores its own tabs), so on Chrome's framework a new profile signed out of those sites
+# at every restart.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='cra_session=kept; path=/'; document.cookie","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"cra_session=kept"
+
+relaunch
+cra://open?url=${PAGE}?n=again
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'cookies:'+document.cookie","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"cookies:[^"]*cra_session=kept

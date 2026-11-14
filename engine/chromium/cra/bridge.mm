@@ -2949,6 +2949,11 @@ void RunReadyBlocks() {
   for (const std::string& arg : args) {
     argv.push_back(arg.c_str());
   }
+  // Safe Browsing's list updates need a Google API key, which Chrome reads from the environment in an
+  // unbranded build (google_apis); one already set there wins, for testing (docs/release.md).
+  if (NSString* key = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CraGoogleAPIKey"]; key.length) {
+    setenv("GOOGLE_API_KEY", key.UTF8String, 0);
+  }
   // Cra made NSApp, its delegate and its menus: Chrome keeps them (cra_engine_hooks.h).
   cra::g_embedder_owns_app = NSApp.delegate != nil;
   g_exit_code = CraEngineMain(static_cast<int>(argv.size()), argv.data());

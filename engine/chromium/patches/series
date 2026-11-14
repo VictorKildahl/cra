@@ -54,3 +54,4 @@ ungoogled/safe_browsing-disable-reporting-of-safebrowsing-over.patch
 ungoogled/disable-untraceable-urls.patch
 ungoogled/disable-intranet-redirect-detector.patch
 ungoogled/disable-dial-repeating-discovery.patch
+cra-session-cookies.patch
