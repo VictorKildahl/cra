@@ -27,6 +27,7 @@
 #33    Tests/BrowserManagerLifecycleTests.swift::nowPlayingCase  896f39d0c04e
 #33    Tests/BrowserManagerLifecycleTests.swift::nowPlayingSkipsPictureInPictureCase  df2bec09cf49
 #33    Tests/BrowserManagerLifecycleTests.swift::playerMediaSessionCase  70013060dd84
+#36    Tests/Scenarios/https-only-toggle.scenario  c2f25093ac38
 #38    Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInAnotherSpaceOfTheProfileIsSelected  f9b7280ab4a7
 #38    Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInThisSpaceWins  d378e29544b8
 #38    Tests/BrowserManagerLifecycleTests.swift::extensionTabActivationCase  49320dcef25f
@@ -163,6 +164,7 @@
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::line  fe1dcfb4701b
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::severalTemplatesAreOneServerEach  dc2fe791c93f
 #110   Tests/Scenarios/secure-dns-default.scenario  1042904fb8ce
+#111   Tests/Scenarios/permission-doubled-request.scenario  b5196411ebdf
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::arcSpaceProfiles  c9cf90d32a72
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::commandLineFollowsTheLoadExtensionOrder  eb3441dc88ab
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::importedExtensionsGoWhereTheirProfilesWent  689676ea4e95
@@ -320,6 +322,7 @@
 #205   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::iconsNeverStack  7ffc5abe0004
 #205   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::readingTheStoredPair  517e549811b6
 #205   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::savingTheIconItReadsChangesNothing  d7e745d4f478
+#208   Tests/Scenarios/middle-click-page.scenario  745469858ccb
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::dropsWhatIsNotALanguageList  92f271a1ba67
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::namesLanguagesInEnglish  11c15535bb75
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::readsAProfilesPreferencesFile  1c42ec3c75b3

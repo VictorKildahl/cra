@@ -37,6 +37,19 @@ enum TestGesture {
         }
     }
 
+    /// A middle click (button 2) at a point of the window, through the app's event queue: the window's
+    /// event monitors and the view under it get it as they get the mouse's.
+    static func middleClick(at point: NSPoint, in window: NSWindow) {
+        for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
+            guard let cg = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                              pressure: type == .otherMouseDown ? 1 : 0)?.cgEvent else { continue }
+            cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+            guard let e = NSEvent(cgEvent: cg) else { continue }
+            NSApp.postEvent(e, atStart: false)
+        }
+    }
+
     /// An other-button release at a point of the window, as the window's event monitors see it
     /// (its button number is AppKit's, not the one a test means).
     static func otherMouseUp(at point: NSPoint, in window: NSWindow) -> NSEvent? {

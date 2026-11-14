@@ -231,3 +231,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
   - `page-windows-open-on-cra` (#354) on the engine: pages count as they first show in a Cra window, and Chrome's
     windows for them (a profile's hidden window, a page's DevTools window) start on the Cra window in use without
     macOS's animation (`setPageWindowStartHandler`), as CEF's page windows do. It passes.
+  - 14 Nov, end of day: every scenario (170, the six that take over the screen included) passes on the engine,
+    on engine-158.0.8127.37-5. Last engine fixes: session cookies outlast a restart (cra-session-cookies.patch,
+    session-cookies-relaunch), Safe Browsing's API key, an extension's window over a full-screen Cra joins its
+    Space. What remains is the hand checks above (Before the switch ships), then the merge and a release.

@@ -1035,6 +1035,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // httpsOnly=1|0: Settings ▸ Privacy's HTTPS-only switch, flipped while pages are open: Chromium takes the
+            // change at once (#36: it crashed doing so once onboarding ended).
+            if let v = dict["httpsOnly"] {
+                store.settings.httpsOnly = v == "1"
+                CraLog.note("https only: \(store.settings.httpsOnly ? "on" : "off")")
+                return
+            }
             // toolbar=out|in|sample|state: the floating toolbar (Settings ▸ Tabs), and where it is.
             if let command = dict["toolbar"] { CraLog.note(main.shell.debugToolbar(command)); return }
             if let label = dict["findBar"] { CraLog.note(main.debugFindBar(label)); return }
@@ -1068,6 +1075,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
                     let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
                     CraLog.note("mouse \(b) at \(Int(g[0])),\(Int(g[1])): \(taken ? "switched space" : "passed on")")
+                    return
+                }
+                // button=middle: a middle click through the event queue, which the window's monitors see as
+                // they see the mouse's: on a page it closes nothing, on a sidebar row it closes the tab (#208).
+                if dict["button"] == "middle" {
+                    let under = NSEvent.mouseEvent(with: .otherMouseUp, location: point, modifierFlags: [], timestamp: 0,
+                                                   windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+                        .flatMap(SpaceListView.tabID(under:)).flatMap { store.item($0)?.displayTitle }
+                    CraLog.note("middle click at \(Int(g[0])),\(Int(g[1])): \(under.map { "tab row \($0)" } ?? "no tab row")")
+                    // probe=1: only what is under the point, no click.
+                    if dict["probe"] != "1" { TestGesture.middleClick(at: point, in: w) }
                     return
                 }
                 // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264); mods=<modifier
