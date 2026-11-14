@@ -179,12 +179,13 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
 
     Click modifiers come from `-[CraApplication sendEvent:]`, as on CEF, and `browser:didChangeSoundPlaying:`
     from the page's audio players.
-  - Quitting: Chrome waits up to 10 s for the network service to exit at shutdown
-    (`BrowserProcessIOThread::ProcessHostCleanUp`), and under Cra it stays up for all of them, on CEF too (a
-    relaunch's "Cra quits" to the next start: 11.6 s). On 158 the thread pool's shutdown then waits too
-    (`TaskTracker::CompleteShutdown`, every worker idle), so without Chrome 158's new Mac shutdown watchdog a
-    quit took over 30 s; the watchdog ends it at 10 s with a dump and `RESULT_CODE_HUNG`, and stays on. Why
-    the network service stays up and what the thread pool waits for are open.
+  - Quitting: until about 09:30 on 14 Nov most scenarios' quits ran into Chrome 158's Mac shutdown watchdog
+    (10 s, then a dump and `RESULT_CODE_HUNG`): the browser waited for the network service to exit
+    (`BrowserProcessIOThread::ProcessHostCleanUp`), then for the thread pool (`TaskTracker::CompleteShutdown`).
+    Plain Chrome from the same tree quits in 0.1 s, also with Cra's switches and `--remote-debugging-pipe`. Since
+    the app stopped acting on page windows the engine doesn't have (focus, find bar, Little Windows, Peek) no quit
+    has (45 scenarios); `grep -l "Teardown watchdog" build/scenarios/*/stdout.log` tells if it comes back. The
+    watchdog stays on.
   - The engine has no Chrome window per page (CEF's Chrome-style hosting has one over each card), so app code
     that read a page's place from `hostWindow` did nothing on it. `TabRuntime.pageWindow`, `pageScreenFrame` and
     `pageViews` fall back to the page's view; Peek, 5-Second Previews, page focus, the find bar, Little Windows
