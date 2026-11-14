@@ -18,10 +18,12 @@ you can send. Code is welcome too, within the few rules below.
   (`scripts/ideas-housekeeping.py`, weekly); one labelled `planned` stays open. What makes
   a good one is under [Features Arc never had](#features-arc-never-had).
 - **No cloud AI.** Arc Max-style cloud features (anything that needs an
-  API key or sends pages away) are out of scope. The exception is features powered by the Mac's
-  own on-device Apple Intelligence model (Ask on Page, Tidy Tabs, Tidy Tab Titles, Tidy Downloads,
-  5-Second Previews, Instant Links, whose search queries go to the search engine as a normal search would),
-  which only show when Apple Intelligence is turned on and never send anything off the Mac.
+  API key or sends pages away) are out of scope. The exception is features powered by the device's
+  own on-device Apple Intelligence model, which never send anything off it. On the Mac: Ask on
+  Page, Tidy Tabs, Tidy Tab Titles, Tidy Downloads, 5-Second Previews and Instant Links (whose
+  search queries go to the search engine as a normal search would), shown only when Apple
+  Intelligence is turned on. On the iPhone: Browse for Me and Summarize, shown on every iPhone
+  that can run Apple Intelligence and asking to turn it on when it's off.
 - **English only, for now.** Like Arc, the interface isn't translated: keeping every
   language in step with a UI that changes most days is more than one maintainer can carry.
   Web pages and Chromium's own dialogs already follow the system language. If you'd like
@@ -85,6 +87,17 @@ You need macOS 14+ on Apple silicon, Xcode 16+ and CMake (`brew install cmake`).
 does, and `just build debug` runs `scripts/build.sh debug`.
 [docs/development.md](docs/development.md) has the code layout, the `cra://` scripting
 hooks and how to run a test instance next to your daily Cra.
+
+The iPhone app needs no Chromium, only Xcode 26 with the iOS platform
+(`xcodebuild -downloadPlatform iOS`):
+
+    scripts/ios.sh build                          # builds into build/ios
+    scripts/ios.sh run -CraOpenURL https://example.com
+    scripts/ios.sh test CraUITests/PageMenuTests  # one UI test class
+
+It matches Arc Search where the Mac app matches Arc; [docs/ios.md](docs/ios.md) has its layout
+and [docs/ios-parity.md](docs/ios-parity.md) what's done and what's missing. Bugs and requests
+for either app use the same issue forms, which ask which app it is.
 
 ## Sending a change
 

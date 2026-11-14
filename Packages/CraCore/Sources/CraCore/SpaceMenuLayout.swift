@@ -20,9 +20,13 @@ public enum SpaceMenuLayout {
     }
 
     /// The menu's groups, a separator between two. Arc offers Hide Space Header only while there
-    /// is one space; Show Space Header brings it back.
-    public static func sections(spaceCount: Int) -> [[Item]] {
-        [
+    /// is one space; Show Space Header brings it back. An incognito window's space (#413) has no
+    /// profile to set (its pages all load in one off-the-record context), no Live Folders, no
+    /// Export (its tabs never move into a saved space) and none of what the window's Spaces menu
+    /// turns off there: Manage Spaces…, Hide Space Header, Delete Space.
+    public static func sections(spaceCount: Int, incognito: Bool = false) -> [[Item]] {
+        if incognito { return [[.changeIcon, .rename, .editTheme, .searchEngine], [.newFolder]] }
+        return [
             [.changeIcon, .rename, .editTheme, .setProfile, .searchEngine],
             [.newFolder, .liveFolders],
             [.export],

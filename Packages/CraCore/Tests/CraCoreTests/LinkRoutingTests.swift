@@ -57,6 +57,30 @@ struct LinkRoutingTests {
         #expect(settings.defaultLinkDestination == .mostRecentSpace)
     }
 
+    /// A URL typed in the ⌘T bar goes through the routes as in Arc 1.173 (#421): the first match
+    /// wins and a route to a space sends the new tab there. The default never applies (a typed URL
+    /// that matches nothing stays in the space in use, in Arc too), and neither does a first match
+    /// to Most Recent Space or a Little Window, which leave it where it is.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/421"))
+    func typedURLFollowsSpaceRoutes() {
+        let personal = UUID(), work = UUID()
+        var settings = AppSettings()
+        settings.defaultLinkDestination = .space(work)
+        settings.linkRoutes = [
+            LinkRoute(match: .contains, text: "meet.google.com/abc", destination: .littleWindowInUse),
+            LinkRoute(match: .contains, text: "meet.google.com", destination: .space(personal)),
+            LinkRoute(match: .equals, text: "youtube.com", destination: .space(personal)),
+            LinkRoute(match: .contains, text: "news.example", destination: .mostRecentSpace),
+            LinkRoute(match: .contains, text: "example", destination: .space(work)),
+        ]
+        #expect(settings.space(forTypedURL: "https://meet.google.com/atc-typed-abc-defg") == personal)
+        #expect(settings.space(forTypedURL: "https://www.youtube.com/") == personal)
+        #expect(settings.space(forTypedURL: "https://example.com/a") == work)
+        #expect(settings.space(forTypedURL: "https://meet.google.com/abc-defg") == nil, "first match: a Little Window")
+        #expect(settings.space(forTypedURL: "https://news.example/") == nil, "first match: Most Recent Space")
+        #expect(settings.space(forTypedURL: "https://other.test/") == nil, "no match: not the default")
+    }
+
     /// settings.json: a Little Window without a space is saved as before #258, so files don't change
     /// on update, and one with a space still reads as a Little Window in Cra from before #258
     /// instead of failing and taking every route with it.

@@ -2,7 +2,9 @@ import Foundation
 import Observation
 
 /// Arc's "now playing" player at the bottom of the sidebar (issue #33): every tab of the
-/// window that played sound since it loaded, oldest first. A tab stays listed while paused
+/// window that played sound since it loaded, oldest first. Only sound Chromium's media session
+/// can control counts, as Arc's player follows that session: a notification ding (under 5 s)
+/// or Web Audio alone makes no card (#411). A tab stays listed while paused
 /// and leaves when it is dismissed, closes, sleeps, or navigates while quiet. The sidebar
 /// shows the ones that aren't on screen. Fed by BrowserManager.
 @MainActor @Observable

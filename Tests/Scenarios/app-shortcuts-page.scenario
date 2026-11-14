@@ -1,0 +1,29 @@
+# promise: #253
+# One App Shortcut without ⌘ on both rows, Hide Sidebar and Show Sidebar, as the reporter set it
+# (⌃`), toggles the sidebar from the sidebar and from a page that has the keyboard. Chromium's
+# page view takes every key equivalent before the menu bar, ⌘ or not, and hands back the ones the
+# page leaves alone. Cra offered only ⌘-keys from there to the menu bar, so a ⌃, ⌥ or F-key App
+# Shortcut did nothing while a page had the keyboard (#253, after the 0.1.36 fix).
+budget rss=600 stalls50=10
+arg -NSUserKeyEquivalents
+arg {"Hide Sidebar"="^`";"Show Sidebar"="^`";}
+cra://debug?windowSize=1280x800
+wait 2
+cra://debug?key=%60,50,262144
+wait 1
+cra://debug?sidebarShown=bar-hidden
+expect-log sidebar shown bar-hidden: visible=0 menu=Show Sidebar key=⌃`
+cra://debug?key=%60,50,262144
+wait 1
+cra://debug?sidebarShown=bar-shown
+expect-log sidebar shown bar-shown: visible=1 menu=Hide Sidebar key=⌃`
+cra://open?url=${PAGE}
+wait 3
+cra://debug?key=%60,50,262144&page=1
+wait 1
+cra://debug?sidebarShown=page-hidden
+expect-log sidebar shown page-hidden: visible=0 menu=Show Sidebar key=⌃`
+cra://debug?key=%60,50,262144&page=1
+wait 1
+cra://debug?sidebarShown=page-shown
+expect-log sidebar shown page-shown: visible=1 menu=Hide Sidebar key=⌃`

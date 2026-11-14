@@ -4,6 +4,10 @@
 // segments.png is only the picker's preview of the bundled icon.
 // WebKit draws them so the ribbons' multiply blending survives (see brand/README.md).
 //   swift scripts/make-app-icons.swift
+// With --ios it renders the same four for the iPhone app instead: 1024 px, square and opaque
+// (iOS cuts the corners itself), into iOS/Cra/Resources/Assets.xcassets as the app icon, its
+// alternates, and the pictures the in-app icon picker shows.
+//   swift scripts/make-app-icons.swift --ios
 import AppKit
 import WebKit
 
@@ -42,6 +46,31 @@ let icons: [String: String] = [
         + #"<g style="isolation:isolate">"# + violetRibbons + "</g></g></svg>",
 ]
 
+let forIOS = CommandLine.arguments.contains("--ios")
+let iosCatalog = root.appendingPathComponent("iOS/Cra/Resources/Assets.xcassets")
+/// The iOS icon set each id is: the app's own icon, and its alternates by name.
+let iosIconNames = ["segments": "AppIcon", "midnight": "AppIcon-Midnight", "mono": "AppIcon-Mono", "violet": "AppIcon-Violet"]
+
+func writeIOS(_ id: String, _ cg: CGImage) {
+    // Redrawn without an alpha channel: App Store Connect refuses an icon that has one.
+    let context = CGContext(data: nil, width: 1024, height: 1024, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    context.draw(cg, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+    let png = NSBitmapImageRep(cgImage: context.makeImage()!).representation(using: .png, properties: [:])!
+    let name = iosIconNames[id]!
+    let iconSet = iosCatalog.appendingPathComponent("\(name).appiconset")
+    let preview = iosCatalog.appendingPathComponent("\(name)-Preview.imageset")
+    for folder in [iconSet, preview] { try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+    try! png.write(to: iconSet.appendingPathComponent("AppIcon.png"))
+    try! png.write(to: preview.appendingPathComponent("icon.png"))
+    let info = #"  "info" : { "author" : "xcode", "version" : 1 }"#
+    try! "{\n  \"images\" : [ { \"filename\" : \"AppIcon.png\", \"idiom\" : \"universal\", \"platform\" : \"ios\", \"size\" : \"1024x1024\" } ],\n\(info)\n}\n"
+        .write(to: iconSet.appendingPathComponent("Contents.json"), atomically: true, encoding: .utf8)
+    try! "{\n  \"images\" : [ { \"filename\" : \"icon.png\", \"idiom\" : \"universal\" } ],\n\(info)\n}\n"
+        .write(to: preview.appendingPathComponent("Contents.json"), atomically: true, encoding: .utf8)
+    print("wrote \(iconSet.path) and its preview")
+}
+
 final class Renderer: NSObject, WKNavigationDelegate {
     let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 256, height: 256))
     var queue: [(String, String)]
@@ -50,10 +79,13 @@ final class Renderer: NSObject, WKNavigationDelegate {
     func next() {
         guard let (_, svg) = queue.first else { exit(0) }
         view.navigationDelegate = self
-        view.setValue(false, forKey: "drawsBackground")
+        view.setValue(forIOS, forKey: "drawsBackground")
         // Only the <svg> tag's size: the tile <rect> has the same attributes.
         let tag = svg.range(of: #"width="64" height="64""#)!
-        let sized = svg.replacingCharacters(in: tag, with: #"style="display:block;width:80.46875vw;height:80.46875vw;margin:9.765625vw""#)
+        // The Mac's tile sits inside Apple's icon grid; the iPhone's fills the square, corners and all.
+        let sized = forIOS
+            ? svg.replacingCharacters(in: tag, with: #"style="display:block;width:100vw;height:100vw""#).replacingOccurrences(of: #" rx="14.3""#, with: "")
+            : svg.replacingCharacters(in: tag, with: #"style="display:block;width:80.46875vw;height:80.46875vw;margin:9.765625vw""#)
         view.loadHTMLString("<!doctype html><html><body style='margin:0;background:transparent;overflow:hidden'>\(sized)</body></html>", baseURL: nil)
     }
 
@@ -61,10 +93,14 @@ final class Renderer: NSObject, WKNavigationDelegate {
         let (id, _) = queue.removeFirst()
         // 512 px on any display: 256 pt at 2x, or rendered at 512 pt where the window is 1x.
         let config = WKSnapshotConfiguration()
-        config.snapshotWidth = NSNumber(value: 512 / Double(webView.window?.backingScaleFactor ?? 2))
+        config.snapshotWidth = NSNumber(value: (forIOS ? 1024 : 512) / Double(webView.window?.backingScaleFactor ?? 2))
         webView.takeSnapshot(with: config) { image, error in
             guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 fatalError("\(id): \(error?.localizedDescription ?? "no image")")
+            }
+            if forIOS {
+                writeIOS(id, cg)
+                return self.next()
             }
             let rep = NSBitmapImageRep(cgImage: cg)
             let out = root.appendingPathComponent("resources/app-icons/\(id).png")

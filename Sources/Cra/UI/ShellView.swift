@@ -96,6 +96,13 @@ final class ShellView: NSView {
     private(set) var paneFactors: [UUID: CGFloat] = [:]
     private(set) var splitOrientation: SplitOrientation = .horizontal
     private(set) var focusedPaneID: UUID?
+    /// A tab or link dragged over the panes (PageSplitDrop): Arc opens an empty pane where it
+    /// would land, and the others make room for it, until the drag leaves or ends.
+    private(set) var dropPreview: SplitDropProposal.Insert?
+    static let dropRegionID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    let dropRegion = SplitDropRegionView()
+    /// The pane a drop would replace: Arc rings it as it rings the focused pane.
+    var dropReplaceID: UUID? { didSet { if dropReplaceID != oldValue { updateFocusRings() } } }
     /// Panes without a page (Arc's tinted "Search or Enter URL…" pane).
     private(set) var emptyPaneIDs: Set<UUID> = []
     var isDarkTheme = false {
@@ -541,8 +548,9 @@ final class ShellView: NSView {
     /// unmarked. A page in full screen has no card around it.
     private func updateFocusRings() {
         let ringed = paneCards.count > 1 && !contentFullscreen
+        let ringID = dropReplaceID ?? focusedPaneID
         for c in paneCards {
-            let ring = ringed && c.tabID == focusedPaneID ? focusRingColor : nil
+            let ring = ringed && c.tabID == ringID ? focusRingColor : nil
             if c.focusRing != ring { c.focusRing = ring }
         }
     }
@@ -571,9 +579,18 @@ final class ShellView: NSView {
     }
 
     private func paneLayout(in bounds: NSRect) -> SplitPaneLayout.Result {
+        paneLayout(in: bounds, preview: dropPreview)
+    }
+
+    private func paneLayout(in bounds: NSRect, preview: SplitDropProposal.Insert?) -> SplitPaneLayout.Result {
         let ids = paneCards.map(\.tabID)
-        let panes = ids.map { SplitPaneLayout.Pane(id: $0, factor: paneFactors[$0] ?? (1 / CGFloat(max(1, ids.count)))) }
-        var layout = SplitPaneLayout(panes: panes, orientation: splitOrientation, containerSize: paneArea(in: bounds).size)
+        var panes = ids.map { SplitPaneLayout.Pane(id: $0, factor: paneFactors[$0] ?? (1 / CGFloat(max(1, ids.count)))) }
+        var orientation = splitOrientation
+        if let preview {
+            panes = SplitDropProposal.panes(panes, inserting: Self.dropRegionID, at: preview)
+            orientation = preview.orientation
+        }
+        var layout = SplitPaneLayout(panes: panes, orientation: orientation, containerSize: paneArea(in: bounds).size)
         layout.backingScaleFactor = window?.backingScaleFactor ?? 2
         return layout.compute()
     }
@@ -592,6 +609,92 @@ final class ShellView: NSView {
             out[c.tabID] = contentContainer.convert(web, to: nil)
         }
         return out
+    }
+
+    // MARK: Drop region
+
+    /// Shows the empty pane a dropped tab or link would become (nil takes it away), with the
+    /// others making room as in Arc: the same move a pane being added makes.
+    func setDropPreview(_ preview: SplitDropProposal.Insert?, animated: Bool = true) {
+        guard preview != dropPreview else { return }
+        let opening = dropPreview == nil
+        dropPreview = preview
+        if preview != nil, dropRegion.superview !== contentContainer {
+            dropRegion.isDark = isDarkTheme
+            contentContainer.addSubview(dropRegion, positioned: .below, relativeTo: placeholderHost)
+        }
+        let target = paneLayout(in: contentContainer.bounds)
+        if let f = target.frames[Self.dropRegionID], opening {
+            // It grows from a sliver at its slot, as a new pane does.
+            let horizontal = preview?.orientation != .vertical
+            dropRegion.frame = horizontal ? NSRect(x: f.midX, y: f.minY, width: 0, height: f.height)
+                                          : NSRect(x: f.minX, y: f.midY, width: f.width, height: 0)
+            dropRegion.alphaValue = 0
+        }
+        guard animated, SplitPaneLayout.Constants.transitionDuration > 0, window != nil else {
+            if preview == nil { dropRegion.removeFromSuperview() }
+            needsLayout = true
+            return
+        }
+        for c in paneCards {
+            guard let f = target.frames[c.tabID] else { continue }
+            c.frozenWebBounds = NSRect(x: 0, y: 0, width: f.width, height: max(0, f.height - barInset(c, panes: paneCards.count, fullscreen: contentFullscreen)))
+        }
+        animatingPanes = true
+        onAnimatePaneFrames?(paneWebFrames(target), SplitPaneLayout.Constants.transitionDuration, SplitPaneLayout.Constants.transitionTiming)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = SplitPaneLayout.Constants.transitionDuration
+            ctx.timingFunction = SplitPaneLayout.Constants.transitionTiming
+            ctx.allowsImplicitAnimation = true
+            for c in paneCards { if let f = target.frames[c.tabID] { c.animator().frame = f } }
+            if let f = target.frames[Self.dropRegionID] {
+                dropRegion.animator().frame = f
+                dropRegion.animator().alphaValue = 1
+            } else {
+                dropRegion.animator().alphaValue = 0
+            }
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            if self.dropPreview == nil { self.dropRegion.removeFromSuperview() }
+            self.animatingPanes = false
+            for c in self.paneCards { c.frozenWebBounds = nil }
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+        }
+    }
+
+    private func layoutDropRegion(_ layout: SplitPaneLayout.Result, animated: Bool) {
+        guard !animatingPanes, let f = layout.frames[Self.dropRegionID] else { return }
+        dropRegion.cornerRadius = fillsWindow ? 0 : CraMetrics.contentCornerRadius
+        if animated { dropRegion.animator().frame = f } else if dropRegion.frame != f { dropRegion.frame = f }
+        dropRegion.alphaValue = 1
+    }
+
+    /// The panes' frames in the content area and the drop region's, as laid out now, for
+    /// PageSplitDrop: the pane ids in order, without the region.
+    var dropLayout: (ids: [UUID], frames: [UUID: CGRect], orientation: SplitOrientation, area: CGRect) {
+        (paneCards.map(\.tabID).filter { $0 != ShellView.noTabID }, paneLayout(in: contentContainer.bounds).frames,
+         dropPreview?.orientation ?? splitOrientation, paneArea(in: contentContainer.bounds))
+    }
+
+    /// The panes as they are without the drop region (where a drop is decided from).
+    var dropBaseFrames: [UUID: CGRect] { paneLayout(in: contentContainer.bounds, preview: nil).frames }
+
+    /// A drag over the shell itself (the drop region, the gaps, a pane's toolbar) goes where one
+    /// over a page goes (PageDropRouter).
+    weak var dropTarget: PageDropTarget?
+
+    func registerForSplitDrops() {
+        registerForDraggedTypes([.craSidebarItem, .URL, .string])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { dropTarget?.pageDragUpdated(sender) ?? [] }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { dropTarget?.pageDragUpdated(sender) ?? [] }
+    override func draggingExited(_ sender: NSDraggingInfo?) { dropTarget?.pageDragExited() }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { true }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { dropTarget?.pageDragExited() }
+        return dropTarget?.pageDragPerform(sender) ?? false
     }
 
     // MARK: Divider drags
@@ -671,13 +774,35 @@ final class ShellView: NSView {
         return card
     }
 
+    /// How much of the page's top the floating bar covers: its height while it is out, else nothing.
+    /// The find bar's panel hangs under that (`FindBarPlacement`).
+    var floatingToolbarCover: CGFloat {
+        guard let card = floatingCard, card.toolbarRevealed else { return 0 }
+        return card.toolbarHeight
+    }
+
+    /// The floating bar came out or went (`animated`: with the slide), so what hangs under it moves.
+    var onFloatingToolbarChange: ((_ animated: Bool) -> Void)?
+
+    /// Windows that follow the floating bar instead of hanging from it (the find bar's panel):
+    /// the pointer on one keeps the bar, and being under the bar doesn't hold it there.
+    var toolbarFollowers: () -> [NSWindow] = { [] }
+
+    private func reveal(_ card: PaneCardView, _ shown: Bool, animated: Bool) {
+        guard card.toolbarRevealed != shown else { return }
+        card.setToolbarRevealed(shown, animated: animated)
+        onFloatingToolbarChange?(animated)
+    }
+
     /// After a layout: the card shows what the tracker says, a bar that stopped floating forgets
     /// its state, and the pointer is watched only while a bar floats.
     private func syncFloatingToolbar() {
         if let card = floatingCard {
-            if card.toolbarRevealed != toolbarTracker.shown { card.setToolbarRevealed(toolbarTracker.shown, animated: false) }
+            reveal(card, toolbarTracker.shown, animated: false)
         } else if toolbarTracker != ToolbarAutoHideTracker() {
+            let wasOut = toolbarTracker.shown
             toolbarTracker.reset()
+            if wasOut { onFloatingToolbarChange?(false) }
         }
         if toolbarActivation.isEmpty, floatingCard != nil {
             toolbarActivation = [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification].map { name in
@@ -693,7 +818,7 @@ final class ShellView: NSView {
         // Another app in front: the bar goes with the pointer's attention, as the floating sidebar does.
         if !NSApp.isActive, toolbarTracker.shown {
             toolbarTracker.reset()
-            floatingCard?.setToolbarRevealed(false, animated: true)
+            if let card = floatingCard { reveal(card, false, animated: true) }
         }
         syncToolbarPolling()
     }
@@ -719,14 +844,21 @@ final class ShellView: NSView {
         let where_: ToolbarAutoHide.Pointer
         if let p = toolbarPointer() {
             where_ = ToolbarAutoHide.classify(p, card: convert(card.frame, from: card.superview), container: bounds,
-                                              barHeight: card.toolbarHeight, shown: toolbarTracker.shown)
+                                              barHeight: card.toolbarHeight, shown: toolbarTracker.shown,
+                                              followers: toolbarFollowerFrames())
         } else {
             where_ = .away
         }
         // A button held down (a drag begun on the bar) or something hanging under the bar keeps it.
         let held = toolbarTracker.shown && (NSEvent.pressedMouseButtons != 0 || somethingHangsFromToolbar(card))
         toolbarTracker.sample(where_, held: held, at: toolbarNow())
-        if card.toolbarRevealed != toolbarTracker.shown { card.setToolbarRevealed(toolbarTracker.shown, animated: true) }
+        reveal(card, toolbarTracker.shown, animated: true)
+    }
+
+    /// Where the bar's followers are, in this view's coordinates.
+    private func toolbarFollowerFrames() -> [NSRect] {
+        guard let window else { return [] }
+        return toolbarFollowers().filter { $0.isVisible }.map { convert(window.convertFromScreen($0.frame), from: nil) }
     }
 
     /// A popover or popup of Cra's hangs from the bar (the Site Control Center, an extension's
@@ -734,8 +866,9 @@ final class ShellView: NSView {
     private func somethingHangsFromToolbar(_ card: PaneCardView) -> Bool {
         guard let window else { return false }
         let cardOnScreen = window.convertToScreen(card.convert(card.bounds, to: nil))
+        let followers = toolbarFollowers()
         return (window.childWindows ?? []).contains { child in
-            child.isVisible && child.alphaValue > 0
+            child.isVisible && child.alphaValue > 0 && !followers.contains { $0 === child }
                 && ToolbarAutoHide.hangsFromBar(child.frame, card: cardOnScreen, barHeight: card.toolbarHeight)
         }
     }
@@ -745,7 +878,7 @@ final class ShellView: NSView {
     func bringFloatingToolbarOut() {
         guard let card = floatingCard, !toolbarTracker.shown else { return }
         toolbarTracker.bringOut()
-        card.setToolbarRevealed(true, animated: false)
+        reveal(card, true, animated: false)
     }
 
     /// For `cra://debug?toolbar=…`: `out` and `in` put the floating bar there, `sample` looks at
@@ -756,7 +889,7 @@ final class ShellView: NSView {
         case "out": bringFloatingToolbarOut()
         case "in":
             toolbarTracker.reset()
-            floatingCard?.setToolbarRevealed(false, animated: false)
+            if let card = floatingCard { reveal(card, false, animated: false) }
         case "sample": sampleToolbarPointer()
         default: break
         }
@@ -768,12 +901,14 @@ final class ShellView: NSView {
             guard g.count == 2 else { return "toolbar at: x,y" }
             let p = convert(NSPoint(x: g[0], y: window.frame.height - g[1]), from: nil)
             let where_ = ToolbarAutoHide.classify(p, card: convert(card.frame, from: card.superview), container: bounds,
-                                                  barHeight: card.toolbarHeight, shown: toolbarTracker.shown)
+                                                  barHeight: card.toolbarHeight, shown: toolbarTracker.shown,
+                                                  followers: toolbarFollowerFrames())
             return "toolbar \(command): \(where_) out=\(toolbarTracker.shown ? 1 : 0)"
         }
         return "toolbar \(command): floats=\(floatingCard != nil ? 1 : 0) out=\(toolbarTracker.shown ? 1 : 0) "
             + "inset=\(Int(card?.barInset ?? 0)) page=\(Int(card?.webArea.frame.height ?? 0))/\(Int(card?.bounds.height ?? 0)) "
-            + "barHidden=\(card?.toolbarHost.isHidden == true ? 1 : 0) polling=\(toolbarPoll != nil ? 1 : 0)"
+            + "barHidden=\(card?.toolbarHost.isHidden == true ? 1 : 0) polling=\(toolbarPoll != nil ? 1 : 0) "
+            + "hangs=\(card.map(somethingHangsFromToolbar) == true ? 1 : 0)"
     }
 
     // MARK: Layout
@@ -893,14 +1028,16 @@ final class ShellView: NSView {
             c.castsShadow = !fillsWindow && !contentFullscreen
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
             // Edge to edge every card is square.
-            c.cornerRadius = paneCards.count > 1 && !fillsWindow ? CraMetrics.contentCornerRadius : cardCornerRadius
+            c.cornerRadius = paneCards.count + (dropPreview == nil ? 0 : 1) > 1 && !fillsWindow ? CraMetrics.contentCornerRadius : cardCornerRadius
             if !animatingPanes, let f = layout.frames[c.tabID] {
                 if animated { c.animator().frame = f } else if c.frame != f { c.frame = f }
             }
             c.layoutSubtreeIfNeeded()
         }
+        layoutDropRegion(layout, animated: animated)
         for (i, h) in handles.enumerated() {
-            h.isHidden = i >= layout.gaps.count
+            // The drop region's gap has no handle; the others wait for the drop.
+            h.isHidden = i >= layout.gaps.count || dropPreview != nil
             if !animatingPanes, i < layout.gaps.count {
                 if animated { h.animator().frame = layout.gaps[i] } else { h.frame = layout.gaps[i] }
             }
@@ -955,7 +1092,7 @@ final class ShellView: NSView {
         if findHost.superview === overlayParent {
             let size = CraMetrics.findBarSize, inset = CraMetrics.findBarInset
             findHost.isHidden = !findVisible
-            findHost.frame = NSRect(x: wb.maxX - size.width - inset, y: wb.maxY - size.height - inset, width: size.width, height: size.height)
+            findHost.frame = FindBarPlacement.frame(page: wb, size: size, inset: inset, toolbarOverPage: floatingToolbarCover)
         }
         if !animatingPanes, paneCards.allSatisfy({ $0.frozenWebBounds == nil }) { onPaneFrames?(paneWebFrames(layout)) }
     }

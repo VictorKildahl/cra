@@ -6,7 +6,7 @@ import PackageDescription
 // and runs without vendor/cef (a target in the root package would build CEF first).
 let package = Package(
     name: "CraCore",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "CraCore", targets: ["CraCore"]),
     ],

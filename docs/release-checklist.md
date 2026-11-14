@@ -56,6 +56,11 @@ built release app with a test profile. Note anything that fails in the release's
   space's darkest tone. Recent open tabs show "Switch to Tab" before typing. Arrow through results
   and check every row's inks follow the selection; long titles truncate before the trailing action.
 
+- **#419/#422, insertion line:** drag a tab between two Today rows, then a page's link, with a real
+  pointer, on a dark space and a light one: a hollow ring 2 pt before the favicons, then a line to 3 pt
+  inside the row, near-white on dark. Put it next to Arc's on the same spaces; Arc's ink was measured
+  only on a dark space (#EFEFEC over #383830), so check the light one.
+
 - **#393, Ask on Page:** with Apple Intelligence on and Settings ▸ Max ▸ Ask on Page on, press ⌘F on a
   long article: the card reads "Find or ask…"; typing a word finds it (count, ↑ ↓, highlights in the
   page). Type a question and press Ask (or Return): the question in the space's colour, "This page was
@@ -63,6 +68,16 @@ built release app with a test profile. Note anything that fails in the release's
   the quote in the page, or says "Quote not found". Ask a follow-up; past 450 pt the conversation scrolls
   with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
   (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
+
+- **#417, Ask on Page follow-ups:** on a long article ask something the page can't answer ("why did el
+  salvador succeed?"), then "Summarize the key points of this article in bullet points": the second answer
+  is a summary, not the first answer again, and no answer starts with "BEGIN DIALOGUE", "Human:" or a made-up
+  question. Then a factual follow-up gets its own quote. The model is on-device and varies, so ask a few times.
+
+- **Ask on Page, long answers and unanswerable questions:** ask a long article something it doesn't say
+  ("why did el salvador succeed?"): the answer never quotes a solar-power page or J.W. Peters. Ask for "the
+  key points of this entire article in detailed bullet points": the window and the page keep scrolling smoothly
+  while it writes, and the answer never vanishes and starts over.
 
 - **#407, Instant Links:** with Apple Intelligence on and Settings ▸ Max ▸ Instant Links on, type
   "top 3 pizza places in naples" in ⌘T and press Shift-Return: the bar closes, "Searching the web for you…"
@@ -87,7 +102,7 @@ built release app with a test profile. Note anything that fails in the release's
   reaches a link shows the answer, or the small card for a link within the site. Leaving the link
   closes it at once unless the pointer is on the card. Share ▸ Copy as Text and Copy as Image paste with
   the retained Cra attribution/emoji differences. Check a beige and a dark space, 1x and 2x.
-  **13 Nov status: PENDING native acceptance.** Current source, native build and full suite pass; four
+  **14 Nov status: PENDING renewed native acceptance and merged-source tests/build.** Retained B7 native build and full suite pass; four
   genuine model samples have documented quality limits. B8 attempt `previews-b8-native-2x-03` stopped
   before card opening because unrelated security dialogs covered the test area; it supplies no card
   or wire pass. Follow the finite [operator checklist](plans/5secondpreviews.md#remaining-native-operator-checklist).

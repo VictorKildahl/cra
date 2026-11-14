@@ -1,0 +1,679 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C0A000000000000000000030 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A000000000000000000031 /* CraCore */; };
+		C0A000000000000000000052 /* domains.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000050 /* domains.txt */; };
+		C0A000000000000000000053 /* NOTICE.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000051 /* NOTICE.txt */; };
+		C0A0000000000000000000B1 /* CraShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000B0 /* CraShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0A0000000000000000000B9 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000B8 /* CraCore */; };
+		C0A0000000000000000000A1 /* CraWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000A0 /* CraWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C0A000000000000000000040 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C0A000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0A000000000000000000010;
+			remoteInfo = Cra;
+		};
+		C0A0000000000000000000A2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C0A000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0A0000000000000000000A4;
+			remoteInfo = CraWidgets;
+		};
+		C0A0000000000000000000B2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C0A000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0A0000000000000000000B4;
+			remoteInfo = CraShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C0A0000000000000000000A3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C0A0000000000000000000A1 /* CraWidgets.appex in Embed Foundation Extensions */,
+				C0A0000000000000000000B1 /* CraShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		C0A000000000000000000011 /* Cra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cra.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0A000000000000000000021 /* CraUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CraUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0A000000000000000000005 /* Support */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Support; sourceTree = "<group>"; };
+		C0A000000000000000000050 /* domains.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = domains.txt; path = ../resources/blocklist/domains.txt; sourceTree = "<group>"; };
+		C0A000000000000000000051 /* NOTICE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = NOTICE.txt; path = ../resources/blocklist/NOTICE.txt; sourceTree = "<group>"; };
+		C0A0000000000000000000A0 /* CraWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0A0000000000000000000B0 /* CraShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		C0A000000000000000000003 /* Cra */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Cra;
+			sourceTree = "<group>";
+		};
+		C0A000000000000000000004 /* CraUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CraUITests;
+			sourceTree = "<group>";
+		};
+		C0A0000000000000000000A5 /* CraWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CraWidgets;
+			sourceTree = "<group>";
+		};
+		C0A0000000000000000000B5 /* CraShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CraShare;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C0A000000000000000000013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0A000000000000000000030 /* CraCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A000000000000000000023 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A0000000000000000000A7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A0000000000000000000B7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0A0000000000000000000B9 /* CraCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C0A000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				C0A000000000000000000003 /* Cra */,
+				C0A000000000000000000004 /* CraUITests */,
+				C0A0000000000000000000A5 /* CraWidgets */,
+				C0A0000000000000000000B5 /* CraShare */,
+				C0A000000000000000000005 /* Support */,
+				C0A000000000000000000054 /* Blocklist */,
+				C0A000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C0A000000000000000000054 /* Blocklist */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000000000000000000050 /* domains.txt */,
+				C0A000000000000000000051 /* NOTICE.txt */,
+			);
+			name = Blocklist;
+			sourceTree = "<group>";
+		};
+		C0A000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C0A000000000000000000011 /* Cra.app */,
+				C0A000000000000000000021 /* CraUITests.xctest */,
+				C0A0000000000000000000A0 /* CraWidgets.appex */,
+				C0A0000000000000000000B0 /* CraShare.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C0A000000000000000000010 /* Cra */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0A000000000000000000015 /* Build configuration list for PBXNativeTarget "Cra" */;
+			buildPhases = (
+				C0A000000000000000000012 /* Sources */,
+				C0A000000000000000000013 /* Frameworks */,
+				C0A000000000000000000014 /* Resources */,
+				C0A0000000000000000000A3 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C0A0000000000000000000A9 /* PBXTargetDependency */,
+				C0A0000000000000000000BB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C0A000000000000000000003 /* Cra */,
+			);
+			name = Cra;
+			packageProductDependencies = (
+				C0A000000000000000000031 /* CraCore */,
+			);
+			productName = Cra;
+			productReference = C0A000000000000000000011 /* Cra.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C0A000000000000000000020 /* CraUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0A000000000000000000025 /* Build configuration list for PBXNativeTarget "CraUITests" */;
+			buildPhases = (
+				C0A000000000000000000022 /* Sources */,
+				C0A000000000000000000023 /* Frameworks */,
+				C0A000000000000000000024 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C0A000000000000000000041 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C0A000000000000000000004 /* CraUITests */,
+			);
+			name = CraUITests;
+			productName = CraUITests;
+			productReference = C0A000000000000000000021 /* CraUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C0A0000000000000000000A4 /* CraWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0A0000000000000000000AA /* Build configuration list for PBXNativeTarget "CraWidgets" */;
+			buildPhases = (
+				C0A0000000000000000000A6 /* Sources */,
+				C0A0000000000000000000A7 /* Frameworks */,
+				C0A0000000000000000000A8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0A0000000000000000000A5 /* CraWidgets */,
+			);
+			name = CraWidgets;
+			productName = CraWidgets;
+			productReference = C0A0000000000000000000A0 /* CraWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C0A0000000000000000000B4 /* CraShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0A0000000000000000000BE /* Build configuration list for PBXNativeTarget "CraShare" */;
+			buildPhases = (
+				C0A0000000000000000000B6 /* Sources */,
+				C0A0000000000000000000B7 /* Frameworks */,
+				C0A0000000000000000000BA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0A0000000000000000000B5 /* CraShare */,
+			);
+			name = CraShare;
+			packageProductDependencies = (
+				C0A0000000000000000000B8 /* CraCore */,
+			);
+			productName = CraShare;
+			productReference = C0A0000000000000000000B0 /* CraShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C0A000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					C0A000000000000000000010 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					C0A000000000000000000020 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = C0A000000000000000000010;
+					};
+					C0A0000000000000000000A4 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					C0A0000000000000000000B4 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = C0A000000000000000000007 /* Build configuration list for PBXProject "Cra" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C0A000000000000000000002;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C0A000000000000000000032 /* XCLocalSwiftPackageReference "../Packages/CraCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C0A000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C0A000000000000000000010 /* Cra */,
+				C0A000000000000000000020 /* CraUITests */,
+				C0A0000000000000000000A4 /* CraWidgets */,
+				C0A0000000000000000000B4 /* CraShare */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C0A000000000000000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0A000000000000000000052 /* domains.txt in Resources */,
+				C0A000000000000000000053 /* NOTICE.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A000000000000000000024 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A0000000000000000000A8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A0000000000000000000BA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C0A000000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A000000000000000000022 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A0000000000000000000A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0A0000000000000000000B6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C0A000000000000000000041 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0A000000000000000000010 /* Cra */;
+			targetProxy = C0A000000000000000000040 /* PBXContainerItemProxy */;
+		};
+		C0A0000000000000000000A9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0A0000000000000000000A4 /* CraWidgets */;
+			targetProxy = C0A0000000000000000000A2 /* PBXContainerItemProxy */;
+		};
+		C0A0000000000000000000BB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0A0000000000000000000B4 /* CraShare */;
+			targetProxy = C0A0000000000000000000B2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		C0A000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		C0A000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C0A000000000000000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Support/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = Support/Cra.entitlements;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C0A000000000000000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Support/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = Support/Cra.entitlements;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C0A000000000000000000026 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Cra;
+			};
+			name = Debug;
+		};
+		C0A000000000000000000027 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Cra;
+			};
+			name = Release;
+		};
+		C0A0000000000000000000AB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Support/Widgets-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C0A0000000000000000000AC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Support/Widgets-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C0A0000000000000000000BC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Support/Share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Support/Share-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C0A0000000000000000000BD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Support/Share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 673A7J2J54;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Support/Share-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dk.kildahl.cra.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C0A000000000000000000007 /* Build configuration list for PBXProject "Cra" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0A000000000000000000008 /* Debug */,
+				C0A000000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0A000000000000000000015 /* Build configuration list for PBXNativeTarget "Cra" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0A000000000000000000016 /* Debug */,
+				C0A000000000000000000017 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0A000000000000000000025 /* Build configuration list for PBXNativeTarget "CraUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0A000000000000000000026 /* Debug */,
+				C0A000000000000000000027 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0A0000000000000000000AA /* Build configuration list for PBXNativeTarget "CraWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0A0000000000000000000AB /* Debug */,
+				C0A0000000000000000000AC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0A0000000000000000000BE /* Build configuration list for PBXNativeTarget "CraShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0A0000000000000000000BC /* Debug */,
+				C0A0000000000000000000BD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C0A000000000000000000032 /* XCLocalSwiftPackageReference "../Packages/CraCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/CraCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C0A000000000000000000031 /* CraCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CraCore;
+		};
+		C0A0000000000000000000B8 /* CraCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CraCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = C0A000000000000000000001 /* Project object */;
+}

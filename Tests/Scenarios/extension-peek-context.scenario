@@ -1,0 +1,50 @@
+# Peek focus, parking, closing and both Expand paths must preserve the extension context.
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"peekInEveryTab":true,"peekExpandInSourceTab":true}
+budget rss=1100 stalls50=40
+cra://debug?installExtension=${FIXTURES}/TabsQueryExtension
+relaunch
+cra://open?url=${ORIGIN}/extension-context.html?n=source
+wait 2
+cra://action/pinTab
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.open('${ORIGIN}/extension-context.html?n=peek')","userGesture":true}
+wait 2
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('peek')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"peek current=true currentWindow=true last=true type=normal page=peek active=peek"
+cra://action/closeLittleWindows
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('peek-closed')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"peek-closed current=true currentWindow=true last=true type=normal page=source active=source"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.open('${ORIGIN}/extension-context.html?n=waiting')","userGesture":true}
+wait 2
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('before-park')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"before-park current=true currentWindow=true last=true type=normal page=waiting active=waiting"
+cra://open?url=${ORIGIN}/extension-context.html?n=other
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('parked')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"parked current=true currentWindow=true last=true type=normal page=other active=other"
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"(document.querySelector('input').focus(),checkExtensionContext('hidden-peek'))","awaitPromise":true,"returnByValue":true}
+expect-log "value":"hidden-peek current=false currentWindow=false last=false type=normal page=waiting active=other"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('after-hidden-focus')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"after-hidden-focus current=true currentWindow=true last=true type=normal page=other active=other"
+cra://action/previousTab
+wait 2
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('unparked')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"unparked current=true currentWindow=true last=true type=normal page=waiting active=waiting"
+cra://debug?peekExpand=plain
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('expanded')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"expanded current=true currentWindow=true last=true type=normal page=waiting active=waiting"
+cra://action/closeTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('after-expand')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"after-expand current=true currentWindow=true last=true type=normal page=source active=source"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.open('${ORIGIN}/extension-context.html?n=in-place')","userGesture":true}
+wait 2
+cra://debug?peekExpand=command
+expect-log peek expand command: selected=\S+n=in-place home=\S+n=source today=1$
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('expanded-in-place')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"expanded-in-place current=true currentWindow=true last=true type=normal page=in-place active=in-place"
+cra://debug?removeExtension=${TABS_QUERY_EXTENSION_ID}
+wait 1
+reject-log fault:

@@ -119,6 +119,14 @@ folder, behind your windows (`CRA_TEST_BACKGROUND`), with the fixture pages serv
 127.0.0.1. Logs, hitch log and snapshots land in `build/scenarios/<name>/`. Adding a journey
 is a text file; the invariants come for free.
 
+The `extension-link-context`, `extension-peek-context`, `extension-little-window-context`
+and `extension-split-window-context` scenarios check password-manager context. A content
+script asks its real extension service worker for the current and last-focused tab,
+then compares their IDs with the sender's tab, including duplicate URLs and an inactive
+sender. They cover links, Back, background tabs, Peek closing/parking/expansion, Little
+Window promotion, split-pane focus and browser-window closing. They run in the background
+on throwaway profiles; `scripts/scenario.sh <name>` runs one without the rest of the suite.
+
 `auto-theme` flips the app between light and dark (`cra://debug?systemAppearance=`) and reads
 which half each window draws (`cra://debug?themeShown=<label>`): an Auto space must switch its
 window content and sidebar both ways, and a Light one must not (#155).

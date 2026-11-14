@@ -235,6 +235,7 @@ static CraClient* AsCraClient(CefClient* c) {
 @property (nonatomic) BOOL chromeCapture;
 - (void)updateCapture;
 @property (nonatomic) BOOL isAudible;
+@property (nonatomic) BOOL hasUncontrollableSound;
 - (void)audibleChanged:(BOOL)audible;
 - (void)requestPictureInPictureInFrame:(CefRefPtr<CefFrame>)frame automatic:(BOOL)automatic x:(int)x y:(int)y;
 /// The key press that lends the page user activation, for a frame that has a video to show.
@@ -1752,7 +1753,11 @@ public:
         if (source_process != PID_BROWSER) return false;
         CraBrowser* o = owner_;
         if (message->GetName() == "Cra.audible") {
-            if (o) [o audibleChanged:message->GetArgumentList()->GetBool(0)];
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            // The second argument, whether the media session is controllable, is new in
+            // cef-156.0.27-codecs7; an older CEF leaves every sound controllable.
+            if (o) o.hasUncontrollableSound = args->GetSize() > 1 && !args->GetBool(1);
+            if (o) [o audibleChanged:args->GetBool(0)];
             return true;
         }
         // Camera and microphone use as Chrome's tab recording indicator counts it, which a
