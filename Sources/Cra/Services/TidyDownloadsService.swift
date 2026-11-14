@@ -38,7 +38,6 @@ final class TidyDownloadsService {
 
     private struct Request {
         let token = UUID()
-        let path: String
         var task: Task<Void, Never>?
     }
 
@@ -46,10 +45,10 @@ final class TidyDownloadsService {
     @ObservationIgnored private var sources: [Key: TidyDownloads.Source] = [:]
     @ObservationIgnored private var requests: [Key: Request] = [:]
     typealias MoveFile = @Sendable (String, String, @escaping @MainActor @Sendable () -> Bool) async -> TidyDownloadFiles.Move?
-    @ObservationIgnored private let moveFile: MoveFile
+    private let moveFile: MoveFile
     @ObservationIgnored private var reverting: UUID?
-    @ObservationIgnored private let modelAvailable: @MainActor () -> Bool
-    @ObservationIgnored private let generate: @MainActor (TidyDownloads.Request) async -> String?
+    private let modelAvailable: @MainActor () -> Bool
+    private let generate: @MainActor (TidyDownloads.Request) async -> String?
 
     init(modelAvailable: @escaping @MainActor () -> Bool = { TidyTabsService.shared.currentModelAvailable },
          generate: @escaping @MainActor (TidyDownloads.Request) async -> String? = { await TidyDownloadsService.ask($0) },
@@ -108,7 +107,7 @@ final class TidyDownloadsService {
         } ?? "English"
         let input = TidyDownloads.Request(file: original, source: source, downloadURL: downloadURL, language: language)
         let generate = self.generate
-        var request = Request(path: path)
+        var request = Request()
         let token = request.token
         request.task = Task { @MainActor [weak self, weak store] in
             let answer = await generate(input)
@@ -119,7 +118,7 @@ final class TidyDownloadsService {
             let historyID = DownloadHistory.shared.entries.last(where: { $0.path == path })?.id
             let eligible: @MainActor @Sendable () -> Bool = { [weak self, weak store] in
                 guard let self, let store else { return false }
-                return self.requests[key]?.token == token && self.requests[key]?.path == path
+                return self.requests[key]?.token == token
                     && store.settings.tidyDownloads && self.modelAvailable() && ownerEligible()
                     && store.prefs.windows.contains(where: { $0.id == window })
             }
