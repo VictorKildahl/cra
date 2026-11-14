@@ -20,6 +20,7 @@ public final class CraDownloadInfo {}
 public enum CraCEFRuntime {
     public static var hosting = true
     public static func chromeHosting() -> Bool { hosting }
+    public static func supportsSparePages() -> Bool { hosting }
 }
 
 @objc public enum CraLinkWindow: Int { case new, incognito, little }

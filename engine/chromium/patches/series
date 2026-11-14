@@ -18,6 +18,7 @@ extension-install-ui-null-tab.patch
 cra-hosted-pages.patch
 page-activate.patch
 extension-tab-activate.patch
+cra-hidden-pages-tabs-query.patch
 extension-popup-no-popout-wait.patch
 translate-ui.patch
 cra-prefs.patch

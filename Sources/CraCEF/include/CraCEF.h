@@ -403,6 +403,8 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// DevTools) instead of embedded Alloy views. Set before any browser exists.
 + (void)setChromeHosting:(BOOL)enabled;
 + (BOOL)chromeHosting;
+/// Whether pages can be made ahead for the next tab (SparePages): CEF's Chrome-style hosting and the Chromium engine.
++ (BOOL)supportsSparePages;
 /// The "Open Link in New Tab" item at the top of a page's context menu: its title and whether it
 /// opens its tab in the background. Read when a menu opens.
 + (void)setLinkMenuTitle:(NSString *)title opensInBackground:(BOOL)background;

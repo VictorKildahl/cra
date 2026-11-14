@@ -3467,6 +3467,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     g_documentStartParams = all;
 }
 + (BOOL)chromeHosting { return g_chromeHosting; }
++ (BOOL)supportsSparePages { return g_chromeHosting; }
 
 + (void)setContentBlockingEnabled:(BOOL)enabled { cra_blocker::Enabled().store(enabled); }
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }

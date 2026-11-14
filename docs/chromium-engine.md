@@ -216,3 +216,15 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
   - DevTools report the panel they show (`devToolsShowsPanel`, for ⌥⌘J and Network, #138) from the same frontend
     script as on CEF. `devToolsPageBounds` stays CEF's: the engine's frontend is a window of its own, never docked
     over the page, and Cra puts it beside the page.
+  - Speed, 14 Nov (scripts/perf/rounds.sh, 3 interleaved rounds, this branch on CEF 156 against the engine on
+    158, local bench pages): memory at 20 tabs 784 → 735 MB, settled 795 → 763 MB; new tab to first paint
+    103 → 69 ms; tab switch to shown 14 → 21 ms; idle CPU at 1 tab 2.6 → 4.4 %, at 20 tabs 6.0 → 8.6 %; idle
+    wakeups at 20 tabs 60 → 116 /s. Per process at idle (top, 1 tab): the browser process 1.3 % against CEF's
+    0.3 %, every helper ~0; a 10 s sample of it finds no hot spot (its main thread ~30 busy ms). The slower switch
+    is open.
+  - Not engine work, found on the way: `solid-spaces` fails its space-dock snapshot on main's CEF build too (the
+    open space's emoji isn't drawn); `unpacked-extension-copy` fails on any local test copy while the installed
+    Cra runs (profileIsFree), and passes on a copy with its own bundle id.
+  - `page-windows-open-on-cra` (#354) counts pages' own Chrome windows, which the engine doesn't have: its
+    `away=0 animated=0` holds, `shown=0` fails the scenario. Victor decides how the locked scenario reads on the
+    engine.

@@ -94,6 +94,7 @@
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/permissions/cra_permission_tabs.h"
+#include "content/public/browser/cra_live_connection.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -152,6 +153,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (bool)agentDownloadTakes:(download::DownloadItem*)item;
 - (void)pageMediaPlaying:(BOOL)playing;
 - (void)pageSoundPlaying:(BOOL)playing;
+- (void)dropSpareContents;
 - (void)pageInfoBarsChanged;
 - (void)pagePictureInPictureTime;
 @property(nonatomic) BOOL inPageFullscreen;
@@ -235,6 +237,12 @@ std::map<content::WebContents*, CraBrowser* __weak>& PagesByContents() {
   return *pages;
 }
 NSInteger g_live_browsers = 0;
+// Pages made ahead for the next tab, outside any tab strip: they go before Chrome destroys their profile at quit,
+// which CHECKs that no page of it is left (WebContentsOfBrowserContext).
+NSHashTable<CraBrowser*>* SparePages() {
+  static NSHashTable<CraBrowser*>* spares = [NSHashTable weakObjectsHashTable];
+  return spares;
+}
 // Set while Cra adds a page of its own, so the tab strip observer leaves it alone.
 bool g_adding_own_page = false;
 
@@ -544,6 +552,8 @@ class PageHost : public TabStripModelObserver {
     // The blank page: the Browser stays open with no page of Cra's in it.
     chrome::AddTabAt(browser, GURL(url::kAboutBlankURL), -1, true);
     placeholder_ = browser->GetTabStripModel()->GetActiveWebContents();
+    // Not a tab to extensions (chrome.tabs.query, chrome.windows.getAll), as a spare page isn't.
+    placeholder_->SetUserData(content::CraSparePageKey(), std::make_unique<base::SupportsUserData::Data>());
     browser->GetTabStripModel()->AddObserver(this);
     MakeHostWindow(window());
   }
@@ -1389,8 +1399,16 @@ void DetachHostWindows() {
   }
 }
 
+void DropSparePages() {
+  for (CraBrowser* spare in SparePages().allObjects) {
+    [spare dropSpareContents];
+  }
+  [SparePages() removeAllObjects];
+}
+
 void StopBridge() {
   g_quitting = true;
+  DropSparePages();
   DetachHostWindows();
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->RemoveObserver(&Captures());
 }
@@ -1626,6 +1644,8 @@ void RunReadyBlocks() {
   BOOL _mediaSessionControllable;
   // While a video of the page is in Picture in Picture: its time for the window's scrubber, twice a second.
   NSTimer* _pictureInPictureClock;
+  // -loadURL: counted the navigation it starts; Chrome's start of it isn't counted again.
+  BOOL _startCounted;
   // The page's DevTools protocol session, made on the first -sendDevToolsMethod:.
   std::unique_ptr<cra::PageSession> _session;
   NSString* _pendingURL;
@@ -1756,6 +1776,9 @@ void RunReadyBlocks() {
     // Made now, while nothing waits on it; it goes in a tab strip when a tab takes it (takeSpareWithURL:).
     _spareProfile = profile;
     _spareContents = content::WebContents::Create(content::WebContents::CreateParams(profile));
+    [SparePages() addObject:self];
+    // Made: a tab can take it (SparePages.take), as the CEF bridge reports a spare once its browser exists.
+    _isCreated = YES;
     return;
   }
   std::unique_ptr<content::WebContents> made = content::WebContents::Create(content::WebContents::CreateParams(profile));
@@ -1891,7 +1914,11 @@ void RunReadyBlocks() {
 - (void)pageStartedNavigation:(content::NavigationHandle*)handle {
   _hasCommittedLoad = NO;
   _navigatingURL = NS(handle->GetURL().spec());
-  ++_navigationStarts;
+  if (_startCounted) {
+    _startCounted = NO;  // -loadURL: counted it before Chrome ended the load it replaces
+  } else {
+    ++_navigationStarts;
+  }
   if ([_delegate respondsToSelector:@selector(browser:didChangeCommittedLoad:)]) {
     [_delegate browser:self didChangeCommittedLoad:NO];
   }
@@ -2124,6 +2151,12 @@ void RunReadyBlocks() {
   }
 }
 
+// Chrome quits: a spare page never taken goes before its profile does.
+- (void)dropSpareContents {
+  _spareContents.reset();
+  _spareProfile = nullptr;
+}
+
 // Sound starting or stopping as it happens, before the 2 s Chrome's audible state holds (music notes).
 - (void)pageSoundPlaying:(BOOL)playing {
   if ([_delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)]) {
@@ -2209,7 +2242,16 @@ void RunReadyBlocks() {
   }
   content::NavigationController::LoadURLParams params{GURL(UTF8(url))};
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
+  // A new navigation, counted before Chrome ends the load still under way (which tells the app the page stopped
+  // loading) and then starts this one: the app sees the new navigation's number first, as the CEF bridge has it.
+  ++_navigationStarts;
+  _startCounted = YES;
   _contents->GetController().LoadURLWithParams(params);
+  if (_startCounted) {
+    // Chrome started nothing (or not yet): the count stays as it was.
+    _startCounted = NO;
+    --_navigationStarts;
+  }
 }
 
 - (void)goBack {
@@ -2871,6 +2913,7 @@ void RunReadyBlocks() {
     return;
   }
   g_quitting = true;
+  cra::DropSparePages();
   cra::StopProfilePrefs();
   cra::DetachHostWindows();
   delete g_keep_alive;
@@ -2911,6 +2954,10 @@ void RunReadyBlocks() {
 
 + (BOOL)chromeHosting {
   return NO;
+}
+
++ (BOOL)supportsSparePages {
+  return YES;
 }
 
 #pragma mark Not yet
