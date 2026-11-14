@@ -1,0 +1,15 @@
+# scripts/test-engine-migration.sh, second half, on the engine: the data folder a Cra on CEF left opens with the
+# site's cookie and the tab's back and forward list.
+budget rss=900 stalls50=40
+pace 0.5
+
+wait 2
+expect-log opens with 2 pages of history
+cra://debug?back=migrated
+expect-log back migrated: selected=\S+n=second back=1
+# A new tab on the same site (the server's port is new; cookies don't keep a port).
+cra://open?url=${PAGE}?n=third
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"cra_migration=kept"

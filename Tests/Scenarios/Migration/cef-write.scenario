@@ -1,0 +1,17 @@
+# scripts/test-engine-migration.sh, first half, on a Cra on CEF: a site's cookie and a tab's back and forward
+# list, saved by a clean quit (the relaunch) into the data folder the engine opens next.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='cra_migration=kept; max-age=86400; path=/'; document.cookie","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"cra_migration=kept"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=second'","userGesture":true}
+wait 1.5
+cra://debug?back=written
+expect-log back written: selected=\S+n=second back=1
+
+relaunch
+expect-log opens with 2 pages of history
