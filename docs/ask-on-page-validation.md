@@ -1,8 +1,10 @@
 # Ask on Page validation
 
-R4 records integration evidence for the reviewed R1–R3c implementation. It changes tests and
-validation documents, with product source frozen at `653ed22bf6c5f4482fca9ceaf8a9143ace6eea8e`.
-This is a partial acceptance record. The reviewed implementation may be published with these
+R4 records integration evidence for the reviewed R1–R3c implementation at
+`653ed22bf6c5f4482fca9ceaf8a9143ace6eea8e`. The 14 November follow-up below adds observed native
+cases and published R5 row-fix evidence at `2d7075c63a5587e47fd87968c734399542590340`.
+R6’s bounded scroll-fix build/native checks passed at the exact reviewed candidate below.
+This is a partial acceptance record. The reviewed implementation is published with these
 limitations; the remaining gates stay OPEN and must be observed before declaring complete feature
 parity or completing the overall goal. Fake guided output proves wiring; textual source presence does not
 prove that a quote supports an answer.
@@ -30,6 +32,59 @@ Root artifacts live outside the repository under `cra-validation/logs/`, `runtim
 engine, model, global input or display action. The root author handoff records exact paths and
 candidate hashes.
 
+## Native follow-up, 14 November 2026
+
+R5's reviewed native row fix is published at `2d7075c63a5587e47fd87968c734399542590340`,
+reviewed tree `c7e19c8bca4d992463aeb14889c42e77e05729d5`, binary SHA-256
+`3a629f6accd65668d9aaa8820600d00593d5257551120c285a272b3c35e4d985`. These physical CEF
+observations use fake generation: they establish input/rendering/quote wiring, not model quality,
+complete Find exclusivity or paired Arc fidelity. Earlier R4 receipts retain their exact source scope.
+Paths below are relative to `/Users/varunaditya/Desktop/arc-decomp/cra-validation`.
+
+| Observed boundary | Result and limit | Receipt |
+| --- | --- | --- |
+| Physical input and symbol/Unicode literals, retained R4 binary `b07de4` | Cmd-F focused/select-all, insertion-caret edits, positive Return/Shift-Return occurrence navigation, zero-match/follow-up Return, Cmd-G ordinary-Find restoration with conversation retained, and Escape/clean reopen were observed. Actual quote clicks highlighted complete 57-UTF16-unit symbols and inline NFD/NFC Café/CJK/ZWJ source sentences orange. This is representative CEF evidence; it does not establish every key or WebKit native behavior. | `runtime/ask-r4-physical-cef-1x-20261114-01/root-observations.jsonl` |
+| R5 native row at 1x | Actual normal 400×49 and narrow 232×49 pt/pixel captures show readable single-line Ask/count/arrows/close without overlap. The nominal `narrow240` filename is not an observed width; a still narrower case's count truncation was observed without exact panel-width measurement. | `runtime/ask-r5-row-candidate-1x-20261114/row-fix-native-summary.json`, `root-observations.jsonl` |
+| R5 repeated and long exact quote | Actual integrated quote action selected the second complete repeated sentence, retaining conversation. The late 52-UTF16-unit literal was visibly orange across four wrapped lines; independent read-only Range geometry was top 668/bottom 811 in an 860 pt viewport, scrollY 1204. DOM Selection was empty during native Find; geometry supports the separate physical glyph observation. | `runtime/ask-r5-row-candidate-1x-20261114/root-observations.jsonl`, `repeated-native-second-family.png`, `long-native-late-quote-family.png` |
+| R5 overflow, themes and genuine missing quote | Light/dark 400×499 pt card, scrollbar/fades/input and retained four-message conversation were observed. After actual DOM target mutation, Find on Page showed the red quote-not-found warning. The settled conversation initially remained at scroll 0 with the newest answer hidden; AX ScrollDown exposed it. This is the R6 trigger, not a successful automatic reveal. | `runtime/ask-r5-row-candidate-1x-20261114/root-observations.jsonl` |
+| Exact R5 2x light-card capture | Exact PID 88657/window 1543 SCK capture was 400×499 pt → 800×998 pixels, scale 2, with current mode 83 stable immediately before/after; root inspected the light card/error/scrollbar/fades/input. Root recorded wrapper restoration to mode 82 with exit 0. Earlier files labeled `2x` whose actual metadata was 1x remain 1x evidence. This is a still-image state, not motion or dark-at-2x proof. | `runtime/ask-r5-native-2x-bounded-20261114/result.json`, `window.png`; restoration/inspection in the R5 `root-observations.jsonl` |
+
+R6 is independently reviewed and committed as `5c91655b3341e609a1172476c39230d15dc8c287`,
+exact tree `f8700b21fafecbc16db6b44772435c207a1569b4`, canonical reviewed diff SHA-256
+`269191afcdbbbcd90ef03b68d9f28855bd049a4d907a3208e82fce1c2746d95c`. Root’s build passed
+(`logs/askonpage-R6-scroll-native-build-20261114.log`); binary SHA-256
+`0d4dea1cb4bc0bddd677fc0669c0bc9d801f95161b875d4312c28d42261b3275`. Root reports lint clean
+with 30 grandfathered findings. Final review: `reviews/code-askonpage-R6-conversation-scroll.md`.
+
+In `runtime/ask-r6-scroll-candidate-cef-20261114/root-observations.jsonl`, four physical turns,
+including fast follow-ups, revealed the newest question/answer. After AX ScrollUp to older content, a physical fifth
+follow-up moved the scrollbar 0→1 and exposed its question and complete answer without manual downward
+scrolling. At older position `0.1038696537678208`, an actual changed-DOM quote error and light-appearance
+change retained that exact scroll position and all five messages. The native newest/older captures
+record the 400×499 pt 1x card; this is a bounded post-layout reveal/preserved-position pass, not a
+physical mid-stream scrolling claim. The R6 2x receipt at
+`runtime/ask-r6-native-2x-bounded-20261114/result.json` binds PID 23762/window 1965 to 400×499 pt →
+800×998 pixels, stable mode 83 before/after. Root inspected the light older-position/fades image and
+recorded restoration to mode 82, exit 0, in the R6 observations.
+
+The owned R6 WebKit run `runtime/ask-r6-native-webkit-20261114/` binds source `5c91655`, the
+same `0d4dea` binary and PID 27733 to the actual localhost WebKit engine. Physical Cmd-F/Return,
+Shift-Cmd-G previous/wrap and Down/Up navigated ordinary `cobalt` occurrences. A physical zero-match
+Budget question/Return generated one fake-provider answer; the actual quote click visibly selected
+the entire 57-UTF16-unit symbol literal gray with conversation retained. Its correlated read-only
+probe confirmed `exactSelection=true`, 57 units, top 224/bottom 242 in an 860 pt viewport. After
+Cmd-F/type `cobalt`/Cmd-G restored ordinary Find with message/input retained, Down/Up selected the
+second/first occurrences; the final probe confirmed exact 6-unit selection at top 320/bottom 338.
+Native AX focus identified `askOnPageInput`; no internal NSTextView-class introspection is claimed.
+See `root-observations.jsonl`, `native-webkit-literal-family.png`,
+`native-webkit-restored-first-family.png` and correlated probes in `stdout.log`. Owned cleanup exited 0.
+
+Reduced motion, physical manual scrolling during a still-streaming answer, paired Arc motion/
+appearance and remaining hover states stay unverified; the original real-model quality failures
+remain recorded. Unobserved native WebKit Unicode/repeated/long/iframe selection cases are
+**coverage limits**, not a new mandatory matrix. The user's deferred physical-hover validation applies to Preview only;
+these receipts do not establish full Ask parity or overall-goal completion.
+
 ## Basic journey and literal selection are separate
 
 Run from the reviewed checkout and root-built app:
@@ -52,40 +107,46 @@ An empty `window.getSelection()` during active CEF Find is therefore not a faile
 match witness. Source tracing is recorded in the external native-selection report; actual
 ordinary Stop(false) conversion was observed. The quote Stop(false) experiment retained the
 conversation before owner change and cleared it after, but its old-tab DOM selection stayed
-empty. That quote selection gate remains open; no product defect is inferred from this
-observation alone.
+empty. That historical DOM-selection experiment did not establish native quote glyphs; the
+representative 14 November CEF physical observations above supply separate evidence. No product
+defect is inferred from the empty DOM Selection alone.
 
-Renderer screenshot diagnostics stopped after one explicit foreground attempt: the bounded
+Earlier renderer screenshot diagnostics stopped after one explicit foreground attempt: the bounded
 frame fence reported `frameReady=false`, `painted=false`, and requested no screenshot. Earlier
 background capture timed out without a response. These are unavailable capture evidence,
-not proof of a product rendering defect or of correct native highlighting. No further
-speculative capture retry is required.
+not proof of a product rendering defect or of correct native highlighting. The later native
+SCK/CUA receipts above have their own observed scale/identity and do not relabel those failures.
 
 ## Remaining native acceptance
 
-- **Exact native quote highlight/selection:** on HTTP fixtures, observe the complete literal
-  symbols/inline NFC/repeated and long-paragraph quote after the actual integrated quote action.
-  Verify the active highlighted glyphs and quote Range viewport, with conversation still open.
-  Then restore ordinary Find and verify its literal selected occurrence. A count, source-present
-  quote, found status or script-only Range result cannot satisfy this gate.
-- **Native field-editor input:** observe the actual key `FindBarPanel`, editable field
-  `askOnPageInput` and associated NSTextView first responder. Exercise Cmd-F select-all,
-  Down/Up, Return/Shift-Return, Cmd-G/Shift-Cmd-G, Escape and caret preservation. The debug key
-  seam targets the main/command window and is not proof of Find-panel event delivery.
-- **Visible appearance and motion:** compare Arc/Cra on the same display at 1x/2x, light/dark
-  including light space on dark Mac, short/overflowing/narrow panel, quote loading/error/hover,
-  focus and reduced motion. Width 400/conversation height 450 are maxima; input adds natural
-  height. Preserve #408 tone; static colors/animation arguments do not prove runtime fidelity.
+- **Exact native quote highlight/selection:** representative CEF symbols/inline NFC/repeated/long
+  glyphs and ordinary-Find restoration were physically observed above, with WebKit symbol and
+  ordinary literal selection separately observed on R6. Preserve exact fixture/source/engine scope;
+  unobserved WebKit Unicode/repeated/long/iframe cases are **coverage limits**, not a new mandatory matrix. A count, source-present
+  quote, found status or script-only Range result cannot substitute for glyph evidence.
+- **Native field-editor input:** retain recorded CEF Cmd-F/caret/Return/Shift-Return/Cmd-G/Escape
+  cases and R6 WebKit Cmd-F/Return/Shift-Cmd-G/Down/Up at their respective source/engine scopes.
+  WebKit AX focus identified `askOnPageInput`; Tab/Shift-Tab and an internal NSTextView
+  first-responder-class readback remain unobserved. The debug key seam targets the main/command
+  window and is not proof of physical Find-panel event delivery.
+- **Visible appearance and motion:** retain observed 1x light/dark/overflow/narrow and exact
+  2x light-card stills above. Paired Arc comparison, light-space-on-dark-Mac combinations,
+  remaining hover/loading states, motion and reduced motion stay open. Width 400/conversation
+  height 450 are maxima; input adds natural height. Preserve #408 tone. R6's tested fast-overflow
+  reveal and same-question layout/error position preservation passed at the candidate above;
+  physical manual scrolling during still-streaming output remains unobserved.
 - **Engine limits:** preserve the distinction between prevented stale setup, prevented
   new-document/retired renderer leases and invalidation after final IPC authorization. Already
   dispatched IPC cannot be atomically revoked. WebKit iframe-only native positive floor and
   subsequent native zero were observed in find-correlation. This does not establish an exact
-  cross-frame count; native selection remains OPEN. Remaining command/front-end observability
-  stays at its recorded scope.
+  cross-frame count or iframe native selection. The later WebKit native symbol/ordinary-selection
+  cases above are separate evidence. Remaining command/front-end observability stays at its
+  recorded scope.
 - **Model quality:** retain existing failing assertions and report unsupported background,
   transformation/language, answer relevance and citation support limits separately from wiring.
 
 Physical validation must hold the owned disposable app alive and verify its exact PID before
 binding CUA. Never bind by app name after the process has exited: that can launch a normal
 profile. Root retains responsibility for dialog handling, display restoration and input;
-external prompts currently prevent claiming the physical key/pixel gates.
+earlier unrelated security prompts are not a blanket current blocker. Claim only the observed
+physical cases above; no other manual gate is implied complete.
