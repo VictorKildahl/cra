@@ -82,6 +82,23 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
   (YouTube) stays controllable through a ding, so its paused card shows playing during the ding, as Chrome's
   own media controls do.
 
+## Before the switch ships
+
+What the scenarios can't reach, checked by hand on a release build (`scripts/release.sh`, signed and notarized):
+
+1. **An existing profile on a signed build.** Install the engine build over a CEF Cra with saved passwords and
+   signed-in sites: the "Cra Safe Storage" Keychain item opens the same cookies and passwords (no sign-outs, no
+   Keychain prompt). `scripts/test-engine-migration.sh` covers cookies and history on unsigned test copies only.
+2. **The update itself.** Sparkle from the last CEF release to the engine release: the app relaunches on the
+   engine, and the CEF framework is gone from the bundle.
+3. **A real Intel Mac.** The x64 build starts and loads pages; under Rosetta here its start-up stalled 1.7 s, so
+   scenario budgets on Intel are open.
+4. **Passkeys** with Touch ID (the keychain access group comes from the provisioning profile), and the Web Store
+   install flow.
+5. **DRM sites**: Netflix and Disney+ open in their WebKit tabs; Spotify plays in Chromium (Widevine).
+6. **Speed**: `scripts/perf/rounds.sh` engine against CEF (memory at 20 tabs, tab switch, new tab, start-up),
+   results in docs/speed.md.
+
 ## Status
 
 - 13 Nov 2026: decided; CEF 158 not built.
