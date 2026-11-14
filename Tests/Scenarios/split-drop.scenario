@@ -1,0 +1,63 @@
+# promise: #419
+# A tab dragged from the sidebar onto the page makes a split where it is let go, as in Arc 1.173.1
+# (measured with real drags): a lone page's nearest edge decides, its left or right side by side,
+# its top or bottom stacked; in a split a pane's sides open a new pane there and its middle is
+# replaced. The drop region takes an even share, the others keep theirs, and the dropped page is
+# the open pane.
+# A page's link does the same near a pane's edge (Cra's own, #419: Arc takes no link there), and
+# leaves the rest of the page to the page. Four panes is the most.
+# Five drops, each laying every page out again: more short stalls than a scenario that only opens tabs.
+budget stalls50=20
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=below
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=fifth
+cra://open?url=${PAGE}?n=fourth
+cra://open?url=${PAGE}?n=other
+cra://open?url=${PAGE}?n=shown
+wait 1
+# The tab on screen has nowhere to go.
+cra://debug?dropSplit=n=shown&x=0.97&y=0.5
+expect-log dropSplit: none$
+# A link over the page's middle stays the page's (its fields still take drops).
+cra://debug?dropSplit=${PAGE}?n=middle&link=1&x=0.5&y=0.5
+expect-log dropSplit: none$
+# A lone page's right edge: side by side, half each.
+cra://debug?dropSplit=n=other&x=0.97&y=0.5
+expect-log dropSplit: proposed horizontal 1, region right 0\.(49|50)$
+expect-log dropSplit: split horizontal n=shown \| n=other open=n=other shares=0\.50 0\.50$
+wait 1
+# A page's link on the first pane's left side: a third pane before it, a third each.
+cra://debug?dropSplit=${PAGE}?n=link&link=1&name=Linked&x=0.06&y=0.5
+expect-log dropSplit: proposed horizontal 0, region left 0\.3\d$
+expect-log dropSplit: split horizontal n=link \| n=shown \| n=other open=n=link shares=0\.33 0\.33 0\.33$
+wait 1
+# Only web pages.
+cra://debug?dropSplit=file:///etc/hosts&link=1&x=0.5&y=0.5
+expect-log dropSplit: refused file:///etc/hosts$
+# A split pane's middle: the tab takes its place and the pane goes back to the sidebar.
+cra://debug?dropSplit=n=fifth&x=0.5&y=0.5
+expect-log dropSplit: proposed replace 1 \(n=shown\)$
+expect-log dropSplit: split horizontal n=link \| n=fifth \| n=other open=n=fifth shares=0\.33 0\.33 0\.33$
+wait 1
+# The last pane's right side: a fourth pane at the end.
+cra://debug?dropSplit=n=fourth&x=0.97&y=0.5
+expect-log dropSplit: proposed horizontal 3, region right 0\.2\d$
+expect-log dropSplit: split horizontal n=link \| n=fifth \| n=other \| n=fourth open=n=fourth shares=0\.25 0\.25 0\.25 0\.25$
+wait 1
+# Four panes is the most: no fifth, but a pane can still be replaced.
+cra://debug?dropSplit=n=shown&x=0.97&y=0.5
+expect-log dropSplit: none$
+cra://debug?dropSplit=n=shown&x=0.875&y=0.5
+expect-log dropSplit: proposed replace 3 \(n=fourth\)$
+expect-log dropSplit: split horizontal n=link \| n=fifth \| n=other \| n=shown open=n=shown shares=0\.25 0\.25 0\.25 0\.25$
+wait 1
+# A lone page's bottom: stacked, the dropped page below.
+cra://open?url=${PAGE}?n=top
+wait 1
+cra://debug?dropSplit=n=below&x=0.5&y=0.97
+expect-log dropSplit: proposed vertical 1, region bottom 0\.(49|50)$
+expect-log dropSplit: split vertical n=top \| n=below open=n=below shares=0\.50 0\.50$

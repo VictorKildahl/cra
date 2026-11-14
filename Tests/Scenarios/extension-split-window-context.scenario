@@ -1,0 +1,54 @@
+# Each split pane and browser window must expose its own focused page to extensions.
+budget rss=1100 stalls50=40
+cra://debug?installExtension=${FIXTURES}/TabsQueryExtension
+relaunch
+cra://open?url=${ORIGIN}/extension-context.html?n=left
+wait 2
+cra://open?url=${ORIGIN}/extension-context.html?n=right
+wait 2
+cra://debug?pickedMenu=2&label=context-split&run=Open in Split View
+expect-log picked menu context-split ran Open in Split View: - picks=0$
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('right')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"right current=true currentWindow=true last=true type=normal page=right active=right"
+cra://action/nextSplitPane
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('left')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"left current=true currentWindow=true last=true type=normal page=left active=left"
+cra://navigate?url=${ORIGIN}/extension-context.html?n=right
+wait 2
+cra://debug?paneLengths=same-url-left
+expect-log pane lengths same-url-left: .* focused=1 horizontal$
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('same-url-left')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"same-url-left current=true currentWindow=true last=true type=normal page=right active=right"
+cra://action/previousSplitPane
+wait 1
+cra://debug?paneLengths=same-url-right
+expect-log pane lengths same-url-right: .* focused=0 horizontal$
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('same-url-right')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"same-url-right current=true currentWindow=true last=true type=normal page=right active=right"
+cra://action/flipSplitOrientation
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('stacked')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"stacked current=true currentWindow=true last=true type=normal page=right active=right"
+cra://action/closeSplitPane
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('split-closed')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"split-closed current=true currentWindow=true last=true type=normal page=right active=right"
+cra://open?url=${ORIGIN}/extension-context.html?n=window
+wait 2
+cra://debug?dragEnd=n=window
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('second-window')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"second-window current=true currentWindow=true last=true type=normal page=window active=window"
+cra://action/closeWindow
+wait 2
+cra://debug?browserWindows=returned
+expect-log browser windows returned: count=1$
+cra://action/previousTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"checkExtensionContext('window-closed')","awaitPromise":true,"returnByValue":true}
+expect-log "value":"window-closed current=true currentWindow=true last=true type=normal page=right active=right"
+cra://debug?removeExtension=${TABS_QUERY_EXTENSION_ID}
+wait 1
+reject-log fault:

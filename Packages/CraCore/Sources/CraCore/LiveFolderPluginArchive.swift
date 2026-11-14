@@ -1,6 +1,8 @@
 import Foundation
 import Darwin
 
+// Unpacks with /usr/bin/unzip, so it exists on the Mac only; the iOS app has no plugins.
+#if os(macOS)
 public final class LiveFolderPluginArchive {
     public let package: LiveFolderPluginPackage
     private let temporaryDirectory: URL
@@ -123,3 +125,4 @@ public final class LiveFolderPluginArchive {
         return output
     }
 }
+#endif

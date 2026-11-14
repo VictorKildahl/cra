@@ -1,7 +1,16 @@
 name: Bug report
-description: Something in Cra doesn't work, or works differently from Arc.
+description: Something in Cra doesn't work, or works differently from Arc (or, on iPhone, Arc Search).
 labels: [bug]
 body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app
+      options:
+        - Mac
+        - iPhone
+    validations:
+      required: true
   - type: textarea
     id: what
     attributes:
@@ -22,15 +31,15 @@ body:
     id: version
     attributes:
       label: Cra version
-      description: Cra ▸ About Cra, or the first line of the Help menu.
+      description: "Mac: Cra ▸ About Cra, or the first line of the Help menu. iPhone: the bottom of App Settings, or the build in TestFlight."
       placeholder: 0.1.14 (Chromium 156.0.8078.48)
     validations:
       required: true
   - type: input
     id: macos
     attributes:
-      label: macOS version
-      placeholder: macOS 26.1
+      label: macOS or iOS version
+      placeholder: macOS 26.1 / iOS 26.1 on iPhone 16 Pro
     validations:
       required: true
   - type: dropdown

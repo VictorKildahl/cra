@@ -1,8 +1,8 @@
 diff --git a/cef/libcef/browser/browser_contents_delegate.cc b/cef/libcef/browser/browser_contents_delegate.cc
-index 72dd7c5..12186c2 100644
+index fc99b7df6..15643f863 100644
 --- a/cef/libcef/browser/browser_contents_delegate.cc
 +++ b/cef/libcef/browser/browser_contents_delegate.cc
-@@ -11,6 +11,7 @@
+@@ -12,9 +12,11 @@
  #include "cef/libcef/browser/native/cursor_util.h"
  #include "cef/libcef/common/api_version_util.h"
  #include "cef/libcef/common/frame_util.h"
@@ -10,7 +10,11 @@ index 72dd7c5..12186c2 100644
  #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
  #include "chrome/common/chrome_result_codes.h"
  #include "components/input/native_web_keyboard_event.h"
-@@ -86,7 +87,14 @@ class CefWidgetHostInterceptor
++#include "content/browser/media/session/media_session_impl.h"
+ #include "content/browser/renderer_host/render_widget_host_impl.h"
+ #include "content/public/browser/focused_node_details.h"
+ #include "content/public/browser/keyboard_event_processing_result.h"
+@@ -87,7 +89,14 @@ class CefWidgetHostInterceptor
  
  CefBrowserContentsDelegate::CefBrowserContentsDelegate(
      scoped_refptr<CefBrowserInfo> browser_info)
@@ -26,22 +30,27 @@ index 72dd7c5..12186c2 100644
  
  void CefBrowserContentsDelegate::ObserveWebContents(
      content::WebContents* new_contents) {
-@@ -613,6 +621,56 @@ void CefBrowserContentsDelegate::DidFinishLoad(
+@@ -620,6 +629,61 @@ void CefBrowserContentsDelegate::DidFinishLoad(
    OnLoadEnd(frame, validated_url, http_status_code);
  }
  
 +// Cra: Chromium's audible state (Chrome's tab speaker icon), which CEF has no
-+// callback for. Delivered as a "Cra.audible" message from PID_BROWSER whose
-+// only argument is the new state.
++// callback for. Delivered as a "Cra.audible" message from PID_BROWSER with the
++// new state, then whether the page's media session is one Chrome's global
++// media controls offer (MediaSessionImpl::IsControllable): a sound under 5 s,
++// such as a notification ding, or Web Audio alone is not.
 +void CefBrowserContentsDelegate::OnAudioStateChanged(bool audible) {
 +  auto c = client();
 +  auto b = browser();
 +  if (!c || !b) {
 +    return;
 +  }
++  auto* session = static_cast<content::MediaSessionImpl*>(
++      content::MediaSession::GetIfExists(web_contents()));
 +  CefRefPtr<CefProcessMessage> message =
 +      CefProcessMessage::Create("Cra.audible");
 +  message->GetArgumentList()->SetBool(0, audible);
++  message->GetArgumentList()->SetBool(1, session && session->IsControllable());
 +  c->OnProcessMessageReceived(b, b->GetMainFrame(), PID_BROWSER, message);
 +}
 +

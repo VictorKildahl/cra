@@ -65,12 +65,10 @@ public enum TidyTitles {
         return !s.isEmpty && s.count <= maximumLength ? s : nil
     }
 
-    /// Arc keeps filtered alone when it is already shorter; otherwise both remain available.
+    /// Arc reduces the raw pair before filtering; display cleaning must not change that decision.
     public static func candidates(_ answer: Answer) -> [String] {
-        let filtered = clean(answer.filtered), rewritten = clean(answer.rewritten)
-        guard let filtered else { return rewritten.map { [$0] } ?? [] }
-        guard let rewritten, filtered.lowercased() != rewritten.lowercased(), filtered.count >= rewritten.count else { return [filtered] }
-        return [filtered, rewritten]
+        let raw = answer.filtered.count < answer.rewritten.count ? [answer.filtered] : [answer.filtered, answer.rewritten]
+        return raw.compactMap(clean)
     }
 
     /// Largest measured candidate that fits, or the smallest when none fit. Ties keep input order.

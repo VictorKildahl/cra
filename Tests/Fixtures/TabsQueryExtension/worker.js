@@ -9,3 +9,20 @@ chrome.action.onClicked.addListener(async (tab) => {
   const windows = await chrome.windows.getAll({});
   await chrome.tabs.create({ url: `${origin}/page.html?n=tabs-${tabs.length}-blank-${blank}-windows-${windows.length}` });
 });
+
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message?.type !== 'context' || !sender.tab) return;
+  (async () => {
+    if (message.label === 'background') {
+      await chrome.tabs.create({ url: `${new URL(sender.tab.url).origin}/extension-context.html?n=unselected`, active: false });
+    }
+    const byId = await chrome.tabs.query({ active: true, windowId: chrome.windows.WINDOW_ID_CURRENT });
+    const current = await chrome.tabs.query({ active: true, currentWindow: true });
+    const last = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const window = await chrome.windows.get(sender.tab.windowId);
+    const page = new URL(sender.tab.url).searchParams.get('n');
+    const active = byId[0]?.url ? new URL(byId[0].url).searchParams.get('n') : 'missing';
+    return `${message.label} current=${byId[0]?.id === sender.tab.id} currentWindow=${current[0]?.id === sender.tab.id} last=${last[0]?.id === sender.tab.id} type=${window.type} page=${page} active=${active}`;
+  })().then(reply, (error) => reply(`error: ${error.message}`));
+  return true;
+});

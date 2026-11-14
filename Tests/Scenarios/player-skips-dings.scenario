@@ -1,0 +1,34 @@
+# promise: #411
+# A notification ding (a 1 s sound) or a Web Audio beep shows the tab's speaker but makes no
+# sidebar player card; a 12 s tone gets one. Arc's player follows Chromium's media session, which
+# Chrome's media controls only offer once it is controllable (media longer than 5 s).
+budget rss=800 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+pace 0.5
+
+cra://open?url=file://${FIXTURES}/Pages/sounds.html
+expect-log loaded file:
+wait 1
+# Read the player through the ding and the speaker's 2 s hold after it.
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"returnByValue":true,"expression":"ding().then(s => document.title = s), 'ding:started'"}
+pace 0.3
+repeat 12 cra://debug?nowPlaying=state&label=ding
+expect-log Cra nowPlaying\[ding\] sounding .*uncontrollable=1
+reject-log Cra nowPlaying\[ding\] .*playing=
+pace 0.5
+wait 2
+
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"returnByValue":true,"expression":"beep().then(s => document.title = s), 'beep:started'"}
+pace 0.3
+repeat 12 cra://debug?nowPlaying=state&label=beep
+expect-log Cra nowPlaying\[beep\] sounding .*uncontrollable=1
+reject-log Cra nowPlaying\[beep\] .*playing=
+pace 0.5
+wait 2
+
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"tone()"}
+expect-log "value":"tone:playing"
+wait 1
+cra://debug?nowPlaying=state&label=tone
+expect-log Cra nowPlaying\[tone\] sounding .*uncontrollable=0
+expect-log Cra nowPlaying\[tone\] .*playing=1 prev=0 next=0 video=0 pip=0

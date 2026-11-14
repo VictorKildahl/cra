@@ -143,12 +143,23 @@ struct TidyTitlesTests {
         #expect(TidyTitles.clean(String(repeating: "a", count: 513)) == nil)
     }
 
+    @Test func rawCandidateReductionPrecedesDisplayCleaning() {
+        // Arc 1.109 0x1000cb684 / 1.171 0x1000bf6a4 reduce the raw pair before
+        // their nonempty predicate; case variants remain for native width measurement.
+        #expect(TidyTitles.candidates(.init(filtered: "", rewritten: "Useful")) == [],
+                "An empty shorter filtered field must not resurrect the discarded rewritten field")
+        #expect(TidyTitles.candidates(.init(filtered: "   A   ", rewritten: "B C")) == ["A", "B C"],
+                "Display trimming must not change the raw pair's count-reduction decision")
+        #expect(TidyTitles.candidates(.init(filtered: "Arc", rewritten: "arc")) == ["Arc", "arc"],
+                "Equal-count case variants remain available for native width measurement")
+    }
+
     @Test(arguments: [
         ("Arc", "Arc Browser", ["Arc"]),
         ("Arc Monetization Strategy", "Arc Monetization", ["Arc Monetization Strategy", "Arc Monetization"]),
         ("One", "Two", ["One", "Two"]),
-        ("\"Arc\"", "arc", ["Arc"]),
-        ("", "Short", ["Short"]),
+        ("\"Arc\"", "arc", ["Arc", "arc"]),
+        ("", "Short", []),
         ("Longer", "", ["Longer"]),
         (" \n", "", []),
         ("Bad\u{0}", "Good", ["Good"]),

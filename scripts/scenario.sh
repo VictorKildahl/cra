@@ -22,6 +22,7 @@
 #   pace <s>                    pause after each command (default 0.2)
 #   repeat <n> <cra://…${i}…>   the command n times, ${i} = 1…n
 #   budget rss=<MB> maxstall=<ms> stalls50=<n> launchstall=<ms> perfcpu=<% of a core>
+#     stalls16=<n> (dropped frames: stalls over 16 ms; no budget unless a scenario sets one)
 #     (stalls count from the first command; start-up has its own launchstall budget)
 #   helpers baseline | helpers settle [slack]
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
@@ -276,7 +277,7 @@ ready "$PID" || problem "Cra did not start reading commands in 30 s"
 sleep 2
 
 PACE=0.2
-RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 LAUNCHSTALL=1000 PERFCPU=0.1
+RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 STALLS16= LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
 
 echo "$NAME (pid $PID, logs in ${OUT#$ROOT/})"
@@ -296,7 +297,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
     budget)
       shift
       for kv in "$@"; do
-        case "$kv" in rss=*) RSS_BUDGET="${kv#*=}" ;; perfcpu=*) PERFCPU="${kv#*=}" ;; launchstall=*) LAUNCHSTALL="${kv#*=}" ;; maxstall=*) MAXSTALL="${kv#*=}" ;; stalls50=*) STALLS50="${kv#*=}" ;; esac
+        case "$kv" in rss=*) RSS_BUDGET="${kv#*=}" ;; perfcpu=*) PERFCPU="${kv#*=}" ;; launchstall=*) LAUNCHSTALL="${kv#*=}" ;; maxstall=*) MAXSTALL="${kv#*=}" ;; stalls50=*) STALLS50="${kv#*=}" ;; stalls16=*) STALLS16="${kv#*=}" ;; esac
       done ;;
     helpers)
       if [ "$2" = "baseline" ]; then BASELINE=$(helpers); echo "  helpers: baseline $BASELINE"
@@ -361,16 +362,20 @@ else
   problem "Cra is not running at the end"
 fi
 # Stalls after a snapshot command are the snapshot being drawn, not the app.
-read -r launch maxstall over50 < <(cat "$OUT/hitch.earlier" "$HITCH" 2>/dev/null | awk '$2 == "relaunch" { started = 0 }
+read -r launch maxstall over50 over16 < <(cat "$OUT/hitch.earlier" "$HITCH" 2>/dev/null | awk '$2 == "relaunch" { started = 0 }
   $2 == "mark" { started = 1; shooting = ($3 ~ /snapshot=/) }
   $2 == "stall" && shooting { next }
   $2 == "stall" && !started { if ($3 > l) l = $3 }
-  $2 == "stall" && started { if ($3 > m) m = $3; if ($3 > 50) n++ }
-  END { printf "%d %d %d\n", l, m, n }' || echo "0 0 0")
+  $2 == "stall" && started { if ($3 > m) m = $3; if ($3 > 50) n++; if ($3 > 16) f++ }
+  END { printf "%d %d %d %d\n", l, m, n, f }' || echo "0 0 0 0")
 echo "  stalls: start-up ${launch} ms (budget ${LAUNCHSTALL}); then longest ${maxstall} ms, ${over50} over 50 ms (budget ${MAXSTALL} ms, ${STALLS50})"
 [ "${launch:-0}" -le "$LAUNCHSTALL" ] || budget_problem "a ${launch} ms main-thread stall at start-up, budget ${LAUNCHSTALL} ms"
 [ "${maxstall:-0}" -le "$MAXSTALL" ] || budget_problem "a ${maxstall} ms main-thread stall, budget ${MAXSTALL} ms"
 [ "${over50:-0}" -le "$STALLS50" ] || budget_problem "${over50} stalls over 50 ms, budget ${STALLS50}"
+if [ -n "$STALLS16" ]; then
+  echo "  dropped frames: ${over16} stalls over 16 ms (budget ${STALLS16})"
+  [ "${over16:-0}" -le "$STALLS16" ] || budget_problem "${over16} stalls over 16 ms, budget ${STALLS16}"
+fi
 
 # The performance recorder (#91): what it costs, and whether it saw the stalls HitchMonitor saw.
 if alive; then

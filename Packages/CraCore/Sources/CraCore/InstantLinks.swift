@@ -271,9 +271,10 @@ public enum InstantLinks {
         }
     }
 
-    /// The script's answer as pages to open: web addresses only, Google's `/url?q=` unwrapped to the page
-    /// (Arc does), `/goto?url=` kept as it is (Google redirects it), Google's own search, maps and sign-in
-    /// links and repeats left out, `limit` at most.
+    /// The script's answer as pages to open: web addresses only, Google's `/url?q=` (Arc does) and
+    /// `/goto?url=` unwrapped to the page (opened as they are, `/goto` shows Google's "verifying your
+    /// request" page for seconds first), Google's own search, maps and sign-in links, a wrapper without a
+    /// web address and repeats left out, `limit` at most.
     public static func results(fromJSON json: String, limit: Int) -> Results {
         guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
             return Results(links: [], blocked: false)
@@ -282,12 +283,12 @@ public enum InstantLinks {
         var seen: Set<String> = []
         for case let raw as String in (object["links"] as? [Any]) ?? [] {
             guard links.count < limit, var url = URL(string: raw), isWeb(url) else { continue }
-            if isGoogle(url), url.path == "/url",
-               let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "q" })?.value,
+            if isGoogle(url), let name = ["/url": "q", "/goto": "url"][url.path],
+               let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == name })?.value,
                let target = URL(string: q), isWeb(target) {
                 url = target
             }
-            if isGoogle(url), url.path != "/goto" { continue }
+            if isGoogle(url) { continue }
             if seen.insert(url.absoluteString).inserted { links.append(url) }
         }
         return Results(links: links, blocked: object["blocked"] as? Bool ?? false)
