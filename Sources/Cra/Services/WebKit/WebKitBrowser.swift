@@ -1095,12 +1095,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                   completionHandler: @escaping @MainActor (URL?) -> Void) {
         // The profile's Download location, or a save panel when it asks for each file (#190).
         let profilePath = incognitoPage ? nil : profile
-        let asked = DownloadDestinations.location(profileID: DownloadDestinations.profileID(profilePath: profilePath)).askWhereToSave
-        DownloadDestinations.destination(profilePath: profilePath, suggestedName: suggestedFilename) { [weak self] dest in
+        DownloadDestinations.destination(profilePath: profilePath, suggestedName: suggestedFilename, replaceExisting: true) { [weak self] dest in
             guard let self, let dest else { return completionHandler(nil) }
-            // A save panel picks a taken name only after the user agreed to replace it, and
-            // WebKit won't write over a file. (Without a panel the name is a free one.)
-            if asked, FileManager.default.fileExists(atPath: dest.path) { try? FileManager.default.trashItem(at: dest, resultingItemURL: nil) }
             self.startDownload(download, response: response, to: dest, completionHandler: completionHandler)
         }
     }
