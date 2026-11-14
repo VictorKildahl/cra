@@ -1,5 +1,6 @@
 // Objective-C++ bridge between Swift and CEF. See include/CraCEF.h.
 #import "CraCEF.h"
+#import "CraPreviewFetch.h"
 
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_browser_view_delegate.h"
@@ -3760,6 +3761,16 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (void)fetchURL:(NSString*)url headers:(NSDictionary<NSString*, NSString*>*)headers profilePath:(NSString*)profilePath
       completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {
     [self fetchURL:url headers:headers profilePath:profilePath restricted:NO attempt:0 completion:completion];
+}
++ (CraPreviewRequest*)fetchPreviewURL:(NSString*)url profilePath:(NSString*)profilePath maximumBytes:(NSUInteger)maximumBytes timeout:(NSTimeInterval)timeout
+                          completion:(void (^)(NSInteger, NSString*, NSString*, NSString*, NSString*, NSUInteger))completion {
+    NSString* profile = [profilePath copy];
+    return [CraPreviewRequest requestURL:url maximumBytes:maximumBytes timeout:timeout context:^{
+        if (!g_contextInitialized || g_quitting) return CefRefPtr<CefRequestContext>(nullptr);
+        if (!profile.length) return CefRequestContext::GetGlobalContext();
+        CefRefPtr<CefRequestContext> context = ProfileContext(profile);
+        return [g_readyProfiles containsObject:profile] ? context : CefRefPtr<CefRequestContext>(nullptr);
+    } completion:completion];
 }
 + (void)fetchPluginURL:(NSString*)url headers:(NSDictionary<NSString*, NSString*>*)headers profilePath:(NSString*)profilePath
       completion:(void (^)(NSInteger, NSString*, NSString*, NSString*))completion {

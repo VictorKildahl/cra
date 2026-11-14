@@ -80,6 +80,18 @@ struct LinkSummaryTests {
         #expect(LinkSummaryPolicy.isPublicHost("crabrowser.app."))
     }
 
+    @Test func everyFetchTargetIsCanonicalPublicAndCredentialFree() {
+        let base = u("https://EXAMPLE.com/directory/page")
+        #expect(LinkSummaryFetchPolicy.target("../final#quote", relativeTo: base, httpsOnly: true) == u("https://example.com/final"))
+        #expect(LinkSummaryFetchPolicy.target("http://example.com:80", httpsOnly: true) == u("https://example.com/"))
+        #expect(LinkSummaryFetchPolicy.target("https://example.com:443/", httpsOnly: false) == u("https://example.com/"))
+        for raw in ["http://127.0.0.1/", "http://0177.0.0.1/", "http://0x7f.0.0.1/", "http://2130706433/",
+                    "http://10.0.0.1/", "http://printer.local/", "http://[::1]/", "file:///tmp/page.html",
+                    "https://user@example.com/", "https://:password@example.com/", "javascript:alert(1)"] {
+            #expect(LinkSummaryFetchPolicy.target(raw, httpsOnly: false) == nil, "no request may start for \(raw)")
+        }
+    }
+
     @Test func httpsOnlyUpgradesTheFetch() {
         #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com/a?b=1"), httpsOnly: true) == u("https://example.com/a?b=1"))
         #expect(LinkSummaryPolicy.fetchURL(for: u("http://example.com:80/a"), httpsOnly: true) == u("https://example.com/a"))
@@ -165,10 +177,100 @@ struct LinkSummaryTests {
         let p = LinkSummaryPrompt.prompt(url: "https://example.com/p", content: content, searchQuery: "pizza oslo", language: "English")
         #expect(p.contains("<webpage>\nURL: https://example.com/p\nTitle: Pizza\nDescription: Best slices\nText.\n</webpage>"))
         #expect(p.contains("'pizza oslo'"))
-        #expect(p.hasSuffix("Write responses in English."))
+        #expect(p.hasSuffix("Write responses (but not JSON keys) in English using markdown formatting."))
         let bare = LinkSummaryPrompt.prompt(url: "https://e.com", content: .init(), searchQuery: nil, language: "Danish")
         #expect(!bare.contains("search query"))
         #expect(LinkSummaryPrompt.instructions.contains("glanceable \"answer card\""))
+    }
+
+    @Test func recoveredPromptKeepsResponseKeysEnglish() {
+        let prompt = LinkSummaryPrompt.prompt(url: "https://example.com/p", content: .init(bodyText: "Useful text"),
+                                             searchQuery: "pizza oslo", language: "Spanish")
+        #expect(prompt.contains("Write responses (but not JSON keys) in Spanish"))
+        #expect(prompt.contains("User search query: 'pizza oslo'"), "the query is data for the optional generated focus, not a second model input")
+        #expect(!prompt.contains("Focus the answer card on the user's search query:"))
+    }
+
+    @Test func optionalSummaryAndFocusHaveDifferentRoles() {
+        let details: [LinkSummaryResult.Detail] = [
+            .init(label: "Price", icon: "tag", info: "Costs twenty euros"),
+            .init(label: "Choice", icon: "star", info: "A recommended local option")
+        ]
+        let answer = LinkSummaryPrompt.Answer(blocked: false, userQuestion: "Price", quickSummary: nil, details: details)
+        let result = LinkSummaryPrompt.result(url: u("https://example.com"), title: "Page", answer: answer, final: true)
+        #expect(result?.quickSummary == nil)
+        #expect(result?.details == details, "missing optional summary still permits useful details")
+        let both = LinkSummaryPrompt.Answer(blocked: false, userQuestion: "Price", quickSummary: "Costs twenty euros", details: details)
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil, answer: both, final: true)?.quickSummary == "Costs twenty euros")
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil,
+                                        answer: .init(blocked: false, userQuestion: "Price", quickSummary: nil, details: [])) == nil,
+                "a generated focus alone is never displayed as the quick summary")
+    }
+
+    @Test func finalDetailsAreCompleteButStreamingStaysPermissive() {
+        let incomplete = LinkSummaryResult.Detail(label: "", icon: "", info: "Progressive text")
+        let partial = LinkSummaryPrompt.Answer(blocked: false, quickSummary: nil, details: [incomplete])
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil, answer: partial)?.details.count == 1)
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil, answer: partial, final: true) == nil)
+        #expect(LinkSummaryPrompt.result(url: u("https://example.com"), title: nil,
+                                        answer: .init(blocked: false, quickSummary: "Only summary", details: []), final: true) == nil)
+    }
+
+    @Test func responseLanguageUsesPreferredLanguageWithEnglishFallback() {
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: ["es-ES", "en-US"]) == "Spanish")
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: ["ja-JP"]) == "Japanese")
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: []) == "English")
+        #expect(LinkSummaryPrompt.responseLanguage(preferredLanguages: ["zz"]) == "English")
+        #expect(LinkSummaryPrompt.instructions == "As a concise and helpful summarizer, create a glanceable \"answer card\" containing the most important information from the webpage. Capture the tone, perspective and POV of the writer.")
+    }
+
+    @Test func combinedPromptBoundsMetadataQueryAndUnicode() {
+        let huge = String(repeating: "界👩🏽‍💻e\u{301}", count: 2_000)
+        let prompt = LinkSummaryPrompt.prompt(url: "https://example.com/" + huge,
+                                             content: .init(title: huge, description: huge, bodyText: huge),
+                                             searchQuery: huge, language: huge)
+        #expect(prompt.utf8.count <= 1_536, "all actual transmitted fields and wrappers share one UTF-8 budget")
+        #expect(prompt.count <= 1_536)
+        #expect(prompt.contains("</webpage>"))
+        #expect(prompt.hasSuffix("using markdown formatting."))
+    }
+
+    @Test func fittedPayloadPreservesCharactersAndUsefulFieldShares() {
+        let text = String(repeating: "界👩🏽‍💻e\u{301}", count: 1_000)
+        let content = LinkSummaryContent.Extracted(title: text, description: text, bodyText: text)
+        let normal = LinkSummaryPrompt.fitted(url: "https://example.com/" + text, content: content,
+                                             searchQuery: "rare needle query", language: "Japanese")
+        let compact = LinkSummaryPrompt.fitted(url: "https://example.com/" + text, content: content,
+                                              searchQuery: "rare needle query", language: "Japanese", compact: true)
+        for (input, limit) in [(normal, 1_536), (compact, 768)] {
+            #expect(input.prompt.utf8.count <= limit && input.prompt.count <= limit)
+            #expect(!input.content.bodyText.isEmpty && !input.content.title!.isEmpty && !input.content.description!.isEmpty)
+            #expect(Array(text).starts(with: Array(input.content.bodyText)), "body clipping preserves whole graphemes")
+            #expect(Array(text).starts(with: Array(input.content.title!)))
+            #expect(input.prompt.components(separatedBy: "rare needle query").count == 2, "the current query is transmitted once")
+            #expect(input.language == "Japanese")
+        }
+        #expect(compact.prompt.utf8.count < normal.prompt.utf8.count)
+        let giantCharacter = "e" + String(repeating: "\u{301}", count: 2_000)
+        let giant = LinkSummaryPrompt.fitted(url: giantCharacter, content: .init(title: giantCharacter, bodyText: giantCharacter),
+                                            searchQuery: giantCharacter, language: giantCharacter)
+        #expect(giant.url.isEmpty && giant.content.title == "" && giant.content.bodyText.isEmpty && giant.searchQuery == nil)
+        #expect(giant.language == "English", "an unrepresentable bounded language uses the existing fallback")
+    }
+
+    @Test func combinedContextBudgetReservesOutputAndSafety() {
+        #expect(LinkSummaryPrompt.fitsContext(inputTokens: 2_816, contextSize: 4_096))
+        #expect(!LinkSummaryPrompt.fitsContext(inputTokens: 2_817, contextSize: 4_096))
+        #expect(!LinkSummaryPrompt.fitsContext(inputTokens: 1, contextSize: 1_279))
+        #expect(!LinkSummaryPrompt.fitsContext(inputTokens: -1, contextSize: 4_096))
+        let payload = LinkSummaryPrompt.fitted(url: String(repeating: "u", count: 10_000),
+                                              content: .init(title: String(repeating: "t", count: 10_000),
+                                                             description: String(repeating: "d", count: 10_000),
+                                                             bodyText: String(repeating: "b", count: 10_000)),
+                                              searchQuery: String(repeating: "q", count: 10_000), language: "English")
+        #expect(LinkSummaryPrompt.fitsFallback(payload, contextSize: 4_096))
+        #expect(!LinkSummaryPrompt.fitsFallback(payload, contextSize: 2_000), "earlier-OS fixed/schema allowance is included with the actual rendered payload")
+        #expect(LinkSummaryPrompt.responseTokenLimit == 1_024 && LinkSummaryPrompt.contextSafetyMargin == 256)
     }
 
     @Test func answerBecomesACard() {
@@ -259,17 +361,88 @@ struct LinkSummaryTests {
 
     // MARK: - Cache
 
+    private func request(_ link: String = "https://example.com/private", profile: String? = nil,
+                         httpsOnly: Bool = false, query: String? = nil, language: String = "English") -> LinkSummaryRequest {
+        LinkSummaryRequest(link: u(link), profilePath: profile, httpsOnly: httpsOnly, searchQuery: query, language: language)
+    }
+
+    @Test func failedPreviewCanBeRetried() {
+        var cache = LinkSummaryCache()
+        cache.store(nil, for: request())
+        #expect(cache.lookup(request()) == nil,
+                "A temporary preview failure must not become a cached no-preview result")
+        #expect(cache.count == 0)
+        let recovered = LinkSummaryResult(url: "https://example.com/private", title: "Recovered", host: "example.com",
+                                          quickSummary: "Available again", details: [])
+        cache.store(recovered, for: request())
+        #expect(cache.lookup(request()) == recovered)
+    }
+
+    @Test func cachedPreviewNeverCrossesFetchOrModelContexts() {
+        let original = request(profile: "/profiles/a", query: "price")
+        let variants = [
+            request(profile: "/profiles/b", query: "price"),
+            request(query: "price"),
+            request(profile: "/profiles/a", query: "reviews"),
+            request(profile: "/profiles/a"),
+            request(profile: "/profiles/a", query: "price", language: "Danish"),
+            request(profile: "/profiles/a", httpsOnly: true, query: "price"),
+            request("https://example.com/other", profile: "/profiles/a", query: "price"),
+        ]
+        var cache = LinkSummaryCache()
+        let privateCard = LinkSummaryResult(url: original.link.absoluteString, title: "Profile A's page", host: "example.com",
+                                            quickSummary: "Account-specific information", details: [])
+        cache.store(privateCard, for: original)
+        #expect(cache.lookup(request(profile: "/profiles/a", query: "price")) == privateCard)
+        for context in variants {
+            #expect(cache.lookup(context) == nil, "A cached preview must not cross profile, query, language or HTTPS context")
+        }
+    }
+
+    @Test func requestCapturesDefaultProfileAndEffectiveFetchURL() {
+        let defaultRequest = request("http://example.com/private", httpsOnly: true, query: "price", language: "Danish")
+        #expect(defaultRequest.profile == .default)
+        #expect(defaultRequest.profilePath == nil)
+        #expect(defaultRequest == request("http://example.com/private", profile: "", httpsOnly: true, query: "price", language: "Danish"))
+        #expect(defaultRequest.link == u("http://example.com/private"))
+        #expect(defaultRequest.fetchURL == u("https://example.com/private"))
+        #expect(defaultRequest.searchQuery == "price")
+        #expect(defaultRequest.language == "Danish")
+        let named = request(profile: "/profiles/a")
+        #expect(named.profile == .path("/profiles/a"))
+        #expect(named.profilePath == "/profiles/a")
+    }
+
+    @Test func sameLinkDoesNotIdentifyTheOriginatingDocument() {
+        let runtime = NSObject(), replacement = NSObject()
+        let window = UUID(), tab = UUID()
+        let page = u("https://www.google.com/search?q=price")
+        func context(_ window: UUID, _ tab: UUID, _ runtime: NSObject, _ revision: UInt, _ page: URL?) -> LinkSummaryContext {
+            .init(request: request(), page: page, windowID: window, tabID: tab,
+                  runtimeID: ObjectIdentifier(runtime), navigationRevision: revision)
+        }
+        let original = context(window, tab, runtime, 1, page)
+        #expect(original == context(window, tab, runtime, 1, page))
+        let changes = [context(UUID(), tab, runtime, 1, page), context(window, UUID(), runtime, 1, page),
+                       context(window, tab, replacement, 1, page), context(window, tab, runtime, 2, page),
+                       context(window, tab, runtime, 1, u("https://www.google.com/search?q=reviews"))]
+        for changed in changes {
+            #expect(original != changed, "same-URL preview work must be scoped to its window, tab, runtime, revision and source page")
+        }
+    }
+
     @Test func cacheKeepsTheNewest() {
         var c = LinkSummaryCache(limit: 2)
-        let r = LinkSummaryResult(url: "a", title: "A", host: "a", quickSummary: nil, details: [])
-        c.store(r, for: "a")
-        c.store(nil, for: "b")
-        #expect(c.lookup("b") == .some(nil))
-        c.store(r, for: "a")  // touched again: "b" is now the oldest
-        c.store(r, for: "c")
+        let a = request("https://a.example"), b = request("https://b.example"), third = request("https://c.example")
+        let r = LinkSummaryResult(url: "https://a.example", title: "A", host: "a.example", quickSummary: nil, details: [])
+        c.store(r, for: a)
+        c.store(r, for: b)
+        c.store(r, for: a)  // stored again: "b" is now the oldest
+        c.store(r, for: third)
         #expect(c.count == 2)
-        #expect(c.lookup("b") == nil)
-        #expect(c.lookup("a") == .some(r))
+        #expect(c.lookup(b) == nil)
+        #expect(c.lookup(a) == r)
+        #expect(c.lookup(third) == r)
     }
 
     // MARK: - Settings

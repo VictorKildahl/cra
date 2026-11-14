@@ -52,6 +52,10 @@ enum LinkSummaryPanelTests {
         expect(p.cardFrame.maxY == top, "the card grows down: its top edge stays under the link")
         expect(p.cardFrame.width == 300, "the answer card stays 300 pt wide")
 
+        p.cardView.show(.loading, theme: theme)
+        let retainedCopy = Mirror(reflecting: p.cardView).children.first { $0.label == "shown" }!
+        expect(Mirror(reflecting: retainedCopy.value).children.isEmpty, "a reused loading card cannot retain the previous copy result")
+
         p.closeCard()
         pump(0.4)
         expect(!p.isVisible, "a closed card leaves the screen")

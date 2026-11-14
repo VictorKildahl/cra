@@ -132,6 +132,19 @@ to Markdown or `docs/` alone runs nothing.
   the footer colour.
 - `scripts/test-link-summary-panel.sh`: 5-Second Previews' card window (`LinkSummaryPanel`) off screen with
   a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
+- `scripts/test-link-summary-service.sh`: production preview controller/service with a manual clock
+  and controlled fetch/model completions: context isolation, stale inspections/results, cancellation,
+  optional image lifetime, finite loading and bounded per-hop redirect/cancellation policy.
+  No CEF request or model inference; no clipboard actions.
+- `scripts/test-link-summary-hooks.sh`: the actual `SidebarStore`, model availability resolver/refresh
+  and production bootstrap binding: same-turn opt-out/off-on, repeated unavailable refresh and fresh
+  eligibility before page fetch/final cache publication. Manual clock, no CEF/model inference.
+- `scripts/test-link-summary-cef.sh`: the actual native preview token's byte/cancellation/readiness
+  callback contract, compiled with installed CEF headers/wrapper; skips when they are absent.
+  Does not boot Chromium or prove wire behavior; validate the dedicated route on a native test app.
+- `scripts/test-link-summary-image.sh`: actual ephemeral image transport through a loopback HTTP
+  proxy with public test URLs: validated redirects, cookie-free requests, streamed 4 MB cap, physical
+  cancellation and one 8-second deadline on a manual clock. No DNS/hosts changes, CEF or visible app.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
   shows the emoji's whole picture, in the same place (#399).
@@ -150,6 +163,13 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
   keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
   button closing it, and the button's hold (⌃-click stays a plain click).
+- `scripts/test-mobile-popup.sh`: the production iOS popup callback and tab store against
+  platform stand-ins: related-view/request ownership, source privacy, nested opener lifetime,
+  close return paths, and private-tab persistence/cleanup. Native POST and opener behavior is
+  exercised separately by `CraUITests/PopupTests` with `iOS/Tests/popup_server.py` on loopback.
+- `scripts/test-shared-download-replacement.sh`: the production download service, history and
+  destination callback with suspended inference and disposable files: replacement ownership,
+  resource aliases, preparation scheduling, original history identity and safe undo.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and

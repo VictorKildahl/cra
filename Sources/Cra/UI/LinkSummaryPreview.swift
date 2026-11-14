@@ -9,65 +9,96 @@ import QuartzCore
 final class LinkSummaryPreviewController {
     static let shared = LinkSummaryPreviewController()
 
-    /// What the window controller knows about a hovered link.
     struct Hover {
-        var link: URL
-        var page: URL?
+        var context: LinkSummaryContext
         weak var window: NSWindow?
-        var profilePath: String?
-        var httpsOnly: Bool
         var theme: SpaceTheme
-        /// Shift as the pointer reached the link (Arc: "hold Shift while hovering").
+        /// Shift as the pointer reached the link, not a subsequent modifier change.
         var shiftHeld: Bool
         var favicon: NSImage?
-        /// Asks the page about the link under the pointer: its frame on screen and whether it is
-        /// one of Arc's links. Nil when the page can't say (no link there).
+        /// Rechecks the actual origin, settings and availability before any delayed delivery.
+        var isCurrent: () -> Bool
         var inspect: (@escaping @MainActor (Inspection?) -> Void) -> Void
     }
 
     struct Inspection {
         var rect: NSRect?
         var arcLink: Bool
+        var link: URL
     }
 
+    /// Cra's total loading bound, not an Arc timing measurement. A stuck fetch or provider must
+    /// not leave a card loading forever; transport/model phases have their own tighter limits.
+    static let loadingTimeout: TimeInterval = 40
+    private let clock: Scheduler
+    private let service: LinkSummaryService
     private var hover: Hover?
-    private var shown: URL?
+    private var shown: Hover?
+    private var generation = UUID()
     private var panel: LinkSummaryPanel?
-    private var resting: Task<Void, Never>?
+    private var resting: ScheduledWork?
+    private var deadline: ScheduledWork?
     private var loading: Task<Void, Never>?
 
-    private init() {}
+    init(clock: Scheduler? = nil, service: LinkSummaryService? = nil) {
+        self.clock = clock ?? LiveScheduler.shared
+        self.service = service ?? .shared
+    }
 
-    /// The status bubble's text changed: a link's URL, or "" when the pointer left it. `hover` is nil
-    /// when the feature is off or the link can't be previewed.
-    func linkHoverChanged(_ new: Hover?) {
-        guard let new else {
-            hover = nil
-            resting?.cancel()
-            if panel?.containsPointer != true { stop() }
-            return
-        }
-        if new.link == hover?.link { return }
-        hover = new
+    /// A link leave may retain the card under the pointer. An unrelated window's status
+    /// notification cannot close this window's presentation.
+    func pointerLeftLink(windowID: UUID, tabID: UUID) {
+        guard let context = (shown ?? hover)?.context, context.windowID == windowID, context.tabID == tabID else { return }
+        hover = nil
         resting?.cancel()
-        if shown != nil { hide() }
-        guard LinkSummaryPolicy.mayOpen(page: new.page, shiftHeld: new.shiftHeld) else { return }
-        resting = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: LinkSummaryPolicy.rest)
-            guard !Task.isCancelled, let self, self.hover?.link == new.link else { return }
+        resting = nil
+        if panel?.containsPointer != true { stop() }
+    }
+
+    func linkHoverChanged(_ new: Hover) {
+        validate(windowID: new.context.windowID)
+        guard new.isCurrent() else { return }
+        if new.context == hover?.context { return }
+        resting?.cancel()
+        hide()
+        hover = new
+        guard LinkSummaryPolicy.mayOpen(page: new.context.page, shiftHeld: new.shiftHeld) else { return }
+        let token = generation
+        let rest = LinkSummaryPolicy.rest.components
+        resting = clock.after(Double(rest.seconds) + Double(rest.attoseconds) / 1e18) { [weak self] in
+            guard let self, self.generation == token, self.hover?.context == new.context, new.isCurrent() else { return }
+            self.resting = nil
             new.inspect { [weak self] found in
-                guard let self, let found, self.hover?.link == new.link,
-                      let kind = LinkSummaryPolicy.kind(link: new.link, page: new.page, shiftHeld: new.shiftHeld, arcLink: found.arcLink)
-                else { return }
-                self.open(kind, for: new, at: found.rect)
+                guard let self, self.generation == token, self.hover?.context == new.context, new.isCurrent(),
+                      let found, found.link == new.context.request.link,
+                      let kind = LinkSummaryPolicy.kind(link: found.link, page: new.context.page,
+                                                        shiftHeld: new.shiftHeld, arcLink: found.arcLink) else { return }
+                self.open(kind, for: new, at: found.rect, token: token)
             }
         }
     }
 
-    private func open(_ kind: LinkSummaryPolicy.Kind, for h: Hover, at rect: NSRect?) {
+    /// Called from the origin's store/browser updates, even when CEF repeats no status string.
+    func validate(windowID: UUID) {
+        guard let current = shown ?? hover, current.context.windowID == windowID else { return }
+        if !current.isCurrent() { stop() }
+    }
+
+    func stop(windowID: UUID) {
+        guard (shown ?? hover)?.context.windowID == windowID else { return }
+        stop()
+    }
+
+    private func accepts(_ token: UUID) -> Bool {
+        guard generation == token, let shown else { return false }
+        guard shown.isCurrent() else { stop(); return false }
+        return true
+    }
+
+    private func open(_ kind: LinkSummaryPolicy.Kind, for h: Hover, at rect: NSRect?, token: UUID) {
         guard let parent = h.window, parent.isVisible else { return }
-        loading?.cancel()
-        shown = h.link
+        shown = h
+        let request = h.context.request
         let p = panel ?? LinkSummaryPanel()
         panel = p
         p.anchor = rect
@@ -75,53 +106,72 @@ final class LinkSummaryPreviewController {
         p.cardView.favicon = h.favicon
         let theme = h.theme
         CraLog.note("5-Second Previews: \(kind == .summary ? "answer" : "small") card opens\(rect == nil ? " by the pointer" : "")")
-        switch kind {
-        case .summary:
-            if let card = LinkSummaryService.shared.cached(h.link) {
-                p.cardView.show(.summary(card), theme: theme)
-                p.open(over: parent)
-                return
-            }
-            p.cardView.show(.loading, theme: theme)
+        if kind == .summary, let card = service.cached(request) {
+            p.cardView.show(.summary(card), theme: theme)
             p.open(over: parent)
-            let query = LinkSummaryPolicy.searchQuery(page: h.page)
-            loading = Task { @MainActor [weak self, weak p] in
-                await LinkSummaryService.shared.load(link: h.link, profilePath: h.profilePath, httpsOnly: h.httpsOnly, searchQuery: query) { card in
-                    guard let self, let p, self.shown == h.link else { return }
-                    // The loading card stays until the answer starts: the page alone shows nothing new.
-                    guard card.result != nil || card.finished else { return }
-                    p.cardView.show(.summary(card), theme: theme)
+            return
+        }
+        p.cardView.show(.loading, theme: theme)
+        p.open(over: parent)
+        deadline = clock.after(Self.loadingTimeout) { [weak self, weak p] in
+            guard let self, let p, self.deadline != nil, self.accepts(token) else { return }
+            self.loading?.cancel()
+            self.loading = nil
+            self.deadline = nil
+            // An ignoring provider cannot deliver more rows after the terminal timeout.
+            self.generation = UUID()
+            self.showFailure(kind, request: request, in: p, theme: theme)
+        }
+        loading = Task { @MainActor [weak self, weak p, service] in
+            switch kind {
+            case .summary:
+                await service.load(request) { [weak self, weak p] card in
+                    guard !Task.isCancelled, let self, let p, self.accepts(token) else { return }
+                    if card.finished { self.deadline?.cancel(); self.deadline = nil }
+                    p.cardView.show(card.result == nil && !card.finished ? .loading : .summary(card), theme: theme)
                     p.fit()
                 }
-            }
-        case .link:
-            p.cardView.show(.loading, theme: theme)
-            p.open(over: parent)
-            loading = Task { @MainActor [weak self, weak p] in
-                let title = await LinkSummaryService.shared.title(link: h.link, profilePath: h.profilePath, httpsOnly: h.httpsOnly)
-                guard !Task.isCancelled, let self, let p, self.shown == h.link else { return }
-                p.cardView.show(.link(title: title ?? LinkSummaryPrompt.displayHost(h.link), address: LinkSummaryPolicy.displayAddress(h.link)), theme: theme)
+            case .link:
+                let title = await service.title(request)
+                guard !Task.isCancelled, let self, let p, self.accepts(token) else { return }
+                self.deadline?.cancel()
+                self.deadline = nil
+                p.cardView.show(.link(title: title ?? LinkSummaryPrompt.displayHost(request.link),
+                                      address: LinkSummaryPolicy.displayAddress(request.link)), theme: theme)
                 p.fit()
             }
         }
     }
 
-    /// The pointer left the card; with no link under it either, the card goes.
+    private func showFailure(_ kind: LinkSummaryPolicy.Kind, request: LinkSummaryRequest, in p: LinkSummaryPanel, theme: SpaceTheme) {
+        let host = LinkSummaryPrompt.displayHost(request.link)
+        if kind == .summary {
+            p.cardView.show(.summary(.init(title: host, host: host, finished: true)), theme: theme)
+        } else {
+            p.cardView.show(.link(title: host, address: LinkSummaryPolicy.displayAddress(request.link)), theme: theme)
+        }
+        p.fit()
+    }
+
     func pointerLeftCard() {
         if hover == nil { stop() }
     }
 
-    /// Closes the card and forgets the hover.
     func stop() {
         hover = nil
         resting?.cancel()
+        resting = nil
         hide()
     }
 
     private func hide() {
+        generation = UUID()
         loading?.cancel()
         loading = nil
+        deadline?.cancel()
+        deadline = nil
         shown = nil
+        panel?.cardView.invalidateSharing()
         panel?.closeCard()
     }
 }
@@ -368,6 +418,13 @@ final class LinkSummaryCardView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// A closing/invalidated presentation keeps its pixels for the fade, but cannot share old data.
+    func invalidateSharing() {
+        link = nil
+        shown = nil
+        share.isHidden = true
+    }
+
     func show(_ content: Content, theme: SpaceTheme) {
         let tones = TooltipTones(theme: theme)
         var image: NSImage?
@@ -375,14 +432,17 @@ final class LinkSummaryCardView: NSView {
         var finished = false
         var isLoading = false
         var small: (String, String)?
+        invalidateSharing()
         switch content {
         case .loading: isLoading = true
         case .summary(let card):
             image = card.image
             result = card.result
             finished = card.finished
-            link = result.flatMap { URL(string: $0.url) } ?? link
-            shown = result.map { ($0, card.image) }
+            if card.finished, let result {
+                link = URL(string: result.url)
+                shown = (result, card.image)
+            }
         case .link(let t, let a): small = (t, a)
         }
         CATransaction.begin()
@@ -573,10 +633,11 @@ final class LinkSummaryCardView: NSView {
     }
 
     @objc private func copyAsImage() {
-        guard let shown else { return }
+        guard let shown,
+              let image = LinkSummaryShareImage.render(shown.result, image: shown.image, favicon: favicon) else { return }
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.writeObjects([LinkSummaryShareImage.render(shown.result, image: shown.image, favicon: favicon)])
+        pb.writeObjects([image])
     }
 }
 

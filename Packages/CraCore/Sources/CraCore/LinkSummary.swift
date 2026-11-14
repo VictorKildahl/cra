@@ -156,6 +156,37 @@ public enum LinkSummaryPolicy {
     }
 }
 
+/// Preview-only network policy. Every hop is validated before it is requested; these limits
+/// bound the whole page load and are Cra choices, not recovered Arc timeout values.
+public enum LinkSummaryFetchPolicy {
+    public static let maximumBytes = 1_048_576
+    public static let maximumRedirects = 5
+    public static let timeout: TimeInterval = 20
+
+    public static func target(_ raw: String, relativeTo base: URL? = nil, httpsOnly: Bool) -> URL? {
+        guard let parsed = URL(string: raw, relativeTo: base)?.absoluteURL,
+              var parts = URLComponents(url: parsed, resolvingAgainstBaseURL: false),
+              parts.user == nil, parts.password == nil,
+              LinkSummaryPolicy.canPreview(link: parsed), let host = parsed.host()?.lowercased() else { return nil }
+        // Chromium accepts legacy hexadecimal and octal IPv4 forms. Reject ambiguous literals
+        // before CEF canonicalizes them to a private address after the initial host check.
+        let labels = host.trimmingCharacters(in: CharacterSet(charactersIn: ".")).split(separator: ".")
+        let numeric = labels.allSatisfy { part in
+            part.allSatisfy(\.isNumber) || (part.lowercased().hasPrefix("0x") && part.dropFirst(2).allSatisfy(\.isHexDigit))
+        }
+        if numeric && labels.contains(where: { $0.count > 1 && $0.first == "0" }) { return nil }
+        parts.fragment = nil
+        parts.host = host
+        parts.scheme = parts.scheme?.lowercased()
+        if parts.path.isEmpty { parts.path = "/" }
+        guard let url = parts.url else { return nil }
+        let secure = LinkSummaryPolicy.fetchURL(for: url, httpsOnly: httpsOnly)
+        guard var canonical = URLComponents(url: secure, resolvingAgainstBaseURL: false) else { return nil }
+        if (canonical.scheme == "http" && canonical.port == 80) || (canonical.scheme == "https" && canonical.port == 443) { canonical.port = nil }
+        return canonical.url
+    }
+}
+
 /// The text of a fetched page for the model.
 public enum LinkSummaryContent {
     public struct Extracted: Equatable, Sendable {
@@ -180,8 +211,8 @@ public enum LinkSummaryContent {
         }
     }
 
-    /// Body text handed to the model. The on-device model has a 4,096-token context, shared with
-    /// the instructions and the answer; 2,400 characters is about 600 tokens of English.
+    /// Extracted body cap before the complete request is fitted by LinkSummaryPrompt.
+    /// Character counts alone do not establish a local model token fit.
     public static let maxContentLength = 2_400
     /// How much of the HTML is read. Pages put megabytes of script before their text; past this the
     /// card would wait on regexes for text the model has no room for.
@@ -292,16 +323,81 @@ public enum LinkSummaryPrompt {
     /// The page as Arc hands it over, between `<webpage>` tags, with the search the user made when
     /// the link was a Google result.
     public static func prompt(url: String, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String) -> String {
+        fitted(url: url, content: content, searchQuery: searchQuery, language: language).prompt
+    }
+
+    private static func render(url: String, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String) -> String {
         var page: [String] = ["URL: \(url)"]
         if let title = content.title { page.append("Title: \(title)") }
         if let description = content.description { page.append("Description: \(description)") }
         if !content.bodyText.isEmpty { page.append(content.bodyText) }
         var lines = ["WEBPAGE INFO:", "<webpage>", page.joined(separator: "\n"), "</webpage>"]
         if let searchQuery {
-            lines.append("Focus the answer card on the user's search query: '\(searchQuery)'.")
+            lines.append("User search query: '\(searchQuery)'")
         }
-        lines.append("Write responses in \(language).")
+        lines.append("Write responses (but not JSON keys) in \(language) using markdown formatting.")
         return lines.joined(separator: "\n")
+    }
+
+    /// A bounded model payload only. Original navigation/cache identity remains in LinkSummaryRequest.
+    public struct Input: Equatable, Sendable {
+        public let url: String
+        public let content: LinkSummaryContent.Extracted
+        public let searchQuery: String?
+        public let language: String
+        public var prompt: String { LinkSummaryPrompt.render(url: url, content: content, searchQuery: searchQuery, language: language) }
+    }
+
+    /// Cra's conservative earlier-OS allowance; exact SDK counts replace the estimate on 26.4+.
+    public static let maximumPromptBytes = 1_536
+    public static let responseTokenLimit = 1_024
+    public static let contextSafetyMargin = 256
+    public static let fallbackFixedTokens = 1_280
+
+    public static func fitted(url: String, content: LinkSummaryContent.Extracted, searchQuery: String?, language: String,
+                              compact: Bool = false) -> Input {
+        let scale = compact ? 2 : 1
+        func field(_ value: String, _ limit: Int) -> String { clip(value, characters: limit / scale, bytes: limit / scale) }
+        let url = field(url, 256)
+        let title = content.title.map { field($0, 160) }
+        let description = content.description.map { field($0, 160) }
+        let query = searchQuery.map { field($0, 128) }.flatMap { $0.isEmpty ? nil : $0 }
+        let chosenLanguage = field(language, 48)
+        let language = chosenLanguage.isEmpty ? "English" : chosenLanguage
+        let metadata = LinkSummaryContent.Extracted(title: title, description: description)
+        let overhead = render(url: url, content: metadata, searchQuery: query, language: language).utf8.count
+        // Adding the body inserts one newline in the page's field list.
+        let room = max(0, maximumPromptBytes / scale - overhead - 1)
+        let body = clip(content.bodyText, characters: room, bytes: room)
+        return Input(url: url, content: .init(title: title, description: description, bodyText: body), searchQuery: query, language: language)
+    }
+
+    /// Never splits a Character, including a combining sequence or joined emoji.
+    private static func clip(_ value: String, characters: Int, bytes: Int) -> String {
+        var output = "", used = 0
+        for character in value.prefix(max(0, characters)) {
+            let size = String(character).utf8.count
+            guard size <= bytes - used else { break }
+            output.append(character)
+            used += size
+        }
+        return output
+    }
+
+    public static func fitsContext(inputTokens: Int, contextSize: Int) -> Bool {
+        let reserve = responseTokenLimit + contextSafetyMargin
+        return inputTokens >= 0 && contextSize >= reserve && inputTokens <= contextSize - reserve
+    }
+
+    /// Treat UTF-8 bytes as a conservative variable-token estimate, not an exact tokenizer.
+    public static func fitsFallback(_ input: Input, contextSize: Int) -> Bool {
+        fitsContext(inputTokens: input.prompt.utf8.count + fallbackFixedTokens, contextSize: contextSize)
+    }
+
+    /// Capture once in the request; only generated values are localized, never schema keys.
+    public static func responseLanguage(preferredLanguages: [String]) -> String {
+        let code = preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
+        return Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? "English"
     }
 
     /// Arc's row limits: 2 to 4 details.
@@ -310,15 +406,17 @@ public enum LinkSummaryPrompt {
     /// The model's answer, cleaned into a card. Nil when it said the page is blocked (asks for
     /// JavaScript or a security check) or said nothing usable: the card then reads
     /// "No preview available", as Arc's does.
-    public static func result(url: URL, title: String?, answer: Answer) -> LinkSummaryResult? {
+    public static func result(url: URL, title: String?, answer: Answer, final: Bool = false) -> LinkSummaryResult? {
         guard !answer.blocked else { return nil }
         let details = answer.details.compactMap { d -> LinkSummaryResult.Detail? in
             let label = clean(d.label).trimmingCharacters(in: CharacterSet(charactersIn: ":"))
             let info = clean(d.info)
-            guard !info.isEmpty else { return nil }
-            return LinkSummaryResult.Detail(label: label, icon: d.icon.trimmingCharacters(in: .whitespaces), info: info)
+            let icon = d.icon.trimmingCharacters(in: .whitespaces)
+            guard !info.isEmpty, !final || (!label.isEmpty && !icon.isEmpty) else { return nil }
+            return LinkSummaryResult.Detail(label: label, icon: icon, info: info)
         }.prefix(maxDetails)
-        let quick = clean(answer.quickSummary)
+        let quick = answer.quickSummary.map(clean) ?? ""
+        guard !final || details.count >= 2 else { return nil }
         guard !details.isEmpty || !quick.isEmpty else { return nil }
         let host = displayHost(url)
         return LinkSummaryResult(url: url.absoluteString, title: title.map(clean).flatMap { $0.isEmpty ? nil : $0 } ?? host,
@@ -328,11 +426,14 @@ public enum LinkSummaryPrompt {
     /// The model's fields before cleaning.
     public struct Answer: Equatable, Sendable {
         public var blocked: Bool
-        public var quickSummary: String
+        /// A generated search focus, not displayed or substituted for the quick summary.
+        public var userQuestion: String?
+        public var quickSummary: String?
         public var details: [LinkSummaryResult.Detail]
 
-        public init(blocked: Bool, quickSummary: String, details: [LinkSummaryResult.Detail]) {
+        public init(blocked: Bool, userQuestion: String? = nil, quickSummary: String?, details: [LinkSummaryResult.Detail]) {
             self.blocked = blocked
+            self.userQuestion = userQuestion
             self.quickSummary = quickSummary
             self.details = details
         }
@@ -364,19 +465,71 @@ public enum LinkSummaryPrompt {
     }
 }
 
-/// Summaries already made, newest last, so hovering a link again shows its card at once without
-/// growing for as long as Cra runs.
+/// A preview's fetch and model context. Arc keys cards by URL and browser context; the local
+/// answer also depends on search, language and secure-connection policy.
+public struct LinkSummaryRequest: Hashable, Sendable {
+    public enum Profile: Hashable, Sendable {
+        case `default`
+        case path(String)
+    }
+
+    public let link: URL
+    public let profile: Profile
+    public let httpsOnly: Bool
+    public let searchQuery: String?
+    public let language: String
+
+    public init(link: URL, profilePath: String?, httpsOnly: Bool, searchQuery: String?, language: String) {
+        self.link = link
+        // CEF treats both nil and an empty profile path as its global Default context.
+        self.profile = profilePath.flatMap { $0.isEmpty ? nil : .path($0) } ?? .default
+        self.httpsOnly = httpsOnly
+        self.searchQuery = searchQuery
+        self.language = language
+    }
+
+    public var profilePath: String? {
+        if case .path(let path) = profile { return path }
+        return nil
+    }
+
+    public var fetchURL: URL { LinkSummaryPolicy.fetchURL(for: link, httpsOnly: httpsOnly) }
+}
+
+/// The document that originated a hover. A matching URL alone cannot identify a browser,
+/// navigation back to the same page, another tab or another window.
+public struct LinkSummaryContext: Equatable, Sendable {
+    public let request: LinkSummaryRequest
+    public let page: URL?
+    public let windowID: UUID
+    public let tabID: UUID
+    public let runtimeID: ObjectIdentifier
+    public let navigationRevision: UInt
+
+    public init(request: LinkSummaryRequest, page: URL?, windowID: UUID, tabID: UUID,
+                runtimeID: ObjectIdentifier, navigationRevision: UInt) {
+        self.request = request
+        self.page = page
+        self.windowID = windowID
+        self.tabID = tabID
+        self.runtimeID = runtimeID
+        self.navigationRevision = navigationRevision
+    }
+}
+
+/// Completed usable summaries, newest last. Failed or blocked pages are retried on the next
+/// hover, rather than retaining a temporary model failure or login challenge for the app's life.
 public struct LinkSummaryCache: Sendable {
     public let limit: Int
-    private var order: [String] = []
-    private var entries: [String: LinkSummaryResult?] = [:]
+    private var order: [LinkSummaryRequest] = []
+    private var entries: [LinkSummaryRequest: LinkSummaryResult] = [:]
 
     public init(limit: Int = 40) { self.limit = limit }
 
-    /// `.some(nil)` is a page known to have no preview.
-    public func lookup(_ key: String) -> LinkSummaryResult?? { entries[key] }
+    public func lookup(_ key: LinkSummaryRequest) -> LinkSummaryResult? { entries[key] }
 
-    public mutating func store(_ value: LinkSummaryResult?, for key: String) {
+    public mutating func store(_ value: LinkSummaryResult?, for key: LinkSummaryRequest) {
+        guard let value else { return }
         if entries.updateValue(value, forKey: key) != nil { order.removeAll { $0 == key } }
         order.append(key)
         while order.count > limit { entries.removeValue(forKey: order.removeFirst()) }

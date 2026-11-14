@@ -18,6 +18,7 @@ suite "CraCore" swift test --package-path Packages/CraCore
 suite "Shipped-issue tests" scripts/promises.py
 if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
+  suite "iOS popup ownership" scripts/test-mobile-popup.sh
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
   suite "Extension popup window" scripts/test-extension-popup-window.sh
@@ -26,6 +27,11 @@ if [ "${1:-}" != core ]; then
   suite "Window content grabber" scripts/test-window-content-grabber.sh
   suite "5-Second Previews copy" scripts/test-link-summary-share.sh
   suite "5-Second Previews card" scripts/test-link-summary-panel.sh
+  suite "5-Second Previews lifecycle" scripts/test-link-summary-service.sh
+  suite "5-Second Previews eligibility hooks" scripts/test-link-summary-hooks.sh
+  suite "5-Second Previews CEF callbacks" scripts/test-link-summary-cef.sh
+  suite "5-Second Previews image transport" scripts/test-link-summary-image.sh
+  suite "Download replacement ownership" scripts/test-shared-download-replacement.sh
   suite "Capture overlay" scripts/test-capture-overlay.sh
   suite "Dialogs" scripts/test-dialogs.sh
   suite "Sidebar creation menu" scripts/test-sidebar-creation-menu.sh
