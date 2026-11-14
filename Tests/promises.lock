@@ -137,6 +137,7 @@
 #106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::noTextNoBadge  b76de0288933
 #106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::textContrastsWithTheBackground  b7f04612d473
 #106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::widthAndAlignment  b820c2ebeeb2
+#106   Tests/Scenarios/extension-action-updates.scenario  5917f3644e30
 #107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::anotherProfilesPageGoesToItsSpace  314ef64164d1
 #107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::anotherProfilesTabIsNeverReused  7bf17f29af57
 #107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::incognitoKeepsToItsOwnSpace  7074cccd4929

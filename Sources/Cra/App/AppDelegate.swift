@@ -1035,6 +1035,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // actionState=<extension id>: what the extension set on its toolbar action, as Cra's buttons show it
+            // (chrome.action.setTitle, setBadgeText; GitHub #106).
+            if let id = dict["actionState"] {
+                let state = ExtensionStore.shared.actions.state(extensionID: id, profile: "Default", tab: nil)
+                CraLog.note("action state \(id): title=\(state.title) badge=\(state.badgeText) icon=\(state.icon == nil ? "manifest" : "set")")
+                return
+            }
             // httpsOnly=1|0: Settings ▸ Privacy's HTTPS-only switch, flipped while pages are open: Chromium takes the
             // change at once (#36: it crashed doing so once onboarding ended).
             if let v = dict["httpsOnly"] {

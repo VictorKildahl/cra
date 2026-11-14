@@ -1,0 +1,14 @@
+# promise: #106
+# What an extension sets on its toolbar action while it runs (chrome.action.setBadgeText, setTitle) reaches
+# Cra's buttons: Chromium's Extensions.actionUpdated, through the browser's DevTools pipe. The icons never
+# changed (#106). The fixture sets its badge and title when a page asks it to.
+budget rss=800 stalls50=10
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://debug?actionState=${TABS_CREATE_EXTENSION_ID}
+expect-log action state \S+: title=Cra Tabs Create Fixture badge= icon=manifest
+cra://open?url=${PAGE}?n=badge
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 3
+cra://debug?actionState=${TABS_CREATE_EXTENSION_ID}
+expect-log action state \S+: title=Seven badge=7 icon=manifest
