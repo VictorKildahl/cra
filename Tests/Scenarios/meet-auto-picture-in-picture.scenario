@@ -1,0 +1,26 @@
+# promise: #198
+# Leaving the tab of a call that uses the microphone and registered its own enterpictureinpicture handler
+# (Google Meet's "Automatic picture-in-picture") asks the page for Picture in Picture, as Chrome does: the
+# handler opens the call's Document Picture in Picture window (#198). Chrome's fake devices answer
+# getUserMedia once the card is allowed, so no real microphone opens.
+budget rss=900 stalls50=40
+arg --use-fake-device-for-media-stream
+# Chrome offers it to https and file pages only.
+cra://open?url=file://${FIXTURES}/Pages/sounds.html
+expect-log loaded file:
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.__asked=false;navigator.mediaSession.setActionHandler('enterpictureinpicture',async()=>{window.__asked=true;await documentPictureInPicture.requestWindow({width:320,height:240});});navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{window.__mic=s});'armed'","returnByValue":true,"userGesture":true}
+wait 2
+cra://debug?permissionCard=1
+expect-log permission card: \S+ wants to use your microphone
+cra://debug?permissionCard=Allow
+expect-log permission card: .*; pressed Allow
+expect-log tab \S+ uses the camera or microphone
+wait 2
+cra://open?url=${PAGE}?n=away
+expect-log asks the page for Picture in Picture
+wait 2
+cra://action/previousTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'asked:'+window.__asked","returnByValue":true}
+expect-log "value":"asked:true"

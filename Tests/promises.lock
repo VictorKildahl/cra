@@ -307,6 +307,7 @@
 #195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsPastTheCapAreDueOldestFirst  9f22e8eec03c
 #195   Packages/CraCore/Tests/CraCoreTests/ShippedWindowsTests.swift::littleWindowShortcutWorksFromAnyAppUnlessTurnedOff  d7c46d24f219
 #198   Tests/BrowserManagerLifecycleTests.swift::callPictureInPictureCase  86106e6d910d
+#198   Tests/Scenarios/meet-auto-picture-in-picture.scenario  ea966258dd42
 #202   Packages/CraCore/Tests/CraCoreTests/PeekTriggerTests.swift::aNewTabLinkInsideThePeekLeavesIt  97e7217fdf7d
 #203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::folderStopsLoadingWhereTheStoreHasIt  7dd24962094b
 #203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::onlyStoreCopiesNamedAfterTheirID  d8e4376933ca
