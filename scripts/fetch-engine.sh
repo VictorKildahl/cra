@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ENGINE_VERSION="${ENGINE_VERSION:-157.0.8103.81}"
+ENGINE_VERSION="${ENGINE_VERSION:-158.0.8127.37}"
 # Bump the suffix when the build changes but the Chrome version does not.
 ENGINE_RELEASE="${ENGINE_RELEASE:-engine-${ENGINE_VERSION}-1}"
 CPU="${ENGINE_CPU:-$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x64)}"

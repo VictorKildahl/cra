@@ -575,7 +575,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         func same(_ a: NSRect, _ b: NSRect) -> Bool {
             abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1 && abs(a.width - b.width) < 1 && abs(a.height - b.height) < 1
         }
-        let page = browser?.hostWindow.flatMap { $0.parent === window ? $0.frame : nil } ?? .zero
+        // The page's Chrome window (CEF), else its view in this window (the Chromium engine).
+        let page: NSRect = {
+            if let host = browser?.hostWindow { return host.parent === window ? host.frame : .zero }
+            guard let view = browser?.containerView, view.window === window, !view.isHiddenOrHasHiddenAncestor else { return .zero }
+            return window.convertToScreen(view.convert(view.bounds, to: nil))
+        }()
         var out = "peek=\(isPeek ? 1 : 0) parked=\(isParked ? 1 : 0) open=\(browser?.hasDevTools == true ? 1 : 0)"
         if let dev = browser?.devToolsWindow {
             let split = area.insetBy(dx: -1, dy: -1).contains(page) && (page.width < area.width - 1 || page.height < area.height - 1)
@@ -1672,7 +1677,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func runDevTools(_ command: DevToolsToggle.Command) {
         guard let b = browser else { return }
         // WebKit's inspector (a DRM service's page) reports nothing back: it is only ever asked to show.
-        guard b.hostWindow != nil else {
+        guard !(b is WebKitBrowser) else {
             b.showDevTools()
             return
         }
