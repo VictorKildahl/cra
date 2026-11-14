@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "ui/base/window_open_disposition.h"
 
 class ChromeBrowserMainExtraParts;
 
@@ -16,6 +17,7 @@ namespace content {
 class WebContents;
 struct ContextMenuParams;
 struct GlobalRenderFrameHostId;
+class NavigationThrottleRegistry;
 }
 namespace ui {
 class SimpleMenuModel;
@@ -117,6 +119,32 @@ inline PageMenuShowHook g_page_menu_show = nullptr;
 // opens no window (patches/cra-relaunch.patch).
 using RelaunchHook = void (*)(const base::CommandLine& command_line);
 inline RelaunchHook g_relaunch = nullptr;
+
+// A link a page of Cra's opens anywhere but in its own tab (a target=_blank or ⌘-click link, a Shift-click,
+// window.open, Chrome's split view click): Cra may open it its own way instead (a Peek, a Little Window, a split
+// pane, another app), and then Chrome makes no tab (true), as the CEF bridge's OnBeforePopup and
+// OnOpenURLFromTab did (patches/cra-links.patch).
+using LinkOpenHook = bool (*)(content::WebContents* source,
+                              const GURL& url,
+                              WindowOpenDisposition disposition,
+                              bool user_gesture);
+inline LinkOpenHook g_link_open = nullptr;
+
+// An address no page loads (another app's, Cra's cra-boost:) from a page of Cra's: Cra asks about it over the
+// page instead of Chrome's external protocol dialog, which would hang off Chrome's never-shown window (true:
+// handled).
+using ExternalProtocolHook = bool (*)(content::WebContents* contents, const GURL& url, bool user_gesture);
+inline ExternalProtocolHook g_external_protocol = nullptr;
+
+// Cra's navigation throttles, for its pages' own navigations: a link that opens in a Peek, a page Cra shows in
+// its WebKit engine (the CEF bridge's OnBeforeBrowse).
+using NavigationThrottlesHook = void (*)(content::NavigationThrottleRegistry& registry);
+inline NavigationThrottlesHook g_navigation_throttles = nullptr;
+
+// A download a page of Cra's starts: Cra may take it instead (an Option-clicked link opens in Split View, as in
+// Arc, GitHub #298; the CEF bridge's CanDownload). True: no download.
+using DownloadInterceptHook = bool (*)(content::WebContents* contents, const GURL& url);
+inline DownloadInterceptHook g_download_intercept = nullptr;
 
 }  // namespace cra
 

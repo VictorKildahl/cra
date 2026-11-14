@@ -1,0 +1,86 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -601,6 +601,15 @@
+                                   std::move(navigation_handle_callback));
+   }
+ 
++  // Cra: a page of Cra's link opened elsewhere than its own tab (a ⌘-click, a Shift-click, Chrome's split view
++  // click) may open Cra's way instead (cra_engine_hooks.h).
++  if (cra::g_link_open && source && params.is_renderer_initiated &&
++      params.disposition != WindowOpenDisposition::kCurrentTab &&
++      cra::g_link_open(source, params.url, params.disposition,
++                       params.user_gesture)) {
++    return nullptr;
++  }
++
+   // If the source is already split, navigate the other pane instead of
+   // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
+   // sees new_contents == this and skips the DidOpenRequestedURL notification,
+@@ -739,6 +748,13 @@
+     if (CanOpenWindowOpenSplitTab(*browser_, source, disposition)) {
+       disposition = WindowOpenDisposition::kNewSplitView;
+     }
++  }
++
++  // Cra: a page of Cra's may open the link its own way (a Peek, a Little Window, a split pane, another app); then
++  // this page is dropped and no tab is made (cra_engine_hooks.h).
++  if (cra::g_link_open && source &&
++      cra::g_link_open(source, target_url, disposition, user_gesture)) {
++    return nullptr;
+   }
+ 
+   FullscreenController* fullscreen_controller =
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/chrome_content_browser_client.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include <algorithm>
+ #include <iterator>
+@@ -5826,6 +5828,10 @@
+ void ChromeContentBrowserClient::CreateThrottlesForNavigation(
+     content::NavigationThrottleRegistry& registry) {
+   CreateAndAddChromeThrottlesForNavigation(registry);
++  // Cra: its pages' links that open in a Peek, pages it shows in WebKit (cra_engine_hooks.h).
++  if (cra::g_navigation_throttles) {
++    cra::g_navigation_throttles(registry);
++  }
+ }
+ 
+ void ChromeContentBrowserClient::CreateThrottlesForCommitWithoutUrlLoader(
+@@ -7579,6 +7585,14 @@
+     const net::IsolationInfo& isolation_info,
+     mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory) {
+   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
++
++  // Cra: another app's address (or cra-boost:) from a page of Cra's: Cra asks about it (cra_engine_hooks.h).
++  if (cra::g_external_protocol && is_primary_main_frame) {
++    content::WebContents* contents = web_contents_getter.Run();
++    if (contents && cra::g_external_protocol(contents, url, has_user_gesture)) {
++      return true;
++    }
++  }
+ 
+ #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+     BUILDFLAG(IS_WIN)
+diff --git a/chrome/browser/download/chrome_download_manager_delegate.cc b/chrome/browser/download/chrome_download_manager_delegate.cc
+--- a/chrome/browser/download/chrome_download_manager_delegate.cc
++++ b/chrome/browser/download/chrome_download_manager_delegate.cc
+@@ -1289,6 +1289,11 @@
+     bool is_transient,
+     bool is_content_initiated,
+     content::WebContents* web_contents) {
++  // Cra: an Option-clicked link in a page of Cra's opens in Split View instead (cra_engine_hooks.h).
++  if (cra::g_download_intercept && web_contents &&
++      cra::g_download_intercept(web_contents, url)) {
++    return true;
++  }
+   PolicyBlocklistService* service =
+       ChromePolicyBlocklistServiceFactory::GetForProfile(profile_);
+   policy::URLBlocklist::URLBlocklistState blocklist_state =

@@ -153,4 +153,36 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
   - Still to do: Cra.mediaSession and Cra.installFromWebStore, agent pages and agent downloads, extension
     popups (Chrome's hidden window still shows for one), runChromeCommand, ungoogled-chromium's service patches,
     the Intel build, then step 4.
+- 13–14 Nov 2026, night: **Chrome 158.0.8127.37**, the Mac stable `scripts/check-engine-update.sh` reported. The
+  sync now fetches only the new tag, one commit deep (gclient's `--with_tags` fetched every tag into the shallow
+  checkout and never finished). Seven patches moved with 158's code (blocked-popups, page-activate,
+  extension-popup-no-popout-wait, cra-permissions, fingerprinting-protection's OfflineAudioContext part, and
+  ungoogled's avatar and intranet-redirect patches); the layer needed one change (Document Picture in Picture is
+  `TYPE_FLOATING`). The sidebar player follows the media session (#411's follow-up, above), and
+  `scripts/test-engine-migration.sh` checks that a Cra on CEF's data folder opens on the engine (its CEF half
+  passes; the folder layout is the same, `Chromium/Default`, and so are the Keychain item's names).
+  - On 158: the app builds and `scripts/test-engine-migration.sh` passes both halves (a CEF build's cookie and back
+    and forward list open on the engine).
+  - Audio scenarios (player-follows-session, player-skips-dings, music-notes) couldn't be judged overnight: with
+    the displays asleep, this Mac's audio output stalled after the first render quantum for the CEF build as well
+    (an AudioContext stayed at 5 ms, a playing `<audio>` at 0.064 s). They run again with the Mac in use.
+  - Links Cra opens its own way were missing on the engine (the suite's boost-install found it):
+    `+setAppLinkHandler:` did nothing and nothing asked Cra before Chrome opened a link. patches/cra-links.patch
+    adds four hooks:
+    - `g_link_open`, from `AddNewContents` and `OpenURLFromTab`: another app's address, a Little Window (⌥⌘), a
+      split pane, a Peek, in OnBeforePopup's order;
+    - `g_external_protocol`, from `HandleExternalProtocol`: cra-boost: and other apps' links ask in Cra, and
+      cra: is refused;
+    - `g_navigation_throttles`: a same-tab link that opens in a Peek, pages Cra hands to WebKit;
+    - `g_download_intercept`, from `InterceptDownloadIfApplicable`: an Option-clicked link opens in Split View
+      (#298).
 
+    Click modifiers come from `-[CraApplication sendEvent:]`, as on CEF, and `browser:didChangeSoundPlaying:`
+    from the page's audio players.
+  - Quitting: Chrome waits up to 10 s for the network service to exit at shutdown
+    (`BrowserProcessIOThread::ProcessHostCleanUp`), and under Cra it stays up for all of them, on CEF too (a
+    relaunch's "Cra quits" to the next start: 11.6 s). Chrome 158's new Mac shutdown watchdog ends that wait
+    with a dump and `RESULT_CODE_HUNG`; patches/cra-shutdown-watchdog.patch keeps it off for Cra. Why the
+    network service stays up is still open.
+  - Still not on the engine: the Picture in Picture window's scrubber time
+    (`browser:didChangePictureInPictureTime:duration:`) and DevTools' `devToolsPageBounds`/`devToolsShowsPanel`.

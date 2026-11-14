@@ -19,6 +19,7 @@
 #include "base/supports_user_data.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
+#include "services/media_session/public/cpp/media_position.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "base/scoped_observation.h"
@@ -305,7 +306,10 @@ class MediaSessionWatch : public content::WebContentsUserData<MediaSessionWatch>
   void MediaSessionImagesChanged(
       const base::flat_map<media_session::mojom::MediaSessionImageType, std::vector<media_session::MediaImage>>&
           images) override {}
-  void MediaSessionPositionChanged(const std::optional<media_session::MediaPosition>& position) override {}
+  void MediaSessionPositionChanged(const std::optional<media_session::MediaPosition>& position) override {
+    position_ = position;
+  }
+  const std::optional<media_session::MediaPosition>& position() const { return position_; }
 
  private:
   friend class content::WebContentsUserData<MediaSessionWatch>;
@@ -315,6 +319,7 @@ class MediaSessionWatch : public content::WebContentsUserData<MediaSessionWatch>
   }
 
   std::set<media_session::mojom::MediaSessionAction> actions_;
+  std::optional<media_session::MediaPosition> position_;
   MediaSessionChanged changed_;
   bool reported_ = false;
   NSInteger state_ = 0;
@@ -535,6 +540,16 @@ void HandleCraMethod(content::WebContents* contents,
 }
 
 }  // namespace
+
+bool MediaPositionNow(content::WebContents* contents, double* position, double* duration) {
+  MediaSessionWatch* watch = MediaSessionWatch::FromWebContents(contents);
+  if (!watch || !watch->position()) {
+    return false;
+  }
+  *position = watch->position()->GetPosition().InSecondsF();
+  *duration = watch->position()->duration().InSecondsF();
+  return true;
+}
 
 void WatchMediaSession(content::WebContents* contents, MediaSessionChanged changed) {
   MediaSessionWatch::CreateForWebContents(contents, changed);

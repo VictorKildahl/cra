@@ -33,6 +33,10 @@ using MediaSessionChanged = void (^)(NSInteger state, bool controllable);
 // state, for `changed`). Once per page, as it is made.
 void WatchMediaSession(content::WebContents* contents, MediaSessionChanged changed);
 
+// Where the page's media is now and how long it is, in seconds (its media session's position, Chrome's media
+// controls' scrubber). False when the session has no position.
+bool MediaPositionNow(content::WebContents* contents, double* position, double* duration);
+
 // Puts a saved back and forward list (Cra.getHistory's "history", base64) into a page that hasn't navigated yet
 // and loads entry `index`, as Cra.restoreHistory does. The number of entries, or 0 with `error` set.
 int RestorePageHistory(content::WebContents* contents, const std::string& history, int index, std::string* error);

@@ -30,6 +30,8 @@ cra-download-tabs.patch
 cra-content-blocking.patch
 cra-page-menu.patch
 cra-relaunch.patch
+cra-shutdown-watchdog.patch
+cra-links.patch
 fingerprinting-protection.patch
 
 # Google's background services, off: ungoogled-chromium's patches (BSD 3-Clause, ungoogled/LICENSE), taken one

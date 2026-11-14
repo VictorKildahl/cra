@@ -79,6 +79,10 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/media_player_id.h"
+#include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/navigation_throttle_registry.h"
+#include "ui/base/page_transition_types.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
@@ -142,6 +146,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)agentDownloadItem:(download::DownloadItem*)item;
 - (bool)agentDownloadTakes:(download::DownloadItem*)item;
 - (void)pageMediaPlaying:(BOOL)playing;
+- (void)pageSoundPlaying:(BOOL)playing;
+- (void)pagePictureInPictureTime;
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
 - (void)devToolsClosed:(BrowserWindowInterface*)devtools;
@@ -360,11 +366,17 @@ class PageObserver : public content::WebContentsObserver,
   }
   void MediaStartedPlaying(const MediaPlayerInfo& info, const content::MediaPlayerId& id) override {
     [owner_ pageMediaPlaying:YES];
+    if (info.has_audio && sounding_.insert(id).second && sounding_.size() == 1) {
+      [owner_ pageSoundPlaying:YES];
+    }
   }
   void MediaStoppedPlaying(const MediaPlayerInfo& info,
                            const content::MediaPlayerId& id,
                            WebContentsObserver::MediaStoppedReason reason) override {
     [owner_ pageMediaPlaying:NO];
+    if (sounding_.erase(id) && sounding_.empty()) {
+      [owner_ pageSoundPlaying:NO];
+    }
   }
   void OnBackgroundColorChanged() override { [owner_ pageBackgroundColor]; }
 
@@ -395,6 +407,8 @@ class PageObserver : public content::WebContentsObserver,
   CraBrowser* __weak owner_;
   raw_ptr<favicon::ContentFaviconDriver> favicons_ = nullptr;
   raw_ptr<find_in_page::FindTabHelper> find_ = nullptr;
+  // Players playing sound now, for the immediate sound state (music notes).
+  std::set<content::MediaPlayerId> sounding_;
 };
 
 // A Browser's window that holds Cra's pages: never seen, never clicked, never captured, never key or main (keys
@@ -1277,6 +1291,179 @@ void StopBridge() {
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->RemoveObserver(&Captures());
 }
 
+// MARK: Links Cra opens its own way
+
+// The last click (left mouse-up) or Return in any window, for the link Chromium opens a moment after it: where it
+// landed and the keys held (the CEF bridge's CraNoteLastPress). Set in -[CraApplication sendEvent:].
+NSWindow* __weak g_last_press_window = nil;
+NSView* __weak g_last_press_view = nil;
+NSEventModifierFlags g_last_press_modifiers = 0;
+NSTimeInterval g_last_press_time = -1;
+BOOL (^g_app_link_handler)(CraBrowser*, NSString*, BOOL) = nil;
+
+void NoteLastPress(NSEvent* event) {
+  BOOL click = event.type == NSEventTypeLeftMouseUp;
+  BOOL enter = event.type == NSEventTypeKeyDown && (event.keyCode == 36 || event.keyCode == 76);  // Return, Enter
+  if (!click && !enter) {
+    return;
+  }
+  NSWindow* window = event.window;
+  NSView* view = nil;
+  if (click) {
+    NSView* root = window.contentView.superview ?: window.contentView;
+    view = [root hitTest:event.locationInWindow];
+  } else if ([window.firstResponder isKindOfClass:[NSView class]]) {
+    view = static_cast<NSView*>(window.firstResponder);
+  }
+  g_last_press_window = window;
+  g_last_press_view = view;
+  g_last_press_modifiers = event.modifierFlags;
+  g_last_press_time = event.timestamp;
+}
+
+// The page's last click (or Return): the keys it was made with and its age in seconds, or -1 when the last one
+// wasn't in this page. Split panes share a window; the first pane to ask takes the click.
+NSTimeInterval LastPressInPage(CraBrowser* page, NSEventModifierFlags* modifiers) {
+  NSView* view = g_last_press_view;
+  BOOL in_page = view && [view isDescendantOf:page.containerView];
+  *modifiers = in_page ? g_last_press_modifiers : 0;
+  return in_page && g_last_press_time >= 0 ? NSProcessInfo.processInfo.systemUptime - g_last_press_time : -1;
+}
+
+// ⌥⌘-click opens the link in a Little Window (Arc's, Settings ▸ Links): Chromium reports it as its split view
+// click (or a ⌘-click, a background tab), so the keys are the click's own (LittleWindowTrigger decides).
+bool OpensLittleWindow(CraBrowser* page, NSString* url, WindowOpenDisposition disposition, bool user_gesture) {
+  if (!user_gesture ||
+      (disposition != WindowOpenDisposition::kNewSplitView &&
+       disposition != WindowOpenDisposition::kNewBackgroundTab) ||
+      ![page.delegate respondsToSelector:@selector(browser:opensLittleWindowForURL:clickModifiers:clickAge:)]) {
+    return false;
+  }
+  NSEventModifierFlags modifiers = 0;
+  NSTimeInterval age = LastPressInPage(page, &modifiers);
+  if (![page.delegate browser:page opensLittleWindowForURL:url clickModifiers:modifiers clickAge:age]) {
+    return false;
+  }
+  g_last_press_time = -1;  // one click, one window
+  return true;
+}
+
+// Chromium's split view click: a pane beside this page, as an Option-click opens (#298).
+bool OpensSplitPane(CraBrowser* page, NSString* url, WindowOpenDisposition disposition, bool user_gesture) {
+  if (!user_gesture || disposition != WindowOpenDisposition::kNewSplitView ||
+      ![page.delegate respondsToSelector:@selector(browser:requestsSplitPaneWithURL:)]) {
+    return false;
+  }
+  NSString* scheme = [NSURL URLWithString:url].scheme.lowercaseString;
+  if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) {
+    return false;
+  }
+  __weak CraBrowser* weak = page;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    CraBrowser* b = weak;
+    if (b) {
+      [b.delegate browser:b requestsSplitPaneWithURL:url];
+    }
+  });
+  return true;
+}
+
+// patches/cra-links.patch: a link a page of Cra's opens elsewhere than its own tab, in the CEF bridge's order
+// (OnBeforePopup): another app's address, a Little Window, a split pane, then a Peek for a clicked target=_blank
+// link (Shift-click: Chrome's new window). window.open with features (a sign-in pop-up) stays a pop-up.
+bool LinkOpen(content::WebContents* source, const GURL& gurl, WindowOpenDisposition disposition, bool user_gesture) {
+  CraBrowser* page = BrowserFor(source);
+  if (!page || g_quitting) {
+    return false;
+  }
+  NSString* url = NS(gurl.spec());
+  if (g_app_link_handler && g_app_link_handler(page, url, user_gesture)) {
+    return true;
+  }
+  if (OpensLittleWindow(page, url, disposition, user_gesture) || OpensSplitPane(page, url, disposition, user_gesture)) {
+    return true;
+  }
+  bool peek_kind = disposition == WindowOpenDisposition::kNewForegroundTab ||
+                   disposition == WindowOpenDisposition::kNewWindow;
+  return user_gesture && peek_kind &&
+         [page.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)] &&
+         [page.delegate browser:page
+                opensPeekForURL:url
+                     shiftClick:disposition == WindowOpenDisposition::kNewWindow
+                         newTab:disposition == WindowOpenDisposition::kNewForegroundTab];
+}
+
+// Another app's address, or Cra's cra-boost:, from a page of Cra's: Cra's app asks about it (AppLinkPrompt). cra:
+// is Cra's own scripting scheme, which a page never drives.
+bool ExternalProtocol(content::WebContents* contents, const GURL& url, bool user_gesture) {
+  CraBrowser* page = BrowserFor(contents);
+  if (!page) {
+    return false;
+  }
+  if (url.SchemeIs("cra")) {
+    return true;
+  }
+  return g_app_link_handler && g_app_link_handler(page, NS(url.spec()), user_gesture);
+}
+
+// A page of Cra's own navigation, before its request goes out (the CEF bridge's OnBeforeBrowse): a clicked link
+// that opens in a Peek, or a page Cra shows in its WebKit engine (ProtectedMediaSites: a sign-in's one-time code
+// isn't spent here).
+class CraNavigationThrottle : public content::NavigationThrottle {
+ public:
+  explicit CraNavigationThrottle(content::NavigationThrottleRegistry& registry)
+      : content::NavigationThrottle(registry) {}
+
+  ThrottleCheckResult WillStartRequest() override {
+    content::NavigationHandle* handle = navigation_handle();
+    if (!handle->IsInPrimaryMainFrame()) {
+      return PROCEED;
+    }
+    CraBrowser* page = BrowserFor(handle->GetWebContents());
+    if (!page) {
+      return PROCEED;
+    }
+    NSString* url = NS(handle->GetURL().spec());
+    ui::PageTransition transition = handle->GetPageTransition();
+    if (handle->HasUserGesture() && handle->IsRendererInitiated() &&
+        ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_LINK) &&
+        !(transition & ui::PAGE_TRANSITION_FORWARD_BACK) &&
+        [page.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)] &&
+        [page.delegate browser:page opensPeekForURL:url shiftClick:NO newTab:NO]) {
+      return CANCEL_AND_IGNORE;
+    }
+    if ([page.delegate respondsToSelector:@selector(browser:handsOffNavigationToURL:method:)] &&
+        [page.delegate browser:page handsOffNavigationToURL:url method:handle->IsPost() ? @"POST" : @"GET"]) {
+      return CANCEL_AND_IGNORE;
+    }
+    return PROCEED;
+  }
+
+  const char* GetNameForLogging() override { return "CraNavigationThrottle"; }
+};
+
+void AddNavigationThrottles(content::NavigationThrottleRegistry& registry) {
+  if (BrowserFor(registry.GetNavigationHandle().GetWebContents())) {
+    registry.AddThrottle(std::make_unique<CraNavigationThrottle>(registry));
+  }
+}
+
+// Chromium makes an Option-clicked link a download of it; Arc opens it in Split View (#298). The click that asked
+// is the last one in this page, a moment ago.
+bool DownloadIntercept(content::WebContents* contents, const GURL& url) {
+  CraBrowser* page = BrowserFor(contents);
+  if (!page || ![page.delegate respondsToSelector:@selector(browser:opensSplitForDownloadURL:clickModifiers:clickAge:)]) {
+    return false;
+  }
+  NSEventModifierFlags modifiers = 0;
+  NSTimeInterval age = LastPressInPage(page, &modifiers);
+  if (![page.delegate browser:page opensSplitForDownloadURL:NS(url.spec()) clickModifiers:modifiers clickAge:age]) {
+    return false;
+  }
+  g_last_press_time = -1;  // one click, one pane
+  return true;
+}
+
 void RunReadyBlocks() {
   g_page_activation = &PageActivation;
   g_translate_state = &TranslateState;
@@ -1292,6 +1479,10 @@ void RunReadyBlocks() {
   g_page_menu_command = &PageMenuCommand;
   g_page_menu_show = &PageMenuShow;
   g_relaunch = &Relaunch;
+  g_link_open = &LinkOpen;
+  g_external_protocol = &ExternalProtocol;
+  g_navigation_throttles = &AddNavigationThrottles;
+  g_download_intercept = &DownloadIntercept;
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->AddObserver(&Captures());
   blocked_content::PopupBlockerTabHelper::SetCraListChangedCallback(base::BindRepeating(&BlockedPopupsChanged));
   StartDownloads(&ReportDownload);
@@ -1324,6 +1515,8 @@ void RunReadyBlocks() {
   std::unique_ptr<PageObserver> _observer;
   // The page's media session is one Chrome's global media controls offer (#411).
   BOOL _mediaSessionControllable;
+  // While a video of the page is in Picture in Picture: its time for the window's scrubber, twice a second.
+  NSTimer* _pictureInPictureClock;
   // The page's DevTools protocol session, made on the first -sendDevToolsMethod:.
   std::unique_ptr<cra::PageSession> _session;
   NSString* _pendingURL;
@@ -1702,6 +1895,17 @@ void RunReadyBlocks() {
   } else {
     _isPictureInPicturePlaying = _contents->IsCurrentlyAudible() || _isAudible;
   }
+  [_pictureInPictureClock invalidate];
+  _pictureInPictureClock = nil;
+  if (active && [_delegate respondsToSelector:@selector(browser:didChangePictureInPictureTime:duration:)]) {
+    __weak CraBrowser* weakSelf = self;
+    _pictureInPictureClock = [NSTimer scheduledTimerWithTimeInterval:0.5
+                                                             repeats:YES
+                                                               block:^(NSTimer* timer) {
+                                                                 [weakSelf pagePictureInPictureTime];
+                                                               }];
+    [self pagePictureInPictureTime];
+  }
   if ([_delegate respondsToSelector:@selector(browser:didChangePictureInPicture:)]) {
     [_delegate browser:self didChangePictureInPicture:active];
   }
@@ -1714,6 +1918,23 @@ void RunReadyBlocks() {
   _isPictureInPicturePlaying = playing;
   if ([_delegate respondsToSelector:@selector(browser:didChangePictureInPicturePlayback:)]) {
     [_delegate browser:self didChangePictureInPicturePlayback:playing];
+  }
+}
+
+// The Picture in Picture video's time, from the page's media session (the CEF bridge's script sent "time:").
+- (void)pagePictureInPictureTime {
+  double position = 0;
+  double duration = 0;
+  if (_contents && _isInPictureInPicture && cra::MediaPositionNow(_contents, &position, &duration) &&
+      [_delegate respondsToSelector:@selector(browser:didChangePictureInPictureTime:duration:)]) {
+    [_delegate browser:self didChangePictureInPictureTime:position duration:duration];
+  }
+}
+
+// Sound starting or stopping as it happens, before the 2 s Chrome's audible state holds (music notes).
+- (void)pageSoundPlaying:(BOOL)playing {
+  if ([_delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)]) {
+    [_delegate browser:self didChangeSoundPlaying:playing];
   }
 }
 
@@ -1781,6 +2002,8 @@ void RunReadyBlocks() {
   }
   _isClosed = YES;
   --g_live_browsers;
+  [_pictureInPictureClock invalidate];
+  _pictureInPictureClock = nil;
   [_delegate browserDidClose:self];
 }
 
@@ -2591,6 +2814,7 @@ void RunReadyBlocks() {
 + (void)setPageWindowStartHandler:(NSRect (^)(NSSize))handler {
 }
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler {
+  cra::g_app_link_handler = [handler copy];
 }
 + (void)setViewSourceHandler:(void (^)(CraBrowser*, NSString*))handler {
   g_view_source_handler = [handler copy];
@@ -2893,6 +3117,7 @@ BOOL CraIsSystemHotKey(NSEvent* event) {
 // dispatcher does this, so the key goes to the page's view here; the page's keys come back through Cra's key
 // hook (KeyEvent). Enabled macOS shortcuts (CraIsSystemHotKey) take the normal path, as in Chrome and Arc.
 - (void)sendEvent:(NSEvent*)event {
+  cra::NoteLastPress(event);
   if ([_forwardedKeyEvents containsObject:event]) {
     [_forwardedKeyEvents removeObject:event];
     [super sendEvent:event];
