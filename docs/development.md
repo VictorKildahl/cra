@@ -176,6 +176,10 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
   keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
   button closing it, and the button's hold (⌃-click stays a plain click).
+- `scripts/test-mobile-popup.sh`: the production iOS popup callback and tab store against
+  platform stand-ins: related-view/request ownership, source privacy, nested opener lifetime,
+  close return paths, and private-tab persistence/cleanup. Native POST and opener behavior is
+  exercised separately by `CraUITests/PopupTests` with `iOS/Tests/popup_server.py` on loopback.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and

@@ -8,6 +8,9 @@ protocol WebPageDelegate: AnyObject {
     func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool)
     /// A link that asked for a new window.
     func webPage(_ page: WebPage, openInNewTab url: URL)
+    /// WebKit keeps the original navigation (including POST and window.opener) in this view.
+    func webPage(_ page: WebPage, createPopupWith configuration: WKWebViewConfiguration, request: URLRequest) -> WKWebView?
+    func webPageDidClose(_ page: WebPage)
     /// The query capsule on a Browse for Me page: edit the question.
     func webPage(_ page: WebPage, editQuery query: String)
 }
@@ -16,6 +19,9 @@ protocol WebPageDelegate: AnyObject {
 final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, WKScriptMessageHandler {
     let tabID: UUID
     let webView: WKWebView
+    /// A script popup keeps its source alive until the popup is closed, including in incognito.
+    let opener: WebPage?
+    let webKitOwnsInitialNavigation: Bool
     weak var delegate: WebPageDelegate?
     private var observations: [NSKeyValueObservation] = []
     private var lastOffset: CGFloat = 0
@@ -41,10 +47,15 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     private(set) var blockedCount = 0
     private var countedHosts = Set<String>()
 
-    init(tab: MobileTab) {
+    init(tab: MobileTab, configuration supplied: WKWebViewConfiguration? = nil, opener: WebPage? = nil) {
         tabID = tab.id
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = tab.isIncognito ? .nonPersistent() : .default()
+        self.opener = opener
+        webKitOwnsInitialNavigation = supplied != nil
+        let configuration = supplied ?? WKWebViewConfiguration()
+        if supplied == nil { configuration.websiteDataStore = tab.isIncognito ? .nonPersistent() : .default() }
+        // The supplied related configuration can share its opener's content controller. Each
+        // page needs its own one handler, script and site-specific blocker lists.
+        configuration.userContentController = WKUserContentController()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = .all
         configuration.defaultWebpagePreferences.preferredContentMode = .mobile
@@ -58,6 +69,11 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         webView.backgroundColor = .systemBackground
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         super.init()
+        if let opener {
+            siteOptions = opener.siteOptions
+            appLinks = opener.appLinks
+            wantsDesktopSite = opener.wantsDesktopSite
+        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.scrollView.delegate = self
@@ -79,6 +95,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
                 self?.changed()
             },
         ]
+        applyBlocking(for: URL(string: tab.url))
     }
 
     func load(_ address: String) {
@@ -219,8 +236,11 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url { delegate?.webPage(self, openInNewTab: url) }
-        return nil
+        return delegate?.webPage(self, createPopupWith: configuration, request: navigationAction.request)
+    }
+
+    func webViewDidClose(_ webView: WKWebView) {
+        delegate?.webPageDidClose(self)
     }
 
     // MARK: Scrolling

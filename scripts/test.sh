@@ -22,6 +22,7 @@ if [ "${1:-}" != core ]; then
   suite "Ask on Page quote scripts" scripts/test-ask-on-page-quotes.sh
   suite "Ask on Page service" scripts/test-ask-on-page-service.sh
   suite "Ask on Page lifecycle" scripts/test-ask-on-page-lifecycle.sh
+  suite "iOS popup ownership" scripts/test-mobile-popup.sh
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
   suite "Extension popup window" scripts/test-extension-popup-window.sh
