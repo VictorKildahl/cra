@@ -127,6 +127,12 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-window-content-grabber.sh`: the page-top grabber on AppKit windows:
   clicks reach the page immediately, non-arrow cursors keep the gesture, native resize edges and rounded corners stay free,
   a child page's drag starts in its browser window's coordinates, and the page stays outside WindowServer's native drag region.
+- `scripts/test-tidy-tabs-model.sh`: Tidy Tabs' production Foundation Models adapter and guided schema,
+  including reduced-request mapping, exactly one context-overflow retry and propagated failure/cancellation.
+  `--real` additionally runs synthetic samples on an available local model; fake checks do not establish quality.
+- `scripts/test-tidy-tabs.sh`: the actual grouping service/store with controlled inference and a
+  manual scheduler: failure retry, fitted empty success, minimum animation, same-turn settings/model
+  invalidation, stale tasks/timers, space/store lifetimes and independent request owners. No model or UI.
 - `scripts/test-link-summary-share.sh`: 5-Second Previews' Copy as Image (`LinkSummaryShareImage`)
   against Arc's own copy of a card: size at 3x, the picture's inset, the dashed line's pattern and place,
   the footer colour.
@@ -150,6 +156,13 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
   keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
   button closing it, and the button's hold (⌃-click stays a plain click).
+- `scripts/test-mobile-popup.sh`: the production iOS popup callback and tab store against
+  platform stand-ins: related-view/request ownership, source privacy, nested opener lifetime,
+  close return paths, and private-tab persistence/cleanup. Native POST and opener behavior is
+  exercised separately by `CraUITests/PopupTests` with `iOS/Tests/popup_server.py` on loopback.
+- `scripts/test-shared-download-replacement.sh`: the production download service, history and
+  destination callback with suspended inference and disposable files: replacement ownership,
+  resource aliases, preparation scheduling, original history identity and safe undo.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and

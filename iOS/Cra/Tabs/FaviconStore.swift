@@ -8,7 +8,6 @@ final class FaviconStore {
     private var memory: [String: UIImage] = [:]
     private var inFlight: Set<String> = []
     private let session: URLSession
-    var onChange: (() -> Void)?
 
     init() {
         directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Favicons", isDirectory: true)
@@ -61,7 +60,6 @@ final class FaviconStore {
                 self.inFlight.remove(key)
                 self.memory[key] = image
                 try? image.pngData()?.write(to: self.file(key), options: .atomic)
-                self.onChange?()
             }
         }.resume()
     }
