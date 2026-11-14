@@ -91,6 +91,9 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/infobars/content/content_infobar_manager.h"
+#include "components/infobars/core/confirm_infobar_delegate.h"
+#include "components/infobars/core/infobar.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
@@ -147,6 +150,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (bool)agentDownloadTakes:(download::DownloadItem*)item;
 - (void)pageMediaPlaying:(BOOL)playing;
 - (void)pageSoundPlaying:(BOOL)playing;
+- (void)pageInfoBarsChanged;
 - (void)pagePictureInPictureTime;
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
@@ -215,6 +219,12 @@ std::map<content::WebContents*, GURL>& OpenedURLs() {
   static auto* urls = new std::map<content::WebContents*, GURL>();
   return *urls;
 }
+// The page each new page was opened from (DidOpenRequestedURL on it), until Cra adopts it: a ⌘-click's tab has no
+// JavaScript opener, and Chrome's tab strip names the tab that was active then (a Little Window's page, say).
+std::map<content::WebContents*, base::WeakPtr<content::WebContents>>& OpenedFrom() {
+  static auto* sources = new std::map<content::WebContents*, base::WeakPtr<content::WebContents>>();
+  return *sources;
+}
 
 // Every CraBrowser that has a page, by its page.
 std::map<content::WebContents*, CraBrowser* __weak>& PagesByContents() {
@@ -281,10 +291,12 @@ NSString* Hex(std::optional<SkColor> color) {
 // A page of Cra's tells its CraBrowser what happens to it: the page itself, its favicon and its find results.
 class PageObserver : public content::WebContentsObserver,
                      public favicon::FaviconDriverObserver,
-                     public find_in_page::FindResultObserver {
+                     public find_in_page::FindResultObserver,
+                     public infobars::InfoBarManager::Observer {
  public:
   PageObserver(content::WebContents* contents, CraBrowser* owner)
       : content::WebContentsObserver(contents), owner_(owner) {
+    WatchInfoBars();
     if (auto* favicons = favicon::ContentFaviconDriver::FromWebContents(contents)) {
       favicons->AddObserver(this);
       favicons_ = favicons;
@@ -296,6 +308,9 @@ class PageObserver : public content::WebContentsObserver,
   }
 
   ~PageObserver() override {
+    if (infobars_) {
+      infobars_->RemoveObserver(this);
+    }
     if (favicons_) {
       favicons_->RemoveObserver(this);
     }
@@ -330,6 +345,7 @@ class PageObserver : public content::WebContentsObserver,
                            bool renderer_initiated) override {
     if (new_contents != web_contents()) {
       OpenedURLs()[new_contents] = url;
+      OpenedFrom()[new_contents] = web_contents()->GetWeakPtr();
     }
   }
   void MediaPictureInPictureChanged(bool active) override { [owner_ pagePictureInPicture:active]; }
@@ -381,6 +397,7 @@ class PageObserver : public content::WebContentsObserver,
   void OnBackgroundColorChanged() override { [owner_ pageBackgroundColor]; }
 
   void DidStartNavigation(content::NavigationHandle* handle) override {
+    WatchInfoBars();
     if (handle->IsInPrimaryMainFrame() && !handle->IsSameDocument()) {
       [owner_ pageStartedNavigation:handle];
     }
@@ -409,6 +426,32 @@ class PageObserver : public content::WebContentsObserver,
   raw_ptr<find_in_page::FindTabHelper> find_ = nullptr;
   // Players playing sound now, for the immediate sound state (music notes).
   std::set<content::MediaPlayerId> sounding_;
+  raw_ptr<infobars::InfoBarManager> infobars_ = nullptr;
+
+ public:
+  // Chrome's bars over the page (infobars::ContentInfoBarManager, made when the page becomes a tab): Cra shows them
+  // itself; Chrome would draw them in its never-shown window.
+  void WatchInfoBars() {
+    if (infobars_) {
+      return;
+    }
+    if (auto* manager = infobars::ContentInfoBarManager::FromWebContents(web_contents())) {
+      manager->AddObserver(this);
+      infobars_ = manager;
+      if (!manager->infobars().empty()) {
+        [owner_ pageInfoBarsChanged];
+      }
+    }
+  }
+  void OnInfoBarAdded(infobars::InfoBar* infobar) override { [owner_ pageInfoBarsChanged]; }
+  void OnInfoBarRemoved(infobars::InfoBar* infobar, bool animate) override { [owner_ pageInfoBarsChanged]; }
+  void OnInfoBarReplaced(infobars::InfoBar* old_infobar, infobars::InfoBar* new_infobar) override {
+    [owner_ pageInfoBarsChanged];
+  }
+  void OnManagerWillBeDestroyed(infobars::InfoBarManager* manager) override {
+    manager->RemoveObserver(this);
+    infobars_ = nullptr;
+  }
 };
 
 // A Browser's window that holds Cra's pages: never seen, never clicked, never captured, never key or main (keys
@@ -525,7 +568,11 @@ class PageHost : public TabStripModelObserver {
     if (!page) {
       return;
     }
-    KeepPlaceholderActive();
+    // Only a page that opened in front: a background one (an extension's tabs.create with active: false) leaves
+    // Chrome's active tab on the page the user is on, which extensions read.
+    if (!background) {
+      KeepPlaceholderActive();
+    }
     // A page's own pop-up has no visible address yet (renderer-initiated): the one it was opened for.
     GURL target = page->GetVisibleURL();
     if (auto opened = OpenedURLs().find(page.get()); opened != OpenedURLs().end()) {
@@ -535,6 +582,14 @@ class PageHost : public TabStripModelObserver {
       target = pending->GetURL();
     }
     NSString* url = NS(target.spec());
+    // The page the link was clicked in, which Chrome names after inserting the tab (DidOpenRequestedURL), beats
+    // the tab strip's opener.
+    if (auto clicked = OpenedFrom().find(page.get()); clicked != OpenedFrom().end()) {
+      if (clicked->second) {
+        opener = clicked->second;
+      }
+      OpenedFrom().erase(clicked);
+    }
     CraBrowser* from = opener ? BrowserFor(opener.get()) : nil;
     CraBrowser* host = nil;
     if (from && [from.delegate respondsToSelector:@selector(browser:popupHostForURL:inBackground:)]) {
@@ -1425,7 +1480,9 @@ class CraNavigationThrottle : public content::NavigationThrottle {
     }
     NSString* url = NS(handle->GetURL().spec());
     ui::PageTransition transition = handle->GetPageTransition();
+    // Not a new page's first load (a ⌘-clicked link's background tab, a pop-up): only a page's own link.
     if (handle->HasUserGesture() && handle->IsRendererInitiated() &&
+        !handle->GetWebContents()->GetController().IsInitialNavigation() &&
         ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_LINK) &&
         !(transition & ui::PAGE_TRANSITION_FORWARD_BACK) &&
         [page.delegate respondsToSelector:@selector(browser:opensPeekForURL:shiftClick:newTab:)] &&
@@ -1928,6 +1985,78 @@ void RunReadyBlocks() {
   if (_contents && _isInPictureInPicture && cra::MediaPositionNow(_contents, &position, &duration) &&
       [_delegate respondsToSelector:@selector(browser:didChangePictureInPictureTime:duration:)]) {
     [_delegate browser:self didChangePictureInPictureTime:position duration:duration];
+  }
+}
+
+// Chrome's bars changed: told once the manager is done changing (a bar's press removes it from inside the call).
+- (void)pageInfoBarsChanged {
+  __weak CraBrowser* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    CraBrowser* page = weakSelf;
+    if (page && [page.delegate respondsToSelector:@selector(browser:didChangeInfoBars:)]) {
+      [page.delegate browser:page didChangeInfoBars:page.infoBars];
+    }
+  });
+}
+
+- (NSArray<NSDictionary<NSString*, id>*>*)infoBars {
+  NSMutableArray<NSDictionary<NSString*, id>*>* out = [NSMutableArray array];
+  auto* manager = _contents ? infobars::ContentInfoBarManager::FromWebContents(_contents) : nullptr;
+  if (!manager) {
+    return out;
+  }
+  for (infobars::InfoBar* bar : manager->infobars()) {
+    infobars::InfoBarDelegate* delegate = bar->delegate();
+    ConfirmInfoBarDelegate* confirm = delegate ? delegate->AsConfirmInfoBarDelegate() : nullptr;
+    if (!confirm) {
+      continue;  // Translate's bar and the like: Cra has its own UI for them.
+    }
+    NSMutableDictionary<NSString*, id>* entry = [@{
+      @"id" : @(reinterpret_cast<intptr_t>(bar)),
+      @"message" : base::SysUTF16ToNSString(confirm->GetMessageText()),
+      @"closeable" : @(delegate->IsCloseable()),
+    } mutableCopy];
+    int buttons = confirm->GetButtons();
+    if (buttons & ConfirmInfoBarDelegate::BUTTON_OK) {
+      entry[@"ok"] = base::SysUTF16ToNSString(confirm->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
+    }
+    if (buttons & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
+      entry[@"cancel"] = base::SysUTF16ToNSString(confirm->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+    }
+    if (std::u16string link = delegate->GetLinkText(); !link.empty()) {
+      entry[@"link"] = base::SysUTF16ToNSString(link);
+    }
+    [out addObject:entry];
+  }
+  return out;
+}
+
+- (void)infoBar:(NSInteger)identifier action:(NSString*)action {
+  auto* manager = _contents ? infobars::ContentInfoBarManager::FromWebContents(_contents) : nullptr;
+  if (!manager) {
+    return;
+  }
+  for (infobars::InfoBar* bar : manager->infobars()) {
+    if (reinterpret_cast<intptr_t>(bar) != identifier) {
+      continue;
+    }
+    infobars::InfoBarDelegate* delegate = bar->delegate();
+    ConfirmInfoBarDelegate* confirm = delegate ? delegate->AsConfirmInfoBarDelegate() : nullptr;
+    bool remove = false;
+    if ([action isEqualToString:@"ok"]) {
+      remove = confirm && confirm->Accept();
+    } else if ([action isEqualToString:@"cancel"]) {
+      remove = confirm && confirm->Cancel();
+    } else if ([action isEqualToString:@"link"]) {
+      remove = delegate && delegate->LinkClicked(WindowOpenDisposition::kNewForegroundTab);
+    } else if ([action isEqualToString:@"close"] && delegate) {
+      delegate->InfoBarDismissed();
+      remove = true;
+    }
+    if (remove) {
+      bar->RemoveSelf();
+    }
+    return;
   }
 }
 

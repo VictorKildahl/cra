@@ -176,6 +176,9 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 /// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
 /// `browser:didChangeAudible:` hold a quiet page audible.
 - (void)browser:(CraBrowser *)browser didChangeSoundPlaying:(BOOL)playing;
+/// Chrome's bars over the page changed (`infoBars`): "<extension> started debugging this browser" and the other
+/// yes/no bars Chrome shows in a tab. Only the Chromium engine reports them; on CEF Chrome draws its own.
+- (void)browser:(CraBrowser *)browser didChangeInfoBars:(NSArray<NSDictionary<NSString *, id> *> *)infoBars;
 /// `hasCommittedLoad` changed: the main frame committed, or a new navigation started.
 - (void)browser:(CraBrowser *)browser didChangeCommittedLoad:(BOOL)committed;
 /// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,
@@ -309,6 +312,12 @@ CRA_EXPORT @interface CraBrowser : NSObject
 /// Leaves element fullscreen (a video), as Esc does.
 - (void)exitFullscreen;
 - (void)setFocused:(BOOL)focused;
+/// Chrome's bars over the page, top first: `id` (NSNumber), `message`, `ok` and `cancel` (button titles, when the
+/// bar has them), `link` (its link's title, when it has one) and `closeable` (an NSNumber: it has a ✕). Empty on
+/// CEF, which draws Chrome's own.
+@property (nonatomic, readonly) NSArray<NSDictionary<NSString *, id> *> *infoBars;
+/// A press on a bar of `infoBars`: "ok", "cancel", "link" or "close".
+- (void)infoBar:(NSInteger)identifier action:(NSString *)action;
 - (void)showDevToolsInspectingPoint:(NSPoint)point;
 - (void)showDevTools;
 /// What the next -showDevTools asks of the frontend, as Chrome's DevToolsToggleAction does: a

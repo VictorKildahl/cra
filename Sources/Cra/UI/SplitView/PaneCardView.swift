@@ -13,6 +13,9 @@ final class PaneCardView: NSView {
     /// Where the Chromium view lives (or where the page window is positioned).
     let webArea = NSView()
     let pageTopGrabber = WindowContentGrabber()
+    /// Chrome's bars over the page, which Cra draws for the Chromium engine (PageInfoBar): above the page, which
+    /// gets the rest of the web area.
+    let infoBarStrip = InfoBarStrip()
     /// Hairline under the toolbar when the pane has no page (Arc draws it on the tinted card).
     private let hairline = NSView()
     /// The card behind the toolbar, in the toolbar's colour. A card with a page paints nothing else:
@@ -182,6 +185,7 @@ final class PaneCardView: NSView {
         addSubview(pageBackground)
         addSubview(elsewhereView)
         addSubview(webArea)
+        addSubview(infoBarStrip)
         addSubview(toolbarBackground)
         addSubview(hairline)
         addSubview(floatingEdge)
@@ -283,7 +287,12 @@ final class PaneCardView: NSView {
         elsewhereView.frame = fill
         elsewhereView.layer?.cornerRadius = pageBackground.layer?.cornerRadius ?? 0
         elsewhereView.layer?.maskedCorners = pageBackground.layer?.maskedCorners ?? []
-        EmbeddedPages.place(webArea.subviews, in: pageBounds)
+        let barHeight = min(infoBarStrip.height, webArea.frame.height)
+        infoBarStrip.isHidden = barHeight == 0
+        infoBarStrip.frame = NSRect(x: webArea.frame.minX, y: webArea.frame.maxY - barHeight, width: webArea.frame.width, height: barHeight)
+        var page = pageBounds
+        page.size.height = max(0, page.height - barHeight)  // the web area isn't flipped: the bars take its top
+        EmbeddedPages.place(webArea.subviews, in: page)
         ring.frame = b
     }
 

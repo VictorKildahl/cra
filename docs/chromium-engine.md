@@ -185,11 +185,15 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
     (`TaskTracker::CompleteShutdown`, every worker idle), so without Chrome 158's new Mac shutdown watchdog a
     quit took over 30 s; the watchdog ends it at 10 s with a dump and `RESULT_CODE_HUNG`, and stays on. Why
     the network service stays up and what the thread pool waits for are open.
-  - The engine has no Chrome window per page (CEF's Chrome-style hosting has one over each card), so the app's
-    code that reads a page's place from `hostWindow` does nothing on it: `TabRuntime.pageWindow` and
-    `pageScreenFrame` fall back to the page's view, used by Peek so far. Others to move: the page-top grabber,
-    captures, page probes, Little Windows' page layout, extension side panels and popups, ChromiumPageFocus.
-  - Chrome's "<extension> started debugging this browser" bar shows in the hidden Chrome window only: Cra needs
-    its own (debugger-infobar is CEF's layout of Chrome's bar).
-  - Still not on the engine: the Picture in Picture window's scrubber time
-    (`browser:didChangePictureInPictureTime:duration:`) and DevTools' `devToolsPageBounds`/`devToolsShowsPanel`.
+  - The engine has no Chrome window per page (CEF's Chrome-style hosting has one over each card), so app code
+    that read a page's place from `hostWindow` did nothing on it. `TabRuntime.pageWindow`, `pageScreenFrame` and
+    `pageViews` fall back to the page's view; Peek, 5-Second Previews, page focus, the find bar, Little Windows
+    (DevTools beside the page: `DevToolsPlaceholder.besidePage`) and extension side panels use them. Captures,
+    probes, the focus ring and hidden-frame release already fell back to the view or are CEF's only.
+  - Chrome's bars over a page ("<extension> started debugging this browser", #241) show in its hidden window on
+    the engine: the bridge reports Chrome's yes/no bars (`infoBars`, `browser:didChangeInfoBars:`) and the card
+    draws them (`InfoBarStrip`, `PageInfoBar` in CraCore) above the page.
+  - A page's own pop-up (window.open with features) is a Cra tab, as on CEF (cra-links.patch), not a pop-up
+    window of Chrome's.
+  - Still not on the engine: DevTools' `devToolsPageBounds` (its frontend is a window of its own, never docked
+    over the page) and `devToolsShowsPanel`.

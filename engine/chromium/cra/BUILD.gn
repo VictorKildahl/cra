@@ -42,6 +42,8 @@ source_set("core") {
     "//chrome/browser/devtools:devtools_toggle_action",
     "//chrome/browser/devtools:devtools",
     "//components/find_in_page:find_in_page",
+    "//components/infobars/content",
+    "//components/infobars/core",
     "//components/favicon/content:content",
     "//chrome/browser/picture_in_picture:picture_in_picture",
     "//chrome/browser/translate:translate",

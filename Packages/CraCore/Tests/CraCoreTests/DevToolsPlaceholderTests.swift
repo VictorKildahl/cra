@@ -78,4 +78,18 @@ struct DevToolsPlaceholderTests {
         #expect(AreaCorners.shared(by: CGRect(x: 0.25, y: -0.25, width: 600, height: 800), with: area).contains(.bottomLeft))
         #expect(AreaCorners.bottom == [.bottomLeft, .bottomRight])
     }
+
+    /// The Chromium engine's DevTools are a window of their own: they go on the right of a Little Window's page
+    /// area, as Chrome docks them, and the page keeps the rest.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/348"))
+    func besidePageDocksOnTheRight() {
+        let area = CGRect(x: 200, y: 100, width: 1000, height: 800)
+        let (page, devTools) = DevToolsPlaceholder.besidePage(in: area)
+        #expect(page == CGRect(x: 200, y: 100, width: 600, height: 800))
+        #expect(devTools == CGRect(x: 800, y: 100, width: 400, height: 800))
+        // A narrow area: DevTools keep 320 pt, and below that the page keeps 240.
+        #expect(DevToolsPlaceholder.besidePage(in: CGRect(x: 0, y: 0, width: 700, height: 500)).devTools.width == 320)
+        let narrow = DevToolsPlaceholder.besidePage(in: CGRect(x: 0, y: 0, width: 400, height: 500))
+        #expect(narrow.page.width == 240 && narrow.devTools.width == 160 && narrow.devTools.minX == 240)
+    }
 }

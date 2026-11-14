@@ -169,7 +169,7 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
             let b = CraBrowser(frame: NSRect(x: 0, y: 0, width: ExtensionSidePanelWidth.initial, height: 600),
                                extensionSidePanelURL: wanted.url, delegate: self, profilePath: profilePath)
             browser = b
-            if let host = b.hostWindow { attach(host) }
+            if let host = b.hostWindow { attach(host) } else { place(bodyRect) }
             Task { [weak self] in await self?.resolvePageTarget(of: b) }
         }
         shell.sidePanelWidth = Self.savedWidth
@@ -188,6 +188,7 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         attachedOnce.removeAll()
         guard let b = browser else { return }
         browser = nil
+        if b.hostWindow == nil { b.containerView.removeFromSuperview() }
         if let host = b.hostWindow {
             if let views = EmbeddedPages.pageViews(of: host) { for v in views { v.removeFromSuperview() } }
             host.parent?.removeChildWindow(host)
@@ -260,6 +261,18 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
 
     private func place(_ rect: NSRect?) {
         bodyRect = rect
+        // The Chromium engine: no Chrome window per page; the page's view goes straight into the panel.
+        if let b = browser, b.hostWindow == nil {
+            let view = b.containerView
+            let area = shell.sidePanel.pageArea
+            guard rect != nil else { view.removeFromSuperview(); return }
+            let attaching = view.superview !== area
+            if attaching { area.addSubview(view) }
+            view.frame = area.bounds
+            view.autoresizingMask = [.width, .height]
+            if attaching { owner?.sidePanelPageAttached() }
+            return
+        }
         guard let mainWindow, let host = browser?.hostWindow, attachedOnce.contains(ObjectIdentifier(host)) else { return }
         guard let rect else {
             // The panel does not fit (a narrow window, a page in full screen): out of sight, as
@@ -289,6 +302,7 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
 
     /// The panel page's views (embedded in the card), so the window keeps its focus there.
     var embeddedViews: [NSView] {
+        if let b = browser, b.hostWindow == nil { return b.containerView.superview == nil ? [] : [b.containerView] }
         guard let host = browser?.hostWindow else { return [] }
         return EmbeddedPages.pageViews(of: host) ?? []
     }
@@ -340,6 +354,7 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         state = nil
         pageTarget = nil
         attachedOnce.removeAll()
+        if browser.hostWindow == nil { browser.containerView.removeFromSuperview() }
         if let host = browser.hostWindow {
             if let views = EmbeddedPages.pageViews(of: host) { for v in views { v.removeFromSuperview() } }
             host.parent?.removeChildWindow(host)

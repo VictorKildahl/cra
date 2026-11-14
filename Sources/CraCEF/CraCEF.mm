@@ -2939,6 +2939,9 @@ static BOOL g_makingSpare = NO;
 - (void)stopLoading { if (_browser) _browser->StopLoad(); }
 - (void)exitFullscreen { if (_browser) _browser->GetHost()->ExitFullscreen(true); }
 
+- (NSArray<NSDictionary<NSString*, id>*>*)infoBars { return @[]; }  // Chrome draws its own bars in CEF's views
+- (void)infoBar:(NSInteger)identifier action:(NSString*)action {}
+
 - (void)setFocused:(BOOL)focused {
     if (_browser) _browser->GetHost()->SetFocus(focused);
     else if (focused) _pendingFocus = YES;

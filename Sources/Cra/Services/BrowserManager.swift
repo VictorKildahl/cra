@@ -9,6 +9,8 @@ final class TabRuntime {
     let browser: CraBrowser
     var progress: Double = 0
     var themeColor: String = ""
+    /// Chrome's bars over the page (the Chromium engine's; CEF draws its own): Cra's card draws them.
+    var infoBars: [PageInfoBar] = []
     /// What the page paints behind its content ("#RRGGBB", "" until reported).
     var backgroundColor: String = ""
     /// Cra popped this tab's video out because the user left the tab (Arc's
@@ -1110,6 +1112,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Music notes follow sound immediately; the speaker and player cards keep the audible hold.
     /// A card paused then resumed within that hold also needs the immediate start event.
+    func browser(_ browser: CraBrowser, didChangeInfoBars infoBars: [[String: Any]]) {
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        let bars = infoBars.compactMap { PageInfoBar($0) }
+        guard bars != rt.infoBars else { return }
+        rt.infoBars = bars
+        log(id, bars.isEmpty ? "info bars gone" : "info bars: \(bars.map { $0.message }.joined(separator: " | "))")
+        delegate?.browserManagerPageWindowsChanged(focus: false)
+    }
+
     func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
         guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
         let changed = rt.soundPlaying != playing
@@ -1632,6 +1643,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
               LittleWindowTrigger.opens(url, clickModifiers: clickModifiers, clickAge: clickAge,
                                         enabled: store.settings.littleWindowOnOptionCommandClick)
         else { return false }
+        log(id, String(format: "link opens a Little Window (click keys %lu, %.2f s ago)", clickModifiers, clickAge))
         return delegate?.browserManagerOpensLittleWindow(url: url, fromTab: id) ?? false
     }
 

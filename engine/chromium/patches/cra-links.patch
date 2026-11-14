@@ -17,7 +17,7 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
    // If the source is already split, navigate the other pane instead of
    // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
    // sees new_contents == this and skips the DidOpenRequestedURL notification,
-@@ -739,6 +748,13 @@
+@@ -739,6 +748,19 @@
      if (CanOpenWindowOpenSplitTab(*browser_, source, disposition)) {
        disposition = WindowOpenDisposition::kNewSplitView;
      }
@@ -28,6 +28,12 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
 +  if (cra::g_link_open && source &&
 +      cra::g_link_open(source, target_url, disposition, user_gesture)) {
 +    return nullptr;
++  }
++  // Cra: a page's own pop-up (window.open with features) is a tab of Cra's, as on CEF: it goes in the tab strip,
++  // where Cra adopts it, instead of a pop-up window of Chrome's.
++  if (cra::g_is_cra_page && source && cra::g_is_cra_page(source) &&
++      disposition == WindowOpenDisposition::kNewPopup) {
++    disposition = WindowOpenDisposition::kNewForegroundTab;
    }
  
    FullscreenController* fullscreen_controller =

@@ -378,6 +378,7 @@
 #239   Packages/CraCore/Tests/CraCoreTests/TabActivationRaiseTests.swift::anExtensionLeavesTheWindowInUseAndOtherAppsAlone  7cb88923ff3f
 #239   Packages/CraCore/Tests/CraCoreTests/TabActivationRaiseTests.swift::anExtensionNeverRaisesAWindowBehindTheOneInUse  28a7fc24ff4d
 #239   Packages/CraCore/Tests/CraCoreTests/TabActivationRaiseTests.swift::anExtensionRaisesItsWindowWhenNoOtherBrowserWindowIsInUse  a38928b7bdda
+#241   Packages/CraCore/Tests/CraCoreTests/PageInfoBarTests.swift::decodesTheDebuggerBar  2268630d7ed3
 #241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::placesTheViewBelowTheBarInTheCard  7ba2374d493e
 #241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::readsTheBarAboveThePageInEitherSuperview  548a9473598d
 #241   Tests/Scenarios/debugger-infobar.scenario  189c93dc5b96
@@ -605,6 +606,7 @@
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aHoleOutsideTheAreaGivesThePageAllOfIt  3a0f4dda2441
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aResizedAreaGrowsThePageNotDevTools  746a2e32946a
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aSmallAreaStillHoldsThePage  3148260fec5a
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::besidePageDocksOnTheRight  5195e6651f1e
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::dockedBottomLeavesThePageTheTop  a3ca0df4b098
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::dockedRightLeavesThePageTheLeft  b4527a6c2478
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::thePageRoundsOnlyTheCornersItSharesWithItsArea  de6492820d94

@@ -1316,6 +1316,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
     func browserManagerPageWindowsChanged(focus: Bool) {
         guard let window else { return }
+        syncInfoBars()
         frameReleaseAfterChange?.cancel()
         frameReleaseAfterChange = app.composition.clock.after(HiddenFrameRelease.afterPageChange) { [weak self] in
             guard let self else { return }
@@ -1515,7 +1516,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// `cra://debug?pageInsets=1`: where the focused page's input view sits against the compositor
     /// that draws the page, after its card lays out again, and the insets Chromium gave it. While
     /// the debugger bar shows, both say the bar's height at the top (#241).
+    /// Each shown tab's card draws its page's bars (the Chromium engine's: PageInfoBar) and gives the page what is
+    /// left below them.
+    private func syncInfoBars() {
+        for id in browsers.visibleTabIDs {
+            guard let card = shell.card(for: id), let rt = browsers.runtime(for: id) else { continue }
+            let before = card.infoBarStrip.height
+            card.infoBarStrip.onAction = { [weak rt] bar, action in rt?.browser.infoBar(bar, action: action) }
+            card.infoBarStrip.show(rt.infoBars)
+            // A tab coming in gets the whole web area from BrowserManager: under bars it lays out again.
+            if !rt.infoBars.isEmpty { card.needsLayout = true }
+            guard card.infoBarStrip.height != before else { continue }
+            card.needsLayout = true
+            // The line EmbeddedPages writes when Chromium's own bar moves the page down on CEF (#241).
+            CraLog.note("page view: Chromium insets top=\(Int(card.infoBarStrip.height)) left=0 bottom=0 right=0")
+        }
+    }
+
     func pageInsetsReadout() -> String {
+        // The Chromium engine: the page's view in its card, under Cra's drawing of Chrome's bars.
+        if let rt = browsers.visibleRuntime, rt.hostWindow == nil, let card = shell.card(for: rt.tabID) {
+            pageInsetsReadouts += 1
+            card.needsLayout = true
+            card.layoutSubtreeIfNeeded()
+            let c = card.webArea.bounds, p = rt.browser.containerView.frame
+            let bars = Int(card.infoBarStrip.height)
+            let inWindow = card.webArea.convert(c, to: nil)
+            let origin = "\(Int(inWindow.minX)),\(Int((window?.frame.height ?? 0) - inWindow.maxY))"
+            return "page view insets \(pageInsetsReadouts): top=\(Int(c.maxY - p.maxY)) left=\(Int(p.minX - c.minX)) bottom=\(Int(p.minY - c.minY)) right=\(Int(c.maxX - p.maxX)); Chromium's top=\(bars) left=0 bottom=0 right=0; page area at \(origin) \(Int(c.width))x\(Int(c.height))"
+        }
         guard let host = browsers.visibleRuntime?.hostWindow, let views = EmbeddedPages.pageViews(of: host),
               let compositor = views.first, let page = views.last, let area = page.superview else { return "page view insets: no page" }
         pageInsetsReadouts += 1
