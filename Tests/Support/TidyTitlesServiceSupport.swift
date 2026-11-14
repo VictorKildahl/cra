@@ -6,6 +6,18 @@ enum SidebarTidyMetrics {
 }
 
 @MainActor
-enum SpaceListView {
+final class SpaceListView {
+    struct DropUI {
+        var windowID: UUID
+        var picked: [UUID] = []
+        func group(for id: UUID, in store: SidebarStore) -> [UUID] { picked.isEmpty ? [id] : picked }
+    }
+    let store: SidebarStore
+    var ui: DropUI
+    init(store: SidebarStore, windowID: UUID, picked: [UUID] = []) {
+        self.store = store
+        ui = DropUI(windowID: windowID, picked: picked)
+    }
+
     static func tidyTitleLayout(for id: UUID, window: UUID) -> TidyTitleLayout? { nil }
 }

@@ -63,6 +63,16 @@ final class SidebarStore {
     /// A tab came into a space's pinned tabs from elsewhere (⌘D, a drag, a menu): Tidy Tab Titles
     /// may give it a shorter name (TidyTitlesService).
     @ObservationIgnored var tabPinned: (UUID) -> Void = { _ in }
+    /// The UI window performing a synchronous tree edit; nested edits restore their caller's origin.
+    @ObservationIgnored private(set) var pinningWindowID: UUID?
+
+    func withPinningWindow(_ windowID: UUID, _ change: () -> Void) {
+        let previous = pinningWindowID
+        pinningWindowID = windowID
+        defer { pinningWindowID = previous }
+        change()
+    }
+
     /// Settings replacement and Turn Off Max must invalidate any outstanding title generation.
     @ObservationIgnored var tidyTabTitlesChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var liveFolderChanged: (UUID) -> Void = { _ in }

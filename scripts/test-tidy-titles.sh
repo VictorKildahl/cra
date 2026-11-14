@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-tidy-titles.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' EXIT
+# Compile the production drop value without its unrelated AppKit preview/autoscroller.
+{ echo "import Foundation"; sed -n '/^struct SidebarListDrop:/,/^}/p' Sources/Cra/UI/Sidebar/SidebarListDrop.swift; } > "$TEST_DIR/SidebarListDrop.swift"
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   Packages/CraCore/Sources/CraCore/*.swift Packages/CraCore/Sources/CraCore/Perf/*.swift Sources/Cra/Perf/Perf.swift \
   Sources/Cra/Services/Import/*.swift \
@@ -12,6 +14,7 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   Sources/Cra/Services/CraLog.swift Sources/Cra/Services/Scheduler.swift \
   Sources/Cra/Services/TidyTitlesService.swift Sources/Cra/Services/TidyTabsService.swift \
   Sources/Cra/UI/Sidebar/List/TidyTitleLayout.swift \
+  "$TEST_DIR/SidebarListDrop.swift" Sources/Cra/UI/Sidebar/List/SpaceListView+Drop.swift \
   Tests/Support/TidyTitlesServiceSupport.swift Tests/Support/ManualScheduler.swift \
   Tests/TidyTitlesServiceTests.swift -o "$TEST_DIR/tidy-titles-tests"
 "$TEST_DIR/tidy-titles-tests" "$@"

@@ -90,7 +90,7 @@ final class TidyTitlesService {
         } ?? "English"
         // Programmatic pins fall back to the store's active window at pin time.
         let request = Request(shown: shown, homeURL: tab.savedURL,
-                              windowID: store.activeWindowID, started: store.clock.now)
+                              windowID: store.pinningWindowID ?? store.activeWindowID, started: store.clock.now)
         requests[id] = request
         let generate = self.generate
         requests[id]?.task = Task { @MainActor [weak self, weak store] in

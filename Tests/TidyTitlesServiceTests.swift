@@ -10,13 +10,20 @@ enum TidyTitlesServiceTests {
 
     @MainActor
     static func main() async throws {
-        _ = NSApplication.shared
-        NSApp.setActivationPolicy(.prohibited)
+        // The drop/store/service regression needs no application or native window.
+        let mode = CommandLine.arguments.dropFirst().first
+        let headless = mode == "origin" || mode == "headless"
+        if !headless {
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.prohibited)
+        }
         let data = FileManager.default.temporaryDirectory.appendingPathComponent("cra-tidy-titles-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: data) }
         setenv("CRA_DATA_DIR", data.path, 1)
         setenv("CRA_ARC_DIR", data.appendingPathComponent("NoArcProfile").path, 1)
-        if CommandLine.arguments.dropFirst().first == "adapter" {
+        if mode == "origin" {
+            await nativeDropOrigin()
+        } else if CommandLine.arguments.dropFirst().first == "adapter" {
             try await adapterRecovery()
         } else if CommandLine.arguments.dropFirst().first == "owner" {
             await staleCompletionCannotRemoveNewRequest()
@@ -31,6 +38,7 @@ enum TidyTitlesServiceTests {
         } else if CommandLine.arguments.dropFirst().first == "availability-fresh" {
             await freshAvailabilityBeforeReveal()
         } else {
+            await nativeDropOrigin()
             await unavailableBeforeApply()
             await availabilityRefresh()
             await freshAvailabilityBeforeReveal()
@@ -45,6 +53,88 @@ enum TidyTitlesServiceTests {
             try await adapterRecovery()
         }
         print("Tidy titles service: \(checks) checks passed")
+    }
+
+    /// Executes the same drop body as the native list, with the real store and service.
+    @MainActor
+    private static func nativeDropOrigin() async {
+        for route in ["insert", "folder", "programmatic", "menu", "no-pin", "manual", "nested", "menu-folder", "menu-favorite"] {
+            let f = Fixture()
+            let source = f.store.activeWindowID
+            let sid = f.store.spaceID(ofItem: f.id)!
+            let destination = f.store.addWindow(spaceID: sid, frame: nil).id
+            let sourceLabel = NSTextField(labelWithString: "")
+            sourceLabel.font = .systemFont(ofSize: 14)
+            sourceLabel.frame.size.width = 50
+            let destinationLabel = NSTextField(labelWithString: "")
+            destinationLabel.font = .systemFont(ofSize: 14)
+            destinationLabel.frame.size.width = 500
+            let generator = f.generator
+            let service = TidyTitlesService(titleLayout: { _, window in
+                let label = window == destination || (route == "nested" && window == source) ? destinationLabel : sourceLabel
+                return TidyTitleLayout(label: label, inset: 2)
+            }, generate: { _, _, _ in await generator.next() }, modelAvailable: { true })
+            f.store.tabPinned = { [weak service, weak store = f.store] id in
+                if let store { service?.tabPinned(id, store: store) }
+            }
+            let parent = f.store.space(sid)!.pinnedContainerID
+            var ids = [f.id]
+            if route == "folder" || route == "nested" || route == "menu-folder" {
+                let second = f.store.createTab(url: "https://example.org/second", in: sid, select: false).id
+                f.store.updateTab(second, title: "Another article - Example")
+                ids.append(second)
+            }
+            let list = SpaceListView(store: f.store, windowID: destination, picked: route == "nested" ? [] : ids)
+            if route == "nested" {
+                let outer = UUID()
+                f.store.withPinningWindow(outer) {
+                    list.applyDrop(SidebarListDrop(draggedID: f.id))
+                    expect(f.store.pinningWindowID == outer, "a drop without a pin restores an existing caller origin")
+                    list.applyDrop(SidebarListDrop(draggedID: f.id, target: .insert(parent: parent, index: 0)))
+                    expect(f.store.pinningWindowID == outer, "a nested drop restores its caller's origin")
+                    f.store.pinTab(ids[1])
+                }
+                let third = f.store.createTab(url: "https://example.org/third", in: sid, select: false).id
+                f.store.updateTab(third, title: "Third article - Example")
+                ids.append(third)
+                f.store.pinTab(third)
+            } else if route == "programmatic" || route == "no-pin" {
+                if route == "no-pin" { list.applyDrop(SidebarListDrop(draggedID: f.id)) }
+                f.store.pinTab(f.id)
+            } else if route == "menu-favorite" {
+                f.store.addToFavorites(f.id)
+                f.store.withPinningWindow(destination) { f.store.removeFromFavorites(f.id) }
+            } else if route == "menu-folder" {
+                f.store.withPinningWindow(destination) { _ = f.store.createFolder(with: ids) }
+            } else if route == "menu" {
+                f.store.withPinningWindow(destination) { f.store.pinTab(f.id) }
+            } else {
+                let target: SidebarListDrop.Target
+                if route == "folder" {
+                    target = .into(f.store.createFolder(named: "Pinned folder", in: parent).id)
+                } else {
+                    target = .insert(parent: parent, index: 0)
+                }
+                list.applyDrop(SidebarListDrop(draggedID: f.id, target: target))
+            }
+            expect(f.store.activeWindowID == source, "pin attribution must not activate a background destination")
+            expect(f.store.pinningWindowID == nil, "every synchronous drop/menu scope restores the previous origin")
+            // A later key window cannot replace the destination captured at the pin boundary.
+            f.store.activeWindowID = UUID()
+            for (offset, id) in ids.enumerated() {
+                await generator.waitFor(offset + 1)
+                if route == "manual" { f.store.rename(id, to: "Mine") }
+                await f.resolveForReveal(offset + 1, answer: .init(filtered: "Specific informative title", rewritten: "Short"))
+            }
+            f.clock.advance(by: 1)
+            let expected = (route == "programmatic" || route == "no-pin") ? "Short" : route == "manual" ? "Mine" : "Specific informative title"
+            let expectedNames = route == "nested" ? ["Specific informative title", "Short", "Specific informative title"] : ids.map { _ in expected }
+            expect(zip(ids, expectedNames).allSatisfy { f.store.item($0.0)?.title == $0.1 },
+                   "\(route): the actual drop destination must choose the persisted title; programmatic fallback and manual names remain protected")
+            expect(ids.allSatisfy { (service.effects[$0] != nil) == (route != "manual") },
+                   "\(route): effects follow applied names only")
+            service.cancelAll()
+        }
     }
 
     @MainActor
