@@ -68,6 +68,7 @@ built release app with a test profile. Note anything that fails in the release's
   count or script-only DOM Range test does not close these gates. Preserve conversation during
   quote navigation and ordinary Find restoration; clear it on a genuine document/owner change.
   At 400 pt and narrow widths, confirm a single-line Ask caption, a visible match count, and no input/control overlap.
+  After fast follow-ups overflow the card, verify the newest question appears and scrolling older turns during an answer is not pulled back.
 
 - **#407, Instant Links:** with Apple Intelligence on and Settings ▸ Max ▸ Instant Links on, type
   "top 3 pizza places in naples" in ⌘T and press Shift-Return: the bar closes, "Searching the web for you…"

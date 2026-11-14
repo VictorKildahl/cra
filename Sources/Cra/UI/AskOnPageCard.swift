@@ -369,6 +369,7 @@ private struct AskOnPageConversation: View {
     @Bindable var state: AskOnPageState
     weak var controller: AskOnPageController?
     @State private var contentHeight: CGFloat = 0
+    @State private var revealedQuestionID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -376,10 +377,10 @@ private struct AskOnPageConversation: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(state.service.messages) { message in
-                        AskOnPageMessageView(message: message, state: state, controller: controller).id(message.id)
+                        messageView(message, proxy: proxy)
                     }
                     if let message = state.service.current {
-                        AskOnPageMessageView(message: message, state: state, controller: controller).id(message.id)
+                        messageView(message, proxy: proxy)
                     }
                 }
                 .padding(.horizontal, 18).padding(.top, 17).padding(.bottom, 12)
@@ -389,13 +390,19 @@ private struct AskOnPageConversation: View {
             .scrollIndicators(.automatic)
             .frame(height: min(max(contentHeight, 1), state.conversationHeightLimit))
             .mask(fades)
-            .onChange(of: state.service.current?.id ?? state.service.messages.last?.id) {
-                if let last = state.service.current ?? state.service.messages.last {
-                    if reduceMotion { proxy.scrollTo(last.id, anchor: .top) }
-                    else { withAnimation(.default) { proxy.scrollTo(last.id, anchor: .top) } }
-                }
-            }
         }
+    }
+
+    private func messageView(_ message: AskOnPageService.Message, proxy: ScrollViewProxy) -> some View {
+        AskOnPageMessageView(message: message, state: state, controller: controller)
+            .onGeometryChange(for: Bool.self) { $0.size.height > 0 } action: { laidOut in
+                guard laidOut, revealedQuestionID != message.id,
+                      message.id == (state.service.current?.id ?? state.service.messages.last?.id) else { return }
+                revealedQuestionID = message.id
+                if reduceMotion { proxy.scrollTo(message.id, anchor: .top) }
+                else { withAnimation(.default) { proxy.scrollTo(message.id, anchor: .top) } }
+            }
+            .id(message.id)
     }
 
     /// Arc's fades where the conversation scrolls under its edges.
