@@ -91,6 +91,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
@@ -1843,7 +1844,8 @@ void RunReadyBlocks() {
   PagesByContents()[contents] = self;
   _isCreated = YES;
   if (_audioMuted || _isAgent) {
-    contents->SetAudioMuted(true);
+    // As the user's mute (the tab's speaker): Chrome's sound setting leaves it on across navigations.
+    SetTabAudioMuted(contents, true, TabMutedReason::kAudioIndicator, std::string());
   }
   if (_isAgent) {
     _agentCapture = contents->IncrementCapturerCount(gfx::Size(1280, 800), /*stay_hidden=*/false,
@@ -2253,7 +2255,9 @@ void RunReadyBlocks() {
 - (void)setAudioMuted:(BOOL)muted {
   _audioMuted = muted;
   if (_contents) {
-    _contents->SetAudioMuted(muted);
+    // As the user's mute (the tab's speaker): Chrome's sound setting would otherwise undo it on the next
+    // navigation (SoundContentSettingObserver).
+    SetTabAudioMuted(_contents, muted, TabMutedReason::kAudioIndicator, std::string());
   }
 }
 
