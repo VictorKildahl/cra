@@ -29,7 +29,7 @@ public enum MobileSearchEngine: String, Codable, CaseIterable, Identifiable {
     }
 
     private static func encoded(_ query: String) -> String {
-        query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?.replacingOccurrences(of: "&", with: "%26") ?? query
+        query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?.replacingOccurrences(of: "&", with: "%26").replacingOccurrences(of: "+", with: "%2B") ?? query
     }
 
     public func searchURL(_ query: String) -> String {
