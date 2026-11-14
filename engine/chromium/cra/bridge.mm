@@ -155,6 +155,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
 - (void)devToolsClosed:(BrowserWindowInterface*)devtools;
+- (void)devToolsShowsPanel:(NSString*)panel;
 @end
 
 namespace {
@@ -486,6 +487,52 @@ void MakeHostWindow(NSWindow* window) {
   }
   [g_host_windows addObject:window];
 }
+
+// The DevTools frontend of a page of Cra's: the panel it shows, on load and on every switch, so ⌥⌘J and Network
+// tell a switch from a close (GitHub #138), as the CEF bridge's frontend hooks report it.
+const char kDevToolsPanelScript[] =
+    "(function(){if(window.__craPanel)return;window.__craPanel=1;"
+    "function find(root,sel){var r=root.querySelector(sel);if(r)return r;var all=root.querySelectorAll('*');"
+    "for(var i=0;i<all.length;i++){if(all[i].shadowRoot){var f=find(all[i].shadowRoot,sel);if(f)return f;}}return null;}"
+    "var now=null,n=0,w=setInterval(function(){var e=find(document,'#tab-elements'),tabs=e&&e.parentNode;"
+    "if(tabs){clearInterval(w);var report=function(){var t=tabs.querySelector('.tabbed-pane-header-tab.selected');"
+    "var p=t&&t.id.indexOf('tab-')==0?t.id.slice(4):null;if(p&&p!==now){now=p;console.log('__cra_devtools_panel:'+p);}};"
+    "report();new MutationObserver(report).observe(tabs,{attributes:true,subtree:true,attributeFilter:['class']});return;}"
+    "if(++n>200)clearInterval(w);},150);})();";
+
+class DevToolsFrontendObserver : public content::WebContentsObserver {
+ public:
+  DevToolsFrontendObserver(content::WebContents* frontend, CraBrowser* page)
+      : content::WebContentsObserver(frontend), page_(page) {
+    Run();
+  }
+
+  void DidFinishLoad(content::RenderFrameHost* frame, const GURL& url) override {
+    if (frame->IsInPrimaryMainFrame()) {
+      Run();
+    }
+  }
+
+  void OnDidAddMessageToConsole(content::RenderFrameHost* frame,
+                                blink::mojom::ConsoleMessageLevel level,
+                                const std::u16string& message,
+                                int32_t line,
+                                const std::u16string& source,
+                                const std::optional<std::u16string>& stack) override {
+    constexpr std::u16string_view kPanel = u"__cra_devtools_panel:";
+    if (message.starts_with(kPanel) && message.size() > kPanel.size()) {
+      [page_ devToolsShowsPanel:base::SysUTF16ToNSString(message.substr(kPanel.size()))];
+    }
+  }
+
+ private:
+  void Run() {
+    web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16(std::string_view(kDevToolsPanelScript)),
+                                                                     base::NullCallback(), /*world_id=*/0);
+  }
+
+  CraBrowser* __weak page_;
+};
 
 // The hidden Browser that holds a profile's pages, and what arrives in it that Cra didn't put there: a
 // page's popup or link opened in a new tab, which becomes a Cra tab through the opener's delegate.
@@ -1570,6 +1617,7 @@ void RunReadyBlocks() {
   NSView* _container;
   raw_ptr<content::WebContents> _contents;
   std::unique_ptr<PageObserver> _observer;
+  std::unique_ptr<DevToolsFrontendObserver> _devToolsFrontend;
   // The page's media session is one Chrome's global media controls offer (#411).
   BOOL _mediaSessionControllable;
   // While a video of the page is in Picture in Picture: its time for the window's scrubber, twice a second.
@@ -2060,6 +2108,12 @@ void RunReadyBlocks() {
   }
 }
 
+- (void)devToolsShowsPanel:(NSString*)panel {
+  if ([_delegate respondsToSelector:@selector(browser:devToolsShowsPanel:)]) {
+    [_delegate browser:self devToolsShowsPanel:panel];
+  }
+}
+
 // Sound starting or stopping as it happens, before the 2 s Chrome's audible state holds (music notes).
 - (void)pageSoundPlaying:(BOOL)playing {
   if ([_delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)]) {
@@ -2425,6 +2479,7 @@ void RunReadyBlocks() {
     return;
   }
   _devToolsBrowser = devtools->GetWeakPtr();
+  _devToolsFrontend = std::make_unique<DevToolsFrontendObserver>(frontend, self);
   frontend->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
   if (!_devToolsHost) {
     _devToolsHost = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 400)
@@ -2448,6 +2503,7 @@ void RunReadyBlocks() {
 
 - (void)devToolsClosed:(BrowserWindowInterface*)devtools {
   _devToolsBrowser = nullptr;
+  _devToolsFrontend.reset();
   _hasDevTools = NO;
   [_devToolsHost.parentWindow removeChildWindow:_devToolsHost];
   [_devToolsHost orderOut:nil];

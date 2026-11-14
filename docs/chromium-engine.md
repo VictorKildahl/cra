@@ -195,5 +195,6 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
     draws them (`InfoBarStrip`, `PageInfoBar` in CraCore) above the page.
   - A page's own pop-up (window.open with features) is a Cra tab, as on CEF (cra-links.patch), not a pop-up
     window of Chrome's.
-  - Still not on the engine: DevTools' `devToolsPageBounds` (its frontend is a window of its own, never docked
-    over the page) and `devToolsShowsPanel`.
+  - DevTools report the panel they show (`devToolsShowsPanel`, for ⌥⌘J and Network, #138) from the same frontend
+    script as on CEF. `devToolsPageBounds` stays CEF's: the engine's frontend is a window of its own, never docked
+    over the page, and Cra puts it beside the page.
