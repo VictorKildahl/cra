@@ -870,8 +870,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // second launch): the frontmost window stands in for it.
         // Never a window no one can see: Chrome's own on the Chromium engine (a page's DevTools window before Cra
         // takes its frontend, the window holding a profile's pages) stays on screen at alpha 0.
-        guard let front = NSApp.orderedWindows.first(where: { $0.isVisible && $0.alphaValue > 0 && !($0 is NSPanel) }) else { return nil }
-        return littleWindows.first { !$0.isParked && ($0.window === front || $0.window === front.parent) }
+        // A Little Window (or Peek) is a panel of its own; other panels (Peek's dimming, tooltips) never count.
+        guard let front = NSApp.orderedWindows.first(where: { $0.isVisible && $0.alphaValue > 0 && (!($0 is NSPanel) || $0 is LittleWindow) }) else { return nil }
+        if let little = littleWindows.first(where: { !$0.isParked && ($0.window === front || $0.window === front.parent) }) { return little }
+        // A Peek is a child of the browser window, above it.
+        return littleWindows.first { !$0.isParked && $0.window?.isVisible == true && $0.window?.parent === front }
     }
 
     /// A space a link from outside may name (cra://open, an Air Traffic Control Little Window):

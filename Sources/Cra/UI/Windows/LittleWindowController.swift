@@ -462,6 +462,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let w = b.hostWindow, w.parent === window {
             w.makeKey()
             ChromiumPageFocus.focus(w)
+        } else if b.hostWindow == nil, !(b is WebKitBrowser), let window, b.containerView.window === window {
+            // The Chromium engine: the page's view is in this window, which takes the keys itself.
+            window.makeKey()
+            if let render = EmbeddedPages.renderView(in: b.containerView) { window.makeFirstResponder(render) }
         }
         b.setFocused(true)
     }
