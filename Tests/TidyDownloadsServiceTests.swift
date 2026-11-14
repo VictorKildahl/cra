@@ -35,9 +35,10 @@ private final class DownloadFixture {
     let store = SidebarStore(clock: ManualScheduler())
     let model = SuspendedDownloadsModel()
     let folder: URL
+    let tabID = UUID()
     var available = true
     var ownerPresent = true
-    var moveFile: TidyDownloadsService.MoveFile = { await TidyDownloadFiles.shared.move(from: $0, name: $1, eligible: $2) }
+    var moveFile: TidyDownloadsService.MoveFile = { await TidyDownloadFiles.shared.move(from: $0, name: $1, identity: $2, eligible: $3) }
     private(set) var moved: [UInt32: String] = [:]
     lazy var service = TidyDownloadsService(modelAvailable: { [weak self] in self?.available == true }, generate: model.answer, moveFile: moveFile)
 
@@ -66,7 +67,7 @@ private final class DownloadFixture {
     }
 
     func capture(_ title: String, id: UInt32 = 1, window: UUID? = nil) {
-        service.noteSource(id, window: window ?? store.activeWindowID,
+        service.noteSource(id, window: window ?? store.activeWindowID, tabID: tabID,
                            tab: TabData(url: "https://source.test/file", title: title), referrer: nil)
     }
 
@@ -101,9 +102,9 @@ private final class MoveGate {
 
     init(afterMove: Bool) { self.afterMove = afterMove }
 
-    func move(_ path: String, _ name: String, _ eligible: @escaping @MainActor @Sendable () -> Bool) async -> TidyDownloadFiles.Move? {
+    func move(_ path: String, _ name: String, _ identity: TidyDownloadFiles.Identity?, _ eligible: @escaping @MainActor @Sendable () -> Bool) async -> TidyDownloadFiles.Move? {
         if !afterMove { await pause() }
-        let result = await TidyDownloadFiles.shared.move(from: path, name: name, eligible: eligible)
+        let result = await TidyDownloadFiles.shared.move(from: path, name: name, identity: identity, eligible: eligible)
         if afterMove { await pause() }
         return result
     }
@@ -134,6 +135,28 @@ enum TidyDownloadsServiceTests {
         defer { try? FileManager.default.removeItem(at: root) }
         setenv("CRA_DATA_DIR", root.appendingPathComponent("profile").path, 1)
         setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+        if CommandLine.arguments.contains("--actor-reentry-regression") {
+            try await replacementDuringEligibility(root)
+            return
+        }
+        if CommandLine.arguments.contains("--replacement-regression") {
+            try await replacementDuringInference(root)
+            return
+        }
+        if CommandLine.arguments.contains("--transfer-regression") {
+            try await sourceMovesBetweenWindows(root)
+            return
+        }
+        try await replacementDuringEligibility(root)
+        try await replacementDuringInference(root)
+        try await destinationCallbackOwnership(root)
+        try await replacementBeforeSnapshot(root)
+        try await missingSnapshotCanRetry(root)
+        try await replacementAtMove(root)
+        try await replacementOfRenamedFile(root)
+        try await replacementDuringUndo(root)
+        try await replacementFailureAndRetry(root)
+        try await sourceMovesBetweenWindows(root)
         try await hiddenHistoryMustNotMoveNewerRow(root)
         try await undoHiddenHistoryPathReuse(root)
         try await failedUndoKeepsCard(root)
@@ -155,12 +178,292 @@ enum TidyDownloadsServiceTests {
         try await sourceTabCloses(root)
         try await rejectedAnswers(root)
         try await storeLifetime(root)
-        print("Tidy Downloads lifecycle/filesystem/undo: 21 cases passed")
+        print("Tidy Downloads lifecycle/filesystem/undo: 31 cases passed")
+    }
+
+    private static func replacementDuringEligibility(_ root: URL) async throws {
+        let folder = root.appendingPathComponent("eligibility-reentry")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let source = folder.appendingPathComponent("Renamed.pdf").path
+        try Data("original download".utf8).write(to: URL(fileURLWithPath: source))
+        let files = TidyDownloadFiles()
+        let identity = await files.identity(at: source)!
+        let eligibilityEntered = AsyncStream<Void>.makeStream()
+        let preparationFinished = DispatchSemaphore(value: 0)
+        let writer = Task.detached {
+            var entered = eligibilityEntered.stream.makeAsyncIterator()
+            _ = await entered.next()
+            let prepared = await files.prepareDestination(source, replacing: false, removeExisting: { _ in
+                preconditionFailure("CEF replaces after preparation, not in the preparation action")
+            })
+            precondition(prepared.ready && prepared.previous == identity)
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: source))
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: Data("replacement writer bytes".utf8))
+            try handle.close()
+            let replacementIdentity = await files.identity(at: source)
+            precondition(replacementIdentity == identity, "an in-place replacement retains the original inode")
+            preparationFinished.signal()
+        }
+        let moved = await files.move(from: source, name: "Original.pdf", identity: identity, eligible: {
+            let admitted = true // The old MainActor decision was sampled before the reservation.
+            eligibilityEntered.continuation.yield(())
+            preparationFinished.wait()
+            return admitted
+        })
+        try await writer.value
+        let bytes = try? String(contentsOfFile: source, encoding: .utf8)
+        precondition(moved == nil && bytes == "replacement writer bytes",
+                     "a destination reservation must revoke an admitted move across the actor's eligibility suspension, even when replacement retains its inode and undo task is not cancelled")
+    }
+
+    private static func replacementDuringInference(_ root: URL) async throws {
+        for completed in [false, true] {
+            let f = try DownloadFixture(root), path = try f.file()
+            f.capture("Original report")
+            let task = f.finish(path: path)
+            await f.model.waitForRequests()
+            let original = DownloadHistory.shared.entries.last!
+            // The supported WebKit Save/Replace path removes the previous destination
+            // before starting the replacement. A replacement may not have finished yet.
+            let retired = f.folder.appendingPathComponent("retired.pdf").path
+            let ready = await f.service.prepareDestination(path, replacing: true, removeExisting: {
+                try FileManager.default.moveItem(atPath: $0, toPath: retired)
+            }).value
+            precondition(ready)
+            try Data("replacement download bytes".utf8).write(to: URL(fileURLWithPath: path))
+            let replacementTask = completed ? f.finish(2, path: path) : nil
+            if completed { await f.model.waitForRequests(2) }
+            let replacement = completed ? DownloadHistory.shared.entries.last : nil
+            f.model.complete(with: "Old Report.pdf")
+            await task?.value
+            let bytes = try? String(contentsOfFile: path, encoding: .utf8)
+            precondition(bytes == "replacement download bytes", "an older inference must never rename a replacement download, including before its completion/history entry")
+            precondition(f.moved.isEmpty && f.service.card == nil)
+            precondition(DownloadHistory.shared.entries.contains(original))
+            if let replacement { precondition(DownloadHistory.shared.entries.contains(replacement)) }
+            if completed {
+                f.model.complete(1, with: "Replacement Report.pdf")
+                await replacementTask?.value
+                let destination = f.folder.appendingPathComponent("Replacement Report.pdf").path
+                let moved = try String(contentsOfFile: destination, encoding: .utf8)
+                precondition(moved == "replacement download bytes" && f.service.card?.download == 2)
+                precondition(f.service.card?.historyID == replacement?.id)
+            }
+        }
+    }
+
+    private static func destinationCallbackOwnership(_ root: URL) async throws {
+        let f = try DownloadFixture(root), path = try f.file(), old = f.finish(path: path)
+        await f.model.waitForRequests()
+        // The exact production boundary both save-panel handlers use releases the destination
+        // only after retirement/barrier. CEF performs its own approved replacement afterward.
+        let chosen: URL? = await withCheckedContinuation { continuation in
+            DownloadDestinations.prepare(URL(fileURLWithPath: path), replacing: false, service: f.service) { continuation.resume(returning: $0) }
+        }
+        precondition(chosen?.path == path)
+        let retired = f.folder.appendingPathComponent("cef-retired.pdf").path
+        try FileManager.default.moveItem(atPath: path, toPath: retired)
+        try Data("CEF replacement writer".utf8).write(to: chosen!)
+        f.model.complete(with: "Obsolete.pdf")
+        await old?.value
+        let bytes = try String(contentsOfFile: path, encoding: .utf8)
+        precondition(bytes == "CEF replacement writer" && f.service.card == nil && f.moved.isEmpty)
+        let cancelled: URL? = await withCheckedContinuation { continuation in
+            DownloadDestinations.prepare(nil, replacing: true, service: f.service) { continuation.resume(returning: $0) }
+        }
+        precondition(cancelled == nil, "cancelling a destination must not release a writer")
+    }
+
+    private static func replacementBeforeSnapshot(_ root: URL) async throws {
+        let f = try DownloadFixture(root), path = try f.file()
+        let old = f.finish(path: path)
+        let retired = f.folder.appendingPathComponent("before-snapshot.pdf").path
+        let preparation = f.service.prepareDestination(path, replacing: true, removeExisting: {
+            try FileManager.default.moveItem(atPath: $0, toPath: retired)
+        })
+        let ready = await preparation.value
+        precondition(ready)
+        try Data("new writer".utf8).write(to: URL(fileURLWithPath: path))
+        await old?.value
+        precondition(f.model.requests.isEmpty && f.service.card == nil && f.moved.isEmpty,
+                     "replacement before the first actor snapshot must retire the old request without asking about the new file")
+        let bytes = try String(contentsOfFile: path, encoding: .utf8)
+        precondition(bytes == "new writer")
+    }
+
+    private static func missingSnapshotCanRetry(_ root: URL) async throws {
+        let f = try DownloadFixture(root)
+        let path = f.folder.appendingPathComponent("missing.pdf").path
+        let missing = f.finish(7, path: path)
+        await missing?.value
+        precondition(f.model.requests.isEmpty && f.service.card == nil, "a missing original resource starts no inference")
+        _ = try f.file("missing.pdf")
+        let retry = f.finish(7, path: path)
+        precondition(retry != nil, "failed resource capture must retire its request and permit retry")
+        await f.model.waitForRequests()
+        f.model.complete(with: "Found Report.pdf")
+        await retry?.value
+        try f.renamed(7, from: path, to: "Found Report.pdf")
+    }
+
+    private static func replacementAtMove(_ root: URL) async throws {
+        for movedFirst in [false, true] {
+            let gate = MoveGate(afterMove: movedFirst)
+            let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2, $3) })
+            let path = try f.file(), old = f.finish(path: path)
+            let original = DownloadHistory.shared.entries.last!
+            await f.model.waitForRequests()
+            f.model.complete(with: "Earlier Report.pdf")
+            await gate.wait()
+            let retired = f.folder.appendingPathComponent("before-writer.pdf").path
+            let ready = await f.service.prepareDestination(path, replacing: true, removeExisting: {
+                try FileManager.default.moveItem(atPath: $0, toPath: retired)
+            }).value
+            precondition(ready)
+            try Data("new writer".utf8).write(to: URL(fileURLWithPath: path))
+            let replacement = DownloadHistory.shared.add(path: path)
+            gate.release()
+            await old?.value
+            let bytes = try String(contentsOfFile: path, encoding: .utf8)
+            precondition(bytes == "new writer" && f.service.card == nil && DownloadHistory.shared.entries.contains(replacement))
+            let expected = movedFirst ? f.folder.appendingPathComponent("Earlier Report.pdf").path : path
+            precondition(DownloadHistory.shared.entries.contains(where: { $0.id == original.id && $0.path == expected }),
+                         "a completed earlier physical move reconciles only its own history; a queued obsolete move never consumes the new writer")
+            if movedFirst {
+                let earlier = try String(contentsOfFile: expected, encoding: .utf8)
+                precondition(earlier == "original bytes: report_123.pdf")
+            } else { precondition(f.moved.isEmpty) }
+        }
+    }
+
+    private static func replacementOfRenamedFile(_ root: URL) async throws {
+        let gate = MoveGate(afterMove: true)
+        let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2, $3) })
+        let path = try f.file(), old = f.finish(path: path)
+        await f.model.waitForRequests()
+        f.model.complete(with: "Earlier Report.pdf")
+        await gate.wait()
+        let renamed = f.folder.appendingPathComponent("Earlier Report.pdf").path
+        let retired = f.folder.appendingPathComponent("retired-renamed.pdf").path
+        let ready = await f.service.prepareDestination(renamed, replacing: true, removeExisting: {
+            try FileManager.default.moveItem(atPath: $0, toPath: retired)
+        }).value
+        precondition(ready)
+        try Data("new writer at renamed destination".utf8).write(to: URL(fileURLWithPath: renamed))
+        gate.release()
+        await old?.value
+        let bytes = try String(contentsOfFile: renamed, encoding: .utf8)
+        precondition(bytes == "new writer at renamed destination" && f.service.card == nil,
+                     "reserving the actual moved resource must retire its pending card even before the old move publishes its new path")
+        // Even without a reservation callback, a resource mismatch must not authorize an undo.
+        let identity = await TidyDownloadFiles.shared.identity(at: renamed)!
+        let retiredAgain = f.folder.appendingPathComponent("retired-again.pdf").path
+        try FileManager.default.moveItem(atPath: renamed, toPath: retiredAgain)
+        try Data("different resource".utf8).write(to: URL(fileURLWithPath: renamed))
+        let move = await TidyDownloadFiles.shared.move(from: renamed, name: "Wrong.pdf", identity: identity, eligible: { true })
+        precondition(move == nil && FileManager.default.fileExists(atPath: renamed), "a stored identity never authorizes another file at the same path")
+    }
+
+    private static func replacementDuringUndo(_ root: URL) async throws {
+        for movedFirst in [false, true] {
+            let gate = MoveGate(afterMove: movedFirst)
+            let f = try DownloadFixture(root, moveFile: { path, name, identity, eligible in
+                if name == "report_123.pdf" { return await gate.move(path, name, identity, eligible) }
+                return await TidyDownloadFiles.shared.move(from: path, name: name, identity: identity, eligible: eligible)
+            })
+            let path = try f.file(), old = f.finish(path: path)
+            await f.model.waitForRequests()
+            f.model.complete(with: "Earlier Report.pdf")
+            await old?.value
+            let card = f.service.card!
+            let undo = Task { await f.service.revert(card) { _, _ in } }
+            await gate.wait()
+            let replacementPath = movedFirst ? path : card.newPath
+            let retired = f.folder.appendingPathComponent("retired-undo.pdf").path
+            let ready = await f.service.prepareDestination(replacementPath, replacing: true, removeExisting: {
+                try FileManager.default.moveItem(atPath: $0, toPath: retired)
+            }).value
+            precondition(ready)
+            try Data("new writer during undo".utf8).write(to: URL(fileURLWithPath: replacementPath))
+            let replacement = DownloadHistory.shared.add(path: replacementPath)
+            gate.release()
+            let restored = await undo.value
+            let bytes = try String(contentsOfFile: replacementPath, encoding: .utf8)
+            precondition(restored == movedFirst && bytes == "new writer during undo" && f.service.card == nil)
+            precondition(DownloadHistory.shared.entries.contains(replacement), "undo reconciliation cannot rewrite the new writer's history")
+        }
+    }
+
+    private static func replacementFailureAndRetry(_ root: URL) async throws {
+        enum Refused: Error { case replacement }
+        let f = try DownloadFixture(root), path = try f.file(), old = f.finish(path: path)
+        await f.model.waitForRequests()
+        let failed = await f.service.prepareDestination(path, replacing: true, removeExisting: { _ in throw Refused.replacement }).value
+        precondition(!failed, "failed replacement must not release a destination to the new writer")
+        f.model.complete(with: "Obsolete.pdf")
+        await old?.value
+        try f.unchanged(path)
+        let retired = f.folder.appendingPathComponent("retry-retired.pdf").path
+        let ready = await f.service.prepareDestination(path, replacing: true, removeExisting: {
+            try FileManager.default.moveItem(atPath: $0, toPath: retired)
+        }).value
+        precondition(ready)
+        try Data("retry writer".utf8).write(to: URL(fileURLWithPath: path))
+        let current = f.finish(2, path: path)
+        await f.model.waitForRequests(2)
+        f.model.complete(1, with: "Retry.pdf")
+        await current?.value
+        let bytes = try String(contentsOfFile: f.folder.appendingPathComponent("Retry.pdf").path, encoding: .utf8)
+        precondition(bytes == "retry writer" && f.service.card?.download == 2)
+    }
+
+    private static func sourceMovesBetweenWindows(_ root: URL) async throws {
+        for progressFirst in [false, true] {
+            let f = try DownloadFixture(root), path = try f.file()
+            let oldWindow = f.store.activeWindowID
+            let newWindow = f.store.addWindow(spaceID: f.store.focusedSpaceID, frame: nil).id
+            f.capture("Original initiating page", window: oldWindow)
+            f.service.noteSource(2, window: oldWindow, tabID: UUID(), tab: TabData(url: "https://other.test", title: "Other tab"), referrer: nil)
+            let transferred = f.service.transferSources(tab: f.tabID, from: oldWindow, to: newWindow)
+            precondition(transferred == [1] && f.service.transferSources(tab: f.tabID, from: oldWindow, to: newWindow).isEmpty,
+                         "adoption transfers only this tab and retires every old owner key")
+            f.service.cancel(window: oldWindow)
+            if progressFirst {
+                f.service.noteSource(1, window: newWindow, tabID: f.tabID,
+                                     tab: TabData(url: "https://later.test", title: "Later navigation must not be recaptured"), referrer: nil)
+            }
+            let task = f.finish(path: path, window: newWindow)
+            await f.model.waitForRequests()
+            precondition(f.model.requests[0].sourceTitle == "Original initiating page" && f.model.requests[0].sourceDomain == "source.test",
+                         "runtime adoption must preserve the initiating page snapshot for the new owner")
+            f.service.cancel(window: oldWindow)
+            f.model.complete(with: "Initiating Page.pdf")
+            await task?.value
+            try f.renamed(from: path, to: "Initiating Page.pdf")
+            precondition(f.service.card?.window == newWindow, "old-owner teardown cannot cancel or misroute the new owner's rename")
+            // Completion consumed the transferred source. Reusing the old owner's ID cannot
+            // revive it; cancellation in the new owner retires a newly transferred source too.
+            let otherPath = try f.file("other.pdf")
+            let next = f.finish(path: otherPath, window: oldWindow)
+            await f.model.waitForRequests(2)
+            precondition(f.model.requests[1].sourceTitle.isEmpty)
+            f.model.complete(1, with: nil)
+            await next?.value
+            f.capture("Cancelled transfer", id: 3, window: oldWindow)
+            precondition(f.service.transferSources(tab: f.tabID, from: oldWindow, to: newWindow) == [3])
+            f.service.cancel(window: newWindow)
+            let cancelled = f.finish(3, path: otherPath, window: newWindow)
+            await f.model.waitForRequests(3)
+            precondition(f.model.requests[2].sourceTitle.isEmpty)
+            f.model.complete(2, with: nil)
+            await cancelled?.value
+        }
     }
 
     private static func hiddenHistoryMustNotMoveNewerRow(_ root: URL) async throws {
         let gate = MoveGate(afterMove: true)
-        let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2) }), path = try f.file()
+        let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2, $3) }), path = try f.file()
         let task = f.finish(path: path)
         await f.model.waitForRequests()
         let original = DownloadHistory.shared.entries.last!
@@ -228,7 +531,7 @@ enum TidyDownloadsServiceTests {
     private static func cancellationAtMove(_ root: URL) async throws {
         for afterMove in [false, true] {
             let gate = MoveGate(afterMove: afterMove)
-            let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2) }), path = try f.file()
+            let f = try DownloadFixture(root, moveFile: { await gate.move($0, $1, $2, $3) }), path = try f.file()
             let task = f.finish(path: path)
             await f.model.waitForRequests()
             f.model.complete(with: "Annual Report.pdf")
@@ -286,9 +589,9 @@ enum TidyDownloadsServiceTests {
 
     private static func undoInFlight(_ root: URL) async throws {
         let gate = MoveGate(afterMove: true)
-        let f = try DownloadFixture(root, moveFile: { path, name, eligible in
-            if name == "report_123.pdf" { return await gate.move(path, name, eligible) }
-            return await TidyDownloadFiles.shared.move(from: path, name: name, eligible: eligible)
+        let f = try DownloadFixture(root, moveFile: { path, name, identity, eligible in
+            if name == "report_123.pdf" { return await gate.move(path, name, identity, eligible) }
+            return await TidyDownloadFiles.shared.move(from: path, name: name, identity: identity, eligible: eligible)
         })
         let path = try f.file()
         let task = f.finish(path: path)
@@ -318,9 +621,9 @@ enum TidyDownloadsServiceTests {
 
     private static func undoHiddenHistoryPathReuse(_ root: URL) async throws {
         let gate = MoveGate(afterMove: true)
-        let f = try DownloadFixture(root, moveFile: { path, name, eligible in
-            if name == "report_123.pdf" { return await gate.move(path, name, eligible) }
-            return await TidyDownloadFiles.shared.move(from: path, name: name, eligible: eligible)
+        let f = try DownloadFixture(root, moveFile: { path, name, identity, eligible in
+            if name == "report_123.pdf" { return await gate.move(path, name, identity, eligible) }
+            return await TidyDownloadFiles.shared.move(from: path, name: name, identity: identity, eligible: eligible)
         })
         let path = try f.file()
         let task = f.finish(path: path)

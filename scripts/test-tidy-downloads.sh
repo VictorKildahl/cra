@@ -14,7 +14,7 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} -I "$
   Sources/Cra/Services/FaviconCache.swift Sources/Cra/Services/SafeStorage.swift \
   Sources/Cra/Services/CraLog.swift Sources/Cra/Services/Scheduler.swift \
   Sources/Cra/Services/TidyDownloadsService.swift Sources/Cra/Services/TidyDownloadFiles.swift Sources/Cra/Services/TidyTabsService.swift \
-  Sources/Cra/Services/DownloadHistory.swift \
+  Sources/Cra/Services/DownloadHistory.swift Sources/Cra/Services/DownloadDestinations.swift \
   Tests/Support/TidyDownloadsHistory.swift Tests/Support/ManualScheduler.swift Tests/TidyDownloadsServiceTests.swift -o "$TEST_DIR/tidy-downloads-tests"
-"$TEST_DIR/tidy-downloads-tests"
 [ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/tidy-downloads-tests" "$CRA_TEST_KEEP/"
+"$TEST_DIR/tidy-downloads-tests" "$@"

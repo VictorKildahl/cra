@@ -76,6 +76,12 @@ enum BrowserManagerLifecycleTests {
 
     @MainActor
     static func main() async {
+        if ProcessInfo.processInfo.environment["CRA_TEST_DOWNLOAD_ADOPTION"] == "1" {
+            downloadSourceAdoptionCase()
+            print("Download source adoption: \(checks) checks passed")
+            return
+        }
+        downloadSourceAdoptionCase()
         await sparePagesCase()
         await tabFaviconsCase()
         let store = SidebarStore()
@@ -297,6 +303,50 @@ enum BrowserManagerLifecycleTests {
         window.contentView!.addSubview(runtime.browser.containerView)
         expect(PageProbe.viewState(runtime).hasSuffix(" display=none"), "the view state names the display the page's window is on")
         manager.closeAll()
+    }
+
+    /// Both runtime handoff paths notify the destination before its delegate takes reports.
+    @MainActor
+    private static func downloadSourceAdoptionCase() {
+        for explicitAdoption in [false, true] {
+            let store = SidebarStore()
+            let tab = store.createTab(url: "https://example.test/downloading").id
+            let source = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+            let destination = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+            source.windowID = UUID()
+            destination.windowID = UUID()
+            let sourceObserver = Observer(), destinationObserver = Observer()
+            source.delegate = sourceObserver
+            destination.delegate = destinationObserver
+            let runtime = source.ensureRuntime(for: tab)!
+            var arrivals: [(UUID, UUID)] = []
+            destination.pageAdopted = { id, previousWindow in
+                expect(runtime.browser.delegate === source, "the original download owner is known before the delegate is redirected")
+                arrivals.append((id, previousWindow))
+            }
+            var reportedTabs: [UUID?] = []
+            destinationObserver.onDownload = { _ in reportedTabs.append(destination.downloadSourceTab) }
+            var staleReports = 0
+            sourceObserver.onDownload = { _ in staleReports += 1 }
+            if explicitAdoption {
+                _ = source.release(tab)
+                _ = destination.adopt(runtime.browser, for: tab, from: "a downloading window's")
+            } else {
+                destination.takeRuntimeFromOtherWindow = { source.release($0) }
+                _ = destination.ensureRuntime(for: tab)
+            }
+            expect(arrivals.count == 1 && arrivals[0].0 == tab && arrivals[0].1 == source.windowID,
+                   "runtime reparenting delivers the exact tab and old window once for source migration")
+            runtime.browser.delegate?.browser(runtime.browser, didUpdateDownload: CraDownloadInfo())
+            runtime.browser.delegate?.browser(runtime.browser, didUpdateDownload: CraDownloadInfo())
+            expect(reportedTabs == [tab, tab] && staleReports == 0 && destination.downloadSourceTab == nil,
+                   "progress and terminal reports follow the adopted page's manager with its stable tab identity")
+            _ = destination.ensureRuntime(for: tab)
+            expect(arrivals.count == 1, "reusing an already-owned runtime must not transfer or recapture its source")
+            destination.closeAll()
+            runtime.browser.finishClose()
+            source.closeAll()
+        }
     }
 
     /// DRM services open in WebKit (ProtectedMediaSites); a popup keeps its opener's engine; a
@@ -1847,10 +1897,11 @@ private final class Observer: BrowserManagerDelegate {
     var activatedTabs: [UUID] = []
     var activatedByPage: [Bool] = []
     var onPageWindowsChanged: (() -> Void)?
+    var onDownload: ((CraDownloadInfo) -> Void)?
     func browserManagerDidUpdate(_ tabID: UUID) {}
     func browserManager(statusMessage: String, tabID: UUID?) {}
     func browserManager(findMatches count: Int, activeMatch: Int) {}
-    func browserManager(download: CraDownloadInfo) {}
+    func browserManager(download: CraDownloadInfo) { onDownload?(download) }
     func browserManager(fullscreen: Bool, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }
     func browserManagerDevToolsChanged() {}

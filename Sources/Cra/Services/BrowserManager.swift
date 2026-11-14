@@ -137,6 +137,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     var windowID: UUID?
     /// A tab's live page held by another window's manager, handed over (see `release`).
     var takeRuntimeFromOtherWindow: ((UUID) -> TabRuntime?)?
+    /// A live page arriving from another browser window brings its running downloads' source.
+    var pageAdopted: ((UUID, UUID) -> Void)?
     /// The window's sidebar player (Arc's "now playing"), fed with this manager's pages.
     var nowPlaying: NowPlaying?
     /// A tab's page closed (the tab closed or went to sleep), with what Chromium kept for it.
@@ -172,6 +174,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let item = store.item(tabID), let tab = item.tab, !item.isEmptyTab else { return nil }
         // The page moves between windows with its history and state, never loads twice.
         if let rt = takeRuntimeFromOtherWindow?(tabID) {
+            transferDownloadSource(rt.browser, tab: tabID)
             rt.browser.delegate = self
             add(rt)
             if inRightProfile(rt) { log(tabID, "moves its page in from another window"); return rt }
@@ -205,6 +208,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// to a tab): it keeps its history, scroll position and page state.
     @discardableResult
     func adopt(_ browser: CraBrowser, for tabID: UUID, from origin: String = "a Little Window's") -> TabRuntime {
+        transferDownloadSource(browser, tab: tabID)
         if let host = browser.hostWindow, let parent = host.parent { parent.removeChildWindow(host) }
         browser.containerView.removeFromSuperview()
         browser.delegate = self
@@ -212,6 +216,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         log(tabID, "takes over \(origin) page")
         store.updateTab(tabID, url: browser.currentURL, title: browser.currentTitle)
         return rt
+    }
+
+    private func transferDownloadSource(_ browser: CraBrowser, tab: UUID) {
+        guard let previous = browser.delegate as? BrowserManager, previous !== self,
+              let previousWindow = previous.windowID else { return }
+        pageAdopted?(tab, previousWindow)
     }
 
     /// Popup host: a browser shell its opener's engine will fill with window.open content, or
