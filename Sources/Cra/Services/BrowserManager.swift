@@ -67,6 +67,12 @@ final class TabRuntime {
     /// The window the page shows in: its Chrome window over the card (CEF's Chrome-style hosting) or the Cra window
     /// whose card holds its view (the Chromium engine, which has no window per page).
     var pageWindow: NSWindow? { hostWindow?.parent ?? hostWindow ?? browser.containerView.window }
+    /// The page's views in its card: what EmbeddedPages moved out of its Chrome window (the page's input view last),
+    /// else the page's own view (the Chromium engine puts it in the card itself).
+    var pageViews: [NSView] {
+        if let host = hostWindow { return EmbeddedPages.pageViews(of: host) ?? [] }
+        return [browser.containerView]
+    }
     /// Where the page is on screen, or nil while it isn't shown: its Chrome window's frame, else its view's.
     var pageScreenFrame: NSRect? {
         if let host = hostWindow { return host.isVisible ? host.frame : nil }

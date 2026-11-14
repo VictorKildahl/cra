@@ -981,8 +981,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             LinkSummaryPreviewController.shared.linkHoverChanged(nil)
             return
         }
-        let pointerInPage = { (host: NSWindow) -> CGPoint? in
-            let f = host.frame, m = NSEvent.mouseLocation
+        let pointerInPage = { (f: NSRect) -> CGPoint? in
+            let m = NSEvent.mouseLocation
             return f.contains(m) ? CGPoint(x: (m.x - f.minX) / f.width, y: (f.maxY - m.y) / f.height) : nil
         }
         let site = LinkSummaryPolicy.autoSite(page: page)
@@ -995,15 +995,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 ?? FaviconKey.key(for: url.absoluteString).flatMap { app.favicons.image(forKey: FaviconKey.siteKey(of: $0)) },
             inspect: { [weak rt] done in
                 // The link under the pointer, its frame, and whether it is one of Arc's (LinkSummaryPolicy.hoverScript).
-                guard let rt, let host = rt.hostWindow, host.isVisible, let pointer = pointerInPage(host) else { done(nil); return }
+                guard let rt, let frame = rt.pageScreenFrame, let pointer = pointerInPage(frame) else { done(nil); return }
                 let params = (try? JSONSerialization.data(withJSONObject: [
                     "expression": LinkSummaryPolicy.hoverScript(pointer: pointer, site: site), "returnByValue": true]))
                     .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-                rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak host] result, _ in
+                rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak rt] result, _ in
                     let value = PeekSource.value(result)
                     DispatchQueue.main.async {
-                        guard let host, let value else { done(nil); return }
-                        let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: host.frame) }
+                        guard let frame = rt?.pageScreenFrame, let value else { done(nil); return }
+                        let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: frame) }
                         done(.init(rect: rect, arcLink: value["arc"] as? Bool ?? false))
                     }
                 }
@@ -1581,7 +1581,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func releaseUnfocusedEmbeddedPage() {
         guard EmbeddedPages.isEnabled, let window, let responder = window.firstResponder as? NSView,
               NSStringFromClass(type(of: responder)) == "RenderWidgetHostViewCocoa" else { return }
-        let focused = browsers.visibleTabID.flatMap { browsers.runtime(for: $0)?.hostWindow }.flatMap(EmbeddedPages.pageViews(of:)) ?? []
+        let focused = browsers.visibleTabID.flatMap { browsers.runtime(for: $0)?.pageViews } ?? []
         // The extension side panel's page keeps the keys it has.
         let panel = sidePanel.isShowing ? sidePanel.embeddedViews : []
         if !(focused + panel).contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
@@ -1591,14 +1591,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var embedFocusTab: UUID?
 
     private func focusEmbeddedPage(_ id: UUID) {
-        guard let window, let host = browsers.runtime(for: id)?.hostWindow,
-              let view = EmbeddedPages.pageViews(of: host)?.last, view.window === window else { return }
+        guard let window, let rt = browsers.runtime(for: id), let view = rt.pageViews.last, view.window === window else { return }
         embedFocusTab = nil
         // Never from a panel that has the keys (the command bar filling a split pane, the find bar).
         if let key = NSApp.keyWindow, key !== window, !EmbeddedPages.isHost(key), key.parent === window { return }
         window.makeKey()
         if let render = EmbeddedPages.renderView(in: view) { window.makeFirstResponder(render) }
-        ChromiumPageFocus.focus(host)
+        if let host = rt.hostWindow { ChromiumPageFocus.focus(host) } else { rt.browser.setFocused(true) }
     }
 
     /// Diagnostic log shared with the bridge: `defaults write dk.kildahl.cra devToolsLog -bool YES`.
@@ -4132,7 +4131,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.layoutContentChildren()
         if let find = findPanel, let window {
             // Typing goes back to the page, unless focus already moved elsewhere.
-            if find.isKeyWindow { browsers.visibleRuntime?.hostWindow?.makeKey() }
+            if find.isKeyWindow, let rt = browsers.visibleRuntime {
+                // The page's Chrome window (CEF), else the page's view in this window (the Chromium engine).
+                if let host = rt.hostWindow { host.makeKey() } else {
+                    window.makeKey()
+                    if let render = rt.pageViews.last.flatMap(EmbeddedPages.renderView(in:)) { window.makeFirstResponder(render) }
+                }
+            }
             window.removeChildWindow(find)
             find.orderOut(nil)
         }
