@@ -181,8 +181,15 @@ Fixes that need a signal CEF doesn't give Cra. Each is part of switching over, w
     from the page's audio players.
   - Quitting: Chrome waits up to 10 s for the network service to exit at shutdown
     (`BrowserProcessIOThread::ProcessHostCleanUp`), and under Cra it stays up for all of them, on CEF too (a
-    relaunch's "Cra quits" to the next start: 11.6 s). Chrome 158's new Mac shutdown watchdog ends that wait
-    with a dump and `RESULT_CODE_HUNG`; patches/cra-shutdown-watchdog.patch keeps it off for Cra. Why the
-    network service stays up is still open.
+    relaunch's "Cra quits" to the next start: 11.6 s). On 158 the thread pool's shutdown then waits too
+    (`TaskTracker::CompleteShutdown`, every worker idle), so without Chrome 158's new Mac shutdown watchdog a
+    quit took over 30 s; the watchdog ends it at 10 s with a dump and `RESULT_CODE_HUNG`, and stays on. Why
+    the network service stays up and what the thread pool waits for are open.
+  - The engine has no Chrome window per page (CEF's Chrome-style hosting has one over each card), so the app's
+    code that reads a page's place from `hostWindow` does nothing on it: `TabRuntime.pageWindow` and
+    `pageScreenFrame` fall back to the page's view, used by Peek so far. Others to move: the page-top grabber,
+    captures, page probes, Little Windows' page layout, extension side panels and popups, ChromiumPageFocus.
+  - Chrome's "<extension> started debugging this browser" bar shows in the hidden Chrome window only: Cra needs
+    its own (debugger-infobar is CEF's layout of Chrome's bar).
   - Still not on the engine: the Picture in Picture window's scrubber time
     (`browser:didChangePictureInPictureTime:duration:`) and DevTools' `devToolsPageBounds`/`devToolsShowsPanel`.
