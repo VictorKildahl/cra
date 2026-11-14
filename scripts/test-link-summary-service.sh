@@ -9,7 +9,7 @@ C=Packages/CraCore/Sources/CraCore
 xcrun swiftc -swift-version 5 -emit-module -emit-object -parse-as-library -module-name CraCEF \
   Tests/LinkSummarySupport/CraCEF.swift -emit-module-path "$TEST_DIR/CraCEF.swiftmodule" -o "$TEST_DIR/CraCEF.o"
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} -I "$TEST_DIR" \
-  "$C/LinkSummary.swift" "$C/LinkSummaryCard.swift" "$C/ThemeTones.swift" "$C/SpaceTheme.swift" "$C/SpaceThemeVariants.swift" \
+  "$C/LinkSummary.swift" "$C/LinkSummaryCard.swift" "$C/LinkSummaryShareBitmap.swift" "$C/ThemeTones.swift" "$C/SpaceTheme.swift" "$C/SpaceThemeVariants.swift" \
   "$TEST_DIR/SiteKey.swift" "$TEST_DIR/CraCEF.o" Sources/Cra/Services/Scheduler.swift Tests/Support/ManualScheduler.swift \
   Sources/Cra/Services/LinkSummaryFetch.swift Sources/Cra/Services/LinkSummaryImageFetch.swift Sources/Cra/Services/LinkSummaryService.swift Sources/Cra/UI/LinkSummaryPreview.swift Sources/Cra/UI/LinkSummaryShareImage.swift \
   Tests/LinkSummarySupport/ModelAvailability.swift Tests/LinkSummaryFetchTests.swift Tests/LinkSummaryServiceTests.swift -o "$TEST_DIR/link-summary-service-tests"
