@@ -1,0 +1,610 @@
+import AppKit
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// Real service, store, models and clock; only generation and native layout lookup are controlled.
+@main
+enum TidyTitlesServiceTests {
+    private static var checks = 0
+
+    @MainActor
+    static func main() async throws {
+        // The drop/store/service regression needs no application or native window.
+        let mode = CommandLine.arguments.dropFirst().first
+        let headless = mode == "origin" || mode == "headless"
+        if !headless {
+            _ = NSApplication.shared
+            NSApp.setActivationPolicy(.prohibited)
+        }
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent("cra-tidy-titles-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: data) }
+        setenv("CRA_DATA_DIR", data.path, 1)
+        setenv("CRA_ARC_DIR", data.appendingPathComponent("NoArcProfile").path, 1)
+        if mode == "origin" {
+            await nativeDropOrigin()
+        } else if CommandLine.arguments.dropFirst().first == "adapter" {
+            try await adapterRecovery()
+        } else if CommandLine.arguments.dropFirst().first == "owner" {
+            await staleCompletionCannotRemoveNewRequest()
+        } else if CommandLine.arguments.dropFirst().first == "availability" {
+            await unavailableBeforeApply()
+            await availabilityRefresh()
+            await freshAvailabilityBeforeReveal()
+        } else if CommandLine.arguments.dropFirst().first == "availability-reveal" {
+            await unavailableBeforeApply(completedOnly: true)
+        } else if CommandLine.arguments.dropFirst().first == "availability-refresh" {
+            await availabilityRefresh()
+        } else if CommandLine.arguments.dropFirst().first == "availability-fresh" {
+            await freshAvailabilityBeforeReveal()
+        } else {
+            await nativeDropOrigin()
+            await unavailableBeforeApply()
+            await availabilityRefresh()
+            await freshAvailabilityBeforeReveal()
+            await cancelledBeforeGeneration()
+            await offOnRejectsLateCompletion()
+            await staleCompletionCannotRemoveNewRequest()
+            await scheduledRevealAndExpiry()
+            await cancelledExpiryCannotClearNewEffect()
+            await completionGuards()
+            await currentOriginMetrics()
+            await teardown()
+            try await adapterRecovery()
+        }
+        print("Tidy titles service: \(checks) checks passed")
+    }
+
+    /// Executes the same drop body as the native list, with the real store and service.
+    @MainActor
+    private static func nativeDropOrigin() async {
+        for route in ["insert", "folder", "programmatic", "menu", "no-pin", "manual", "nested", "menu-folder", "menu-favorite"] {
+            let f = Fixture()
+            let source = f.store.activeWindowID
+            let sid = f.store.spaceID(ofItem: f.id)!
+            let destination = f.store.addWindow(spaceID: sid, frame: nil).id
+            let sourceLabel = NSTextField(labelWithString: "")
+            sourceLabel.font = .systemFont(ofSize: 14)
+            sourceLabel.frame.size.width = 50
+            let destinationLabel = NSTextField(labelWithString: "")
+            destinationLabel.font = .systemFont(ofSize: 14)
+            destinationLabel.frame.size.width = 500
+            let generator = f.generator
+            let service = TidyTitlesService(titleLayout: { _, window in
+                let label = window == destination || (route == "nested" && window == source) ? destinationLabel : sourceLabel
+                return TidyTitleLayout(label: label, inset: 2)
+            }, generate: { _, _, _ in await generator.next() }, modelAvailable: { true })
+            f.store.tabPinned = { [weak service, weak store = f.store] id in
+                if let store { service?.tabPinned(id, store: store) }
+            }
+            let parent = f.store.space(sid)!.pinnedContainerID
+            var ids = [f.id]
+            if route == "folder" || route == "nested" || route == "menu-folder" {
+                let second = f.store.createTab(url: "https://example.org/second", in: sid, select: false).id
+                f.store.updateTab(second, title: "Another article - Example")
+                ids.append(second)
+            }
+            let list = SpaceListView(store: f.store, windowID: destination, picked: route == "nested" ? [] : ids)
+            if route == "nested" {
+                let outer = UUID()
+                f.store.withPinningWindow(outer) {
+                    list.applyDrop(SidebarListDrop(draggedID: f.id))
+                    expect(f.store.pinningWindowID == outer, "a drop without a pin restores an existing caller origin")
+                    list.applyDrop(SidebarListDrop(draggedID: f.id, target: .insert(parent: parent, index: 0)))
+                    expect(f.store.pinningWindowID == outer, "a nested drop restores its caller's origin")
+                    f.store.pinTab(ids[1])
+                }
+                let third = f.store.createTab(url: "https://example.org/third", in: sid, select: false).id
+                f.store.updateTab(third, title: "Third article - Example")
+                ids.append(third)
+                f.store.pinTab(third)
+            } else if route == "programmatic" || route == "no-pin" {
+                if route == "no-pin" { list.applyDrop(SidebarListDrop(draggedID: f.id)) }
+                f.store.pinTab(f.id)
+            } else if route == "menu-favorite" {
+                f.store.addToFavorites(f.id)
+                f.store.withPinningWindow(destination) { f.store.removeFromFavorites(f.id) }
+            } else if route == "menu-folder" {
+                f.store.withPinningWindow(destination) { _ = f.store.createFolder(with: ids) }
+            } else if route == "menu" {
+                f.store.withPinningWindow(destination) { f.store.pinTab(f.id) }
+            } else {
+                let target: SidebarListDrop.Target
+                if route == "folder" {
+                    target = .into(f.store.createFolder(named: "Pinned folder", in: parent).id)
+                } else {
+                    target = .insert(parent: parent, index: 0)
+                }
+                list.applyDrop(SidebarListDrop(draggedID: f.id, target: target))
+            }
+            expect(f.store.activeWindowID == source, "pin attribution must not activate a background destination")
+            expect(f.store.pinningWindowID == nil, "every synchronous drop/menu scope restores the previous origin")
+            // A later key window cannot replace the destination captured at the pin boundary.
+            f.store.activeWindowID = UUID()
+            for (offset, id) in ids.enumerated() {
+                await generator.waitFor(offset + 1)
+                if route == "manual" { f.store.rename(id, to: "Mine") }
+                await f.resolveForReveal(offset + 1, answer: .init(filtered: "Specific informative title", rewritten: "Short"))
+            }
+            f.clock.advance(by: 1)
+            let expected = (route == "programmatic" || route == "no-pin") ? "Short" : route == "manual" ? "Mine" : "Specific informative title"
+            let expectedNames = route == "nested" ? ["Specific informative title", "Short", "Specific informative title"] : ids.map { _ in expected }
+            expect(zip(ids, expectedNames).allSatisfy { f.store.item($0.0)?.title == $0.1 },
+                   "\(route): the actual drop destination must choose the persisted title; programmatic fallback and manual names remain protected")
+            expect(ids.allSatisfy { (service.effects[$0] != nil) == (route != "manual") },
+                   "\(route): effects follow applied names only")
+            service.cancelAll()
+        }
+    }
+
+    @MainActor
+    private static func unavailableBeforeApply(completedOnly: Bool = false) async {
+        for completed in completedOnly ? [true] : [false, true] {
+            let f = Fixture()
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(1)
+            if completed {
+                await f.resolveForReveal(1, with: "Unavailable Name")
+            }
+            f.available = false // The cached status need not have refreshed yet.
+            if !completed {
+                await f.resolveForReveal(1, with: "Unavailable Name")
+            }
+            f.clock.advance(by: 1)
+            expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
+                   completed ? "a completed answer cannot reveal after model availability is lost"
+                             : "an uncooperative provider cannot rename after model availability is lost")
+        }
+    }
+
+    @MainActor
+    private static func availabilityRefresh() async {
+        let original = ProcessInfo.processInfo.environment["CRA_TIDY_FAKE_MODEL"]
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+        _ = TidyTabsService.fakeModel // Keep adapter tests on their controlled provider.
+        let availability = TidyTabsService.shared
+        defer {
+            availability.titlesUnavailable = {}
+            if let original { setenv("CRA_TIDY_FAKE_MODEL", original, 1) } else { unsetenv("CRA_TIDY_FAKE_MODEL") }
+            availability.refresh()
+        }
+        for completed in [false, true] {
+            setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
+            // First case leaves the cached status off while fresh eligibility has returned.
+            if completed { availability.refresh() }
+            let f = Fixture()
+            let service = f.service!
+            availability.titlesUnavailable = { [weak service] in service?.cancelAll() }
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(1)
+            if completed {
+                await f.resolveForReveal(1, with: "Stale Name")
+            }
+            // The real refresh must invalidate synchronously, without an actor yield between states.
+            setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+            availability.refresh()
+            setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
+            availability.refresh()
+            if !completed {
+                f.generator.resolve(1, with: "Stale Name")
+                await turn()
+            }
+            f.clock.advance(by: 1)
+            expect(f.store.item(f.id)?.title == nil && service.effects.isEmpty,
+                   completed ? "same-turn model off/on invalidates an already completed answer's reveal"
+                             : "same-turn model off/on invalidates an uncooperative provider's token")
+
+            f.store.unpinTab(f.id)
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(2)
+            await f.resolveForReveal(2, with: "Current Name")
+            f.clock.advance(by: 1)
+            expect(f.store.item(f.id)?.title == "Current Name" && service.effects[f.id] != nil,
+                   "new available work remains independent of the invalidated token")
+            setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+            availability.refresh()
+            expect(service.effects.isEmpty && f.store.item(f.id)?.title == "Current Name",
+                   "real unavailable refresh synchronously clears active effects while preserving saved names")
+        }
+    }
+
+    @MainActor
+    private static func freshAvailabilityBeforeReveal() async {
+        let original = ProcessInfo.processInfo.environment["CRA_TIDY_FAKE_MODEL"]
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1)
+        _ = TidyTabsService.fakeModel
+        let availability = TidyTabsService.shared
+        defer {
+            if let original { setenv("CRA_TIDY_FAKE_MODEL", original, 1) } else { unsetenv("CRA_TIDY_FAKE_MODEL") }
+            availability.refresh()
+        }
+        setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
+        availability.refresh()
+        let f = Fixture()
+        let generator = f.generator
+        let service = TidyTitlesService(generate: { _, _, _ in await generator.next() })
+        f.store.tabPinned = { [weak service, weak store = f.store] id in
+            if let store { service?.tabPinned(id, store: store) }
+        }
+        f.store.pinTab(f.id)
+        await generator.waitFor(1)
+        await f.resolveForReveal(1, with: "Unavailable Name")
+        setenv("CRA_TIDY_FAKE_MODEL", "off", 1) // No refresh: cached status still says available.
+        expect(availability.modelAvailable && !availability.currentModelAvailable,
+               "fresh eligibility detects model loss before cached availability refresh")
+        f.clock.advance(by: 1)
+        expect(f.store.item(f.id)?.title == nil && service.effects.isEmpty,
+               "the production default rechecks actual model availability before revealing a completed answer")
+        service.cancelAll()
+    }
+
+    @MainActor
+    private static func cancelledBeforeGeneration() async {
+        let f = Fixture()
+        f.store.pinTab(f.id)
+        f.store.settings.tidyTabTitles = false
+        await turn()
+        f.clock.advance(by: 10)
+        expect(f.generator.count == 0 && f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
+               "a request cancelled before its task starts cannot begin generation or rename")
+    }
+
+    @MainActor
+    private static func offOnRejectsLateCompletion() async {
+        let f = Fixture()
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(1)
+        f.store.settings.tidyTabTitles = false
+        f.store.settings.tidyTabTitles = true
+        f.generator.resolve(1, with: "Stale Name")
+        await turn()
+        f.clock.advance(by: 10)
+        await turn()
+        expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
+               "disabling then re-enabling must invalidate an uncooperative model's old answer")
+    }
+
+    @MainActor
+    private static func staleCompletionCannotRemoveNewRequest() async {
+        let f = Fixture()
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(1)
+        f.store.settings.tidyTabTitles = false
+        f.store.settings.tidyTabTitles = true
+        f.store.unpinTab(f.id)
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(2)
+        f.service!.tabPinned(f.id, store: f.store)
+        f.generator.resolve(1, with: "Old Name")
+        await turn()
+        f.service!.tabPinned(f.id, store: f.store)
+        await f.resolveForReveal(2, with: "New Name")
+        f.clock.advance(by: 1)
+        await turn()
+        expect(f.store.item(f.id)?.title == "New Name" && f.service!.effects[f.id] != nil,
+               "old cancellation/cleanup cannot remove or apply over the newer request")
+        expect(f.generator.count == 2 && f.store.item(f.id)?.title == "New Name",
+               "duplicate pin notifications share the same request and produce one current name")
+        f.service!.cancelAll()
+    }
+
+    @MainActor
+    private static func scheduledRevealAndExpiry() async {
+        let f = Fixture()
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(1)
+        await f.resolveForReveal(1, with: "First Name")
+        f.clock.advance(by: 0.99)
+        expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
+               "a quick answer waits for the measured minimum reveal delay")
+        f.store.settings.tidyTabTitles = false
+        f.clock.advance(by: 1)
+        expect(f.store.item(f.id)?.title == nil && f.service!.effects.isEmpty,
+               "opt-out cancels a scheduled reveal before it can rename")
+
+        f.store.settings.tidyTabTitles = true
+        f.store.unpinTab(f.id)
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(2)
+        await f.resolveForReveal(2, with: "Second Name")
+        f.clock.advance(by: 1)
+        let firstEffect = f.service!.effects[f.id]
+        expect(f.store.item(f.id)?.title == "Second Name" && firstEffect?.start == f.clock.now,
+               "the new request applies on the injected clock and starts its own effect")
+        f.clock.advance(by: TidyTitlesService.subtitleShown - 0.01)
+        expect(f.service!.effects[f.id] == firstEffect, "the subtitle remains until its expiry boundary")
+        f.clock.advance(by: 0.01)
+        expect(f.service!.effects[f.id] == nil && f.store.item(f.id)?.title == "Second Name",
+               "expiry clears the effect but preserves the persisted custom name")
+
+        f.store.rename(f.id, to: nil)
+        f.store.unpinTab(f.id)
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(3)
+        await f.resolveForReveal(3, with: "Third Name")
+        f.clock.advance(by: 1)
+        f.store.settings.tidyTabTitles = false
+        expect(f.service!.effects.isEmpty && f.store.item(f.id)?.title == "Third Name",
+               "disabling clears active hints without undoing an already applied name")
+    }
+
+    @MainActor
+    private static func cancelledExpiryCannotClearNewEffect() async {
+        let f = Fixture()
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(1)
+        await f.resolveForReveal(1, with: "First Name")
+        f.clock.advance(by: 1)
+        f.store.settings.tidyTabTitles = false
+        f.store.settings.tidyTabTitles = true
+        f.store.rename(f.id, to: nil)
+        f.store.unpinTab(f.id)
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(2)
+        await f.resolveForReveal(2, with: "Second Name")
+        f.clock.advance(by: 1)
+        let effect = f.service!.effects[f.id]
+        f.clock.advance(by: TidyTitlesService.subtitleShown - 1)
+        expect(f.store.item(f.id)?.title == "Second Name" && effect != nil && f.service!.effects[f.id] == effect,
+               "the cancelled older expiry cannot clear a newer request's effect")
+        f.clock.advance(by: 1)
+        expect(f.service!.effects[f.id] == nil, "the newer effect expires on its own clock boundary")
+    }
+
+    @MainActor
+    private static func completionGuards() async {
+        for mutation in ["manual", "unpin", "delete", "title", "home", "navigate", "other-setting", "failure"] {
+            let f = Fixture()
+            f.store.pinTab(f.id)
+            await f.generator.waitFor(1)
+            switch mutation {
+            case "manual": f.store.rename(f.id, to: "Mine")
+            case "unpin": f.store.unpinTab(f.id)
+            case "delete": f.store.archiveTab(f.id, reason: .manual)
+            case "title": f.store.updateTab(f.id, title: "Another page")
+            case "home":
+                f.store.updateTab(f.id, url: "https://example.org/new-home")
+                f.store.setPinnedHomeToCurrent(f.id)
+            case "navigate": f.store.updateTab(f.id, url: "https://example.org/away")
+            case "other-setting": f.store.settings.tidyDownloads.toggle()
+            default: break
+            }
+            if mutation == "failure" {
+                f.generator.resolve(1, with: nil)
+                await turn()
+            } else {
+                await f.resolveForReveal(1, with: "Generated Name")
+            }
+            f.clock.advance(by: 1)
+            await turn()
+            let applies = mutation == "navigate" || mutation == "other-setting"
+            let expected = applies ? "Generated Name" : mutation == "manual" ? "Mine" : nil
+            expect(f.store.item(f.id)?.title == expected,
+                   "completion respects \(mutation) while ordinary same-home navigation remains valid")
+            expect((f.service!.effects[f.id] != nil) == applies,
+                   "suppressed \(mutation) completion cannot create an effect")
+            f.service!.cancelAll()
+        }
+    }
+
+    @MainActor
+    private static func currentOriginMetrics() async {
+        let f = Fixture()
+        f.label.frame.size.width = 30
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(1)
+        f.store.activeWindowID = UUID()
+        f.label.frame.size.width = 500
+        await f.resolveForReveal(1, answer: .init(filtered: "Specific informative title", rewritten: "Short"))
+        f.clock.advance(by: 1)
+        await turn()
+        expect(f.store.item(f.id)?.title == "Specific informative title",
+               "completion uses the resized originating row, not an early width or the later active window")
+        f.service!.cancelAll()
+    }
+
+    @MainActor
+    private static func teardown() async {
+        let f = Fixture()
+        f.store.pinTab(f.id)
+        await f.generator.waitFor(1)
+        weak var service = f.service
+        f.service = nil
+        await turn()
+        expect(service == nil, "in-flight generation must not keep the service alive")
+        f.generator.resolve(1, with: "Too Late")
+        await turn()
+        f.clock.advance(by: 10)
+        expect(f.store.item(f.id)?.title == nil, "a destroyed service cannot apply a late answer")
+
+        let scheduled = Fixture()
+        scheduled.store.pinTab(scheduled.id)
+        await scheduled.generator.waitFor(1)
+        await scheduled.resolveForReveal(1, with: "Pending Reveal")
+        scheduled.service = nil
+        await turn()
+        scheduled.clock.advance(by: 10)
+        expect(scheduled.store.item(scheduled.id)?.title == nil,
+               "destroying the service cancels its scheduled reveal")
+    }
+
+    @MainActor
+    private static func adapterRecovery() async throws {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            var requests: [(String, String, Int)] = []
+            let recovered = await TidyTitlesService.ask(title: String(repeating: "🌎", count: 201),
+                url: "https://example.org/article", language: "Japanese", respond: { instructions, prompt, limit in
+                    requests.append((instructions, prompt, limit))
+                    if requests.count == 1 {
+                        throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "forced overflow"))
+                    }
+                    return .init(filtered: "回復した名前", rewritten: "回復した名前")
+                })
+            expect(recovered?.filtered == "回復した名前" && requests.count == 2,
+                   "exact context overflow retries one smaller request and returns its actual answer")
+            for (index, request) in requests.enumerated() {
+                let source = try JSONDecoder().decode([String: String].self, from: Data(request.1.dropFirst("Source data:\n".count).utf8))
+                expect(source["title"]?.count == (index == 0 ? 200 : 100)
+                       && source["responseLanguage"] == "Japanese" && source["site"] == "example.org"
+                       && request.0.hasSuffix("Write both response values in Japanese.")
+                       && request.2 == 384 && (request.0 + request.1).utf8.count <= 4_096,
+                       "the final attempt \(index) preserves trusted language/site and bounds input plus output reserve")
+            }
+
+            let oversized = "x" + String(repeating: "\u{301}", count: 10_000)
+            let bounded = await TidyTitlesService.ask(title: oversized, url: "https://" + String(repeating: "a", count: 254) + ".com",
+                language: oversized, respond: { instructions, prompt, _ in
+                    expect((instructions + prompt).utf8.count <= 4_096,
+                           "the production adapter's complete request bounds composed graphemes in every field")
+                    return .init(filtered: "Bounded", rewritten: "Bounded")
+                })
+            expect(bounded?.filtered == "Bounded", "bounded input reaches the production response boundary")
+
+            for kind in ["overflow", "generic", "lookalike", "cancelled"] {
+                var calls = 0
+                let answer = await TidyTitlesService.ask(title: "Source", url: "https://example.org", language: "English", respond: { _, _, _ in
+                    calls += 1
+                    switch kind {
+                    case "overflow": throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "forced overflow"))
+                    case "cancelled": throw CancellationError()
+                    case "lookalike": throw NSError(domain: "exceededContextWindowSize", code: 1)
+                    default: throw CocoaError(.featureUnsupported)
+                    }
+                })
+                expect(answer == nil && calls == (kind == "overflow" ? 2 : 1),
+                       "\(kind) failure stops after the exact permitted number of attempts")
+            }
+
+            let generator = Generator()
+            var calls = 0
+            let pending = Task { @MainActor in
+                await TidyTitlesService.ask(title: "Source", url: "https://example.org", language: "English", respond: { _, _, _ in
+                    calls += 1
+                    _ = await generator.next()
+                    throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "late overflow"))
+                })
+            }
+            await generator.waitFor(1)
+            pending.cancel()
+            generator.resolve(1, with: nil)
+            let cancelled = await pending.value
+            expect(cancelled == nil && calls == 1, "cancellation during overflow delivery cannot start a retry")
+        }
+        #endif
+    }
+
+    @MainActor
+    private final class Fixture {
+        let clock = RevealClock()
+        let store: SidebarStore
+        let generator = Generator()
+        let label = NSTextField(labelWithString: "")
+        var service: TidyTitlesService?
+        var available = true
+        let id: UUID
+
+        /// Resuming the fake model alone does not run the service's async continuation.
+        /// Wait until that continuation has installed real reveal work on the injected clock.
+        func resolveForReveal(_ index: Int, with title: String) async {
+            await resolveForReveal(index, answer: .init(filtered: title, rewritten: title))
+        }
+
+        func resolveForReveal(_ index: Int, answer: TidyTitles.Answer) async {
+            let scheduled = clock.scheduledCount
+            generator.resolve(index, answer: answer)
+            await clock.waitForSchedule(after: scheduled)
+        }
+
+        init() {
+            store = SidebarStore(clock: clock)
+            store.settings.tidyTabTitles = true
+            let space = store.createSpace(title: "Title test", emoji: "📌")
+            id = store.createTab(url: "https://example.org/article", in: space.id, select: false).id
+            store.updateTab(id, title: "Original article - Example")
+            let origin = store.activeWindowID
+            let label = self.label, id = self.id, generator = self.generator
+            label.font = .systemFont(ofSize: 14)
+            label.frame.size.width = 500
+            service = TidyTitlesService(titleLayout: { item, window in
+                item == id && window == origin ? TidyTitleLayout(label: label, inset: 2) : nil
+            }, generate: { _, _, _ in await generator.next() }, modelAvailable: { [weak self] in self?.available == true })
+            store.tabPinned = { [weak service, weak store] id in
+                if let store { service?.tabPinned(id, store: store) }
+            }
+            store.tidyTabTitlesChanged = { [weak service] enabled in if !enabled { service?.cancelAll() } }
+        }
+    }
+
+    /// Observes the existing Scheduler boundary and delegates time/work to the real manual clock.
+    /// Only title reveal/expiry work is scheduled here; store persistence uses its own queue.
+    @MainActor
+    private final class RevealClock: Scheduler {
+        private let clock = ManualScheduler(now: Date(timeIntervalSince1970: 1_700_000_000))
+        private(set) var scheduledCount = 0
+        private var scheduled: CheckedContinuation<Void, Never>?
+        var now: Date { clock.now }
+
+        func after(_ delay: TimeInterval, _ work: @escaping @MainActor () -> Void) -> ScheduledWork {
+            let handle = clock.after(delay, work)
+            scheduledCount += 1
+            let waiter = scheduled
+            scheduled = nil
+            waiter?.resume()
+            return handle
+        }
+
+        func every(_ interval: TimeInterval, _ work: @escaping @MainActor () -> Void) -> ScheduledWork {
+            clock.every(interval, work)
+        }
+
+        func advance(by seconds: TimeInterval) { clock.advance(by: seconds) }
+
+        func waitForSchedule(after count: Int) async {
+            if scheduledCount > count { return }
+            precondition(scheduled == nil, "only one model completion is awaited per fixture")
+            await withCheckedContinuation { scheduled = $0 }
+        }
+    }
+
+    /// Deliberately ignores cancellation, as a model already returning an answer can do.
+    @MainActor
+    private final class Generator {
+        private(set) var count = 0
+        private var replies: [Int: CheckedContinuation<TidyTitles.Answer?, Never>] = [:]
+        private var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+
+        func next() async -> TidyTitles.Answer? {
+            count += 1
+            let index = count
+            return await withCheckedContinuation { reply in
+                replies[index] = reply
+                waiters.removeValue(forKey: index)?.resume()
+            }
+        }
+
+        func waitFor(_ index: Int) async {
+            if replies[index] != nil { return }
+            await withCheckedContinuation { waiters[index] = $0 }
+        }
+
+        func resolve(_ index: Int, with title: String?) {
+            resolve(index, answer: title.map { .init(filtered: $0, rewritten: $0) })
+        }
+
+        func resolve(_ index: Int, answer: TidyTitles.Answer?) {
+            guard let reply = replies.removeValue(forKey: index) else { fatalError("missing model request \(index)") }
+            reply.resume(returning: answer)
+        }
+    }
+
+    @MainActor
+    private static func turn() async {
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+    }
+
+    private static func expect(_ condition: Bool, _ message: String) {
+        checks += 1
+        guard condition else { print("FAIL: \(message)"); exit(1) }
+    }
+}

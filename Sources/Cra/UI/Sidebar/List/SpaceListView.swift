@@ -101,6 +101,18 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui { l.refreshHover() }
     }
 
+    /// Measure only in the window that initiated the pin, using its layout at completion time.
+    static func tidyTitleLayout(for id: UUID, window windowID: UUID) -> TidyTitleLayout? {
+        for list in all.allObjects where TidyTitles.usesSidebarLayout(windowID: list.ui.windowID,
+            originWindowID: windowID, hasWindow: list.window != nil, showsNewTab: list.showsNewTab) {
+            list.layoutSubtreeIfNeeded()
+            if let row = list.views[.item(id)] as? TabRowView, row.model?.id == id {
+                return row.tidyTitleLayout
+            }
+        }
+        return nil
+    }
+
     /// Arc's Spaces page lists a space's tabs without the New Tab row.
     var showsNewTab = true { didSet { if showsNewTab != oldValue { scheduleSync() } } }
 
@@ -1125,26 +1137,6 @@ final class SpaceListView: NSView, NSDraggingSource {
         return store.createTab(url: link.url, title: link.title, in: spaceID, select: false, parent: place.parent, index: place.index, window: ui.windowID)
     }
 
-    private func applyDrop(_ drop: SidebarListDrop) {
-        let id = drop.draggedID
-        // A picked tab carries the other picks along (a split still takes one pane).
-        let group = ui.group(for: id, in: store)
-        switch drop.target {
-        case .insert(let parent, let index)?:
-            store.moveItems(group, to: parent, index: index)
-        case .split(let tab, let leading)?:
-            // Arc opens the tab a drag picks up, so the new split ends up open on its pane (#180).
-            if store.combineIntoSplit(id, onto: tab, leading: leading) != nil { store.selectTab(id, window: ui.windowID) }
-        case .into(let target)?:
-            if store.item(target)?.isFolder == true {
-                store.dropIntoFolder(group, folder: target)
-            } else {
-                store.moveItem(id, to: target, index: nil)
-            }
-        case nil:
-            break
-        }
-    }
 
     private func isInside(_ id: UUID, _ ancestor: UUID) -> Bool {
         var cur = store.item(id)?.parentID

@@ -573,10 +573,11 @@ final class LinkSummaryCardView: NSView {
     }
 
     @objc private func copyAsImage() {
-        guard let shown else { return }
+        guard let shown,
+              let image = LinkSummaryShareImage.render(shown.result, image: shown.image, favicon: favicon) else { return }
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.writeObjects([LinkSummaryShareImage.render(shown.result, image: shown.image, favicon: favicon)])
+        pb.writeObjects([image])
     }
 }
 

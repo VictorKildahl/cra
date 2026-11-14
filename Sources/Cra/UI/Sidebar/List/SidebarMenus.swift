@@ -80,10 +80,14 @@ enum SidebarMenus {
         if m.pinned {
             add(menu, action: "pinTab", "Unpin Tab") { store.unpinTab(id) }
         } else {
-            add(menu, action: "pinTab", "Pin Tab") { store.pinTab(id) }
+            add(menu, action: "pinTab", "Pin Tab") {
+                store.withPinningWindow(ui.windowID) { store.pinTab(id) }
+            }
         }
         if store.isFavorite(id) {
-            add(menu, action: "favoriteTab", "Remove from Favorites") { store.removeFromFavorites(id) }
+            add(menu, action: "favoriteTab", "Remove from Favorites") {
+                store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) }
+            }
         } else {
             add(menu, action: "favoriteTab", "Add to Favorites") { store.addToFavorites(id) }
         }
@@ -214,7 +218,11 @@ enum SidebarMenus {
                     sub.addItem(.separator())
                     add(sub, "New Space…") { actions.newSpaceWith(ids) }
                 case "newFolder":
-                    add(menu, title) { ui.renamingID = store.createFolder(with: ids).id }
+                    add(menu, title) {
+                        store.withPinningWindow(ui.windowID) {
+                            ui.renamingID = store.createFolder(with: ids).id
+                        }
+                    }
                 case "archive":
                     // Arc archives every pick, pinned ones too, without asking; a Today tab goes as ⌘W does.
                     add(menu, title) {
@@ -249,12 +257,14 @@ enum SidebarMenus {
             let sub = submenu(menu, ids.count > 1 ? "Move \(ids.count) Tabs to Folder" : "Move to Folder")
             for f in folders {
                 add(sub, f.title ?? "Folder", enabled: !ids.allSatisfy { store.item($0)?.parentID == f.id }) {
-                    store.moveItems(ids, to: f.id, index: nil)
+                    store.withPinningWindow(ui.windowID) { store.moveItems(ids, to: f.id, index: nil) }
                 }
             }
         }
         add(menu, ids.count > 1 ? "New Folder with \(ids.count) Tabs" : "New Folder with Tab") {
-            ui.renamingID = store.createFolder(with: ids).id
+            store.withPinningWindow(ui.windowID) {
+                ui.renamingID = store.createFolder(with: ids).id
+            }
         }
     }
 

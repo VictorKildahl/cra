@@ -3934,6 +3934,50 @@ Titles (`renamePinnedTabsEnabled`, AI endpoint `renamePinnedTabs`) gives a tab a
 - [?] Not seen: whether a drag into Pinned renames (Cra does, every pin counts), a rename whose new name isn't a
   prefix of the old (Cra crossfades in the soft edge), undo.
 
+### Recovered title contract (12 Nov 2026, Arc arm64 disassembly and bundled strings)
+
+- [O static] The prompt builder at `0x1000c00ac` uses editor/summarizer/translator instructions:
+  remove site/SEO/page-kind cruft, retain proper nouns and useful context, and prefer the subject,
+  main verb and object. It requests `filtered` without a word limit and `rewritten` in 1–3 words.
+  The response language is the preferred language localized through `en_US`, with English fallback.
+- [O static, predicate cross-check 14 Nov 2026] Arc 1.109 constructs candidates at `0x1000cb684`;
+  1.171 at `0x1000bf6a4`: filtered alone when its raw character count is smaller, otherwise
+  filtered then rewritten. Filtering comes afterward. The keypath getters `0x1000cc66c` (1.109)
+  and `0x1000c06c0` (1.171) test raw encoded length nonzero, with no trimming or deduplication.
+  Selectors `0x1000cbe80` / `0x1000bff80` take the largest measured candidate that fits, or the
+  smallest if none fits; strict comparisons keep the earlier candidate on ties. The measurement
+  helpers are `0x100691650` / `0x1007726e8`; their font/attributes remain unproven, so interpreting
+  the result as native rendered text width remains an inference.
+- Cra reduces the raw pair before its existing display cleaning, retaining case variants for
+  measurement and never recovering a discarded rewritten field. Unlike Arc's raw nonempty test,
+  Cra still normalizes whitespace/quote wrappers, rejects controls and names over 512 characters,
+  and excludes nonpositive/nonfinite widths. These are local safety rules, not exact raw-validation
+  parity. The raw-order regression was observed failing on all three assertions before correction.
+- Cra now requests those two fields locally and measures candidates with the current originating
+  sidebar row's 14 pt native font and drawable width. Library Spaces cards and other windows cannot
+  supply that width. A missing originating row uses the measured smallest candidate. Requests are
+  rejected after opt-out, manual naming, unpin/deletion, changed shown title or changed pinned home;
+  ordinary navigation with the same home is preserved. Opt-out cancels pending work and hints.
+- Cra bounds source data, reserves 384 output tokens, counts instructions/prompt/schema on macOS
+  26.4+, and retries a typed context overflow once with a fresh session and smaller title bounds.
+  Earlier macOS 26 versions use bounded input without an exact token preflight. These are local
+  adapter safeguards, not recovered Arc internals. Reveal/sweep/subtitle constants above are unchanged.
+- Four real local-model samples on 12 Nov returned English Arc/Anna names, Spanish `Clima`, and
+  Japanese-script alternatives. The Japanese filtered result retained the page-kind word “guide”;
+  the prompt does not guarantee cleanup quality. `tidy-titles` uses the deterministic fake only for
+  native pin/editor, window/Library and persistence integration, not model semantics or latency.
+- Cra validation, 13 Nov 2026: eligibility now reads actual model availability at pin/application;
+  an unavailable refresh invalidates pending responses, held reveals and active effects even when
+  UI availability was already cached as unavailable. Interrupted editing removes the old-title
+  overlay, masks, sparkles and hint while retaining the saved custom name.
+- Cra-only native captures on 13 Nov used 1200 × 800 pixels at 1x and 2400 × 1600 at 2x: generated
+  title/hint, settled light/dark rows and interrupted native editors were checked. Both relaunches
+  restored the same item with custom title `Synthetic Alpha` and source title
+  `Synthetic Alpha - Test Host`. Evidence: `cra-validation/runtime/titles-latest-b7-{native1x,
+  foreground2x,interruption1x,interruption2x}/`. These fake-model captures verify local presentation
+  and persistence; they are not fresh paired Arc captures or new animation-frame measurements.
+  The earlier measured timings above are unchanged; real semantic-quality limitations remain.
+
 ## Tidy Downloads (Arc 1.171, 4 Nov 2026, strings + Victor's Arc, 60 fps recordings)
 
 Arc Max's renameDownloads: a finished download is renamed on disk and a card above the download bin says so.
