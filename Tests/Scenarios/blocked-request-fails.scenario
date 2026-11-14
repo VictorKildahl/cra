@@ -1,0 +1,30 @@
+# A request the ad and tracker blocker stops fails the way an unreachable server does: an
+# XMLHttpRequest gets `error`, fetch rejects, a script element gets `error`. It used to be
+# cancelled, which an XMLHttpRequest reports as `abort`. Adobe Target 2.9 to 2.10 hides the page
+# (`body {opacity: 0 !important}`) until its request ends in load, error or timeout, so
+# ziplyfiber.com, fidelity.com and allstate.com stayed white with the blocker on.
+# The blocked server still receives nothing. omtrdc.net is on the bundled list; it and
+# allowed.example (not listed) are the fixture server here, so the run needs no network.
+# No & in a script: it ends the cra:// query.
+budget rss=800 stalls50=30
+arg --host-resolver-rules=MAP omtrdc.net 127.0.0.1, MAP *.omtrdc.net 127.0.0.1, MAP allowed.example 127.0.0.1
+pace 0.5
+
+cra://open?url=${PAGE}?n=blocker
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# The names reach the fixture server: a third party that isn't listed is asked.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://allowed.example:'+location.port+'/page.html?probe=allowed',{mode:'no-cors'}).then(()=>'allowed fetch:sent',e=>'allowed fetch:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"allowed fetch:sent"
+expect-log GET /page\.html\?probe=allowed
+
+# A listed third party: each kind of request ends as a failed one.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const x=new XMLHttpRequest();x.open('GET','http://nwfbr.tt.omtrdc.net:'+location.port+'/page.html?probe=blocked-xhr');x.timeout=5000;x.onload=()=>r('blocked xhr:load');x.onerror=()=>r('blocked xhr:error');x.onabort=()=>r('blocked xhr:abort');x.ontimeout=()=>r('blocked xhr:timeout');x.send()})","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"blocked xhr:error"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://nwfbr.tt.omtrdc.net:'+location.port+'/page.html?probe=blocked-fetch',{mode:'no-cors'}).then(()=>'blocked fetch:sent',e=>'blocked fetch:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"blocked fetch:TypeError"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const s=document.createElement('script');s.src='http://nwfbr.tt.omtrdc.net:'+location.port+'/page.html?probe=blocked-script';s.onload=()=>r('blocked script:load');s.onerror=()=>r('blocked script:error');document.head.append(s)})","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"blocked script:error"
+
+# Nothing went to the listed server.
+reject-log probe=blocked

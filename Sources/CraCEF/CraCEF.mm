@@ -1297,18 +1297,47 @@ static const char kLoadingBackgroundProbe[] =
 // so without this every such link failed with ERR_UNKNOWN_URL_SCHEME. Allowing it hands
 // the link to Chrome's ExternalProtocolHandler, which blocks dangerous schemes and asks
 // "Open <app>?" with "Always allow" like Chrome and Arc.
+// What a blocked request gets instead of the network: no bytes and Chromium's
+// ERR_BLOCKED_BY_CLIENT, the error Chrome's own blockers give. The page sees a request that
+// failed (XMLHttpRequest's `error`, a rejected fetch), as from an unreachable server.
+class CraBlockedRequestHandler : public CefResourceHandler {
+public:
+    bool Open(CefRefPtr<CefRequest> request, bool& handle_request, CefRefPtr<CefCallback> callback) override {
+        handle_request = true;
+        return true;
+    }
+    void GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t& response_length, CefString& redirectUrl) override {
+        response->SetError(ERR_BLOCKED_BY_CLIENT);
+        response_length = 0;
+    }
+    bool Read(void* data_out, int bytes_to_read, int& bytes_read, CefRefPtr<CefResourceReadCallback> callback) override {
+        bytes_read = 0;
+        return false;
+    }
+    void Cancel() override {}
+
+private:
+    IMPLEMENT_REFCOUNTING(CraBlockedRequestHandler);
+};
+
 class CraContentBlockingHandler : public CefResourceRequestHandler {
 public:
     explicit CraContentBlockingHandler(bool external = true) : external_(external) {}
+    // A blocked frame is cancelled and stays empty: failing it would draw Chromium's
+    // "blocked" error page where the ad was.
     ReturnValue OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                                      CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) override {
-        if (!cra_blocker::Enabled().load(std::memory_order_relaxed)) return RV_CONTINUE;
-        if (!browser || request->GetResourceType() == RT_MAIN_FRAME) return RV_CONTINUE;
-        CefRefPtr<CefFrame> top = browser->GetMainFrame();  // the tab's top-level page
-        if (!top) return RV_CONTINUE;
-        std::string pageHost = cra_blocker::WebHost(top->GetURL().ToString());
-        std::string requestHost = cra_blocker::WebHost(request->GetURL().ToString());
-        return cra_blocker::ShouldBlock(requestHost, pageHost) ? RV_CANCEL : RV_CONTINUE;
+        return request->GetResourceType() == RT_SUB_FRAME && Blocks(browser, request) ? RV_CANCEL : RV_CONTINUE;
+    }
+
+    // Everything else a page asks a blocked host for fails instead. A cancelled request is
+    // one the page called off: an XMLHttpRequest reports `abort`, which scripts that wait for
+    // load, error or timeout never hear. Adobe Target 2.9 to 2.10 kept the page hidden
+    // (`body {opacity: 0}`) on ziplyfiber.com, fidelity.com and allstate.com for that reason.
+    CefRefPtr<CefResourceHandler> GetResourceHandler(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                                                     CefRefPtr<CefRequest> request) override {
+        if (request->GetResourceType() == RT_SUB_FRAME || !Blocks(browser, request)) return nullptr;
+        return new CraBlockedRequestHandler();
     }
 
     void OnProtocolExecution(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request,
@@ -1319,6 +1348,17 @@ public:
     }
 
 private:
+    // Whether the blocker stops this request of the tab's top-level page (IO thread).
+    static bool Blocks(CefRefPtr<CefBrowser> browser, CefRefPtr<CefRequest> request) {
+        if (!cra_blocker::Enabled().load(std::memory_order_relaxed)) return false;
+        if (!browser || request->GetResourceType() == RT_MAIN_FRAME) return false;
+        CefRefPtr<CefFrame> top = browser->GetMainFrame();
+        if (!top) return false;
+        std::string pageHost = cra_blocker::WebHost(top->GetURL().ToString());
+        std::string requestHost = cra_blocker::WebHost(request->GetURL().ToString());
+        return cra_blocker::ShouldBlock(requestHost, pageHost);
+    }
+
     const bool external_;
     IMPLEMENT_REFCOUNTING(CraContentBlockingHandler);
 };
