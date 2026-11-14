@@ -35,7 +35,7 @@ enum LinkSummaryShareImageTests {
         let banner = NSImage(size: NSSize(width: 1200, height: 630), flipped: false) { r in
             NSColor(srgbRed: 0.1, green: 0.2, blue: 0.6, alpha: 1).setFill(); r.fill(); return true
         }
-        let image = LinkSummaryShareImage.render(result, image: banner, favicon: nil)
+        let image = LinkSummaryShareImage.render(result, image: banner, favicon: nil)!
         guard let rep = image.representations.first as? NSBitmapImageRep else { expect(false, "the copy is a bitmap"); return }
         expect(rep.pixelsWide == 912, "the copy is 304 pt wide at 3x, as Arc's (got \(rep.pixelsWide) px)")
         expect(abs(rep.pixelsHigh - 1289) <= 6, "the copy is about as tall as Arc's 1289 px for the same card (got \(rep.pixelsHigh))")
@@ -56,7 +56,7 @@ enum LinkSummaryShareImageTests {
         expect(abs(row - 1139) <= 4, "the dashed line sits where Arc's does for the same card (row \(row), Arc 1139)")
 
         // Without a picture the card starts with the summary, nothing above it.
-        let plain = LinkSummaryShareImage.render(result, image: nil, favicon: nil)
+        let plain = LinkSummaryShareImage.render(result, image: nil, favicon: nil)!
         let plainRep = plain.representations.first as! NSBitmapImageRep
         expect(plainRep.pixelsHigh < rep.pixelsHigh - 400, "no picture, no banner (\(plainRep.pixelsHigh) px)")
         expect((0..<30).allSatisfy { near(pixel(plainRep, 456, $0), 0xFFFFFF) }, "no picture: white above the summary")
@@ -64,8 +64,28 @@ enum LinkSummaryShareImageTests {
         // More rows make a taller copy; none cut off.
         var long = result
         long.details.append(.init(label: "Extra", icon: "star", info: "One more row of text that is long enough to wrap onto a second line."))
-        let longRep = LinkSummaryShareImage.render(long, image: nil, favicon: nil).representations.first as! NSBitmapImageRep
+        let longRep = LinkSummaryShareImage.render(long, image: nil, favicon: nil)!.representations.first as! NSBitmapImageRep
         expect(longRep.pixelsHigh > plainRep.pixelsHigh + 100, "a fifth row makes the copy taller")
+        // A small source can request a disproportionate output bitmap.
+        let narrow = NSImage(size: NSSize(width: 1, height: 10), flipped: false) { rect in
+            NSColor.blue.setFill(); rect.fill(); return true
+        }
+        let narrowRep = LinkSummaryShareImage.render(result, image: narrow, favicon: nil)!.representations.first as! NSBitmapImageRep
+        expect(narrowRep.pixelsWide * narrowRep.pixelsHigh <= 4_000_000, "extreme aspect must not allocate an unbounded share bitmap")
+        expect(narrowRep.pixelsHigh == plainRep.pixelsHigh, "an extreme aspect omits the picture and preserves the text card")
+        let huge = NSImage(size: NSSize(width: 1, height: 10_000))
+        let hugeRep = LinkSummaryShareImage.render(result, image: huge, favicon: nil)!.representations.first as! NSBitmapImageRep
+        expect(hugeRep.pixelsHigh == plainRep.pixelsHigh, "the original 1 by 10,000 case is bounded before allocating")
+        expect(LinkSummaryShareBitmap(pointSize: CGSize(width: 304, height: CGFloat.infinity)) == nil, "infinite layout rejected before integer conversion")
+        expect(LinkSummaryShareBitmap(pointSize: CGSize(width: CGFloat.nan, height: 100)) == nil, "NaN layout rejected")
+        expect(LinkSummaryShareBitmap(pointSize: CGSize(width: 304, height: CGFloat.greatestFiniteMagnitude)) == nil, "overflowing layout rejected")
+        expect(LinkSummaryShareBitmap(pointSize: CGSize(width: 0, height: 100)) == nil, "empty layout rejected")
+        let boundary = LinkSummaryShareBitmap(pointSize: CGSize(width: 304, height: 1461))
+        expect(boundary?.height == 4383, "a bitmap below the budget is allowed")
+        expect(LinkSummaryShareBitmap(pointSize: CGSize(width: 304, height: 1462)) == nil, "a bitmap above the budget is rejected")
+        var oversized = result
+        oversized.details = Array(repeating: .init(label: "Row", icon: "star", info: "Content"), count: 100)
+        expect(LinkSummaryShareImage.render(oversized, image: nil, favicon: nil) == nil, "oversized text layout fails without allocating")
         print("Copy as Image: \(checks) checks passed")
     }
 }
