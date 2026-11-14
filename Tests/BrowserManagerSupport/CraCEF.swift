@@ -4,13 +4,17 @@ import AppKit
 
 public protocol CraBrowserDelegate: AnyObject {
     func browserDidClose(_ browser: CraBrowser)
+    func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo)
     func browser(_ browser: CraBrowser, requestsPermissionForOrigin origin: String, kinds: UInt, completion: @escaping (Bool) -> Void)
     func browser(_ browser: CraBrowser, didChangeURL url: String)
     func browser(_ browser: CraBrowser, didChangeTitle title: String)
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool)
 }
 
-public final class CraDownloadInfo {}
+extension CraBrowserDelegate {
+    public func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo) {}
+}
+public final class CraDownloadInfo { public init() {} }
 
 /// The runtime switches BrowserManager's helpers read.
 @MainActor

@@ -158,6 +158,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         browsers.pageClosed = { ExtensionStore.shared.forgetActionTab($0) }
         browsers.delegate = self
         browsers.windowID = session.id
+        browsers.pageAdopted = { [weak self] tab, previousWindow in
+            guard let self else { return }
+            let downloads = TidyDownloadsService.shared.transferSources(tab: tab, from: previousWindow, to: self.windowID)
+            self.windowDownloads.formUnion(downloads)
+            if !downloads.isEmpty { self.watchDownloads() }
+            self.app.mainWindows.first(where: { $0.windowID == previousWindow })?.windowDownloads.subtract(downloads)
+        }
         browsers.takeRuntimeFromOtherWindow = { [weak self] id in
             guard let self else { return nil }
             for other in self.app.mainWindows where other !== self {
@@ -1020,8 +1027,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func browserManager(download: CraDownloadInfo) {
         let name = (download.fullPath as NSString).lastPathComponent.isEmpty ? download.suggestedName : (download.fullPath as NSString).lastPathComponent
-        if let tab = browsers.downloadSourceTab, let item = store.item(tab), let t = item.tab {
-            TidyDownloadsService.shared.noteSource(download.identifier, title: item.displayTitle, url: t.url)
+        if download.state == .inProgress, !finishedDownloads.contains(download.identifier),
+           let tab = browsers.downloadSourceTab, let item = store.item(tab), let t = item.tab {
+            TidyDownloadsService.shared.noteSource(download.identifier, window: windowID, tabID: tab, tab: t,
+                referrer: t.referrerID.flatMap { store.item($0)?.tab })
         }
         if windowDownloads.insert(download.identifier).inserted {
             ChromeDownloadAnimation.suppress()
@@ -1033,21 +1042,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                       cancelled: download.state == .cancelled, failed: download.state == .interrupted,
                                       paused: download.paused)
         updateRecentDownload(download)
+        if download.state == .cancelled || download.state == .interrupted || (download.state == .complete && download.fullPath.isEmpty) {
+            TidyDownloadsService.shared.cancel(download.identifier, window: windowID)
+        }
         if download.state == .complete, !download.fullPath.isEmpty, finishedDownloads.insert(download.identifier).inserted {
             DownloadHistory.shared.add(path: download.fullPath, profile: browsers.downloadSourceTab.map(store.profileDirectoryName(item:)) ?? profileDirectoryName)
             // The address's scheme only, never the file: scenarios wait for this line.
             CraLog.note("Download finished from a \(URL(string: download.url)?.scheme ?? "unknown"): address")
             let id = download.identifier
-            TidyDownloadsService.shared.finished(id, path: download.fullPath, downloadURL: download.url, window: windowID, store: store) { [weak self] path in
-                guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id else { return }
+            TidyDownloadsService.shared.finished(id, path: download.fullPath, downloadURL: download.url, window: windowID, store: store,
+                ownerEligible: { [weak self] in self?.window != nil && self?.isPutAway == false }) { [weak self] path in
+                guard let self, var recent = self.sidebarUI.recentDownload, recent.id == id, recent.path == download.fullPath else { return }
                 recent.path = path
                 self.sidebarUI.recentDownload = recent
             }
         }
-        if download.state == .inProgress, downloadWatchdog == nil {
-            downloadWatchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.checkStalledDownloads() }
-            }
+        if download.state == .inProgress { watchDownloads() }
+    }
+
+    private func watchDownloads() {
+        guard downloadWatchdog == nil else { return }
+        downloadWatchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkStalledDownloads() }
         }
     }
 
@@ -4460,7 +4476,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard (notification.object as? NSWindow) === window else { return }
         LinkSummaryPreviewController.shared.stop()
         tabSwitcher.cancel()
+        // Teardown first hands any surviving page/download to its new window.
         app.mainWindowWillClose(self)
+        TidyDownloadsService.shared.cancel(window: windowID)
     }
 
     override func showWindow(_ sender: Any?) {
@@ -4475,6 +4493,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func putAway() {
         guard !isPutAway else { return }
         isPutAway = true
+        TidyDownloadsService.shared.cancel(window: windowID)
         dismissTransientUI()
         sidePanel.hide()
         for p in peeks { p.closeWindow() }

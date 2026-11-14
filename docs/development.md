@@ -119,6 +119,11 @@ to Markdown or `docs/` alone runs nothing.
   a stub to `AppServices.swift`.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
+- `scripts/test-tidy-downloads.sh`: the production Tidy Downloads service and `SidebarStore`,
+  suspended local-model responses, and real temporary files: opt-out, cancellation, unavailable
+  model, owner teardown, duplicate notifications and obsolete completions without sleeps. Compiles
+  the real `DownloadHistory` with a minimal CEF control stub; checks serial filesystem collisions,
+  move errors, cancellation before/after physical moves, and asynchronous stale/repeated undo.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
@@ -150,6 +155,10 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
   keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
   button closing it, and the button's hold (⌃-click stays a plain click).
+- `scripts/test-mobile-popup.sh`: the production iOS popup callback and tab store against
+  platform stand-ins: related-view/request ownership, source privacy, nested opener lifetime,
+  close return paths, and private-tab persistence/cleanup. Native POST and opener behavior is
+  exercised separately by `CraUITests/PopupTests` with `iOS/Tests/popup_server.py` on loopback.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and
