@@ -1,5 +1,3 @@
-import Foundation
-
 @MainActor final class TidyTabsService {
     static let shared = TidyTabsService()
     static let fakeModel = false

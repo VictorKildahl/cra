@@ -1,5 +1,3 @@
-import Foundation
-
 extension LinkSummaryPreviewController {
     /// Installed once by bootstrap. Off/on transitions must revoke the current generation before
     /// observation delivery can coalesce them; fresh eligibility alone cannot detect that ABA.
