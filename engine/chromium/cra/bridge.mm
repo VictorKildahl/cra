@@ -162,6 +162,11 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)devToolsShowsPanel:(NSString*)panel;
 @end
 
+// A page's view: counted once for cra://debug?pageWindows= when it first shows in a window (a Cra window, the only
+// kind it goes in, so never away).
+@interface CraPageContainerView : NSView
+@end
+
 namespace {
 
 NSString* NS(const std::string& s) {
@@ -472,10 +477,57 @@ class PageObserver : public content::WebContentsObserver,
 // CEF's page windows in EmbeddedPages: the window's own class may be a KVO subclass, so it isn't replaced).
 NSHashTable<NSWindow*>* g_host_windows = nil;
 
+// Where and how pages and Chrome's windows for them came on screen: cra://debug?pageWindows= (#354), as the CEF
+// bridge counts them. On the engine a page is a view in a Cra window, and Chrome's only windows for pages are a
+// profile's hidden window and a page's DevTools window: a window shown on a display brings that display to a
+// desktop, so they start on the Cra window in use (g_page_window_start), without macOS's animation.
+NSInteger g_page_windows_shown = 0;
+NSInteger g_page_windows_away = 0;
+NSInteger g_page_windows_animated = 0;
+NSRect (^g_page_window_start)(NSSize) = nil;
+
+void PlaceChromeWindow(NSWindow* window) {
+  if (!window) {
+    return;
+  }
+  NSRect frame = g_page_window_start ? g_page_window_start(window.frame.size) : NSZeroRect;
+  if (!NSIsEmptyRect(frame)) {
+    [window setFrame:frame display:NO];
+  }
+  window.animationBehavior = NSWindowAnimationBehaviorNone;
+}
+
+// A window of Chrome's for a page, where it is now: away when its centre is on no Cra window on screen.
+void NoteChromeWindowShown(NSWindow* window) {
+  if (!window) {
+    return;
+  }
+  g_page_windows_shown++;
+  if (window.animationBehavior != NSWindowAnimationBehaviorNone) {
+    g_page_windows_animated++;
+  }
+  NSPoint centre = NSMakePoint(NSMidX(window.frame), NSMidY(window.frame));
+  BOOL anyCraWindow = NO;
+  for (NSWindow* w in NSApp.windows) {
+    if (w == window || !w.isVisible || w.parentWindow || w.alphaValue == 0 || [g_host_windows containsObject:w]) {
+      continue;
+    }
+    if (NSPointInRect(centre, w.frame)) {
+      return;
+    }
+    anyCraWindow = YES;
+  }
+  if (anyCraWindow) {
+    g_page_windows_away++;
+  }
+}
+
 void MakeHostWindow(NSWindow* window) {
   if (!window) {
     return;
   }
+  PlaceChromeWindow(window);
+  NoteChromeWindowShown(window);
   window.alphaValue = 0;
   window.ignoresMouseEvents = YES;
   window.sharingType = NSWindowSharingNone;
@@ -1172,6 +1224,8 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       // has put it in.
       window.alphaValue = 0;
       window.ignoresMouseEvents = YES;
+      PlaceChromeWindow(window);
+      NoteChromeWindowShown(window);
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
       return;
     }
@@ -1730,7 +1784,7 @@ void RunReadyBlocks() {
   _pendingHistory = url && !incognito && [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
   _isIncognito = incognito;
   _profilePath = incognito ? nil : [profilePath copy];
-  _container = [[NSView alloc] initWithFrame:frame];
+  _container = [[CraPageContainerView alloc] initWithFrame:frame];
   _container.wantsLayer = YES;
   _container.autoresizesSubviews = YES;
   // The address it was asked for, until the page reports its own (as CEF does).
@@ -3056,6 +3110,7 @@ void RunReadyBlocks() {
   g_stray_page_handler = [handler copy];
 }
 + (void)setPageWindowStartHandler:(NSRect (^)(NSSize))handler {
+  g_page_window_start = [handler copy];
 }
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler {
   cra::g_app_link_handler = [handler copy];
@@ -3105,7 +3160,8 @@ void RunReadyBlocks() {
   FloatOverFullScreenSpaces(window);
 }
 + (NSString*)pageWindowsReadout {
-  return @"shown=0 away=0 animated=0";
+  return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_page_windows_shown,
+                                    (long)g_page_windows_away, (long)g_page_windows_animated];
 }
 + (BOOL)hasBrowserDevTools {
   return g_cdp_write_fd >= 0;
@@ -3402,4 +3458,16 @@ BOOL CraIsSystemHotKey(NSEvent* event) {
   }
 }
 
+@end
+
+@implementation CraPageContainerView {
+  BOOL _counted;
+}
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  if (!_counted && self.window) {
+    _counted = YES;
+    g_page_windows_shown++;
+  }
+}
 @end

@@ -26,7 +26,11 @@ final class EmojiLabel: NSTextField {
     /// makes that tall enough. The label is flipped, so the top edge is y = 0.
     var textRect: NSRect {
         let inset: CGFloat = 2
-        return NSRect(x: inset, y: 0, width: max(0, bounds.width - 2 * inset), height: .greatestFiniteMagnitude / 2)
+        // Taller than the label by a font size: no line box clips the picture, and a context that isn't
+        // flipped (a layer rendered for a component snapshot) doesn't put the text at the far end of an
+        // endless rect.
+        return NSRect(x: inset, y: 0, width: max(0, bounds.width - 2 * inset),
+                      height: bounds.height + (font?.pointSize ?? 13) * 2)
     }
 
     /// Drawn twice: a stock label's text reaches the screen composited twice (its antialiased edges

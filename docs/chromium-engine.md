@@ -222,9 +222,11 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
     wakeups at 20 tabs 60 → 116 /s. Per process at idle (top, 1 tab): the browser process 1.3 % against CEF's
     0.3 %, every helper ~0; a 10 s sample of it finds no hot spot (its main thread ~30 busy ms). The slower switch
     is open.
-  - Not engine work, found on the way: `solid-spaces` fails its space-dock snapshot on main's CEF build too (the
-    open space's emoji isn't drawn); `unpacked-extension-copy` fails on any local test copy while the installed
+  - Not engine work, found on the way: `solid-spaces` fails its space-dock snapshot on main's CEF build too. The
+    open space's emoji wasn't drawn in component snapshots at all since #399's EmojiLabel (its endless text rect);
+    with a finite rect it draws, ~1.5 pt left of the reference recorded before #399 and the dock changes after it.
+    Victor decides whether that is the dock's look now (re-record) or a shift to fix; `unpacked-extension-copy` fails on any local test copy while the installed
     Cra runs (profileIsFree), and passes on a copy with its own bundle id.
-  - `page-windows-open-on-cra` (#354) counts pages' own Chrome windows, which the engine doesn't have: its
-    `away=0 animated=0` holds, `shown=0` fails the scenario. Victor decides how the locked scenario reads on the
-    engine.
+  - `page-windows-open-on-cra` (#354) on the engine: pages count as they first show in a Cra window, and Chrome's
+    windows for them (a profile's hidden window, a page's DevTools window) start on the Cra window in use without
+    macOS's animation (`setPageWindowStartHandler`), as CEF's page windows do. It passes.
