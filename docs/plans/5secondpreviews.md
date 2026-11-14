@@ -1,6 +1,6 @@
 # 5-Second Previews implementation plan
 
-Status, 13 November 2026: B1–B7 implementation independently reviewed and committed; current native build and full suite pass. Whole-feature acceptance and B8 documentation approval remain **PENDING** the bounded native/manual observations below. This documentation draft adds no source behavior and claims no new runtime pass.
+Status, 14 November 2026: B1–B7 implementation independently reviewed, committed and published; retained native-build/full-suite evidence and model-quality limits are unchanged. Physical-hover acceptance is **DEFERRED BY USER** following “Skip physical hover validation for now”; native/manual acceptance remains unverified. This documentation update adds no source behavior or new runtime pass and awaits independent exact-diff review.
 
 Branch: `5secondpreviews`, base `fccc893ca3989ebed0485dd9a67622fa7950f0c9`.
 Worktree: `/Users/varunaditya/.codex/worktrees/cra-5secondpreviews/cra`.
@@ -160,7 +160,8 @@ After root coordination, run repository-required `scripts/test.sh`, build releas
 
 Completion requires the reviewed implementation and existing regression/build/full-suite evidence, the remaining bounded native observations below, and independent review of the exact final documentation/branch. Any unverified manual, real-site, hardware or model behavior must remain explicitly unverified. Source approval does not complete native acceptance.
 
-## Current validation record, 13 November 2026
+<a id="current-validation-record-13-november-2026"></a>
+## Current validation record, updated 14 November 2026
 
 Evidence root: `/Users/varunaditya/Desktop/arc-decomp/cra-validation`. Paths in the table are relative to it. These are retained local artifacts, not checked-in portable receipts. Source checkpoint: HEAD `310b84ac4de6807a3d2169ac2066665d60223e75`, tree `097bf07fcc14da7d0f1002ec6eb6750d625b9d95`. Documentation edits change the eventual tree; these identifiers describe the source checkpoint, not a future docs commit.
 
@@ -173,8 +174,20 @@ Evidence root: `/Users/varunaditya/Desktop/arc-decomp/cra-validation`. Paths in 
 | Actual page/profile wire | PASS earlier B3 actual CEF normal/redirect hops, blocked-target zero hits, hop/loop bounds, over-cap disconnect, leave cancellation, aggregate deadline, A/B cookies/cache and restricted-plugin/live-folder smoke. Original source/binary scope retained; no relabeling as current B7 on-screen evidence. | `wire/run-b3-01/handoff.md`, `result.json` |
 | Actual image wire | PASS earlier B4 actual URLSession streamed cap, redirect policy, cookie/cache suppression, cancellation and aggregate deadline. Does not establish a current visible banner. | `reviews/code-5secondpreviews-04.md` and its wire receipts |
 | Actual model | PASS inference executed with available model through production ask/respond/generate/tokenCount; four typed usable samples. Input totals 594/609/595/602 include schema 364 and instructions 51; B7 preserves this B6 generation/Core path. | `runtime/previews-b7-real-model/readout.json` |
-| Current native acceptance | **PENDING.** B8 attempt 03 stopped at readiness: `checks=[]`, `captures=[]`. Main-window 2x/theme/DOM readiness does not prove card pixels or a wire journey. | `runtime/previews-b8-native-2x-03/result.json`, `root-interruption.json`, `capture-diagnostic-summary.json` |
-| Final docs/branch review | **PENDING.** This B8 draft must incorporate genuine new native receipts before independent exact-diff review and root-owned finalization. | `reviews/5secondpreviews-final-gap-assessment.md` |
+| Current native acceptance | **DEFERRED BY USER; unverified.** The earlier 13 November attempt stopped at readiness; four 14 November 1x attempts below establish no card/wire pass. Main-window scale/theme/DOM readiness does not prove preview pixels or a wire journey. | `runtime/previews-b8-native-2x-03/` and the dated run receipts below |
+| Docs/branch review | Published implementation/docs checkpoint `3db31488d949f4020de563d567f9cc8cc8658c5b` retains open native acceptance. This 14 November record awaits independent exact-diff review and root-owned commit/push. | `reviews/final-5secondpreviews-publication.md`, `reviews/5secondpreviews-final-gap-assessment.md` |
+
+### Native follow-up, 14 November 2026
+
+The frozen binary above was unchanged. All four runs retained `checks=[]`, `captures=[]`; none establishes a preview-card or current wire-journey pass. Run paths below are relative to the evidence root.
+
+| Attempt | Actual outcome | Receipt |
+| --- | --- | --- |
+| 1x 01 / 02 | Timed out awaiting an actual answer-card opening. Attempt 02 recorded valid enabled-link/native-pointer preconditions, but no card opened. Cause remains unknown. | `runtime/previews-b8-native-1x-20261114-01/result.json`; `runtime/previews-b8-native-1x-20261114-02/result.json`, `first-entry-enabled.json` |
+| 1x 03 | Root intentionally stopped at readiness after a white page despite valid fixture DOM; no paint/frame progression was observed. No product cause was established. | `runtime/previews-b8-native-1x-20261114-03/result.json`, `root-interruption.json` |
+| 1x 04 | One external `--no-neighbor` seed variation initially remained white. Actual native CmdL navigation to the same fixture at `/hn?fresh=1` produced the visible beige page. The final native-pointer precondition then failed before opening; this is no card/wire pass and establishes no cause or fix. | `runtime/previews-b8-native-1x-20261114-04/result.json`, `root-observations.jsonl`, `first-entry-enabled.json` |
+
+The user explicitly chose **“Skip physical hover validation for now.”** Physical-hover acceptance is deferred; the checklist below is retained for a later user-requested resume. No 2x Preview, motion or native copy/paste pass is claimed. The clipboard was never accessed. Earlier B3 page/profile/neighbor and B4 image receipts retain their original source/binary scopes; publication and the documented model-quality limits are unchanged.
 
 ### Model-output disposition and retained limits
 
@@ -191,7 +204,7 @@ Implemented Cra boundaries: regex HTML extraction rather than a rendered DOM sna
 
 ### Remaining native operator checklist
 
-All items are **PENDING**. Run only after the user has cleared the unrelated LuLu/Safe Storage and queued helper dialogs. Do not choose security/password/firewall actions, hide or terminate unrelated workflows, or reinterpret an occluded/black child-host capture as a product defect. Preserve failed external fixture attempts as such.
+Physical-hover work is **DEFERRED BY USER**; remaining native/manual checks are **UNVERIFIED**. Retain this checklist for a later user-requested resume, without treating the earlier unrelated dialogs as the current cause. Do not choose security/password/firewall actions, hide or terminate unrelated workflows, or reinterpret an occluded/black child-host capture as a product defect. Preserve failed external fixture attempts as such.
 
 1. **Confirm identity/readiness.** Verify the frozen binary hash above and current source checkpoint; record driver/capture-helper hashes. Use a fresh output directory per attempt. Root owns the existing display wrappers and native app. Confirm the actual preview can be unobstructed before continuing any pointer checkpoint.
 2. **Run one complete 2x journey.** In the existing root-owned 2x display setup, run the command below with a new directory. At `checkpoint-ready.json`, inspect `ready-family.png` through CUA, verify the broad fixture page/link is disabled, safely place the pointer in empty right-center page area and create `continue-ready`. Follow only the checkpoint's observed empty-area placement instructions; never select a copy/share action during this script.
@@ -202,7 +215,7 @@ All items are **PENDING**. Run only after the user has cleared the unrelated LuL
 7. **Check native pasted output only when authorized.** The prepared driver never copies. An authorized bounded manual check must select Copy as Text and Copy as Image, paste into a disposable target and inspect content/current identity, attribution, image and layout. Record both actual pasted outputs. If clipboard use remains unavailable or unauthorized, leave this item **UNVERIFIED**; panel/share harnesses and opening the menu cannot complete it.
 8. **Close the record.** Link actual run directories, inspected captures, motion/menu/setting/paste observations and explicit unverified items here and in the release checklist. If a real product defect appears, make only the scoped correction and obtain source re-review. Otherwise obtain independent final docs/exact-branch review. Root alone stages/commits/pushes under the user's authorization; no PR, merge or force-push is part of this checklist.
 
-Prepared command (root executes; this draft did not run it):
+Prepared command for a later user-requested resume (root executes; this documentation update did not run it):
 
 ```sh
 python3 /Users/varunaditya/Desktop/arc-decomp/cra-validation/scripts/previews-b7/native-wire-probe.py \
