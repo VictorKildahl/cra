@@ -486,6 +486,27 @@ NSInteger g_page_windows_away = 0;
 NSInteger g_page_windows_animated = 0;
 NSRect (^g_page_window_start)(NSSize) = nil;
 
+// Whether one of Cra's windows fills the screen on the Space the user is looking at.
+BOOL FullScreenWindowOnActiveSpace(NSWindow* except) {
+  for (NSWindow* window in NSApp.windows) {
+    if (window != except && window.visible && (window.styleMask & NSWindowStyleMaskFullScreen) && window.onActiveSpace) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
+// An extension's own window (Bitwarden's vault unlock prompt, chrome.windows.create) that opens over a full-screen
+// Cra joins that Space as a full-screen auxiliary, as the CEF bridge's did: as an ordinary window it opened on a
+// desktop and macOS switched there. Only over a full-screen Cra: an auxiliary window can't go full screen itself.
+void JoinFullScreenSpace(NSWindow* window) {
+  NSWindowCollectionBehavior behavior = window.collectionBehavior;
+  behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary |
+                NSWindowCollectionBehaviorFullScreenAllowsTiling | NSWindowCollectionBehaviorCanJoinAllSpaces);
+  behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace;
+  window.collectionBehavior = behavior;
+}
+
 void PlaceChromeWindow(NSWindow* window) {
   if (!window) {
     return;
@@ -1237,6 +1258,9 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
     }
     if (browser->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
       if (window) {
+        if (FullScreenWindowOnActiveSpace(window)) {
+          JoinFullScreenSpace(window);
+        }
         if (!g_extension_windows) {
           g_extension_windows = [NSHashTable weakObjectsHashTable];
         }
