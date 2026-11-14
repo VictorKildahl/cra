@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 ENGINE_VERSION="${ENGINE_VERSION:-158.0.8127.37}"
 # Bump the suffix when the build changes but the Chrome version does not.
-ENGINE_RELEASE="${ENGINE_RELEASE:-engine-${ENGINE_VERSION}-2}"
+ENGINE_RELEASE="${ENGINE_RELEASE:-engine-${ENGINE_VERSION}-3}"
 CPU="${ENGINE_CPU:-$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x64)}"
 DIR="${ENGINE_DIR:-vendor/engine}"
 URL="${ENGINE_URL:-https://github.com/VictorKildahl/cra/releases/download/${ENGINE_RELEASE}/cra_framework_${CPU}.tar.xz}"
