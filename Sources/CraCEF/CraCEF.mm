@@ -22,6 +22,7 @@
 #include "include/cef_command_ids.h"
 #include "include/cef_id_mappers.h"
 #include "include/cef_command_line.h"
+#include "include/cef_command_handler.h"
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_display_handler.h"
 #include "include/cef_download_handler.h"
@@ -212,6 +213,8 @@ static CraClient* AsCraClient(CefClient* c) {
 }
 
 @interface CraBrowser ()
+@property (nonatomic, copy, nullable) NSUUID* findGeneration;
+@property (nonatomic) BOOL findQuote;
 @property (nonatomic, strong) NSView* containerView;
 @property (nonatomic, copy) NSString* currentURL;
 @property (nonatomic, copy) NSString* currentTitle;
@@ -1402,6 +1405,7 @@ class CraClient : public CefClient,
                   public CefFocusHandler,
                   public CefPermissionHandler,
                   public CefFindHandler,
+                  public CefCommandHandler,
                   public CefRenderHandler,
                   public CefJSDialogHandler,
                   public CefDialogHandler {
@@ -1423,6 +1427,7 @@ public:
     CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
     CefRefPtr<CefPermissionHandler> GetPermissionHandler() override { return this; }
     CefRefPtr<CefFindHandler> GetFindHandler() override { return this; }
+    CefRefPtr<CefCommandHandler> GetCommandHandler() override { return this; }
     CefRefPtr<CefJSDialogHandler> GetJSDialogHandler() override { return this; }
 
     // JS dialogs ----------------------------------------------------------
@@ -1833,9 +1838,27 @@ public:
 
     void OnFindResult(CefRefPtr<CefBrowser> browser, int identifier, int count, const CefRect& selectionRect,
                       int activeMatchOrdinal, bool finalUpdate) override {
+        CEF_REQUIRE_UI_THREAD();
         CraBrowser* o = owner_;
-        if (o && [o.delegate respondsToSelector:@selector(browser:didFindMatches:activeMatch:)])
-            [o.delegate browser:o didFindMatches:count activeMatch:activeMatchOrdinal];
+        // Capture at native entry. A later dispatch must never borrow a newer query's tag.
+        NSUUID* generation = o.findGeneration;
+        BOOL quote = o.findQuote;
+        if (generation && [o.delegate respondsToSelector:@selector(browser:didFindMatches:activeMatch:generation:quote:identifier:finalUpdate:)])
+            [o.delegate browser:o didFindMatches:count activeMatch:activeMatchOrdinal generation:generation
+                        quote:quote identifier:identifier finalUpdate:finalUpdate];
+    }
+
+    bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
+                         cef_window_open_disposition_t disposition) override {
+        CraFindAction action;
+        if (command_id == cef_id_for_command_id_name("IDC_FIND")) action = CraFindActionShow;
+        else if (command_id == cef_id_for_command_id_name("IDC_FIND_NEXT")) action = CraFindActionNext;
+        else if (command_id == cef_id_for_command_id_name("IDC_FIND_PREVIOUS")) action = CraFindActionPrevious;
+        else return false;
+        CraBrowser* o = owner_;
+        if (![o.delegate respondsToSelector:@selector(browser:requestsFindAction:)]) return false;
+        [o.delegate browser:o requestsFindAction:action];
+        return true;
     }
 
     void OnLoadingProgressChange(CefRefPtr<CefBrowser> browser, double progress) override {
@@ -3048,10 +3071,27 @@ static BOOL g_makingSpare = NO;
 - (double)zoomLevel { return _browser ? _browser->GetHost()->GetZoomLevel() : 0; }
 - (void)setZoomLevel:(double)level { if (_browser) _browser->GetHost()->SetZoomLevel(level); }
 
-- (void)findText:(NSString*)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext {
-    if (_browser) _browser->GetHost()->Find(CefStringFromNS(text), forward, matchCase, findNext);
+- (void)findText:(NSString*)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext
+    generation:(NSUUID*)generation quote:(BOOL)quote {
+    CEF_REQUIRE_UI_THREAD();
+    if (!CefCurrentlyOn(TID_UI)) return;
+    if (!_browser) return;
+    if (![self.findGeneration isEqual:generation] || self.findQuote != quote) {
+        // Pinned CEF's FindTabHelper installs the next session ID synchronously and filters
+        // older replies. Stop forces a new engine session even for A→B→A or reopened A.
+        self.findGeneration = nil;
+        _browser->GetHost()->StopFinding(false);
+        self.findQuote = quote;
+        self.findGeneration = generation;
+    }
+    _browser->GetHost()->Find(CefStringFromNS(text), forward, matchCase, findNext);
 }
-- (void)stopFinding:(BOOL)clearSelection { if (_browser) _browser->GetHost()->StopFinding(clearSelection); }
+- (void)stopFinding:(BOOL)clearSelection {
+    CEF_REQUIRE_UI_THREAD();
+    if (!CefCurrentlyOn(TID_UI)) return;
+    self.findGeneration = nil;
+    if (_browser) _browser->GetHost()->StopFinding(clearSelection);
+}
 - (void)setAudioMuted:(BOOL)muted {
     _audioMuted = muted;
     if (_browser) _browser->GetHost()->SetAudioMuted(muted);
@@ -3272,6 +3312,13 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 // execution context (createIsolatedWorld returns the existing world of that name), then evaluate.
 - (void)evaluateInIsolatedWorld:(NSString*)world params:(NSString*)params
                      completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+    [self evaluateInIsolatedWorld:world params:params ifCurrent:^BOOL { return YES; } completion:completion];
+}
+
+- (void)evaluateInIsolatedWorld:(NSString*)world params:(NSString*)params ifCurrent:(BOOL (^)(void))ifCurrent
+                     completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+    CEF_REQUIRE_UI_THREAD();
+    if (!CefCurrentlyOn(TID_UI) || !ifCurrent()) { completion(nil, @"retired evaluation"); return; }
     __weak CraBrowser* weakSelf = self;
     id (^parse)(NSString*) = ^id(NSString* json) {
         return json ? [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
@@ -3279,19 +3326,22 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     [self sendDevToolsMethod:@"Page.getFrameTree" params:@"{}" completion:^(NSString* tree, NSString* error) {
         NSString* frameID = [parse(tree) valueForKeyPath:@"frameTree.frame.id"];
         CraBrowser* s = weakSelf;
-        if (!s || ![frameID isKindOfClass:NSString.class]) { completion(nil, error ?: @"no frame"); return; }
+        if (!s || !ifCurrent()) { completion(nil, @"retired evaluation"); return; }
+        if (![frameID isKindOfClass:NSString.class]) { completion(nil, error ?: @"no frame"); return; }
         NSData* body = [NSJSONSerialization dataWithJSONObject:@{@"frameId": frameID, @"worldName": world} options:0 error:nil];
         [s sendDevToolsMethod:@"Page.createIsolatedWorld" params:[[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding]
                    completion:^(NSString* made, NSString* error) {
             NSNumber* context = [parse(made) valueForKey:@"executionContextId"];
             NSMutableDictionary* evaluate = [parse(params) mutableCopy];
             CraBrowser* s = weakSelf;
-            if (!s || ![context isKindOfClass:NSNumber.class] || ![evaluate isKindOfClass:NSMutableDictionary.class]) {
+            if (!s || !ifCurrent()) { completion(nil, @"retired evaluation"); return; }
+            if (![context isKindOfClass:NSNumber.class] || ![evaluate isKindOfClass:NSMutableDictionary.class]) {
                 completion(nil, error ?: @"no isolated world");
                 return;
             }
             evaluate[@"contextId"] = context;
             NSData* json = [NSJSONSerialization dataWithJSONObject:evaluate options:0 error:nil];
+            if (!ifCurrent()) { completion(nil, @"retired evaluation"); return; }
             [s sendDevToolsMethod:@"Runtime.evaluate" params:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]
                        completion:completion];
         }];

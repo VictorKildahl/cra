@@ -1,0 +1,32 @@
+# Real native Find counts, navigation and Chrome-command ownership. Ask remains disabled.
+# Rapid replacement/late-result identity is also covered by the Core and manager contracts;
+# the external acceptance driver observes per-command log offsets for repeated engine states.
+budget rss=900 stalls50=35
+cra://open?url=${ORIGIN}/find.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?findQuery=cobalt
+expect-log find generation=\S+ identifier=[0-9]+ count=3 ordinal=1 final=true purpose=ordinary
+cra://debug?findStep=next
+expect-log find generation=\S+ identifier=[0-9]+ count=3 ordinal=2 final=true purpose=ordinary
+cra://debug?findStep=nativeNext
+expect-log find nativeAction=1
+expect-log find generation=\S+ identifier=[0-9]+ count=3 ordinal=3 final=true purpose=ordinary
+cra://debug?findStep=nativePrevious
+expect-log find nativeAction=2
+cra://debug?findQuery=absent-synthetic-question
+expect-log find generation=\S+ identifier=[0-9]+ count=0 ordinal=0 final=true purpose=ordinary
+cra://debug?findStep=close
+cra://debug?findStep=nativeShow
+expect-log find nativeAction=0
+cra://debug?findQuery=cobalt&findPurpose=quote
+expect-log find generation=\S+ identifier=[0-9]+ count=3 ordinal=[1-3] final=true purpose=quote
+cra://debug?findQuery=frame-only-needle
+expect-log find generation=\S+ identifier=[0-9]+ count=1 ordinal=1 final=true purpose=ordinary
+cra://debug?findStep=close
+cra://open?url=${WEBKIT}/find.html
+expect-log loaded localhost \(HTTP 200\)
+cra://debug?findQuery=frame-only-needle
+expect-log find generation=\S+ identifier=-1 count=1 ordinal=1 final=true purpose=ordinary
+cra://debug?findQuery=absent-webkit-question
+expect-log find generation=\S+ identifier=-1 count=0 ordinal=0 final=true purpose=ordinary
+cra://debug?findStep=close

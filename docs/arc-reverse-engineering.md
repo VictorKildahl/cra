@@ -4052,28 +4052,36 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   white card (#FAFAFB-ish), 18 pt margins, about 17 pt between parts and 12 pt above Find on Page, a plain ✕ about 12 pt
   level with the question, and at the bottom one grey band (corner ~8, 6 pt in from the card) holding the field and a
   full-colour Ask button (~46 × 26 pt) that shows while the field is still empty.
-- Cra (AskOnPagePolicy, AskOnPagePrompt, AskOnPageReply in CraCore; AskOnPageService, AskOnPageCard): Arc's card in
-  ⌘F's panel, Arc's prompt on the Mac's Apple Intelligence model (rules and examples as the session's instructions),
-  Arc's budget less 600 tokens kept for the answer, checked with the model's own token count where macOS has it
-  (26.4) and cut again if a page still doesn't fit. The page text comes from a script in Cra's isolated world that
-  skips Arc's parts and hidden ones. Cra's choices where Arc's weren't readable: Return goes to the next match while the
-  text is on the page and asks otherwise (always asks in a conversation); Find on Page tries the quote's first sentence
-  and first eight words when the whole quote isn't on the page (a footnote mark between sentences, the model's slips);
-  the model's echo of the dialogue ("BEGIN DIALOGUE", "Human: …", or the question as asked) is dropped. Not Arc's, on
-  purpose (#417): Arc's "When I write BEGIN DIALOGUE … the "Human:"" paragraph is replaced by "After the page, each
-  message is a question…", the page goes with the first question without "BEGIN DIALOGUE", and each earlier question
-  and answer is a turn of its own in the session's transcript. Given Arc's dialogue as text, the on-device model wrote
-  a dialogue back (made-up questions, "Human:"/"Assistant:" lines, or an earlier answer word for word): 30 of 40
-  answers in ten 4-question conversations on a 10,500-character article, 0 of 40 as turns (13 Nov 2026, macOS 26.7).
-  Arc's four examples aren't sent either: on a question the page can't answer, the model quoted the solar example as
-  the page's (9 of 20; labelled "never quote these" 6 of 20; placeholders copied as placeholders), 0 of 20 without
-  them, and answerable questions quote the page as often (19 of 20). A long answer may use the rest of the context
-  (`maximumResponseTokens`) and keeps what it wrote if it overflows anyway; it reaches the card at most ten times a
-  second, line by line while it streams. A follow-up ends with "Quote the page in an <excerpt> tag if it answers
-  this.": after a summary (no quotes) the model kept answering without them (9 of 24 follow-ups quoted, 16 with it).
-  An earlier answer is sent again up to 800 characters: a summary that filled the context left the next questions
-  20 % of the page. The card sits
-  where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
+- Cra reconciliation (13 Nov 2026, implementation through `653ed22`): one per-window guided on-device
+  service reuses the native Find panel/card. Current-document identity includes navigation/runtime/profile
+  ownership; synchronous actual settings/model/profile mutation hooks clear stale work. Ask eligibility is
+  HTTP(S), standard non-private context, not search.arc.net, resolved HTML/XHTML only; ordinary Find stays
+  usable on excluded pages. Local requests use Apple's shared context budget, SDK fitting and reserved
+  output/framing, not Arc's server allowance. Guided schema order is excerpts, answer, optional keyAnswer;
+  the local question is included once, with escaped metadata, no malformed server template or raw-tag
+  parser. Quotes use the full normalized literal with a guarded current live-DOM range/isolated lease;
+  no shortened/fuzzy fallback or generic native count determines quote status. Next/previous restores the
+  preserved ordinary query while retaining conversation; genuine document/owner change clears it.
+  The R0 plan records newer Arc 1.109 recovery for exact geometry/keyboard/eligibility and corrected FRINTA
+  ties-away budgeting. The measured upstream #408 tone is retained, without inferring effective runtime
+  colors from a static helper. Root actual engine/script and routing evidence passed at the scopes in
+  [Ask validation](ask-on-page-validation.md); complete native highlight/key/pixel parity remains OPEN,
+  and actual model quality failures remain recorded. Reviewed source publication does not waive these
+  acceptance gates.
+- Upstream raw-response adapter findings (13 Nov 2026, #417; not measurements of this branch's
+  guided adapter): serializing Arc's `BEGIN DIALOGUE`/`Human:`/`Assistant:` framing produced
+  dialogue or repeated answers in 30 of 40 local-model answers; native transcript turns produced
+  0 of 40. Hypothetical solar examples contaminated 9 of 20 unanswerable answers (6 of 20 when
+  labelled not to quote); removing them produced 0 of 20. Follow-up quote reminders improved
+  factual follow-up quoting from 9 of 24 to 16 of 24. Upstream also capped earlier answers at 800
+  characters, paced raw streaming at ten updates per second, retained partial raw answers on
+  overflow, and rejected/retried raw page-block echoes.
+  These observations do not prove the same failure or fix for guided `excerpts`/`answer` fields.
+  This branch retains quoted bounded history, exact transmitted-source validation, guided
+  completeness and overflow failure semantics. It does not claim those model-quality or pacing
+  gates passed. The shared floating-toolbar placement fix (#418) also constrains the guided
+  card's available height below the revealed toolbar, preserving short/narrow-page bounds.
+
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)
 

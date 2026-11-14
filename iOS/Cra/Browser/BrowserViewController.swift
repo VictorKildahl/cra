@@ -439,7 +439,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         page.webView.allowsBackForwardNavigationGestures = false
         page.webView.frame = pageContainer.bounds
         pageContainer.insertSubview(page.webView, belowSubview: pageDim)
-        if page.webView.url == nil, !page.isBrowsing {
+        if page.webView.url == nil, !page.isBrowsing, !page.webKitOwnsInitialNavigation {
             if let query = MobileBrowseForMe.query(fromTabAddress: tab.url) {
                 browse(for: query, in: page)
             } else {
@@ -997,7 +997,40 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func webPage(_ page: WebPage, openInNewTab url: URL) {
-        incognitoSearch = store.selected?.isIncognito ?? false
+        incognitoSearch = store.tabs.first(where: { $0.id == page.tabID })?.isIncognito ?? false
         open(url.absoluteString)
+    }
+
+    func webPage(_ page: WebPage, createPopupWith configuration: WKWebViewConfiguration, request: URLRequest) -> WKWebView? {
+        captureSnapshot()
+        guard let popup = store.openPopup(configuration: configuration, request: request, from: page),
+              let tab = store.selected else { return nil }
+        show(tab)
+        // Opener callbacks can update its address/title while the popup is in front.
+        page.delegate = self
+        incognitoSearch = tab.isIncognito
+        leaveSwitcherForPage()
+        setSearching(false)
+        refreshTabStack()
+        return popup.webView
+    }
+
+    func webPageDidClose(_ page: WebPage) {
+        let wasShown = page === shownPage
+        if wasShown {
+            page.webView.removeFromSuperview()
+            shownPage = nil
+        }
+        page.delegate = nil
+        store.close(page.tabID)
+        if wasShown {
+            if let tab = store.selected {
+                show(tab)
+                if let shownPage { webPageDidChange(shownPage) }
+            } else {
+                setSearching(true, incognito: false)
+            }
+        }
+        refreshTabStack()
     }
 }

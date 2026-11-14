@@ -212,7 +212,261 @@ enum BrowserManagerLifecycleTests {
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
         permissionPopoverStepsAsideCase()
+        await askOnPageQuoteCase()
+        await askOnPageSnapshotCase()
+        findCorrelationCase()
         print("Browser manager lifecycle: \(checks) checks passed")
+    }
+
+    @MainActor
+    private static func findCorrelationCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let tab = store.createTab(url: "https://example.test/find").id
+        let other = store.createTab(url: "https://example.test/other").id
+        manager.show(tab, focus: false)
+        let original = manager.visibleRuntime!.browser
+        manager.find("absent", forward: true)
+        let old = manager.findState.request!
+        // A native callback already captured its tag before delivery was queued.
+        let oldDelivery = {
+            manager.browser(original, didFindMatches: 0, activeMatch: 0, generation: old.id, quote: false, identifier: 1, finalUpdate: true)
+        }
+        manager.prepareFind("matching")
+        oldDelivery()
+        expect(manager.findState.count == nil && !manager.canAskFind(query: "matching", enabled: true, forward: true),
+               "an old final zero delivered after a synchronous edit cannot authorize Ask")
+        let current = manager.findState.request!
+        manager.browser(original, didFindMatches: 3, activeMatch: 1, generation: current.id, quote: false, identifier: 2, finalUpdate: true)
+        expect(observer.findStates.last?.count == 3 && manager.findState.activeMatch == 1,
+               "the current browser's tagged native final updates accepted ordinary Find state")
+        manager.find("matching", forward: false)
+        expect(manager.findState.request?.id == current.id, "next/previous preserve the current native query session")
+        for change in 0..<7 {
+            manager.find("absent", forward: true)
+            let browser = manager.visibleRuntime!.browser
+            let request = manager.findState.request!
+            manager.browser(browser, didFindMatches: 0, activeMatch: 0, generation: request.id, quote: false, identifier: 3, finalUpdate: true)
+            expect(manager.canAskFind(query: "absent", enabled: true, forward: true), "current final zero is eligible before owner changes")
+            switch change {
+            case 0: browser.setLoading(true); browser.setLoading(false)
+            case 1: manager.show(other, focus: false); manager.show(tab, focus: false)
+            case 2: store.profilePaths[tab] = "/different-profile"
+            case 3: manager.unload(tab); manager.show(tab, focus: false)
+            case 4: manager.show([tab, other], focused: other, focus: false)
+            case 5: manager.stopFinding(true)
+            default: browser.navigate(to: "https://example.test/find")
+            }
+            manager.browser(browser, didFindMatches: 0, activeMatch: 0, generation: request.id, quote: false, identifier: 3, finalUpdate: true)
+            expect(!manager.canAskFind(query: "absent", enabled: true, forward: true),
+                   "late final zero cannot survive reload, focus, profile, runtime, split, close or same-URL change (\(change))")
+            store.profilePaths[tab] = nil
+            manager.show(tab, focus: false)
+        }
+        manager.find("absent", forward: true, purpose: .quote)
+        let quote = manager.findState.request!
+        manager.browser(manager.visibleRuntime!.browser, didFindMatches: 0, activeMatch: 0, generation: quote.id, quote: true, identifier: 4, finalUpdate: true)
+        expect(manager.findState.count == 0 && !manager.canAskFind(query: "absent", enabled: true, forward: true),
+               "quote navigation has results but cannot complete ordinary Find")
+        manager.browser(original, requestsFindAction: .show)
+        expect(observer.findActions.isEmpty, "retired browser's native command cannot open the current panel")
+        manager.browser(manager.visibleRuntime!.browser, requestsFindAction: .next)
+        expect(observer.findActions == [.next], "current native Chrome Find is routed to the app Find owner")
+        manager.closeAll()
+    }
+
+    @MainActor
+    private static func resolveAskDocument(_ manager: BrowserManager, mime: String = "text/html") async {
+        manager.refreshAskOnPageDocument()
+        guard manager.askOnPageDocumentRead != nil, let browser = manager.visibleRuntime?.browser else { return }
+        let reply = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": browser.currentURL, "contentType": mime]]]), encoding: .utf8)!
+        browser.replies.removeLast().completion(reply, nil)
+        // The production native callback enqueues its complete mutation before this FIFO marker.
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+    }
+
+    // promise: #393
+    @MainActor
+    private static func askOnPageQuoteCase() async {
+        let store = SidebarStore(), observer = Observer()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.delegate = observer
+        let tab = store.createTab(url: "https://example.test/article").id
+        manager.show(tab, focus: false)
+        await resolveAskDocument(manager)
+        let browser = manager.visibleRuntime!.browser
+        let text = "The café opens at 09:30."
+        let hit = #"{"result":{"value":{"found":true,"startNode":0,"startOffset":0,"endNode":0,"endOffset":24}}}"#
+        let yes = #"{"result":{"value":{"found":true}}}"#, no = #"{"result":{"value":{"found":false}}}"#
+        func turn() async { await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } } }
+        var results: [Bool?] = [], usable = true
+        func start() -> AskOnPage.FindRequest {
+            manager.clearAskOnPageQuote()
+            let request = manager.prepareFind(text, matchCase: true, purpose: .quote)!
+            manager.findAskOnPageQuote(text, in: manager.askOnPageContext()!, request: request,
+                                      isCurrent: { usable }) { results.append($0) }
+            return request
+        }
+        let request = start()
+        expect(browser.guardedEvaluations.removeFirst()(), "current lookup passes its final setup authorization")
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        expect(results.isEmpty && manager.findState.request == request, "lookup alone cannot report found or replace quote generation")
+        manager.browser(browser, didFindMatches: 99, activeMatch: 1, generation: request.id, quote: true, identifier: 7, finalUpdate: true)
+        expect(results.isEmpty, "generic native Find counts never complete a quote DOM operation")
+        expect(browser.guardedEvaluations.removeFirst()(), "current effect passes its final setup authorization")
+        browser.replies.removeLast().completion(yes, nil); await turn()
+        expect(results.count == 1 && results[0] == true && manager.findState.request == request,
+               "only the completed current effect reports found using the same quote generation")
+        manager.find("ordinary input", forward: false)
+        let ordinary = manager.findState.request!
+        manager.find("ordinary input", forward: true)
+        expect(ordinary.purpose == .ordinary && manager.findState.request == ordinary,
+               "ordinary input restores its own generation and repeated next/previous keeps it")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(no, nil); await turn()
+        expect(results.count == 1 && results[0] == false && browser.guardedEvaluations.isEmpty,
+               "a completed exact not-found lookup has no effect phase or native highlight")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        usable = false
+        expect(!browser.guardedEvaluations.removeFirst()(), "revoked service authority rejects a late effect setup before dispatch")
+        await turn()
+        expect(results.count == 1 && results[0] == nil, "unavailable/disabled authority retires status rather than inventing not-found")
+        usable = true; results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        _ = browser.guardedEvaluations.removeFirst()()
+        let committedEffect = browser.replies.removeLast().completion
+        manager.find("current ordinary", forward: true)
+        let afterCommit = manager.findState
+        committedEffect(yes, nil); await turn()
+        expect(results.count == 1 && results[0] == nil && manager.findState == afterCommit,
+               "invalidation after IPC commit still rejects status/native Find and cannot steal ordinary ownership")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        let late = browser.replies.removeLast().completion
+        manager.find("restored question", forward: true)
+        let restored = manager.findState
+        late(hit, nil); await turn()
+        expect(results.count == 1 && results[0] == nil && manager.findState == restored && browser.guardedEvaluations.isEmpty,
+               "ordinary Find retires pending quote effects and late lookup cannot steal restored ownership")
+        results.removeAll()
+        _ = start(); _ = browser.guardedEvaluations.removeFirst()()
+        browser.replies.removeLast().completion(hit, nil); await turn()
+        browser.setLoading(true); browser.setLoading(false)
+        expect(!browser.guardedEvaluations.removeFirst()(), "same-URL new navigation invalidates effect setup")
+        await turn()
+        expect(results.count == 1 && results[0] == nil, "a retired document never publishes quote status")
+        manager.closeAll()
+    }
+
+    @MainActor
+    private static func askOnPageSnapshotCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let tab = store.createTab(url: "https://example.test/article").id
+        let other = store.createTab(url: "https://example.test/other").id
+        manager.show(tab, focus: false)
+        let text = "A complete synthetic article sentence that can be used as page context and quoted."
+        let reply = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": "https://example.test/article", "title": "Article", "text": text,
+            "contentType": "text/html", "truncated": false]]]), encoding: .utf8)!
+        let browser = manager.visibleRuntime!.browser
+        expect(manager.askOnPageContext() == nil, "Ask remains disabled before actual current document type resolves")
+        await resolveAskDocument(manager)
+        let context = manager.askOnPageContext()!
+        var received: [AskOnPagePrompt.Page?] = []
+        manager.askOnPageSnapshot(context) { received.append($0) }
+        browser.replies.removeLast().completion(reply, nil)
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(received.count == 1 && received[0]?.text == text, "Ask context is returned from the captured current browser")
+
+        for change in 0..<5 {
+            await resolveAskDocument(manager)
+            let current = manager.askOnPageContext()!
+            let active = manager.visibleRuntime!.browser
+            received.removeAll()
+            manager.askOnPageSnapshot(current) { received.append($0) }
+            let complete = active.replies.removeLast().completion
+            switch change {
+            case 0: active.setLoading(true); active.setLoading(false)
+            case 1: manager.show(other, focus: false); manager.show(tab, focus: false)
+            case 2: store.profilePaths[tab] = "/different-profile"
+            case 3: manager.unload(tab); manager.show(tab, focus: false)
+            default: manager.show([tab, other], focused: other, focus: false)
+            }
+            complete(reply, nil)
+            await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+            expect(received.count == 1 && received[0] == nil,
+                   "Ask rejects an obsolete snapshot after reload, focus away/back, profile change, replacement or split focus (case \(change))")
+            store.profilePaths[tab] = nil
+            manager.show(tab, focus: false)
+        }
+        received.removeAll()
+        manager.askOnPageSnapshot(context) { received.append($0) }
+        expect(received.count == 1 && received[0] == nil, "an obsolete request is rejected before page evaluation")
+        let internalPage = store.createTab(url: "cra://settings").id
+        manager.show(internalPage, focus: false)
+        expect(manager.askOnPageContext() == nil, "internal browser pages are ineligible before extraction")
+        for (url, mime, privatePage) in [
+            ("https://example.test/extensionless-pdf", "application/pdf", false),
+            ("https://example.test/extensionless-image", "image/svg+xml", false),
+            ("https://example.test/extensionless-movie", "video/mp4", false),
+            ("https://search.arc.net/article", "text/html", false),
+            ("file:///tmp/article.html", "text/html", false),
+            ("https://example.test/private", "text/html", true)] {
+            let id = store.createTab(url: url).id
+            if privatePage { store.incognitoItems.insert(id) }
+            manager.show(id, focus: false)
+            await resolveAskDocument(manager, mime: mime)
+            expect(manager.askOnPageContext() == nil && manager.findPageContext() != nil,
+                   "resolved PDF/image/movie, Arc Search, file and private eligibility never disables ordinary Find: \(url)")
+        }
+        let disguisedHTML = store.createTab(url: "https://example.test/page.pdf").id
+        manager.show(disguisedHTML, focus: false)
+        await resolveAskDocument(manager, mime: "text/html")
+        expect(manager.askOnPageContext() != nil,
+               "actual HTML MIME takes precedence over a misleading .pdf suffix")
+        expect(AskOnPageDocument.kind(url: URL(string: "https://example.test/document")!, mimeType: "application/pdf") == .pdf
+            && AskOnPageDocument.kind(url: URL(string: "https://example.test/document")!, mimeType: "image/svg+xml") == .image
+            && AskOnPageDocument.kind(url: URL(string: "https://example.test/document")!, mimeType: "video/mp4") == .movie,
+            "resolved UTType conformance rejects MIME subtypes without relying on filename suffixes")
+        manager.invalidateAskOnPageDocument()
+        manager.refreshAskOnPageDocument()
+        let oldTypeReply = manager.visibleRuntime!.browser.replies.removeLast().completion
+        manager.visibleRuntime!.browser.setLoading(true)
+        manager.visibleRuntime!.browser.setLoading(false)
+        manager.refreshAskOnPageDocument()
+        let newTypeReply = manager.visibleRuntime!.browser.replies.removeLast().completion
+        let oldType = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": "https://example.test/page.pdf", "contentType": "text/html"]]]), encoding: .utf8)!
+        oldTypeReply(oldType, nil)
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(manager.askOnPageContext() == nil && manager.askOnPageDocumentRead != nil,
+               "a late same-URL old type probe cannot enable Ask or consume the current type request")
+        let newType = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": [
+            "url": "https://example.test/page.pdf", "contentType": "application/pdf"]]]), encoding: .utf8)!
+        newTypeReply(newType, nil)
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+        expect(manager.askOnPageContext() == nil && manager.askOnPageDocumentRead == nil,
+               "current extensionless/resolved PDF evidence stays ineligible after a stale HTML probe")
+        for malformed in ["{}", "not JSON", String(repeating: "x", count: 20_001),
+            #"{"result":{"value":{"url":"https://example.test/other","contentType":"text/html"}}}"#,
+            #"{"result":{"value":{"url":"https://example.test/page.pdf","contentType":""}}}"#,
+            #"{"result":{"value":{}},"exceptionDetails":{}}"#] {
+            manager.invalidateAskOnPageDocument()
+            manager.refreshAskOnPageDocument()
+            manager.visibleRuntime!.browser.replies.removeLast().completion(malformed, nil)
+            await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+            expect(manager.askOnPageContext() == nil && manager.askOnPageDocument == nil,
+                   "malformed, oversized, exception and wrong-document type metadata cannot enable Ask")
+        }
+        manager.closeAll()
     }
 
     @MainActor
@@ -1849,7 +2103,10 @@ private final class Observer: BrowserManagerDelegate {
     var onPageWindowsChanged: (() -> Void)?
     func browserManagerDidUpdate(_ tabID: UUID) {}
     func browserManager(statusMessage: String, tabID: UUID?) {}
-    func browserManager(findMatches count: Int, activeMatch: Int) {}
+    var findStates: [AskOnPage.FindState] = []
+    var findActions: [CraFindAction] = []
+    func browserManager(findState state: AskOnPage.FindState) { findStates.append(state) }
+    func browserManager(findAction action: CraFindAction) { findActions.append(action) }
     func browserManager(download: CraDownloadInfo) {}
     func browserManager(fullscreen: Bool, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }

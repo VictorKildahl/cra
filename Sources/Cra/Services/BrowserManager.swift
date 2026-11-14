@@ -71,8 +71,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerDidUpdate(_ tabID: UUID)
     /// The status bubble's text (a hovered link's URL, "" when the pointer leaves it) and the tab whose page shows it.
     func browserManager(statusMessage: String, tabID: UUID?)
-    /// Find in page results for the visible tab; -1 = no new value.
-    func browserManager(findMatches count: Int, activeMatch: Int)
+    func browserManager(findState state: AskOnPage.FindState)
+    func browserManager(findAction action: CraFindAction)
     func browserManager(download: CraDownloadInfo)
     func browserManager(fullscreen: Bool, tabID: UUID)
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView?
@@ -127,6 +127,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     private(set) var runtimes: [UUID: TabRuntime] = [:]
     /// The focused pane's tab (the one toolbar actions and DevTools apply to).
     private(set) var visibleTabID: UUID?
+    /// Stops an Ask snapshot from surviving a focus switch away and back to the same document.
+    private(set) var askOnPageFocusRevision: UInt = 0
+    private(set) var findState = AskOnPage.FindState()
+    private var findOwner: AskOnPageContext?
+    /// One current document's type probe, never page text or a URL-wide cache.
+    var askOnPageDocument: AskOnPageDocumentSnapshot?
+    var askOnPageQuoteOperation: AskOnPageQuoteOperation?
+    var askOnPageDocumentRead: (id: UUID, context: AskOnPageContext)?
     /// Every tab on screen, in pane order (one entry outside split view).
     private(set) var visibleTabIDs: [UUID] = []
     /// Tabs whose page tab sleeping closed and that haven't been shown since.
@@ -253,6 +261,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Gives up a tab's live page so another window can show it. Its DevTools close:
     /// their window belongs to this one.
     func release(_ tabID: UUID) -> TabRuntime? {
+        invalidateAskOnPageDocument(for: tabID)
+        if findOwner?.tabID == tabID { stopFinding(false) }
         guard let rt = runtimes.removeValue(forKey: tabID) else { return nil }
         nowPlaying?.remove(tabID)
         nowPlaying?.pictureInPicture.remove(tabID)
@@ -267,7 +277,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
         devToolsDockedState[tabID] = nil
-        if visibleTabID == tabID { visibleTabID = nil }
+        if visibleTabID == tabID { visibleTabID = nil; askOnPageFocusRevision &+= 1 }
         visibleTabIDs.removeAll { $0 == tabID }
         handOffPermissions(of: tabID, browser: rt.browser)
         if let host = rt.hostWindow {
@@ -291,6 +301,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Show several tabs at once (split view); `focused` gets keyboard focus.
     func show(_ tabIDs: [UUID], focused: UUID?, focus: Bool) {
         let started = Perf.now()
+        let previousFocus = visibleTabID
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
             runtimes[previous]?.hiddenAt = clock.now
@@ -342,6 +353,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         visibleTabIDs = shown
         if let np = nowPlaying, np.onScreen != Set(shown) { np.onScreen = Set(shown) }
         visibleTabID = focused.flatMap { newSet.contains($0) ? $0 : nil } ?? shown.first
+        if visibleTabID != previousFocus {
+            askOnPageFocusRevision &+= 1
+            invalidateAskOnPageDocument()
+            stopFinding(false)
+        }
         if wasVisible != Set(shown) {
             HitchMonitor.mark("page-shown")
             if let rt = visibleRuntime {
@@ -1294,7 +1310,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeURL url: String) {
         guard let id = tabID(of: browser) else { return }
+        if findOwner?.tabID == id { stopFinding(false) }
         runtimes[id]?.navigationRevision &+= 1
+        invalidateAskOnPageDocument(for: id)
         // A quiet page that navigates leaves the player; a playlist moving on keeps its card.
         if !browser.isAudible { nowPlaying?.remove(id) }
         // Our own error page is a data: URL; keep the real address in the model.
@@ -1310,7 +1328,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
         guard let id = tabID(of: browser) else { return }
-        if loading { runtimes[id]?.navigationRevision &+= 1 }
+        if loading, findOwner?.tabID == id { stopFinding(false) }
+        if loading {
+            runtimes[id]?.navigationRevision &+= 1
+            invalidateAskOnPageDocument(for: id)
+        }
         HitchMonitor.mark(loading ? "load-start" : "load-end")
         if loading { Perf.begin(.pageLoad, id.uuidString) } else {
             Perf.end(.pageLoad, id.uuidString)
@@ -1445,9 +1467,53 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManager(statusMessage: message, tabID: tabID(of: browser))
     }
 
-    func browser(_ browser: CraBrowser, didFindMatches count: Int, activeMatch: Int) {
+    /// Runs synchronously at field/programmatic edits, before any deferred UI observation.
+    @discardableResult
+    func prepareFind(_ query: String, matchCase: Bool = false, purpose: AskOnPage.FindPurpose = .ordinary) -> AskOnPage.FindRequest? {
+        guard let owner = findPageContext() else { stopFinding(false); return nil }
+        if findOwner != owner { stopFinding(false); findOwner = owner }
+        let previous = findState
+        let request = findState.begin(query, matchCase: matchCase, purpose: purpose)
+        if previous.request != request { retireAskOnPageQuote() }
+        if previous != findState { delegate?.browserManager(findState: findState) }
+        return request
+    }
+
+    func find(_ query: String, forward: Bool, matchCase: Bool = false, purpose: AskOnPage.FindPurpose = .ordinary) {
+        guard !query.replacingOccurrences(of: "\r", with: "").isEmpty else { stopFinding(true); return }
+        guard let request = prepareFind(query, matchCase: matchCase, purpose: purpose), let browser = visibleRuntime?.browser else { return }
+        browser.findText(query, forward: forward, matchCase: matchCase, findNext: true,
+                         generation: request.id, quote: purpose == .quote)
+    }
+
+    func stopFinding(_ clearSelection: Bool) {
+        retireAskOnPageQuote()
+        let browser = findOwner.flatMap { owner in
+            runtimes[owner.tabID].flatMap { ObjectIdentifier($0) == owner.runtime ? $0.browser : nil }
+        }
+        findOwner = nil
+        findState.clear()
+        browser?.stopFinding(clearSelection)
+        delegate?.browserManager(findState: findState)
+    }
+
+    func canAskFind(query: String, enabled: Bool, forward: Bool) -> Bool {
+        guard findOwner != nil else { return false }
+        guard findOwner == findPageContext() else { stopFinding(false); return false }
+        return findState.canAsk(query: query, enabled: enabled, forward: forward)
+    }
+
+    func browser(_ browser: CraBrowser, didFindMatches count: Int, activeMatch: Int, generation: UUID, quote: Bool, identifier: Int, finalUpdate: Bool) {
+        guard let id = tabID(of: browser), id == visibleTabID, findOwner != nil else { return }
+        guard findOwner == findPageContext() else { stopFinding(false); return }
+        guard findState.accept(generation, quote: quote, identifier: identifier, count: count, activeMatch: activeMatch, finalUpdate: finalUpdate) else { return }
+        delegate?.browserManager(findState: findState)
+    }
+
+    func browser(_ browser: CraBrowser, requestsFindAction action: CraFindAction) {
         guard let id = tabID(of: browser), id == visibleTabID else { return }
-        delegate?.browserManager(findMatches: count, activeMatch: activeMatch)
+        // OnChromeCommand is intercepted before Chromium's own FindBarController can search.
+        delegate?.browserManager(findAction: action)
     }
 
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {

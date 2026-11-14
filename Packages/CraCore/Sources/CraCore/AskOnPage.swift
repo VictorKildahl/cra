@@ -1,447 +1,246 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
-/// Arc Max's Ask on Page (`askOnPageEnabled`, Arc's FindInPage + AskInPage modules), on the Mac's own
-/// Apple Intelligence model instead of Arc's server.
-///
-/// Arc's settings text: "Press Command + F on any page to ask a question and let Max answer it for you
-/// in seconds." It is Arc's find bar as a card: ⌘F opens one field, "Find or ask…". Typing finds on the
-/// page as before (count, previous, next); the Ask button sends the text as a question about the page.
-/// The answer quotes the page between `<excerpt>` tags; each quote gets "Find on Page", which runs the
-/// page's own find on it. Once a conversation started the field reads "Ask a question…" and only asks.
-/// Read from Arc 1.173.1's binary (docs/arc-reverse-engineering.md, "Ask on Page").
-public enum AskOnPagePolicy {
-    /// What Return does in the field. Arc's binding wasn't readable; Cra finds while the text is on
-    /// the page and asks once it isn't (a question rarely is), and always asks in a conversation.
-    public enum ReturnKey: Equatable, Sendable {
-        case nextMatch, ask
+/// Ask on Page's transient dialogue and citations. Browser ownership and model tasks live in the app.
+public enum AskOnPage {
+    public static let disabledNotification = Notification.Name("CraAskOnPageDisabled")
+    public static let profileChangedNotification = Notification.Name("CraAskOnPageProfileChanged")
+    public static let unavailableNotification = Notification.Name("CraAskOnPageUnavailable")
+    public enum FindPurpose: Equatable, Sendable { case ordinary, quote }
+
+    /// One exact query session. Native identifiers are evidence, not caller-supplied IDs.
+    public struct FindRequest: Equatable, Sendable {
+        public let id: UUID
+        public let query: String
+        public let matchCase: Bool
+        public let purpose: FindPurpose
     }
 
-    /// Pages the card can answer about (Arc's `isValidAskPage`): web pages and files, not Cra's own
-    /// pages, chrome:// or an empty tab. Elsewhere the field only finds.
-    public static func canAsk(page: URL?) -> Bool {
-        guard let scheme = page?.scheme?.lowercased() else { return false }
-        return scheme == "http" || scheme == "https" || scheme == "file"
+    public struct FindState: Equatable, Sendable {
+        public private(set) var request: FindRequest?
+        public private(set) var count: Int?
+        public private(set) var activeMatch = 0
+        public private(set) var identifier: Int?
+        public private(set) var finalUpdate = false
+        private var finalZero = false
+
+        public init() {}
+
+        /// Repeated next/previous searches remain in the same native query session.
+        @discardableResult
+        public mutating func begin(_ query: String, matchCase: Bool = false, purpose: FindPurpose = .ordinary) -> FindRequest {
+            if let request, request.query == query, request.matchCase == matchCase, request.purpose == purpose { return request }
+            clear()
+            let next = FindRequest(id: UUID(), query: query, matchCase: matchCase, purpose: purpose)
+            request = next
+            return next
+        }
+
+        public mutating func clear() { self = Self() }
+
+        @discardableResult
+        public mutating func accept(_ generation: UUID, quote: Bool, identifier: Int, count: Int, activeMatch: Int, finalUpdate: Bool) -> Bool {
+            guard let request, request.id == generation, (request.purpose == .quote) == quote else { return false }
+            self.identifier = identifier
+            self.finalUpdate = finalUpdate
+            if count >= 0 { self.count = count }
+            if activeMatch >= 0 { self.activeMatch = activeMatch }
+            // A final unknown count cannot turn an earlier partial zero into proof.
+            finalZero = finalUpdate && count == 0
+            return true
+        }
+
+        public func canAsk(query: String, enabled: Bool, forward: Bool) -> Bool {
+            enabled && forward && finalZero && request?.purpose == .ordinary && request?.query == query
+                && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
-    /// The field's placeholder, Arc's three.
-    public static func placeholder(canAsk: Bool, inConversation: Bool) -> String {
-        if !canAsk { return "Find in page…" }
-        return inConversation ? "Ask a question…" : "Find or ask…"
+    /// The existing deterministic UI fixture model, returning native fields from the fitted source.
+    /// It never certifies model quality, and it does not invent punctuation outside that source.
+    public static func fixtureDraft(question: String, source: String) -> Draft {
+        let words = Set(question.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .filter { $0.count > 3 }.map(String.init))
+        var sentences: [String] = [], sentence = ""
+        for character in source {
+            sentence.append(character)
+            if ".!?\n".contains(character) {
+                let text = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.count > 12 { sentences.append(text) }
+                sentence = ""
+            }
+        }
+        let tail = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tail.count > 12 { sentences.append(tail) }
+        guard let quote = sentences.first(where: { sentence in words.contains { sentence.lowercased().contains($0) } }) ?? sentences.first else {
+            return .init(excerpts: [], answer: "I think it is not on the page, so this is just a guess.")
+        }
+        return .init(excerpts: [quote], answer: quote, keyAnswer: String(quote.split(separator: " ").prefix(4).joined(separator: " ")))
     }
 
-    public static func returnKey(query: String, matches: Int?, inConversation: Bool, canAsk: Bool) -> ReturnKey? {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return nil }
-        guard canAsk else { return .nextMatch }
-        if inConversation { return .ask }
-        if let matches, matches > 0 { return .nextMatch }
-        // Still waiting for the page's count: a question is the likelier reading of text with a space.
-        if matches == nil { return q.contains(" ") ? .ask : .nextMatch }
-        return .ask
-    }
-
-    /// Whether the Ask button shows: text typed on a page the card can answer about.
-    public static func showsAskButton(query: String, canAsk: Bool) -> Bool {
-        canAsk && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// A quote as Arc searches for it: trimmed of whitespace and quotation marks.
-    public static func trimQuote(_ quote: String) -> String {
-        quote.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'“”‘’")))
-    }
-
-    /// The page's readable text, as Arc's WebPageSnapshot reads it: scripts, styles, navigation,
-    /// headers, footers, forms, dialogs and what is hidden left out, the main entity or article
-    /// when the page marks one. Runs in Cra's isolated world; answers {url, title, text}. Reads up to
-    /// `maxPageCharacters` (the rest only counts toward the length).
-    public static let pageTextScript = """
-    (() => {
-      const skip = 'script,style,link,svg,noscript,template,iframe,[aria-hidden=true],nav,[role=navigation],[aria-role=navigation],footer,header,[role=banner],[aria-role=banner],form,option,[role=alert],[role=dialog],[aria-role=alert],[aria-role=dialog]';
-      const prefer = ['[itemprop=mainEntity]', 'article', '#content', 'main', '.reviews-content'];
-      let root = null;
-      for (const s of prefer) { const el = document.querySelector(s); if (el && (el.innerText || '').trim().length > 200) { root = el; break; } }
-      root = root || document.body || document.documentElement;
-      const block = /^(block|flex|grid|list-item|table|table-row|flow-root)$/;
-      const max = \(maxPageCharacters);
-      let out = '', total = 0;
-      const add = (s) => { total += s.length; if (out.length < max) out += s; };
-      const walk = (node) => {
-        if (node.nodeType === 3) { const t = node.nodeValue.replace(/\\s+/g, ' '); if (t.trim()) add(t); return; }
-        if (node.nodeType !== 1) return;
-        if (node !== root && node.matches(skip)) return;
-        if (node.checkVisibility && !node.checkVisibility()) return;
-        const display = getComputedStyle(node).display;
-        const isBlock = block.test(display) || node.tagName === 'BR';
-        if (isBlock) add('\\n');
-        for (const child of node.childNodes) walk(child);
-        if (isBlock) add('\\n');
-      };
-      walk(root);
-      const text = out.replace(/[ \\t]*\\n[ \\t\\n]*/g, '\\n').replace(/ {2,}/g, ' ').trim();
-      return {url: location.href, title: document.title || '', text, total};
-    })()
-    """
-
-    /// How much page text the script reads at most, far past what the model takes.
-    public static let maxPageCharacters = 200_000
-}
-
-/// What the model is asked: Arc's rules (AskInPageChat), the page between Arc's
-/// tags, then the question. Arc sends it all as one message, the conversation written into it as
-/// "BEGIN DIALOGUE", "Human: …", "Assistant: …". Here the rules are the session's
-/// instructions, the page goes with the first question, and each question and answer is a turn of
-/// its own. The on-device model, given Arc's dialogue as text, writes a dialogue back: made-up
-/// "Human:" questions, or the last answer again word for word (#417).
-public enum AskOnPagePrompt {
-    public static func rules(language: String) -> String {
-        """
-        You will be acting as a research assistant. I will give you the content of a webpage, and you will concisely answer \
-        questions from a human using information from that page. You will provide citations for all answers using <excerpt> tags.
-
-        \(userLine)
-
-        RULES:
-        1. stay in your role throughout the dialogue
-        2. when asked a question, decide if you can answer based on information on the page. If the page answers the question, \
-        directly quote the relevant sentence on the page using an <excerpt> tag on its own line. Then, summarize the answer in 10 \
-        words on the next line.
-        3. <excerpt> tags must be on their own line, not inline.
-        4. If you can’t provide a direct quote to support your answer, make it clear that it’s just a guess.
-        5. Use Markdown, not HTML, to format your answer. Always **bold** the term that answers the question.
-        6. Be extremely concise. (1-sentence answers if possible).
-        7. Respond in \(language).
-        8. You may perform translations, summaries or other textual transformations for the user if asked.
-        """
-    }
-
-    /// In place of Arc's "When I write BEGIN DIALOGUE you will enter this role, and all further input
-    /// from the "Human:" will be from a user seeking answers about a webpage." The on-device model
-    /// takes that as the shape of its answer and writes a dialogue (#417).
-    public static let userLine = "After the page, each message is a question from a user seeking answers about the webpage."
-
-    /// Arc's rules, without the examples Arc sends after them ("EXAMPLES OF RESPONSES FOR A
-    /// HYPOTHETICAL WEBPAGE": solar power, Brooklyn, a privacy policy, a summary). On a question the
-    /// page can't answer, the on-device model quoted the solar example as if it were the page: 9 of
-    /// 20 answers, 0 of 20 without the examples, and answerable questions quote the page as often.
-    public static func instructions(language: String) -> String {
-        rules(language: language)
-    }
-
-    /// One question and its answer, earlier in the conversation.
     public struct Turn: Equatable, Sendable {
-        public var question: String
-        public var answer: String
+        public let question: String
+        public let answer: String
+
         public init(question: String, answer: String) {
             self.question = question
             self.answer = answer
         }
     }
 
-    /// How many earlier answers are sent again; older ones read "[Older messages hidden]", as
-    /// Arc's do, so a long conversation leaves the page room.
-    public static let keptAnswers = 2
-    public static let hiddenAnswer = "[Older messages hidden]"
-    /// An earlier answer is sent again up to this many characters. A summary that filled the context
-    /// left the next questions 20 % of the page; its start is what a follow-up refers to.
-    public static let keptAnswerCharacters = 800
+    /// Only completed pairs enter history; eviction never leaves an answer without its question.
+    public struct History: Equatable, Sendable {
+        public static let maximumTurns = 12
+        public static let maximumBytes = 65_536
+        public private(set) var turns: [Turn] = []
+        public private(set) var olderMessagesHidden: Bool
 
-    /// An earlier answer as it is sent again: hidden when older than `keptAnswers`, cut when long.
-    static func earlierAnswer(_ answer: String, index: Int, of count: Int) -> String {
-        if index < count - keptAnswers { return hiddenAnswer }
-        return answer.count > keptAnswerCharacters ? String(answer.prefix(keptAnswerCharacters)) + "…" : answer
-    }
+        public init(olderMessagesHidden: Bool = false) { self.olderMessagesHidden = olderMessagesHidden }
 
-    /// One turn the model already took: what it was asked and what it answered.
-    public struct Exchange: Equatable, Sendable {
-        public var prompt: String
-        public var response: String
-        public init(prompt: String, response: String) {
-            self.prompt = prompt
-            self.response = response
+        public mutating func append(_ turn: Turn) {
+            turns.append(turn)
+            var bytes = turns.reduce(0) { $0 + $1.question.utf8.count + $1.answer.utf8.count }
+            while turns.count > Self.maximumTurns || bytes > Self.maximumBytes {
+                let removed = turns.removeFirst()
+                bytes -= removed.question.utf8.count + removed.answer.utf8.count
+                olderMessagesHidden = true
+            }
         }
     }
 
-    /// What the model gets: the turns before, then the prompt it answers now. The page goes with
-    /// the conversation's first question, so it comes before every answer that quotes it.
-    public struct Conversation: Equatable, Sendable {
-        public var earlier: [Exchange]
-        public var prompt: String
-    }
+    public struct Draft: Equatable, Sendable {
+        public var excerpts: [String]?
+        public var answer: String?
+        public var keyAnswer: String?
 
-    /// Arc's page context (it closes <url> with </title>, kept).
-    public static func context(url: String, title: String?, date: String, text: String) -> String {
-        "WEBPAGE CONTEXT FOR OUR DIALOGUE:\n<url>\(url)</title>\n<current-date>\(date)</current-date>\n<title>\(title ?? "")</title>\n<content>\n\(text)\n</content>\n"
-    }
-
-    public static func conversation(url: String, title: String?, date: String, text: String, turns: [Turn], question: String) -> Conversation {
-        let page = context(url: url, title: title, date: date, text: text)
-        let earlier = turns.enumerated().map { i, turn in
-            Exchange(prompt: i == 0 ? page + turn.question : turn.question,
-                     response: earlierAnswer(turn.answer, index: i, of: turns.count))
+        public init(excerpts: [String]? = nil, answer: String? = nil, keyAnswer: String? = nil) {
+            self.excerpts = excerpts; self.answer = answer; self.keyAnswer = keyAnswer
         }
-        return Conversation(earlier: earlier, prompt: turns.isEmpty ? page + question : question + followUpReminder)
     }
 
-    /// After a follow-up question. Past an answer without a quote (a summary), the model kept writing
-    /// without one: factual follow-ups quoted the page 9 times in 24, 16 with this line.
-    public static let followUpReminder = "\n\nQuote the page in an <excerpt> tag if it answers this."
-
-    /// What is sent besides the page and the instructions: the questions and the answers kept.
-    public static func dialogue(turns: [Turn], question: String) -> String {
-        let earlier = turns.enumerated().flatMap { i, turn in
-            [turn.question, earlierAnswer(turn.answer, index: i, of: turns.count)]
+    public enum QuoteState: Equatable, Sendable { case unverified, verified, notFound }
+    public struct Quote: Equatable, Sendable {
+        public let text: String
+        public let state: QuoteState
+    }
+    public struct Answer: Equatable, Sendable {
+        public let text: String
+        public let keyAnswer: String?
+        public let quotes: [Quote]
+        public let isComplete: Bool
+        /// Text presence in the transmitted source, not semantic support for the answer.
+        public var hasVerifiedQuote: Bool { quotes.contains { $0.state == .verified } }
+        public var emphasisRange: NSRange? {
+            guard let keyAnswer, !keyAnswer.isEmpty, let range = text.range(of: keyAnswer, options: .literal) else { return nil }
+            return NSRange(range, in: text)
         }
-        return (earlier + [turns.isEmpty ? question : question + followUpReminder]).joined(separator: "\n")
+        /// Only internal history context; native UI consumes the fields directly.
+        public var historyText: String { (quotes.map(\.text) + [text]).joined(separator: "\n") }
     }
 
-    /// Room left for the answer, in tokens. Arc asks for up to 4,096 from a far bigger model; the
-    /// on-device one has 4,096 for everything, and Arc's answers are a quote and a line.
-    public static let answerTokens = 600
-
-    /// The most the answer may use where the model counted the prompt: the rest of its context, so a
-    /// long answer ends there instead of overflowing it. Nil when the prompt wasn't counted.
-    public static func responseTokens(contextTokens: Int, promptTokens: Int?) -> Int? {
-        promptTokens.map { max(1, contextTokens - $0) }
-    }
-
-    /// What follows when the context overflows. Before any answer, the page was too long for the
-    /// estimate: read less and ask again. After part of one, the answer outgrew the room left for it
-    /// (a long summary): keep what the card already shows. Starting over wiped 31 s of a summary and
-    /// wrote it again from a shorter page.
-    public enum Overflow: Equatable, Sendable { case readLess, keepAnswer }
-
-    public static func afterOverflow(streamed: String) -> Overflow {
-        streamed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .readLess : .keepAnswer
-    }
-
-    /// Arc's budget for the page: three characters per token of context (at most 16,000 tokens),
-    /// less the rules, the examples and 200. The on-device model's context also holds the answer,
-    /// so its room comes off first; the dialogue too, since Cra sends the conversation again.
-    public static func characterBudget(contextTokens: Int, instructions: String, dialogue: String) -> Int {
-        let tokens = min(contextTokens, 16_000) - answerTokens
-        return max(0, tokens * 3 - (instructions.count + dialogue.count + 200))
-    }
-
-    /// The page cut to `budget` characters with "…", and how much of it that is. `total` is the
-    /// page's whole length when the script read only part of it. The fraction is nil when it all fits.
-    public static func truncate(_ text: String, budget: Int, total: Int? = nil) -> (text: String, fractionRead: Double?) {
-        let whole = max(total ?? text.count, text.count)
-        guard whole > budget else { return (text, nil) }
-        let cut = String(text.prefix(budget)) + "…"
-        return (cut, whole == 0 ? nil : Double(min(budget, text.count)) / Double(whole))
-    }
-
-    /// The same text cut further when the model counted more tokens than it has room for: by the
-    /// share that is over, and a tenth more for the estimate.
-    public static func shrink(budget: Int, promptTokens: Int, allowedTokens: Int) -> Int {
-        guard promptTokens > allowedTokens, promptTokens > 0 else { return budget }
-        return max(0, Int(Double(budget) * Double(allowedTokens) / Double(promptTokens) * 0.9))
-    }
-
-    /// Arc's line over the answer: "This page was long, so I read the first 81%." Nil when it read it all.
-    public static func fractionLine(_ fraction: Double?) -> String? {
-        guard let fraction, fraction < 1 else { return nil }
-        let percent = max(1, min(99, Int((fraction * 100).rounded(.down))))
-        return "This page was long, so I read the first \(percent)%."
-    }
-
-    /// Arc's answer for a page with no text to speak of (49 characters or fewer).
-    public static let unreadable = "Sorry, I can’t read this type of page."
-    public static let failed = "Sorry, I encountered an error"
-    public static let fakeMadeUpQuote = "The moon is made of green cheese, the article says."
-    /// How many points the test model's summary has.
-    public static let fakeSummaryPoints = 28
-    public static let minimumText = 50
-    /// How many times a reply that only copies the page block back is asked for again.
-    public static let echoRetries = 2
-
-    /// The test model's answer (CRA_TIDY_FAKE_MODEL=1): the first sentence on the page that shares
-    /// a word with the question, quoted the way Arc's answers are. Asked for a summary, it lists the
-    /// page's first sentences as bullets, as long as the real model's summaries run. Asked to make
-    /// something up, it quotes a sentence the page doesn't have, as the real model sometimes does.
-    /// Asked to repeat the page, its first answer (`attempt` 0) is the page block copied back, as
-    /// the real model's sometimes is; asked again, it answers.
-    public static func fakeAnswer(question: String, text: String, attempt: Int = 0) -> String {
-        let asked = question.lowercased()
-        if asked.contains("repeat the page") {
-            if attempt == 0 { return "<url>https://example.test/</title>\n<current-date>today</current-date>\n<content>\n\(text.prefix(200))" }
-            return fakeAnswer(question: "", text: text)
+    /// Partial generated fields replace earlier fields. No provisional quotation is actionable.
+    public static func partialAnswer(_ draft: Draft) -> Answer {
+        var remaining = 65_536
+        func take(_ text: String) -> String {
+            let result = prefix(text, maximumBytes: remaining)
+            remaining -= result.utf8.count
+            return result
         }
-        if asked.contains("make up") || asked.contains("made-up") {
-            return "According to the page:\n<excerpt>\(fakeMadeUpQuote)</excerpt>\nSo, **a guess**."
+        let text = take(draft.answer ?? "")
+        let key = draft.keyAnswer.map(take)
+        let quotes = (draft.excerpts ?? []).prefix(4).map { Quote(text: take($0), state: .unverified) }
+        return Answer(text: text, keyAnswer: key, quotes: quotes, isComplete: false)
+    }
+
+    /// Required-field completeness is separate from citation validity and optional emphasis:
+    /// complete empty citation arrays remain legitimate conversation turns.
+    public static func completeAnswer(_ draft: Draft, source: String) -> Answer? {
+        guard let excerpts = draft.excerpts, let text = draft.answer,
+              excerpts.count <= 4, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              excerpts.reduce(text.utf8.count + (draft.keyAnswer?.utf8.count ?? 0), { $0 + $1.utf8.count }) <= 65_536 else { return nil }
+        let source = normalized(source)
+        let quotes = excerpts.map { text -> Quote in
+            let candidate = normalized(text)
+            return Quote(text: text, state: !candidate.isEmpty && source.contains(candidate) ? .verified : .notFound)
         }
-        if asked.contains("summar") || asked.contains("key points") {
-            let sentences = text.split(whereSeparator: { ".!?\n".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.count > 12 }
-            return "Here are the key points of the page:\n\n" + sentences.prefix(fakeSummaryPoints).map { "* **\($0.split(separator: " ").prefix(2).joined(separator: " "))** \($0)." }.joined(separator: "\n")
+        return Answer(text: text, keyAnswer: draft.keyAnswer, quotes: quotes, isComplete: true)
+    }
+
+    /// Only canonical Unicode and whitespace fold. Case and punctuation remain evidence.
+    public static func normalized(_ text: String) -> String {
+        text.precomposedStringWithCanonicalMapping.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// A byte limit that never cuts a composed character, shared by context and response bounds.
+    static func prefix(_ text: String, maximumBytes: Int) -> String {
+        var bytes = 0
+        var end = text.startIndex
+        for character in text {
+            let size = character.utf8.count
+            if bytes + size > maximumBytes { break }
+            bytes += size
+            end = text.index(after: end)
         }
-        let words = Set(question.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).filter { $0.count > 3 }.map(String.init))
-        let sentences = text.split(whereSeparator: { ".!?\n".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.count > 12 }
-        guard let hit = sentences.first(where: { s in words.contains { s.lowercased().contains($0) } }) ?? sentences.first else {
-            return "I think it’s **not on the page**, so this is just a guess."
-        }
-        return "According to the page:\n<excerpt>\(hit).</excerpt>\nSo, **\(hit.split(separator: " ").prefix(4).joined(separator: " "))**."
+        return String(text[..<end])
     }
 }
 
-/// How often a streamed answer reaches the card. The model sends its reply so far after every token,
-/// 30 to 50 times a second; laying out a long answer that often took the main thread for most of a
-/// summary (334 stalls in 14 s). The first snapshot shows at once, then at most one per `interval`,
-/// always the latest, and the finished answer at once.
-public struct AskOnPageStreamPacing: Equatable, Sendable {
-    public static let interval: TimeInterval = 0.1
-    private var lastShown: TimeInterval?
 
-    public init() {}
+/// Arc 1.109's page gate and the existing combined Find or Ask presentation.
+/// An eligible URL/type still requires a genuine current HTML snapshot before generation.
+public enum AskOnPagePolicy {
+    public enum ReturnKey: Equatable, Sendable { case nextMatch, ask }
 
-    /// How long to wait before showing a snapshot that arrived at `now`: 0 shows it now.
-    public func delay(at now: TimeInterval) -> TimeInterval {
-        guard let lastShown else { return 0 }
-        return max(0, lastShown + Self.interval - now)
+    public enum DocumentKind: Equatable, Sendable { case unknown, html, pdf, image, movie, other }
+
+    public static func supportsURL(_ page: URL?) -> Bool {
+        guard let page, let scheme = page.scheme?.lowercased(), ["http", "https"].contains(scheme) else { return false }
+        return page.host?.lowercased() != "search.arc.net"
     }
 
-    public mutating func shown(at now: TimeInterval) { lastShown = now }
+    public static func canAsk(page: URL?, incognito: Bool, documentKind: DocumentKind) -> Bool {
+        supportsURL(page) && !incognito && ![.pdf, .image, .movie].contains(documentKind)
+    }
+
+    public static func placeholder(canAsk: Bool, inConversation: Bool) -> String {
+        if !canAsk { return "Find in page…" }
+        return inConversation ? "Ask a question…" : "Find or ask…"
+    }
+
+    /// Display counts cannot prove ownership. Only the manager's correlated final zero may ask.
+    public static func returnKey(query: String, finalZero: Bool, inConversation: Bool,
+                                 canAsk: Bool, forward: Bool) -> ReturnKey? {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard forward, canAsk else { return .nextMatch }
+        return inConversation || finalZero ? .ask : .nextMatch
+    }
+
+    public static func showsAskButton(query: String, canAsk: Bool) -> Bool {
+        canAsk && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
-/// An answer split into Arc's parts (AskInPageMessagePart): text, and quotes from the page.
-public enum AskOnPageReply {
-    public struct Part: Equatable, Sendable {
-        public var text: String
-        public var isQuote: Bool
-        public init(text: String, isQuote: Bool) {
-            self.text = text
-            self.isQuote = isQuote
-        }
+/// Ask's preferred card fits the focused page; 450 caps the conversation, not the whole panel.
+public enum AskOnPageLayout {
+    public static let maximumWidth: CGFloat = 400
+    public static let maximumConversationHeight: CGFloat = 450
+
+    public static func frame(preferred: CGSize, page: CGRect, inset: CGFloat, toolbarOverPage: CGFloat = 0) -> CGRect {
+        // The floating toolbar covers the page's top. Constrain the whole card below it,
+        // including a short page's conversation, rather than shifting a full-height card out.
+        var page = page
+        page.size.height = max(0, page.height - max(0, toolbarOverPage))
+        let dx = min(max(0, inset), max(0, page.width) / 2)
+        let dy = min(max(0, inset), max(0, page.height) / 2)
+        let width = min(maximumWidth, max(0, preferred.width), max(0, page.width - 2 * dx))
+        let height = min(max(0, preferred.height), max(0, page.height - 2 * dy))
+        return CGRect(x: page.maxX - dx - width, y: page.maxY - dy - height, width: width, height: height)
     }
 
-    /// The parts of `reply`, as far as it has come: a quote still streaming is a quote already, and a
-    /// tag the model is halfway through writing is left out.
-    public static func parts(_ reply: String, question: String? = nil) -> [Part] {
-        var parts: [Part] = []
-        var rest = Substring(clean(reply, question: question))
-        func addText(_ s: Substring) {
-            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !t.isEmpty { parts.append(Part(text: t, isQuote: false)) }
-        }
-        while !rest.isEmpty {
-            guard let open = rest.range(of: "<excerpt>") else {
-                addText(dropPartialTag(rest))
-                break
-            }
-            addText(rest[..<open.lowerBound])
-            let after = rest[open.upperBound...]
-            if let close = after.range(of: "</excerpt>") {
-                let quote = AskOnPagePolicy.trimQuote(String(after[..<close.lowerBound]))
-                if !quote.isEmpty { parts.append(Part(text: quote, isQuote: true)) }
-                rest = after[close.upperBound...]
-            } else {
-                let quote = AskOnPagePolicy.trimQuote(String(dropPartialTag(after)))
-                if !quote.isEmpty { parts.append(Part(text: quote, isQuote: true)) }
-                break
-            }
-        }
-        return parts
-    }
-
-    /// The reply without the prompt's dialogue framing, which the on-device model sometimes writes
-    /// back before its answer: a "BEGIN DIALOGUE" line, the question again (as "Human: …" or as it
-    /// was asked), and an "Assistant:" before the answer.
-    public static func clean(_ reply: String, question: String? = nil) -> String {
-        var lines = reply.components(separatedBy: "\n")
-        let asked = question.map(normalized)
-        while let first = lines.first {
-            let t = first.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty || t == "BEGIN DIALOGUE" || t.hasPrefix("Human:") || t.hasPrefix("> ") { lines.removeFirst(); continue }
-            // The question itself, unless it is all the model has written so far of a longer line.
-            if let asked, !asked.isEmpty, normalized(t) == asked, lines.count > 1 { lines.removeFirst(); continue }
-            if t.hasPrefix("Assistant:") {
-                lines[0] = String(t.dropFirst("Assistant:".count)).trimmingCharacters(in: .whitespaces)
-                if lines[0].isEmpty { lines.removeFirst(); continue }
-            }
-            break
-        }
-        let rest = lines.joined(separator: "\n")
-        if echoesPrompt(rest) { return "" }
-        // A streamed line still being written may be the start of "BEGIN DIALOGUE", "Human:" or the
-        // question again, or of the page block coming back: it waits for the rest.
-        if lines.count == 1, let only = lines.first {
-            let t = only.trimmingCharacters(in: .whitespaces)
-            if !t.isEmpty, pageBlockMarkers.contains(where: { $0.hasPrefix(t) }) { return "" }
-            if ["BEGIN DIALOGUE", "Human:", "Assistant:"].contains(where: { $0.hasPrefix(only) && !only.isEmpty }) { return "" }
-            if !reply.hasSuffix("\n"), let asked, !normalized(only).isEmpty, asked.hasPrefix(normalized(only)) { return "" }
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// How the prompt's page block starts its lines (AskOnPagePrompt.context).
-    static let pageBlockMarkers = ["WEBPAGE CONTEXT", "<url>", "<current-date>", "<title>", "<content>"]
-
-    /// Whether the reply is the prompt's page block coming back instead of an answer: the on-device
-    /// model sometimes copies its input from `<url>` on (Wikipedia's Bauhaus page, cut to 18 %: 1 run
-    /// in 10). An answer never starts with one of the block's tags.
-    public static func echoesPrompt(_ reply: String) -> Bool {
-        let t = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        return pageBlockMarkers.contains { t.hasPrefix($0) }
-    }
-
-    static func normalized(_ s: String) -> String {
-        s.lowercased().filter { $0.isLetter || $0.isNumber }
-    }
-
-    /// What Find on Page searches for, in turn, until the page has it: the whole quote, then its first
-    /// sentence, then its first eight words. A page's own marks between sentences (Wikipedia's "[3]")
-    /// and the model's small slips keep a whole quote from matching.
-    public static func findCandidates(_ quote: String) -> [String] {
-        let whole = findText(quote)
-        var out = [whole]
-        if let end = whole.firstIndex(where: { ".!?".contains($0) }), whole.index(after: end) < whole.endIndex {
-            let sentence = findText(String(whole[...end]))
-            if sentence.count >= 12 { out.append(sentence) }
-        }
-        let words = whole.split(separator: " ")
-        if words.count > 8 { out.append(words.prefix(8).joined(separator: " ")) }
-        var seen = Set<String>()
-        return out.filter { !$0.isEmpty && seen.insert($0).inserted }
-    }
-
-    /// A text part's lines, each drawn on its own while the answer streams so only the last one is
-    /// laid out again. An empty line keeps its height as a space.
-    public static func lines(_ text: String) -> [String] {
-        text.components(separatedBy: "\n").map { $0.isEmpty ? " " : $0 }
-    }
-
-    /// Whether a quote is on the page the model read, as Find on Page would look for it (the whole
-    /// quote, its first sentence, its first eight words), comparing words only: case, punctuation and
-    /// spacing aside. The model sometimes writes a quote the page doesn't have (about 1 in 5 on a
-    /// question the page can't answer); the card says so when the answer is done, not after a click.
-    public static func isOnPage(_ quote: String, pageText: String) -> Bool {
-        let page = words(pageText)
-        return findCandidates(quote).contains { candidate in
-            let w = words(candidate)
-            return !w.isEmpty && page.contains(w)
-        }
-    }
-
-    static func words(_ s: String) -> String {
-        s.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ")
-    }
-
-    /// The text without a tag cut off at its end ("<exc", "</excer").
-    static func dropPartialTag(_ s: Substring) -> Substring {
-        guard let lt = s.lastIndex(of: "<") else { return s }
-        let tail = s[lt...]
-        if !tail.contains(">"), "</excerpt>".hasPrefix(tail) || "<excerpt>".hasPrefix(tail) { return s[..<lt] }
-        return s
-    }
-
-    /// A quote's text for the page's find: Markdown links and emphasis read as their words, which is
-    /// what the page shows.
-    public static func findText(_ quote: String) -> String {
-        var s = quote.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
-        s = s.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
-        s = AskOnPagePolicy.trimQuote(s)
-        // A trailing ellipsis or full stop the model added isn't always the page's.
-        while let last = s.last, ".…".contains(last) { s.removeLast() }
-        return s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    public static func conversationHeight(content: CGFloat, input: CGFloat, available: CGFloat) -> CGFloat {
+        min(maximumConversationHeight, max(0, content), max(0, available - input))
     }
 }
 

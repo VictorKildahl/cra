@@ -1,316 +1,204 @@
+@testable import CraCore
 import Foundation
 import Testing
-@testable import CraCore
 
-/// Arc Max's Ask on Page (#393): Arc 1.173.1's find-or-ask bar, prompt and answer parts.
 struct AskOnPageTests {
-    @Test func asksOnlyAboutWebPagesAndFiles() {
-        #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://example.com/a")))
-        #expect(AskOnPagePolicy.canAsk(page: URL(string: "http://example.com")))
-        #expect(AskOnPagePolicy.canAsk(page: URL(string: "file:///Users/a/b.html")))
-        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "cra://settings")))
-        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "chrome://version")))
-        #expect(!AskOnPagePolicy.canAsk(page: URL(string: "about:blank")))
-        #expect(!AskOnPagePolicy.canAsk(page: nil))
+    @Test func aFloatingToolbarLeavesTheAskCardInsideAShortFocusedPage() {
+        let page = CGRect(x: 290, y: 10, width: 240, height: 180)
+        let preferred = CGSize(width: 400, height: 499)
+        let hidden = AskOnPageLayout.frame(preferred: preferred, page: page, inset: 10)
+        let shown = AskOnPageLayout.frame(preferred: preferred, page: page, inset: 10, toolbarOverPage: 32)
+        #expect(shown.maxY == hidden.maxY - 32)
+        #expect(shown.height == hidden.height - 32)
+        #expect(shown.minY == page.minY + 10)
+        #expect(shown.width == 220 && shown.maxX == page.maxX - 10)
+        let covered = AskOnPageLayout.frame(preferred: preferred, page: page, inset: 10, toolbarOverPage: 300)
+        #expect(covered.height == 0 && covered.maxY == page.minY)
     }
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func placeholdersAreArcs() {
-        #expect(AskOnPagePolicy.placeholder(canAsk: false, inConversation: false) == "Find in page…")
-        #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: false) == "Find or ask…")
-        #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: true) == "Ask a question…")
+    @Test func findFinalZeroBelongsToTheExactCurrentQueryGeneration() {
+        var find = AskOnPage.FindState()
+        let a = find.begin("absent")
+        let acceptsPartial = find.accept(a.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: false)
+        #expect(acceptsPartial)
+        #expect(!find.canAsk(query: "absent", enabled: true, forward: true))
+        let b = find.begin("matching")
+        let rejectsOldZero = !find.accept(a.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsOldZero)
+        #expect(find.count == nil && !find.canAsk(query: "matching", enabled: true, forward: true))
+        let acceptsMatching = find.accept(b.id, quote: false, identifier: 2, count: 3, activeMatch: 1, finalUpdate: true)
+        #expect(acceptsMatching)
+        #expect(find.count == 3 && find.activeMatch == 1 && !find.canAsk(query: "matching", enabled: true, forward: true))
+        let again = find.begin("absent")
+        #expect(again.id != a.id)
+        let rejectsFirstA = !find.accept(a.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsFirstA)
+        let acceptsNewZero = find.accept(again.id, quote: false, identifier: 3, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(acceptsNewZero)
+        #expect(find.canAsk(query: "absent", enabled: true, forward: true))
+        #expect(!find.canAsk(query: "absent", enabled: false, forward: true))
+        #expect(!find.canAsk(query: "absent", enabled: true, forward: false))
+        #expect(!find.canAsk(query: "edited before native Find", enabled: true, forward: true))
+        let continuesSession = find.begin("absent").id == again.id
+        #expect(continuesSession, "next/previous keep the same query session")
+        find.clear()
+        let rejectsClosed = !find.accept(again.id, quote: false, identifier: 3, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsClosed)
+        let reopensFresh = find.begin("absent").id != again.id
+        #expect(reopensFresh, "reopening identical text starts a fresh session")
     }
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func returnFindsTextOnThePageAndAsksTheRest() {
-        let r = AskOnPagePolicy.returnKey
-        #expect(r("", 3, false, true) == nil)
-        #expect(r("   ", nil, true, true) == nil)
-        #expect(r("solar", 3, false, true) == .nextMatch)
-        #expect(r("how do reactions work", 0, false, true) == .ask)
-        #expect(r("how do reactions work", nil, false, true) == .ask)
-        #expect(r("solar", nil, false, true) == .nextMatch)
-        // In a conversation the field only asks, even when the words are on the page.
-        #expect(r("solar", 3, true, true) == .ask)
-        // A page the card can't answer about keeps the plain find bar.
-        #expect(r("how do reactions work", 0, false, false) == .nextMatch)
-        #expect(AskOnPagePolicy.showsAskButton(query: "why", canAsk: true))
-        #expect(!AskOnPagePolicy.showsAskButton(query: " ", canAsk: true))
-        #expect(!AskOnPagePolicy.showsAskButton(query: "why", canAsk: false))
-    }
-
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func promptIsArcsWithThePageBetweenItsTags() {
-        let rules = AskOnPagePrompt.rules(language: "Danish")
-        #expect(rules.hasPrefix("You will be acting as a research assistant."))
-        #expect(rules.contains("7. Respond in Danish."))
-        #expect(rules.contains("using an <excerpt> tag on its own line"))
-        let c = AskOnPagePrompt.conversation(url: "https://apple.com/ios", title: "iOS 17", date: "12/11/2026, 18:00",
-                                             text: "React with your hands.", turns: [], question: "How do reactions work?")
-        #expect(c.earlier.isEmpty)
-        #expect(c.prompt == """
-        WEBPAGE CONTEXT FOR OUR DIALOGUE:
-        <url>https://apple.com/ios</title>
-        <current-date>12/11/2026, 18:00</current-date>
-        <title>iOS 17</title>
-        <content>
-        React with your hands.
-        </content>
-        How do reactions work?
-        """)
-    }
-
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func theModelIsNotToldToWriteADialogue() {
-        // Arc's "When I write BEGIN DIALOGUE … the "Human:"" made the on-device model write a dialogue
-        // of its own: made-up questions, or the answer before word for word.
-        let instructions = AskOnPagePrompt.instructions(language: "English")
-        #expect(!instructions.contains("BEGIN DIALOGUE"))
-        #expect(!instructions.contains("\"Human:\""))
-        #expect(instructions.contains(AskOnPagePrompt.userLine))
-    }
-
-    @Test func theModelIsShownNoQuotesFromAnotherPage() {
-        // Arc's examples quoted a solar-power page; the on-device model quoted it back as this page's.
-        let instructions = AskOnPagePrompt.instructions(language: "English")
-        for example in ["EXAMPLES OF RESPONSES", "J.W. Peters", "Solar Power of Oklahoma", "Brooklyn", "Privacy Policy"] {
-            #expect(!instructions.contains(example))
+    @Test func quoteUnknownAndEmptyFindResultsNeverAuthorizeAsk() {
+        for query in ["", "\r", " "] {
+            var find = AskOnPage.FindState()
+            let request = find.begin(query)
+            _ = find.accept(request.id, quote: false, identifier: 0, count: 0, activeMatch: 0, finalUpdate: true)
+            #expect(!find.canAsk(query: query, enabled: true, forward: true))
         }
-        #expect(instructions.contains("using an <excerpt> tag on its own line"))
+        var find = AskOnPage.FindState()
+        let request = find.begin("a question")
+        let rejectsWrongPurpose = !find.accept(request.id, quote: true, identifier: 1, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(rejectsWrongPurpose)
+        _ = find.accept(request.id, quote: false, identifier: 1, count: 0, activeMatch: 0, finalUpdate: false)
+        _ = find.accept(request.id, quote: false, identifier: 1, count: -1, activeMatch: -1, finalUpdate: true)
+        #expect(!find.canAsk(query: "a question", enabled: true, forward: true), "a negative final must not promote a partial zero")
+        let quote = find.begin("a question", purpose: .quote)
+        #expect(quote.id != request.id)
+        _ = find.accept(quote.id, quote: true, identifier: 2, count: 0, activeMatch: 0, finalUpdate: true)
+        #expect(!find.canAsk(query: "a question", enabled: true, forward: true))
+        let restoresOrdinary = find.begin("a question").id != quote.id
+        #expect(restoresOrdinary, "restoring ordinary Find uses a new session")
     }
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func aFollowUpIsItsOwnTurnAfterThePage() {
-        // The reporter's conversation: the first answer stays a turn of its own, the follow-up is
-        // asked alone, and no text says "Human:" or "Assistant:" for the model to carry on.
-        let first = AskOnPagePrompt.Turn(question: "why el salvador succeed?",
-                                         answer: "It cannot be determined from the page.\n<excerpt>The real measure of success.</excerpt>")
-        let c = AskOnPagePrompt.conversation(url: "https://example.com/haiti", title: "Haiti", date: "13/11/2026, 12:00",
-                                             text: "The real measure of success.", turns: [first],
-                                             question: "Summarize the key points of this entire article in detailed bullet points.")
-        #expect(c.prompt == "Summarize the key points of this entire article in detailed bullet points." + AskOnPagePrompt.followUpReminder)
-        #expect(c.earlier == [.init(prompt: AskOnPagePrompt.context(url: "https://example.com/haiti", title: "Haiti", date: "13/11/2026, 12:00",
-                                                                     text: "The real measure of success.") + "why el salvador succeed?",
-                                    response: first.answer)])
-        let sent = ([c.prompt] + c.earlier.flatMap { [$0.prompt, $0.response] }).joined(separator: "\n")
-        for framing in ["BEGIN DIALOGUE", "Human:", "Assistant:"] { #expect(!sent.contains(framing)) }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func quotesRequireTheExactTransmittedSource() throws {
+        let draft = AskOnPage.Draft(excerpts: ["The answer is solar power."], answer: "Mostly solar power.", keyAnswer: "solar power")
+        let valid = try #require(AskOnPage.completeAnswer(draft, source: "The answer is solar\n\t power."))
+        #expect(valid.quotes.first?.state == .verified && valid.hasVerifiedQuote)
+        #expect(valid.emphasisRange == NSRange(location: 7, length: 11))
+        #expect(AskOnPage.completeAnswer(draft, source: "The answer is Solar power.")?.quotes.first?.state == .notFound)
+        #expect(AskOnPage.completeAnswer(draft, source: "The answer is solar power!")?.quotes.first?.state == .notFound)
+        #expect(AskOnPage.completeAnswer(draft, source: "This is only the transmitted page introduction.")?.hasVerifiedQuote == false)
     }
 
-    @Test func aFollowUpIsAskedForAQuote() {
-        // After a summary the model kept answering without quotes; the first question needs no reminder.
-        let first = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page", turns: [], question: "q1")
-        #expect(!first.prompt.contains(AskOnPagePrompt.followUpReminder))
-        let next = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page",
-                                                turns: [.init(question: "Summarize it", answer: "* one\n* two")], question: "Who?")
-        #expect(next.prompt == "Who?\n\nQuote the page in an <excerpt> tag if it answers this.")
-        #expect(next.earlier.map(\.prompt).allSatisfy { !$0.contains(AskOnPagePrompt.followUpReminder) })
+    @Test func literalSourceCharactersAreDataRatherThanMarkup() throws {
+        let source = "Budget < €40 & the editor says \"use <excerpt> literally\". Café stays unchanged."
+        let quote = "Budget < €40 & the editor says \"use <excerpt> literally\"."
+        let answer = try #require(AskOnPage.completeAnswer(.init(excerpts: [quote, "Cafe\u{301} stays unchanged."],
+            answer: "Budget is below €40.", keyAnswer: "€40"), source: source))
+        #expect(answer.quotes.map(\.text) == [quote, "Cafe\u{301} stays unchanged."])
+        #expect(answer.quotes.allSatisfy { $0.state == .verified })
+        #expect(!answer.historyText.contains("&lt;"), "native rendering/history retain actual visible source text")
+        let encoded = quote.replacingOccurrences(of: "<", with: "&lt;")
+        #expect(AskOnPage.completeAnswer(.init(excerpts: [encoded], answer: "Budget is below €40.", keyAnswer: "€40"), source: source)?.hasVerifiedQuote == false)
     }
 
-    @Test func aLongEarlierAnswerLeavesTheNextQuestionThePage() {
-        let summary = String(repeating: "* A key point of the article.\n", count: 100)
-        let c = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page",
-                                             turns: [.init(question: "Summarize it", answer: summary)], question: "Who?")
-        #expect(c.earlier[0].response == String(summary.prefix(AskOnPagePrompt.keptAnswerCharacters)) + "…")
-        #expect(AskOnPagePrompt.dialogue(turns: [.init(question: "Summarize it", answer: summary)], question: "Who?").count < 900)
-        let short = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page",
-                                                 turns: [.init(question: "Who?", answer: "**Garry Conille**.")], question: "When?")
-        #expect(short.earlier[0].response == "**Garry Conille**.")
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func partialFieldsNeverEnableEvidence() {
+        let partial = AskOnPage.partialAnswer(.init(excerpts: ["A fact."], answer: "A fact", keyAnswer: "fact"))
+        #expect(!partial.isComplete && !partial.hasVerifiedQuote && partial.quotes.first?.state == .unverified)
+        #expect(AskOnPage.partialAnswer(.init()).text.isEmpty)
     }
 
-    @Test func followUpsKeepTheLastAnswersAndHideOlderOnes() {
-        let turns = (1...3).map { AskOnPagePrompt.Turn(question: "q\($0)", answer: "a\($0)") }
-        let c = AskOnPagePrompt.conversation(url: "u", title: nil, date: "d", text: "page", turns: turns, question: "q4")
-        let page = AskOnPagePrompt.context(url: "u", title: nil, date: "d", text: "page")
-        #expect(c.earlier == [
-            .init(prompt: page + "q1", response: "[Older messages hidden]"),
-            .init(prompt: "q2", response: "a2"),
-            .init(prompt: "q3", response: "a3"),
-        ])
-        #expect(c.prompt == "q4" + AskOnPagePrompt.followUpReminder)
-        #expect(AskOnPagePrompt.dialogue(turns: turns, question: "q4") == "q1\n[Older messages hidden]\nq2\na2\nq3\na3\nq4" + AskOnPagePrompt.followUpReminder)
+    @Test func joinedEmojiAndPersianFormatScalarsSurviveNativeAnswers() throws {
+        let text = "👩‍💻 می‌روم"
+        let answer = try #require(AskOnPage.completeAnswer(.init(excerpts: [text], answer: text, keyAnswer: "می‌روم"), source: text))
+        #expect(answer.text == text && answer.quotes.first?.text == text && answer.hasVerifiedQuote)
+        #expect(answer.emphasisRange == NSRange(location: 6, length: 6))
+        #expect(AskOnPage.partialAnswer(.init(excerpts: [text], answer: text, keyAnswer: "می‌روم")).text == text)
     }
 
-    @Test func budgetIsArcsLessTheAnswersRoom() {
-        // Arc: min(context, 16000) × 3 − (rules + examples + 200); the answer's 600 tokens off the context first.
-        #expect(AskOnPagePrompt.characterBudget(contextTokens: 4096, instructions: String(repeating: "x", count: 2000), dialogue: "q")
-                == (4096 - 600) * 3 - 2201)
-        #expect(AskOnPagePrompt.characterBudget(contextTokens: 100_000, instructions: "", dialogue: "") == (16_000 - 600) * 3 - 200)
-        #expect(AskOnPagePrompt.characterBudget(contextTokens: 100, instructions: "", dialogue: "") == 0)
-        #expect(AskOnPagePrompt.shrink(budget: 9000, promptTokens: 4000, allowedTokens: 3000) == 6075)
-        #expect(AskOnPagePrompt.shrink(budget: 9000, promptTokens: 2000, allowedTokens: 3000) == 9000)
+    @Test func zeroOrInvalidCitationsDoNotInvalidateAnOtherwiseCompleteAnswer() throws {
+        let guess = try #require(AskOnPage.completeAnswer(.init(excerpts: [], answer: "I guess Brooklyn, but it is not on the page.", keyAnswer: "Brooklyn"), source: "A fact."))
+        #expect(guess.isComplete && guess.quotes.isEmpty && !guess.hasVerifiedQuote)
+        let mixed = try #require(AskOnPage.completeAnswer(.init(excerpts: ["A fact.", "An invention."], answer: "A mixed answer.", keyAnswer: "mixed"), source: "A fact."))
+        #expect(mixed.quotes.map(\.state) == [.verified, .notFound])
     }
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func longPagesAreCutAndSaySo() {
-        let page = String(repeating: "a", count: 1000)
-        let short = AskOnPagePrompt.truncate(page, budget: 2000)
-        #expect(short.text == page)
-        #expect(short.fractionRead == nil)
-        let cut = AskOnPagePrompt.truncate(page, budget: 810)
-        #expect(cut.text == String(repeating: "a", count: 810) + "…")
-        #expect(cut.fractionRead == 0.81)
-        #expect(AskOnPagePrompt.fractionLine(cut.fractionRead) == "This page was long, so I read the first 81%.")
-        // The script read 1000 characters of a 4000-character page: the share is of the whole page.
-        #expect(AskOnPagePrompt.truncate(page, budget: 2000, total: 4000).fractionRead == 0.25)
+    @Test func completeRequiredFieldsAreStillRequired() {
+        for draft in [AskOnPage.Draft(answer: "Answer", keyAnswer: "Answer"), .init(excerpts: [], keyAnswer: "Answer"),
+                      .init(excerpts: [], answer: " ", keyAnswer: " ")] {
+            #expect(AskOnPage.completeAnswer(draft, source: "A fact.") == nil)
+        }
+    }
+
+    @Test(arguments: [nil, "", "09:30 Elm Street", "a 09:30"] as [String?])
+    func unusableEmphasisKeepsTheExactNativeAnswer(hint: String?) throws {
+        let text = "L'observatoire ouvre à 09:30 sur Elm Street."
+        let answer = try #require(AskOnPage.completeAnswer(.init(excerpts: ["A fact."], answer: text, keyAnswer: hint), source: "A fact."))
+        #expect(answer.text == text && answer.historyText.contains(text))
+        #expect(answer.emphasisRange == nil && answer.quotes.first?.state == .verified)
+    }
+
+    @Test func transformationsCanBeMultilineAndEmphasizeTheWholeAnswer() throws {
+        let text = "Première ligne: une traduction complète.\nDeuxième ligne: encore une phrase, au-delà de dix mots."
+        let result = try #require(AskOnPage.completeAnswer(.init(excerpts: [], answer: text, keyAnswer: text), source: "Original page"))
+        #expect(result.text == text && result.emphasisRange == NSRange(location: 0, length: text.utf16.count))
+    }
+
+    @Test func nativeFieldBoundsPreserveGraphemesAndRejectOversizedFinals() {
+        let draft = AskOnPage.Draft(excerpts: ["A fact."], answer: String(repeating: "📄", count: 20_000), keyAnswer: "📄")
+        let partial = AskOnPage.partialAnswer(draft)
+        #expect(partial.text.utf8.count <= 65_536 && partial.text.allSatisfy { $0 == "📄" })
+        #expect(AskOnPage.completeAnswer(draft, source: "A fact.") == nil)
+        #expect(AskOnPage.completeAnswer(.init(excerpts: Array(repeating: "A fact.", count: 5), answer: "Fact", keyAnswer: "Fact"), source: "A fact.") == nil)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func historyEvictsWholePairsAndRemembersTheOmission() {
+        var history = AskOnPage.History()
+        for n in 0...12 { history.append(.init(question: "Question \(n)", answer: "Answer \(n)")) }
+        #expect(history.turns.count == 12)
+        #expect(history.turns.first == .init(question: "Question 1", answer: "Answer 1"))
+        #expect(history.turns.last == .init(question: "Question 12", answer: "Answer 12"))
+        #expect(history.olderMessagesHidden)
+        history.append(.init(question: "New question", answer: String(repeating: "📄", count: 17_000)))
+        #expect(history.turns.isEmpty, "an oversized pair is omitted, never split")
+        history.append(.init(question: "Small question", answer: "Small answer"))
+        #expect(history.turns == [.init(question: "Small question", answer: "Small answer")])
+        #expect(history.olderMessagesHidden)
+    }
+}
+
+struct AskOnPageNativePresentationTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func fixtureQuotesTheActualFittedSentenceWithoutRepair() throws {
+        let source = "Welcome to the page. Reactions fill the camera frame with effects! Other things here."
+        let draft = AskOnPage.fixtureDraft(question: "How do reactions work?", source: source)
+        let answer = try #require(AskOnPage.completeAnswer(draft, source: source))
+        #expect(answer.quotes.map(\.text) == ["Reactions fill the camera frame with effects!"])
+        #expect(answer.quotes.first?.state == .verified)
+        #expect(!answer.text.contains("<excerpt>"))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func pageFractionDisclosureKeepsItsVisibleWording() {
+        #expect(AskOnPagePrompt.fractionLine(0.81) == "This page was long, so I read the first 81%.")
         #expect(AskOnPagePrompt.fractionLine(nil) == nil)
         #expect(AskOnPagePrompt.fractionLine(1) == nil)
         #expect(AskOnPagePrompt.fractionLine(0.999) == "This page was long, so I read the first 99%.")
         #expect(AskOnPagePrompt.fractionLine(0.001) == "This page was long, so I read the first 1%.")
     }
+}
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func answersSplitIntoTextAndQuotes() {
-        let reply = """
-        According to the page:
-        <excerpt>"React with your hands Add a reaction that fills the camera frame."</excerpt>
-        You can add reactions like **hearts** during a FaceTime call.
-        """
-        #expect(AskOnPageReply.parts(reply) == [
-            .init(text: "According to the page:", isQuote: false),
-            .init(text: "React with your hands Add a reaction that fills the camera frame.", isQuote: true),
-            .init(text: "You can add reactions like **hearts** during a FaceTime call.", isQuote: false),
-        ])
-        #expect(AskOnPageReply.parts("I think it’s **Brooklyn**.") == [.init(text: "I think it’s **Brooklyn**.", isQuote: false)])
-    }
-
-    @Test func aStreamingAnswerShowsItsQuoteAsItComes() {
-        #expect(AskOnPageReply.parts("According to the page:\n<exc") == [.init(text: "According to the page:", isQuote: false)])
-        #expect(AskOnPageReply.parts("According to the page:\n<excerpt>React with") == [
-            .init(text: "According to the page:", isQuote: false), .init(text: "React with", isQuote: true),
-        ])
-        #expect(AskOnPageReply.parts("A\n<excerpt>React with your</exce") == [
-            .init(text: "A", isQuote: false), .init(text: "React with your", isQuote: true),
-        ])
-        #expect(AskOnPageReply.parts("") == [])
-        #expect(AskOnPageReply.parts("a < b") == [.init(text: "a < b", isQuote: false)])
-    }
-
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func theModelsEchoOfTheDialogueIsLeftOut() {
-        // The on-device model wrote these back before its answer on Wikipedia's Solar power page.
-        let reply = "BEGIN DIALOGUE\nHuman: What share of the world's electricity came from solar?\n<excerpt>In 2025, solar power generated 9% of global electricity.</excerpt>\nSolar power accounted for **9%**."
-        #expect(AskOnPageReply.parts(reply) == [
-            .init(text: "In 2025, solar power generated 9% of global electricity.", isQuote: true),
-            .init(text: "Solar power accounted for **9%**.", isQuote: false),
-        ])
-        #expect(AskOnPageReply.parts("Assistant: According to the page:") == [.init(text: "According to the page:", isQuote: false)])
-        #expect(AskOnPageReply.parts("BEGIN DIA") == [])
-        #expect(AskOnPageReply.parts("Hum") == [])
-        #expect(AskOnPageReply.parts("Hello there") == [.init(text: "Hello there", isQuote: false)])
-        // On Apple's iOS page it wrote the question back as asked, without "Human:".
-        #expect(AskOnPageReply.parts("How do reactions work?\n<excerpt>Reactions fill the frame.</excerpt>", question: "How do reactions work?")
-                == [.init(text: "Reactions fill the frame.", isQuote: true)])
-        // While it streams, the start of the question waits for the line to end.
-        #expect(AskOnPageReply.parts("How do reac", question: "How do reactions work?") == [])
-        #expect(AskOnPageReply.parts("Reactions are", question: "How do reactions work?") == [.init(text: "Reactions are", isQuote: false)])
-    }
-
-    /// On Wikipedia's Bauhaus page (cut to 18 %), "when did the bauhaus close?" got the prompt's own
-    /// page block back as the answer, 1 run in 10 on the on-device model and 2 of 2 in the 0.1.43
-    /// release clips. An echo is no answer: the card shows none of it, and the service asks again.
-    @Test func theModelsEchoOfThePageIsNoAnswer() {
-        let page = AskOnPagePrompt.context(url: "https://en.wikipedia.org/wiki/Bauhaus", title: "Bauhaus - Wikipedia",
-                                           date: "13/11/2026, 19.39", text: "From Wikipedia, the free encyclopedia\nThe Bauhaus was a school.")
-        let echo = String(page.dropFirst("WEBPAGE CONTEXT FOR OUR DIALOGUE:\n".count))
-        for reply in [page, echo, "\n" + echo, String(echo.prefix(60)), "<current-date>13/11/2026</current-date>\n<title>Bauhaus</title>"] {
-            #expect(AskOnPageReply.echoesPrompt(reply), "\(reply.prefix(30))")
-            #expect(AskOnPageReply.parts(reply) == [], "\(reply.prefix(30))")
+struct AskOnPagePolicyTests {
+    @Test func eligibilityMatchesLegacyWebAndPrivateTypeRules() {
+        for scheme in ["http", "https", "HTTP", "HTTPS"] {
+            #expect(AskOnPagePolicy.canAsk(page: URL(string: "\(scheme)://example.test/article"), incognito: false, documentKind: .html))
         }
-        // While it streams, the start of a tag waits: it may be the page block coming back.
-        #expect(AskOnPageReply.parts("<ur") == [])
-        #expect(AskOnPageReply.parts("WEBPAGE CON") == [])
-        #expect(!AskOnPageReply.echoesPrompt("<ur"))
-        // An answer is never taken for one, even one that names a tag or quotes the page.
-        for reply in ["<excerpt>The Bauhaus was a school.</excerpt>\nIt was **a school**.", "The page’s <title> is Bauhaus.", "Walter Gropius."] {
-            #expect(!AskOnPageReply.echoesPrompt(reply))
-            #expect(!AskOnPageReply.parts(reply).isEmpty)
+        for url in [nil, "file:///tmp/article.html", "cra://settings", "chrome://version", "about:blank", "https://search.arc.net/path", "https://SEARCH.ARC.NET/path", "https://SeArCh.ArC.NeT/path"] as [String?] {
+            #expect(!AskOnPagePolicy.canAsk(page: url.flatMap(URL.init(string:)), incognito: false, documentKind: .unknown))
         }
-        #expect(AskOnPagePrompt.echoRetries >= 1)
-    }
-
-    @Test func theTestModelEchoesThePageOnceWhenAskedTo() {
-        let text = "The Bauhaus was a school. It closed in 1933."
-        #expect(AskOnPageReply.echoesPrompt(AskOnPagePrompt.fakeAnswer(question: "Repeat the page back", text: text, attempt: 0)))
-        #expect(!AskOnPageReply.echoesPrompt(AskOnPagePrompt.fakeAnswer(question: "Repeat the page back", text: text, attempt: 1)))
-        #expect(AskOnPagePrompt.fakeAnswer(question: "When did it close?", text: text, attempt: 0)
-                == AskOnPagePrompt.fakeAnswer(question: "When did it close?", text: text))
-    }
-
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func aQuoteSplitByThePagesFootnoteIsFoundByItsFirstSentence() {
-        // Wikipedia shows "…9% of global electricity.[3] In 2024, …": the whole quote isn't on the page.
-        let quote = "In 2025, solar power generated 9% of global electricity. In 2024, solar generated 7% of global electricity and over 1% of primary energy."
-        #expect(AskOnPageReply.findCandidates(quote) == [
-            "In 2025, solar power generated 9% of global electricity. In 2024, solar generated 7% of global electricity and over 1% of primary energy",
-            "In 2025, solar power generated 9% of global electricity",
-            "In 2025, solar power generated 9% of global",
-        ])
-        #expect(AskOnPageReply.findCandidates("Short quote.") == ["Short quote"])
-    }
-
-    @Test func quotesAreFoundByTheWordsThePageShows() {
-        #expect(AskOnPageReply.findText("“[Privacy Policy](https://x.com/p)”") == "Privacy Policy")
-        #expect(AskOnPageReply.findText(" React with   your **hands**.") == "React with your hands")
-        #expect(AskOnPagePolicy.trimQuote("\"‘quoted’\"") == "quoted")
-    }
-
-    @Test func theTestModelQuotesTheSentenceThatAnswers() {
-        let text = "Welcome to the page. Reactions fill the camera frame with effects. Other things here."
-        let answer = AskOnPagePrompt.fakeAnswer(question: "How do reactions work?", text: text)
-        #expect(AskOnPageReply.parts(answer).contains(.init(text: "Reactions fill the camera frame with effects.", isQuote: true)))
-    }
-
-    @Test func aStreamedAnswerReachesTheCardTenTimesASecond() {
-        var pacing = AskOnPageStreamPacing()
-        #expect(pacing.delay(at: 5.0) == 0)
-        pacing.shown(at: 5.0)
-        #expect(abs(pacing.delay(at: 5.02) - 0.08) < 1e-9)
-        #expect(pacing.delay(at: 5.1) == 0)
-        #expect(pacing.delay(at: 7) == 0)
-        // Fifty snapshots a second for two seconds: about twenty reach the card.
-        var p = AskOnPageStreamPacing(), shown = 0, due: TimeInterval?
-        for i in 0..<100 {
-            let now = Double(i) * 0.02
-            if let d = due, now >= d { p.shown(at: d); shown += 1; due = nil }
-            if due == nil {
-                let wait = p.delay(at: now)
-                if wait == 0 { p.shown(at: now); shown += 1 } else { due = now + wait }
-            }
+        for kind in [AskOnPagePolicy.DocumentKind.pdf, .image, .movie] {
+            #expect(!AskOnPagePolicy.canAsk(page: URL(string: "https://example.test/extensionless"), incognito: false, documentKind: kind))
         }
-        #expect((19...21).contains(shown))
-    }
-
-    @Test func aStreamingAnswerIsDrawnLineByLine() {
-        #expect(AskOnPageReply.lines("Key points:\n\n* one\n* two") == ["Key points:", " ", "* one", "* two"])
-        #expect(AskOnPageReply.lines("one line") == ["one line"])
-    }
-
-    @Test func aLongAnswerEndsWhereTheContextDoes() {
-        #expect(AskOnPagePrompt.responseTokens(contextTokens: 4096, promptTokens: 3400) == 696)
-        #expect(AskOnPagePrompt.responseTokens(contextTokens: 4096, promptTokens: 5000) == 1)
-        #expect(AskOnPagePrompt.responseTokens(contextTokens: 4096, promptTokens: nil) == nil)
-        // An overflow after part of the answer keeps it; before any, the page is read shorter.
-        #expect(AskOnPagePrompt.afterOverflow(streamed: "Here are the key points:\n* one") == .keepAnswer)
-        #expect(AskOnPagePrompt.afterOverflow(streamed: " \n") == .readLess)
-    }
-
-    @Test func aQuoteThePageDoesntHaveIsCaughtBeforeFindOnPage() {
-        let page = "Since 2020, Haiti's capital Port-au-Prince has been the site of an ongoing armed conflict.\nHenry ultimately resigned and was replaced by Garry Conille on 3 June 2024, who in turn was replaced."
-        // On the page, despite case, curly quotes, a Markdown link, spacing or a cut-short second half.
-        #expect(AskOnPageReply.isOnPage("Since 2020, Haiti’s capital   Port-au-Prince has been the site of an ongoing armed conflict.", pageText: page))
-        #expect(AskOnPageReply.isOnPage("henry ultimately resigned and was replaced by [Garry Conille](https://x.org) on 3 June 2024", pageText: page))
-        #expect(AskOnPageReply.isOnPage("Henry ultimately resigned and was replaced by Garry Conille. He later wrote a book.", pageText: page))
-        // The live model's made-up quote on this page, and the test model's.
-        #expect(!AskOnPageReply.isOnPage("Gangs were not the cause of El Salvador's success.", pageText: page))
-        #expect(!AskOnPageReply.isOnPage(AskOnPagePrompt.fakeMadeUpQuote, pageText: page))
-        #expect(!AskOnPageReply.isOnPage("  ", pageText: page))
-    }
-
-    @Test func theTestModelSummarizesAtLength() {
-        let text = (1...30).map { "Sentence number \($0) about the page." }.joined(separator: " ")
-        let answer = AskOnPagePrompt.fakeAnswer(question: "Summarize the key points of this article", text: text)
-        #expect(answer.components(separatedBy: "\n* ").count - 1 == AskOnPagePrompt.fakeSummaryPoints)
-        #expect(answer.hasPrefix("Here are the key points of the page:"))
-        #expect(answer.count > 600)
-    }
-
-    @Test func pageScriptLeavesOutArcsSkippedParts() {
-        let s = AskOnPagePolicy.pageTextScript
-        for part in ["nav", "footer", "header", "form", "[aria-hidden=true]", "[itemprop=mainEntity]", "article", "#content"] {
-            #expect(s.contains(part))
+        for kind in [AskOnPagePolicy.DocumentKind.unknown, .html, .other] {
+            #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://example.test/article"), incognito: false, documentKind: kind))
+            #expect(!AskOnPagePolicy.canAsk(page: URL(string: "https://example.test/article"), incognito: true, documentKind: kind))
         }
-        #expect(s.contains("200000"))
+        #expect(AskOnPagePolicy.canAsk(page: URL(string: "https://sub.search.arc.net/article"), incognito: false, documentKind: .html))
+    }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func placeholdersAreArcs() {
+        #expect(AskOnPagePolicy.placeholder(canAsk: false, inConversation: false) == "Find in page…")
+        #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: false) == "Find or ask…")
+        #expect(AskOnPagePolicy.placeholder(canAsk: true, inConversation: true) == "Ask a question…")
     }
 
     @Test func askOnPageIsOffByDefaultAndRoundTrips() throws {
@@ -320,6 +208,22 @@ struct AskOnPageTests {
         on.askOnPage = true
         #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(on)).askOnPage)
         #expect(UsageStats.reportedSettings.contains("askOnPage"))
+    }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func returnRequiresAnOwnedFinalZeroAndNeverAsksBackward() {
+        let r = AskOnPagePolicy.returnKey
+        #expect(r("", true, false, true, true) == nil)
+        #expect(r("   ", true, true, true, true) == nil)
+        #expect(r("solar", false, false, true, true) == .nextMatch)
+        #expect(r("how do reactions work", false, false, true, true) == .nextMatch)
+        #expect(r("how do reactions work", true, false, true, true) == .ask)
+        #expect(r("how do reactions work", true, false, true, false) == .nextMatch)
+        #expect(r("solar", false, true, true, true) == .ask)
+        #expect(r("solar", true, true, true, false) == .nextMatch)
+        #expect(r("question", true, false, false, true) == .nextMatch)
+        #expect(AskOnPagePolicy.showsAskButton(query: "why", canAsk: true))
+        #expect(!AskOnPagePolicy.showsAskButton(query: " ", canAsk: true))
+        #expect(!AskOnPagePolicy.showsAskButton(query: "why", canAsk: false))
     }
 }
 
@@ -369,4 +273,21 @@ struct AskOnPageToneTests {
         #expect(q.b > q.g)
         #expect(AskOnPageTone.luminance(tone.questionOnLight) < 0.2)
     }
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393"))
+    func askLayoutCapsConversationAndFitsTheFocusedPage() {
+        for page in [CGRect(x: 100, y: 200, width: 900, height: 700), CGRect(x: -600, y: 40, width: 240, height: 160),
+                     CGRect(x: 1, y: 2, width: 8, height: 6), .zero] {
+            let panel = AskOnPageLayout.frame(preferred: CGSize(width: 400, height: 498), page: page, inset: 10)
+            #expect(panel.width >= 0 && panel.width <= 400 && panel.height >= 0)
+            #expect(panel.minX >= page.minX && panel.maxX <= page.maxX && panel.minY >= page.minY && panel.maxY <= page.maxY)
+        }
+        let wide = AskOnPageLayout.frame(preferred: CGSize(width: 400, height: 498),
+                                        page: CGRect(x: 0, y: 0, width: 900, height: 700), inset: 10)
+        #expect(wide.size == CGSize(width: 400, height: 498))
+        #expect(AskOnPageLayout.conversationHeight(content: 900, input: 48, available: 700) == 450)
+        #expect(AskOnPageLayout.conversationHeight(content: 100, input: 48, available: 700) == 100)
+        #expect(AskOnPageLayout.conversationHeight(content: 900, input: 48, available: 140) == 92)
+        #expect(AskOnPageLayout.conversationHeight(content: 900, input: 100, available: 80) == 0)
+    }
+
 }

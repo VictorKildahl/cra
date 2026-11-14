@@ -1,84 +1,58 @@
 import AppKit
-import CraCEF
 import Observation
 import SwiftUI
 
-/// Arc Max's Ask on Page (AskInPageView): with the setting on, ⌘F's bar is this card. Typing finds
-/// on the page as the plain bar does; Ask (or Return once the text isn't on the page) asks the Mac's
-/// Apple Intelligence model about the page, and the card grows into the conversation over the row.
-/// Arc's numbers (docs/arc-reverse-engineering.md, "Ask on Page"): 400 pt wide, the conversation
-/// at most 450 tall, the close button 18 pt, 9 from the top and trailing edges, quotes on a 2 pt
-/// rule with "Find on Page →" under them.
+/// The existing native Find or Ask card. The window's service alone owns requests and dialogue.
 @MainActor
 @Observable
 final class AskOnPageState {
-    struct Message: Identifiable, Equatable {
-        let id = UUID()
-        var question: String
-        var reply = ""
-        var fractionRead: Double?
-        var finished = false
+    let service: AskOnPageService
+    var enabled = false
+    var canAsk = false
+    /// The card follows its own effective appearance, independently of the space (#408).
+    var tone = AskOnPageTone(themeHex: "#DDDDDD")
+    var height: CGFloat = AskOnPageMetrics.rowHeight
+    var inputHeight: CGFloat = AskOnPageMetrics.rowHeight
+    var availableSize = CGSize(width: AskOnPageLayout.maximumWidth, height: CGFloat.greatestFiniteMagnitude)
+    var width: CGFloat { min(AskOnPageLayout.maximumWidth, availableSize.width) }
+    var conversationHeightLimit: CGFloat {
+        AskOnPageLayout.conversationHeight(content: AskOnPageLayout.maximumConversationHeight,
+                                          input: inputHeight, available: availableSize.height)
     }
 
-    enum QuoteSearch: Equatable { case loading, found, notFound }
-
-    /// The setting is on and the model can run: the card replaces the plain find bar.
-    var enabled = false
-    /// The page is one the model can be asked about (Arc's isValidAskPage).
-    var canAsk = false
-    var messages: [Message] = []
-    var quotes: [String: QuoteSearch] = [:]
-    /// The space's colour for the question and the Ask button, one question per card appearance:
-    /// the card follows macOS, not the space (#408).
-    var tone = AskOnPageTone(themeHex: "#DDDDDD")
-    /// The card's height as laid out, which its panel follows.
-    var height: CGFloat = AskOnPageMetrics.rowHeight
-
-    var inConversation: Bool { !messages.isEmpty }
+    init(service: AskOnPageService) { self.service = service }
+    var inConversation: Bool { !service.messages.isEmpty || service.current != nil }
 }
 
 enum AskOnPageMetrics {
-    static let width: CGFloat = 400
-    static let conversationMaxHeight: CGFloat = 450
     static let rowHeight: CGFloat = 48
     static let radius: CGFloat = 10
 }
 
-/// One window's card: its state, the find bar it stands in for, and the model's answers.
+/// One window's existing card and Find callbacks, backed by exactly one guided service.
 @MainActor
 final class AskOnPageController {
-    let state = AskOnPageState()
+    let state: AskOnPageState
+    let service: AskOnPageService
     private let overlay: OverlayState
-    /// The find bar's own actions: find (query, forward), close.
     var onFind: (String, Bool) -> Void = { _, _ in }
     var onClose: () -> Void = {}
-    /// The page asked about: the focused tab's browser.
-    var browser: () -> CraBrowser? = { nil }
-    /// The card's size changed: its panel follows.
+    var canAskFromFind: (String, Bool) -> Bool = { _, _ in false }
     var onResize: () -> Void = {}
-
     private(set) lazy var view: NSView = makeView()
-    private var asking: Task<Void, Never>?
-    /// The page the conversation is about (tab and address); another page ends it.
-    private var subject: (tab: UUID, url: String)?
-    /// The page in front, as pageChanged last heard.
-    private var current: (tab: UUID, url: String)?
-    private var pendingQuote: String?
-    private var quoteTimeout: DispatchWorkItem?
-    /// The streamed answer reaches the card at most ten times a second (AskOnPageStreamPacing).
-    private var pacing = AskOnPageStreamPacing()
-    private var pendingSnapshot: (id: UUID, reply: String, fraction: Double?)?
-    private var snapshotFlush: DispatchWorkItem?
 
-    init(overlay: OverlayState) {
+    init(overlay: OverlayState, service: AskOnPageService) {
         self.overlay = overlay
+        self.service = service
+        state = AskOnPageState(service: service)
     }
 
-    var size: NSSize { NSSize(width: AskOnPageMetrics.width, height: state.height) }
-
-    func setTone(themeHex: String) {
-        state.tone = AskOnPageTone(themeHex: themeHex)
+    var size: NSSize { NSSize(width: state.width, height: min(state.height, state.availableSize.height)) }
+    func constrain(to available: CGSize) {
+        let size = CGSize(width: max(0, available.width), height: max(0, available.height))
+        if state.availableSize != size { state.availableSize = size }
     }
+    func setTone(themeHex: String) { state.tone = AskOnPageTone(themeHex: themeHex) }
 
     private func makeView() -> NSView {
         let container = NSView()
@@ -87,7 +61,6 @@ final class AskOnPageController {
         container.addSubview(card)
         let host = NSHostingView(rootView: AskOnPageView(state: state, overlay: overlay, controller: self))
         host.autoresizingMask = [.width, .height]
-        // The panel sizes the card; SwiftUI only says how tall it wants to be.
         host.sizingOptions = []
         container.addSubview(host)
         container.wantsLayer = true
@@ -101,169 +74,47 @@ final class AskOnPageController {
         onResize()
     }
 
-    /// Return in the field.
     func submit(shift: Bool) {
-        // A count for other text (the page hasn't answered for this yet) says nothing about it.
-        let matches = overlay.findCountText == overlay.findQuery ? overlay.findMatchCount : nil
-        switch AskOnPagePolicy.returnKey(query: overlay.findQuery, matches: matches,
-                                         inConversation: state.inConversation, canAsk: state.canAsk) {
+        service.refresh()
+        switch AskOnPagePolicy.returnKey(query: overlay.findQuery,
+            finalZero: canAskFromFind(overlay.findQuery, !shift), inConversation: state.inConversation,
+            canAsk: state.enabled && state.canAsk, forward: !shift) {
         case .nextMatch?: onFind(overlay.findQuery, !shift)
         case .ask?: ask(overlay.findQuery)
         case nil: break
         }
     }
 
-    /// The page in front changed (tab, address): a conversation about another page ends.
-    func pageChanged(tab: UUID?, url: URL?) {
-        state.canAsk = AskOnPagePolicy.canAsk(page: url)
-        current = tab.map { ($0, url?.absoluteString ?? "") }
-        guard let subject, subject.tab != tab || subject.url != (url?.absoluteString ?? "") else { return }
-        CraLog.note("Ask on Page: another page, the conversation ends")
-        reset()
+    func pageChanged(canAsk: Bool) {
+        service.refresh()
+        state.canAsk = canAsk
     }
 
     func ask(_ raw: String) {
-        let question = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty, state.canAsk, let browser = browser() else { return }
-        if subject == nil { subject = current }
-        let turns = state.messages.filter(\.finished).map { AskOnPagePrompt.Turn(question: $0.question, answer: $0.reply) }
-        asking?.cancel()
-        dropPendingSnapshot()
-        state.messages.append(.init(question: question))
-        let id = state.messages[state.messages.count - 1].id
-        // The field asks the next question; the page's find marks go.
+        guard state.enabled, state.canAsk else { return }
+        let code = Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
+        let language = Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? "English"
+        guard service.ask(raw.trimmingCharacters(in: .whitespacesAndNewlines), language: language) else { return }
         overlay.findQuery = ""
         onFind("", true)
-        CraLog.note("Ask on Page: asked (\(state.messages.count) in the conversation)")
-        asking = Task { @MainActor [weak self] in
-            let service = AskOnPageService.shared
-            guard let page = await service.read(browser) else {
-                self?.update(id) { $0.reply = AskOnPagePrompt.unreadable; $0.finished = true }
-                return
-            }
-            let final = await service.answer(question: question, turns: turns, page: page) { reply, fraction in
-                self?.stream(id, reply: reply, fraction: fraction)
-            }
-            guard !Task.isCancelled, let final else { return }
-            self?.dropPendingSnapshot()
-            self?.update(id) { $0.reply = final; $0.finished = true }
-            self?.checkQuotes(final, question: question, pageText: page.text)
-        }
     }
 
-    /// Quotes the page doesn't have say so at once (Arc's "Quote not found"), not after a click.
-    private func checkQuotes(_ reply: String, question: String, pageText: String) {
-        for part in AskOnPageReply.parts(reply, question: question) where part.isQuote {
-            if !AskOnPageReply.isOnPage(part.text, pageText: pageText) {
-                state.quotes[part.text] = .notFound
-                CraLog.note("Ask on Page: a quote isn't on the page")
-            }
-        }
+    func findQuote(messageID: UUID, index: Int) {
+        guard state.enabled, state.canAsk else { return }
+        service.findQuote(messageID: messageID, index: index)
     }
 
-    /// The model's reply so far: shown now, or the latest one when the pacing allows.
-    private func stream(_ id: UUID, reply: String, fraction: Double?) {
-        pendingSnapshot = (id, reply, fraction)
-        guard snapshotFlush == nil else { return }
-        let wait = pacing.delay(at: ProcessInfo.processInfo.systemUptime)
-        if wait == 0 { flushSnapshot(); return }
-        let flush = DispatchWorkItem { [weak self] in
-            self?.snapshotFlush = nil
-            self?.flushSnapshot()
-        }
-        snapshotFlush = flush
-        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: flush)
-    }
-
-    private func flushSnapshot() {
-        guard let s = pendingSnapshot else { return }
-        pendingSnapshot = nil
-        pacing.shown(at: ProcessInfo.processInfo.systemUptime)
-        update(s.id) { $0.reply = s.reply; $0.fractionRead = s.fraction }
-    }
-
-    private func dropPendingSnapshot() {
-        snapshotFlush?.cancel()
-        snapshotFlush = nil
-        pendingSnapshot = nil
-        pacing = AskOnPageStreamPacing()
-    }
-
-    private func update(_ id: UUID, _ change: (inout AskOnPageState.Message) -> Void) {
-        guard let i = state.messages.firstIndex(where: { $0.id == id }) else { return }
-        change(&state.messages[i])
-    }
-
-    /// What Find on Page still has to try for the pending quote.
-    private var quoteCandidates: [String] = []
-
-    /// Find on Page: the page's own find runs on the quote (then its first sentence, then its first
-    /// words); the card says when none of them is there.
-    func findQuote(_ quote: String) {
-        let candidates = AskOnPageReply.findCandidates(quote)
-        guard !candidates.isEmpty else { return }
-        state.quotes[quote] = .loading
-        pendingQuote = quote
-        quoteCandidates = candidates
-        tryNextCandidate()
-    }
-
-    private func tryNextCandidate() {
-        guard let quote = pendingQuote, !quoteCandidates.isEmpty else { return }
-        let text = quoteCandidates.removeFirst()
-        quoteTimeout?.cancel()
-        onFind(text, true)
-        let timeout = DispatchWorkItem { [weak self] in
-            guard let self, self.pendingQuote == quote else { return }
-            self.notFound(quote)
-        }
-        quoteTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: timeout)
-    }
-
-    private func notFound(_ quote: String) {
-        if !quoteCandidates.isEmpty { tryNextCandidate(); return }
-        state.quotes[quote] = .notFound
-        pendingQuote = nil
-        quoteTimeout?.cancel()
-        CraLog.note("Ask on Page: quote not found")
-    }
-
-    /// The page's find answered: a quote being looked for is found, or the next try runs.
-    func matchesUpdated(count: Int) {
-        guard let quote = pendingQuote, count >= 0 else { return }
-        if count > 0 {
-            state.quotes[quote] = .found
-            pendingQuote = nil
-            quoteCandidates = []
-            quoteTimeout?.cancel()
-            CraLog.note("Ask on Page: quote found (\(count))")
-        } else {
-            notFound(quote)
-        }
-    }
-
-    /// Typing in the field finds, unless the card is in a conversation (then it only asks).
     var findsWhileTyping: Bool { !state.enabled || !state.inConversation }
+    func reset() { service.clear() }
 
-    /// The card closed: Arc starts again from the find bar.
-    func reset() {
-        asking?.cancel()
-        asking = nil
-        dropPendingSnapshot()
-        subject = nil
-        pendingQuote = nil
-        quoteCandidates = []
-        quoteTimeout?.cancel()
-        state.messages = []
-        state.quotes = [:]
+    func restoreFailedQuestion() {
+        if case .failed = service.phase, overlay.findQuery.isEmpty { overlay.findQuery = service.current?.question ?? "" }
     }
 
-    /// cra://debug?askFindQuote=<n>: Find on Page under the last answer's nth quote (from 1).
+    /// The existing debug action addresses a native completed citation, without a markup parser.
     func debugFindQuote(_ n: Int) {
-        let quotes = AskOnPageReply.parts(state.messages.last?.reply ?? "", question: state.messages.last?.question).filter(\.isQuote)
-        guard n >= 1, n <= quotes.count else { return }
-        findQuote(quotes[n - 1].text)
+        guard let message = service.messages.last else { return }
+        findQuote(messageID: message.id, index: n - 1)
     }
 
     /// cra://debug?askTone=<label>: the card's appearance (its own, as SwiftUI sees it), the question's
@@ -280,18 +131,123 @@ final class AskOnPageController {
                       hex(b), AskOnPageTone.contrast(b, (1, 1, 1)))
     }
 
-    /// cra://debug readout: messages, the last reply's parts and the read line.
+    /// Counts/status only. Debug output must not retain real page/question/answer text.
     func readout(_ label: String) -> String {
-        guard let last = state.messages.last else { return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=0" }
-        let parts = AskOnPageReply.parts(last.reply, question: last.question)
-        let quotes = parts.filter(\.isQuote).count
+        let messages = service.messages.count + (service.current == nil ? 0 : 1)
+        guard let last = service.current ?? service.messages.last else {
+            return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=0"
+        }
+        let quotes = last.answer?.quotes.count ?? 0
         let line = AskOnPagePrompt.fractionLine(last.fractionRead) ?? "-"
-        let found = state.quotes.values.map { "\($0)" }.sorted().joined(separator: ",")
-        let first = parts.first(where: \.isQuote).map { String($0.text.prefix(40)) } ?? "-"
-        // The last answer shows an earlier one again (#417); only said when it does.
-        let repeats = state.messages.dropLast().contains { AskOnPageReply.parts($0.reply, question: $0.question) == parts }
-        return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=\(state.messages.count) finished=\(last.finished) quotes=\(quotes) read=\(line) search=[\(found)] quote=\"\(first)\" height=\(Int(state.height))"
-            + (repeats ? " repeats=true" : "")
+        let search = service.quoteNavigation.map { $0.status.rawValue } ?? ""
+        return "ask \(label): enabled=\(state.enabled) canAsk=\(state.canAsk) messages=\(messages) finished=\(last.answer?.isComplete == true) quotes=\(quotes) read=\(line) search=[\(search)] height=\(Int(state.height))"
+    }
+}
+
+/// Arc uses a native field editor. Focus tokens select all once; ordinary updates preserve selection.
+@MainActor
+final class AskOnPageTextField: NSTextField, NSTextFieldDelegate {
+    private let overlay: OverlayState
+    private weak var controller: AskOnPageController?
+    private var appliedFocusToken: Int?
+    private var scheduledFocusToken: Int?
+
+    init(overlay: OverlayState, controller: AskOnPageController?) {
+        self.overlay = overlay; self.controller = controller
+        super.init(frame: .zero)
+        isBordered = false; isBezeled = false; drawsBackground = false
+        focusRingType = .none; usesSingleLineMode = true
+        cell?.wraps = false; cell?.isScrollable = true
+        setContentHuggingPriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        delegate = self
+        setAccessibilityIdentifier("askOnPageInput")
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func update(query: String, placeholder: String, fontSize: CGFloat, focusToken: Int, visible: Bool) {
+        if stringValue != query { stringValue = query }
+        font = .systemFont(ofSize: fontSize, weight: .medium)
+        placeholderString = placeholder
+        setAccessibilityLabel(placeholder)
+        if visible { requestFocus(token: focusToken) }
+    }
+
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); requestFocus(token: overlay.findFocusToken) }
+
+    private func requestFocus(token: Int) {
+        guard overlay.findVisible, appliedFocusToken != token, scheduledFocusToken != token else { return }
+        scheduledFocusToken = token
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.scheduledFocusToken == token { self.scheduledFocusToken = nil }
+            guard self.overlay.findVisible, self.overlay.findFocusToken == token,
+                  self.controller?.state.enabled == true, !self.isHiddenOrHasHiddenAncestor,
+                  let window = self.window else { return }
+            var editor = self.currentEditor()
+            if editor == nil || window.firstResponder !== editor {
+                guard window.makeFirstResponder(self) else { return }
+                editor = self.currentEditor()
+            }
+            guard let editor else { return }
+            editor.selectAll(nil)
+            self.appliedFocusToken = token
+        }
+    }
+
+    func controlTextDidChange(_ obj: Notification) { overlay.findQuery = stringValue }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        performCommand(selector, modifiers: NSApp.currentEvent?.modifierFlags ?? [])
+    }
+
+    /// The native delegate supplies selectors and actual event modifiers; unrelated editor commands stay native.
+    func performCommand(_ selector: Selector, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard overlay.findVisible, let controller else { return false }
+        let modifiers = modifiers.intersection([.shift, .control, .option, .command])
+        switch selector {
+        case #selector(NSResponder.moveDown(_:)) where modifiers.isEmpty:
+            controller.onFind(overlay.findQuery, true)
+        case #selector(NSResponder.moveUp(_:)) where modifiers.isEmpty:
+            controller.onFind(overlay.findQuery, false)
+        case #selector(NSResponder.insertNewline(_:)) where modifiers.isEmpty:
+            controller.submit(shift: false)
+        case #selector(NSResponder.insertNewline(_:)) where modifiers == .shift:
+            controller.onFind(overlay.findQuery, false)
+        case #selector(NSResponder.insertLineBreak(_:)) where modifiers == .shift,
+             #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)) where modifiers == .shift:
+            controller.onFind(overlay.findQuery, false)
+        case #selector(NSResponder.cancelOperation(_:)):
+            controller.onClose()
+        default: return false
+        }
+        return true
+    }
+}
+
+/// Value inputs are captured during SwiftUI body evaluation, including explicit Cmd-F focus requests.
+struct AskOnPageInput: NSViewRepresentable {
+    let overlay: OverlayState
+    weak var controller: AskOnPageController?
+    let query: String
+    let placeholder: String
+    let fontSize: CGFloat
+    let focusToken: Int
+    let visible: Bool
+
+    init(state: AskOnPageState, overlay: OverlayState, controller: AskOnPageController?) {
+        self.overlay = overlay; self.controller = controller
+        query = overlay.findQuery; focusToken = overlay.findFocusToken; visible = overlay.findVisible
+        fontSize = state.inConversation ? 14 : 16
+        placeholder = AskOnPagePolicy.placeholder(canAsk: state.canAsk, inConversation: state.inConversation)
+    }
+    func makeNSView(context: Context) -> AskOnPageTextField { AskOnPageTextField(overlay: overlay, controller: controller) }
+    func updateNSView(_ field: AskOnPageTextField, context: Context) { update(field) }
+    func update(_ field: AskOnPageTextField) {
+        field.update(query: query, placeholder: placeholder, fontSize: fontSize, focusToken: focusToken, visible: visible)
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: AskOnPageTextField, context: Context) -> CGSize? {
+        CGSize(width: max(0, proposal.width ?? 0), height: ceil(nsView.intrinsicContentSize.height))
     }
 }
 
@@ -300,79 +256,89 @@ final class AskOnPageController {
 struct AskOnPageView: View {
     @Bindable var state: AskOnPageState
     @Bindable var overlay: OverlayState
-    let controller: AskOnPageController
-    @FocusState private var fieldFocused: Bool
+    weak var controller: AskOnPageController?
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var closeHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if state.inConversation {
-                AskOnPageConversation(state: state, controller: controller)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        let spring: Animation? = reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.75, blendDuration: 0.1)
+        return VStack(alignment: .leading, spacing: 0) {
+            Group {
+                if state.inConversation {
+                    AskOnPageConversation(state: state, controller: controller)
+                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                }
             }
+            .animation(spring, value: state.service.current?.id ?? state.service.messages.last?.id)
+            .animation(spring, value: state.service.current?.answer)
             inputRow
         }
-        .frame(width: AskOnPageMetrics.width, alignment: .top)
+        .frame(width: state.width, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controller.heightChanged($0) }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controller?.heightChanged($0) }
         .frame(maxHeight: .infinity, alignment: .top)
         // Arc's card is nearly opaque (the reporter's capture): the material only shows at its edge.
         .background(RoundedRectangle(cornerRadius: AskOnPageMetrics.radius, style: .continuous)
             .fill(Color(white: AskOnPageTone.card(dark: scheme == .dark)).opacity(scheme == .dark ? 0.96 : 0.97)))
         .overlay(alignment: .topTrailing) {
-            if state.inConversation { closeButton.padding([.top, .trailing], 12) }
+            if state.inConversation { closeButton.padding([.top, .trailing], 9) }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.75, blendDuration: 0.1), value: state.inConversation)
-        .onAppear { fieldFocused = true }
-        .onChange(of: overlay.findFocusToken) { fieldFocused = true }
-        .onChange(of: overlay.findVisible) { _, visible in if visible { fieldFocused = true } }
+        .animation(reduceMotion ? nil : .easeInOut, value: state.inConversation)
+        .transaction { if reduceMotion { $0.disablesAnimations = true } }
+        .onChange(of: state.service.phase) { controller?.restoreFailedQuestion() }
+        .onExitCommand { controller?.onClose() }
     }
 
-    /// Arc's field: one grey band with the count, the arrows and the Ask button inside it.
+    /// The native baseline row includes Find controls; only conversation input gets an inset band.
     private var inputRow: some View {
-        HStack(alignment: .center, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                TextField(AskOnPagePolicy.placeholder(canAsk: state.canAsk, inConversation: state.inConversation), text: $overlay.findQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .focused($fieldFocused)
-                    .onSubmit { controller.submit(shift: NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false) }
-                    .onExitCommand { controller.onClose() }
-                findControls
-            }
-            .padding(.leading, 10).padding(.trailing, 5).padding(.vertical, 5)
-            .frame(minHeight: 36)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
+        let font = NSFont.systemFont(ofSize: state.inConversation ? 14 : 16, weight: .medium)
+        let ascent = font.ascender, descent = font.descender
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            AskOnPageInput(state: state, overlay: overlay, controller: controller)
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    (dimensions.height - ascent + descent) / 2 + ascent
+                }
+            findControls
             if !state.inConversation {
-                iconButton("xmark", label: "Close") { controller.onClose() }
+                iconButton("xmark", label: "Close") { controller?.onClose() }
             }
         }
-        .padding(6)
-        .frame(minHeight: AskOnPageMetrics.rowHeight)
+        .padding(12).padding(.leading, 6)
+        .background {
+            if state.inConversation {
+                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color.primary.opacity(0.06)).padding(6)
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { state.inputHeight = $0 }
     }
 
     @ViewBuilder private var findControls: some View {
             if !state.inConversation, !overlay.findQuery.isEmpty, let matches = overlay.findMatchCount {
-                Text(matches == 0 ? "No matches" : "\(overlay.findActiveMatch)/\(matches)")
-                    .font(.system(size: 13, weight: .medium)).monospacedDigit()
+                let countLabel = matches == 0 ? "No matches" : "\(overlay.findActiveMatch)/\(matches)"
+                Text(countLabel)
+                    .font(.system(size: 13, weight: .medium, design: .rounded)).monospacedDigit()
                     .foregroundStyle(.primary.opacity(0.5))
-                    .fixedSize()
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(countLabel).accessibilityLabel(countLabel)
                 if matches > 0 {
-                    iconButton("arrow.up", label: "Previous") { controller.onFind(overlay.findQuery, false) }
-                    iconButton("arrow.down", label: "Next") { controller.onFind(overlay.findQuery, true) }
+                    iconButton("arrow.up", label: "Previous") { controller?.onFind(overlay.findQuery, false) }
+                    iconButton("arrow.down", label: "Next") { controller?.onFind(overlay.findQuery, true) }
                 }
             }
             // Arc shows Ask with the field still empty (the reporter's capture); it asks once there is text.
             if state.canAsk {
                 let ready = AskOnPagePolicy.showsAskButton(query: overlay.findQuery, canAsk: state.canAsk)
-                Button { if ready { controller.ask(overlay.findQuery) } } label: {
+                Button { if ready { controller?.ask(overlay.findQuery) } } label: {
                     Text("Ask").font(.callout.weight(.semibold)).foregroundStyle(.white)
+                        .fixedSize()
                         .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color(state.tone.button)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("askOnPageAsk")
+                .accessibilityLabel("Submit")
             }
     }
 
@@ -387,7 +353,7 @@ struct AskOnPageView: View {
 
     /// Arc's close button: a plain ✕ on the card; its material square shows under the pointer.
     private var closeButton: some View {
-        Button { controller.onClose() } label: {
+        Button { controller?.onClose() } label: {
             Image(systemName: "xmark").font(.system(size: 12, weight: .regular)).foregroundStyle(.primary.opacity(0.5))
                 .frame(width: 22, height: 22)
                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.ultraThinMaterial).opacity(closeHovered ? 1 : 0))
@@ -401,15 +367,20 @@ struct AskOnPageView: View {
 /// The questions and answers, scrolling past 450 pt, newest in view.
 private struct AskOnPageConversation: View {
     @Bindable var state: AskOnPageState
-    let controller: AskOnPageController
+    weak var controller: AskOnPageController?
     @State private var contentHeight: CGFloat = 0
+    @State private var revealedQuestionID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 24) {
-                    ForEach(state.messages) { message in
-                        AskOnPageMessageView(message: message, state: state, controller: controller).id(message.id)
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(state.service.messages) { message in
+                        messageView(message, proxy: proxy)
+                    }
+                    if let message = state.service.current {
+                        messageView(message, proxy: proxy)
                     }
                 }
                 .padding(.horizontal, 18).padding(.top, 17).padding(.bottom, 12)
@@ -417,17 +388,26 @@ private struct AskOnPageConversation: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
             .scrollIndicators(.automatic)
-            .frame(height: min(max(contentHeight, 1), AskOnPageMetrics.conversationMaxHeight))
+            .frame(height: min(max(contentHeight, 1), state.conversationHeightLimit))
             .mask(fades)
-            .onChange(of: state.messages.count) {
-                if let last = state.messages.last { withAnimation(.default) { proxy.scrollTo(last.id, anchor: .top) } }
-            }
         }
+    }
+
+    private func messageView(_ message: AskOnPageService.Message, proxy: ScrollViewProxy) -> some View {
+        AskOnPageMessageView(message: message, state: state, controller: controller)
+            .onGeometryChange(for: Bool.self) { $0.size.height > 0 } action: { laidOut in
+                guard laidOut, revealedQuestionID != message.id,
+                      message.id == (state.service.current?.id ?? state.service.messages.last?.id) else { return }
+                revealedQuestionID = message.id
+                if reduceMotion { proxy.scrollTo(message.id, anchor: .top) }
+                else { withAnimation(.default) { proxy.scrollTo(message.id, anchor: .top) } }
+            }
+            .id(message.id)
     }
 
     /// Arc's fades where the conversation scrolls under its edges.
     private var fades: some View {
-        let scrolls = contentHeight > AskOnPageMetrics.conversationMaxHeight
+        let scrolls = contentHeight > state.conversationHeightLimit
         return LinearGradient(stops: scrolls ? [.init(color: .clear, location: 0), .init(color: .black, location: 0.04),
                                                 .init(color: .black, location: 0.9), .init(color: .clear, location: 1)]
                                              : [.init(color: .black, location: 0), .init(color: .black, location: 1)],
@@ -436,11 +416,12 @@ private struct AskOnPageConversation: View {
 }
 
 private struct AskOnPageMessageView: View {
-    let message: AskOnPageState.Message
+    let message: AskOnPageService.Message
     @Bindable var state: AskOnPageState
-    let controller: AskOnPageController
+    weak var controller: AskOnPageController?
     @Environment(\.colorScheme) private var scheme
     @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -450,85 +431,85 @@ private struct AskOnPageMessageView: View {
                 .textSelection(.enabled)
             if let line = AskOnPagePrompt.fractionLine(message.fractionRead) {
                 Text(line).font(.subheadline.bold()).foregroundStyle(.primary.opacity(0.5))
+            } else if message.isPartialPage {
+                Text("This page was long, so I read part of it.").font(.subheadline.bold()).foregroundStyle(.primary.opacity(0.5))
             }
-            let parts = AskOnPageReply.parts(message.reply, question: message.question)
-            if parts.isEmpty, !message.finished {
-                Text("Loading Content").font(.body).redacted(reason: .placeholder)
-                    .opacity(pulse ? 0.4 : 1)
-                    .onAppear { withAnimation(.easeInOut(duration: 0.8).repeatForever()) { pulse = true } }
+            if message.olderMessagesHidden {
+                Text("[Older messages hidden]").font(.subheadline).foregroundStyle(.secondary)
             }
-            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
-                if part.isQuote {
-                    AskOnPageQuote(quote: part.text, search: state.quotes[part.text], finished: message.finished) { controller.findQuote(part.text) }
-                } else if message.finished {
-                    Text(Self.markdown(part.text)).font(.body).foregroundStyle(.primary.opacity(0.8))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                } else {
-                    // While it streams, a line per Text: only the last one is laid out again.
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(AskOnPageReply.lines(part.text).enumerated()), id: \.offset) { _, line in
-                            AskOnPageLine(text: line).equatable()
-                        }
+            if let answer = message.answer {
+                ForEach(Array(answer.quotes.enumerated()), id: \.offset) { index, quote in
+                    AskOnPageQuote(quote: quote, finished: answer.isComplete,
+                        status: state.service.quoteNavigation.flatMap { $0.messageID == message.id && $0.index == index ? $0.status : nil }) {
+                        controller?.findQuote(messageID: message.id, index: index)
                     }
                 }
+                answerText(answer).font(.body).foregroundStyle(.primary.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            } else if state.service.isLoading {
+                Text("Loading Content").font(.body).redacted(reason: .placeholder)
+                    .opacity(reduceMotion ? 1 : (pulse ? 0.4 : 1))
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: pulse)
+                    .onAppear { pulse = !reduceMotion }
+                    .onChange(of: reduceMotion) { pulse = !reduceMotion }
+            }
+            if state.service.current?.id == message.id, let failure = state.service.failureText {
+                Text(failure).font(.body).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    static func markdown(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+    private func answerText(_ answer: AskOnPage.Answer) -> Text {
+        guard let key = answer.keyAnswer, !key.isEmpty,
+              let range = answer.text.range(of: key, options: .literal) else { return Text(answer.text) }
+        let prefix = Text(String(answer.text[..<range.lowerBound]))
+        let emphasis = Text(String(answer.text[range])).bold()
+        let suffix = Text(String(answer.text[range.upperBound...]))
+        return Text("\(prefix)\(emphasis)\(suffix)")
     }
 }
 
-/// One line of an answer that is still streaming.
-private struct AskOnPageLine: View, Equatable {
-    let text: String
-
-    var body: some View {
-        Text(AskOnPageMessageView.markdown(text)).font(.body).foregroundStyle(.primary.opacity(0.8))
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// A quote from the page on Arc's 2 pt rule, with Find on Page under it.
+/// Literal native source text on the existing 2 pt rule; provisional/absent text cannot navigate.
 private struct AskOnPageQuote: View {
-    let quote: String
-    let search: AskOnPageState.QuoteSearch?
+    let quote: AskOnPage.Quote
     let finished: Bool
+    let status: AskOnPageService.QuoteStatus?
     let find: () -> Void
     @State private var hovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Rectangle().fill(Color.primary.opacity(0.1)).frame(width: 2)
             VStack(alignment: .leading, spacing: 0) {
-                Text(AskOnPageMessageView.markdown(quote)).font(.body).foregroundStyle(.primary.opacity(0.8))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                Text(quote.text).font(.body).foregroundStyle(.primary.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 if finished {
-                    if search == .notFound {
+                    if quote.state == .notFound || status == .notFound {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
                             Text("Quote not found. Make sure it’s accurate!")
                         }
-                        .font(.system(size: 11, weight: .bold)).foregroundStyle(.primary.opacity(0.5))
-                        .padding(.top, 12)
-                    } else {
+                        .font(.system(size: 11, weight: .bold)).foregroundStyle(.red)
+                        .padding(.top, 4)
+                    } else if quote.state == .verified {
                         Button(action: find) {
                             HStack(spacing: 4) {
+                                if status == .loading { ProgressView().controlSize(.mini) }
                                 Text("Find on Page")
-                                Image(systemName: "arrow.forward")
+                                Image(systemName: "arrow.forward").offset(x: hovered && !reduceMotion ? 4 : 0)
                             }
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.primary.opacity(hovered ? 0.8 : 0.5))
-                            .opacity(search == .loading ? 0.5 : 1)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .padding(.top, 12)
-                        .onHover { h in withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.2)) { hovered = h } }
+                        .padding(.top, 4)
+                        .onHover { h in
+                            if reduceMotion { hovered = h }
+                            else { withAnimation(.timingCurve(0.25, 0.1, 0.25, 1, duration: 0.2)) { hovered = h } }
+                        }
                         .accessibilityIdentifier("askOnPageFindQuote")
                     }
                 }

@@ -13,6 +13,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     let sidebarUI = SidebarUIState()
     let sidebarActions = SidebarActions()
     let overlay = OverlayState()
+    private var debugFindResults = false
     let commandBar: CommandBarController
     private(set) var browsers: BrowserManager!
     private(set) var shell: ShellView!
@@ -157,6 +158,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // What extensions set for a tab (chrome.action.setIcon with tabId) went with its page.
         browsers.pageClosed = { ExtensionStore.shared.forgetActionTab($0) }
         browsers.delegate = self
+        overlay.onFindQueryChange = { [weak self] query in
+            guard let self else { return }
+            if self.overlay.findVisible, self.askOnPage.findsWhileTyping { self.find(query, forward: true) }
+            else { self.browsers.prepareFind(query) }
+        }
         browsers.windowID = session.id
         browsers.takeRuntimeFromOtherWindow = { [weak self] id in
             guard let self else { return nil }
@@ -515,6 +521,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             _ = store.settings
             _ = store.spaces
             _ = SystemAppearance.shared.isDark
+            _ = TidyTabsService.shared.modelAvailable
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.refresh()
@@ -596,6 +603,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false }) {
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
         }
+        if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
         shell.layoutContentChildren()
         syncPeeks(onScreen: panes)
         syncRingPanel()
@@ -1010,12 +1018,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }))
     }
 
-    func browserManager(findMatches count: Int, activeMatch: Int) {
+    func browserManager(findState state: AskOnPage.FindState) {
+        if debugFindResults { logFindState() }
         guard overlay.findVisible else { return }
-        askOnPage.matchesUpdated(count: count)
-        if count >= 0 { overlay.findCountText = lastFindText }
-        if count >= 0 { overlay.findMatchCount = count }
-        if activeMatch >= 0 { overlay.findActiveMatch = activeMatch }
+        overlay.findMatchCount = state.count
+        overlay.findActiveMatch = state.activeMatch
+    }
+
+    func browserManager(findAction action: CraFindAction) {
+        if debugFindResults { CraLog.note("find nativeAction=\(action.rawValue)") }
+        switch action {
+        case .show: showFindBar()
+        case .next: findNext(forward: true)
+        case .previous: findNext(forward: false)
+        @unknown default: break
+        }
     }
 
     func browserManager(download: CraDownloadInfo) {
@@ -1180,16 +1197,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// panel made every shot of the page blank white (#346).
     private var overlayPanel: NSPanel?
     private var findPanel: FindBarPanel?
-    /// The text the page's find last ran on.
-    private var lastFindText = ""
     /// The focused page's screen rect the find panel was last placed on.
     private var lastFindPage: NSRect?
     /// Arc Max's Ask on Page: with the setting on, the find bar's panel shows this card instead (#393).
     private(set) lazy var askOnPage: AskOnPageController = {
-        let c = AskOnPageController(overlay: overlay)
+        let service = AskOnPageService(browsers: browsers, settingsStore: store, enabled: { [weak self] in self?.store.settings.askOnPage == true },
+                                       clock: app.composition.clock)
+        let c = AskOnPageController(overlay: overlay, service: service)
         c.onFind = { [weak self] q, forward in self?.find(q, forward: forward) }
         c.onClose = { [weak self] in self?.hideFindBar() }
-        c.browser = { [weak self] in self?.currentBrowser }
+        c.canAskFromFind = { [weak self] query, forward in
+            self?.browsers.canAskFind(query: query, enabled: true, forward: forward) ?? false
+        }
         c.onResize = { [weak self] in self?.refitFindPanel() }
         return c
     }()
@@ -1308,13 +1327,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// floating toolbar while that is out (`FindBarPlacement`).
     private func findPanelFrame(page: NSRect) -> NSRect {
         lastFindPage = page
-        let size = askOnPage.state.enabled ? askOnPage.size : CraMetrics.findBarSize
-        return FindBarPlacement.frame(page: page, visibleMaxX: window?.frame.maxX, size: size, inset: CraMetrics.findBarInset,
+        let inset = CraMetrics.findBarInset
+        var page = page
+        if let window, page.maxX > window.frame.maxX { page.size.width = max(0, window.frame.maxX - page.minX) }
+        if askOnPage.state.enabled {
+            let cover = shell.floatingToolbarCover
+            let available = AskOnPageLayout.frame(preferred: CGSize(width: 400, height: CGFloat.greatestFiniteMagnitude),
+                                                 page: page, inset: inset, toolbarOverPage: cover).size
+            askOnPage.constrain(to: available)
+            return AskOnPageLayout.frame(preferred: askOnPage.size, page: page, inset: inset, toolbarOverPage: cover)
+        }
+        return FindBarPlacement.frame(page: page, size: CraMetrics.findBarSize, inset: inset,
                                       toolbarOverPage: shell.floatingToolbarCover)
     }
 
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
     func browserManagerPageWindowsChanged(focus: Bool) {
+        askOnPage.service.refresh()
         guard let window else { return }
         frameReleaseAfterChange?.cancel()
         frameReleaseAfterChange = app.composition.clock.after(HiddenFrameRelease.afterPageChange) { [weak self] in
@@ -4112,9 +4141,45 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Find
 
+    /// Privileged scenario seam: exercise the production query/native-command paths without
+    /// global keyboard input. Result diagnostics contain identity/counts only, never query text.
+    func debugFind(query: String?, step: String?, quote: Bool) {
+        debugFindResults = true
+        if let query {
+            if quote { browsers.find(query, forward: true, purpose: .quote) }
+            else {
+                let restoring = overlay.findVisible && overlay.findQuery == query && browsers.findState.request?.purpose == .quote
+                overlay.findQuery = query
+                showFindBar()
+                if restoring { find(query, forward: true) }
+            }
+        }
+        switch step {
+        case "show": showFindBar()
+        case "close": hideFindBar()
+        case "next": findNext(forward: true)
+        case "previous": findNext(forward: false)
+        case "nativeShow": _ = currentBrowser?.runChromeCommand("IDC_FIND")
+        case "nativeNext": _ = currentBrowser?.runChromeCommand("IDC_FIND_NEXT")
+        case "nativePrevious": _ = currentBrowser?.runChromeCommand("IDC_FIND_PREVIOUS")
+        default: break
+        }
+        logFindState()
+    }
+
+    private func logFindState() {
+        let state = browsers.findState
+        CraLog.note("find generation=\(state.request?.id.uuidString ?? "none") identifier=\(state.identifier.map(String.init) ?? "none") "
+                    + "count=\(state.count.map(String.init) ?? "pending") ordinal=\(state.activeMatch) final=\(state.finalUpdate) "
+                    + "purpose=\(state.request?.purpose == .quote ? "quote" : "ordinary")")
+    }
+
     func showFindBar() {
+        let opening = !overlay.findVisible
+        if opening { browsers.stopFinding(false) }
         syncAskOnPage()
         overlay.findVisible = true
+        if opening, !overlay.findQuery.isEmpty { find(overlay.findQuery, forward: true) }
         overlay.findFocusToken += 1
         shell.findVisible = true
         shell.layoutContentChildren()
@@ -4130,7 +4195,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         overlay.findMatchCount = nil
         askOnPage.reset()
         shell.findVisible = false
-        currentBrowser?.stopFinding(true)
+        browsers.stopFinding(true)
         shell.layoutContentChildren()
         if let find = findPanel, let window {
             // Typing goes back to the page, unless focus already moved elsewhere.
@@ -4144,18 +4209,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc's (and Chrome's) Edit ▸ Find ▸ Use Selection to Find: the page's selection becomes the
     /// search, on the find pasteboard too as macOS apps share it, and the bar finds it.
     func useSelectionForFind() {
-        guard let b = currentBrowser else { return }
+        guard let b = currentBrowser, let owner = browsers.findPageContext() else { return }
         b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"getSelection().toString()","returnByValue":true}"#) { [weak self] result, _ in
             MainActor.assumeIsolated {
                 let o = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 let text = ((o?["result"] as? [String: Any])?["value"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let self, !text.isEmpty else { return }
+                guard let self, self.currentBrowser === b, self.browsers.findPageContext() == owner, !text.isEmpty else { return }
                 let pb = NSPasteboard(name: .find)
                 pb.clearContents()
                 pb.setString(text, forType: .string)
+                // Typing does not search in a conversation; this explicit Find command still must.
+                let needsSearch = self.overlay.findVisible && (self.overlay.findQuery == text || !self.askOnPage.findsWhileTyping)
                 self.overlay.findQuery = text
                 self.showFindBar()
-                self.find(text, forward: true)
+                if needsSearch { self.find(text, forward: true) }
             }
         }
     }
@@ -4172,16 +4239,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// unlike a first request that selects a match (Chrome's find bar does this while
     /// typing), so the bar shows "1/3" rather than "0/3".
     private func find(_ q: String, forward: Bool) {
-        guard let b = currentBrowser else { return }
-        if q.isEmpty { overlay.findMatchCount = nil; lastFindText = ""; b.stopFinding(true); return }
-        lastFindText = q
-        b.findText(q, forward: forward, matchCase: false, findNext: true)
+        browsers.find(q, forward: forward)
     }
 
     /// Ask on Page or the plain find bar, by the setting and the model; the card follows the page in
     /// front and the space's colour.
     func syncAskOnPage() {
-        let enabled = store.settings.askOnPage && AskOnPageService.shared.isAvailable
+        let enabled = store.settings.askOnPage && AskOnPageLocalModel.isAvailable && TidyTabsService.shared.currentModelAvailable
         let state = askOnPage.state
         if state.enabled != enabled {
             state.enabled = enabled
@@ -4192,8 +4256,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let theme = focusedSpace.theme.shown
         // Not theme.isDark: the card follows macOS, so it makes a question for each appearance (#408).
         askOnPage.setTone(themeHex: theme.accent ?? theme.colors.first ?? "#DDDDDD")
-        let tab = browsers.visibleTabID
-        askOnPage.pageChanged(tab: tab, url: tab.flatMap { store.item($0)?.tab?.url }.flatMap(URL.init(string:)))
+        if enabled { browsers.refreshAskOnPageDocument() }
+        askOnPage.pageChanged(canAsk: browsers.askOnPageContext() != nil)
         refitFindPanel()
     }
 
@@ -4458,6 +4522,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        askOnPage.reset()
         LinkSummaryPreviewController.shared.stop()
         tabSwitcher.cancel()
         app.mainWindowWillClose(self)

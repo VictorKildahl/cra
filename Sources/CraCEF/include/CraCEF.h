@@ -6,6 +6,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CraBrowser;
 
+typedef NS_ENUM(NSInteger, CraFindAction) {
+    CraFindActionShow = 0,
+    CraFindActionNext = 1,
+    CraFindActionPrevious = 2,
+};
+
 typedef NS_ENUM(NSInteger, CraDownloadState) {
     CraDownloadStateInProgress = 0,
     CraDownloadStateComplete = 1,
@@ -137,7 +143,12 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didReportBackgroundColor:(NSString *)hex;
 /// Find in page progress: `count` matches, `activeMatch` is the highlighted one
 /// (1-based). Either is -1 while Chromium has no new value for it.
-- (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch;
+/// The immutable generation/purpose belongs to the caller's query session; identifier/final
+/// are native engine evidence (WebKit has no native identifier and reports -1).
+- (void)browser:(CraBrowser *)browser didFindMatches:(NSInteger)count activeMatch:(NSInteger)activeMatch
+    generation:(NSUUID *)generation quote:(BOOL)quote identifier:(NSInteger)identifier finalUpdate:(BOOL)finalUpdate;
+/// Chrome's native Find commands use the app's Find panel, keeping one search owner.
+- (void)browser:(CraBrowser *)browser requestsFindAction:(CraFindAction)action;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
 /// Chromium dropped the page's permission request before Cra answered it (the page navigated or
@@ -296,7 +307,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)closeDevTools;
 - (double)zoomLevel;
 - (void)setZoomLevel:(double)level;
-- (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext;
+/// A fresh generation restarts native Find; next/previous keep the same generation.
+- (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext
+    generation:(NSUUID *)generation quote:(BOOL)quote;
 - (void)stopFinding:(BOOL)clearSelection;
 /// Mutes the page, also one Chromium hasn't made yet: it starts muted (#387).
 - (void)setAudioMuted:(BOOL)muted;
@@ -346,6 +359,11 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// Runtime.evaluate (`params` without a context) in the main frame's isolated world `world`,
 /// where the isolated document start script runs.
 - (void)evaluateInIsolatedWorld:(NSString *)world params:(NSString *)params
+                     completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
+/// Ask's effect authorization is checked again after isolated-world setup, immediately before IPC.
+/// A dispatched renderer command cannot be atomically revoked; callers also fence the document in JS.
+- (void)evaluateInIsolatedWorld:(NSString *)world params:(NSString *)params
+                      ifCurrent:(BOOL (^)(void))ifCurrent
                      completion:(void (^)(NSString * _Nullable result, NSString * _Nullable error))completion;
 /// Chrome DevTools Protocol call on this browser's own session (no DevTools window).
 /// `params` is a JSON object string; the completion gets the result JSON or an error.

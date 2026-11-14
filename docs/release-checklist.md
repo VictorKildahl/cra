@@ -68,6 +68,12 @@ built release app with a test profile. Note anything that fails in the release's
   the quote in the page, or says "Quote not found". Ask a follow-up; past 450 pt the conversation scrolls
   with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
   (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
+  Record the separate exact native quote-highlight/selection, field-editor key/focus and 1x/2x
+  appearance gates in [Ask validation](ask-on-page-validation.md). A passing basic scenario, native
+  count or script-only DOM Range test does not close these gates. Preserve conversation during
+  quote navigation and ordinary Find restoration; clear it on a genuine document/owner change.
+  At 400 pt and narrow widths, confirm a single-line Ask caption, a visible match count, and no input/control overlap.
+  After fast follow-ups overflow the card, verify the newest question appears and scrolling older turns during an answer is not pulled back.
 
 - **#417, Ask on Page follow-ups:** on a long article ask something the page can't answer ("why did el
   salvador succeed?"), then "Summarize the key points of this article in bullet points": the second answer

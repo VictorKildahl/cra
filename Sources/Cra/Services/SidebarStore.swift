@@ -30,7 +30,15 @@ final class SidebarStore {
             notifyItemReaders(of: oldValue)
         }
     }
-    var settings = AppSettings() { didSet { settingsStore.save(settings) } }
+    var settings = AppSettings() {
+        didSet {
+            // Deliver the disable edge inline, including master-switch/replacement and same-turn off/on.
+            if oldValue.askOnPage && !settings.askOnPage {
+                NotificationCenter.default.post(name: AskOnPage.disabledNotification, object: self)
+            }
+            settingsStore.save(settings)
+        }
+    }
     private(set) var history: [String: HistoryEntry] = [:]
     private(set) var ranking = RankingData()
     /// Bumped on every structural change; cheap way for AppKit code to observe.
@@ -821,6 +829,12 @@ final class SidebarStore {
     /// Repaired like a file at launch, so a profile the other Mac deleted leaves its spaces on
     /// Default, and a window whose space is gone shows the first.
     func replace(document synced: SidebarDocument) {
+        let previousAskProfiles = askProfileOwnership(of: allTabs().map(\.id))
+        let previousSpaceProfiles = spaces.mapValues(\.profileID)
+        defer {
+            let changedSpaces = Set(previousSpaceProfiles.keys.filter { previousSpaceProfiles[$0]! != spaces[$0]?.profileID })
+            notifyAskProfileChanges(previousAskProfiles, spaces: changedSpaces)
+        }
         let doc = synced.forSync()
         var kept = Set<UUID>()
         for sid in incognitoSpaceIDs.union(blankSpaceIDs) { if let s = spaces[sid] { collectSubtree(of: s, into: &kept) } }
@@ -939,6 +953,8 @@ final class SidebarStore {
         if fromParent != newParent, let from = fromParent, let live = liveFolder(containing: from) { hideLiveItem(id, in: live.id) }
         let oldIndex = fromParent.flatMap { items[$0]?.children.firstIndex(of: id) }
         let wasPinned = fromParent.map { if case .pinned? = rootContainerKind($0) { return true } else { return false } } ?? false
+        let previousAskProfiles = askProfileOwnership(of: it.isTab ? [id] : tabs(under: id).map(\.id))
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         if it.isFolder, !it.isTabGroup, case .today? = rootContainerKind(newParent) {
             // Unpack: move the folder's tabs instead.
             let kids = it.children
@@ -1045,6 +1061,8 @@ final class SidebarStore {
             for t in tabs where t.id != first.id { addToSplit(existing.id, tabID: t.id, at: nil) }
             return items[existing.id]
         }
+        let previousAskProfiles = askProfileOwnership(of: tabs.map(\.id))
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         // Observed in Arc 1.170: splitting a favorite or pinned tab leaves it in
         // place and builds the split in Today from a copy of the page; a Today
         // tab moves into the split at its own slot.
@@ -1158,6 +1176,8 @@ final class SidebarStore {
             if let i = index, let sp = items[splitID], sp.children.firstIndex(of: tabID) != nil { moveWithinSplit(splitID, tabID: tabID, to: i) }
             return
         }
+        let previousAskProfiles = askProfileOwnership(of: [tabID])
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         let from = tab.parentID
         var paneID = tabID
         if isPinned(tabID), let data = tab.tab {
@@ -1356,12 +1376,16 @@ final class SidebarStore {
     func moveFavorite(_ id: UUID, toProfile profileID: UUID?) {
         let id = splitContaining(id)?.id ?? id
         guard let from = profileList(ofItem: id), from.profileID != profileID, profileID == nil || profile(profileID) != nil else { return }
+        let previousAskProfiles = askProfileOwnership(of: items[id]?.isTab == true ? [id] : tabs(under: id).map(\.id))
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         reparent(id, to: profileList(profileID))
         touch()
     }
 
     /// Makes the sidebar match FavoritesSharing.share; nothing changes when it already does.
     private func shareFavorites() {
+        let previousAskProfiles = askProfileOwnership(of: allTabs().filter { isFavorite($0.id) }.map(\.id))
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         profileFavorites.removeAll { items[$0.containerID] == nil }
         let lists = profileFavorites.map { FavoritesSharing.ProfileList($0, items: entries($0.containerID)) }
         let plan = FavoritesSharing.share(favoritesBySpace(), lists: lists)
@@ -1402,6 +1426,8 @@ final class SidebarStore {
     /// Each space showing a list gets one of its own: the first takes the favorites and their
     /// pages, the others copies. A list no space shows stays with its profile for next time.
     private func unshareFavorites() {
+        let previousAskProfiles = askProfileOwnership(of: allTabs().filter { isFavorite($0.id) }.map(\.id))
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         let splits = FavoritesSharing.unshare(favoritesBySpace(), lists: profileFavorites)
         guard !splits.isEmpty else { return }
         var windows = prefs.windows
@@ -2256,7 +2282,12 @@ final class SidebarStore {
     }
 
     func updateSpace(_ space: Space) {
-        guard spaces[space.id] != nil else { return }
+        guard let previous = spaces[space.id] else { return }
+        defer {
+            if previous.profileID != space.profileID {
+                NotificationCenter.default.post(name: AskOnPage.profileChangedNotification, object: self, userInfo: ["spaceID": space.id])
+            }
+        }
         storedThemes[space.id] = nil
         spaces[space.id] = space
         touch()
@@ -2328,6 +2359,31 @@ final class SidebarStore {
     }
 
     // MARK: Profiles
+
+    /// Temporary snapshots at actual profile/tree mutations, not a store-wide owner registry.
+    private struct AskProfileOwnership: Equatable {
+        let profileID: UUID?
+        let path: String?
+        let incognito: Bool
+    }
+
+    private func askProfileOwnership(of id: UUID) -> AskProfileOwnership? {
+        guard items[id]?.isTab == true else { return nil }
+        return AskProfileOwnership(profileID: profileID(item: id), path: profilePath(item: id), incognito: isIncognito(item: id))
+    }
+
+    private func askProfileOwnership(of ids: [UUID]) -> [UUID: AskProfileOwnership] {
+        var result: [UUID: AskProfileOwnership] = [:]
+        for id in Set(ids) { if let ownership = askProfileOwnership(of: id) { result[id] = ownership } }
+        return result
+    }
+
+    private func notifyAskProfileChanges(_ previous: [UUID: AskProfileOwnership], spaces: Set<UUID> = []) {
+        let tabs = Set(previous.keys.filter { previous[$0] != askProfileOwnership(of: $0) })
+        guard !tabs.isEmpty || !spaces.isEmpty else { return }
+        NotificationCenter.default.post(name: AskOnPage.profileChangedNotification, object: self,
+                                        userInfo: ["tabIDs": tabs, "spaceIDs": spaces])
+    }
 
     func profile(_ id: UUID?) -> BrowserProfile? { id.flatMap { p in profiles.first { $0.id == p } } }
     func spaces(usingProfile id: UUID?) -> [Space] { orderedSpaces.filter { $0.profileID == id } }
@@ -2412,6 +2468,7 @@ final class SidebarStore {
         if isProfileList(s.favoritesContainerID) { s.favoritesContainerID = profileList(profileID) }
         s.profileID = profileID
         spaces[id] = s
+        NotificationCenter.default.post(name: AskOnPage.profileChangedNotification, object: self, userInfo: ["spaceID": id])
         for (folder, profile) in previousProfiles where profileDirectoryName(item: folder) != profile {
             invalidateLiveFolder(folder)
         }
@@ -2431,6 +2488,9 @@ final class SidebarStore {
     /// folder open, so it goes at the next launch (ProfileCleanup).
     func deleteProfile(_ id: UUID) {
         guard let p = profile(id), spaces.values.allSatisfy({ $0.profileID != id }) else { return }
+        let previousAskProfiles = askProfileOwnership(of: profileFavorites.filter { $0.profileID == id }
+            .flatMap { tabs(under: $0.containerID).map(\.id) })
+        defer { notifyAskProfileChanges(previousAskProfiles) }
         profiles.removeAll { $0.id == id }
         // Its favorites go with it.
         for l in profileFavorites where l.profileID == id {

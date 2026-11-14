@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Synthetic Ask on Page article</title>
+<style>.invisible { display: none } .masked { visibility: hidden }
+  .paragraph { display: block } .inline-layout { display: inline }</style>
+<nav>Navigation should never become a citation for this synthetic article.</nav>
+<header>Account and toolbar controls are outside the readable article.</header>
+<main>
+  <h1>Local page context</h1>
+  <p>The <span>synthetic article</span> contains a supported sentence across inline elements.</p>
+  <p>Café and 漢字 stay in their original spelling. This is the second paragraph.</p>
+  <p>Budget &lt; €40 &amp; the editor says "use &lt;excerpt&gt; literally".</p>
+  <span class="paragraph">A readable first paragraph has an exact final word.</span><span class="paragraph">The second visible paragraph begins separately.</span>
+  <section><div class="inline-layout">Genuine</div><div class="inline-layout">inline adjacency stays joined.</div></section>
+  <div hidden>Hidden attribute secret</div>
+  <div class="invisible">Display none secret</div>
+  <div class="masked">Visibility hidden secret</div>
+  <div aria-hidden="true">Accessibility hidden secret</div>
+  <input value="Input value secret">
+  <input type="password" value="Password secret">
+  <textarea>Textarea secret</textarea>
+  <button>Button secret</button>
+  <script>window.syntheticPageValue = 'Script secret';</script>
+</main>
+<footer>Footer chrome should not become page context.</footer>

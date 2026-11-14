@@ -7,13 +7,20 @@ import Observation
 final class OverlayState {
     var status = ""
     var findVisible = false
-    var findQuery = ""
+    var findQuery = "" {
+        didSet {
+            guard findQuery != oldValue else { return }
+            findMatchCount = nil
+            findActiveMatch = 0
+            onFindQueryChange?(findQuery)
+        }
+    }
+    /// Synchronous, so Return cannot use a previous query while Observation is pending.
+    var onFindQueryChange: ((String) -> Void)?
     var findFocusToken = 0
     /// Find in page results ("2/7" in the bar); nil until the page answers.
     var findMatchCount: Int?
     var findActiveMatch = 0
-    /// The text `findMatchCount` counts: the field can be ahead of the page's answer.
-    var findCountText = ""
 }
 
 /// The link under the pointer, bottom left over the page. AppKit: it changes on every link the
@@ -79,7 +86,6 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     private let field = NSTextField()
     private let count = NSTextField.sidebarLabel(size: 11)
     private var buttons: [ClosureButton] = []
-    private var lastQuery = ""
     private var lastFocusToken = 0
     private var wasVisible = false
 
@@ -125,9 +131,6 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         }
         for v in subviews { v.isHidden = !visible }
         if field.stringValue != query { field.stringValue = query }
-        // Like SwiftUI's .onChange on the query: every change, typed or set, searches.
-        if visible, query != lastQuery { onFind(query, true) }
-        lastQuery = query
         if let matches, !query.isEmpty {
             count.stringValue = "\(matches == 0 ? 0 : active)/\(matches)"
             count.isHidden = !visible

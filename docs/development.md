@@ -101,6 +101,14 @@ the save panel.
 
 [testing.md](testing.md) has the rules, the layers, the gates and how to write a scenario.
 
+`find-correlation` exercises ordinary Find in real CEF and WebKit while Ask is disabled.
+Its privileged `cra://debug?findQuery=<synthetic text>` sets the existing Find query;
+`findStep=show|close|next|previous|nativeShow|nativeNext|nativePrevious|state` drives the
+ordinary controls or actual Chrome command route. `findPurpose=quote` exercises only native
+quote-search isolation, not quotation validation. Diagnostics record generation, native ID,
+count, ordinal, final flag and purpose, never the query text. Rapid-order acceptance checks
+must inspect new log output per command; historical matching log lines alone are insufficient.
+
 CI runs the same tests on every pull request and push to main (no CEF download), once, through
 `scripts/coverage.py` plus `scripts/lint.py`, and the smoke test on the app it builds. A change
 to Markdown or `docs/` alone runs nothing.
@@ -119,6 +127,24 @@ to Markdown or `docs/` alone runs nothing.
   a stub to `AppServices.swift`.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
+- `scripts/test-ask-on-page-content.sh`: the production bounded Ask on Page script in a real
+  WebKit isolated world, using a loopback HTTP fixture, including hidden/large DOM and Unicode bounds.
+- `scripts/test-ask-on-page-quotes.sh`: production quote lookup/effect scripts on a controlled DOM surface
+  in Node (no added product dependency). Covers inline Unicode, repeated/mutated text, leases and bounds;
+  actual engine selection/scroll remains a separate CEF/WebKit gate.
+- `scripts/test-ask-on-page-lifecycle.sh`: actual SidebarStore individual/replacement/master settings
+  writes and real model-status refresh, two window services, same-turn off/on, late provider delivery,
+  completed history/source and teardown. Notifications run inline at the real mutation boundaries.
+- `scripts/test-ask-on-page-service.sh`: production native card/controller/overlay ownership,
+  correlated Return decisions, literal quote actions, request cancellation, streaming and failures with a
+  controlled provider/manual clock. `--real-model` explicitly probes the production on-device
+  adapter with synthetic page questions. `--real-model-extended` adds Japanese and genuinely fitted
+  oversized-source cases. Both require available Apple Intelligence and are never CI inference gates.
+  `Tests/Fixtures/AskOnPage/runtime.html` supplies loopback HTTP targets for actual engine
+  inline/Unicode/repeated/long-paragraph quote, native selection and viewport checks.
+  Each window service registers weak, synchronous notifications for its store's disable edge and
+  model unavailability; Observation remains a sustained-state backstop. The lifecycle harness
+  covers actual mutations; the controlled service harness covers request and delivery ownership.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
@@ -150,6 +176,13 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-back-forward-menu.sh`: Back and Forward's history menu (#416) off screen: rows,
   keys, clicks, titles cut where Arc cuts them, the window growing from its tail, a click on the
   button closing it, and the button's hold (⌃-click stays a plain click).
+- `scripts/test-mobile-popup.sh`: the production iOS popup callback and tab store against
+  platform stand-ins: related-view/request ownership, source privacy, nested opener lifetime,
+  close return paths, and private-tab persistence/cleanup. Native POST and opener behavior is
+  exercised separately by `CraUITests/PopupTests` with `iOS/Tests/popup_server.py` on loopback.
+- `scripts/test-shared-download-replacement.sh`: the production download service, history and
+  destination callback with suspended inference and disposable files: replacement ownership,
+  resource aliases, preparation scheduling, original history identity and safe undo.
 - `scripts/test-easel-canvas.sh`: the real `EaselSheetView` in an off-screen window, driven with
   synthetic mouse and key events: one click picks a text block, a double click edits it, Return and
   Escape end editing, Delete removes it, its size pill follows a drag. Undo and Redo, copy and

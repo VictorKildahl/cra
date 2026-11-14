@@ -1,177 +1,358 @@
-import AppKit
-import CraCEF
 import Foundation
+import Observation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
 
-/// Ask on Page on the Mac's own Apple Intelligence model (FoundationModels, macOS 26): the page's
-/// text, read by a script in Cra's isolated world, and Arc's prompt (AskOnPagePrompt). The text and
-/// the answer stay on the Mac.
-@MainActor
+/// One window's transient conversation. The controller calls refresh when its focused page changes.
+/// The owner must call clear synchronously on disable/unavailable transitions, before re-enabling:
+/// level-triggered Observation can coalesce a same-turn off/on pair and cannot preserve that edge.
+@MainActor @Observable
 final class AskOnPageService {
-    static let shared = AskOnPageService()
-    private init() {}
-
-    var isAvailable: Bool { TidyTabsService.fakeModel || TidyTabsService.shared.modelAvailable }
-
-    /// The page as the script read it.
-    struct Page: Sendable {
-        var url: String
-        var title: String?
-        var text: String
-        /// The page's whole length; more than `text` when the script stopped reading.
-        var total: Int
+    enum Failure: Error, Equatable {
+        case unreadablePage, inputTooLong, unavailable, contextOverflow, refused, generationFailed, incompleteAnswer, invalidAnswer, timedOut
     }
+    enum Phase: Equatable { case idle, reading, answering, failed(Failure) }
+    struct Message: Identifiable {
+        let id: UUID
+        let question: String
+        var answer: AskOnPage.Answer?
+        var source = ""
+        var isPartialPage = false
+        var fractionRead: Double?
+        var olderMessagesHidden = false
+    }
+    enum QuoteStatus: String { case loading, found, notFound }
+    struct QuoteNavigation {
+        let messageID: UUID
+        let index: Int
+        let request: AskOnPage.FindRequest
+        var status: QuoteStatus
+    }
+    private(set) var quoteNavigation: QuoteNavigation?
+    typealias Generate = @MainActor (AskOnPagePrompt.Fitted, @escaping @MainActor (AskOnPage.Draft) -> Void) async throws -> AskOnPage.Draft
+    static let requestTimeout: TimeInterval = 90
 
-    /// Reads the page's text. Nil when the page doesn't answer (it is loading, or not a web page).
-    func read(_ browser: CraBrowser) async -> Page? {
-        let params = (try? JSONSerialization.data(withJSONObject: ["expression": AskOnPagePolicy.pageTextScript, "returnByValue": true]))
-            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        return await withCheckedContinuation { (c: CheckedContinuation<Page?, Never>) in
-            browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, _ in
-                guard let data = result?.data(using: .utf8),
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], json["exceptionDetails"] == nil,
-                      let value = (json["result"] as? [String: Any])?["value"] as? [String: Any],
-                      let text = value["text"] as? String else { c.resume(returning: nil); return }
-                let title = (value["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                c.resume(returning: Page(url: value["url"] as? String ?? "", title: title, text: text,
-                                         total: (value["total"] as? NSNumber)?.intValue ?? text.count))
-            }
+    private(set) var phase: Phase = .idle
+    private(set) var messages: [Message] = []
+    private(set) var current: Message?
+    private(set) var olderMessagesHidden = false
+    var isLoading: Bool { phase == .reading || phase == .answering }
+    var failureText: String? {
+        guard case .failed(let failure) = phase else { return nil }
+        switch failure {
+        case .unreadablePage: return AskOnPagePrompt.unreadable
+        case .inputTooLong: return "This question is too long. Try a shorter question."
+        case .unavailable: return "Apple Intelligence isn’t available right now."
+        case .timedOut: return "Sorry, the answer took too long. Try again."
+        default: return AskOnPagePrompt.failed
         }
     }
 
-    /// The user's language by name, as Arc writes it into the prompt.
-    private static var language: String {
-        let code = Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier } ?? "en"
-        return Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? "English"
-    }
+    @ObservationIgnored private let browsers: BrowserManager
+    @ObservationIgnored private let enabled: @MainActor () -> Bool
+    @ObservationIgnored private let available: @MainActor () -> Bool
+    @ObservationIgnored private let generate: Generate
+    @ObservationIgnored private let countTokens: AskOnPagePrompt.TokenCount
+    @ObservationIgnored private let estimatedTokenCount: Bool
+    @ObservationIgnored private let clock: Scheduler
+    @ObservationIgnored private var context: AskOnPageContext?
+    @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var deadline: ScheduledWork?
+    @ObservationIgnored private var invalidationObservers: [NSObjectProtocol] = []
 
-    /// Answers `question` about `page`, streaming the reply so far into `update` along with how much
-    /// of the page was read (nil: all of it). Returns the whole reply, Arc's sorry when the page has
-    /// no text or the model failed, or nil when cancelled.
-    func answer(question: String, turns: [AskOnPagePrompt.Turn], page: Page,
-                update: @escaping (String, Double?) -> Void) async -> String? {
-        let started = Date()
-        guard page.text.trimmingCharacters(in: .whitespacesAndNewlines).count >= AskOnPagePrompt.minimumText else {
-            update(AskOnPagePrompt.unreadable, nil)
-            return AskOnPagePrompt.unreadable
-        }
-        let instructions = AskOnPagePrompt.instructions(language: Self.language)
-        let dialogue = AskOnPagePrompt.dialogue(turns: turns, question: question)
-        let date = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .short)
-
-        if TidyTabsService.fakeModel {
-            let cut = AskOnPagePrompt.truncate(page.text, budget: 4_000, total: page.total)
-            echo: for attempt in 0...AskOnPagePrompt.echoRetries {
-                let reply = AskOnPagePrompt.fakeAnswer(question: question, text: page.text, attempt: attempt)
-                // About a token every 20 ms, as the on-device model streams a long answer.
-                for end in stride(from: 5, to: reply.count, by: 5) {
-                    try? await Task.sleep(for: .milliseconds(20))
-                    if Task.isCancelled { return nil }
-                    let part = String(reply.prefix(end))
-                    if AskOnPageReply.echoesPrompt(part) { Self.noteEcho(attempt); continue echo }
-                    update(part, cut.fractionRead)
+    init(browsers: BrowserManager, settingsStore: SidebarStore? = nil, enabled: @escaping @MainActor () -> Bool,
+         available: @escaping @MainActor () -> Bool = { TidyTabsService.shared.currentModelAvailable && AskOnPageLocalModel.isAvailable },
+         clock: Scheduler? = nil, countTokens: AskOnPagePrompt.TokenCount? = nil, generate: Generate? = nil) {
+        self.browsers = browsers; self.enabled = enabled; self.available = available
+        self.clock = clock ?? LiveScheduler.shared
+        self.countTokens = countTokens ?? AskOnPageLocalModel.tokenCount
+        self.estimatedTokenCount = countTokens == nil && AskOnPageLocalModel.estimatesTokens
+        self.generate = generate ?? AskOnPageLocalModel.stream
+        if let settingsStore {
+            invalidationObservers.append(NotificationCenter.default.addObserver(
+                forName: AskOnPage.disabledNotification, object: nil, queue: nil) { [weak self, weak settingsStore] notification in
+                MainActor.assumeIsolated {
+                    guard let settingsStore, notification.object as AnyObject? === settingsStore else { return }
+                    self?.clear()
                 }
-                if AskOnPageReply.echoesPrompt(reply) { Self.noteEcho(attempt); continue }
-                update(reply, cut.fractionRead)
-                return reply
-            }
-            update(AskOnPagePrompt.failed, nil)
-            return AskOnPagePrompt.failed
+            })
+            invalidationObservers.append(NotificationCenter.default.addObserver(
+                forName: AskOnPage.profileChangedNotification, object: nil, queue: nil) { [weak self, weak settingsStore] notification in
+                MainActor.assumeIsolated {
+                    guard let self, let settingsStore, notification.object as AnyObject? === settingsStore,
+                          let context = self.context else { return }
+                    let space = notification.userInfo?["spaceID"] as? UUID
+                    let spaces = notification.userInfo?["spaceIDs"] as? Set<UUID> ?? []
+                    let tabs = notification.userInfo?["tabIDs"] as? Set<UUID> ?? []
+                    if space == context.spaceID || spaces.contains(context.spaceID) || tabs.contains(context.tabID) { self.clear() }
+                }
+            })
         }
+        invalidationObservers.append(NotificationCenter.default.addObserver(
+            forName: AskOnPage.unavailableNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.clear() }
+        })
+        // Backstop for sustained unusability; synchronous owner invalidation handles transient changes.
+        observeChanges(of: { [weak self] in self.map { $0.enabled() && $0.available() } ?? false }) { [weak self] usable in
+            if !usable { self?.clear() }
+        }
+    }
 
+    deinit {
+        invalidationObservers.forEach(NotificationCenter.default.removeObserver)
+        task?.cancel()
+        Task { @MainActor [deadline] in deadline?.cancel() }
+    }
+
+    /// Closing the panel/window clears page text and history and invalidates even a cancellation-ignoring provider.
+    func clear() {
+        let pending = task, timer = deadline
+        task = nil; deadline = nil
+        context = nil; current = nil; messages = []; olderMessagesHidden = false; phase = .idle; quoteNavigation = nil
+        browsers.clearAskOnPageQuote()
+        pending?.cancel(); timer?.cancel()
+    }
+
+    func refresh() {
+        if !enabled() || !available() || context.map({ !browsers.isCurrentAskOnPage($0) }) == true { clear() }
+    }
+
+    /// A citation action is authorized by this completed native message, never by copied quote text.
+    func findQuote(messageID: UUID, index: Int) {
+        refresh()
+        guard enabled(), available(), let context, browsers.isCurrentAskOnPage(context),
+              let message = messages.first(where: { $0.id == messageID }), let answer = message.answer,
+              answer.isComplete, answer.quotes.indices.contains(index), answer.quotes[index].state == .verified else { return }
+        let text = answer.quotes[index].text
+        browsers.clearAskOnPageQuote()
+        guard let request = browsers.prepareFind(text, matchCase: true, purpose: .quote) else { return }
+        quoteNavigation = QuoteNavigation(messageID: messageID, index: index, request: request, status: .loading)
+        browsers.findAskOnPageQuote(text, in: context, request: request, isCurrent: { [weak self] in
+            guard let self else { return false }
+            return self.ownsQuote(messageID: messageID, index: index, request: request, context: context)
+        }) { [weak self] found in
+            guard let self else { return }
+            guard self.ownsQuote(messageID: messageID, index: index, request: request, context: context) else {
+                self.refresh()
+                return
+            }
+            guard let found else { self.quoteNavigation = nil; return }
+            self.quoteNavigation?.status = found ? .found : .notFound
+        }
+    }
+
+    private func ownsQuote(messageID: UUID, index: Int, request: AskOnPage.FindRequest, context: AskOnPageContext) -> Bool {
+        quoteNavigation?.messageID == messageID && quoteNavigation?.index == index && quoteNavigation?.request == request
+            && enabled() && available() && self.context == context && browsers.isCurrentAskOnPage(context)
+            && messages.contains(where: { $0.id == messageID })
+    }
+
+    @discardableResult
+    func ask(_ question: String, language: String) -> Bool {
+        refresh()
+        guard enabled(), available(), !isLoading,
+              !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let pageContext = browsers.askOnPageContext() else { return false }
+        quoteNavigation = nil
+        browsers.clearAskOnPageQuote()
+        context = pageContext
+        let id = UUID()
+        current = Message(id: id, question: question)
+        phase = .reading
+        deadline = clock.after(Self.requestTimeout) { [weak self] in self?.fail(.timedOut, id: id) }
+        let date = clock.now.formatted(.dateTime.year().month(.wide).day())
+        browsers.askOnPageSnapshot(pageContext) { [weak self] page in
+            guard let self else { return }
+            guard self.accepts(id) else { self.refresh(); return }
+            guard let page else { self.fail(.unreadablePage, id: id); return }
+            self.start(page: page, question: question, language: language, date: date, id: id)
+        }
+        return true
+    }
+
+    private func accepts(_ id: UUID) -> Bool {
+        current?.id == id && isLoading && enabled() && available()
+            && context.map { browsers.isCurrentAskOnPage($0) } == true
+    }
+
+    private func start(page: AskOnPagePrompt.Page, question: String, language: String, date: String, id: UUID) {
+        let history = history
+        let generate = generate, countTokens = countTokens, estimated = estimatedTokenCount
+        task = Task { [weak self] in
+            do {
+                for attempt in 0...1 {
+                    try Task.checkCancellation()
+                    // Overflow retry has a smaller budget and a fresh provider session. Failed partial text is replaced.
+                    guard let fitted = try await AskOnPagePrompt.fit(page: page, question: question, history: history,
+                        language: language, currentDate: date, inputLimit: attempt == 0 ? 3072 : 2048, countTokens: countTokens, estimatedTokenCount: estimated) else {
+                        self?.fail(.inputTooLong, id: id); return
+                    }
+                    guard self?.accepts(id) == true else { self?.refresh(); return }
+                    self?.phase = .answering
+                    self?.current?.answer = nil
+                    self?.current?.source = fitted.source
+                    self?.current?.isPartialPage = fitted.isPartialPage
+                    self?.current?.fractionRead = fitted.fractionRead
+                    self?.current?.olderMessagesHidden = fitted.olderMessagesHidden
+                    do {
+                        let final = try await generate(fitted) { [weak self] snapshot in
+                            guard let self else { return }
+                            guard self.accepts(id) else { self.refresh(); return }
+                            // A snapshot is the whole answer so far, never a delta.
+                            self.current?.answer = AskOnPage.partialAnswer(snapshot)
+                        }
+                        guard let answer = AskOnPage.completeAnswer(final, source: fitted.source) else {
+                            self?.fail(.invalidAnswer, id: id); return
+                        }
+                        guard self?.accepts(id) == true else { self?.refresh(); return }
+                        self?.current?.answer = answer
+                    } catch Failure.contextOverflow where attempt == 0 { continue }
+                    try Task.checkCancellation()
+                    self?.finish(id)
+                    return
+                }
+            } catch is CancellationError {
+                self?.fail(.generationFailed, id: id)
+            } catch {
+                self?.fail(error as? Failure ?? .generationFailed, id: id)
+            }
+        }
+    }
+
+    private func finish(_ id: UUID) {
+        guard accepts(id), let message = current else { refresh(); return }
+        guard message.answer?.isComplete == true else { fail(.incompleteAnswer, id: id); return }
+        messages.append(message)
+        let bounded = history
+        messages.removeFirst(messages.count - bounded.turns.count)
+        olderMessagesHidden = bounded.olderMessagesHidden
+        deadline?.cancel(); deadline = nil; task = nil; current = nil; phase = .idle
+    }
+
+    private func fail(_ error: Failure, id: UUID) {
+        guard current?.id == id, isLoading else { return }
+        guard accepts(id) else { refresh(); return }
+        task?.cancel(); task = nil; deadline?.cancel(); deadline = nil
+        phase = .failed(error)
+    }
+
+    private var history: AskOnPage.History {
+        var history = AskOnPage.History(olderMessagesHidden: olderMessagesHidden)
+        for message in messages { history.append(.init(question: message.question, answer: message.answer?.historyText ?? "")) }
+        return history
+    }
+}
+
+/// The production on-device adapter: guided native fields, without a generated-markup parser.
+@MainActor
+enum AskOnPageLocalModel {
+    static var isAvailable: Bool {
+        if TidyTabsService.fakeModel { return true }
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *), case .available = SystemLanguageModel.default.availability { return true }
+        #endif
+        return false
+    }
+    static var estimatesTokens: Bool {
+        if TidyTabsService.fakeModel { return true }
+        if #available(macOS 26.4, *) { return false }
+        return true
+    }
+    static var tokenCount: AskOnPagePrompt.TokenCount {
+        { instructions, prompt in
+            try Task.checkCancellation()
+            // Deterministic UI fixture only: no tokenizer or on-device model is invoked.
+            if TidyTabsService.fakeModel { return (instructions.utf8.count + prompt.utf8.count + 2) / 3 + 256 }
+            #if canImport(FoundationModels)
+            if #available(macOS 26.0, *) {
+                if #available(macOS 26.4, *) {
+                    let counts = try await measuredCounts(instructions: instructions, prompt: prompt)
+                    return counts.total
+                }
+                return try byteEstimate(instructions: instructions, prompt: prompt)
+            }
+            #endif
+            throw AskOnPageService.Failure.unavailable
+        }
+    }
+    #if canImport(FoundationModels)
+    @available(macOS 26.0, *)
+    private static var options: GenerationOptions {
+        GenerationOptions(sampling: .greedy, maximumResponseTokens: AskOnPagePrompt.maximumResponseTokens)
+    }
+    @available(macOS 26.0, *)
+    static func byteEstimate(instructions: String, prompt: String) throws -> Int {
+        let schema = try JSONEncoder().encode(AskOnPageGeneratedAnswer.generationSchema)
+        return instructions.utf8.count + prompt.utf8.count + schema.count
+    }
+    @available(macOS 26.0, *)
+    static func completeDraft(from raw: GeneratedContent?) throws -> AskOnPage.Draft {
+        guard let raw, raw.isComplete else { throw AskOnPageService.Failure.incompleteAnswer }
+        do {
+            let final = try AskOnPageGeneratedAnswer(raw)
+            return .init(excerpts: final.excerpts, answer: final.answer, keyAnswer: final.keyAnswer)
+        } catch { throw AskOnPageService.Failure.invalidAnswer }
+    }
+    @available(macOS 26.4, *)
+    static func measuredCounts(instructions: String, prompt: String) async throws -> (base: Int, schema: Int, typed: Int, total: Int) {
+        let model = SystemLanguageModel.default
+        let session = LanguageModelSession(instructions: instructions)
+        let segments: [Transcript.Segment] = [.text(.init(content: prompt))]
+        let base = try await model.tokenCount(for: Array(session.transcript) + [.prompt(.init(segments: segments, options: options))])
+        let schema = try await model.tokenCount(for: AskOnPageGeneratedAnswer.generationSchema)
+        let typed = try await model.tokenCount(for: Array(session.transcript) + [.prompt(.init(segments: segments, options: options,
+            responseFormat: .init(type: AskOnPageGeneratedAnswer.self)))])
+        return (base, schema, typed, max(typed, base + schema))
+    }
+    #endif
+
+    static func stream(_ fitted: AskOnPagePrompt.Fitted, update: @escaping @MainActor (AskOnPage.Draft) -> Void) async throws -> AskOnPage.Draft {
+        guard isAvailable else { throw AskOnPageService.Failure.unavailable }
+        if TidyTabsService.fakeModel {
+            let draft = AskOnPage.fixtureDraft(question: fitted.question, source: fitted.source)
+            update(.init(excerpts: draft.excerpts, answer: nil))
+            await Task.yield()
+            try Task.checkCancellation()
+            update(draft)
+            return draft
+        }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
-            let model = SystemLanguageModel.default
-            var budget = AskOnPagePrompt.characterBudget(contextTokens: Self.contextSize(model), instructions: instructions, dialogue: dialogue)
-            var echoes = 0
-            // Three characters a token is Arc's estimate; the model counts for real where it can, and a
-            // prompt still too long is cut by the share it is over and tried again. A reply that copies
-            // the page block back is asked for again.
-            for attempt in 0..<(3 + AskOnPagePrompt.echoRetries) {
-                let cut = AskOnPagePrompt.truncate(page.text, budget: budget, total: page.total)
-                let conversation = AskOnPagePrompt.conversation(url: page.url, title: page.title, date: date, text: cut.text, turns: turns, question: question)
-                let counted = await Self.tokens(model, instructions: instructions, conversation: conversation)
-                if let counted, attempt < 2 {
-                    let allowed = Self.contextSize(model) - AskOnPagePrompt.answerTokens
-                    let smaller = AskOnPagePrompt.shrink(budget: min(budget, cut.text.count), promptTokens: counted, allowedTokens: allowed)
-                    if smaller < min(budget, cut.text.count) { budget = smaller; continue }
+            do {
+                let session = LanguageModelSession(instructions: fitted.instructions)
+                var last: GeneratedContent?
+                for try await snapshot in session.streamResponse(to: fitted.prompt, generating: AskOnPageGeneratedAnswer.self, options: options) {
+                    try Task.checkCancellation()
+                    guard snapshot.rawContent.jsonString.utf8.count <= 300_000 else { throw AskOnPageService.Failure.invalidAnswer }
+                    last = snapshot.rawContent
+                    update(.init(excerpts: snapshot.content.excerpts, answer: snapshot.content.answer, keyAnswer: snapshot.content.keyAnswer))
                 }
-                var last = ""
-                do {
-                    let session = Self.session(model, instructions: instructions, earlier: conversation.earlier)
-                    // A long answer (a summary) ends where the context does instead of overflowing it.
-                    let options = AskOnPagePrompt.responseTokens(contextTokens: Self.contextSize(model), promptTokens: counted)
-                        .map { GenerationOptions(maximumResponseTokens: $0) } ?? GenerationOptions()
-                    var echoed = false
-                    for try await snapshot in session.streamResponse(to: conversation.prompt, options: options) {
-                        if Task.isCancelled { return nil }
-                        last = snapshot.content
-                        if AskOnPageReply.echoesPrompt(last) { echoed = true; break }
-                        update(last, cut.fractionRead)
-                    }
-                    if echoed {
-                        Self.noteEcho(echoes)
-                        echoes += 1
-                        if echoes > AskOnPagePrompt.echoRetries { break }
-                        continue
-                    }
-                    CraLog.note(String(format: "Ask on Page: answered in %.1f s (%d of %d characters read)",
-                                       Date().timeIntervalSince(started), min(cut.text.count, page.total), page.total))
-                    return last
-                } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
-                    switch AskOnPagePrompt.afterOverflow(streamed: last) {
-                    case .keepAnswer:
-                        CraLog.note("Ask on Page: the answer reached the end of the context; kept as written")
-                        return last
-                    case .readLess:
-                        CraLog.note("Ask on Page: the page didn't fit at \(budget) characters")
-                        budget = budget * 3 / 5
-                    }
-                } catch {
-                    if Task.isCancelled { return nil }
-                    CraLog.note("Ask on Page: the model failed: \(error)")
-                    break
+                return try completeDraft(from: last)
+            } catch let error as LanguageModelSession.GenerationError {
+                switch error {
+                case .exceededContextWindowSize: throw AskOnPageService.Failure.contextOverflow
+                case .refusal, .guardrailViolation: throw AskOnPageService.Failure.refused
+                case .assetsUnavailable: throw AskOnPageService.Failure.unavailable
+                default: throw AskOnPageService.Failure.generationFailed
                 }
             }
         }
         #endif
-        update(AskOnPagePrompt.failed, nil)
-        return AskOnPagePrompt.failed
+        throw AskOnPageService.Failure.unavailable
     }
-
-    private static func noteEcho(_ attempt: Int) {
-        CraLog.note("Ask on Page: the answer repeated the page; " + (attempt < AskOnPagePrompt.echoRetries ? "asking again" : "giving up"))
-    }
-
-    #if canImport(FoundationModels)
-    @available(macOS 26.0, *)
-    private static func contextSize(_ model: SystemLanguageModel) -> Int {
-        if #available(macOS 26.4, *) { return model.contextSize }
-        return 4_096
-    }
-
-    /// A session that has already taken the conversation's earlier turns, each a turn of its own
-    /// rather than "Human:"/"Assistant:" text, which the model copied into its answer (#417).
-    @available(macOS 26.0, *)
-    private static func session(_ model: SystemLanguageModel, instructions: String, earlier: [AskOnPagePrompt.Exchange]) -> LanguageModelSession {
-        guard !earlier.isEmpty else { return LanguageModelSession(model: model, instructions: instructions) }
-        func text(_ s: String) -> [Transcript.Segment] { [.text(Transcript.TextSegment(content: s))] }
-        var entries: [Transcript.Entry] = [.instructions(Transcript.Instructions(segments: text(instructions), toolDefinitions: []))]
-        for turn in earlier {
-            entries.append(.prompt(Transcript.Prompt(segments: text(turn.prompt))))
-            entries.append(.response(Transcript.Response(assetIDs: [], segments: text(turn.response))))
-        }
-        return LanguageModelSession(model: model, transcript: Transcript(entries: entries))
-    }
-
-    @available(macOS 26.0, *)
-    private static func tokens(_ model: SystemLanguageModel, instructions: String, conversation: AskOnPagePrompt.Conversation) async -> Int? {
-        guard #available(macOS 26.4, *) else { return nil }
-        let sent = (conversation.earlier.flatMap { [$0.prompt, $0.response] } + [conversation.prompt]).joined(separator: "\n")
-        guard let a = try? await model.tokenCount(for: Instructions(instructions)), let b = try? await model.tokenCount(for: sent) else { return nil }
-        return a + b
-    }
-    #endif
 }
+
+#if canImport(FoundationModels)
+@available(macOS 26.0, *)
+@Generable
+struct AskOnPageGeneratedAnswer {
+    // Apple guided generation follows declaration order; Arc likewise asks for source quotes before its short answer.
+    @Guide(description: "First select only unchanged PAGE SOURCE sentences answering CURRENT QUESTION, including punctuation. Return [] if the source does not answer; never unrelated quotes or background facts.", .count(0...4))
+    var excerpts: [String]
+    @Guide(description: "Directly answer CURRENT QUESTION, not a previous question. Plain text in the requested language; allow summaries/translations. Identify background guesses.")
+    var answer: String
+    @Guide(description: "Optional bold hint copied exactly from answer, preserving accents, punctuation and case. Prefer a decisive number/name; nil if no suitable phrase.")
+    var keyAnswer: String?
+}
+#endif
