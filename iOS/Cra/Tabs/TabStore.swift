@@ -62,7 +62,11 @@ final class TabStore {
     var rowTabs: [MobileTab] { document.rowTabs }
 
     func close(_ id: UUID) {
+        let wasSelected = document.selected == id
+        var opener = pages[id]?.opener
+        while let page = opener, !document.tabs.contains(where: { $0.id == page.tabID }) { opener = page.opener }
         document.close(id)
+        if wasSelected, let opener { document.select(opener.tabID, now: now()) }
         pages[id] = nil
         snapshots[id] = nil
         try? FileManager.default.removeItem(at: snapshotFile(id))
@@ -116,8 +120,15 @@ final class TabStore {
     }
 
     private func changed() {
-        // An incognito tab that is no longer on screen has no way back, so it closes.
-        for id in document.closeIncognitoTabsLeftBehind() {
+        // A private popup's source is still live: window.close() must be able to return to it.
+        // Leaving that live chain for an unrelated tab still closes every private tab in it.
+        var retained = Set<UUID>()
+        var opener = document.selected.flatMap { pages[$0]?.opener }
+        while let page = opener {
+            retained.insert(page.tabID)
+            opener = page.opener
+        }
+        for id in document.closeIncognitoTabsLeftBehind(keeping: retained) {
             pages[id] = nil
             snapshots[id] = nil
         }
@@ -126,6 +137,19 @@ final class TabStore {
     }
 
     // MARK: Pages
+
+    /// Returns a retained related page without loading its URL: WebKit continues the original
+    /// request in the returned view. Privacy belongs to the source, even if selection changed.
+    func openPopup(configuration: WKWebViewConfiguration, request: URLRequest, from source: WebPage) -> WebPage? {
+        guard pages[source.tabID] === source,
+              let origin = document.tabs.first(where: { $0.id == source.tabID }) else { return nil }
+        let tab = MobileTab(url: request.url?.absoluteString ?? "about:blank", lastActive: now(), isIncognito: origin.isIncognito)
+        let page = WebPage(tab: tab, configuration: configuration, opener: source)
+        pages[tab.id] = page
+        document.open(tab)
+        changed()
+        return page
+    }
 
     /// The tab's web view, made on first use.
     func page(for tab: MobileTab) -> WebPage {
