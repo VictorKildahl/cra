@@ -15,7 +15,7 @@ final class TidyTitlesService {
 
     /// A rename the row is showing: what it was called, and since when.
     struct Effect: Equatable {
-        var token = UUID()
+        var token: UUID
         var oldTitle: String
         var start: Date
     }
