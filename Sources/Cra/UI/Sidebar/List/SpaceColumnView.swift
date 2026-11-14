@@ -114,7 +114,7 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
     private let store: SidebarStore
     private let ui: SidebarUIState
     private let actions: SidebarActions
-    private let emoji = NSTextField.sidebarLabel(size: 14)
+    private let emoji = EmojiLabel.sidebar(size: 14)
     private let title = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     /// An Icon-tab glyph in the emoji's place.
     private let symbol = NSImageView()
@@ -382,7 +382,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         return m
     }
 
-    private func makeSpaceMenu() -> NSMenu? {
+    /// The menu a right-click or the ••• opens; also `cra://debug?spaceMenu=` (#413).
+    func makeSpaceMenu() -> NSMenu? {
         if blank { return moveToMenu() }
         return SpaceMenu.make(spaceID: spaceID, store: store, ui: ui, actions: actions, anchor: self) { [weak self] in self?.beginRename() }
     }
@@ -449,7 +450,7 @@ enum SpaceMenu {
         let isOpen = store.focusedSpaceID(window: ui.windowID) == id
         let m = NSMenu()
         m.autoenablesItems = false
-        for (i, section) in SpaceMenuLayout.sections(spaceCount: store.orderedSpaces.count).enumerated() {
+        for (i, section) in SpaceMenuLayout.sections(spaceCount: store.orderedSpaces.count, incognito: store.isIncognito(space: id)).enumerated() {
             if i > 0 { m.addItem(.separator()) }
             for item in section {
                 // From the dock, a space that isn't open opens first for what shows in its sidebar.

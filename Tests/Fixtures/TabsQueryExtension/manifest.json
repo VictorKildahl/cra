@@ -10,6 +10,10 @@
   "background": {
     "service_worker": "worker.js"
   },
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+    "js": ["context.js"]
+  }],
   "action": {
     "default_title": "Cra Tabs Query Fixture"
   }

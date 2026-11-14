@@ -333,6 +333,10 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// The page is playing sound, in any frame (Chromium's audible state). Like Chrome's tab
 /// speaker it stays YES for 2 s after the page goes quiet. Muting the tab doesn't change it.
 @property (nonatomic, readonly) BOOL isAudible;
+/// The sound that last started or stopped is one Chrome's global media controls leave out
+/// (Chromium's media session isn't controllable): a sound under 5 s, such as a notification
+/// ding, or Web Audio alone. The sidebar player makes no card for it, as Arc (#411).
+@property (nonatomic, readonly) BOOL hasUncontrollableSound;
 /// Play/pause the video in the Picture in Picture window.
 - (void)togglePictureInPicturePlayback;
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).

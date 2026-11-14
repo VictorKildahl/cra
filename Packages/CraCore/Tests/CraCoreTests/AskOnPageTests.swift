@@ -3,6 +3,19 @@ import Foundation
 import Testing
 
 struct AskOnPageTests {
+    @Test func aFloatingToolbarLeavesTheAskCardInsideAShortFocusedPage() {
+        let page = CGRect(x: 290, y: 10, width: 240, height: 180)
+        let preferred = CGSize(width: 400, height: 499)
+        let hidden = AskOnPageLayout.frame(preferred: preferred, page: page, inset: 10)
+        let shown = AskOnPageLayout.frame(preferred: preferred, page: page, inset: 10, toolbarOverPage: 32)
+        #expect(shown.maxY == hidden.maxY - 32)
+        #expect(shown.height == hidden.height - 32)
+        #expect(shown.minY == page.minY + 10)
+        #expect(shown.width == 220 && shown.maxX == page.maxX - 10)
+        let covered = AskOnPageLayout.frame(preferred: preferred, page: page, inset: 10, toolbarOverPage: 300)
+        #expect(covered.height == 0 && covered.maxY == page.minY)
+    }
+
     @Test func findFinalZeroBelongsToTheExactCurrentQueryGeneration() {
         var find = AskOnPage.FindState()
         let a = find.begin("absent")

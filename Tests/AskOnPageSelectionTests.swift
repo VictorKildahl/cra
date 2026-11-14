@@ -10,6 +10,7 @@ enum AskOnPageSelectionTests {
         selectionFindsOnceThroughEveryPanelPath()
         staleSelectionCannotChangeTheNewOwner()
         narrowAskPanelFitsFocusedPage()
+        panelsFollowTheFloatingToolbarThroughProductionPlacement()
         print("Use Selection to Find: \(checks) production-boundary checks passed")
     }
 
@@ -62,6 +63,26 @@ enum AskOnPageSelectionTests {
         expect(page.contains(panel), "The actual Ask panel must remain inside a narrow focused page, including its total height")
     }
 
+    private static func panelsFollowTheFloatingToolbarThroughProductionPlacement() {
+        let owner = SelectionWindow()
+        let page = NSRect(x: 100, y: 200, width: 640, height: 240)
+        owner.shell.floatingToolbarCover = 32
+        owner.askOnPage.state.enabled = true
+        owner.askOnPage.heightChanged(600)
+        let ask = owner.measuredFindPanelFrame(page: page)
+        expect(ask.maxY == page.maxY - 42 && ask.minY == page.minY + 10 && ask.height == 188,
+            "The actual guided panel must fit below the revealed toolbar without moving below a short page")
+        expect(owner.askOnPage.state.availableSize.height == 188,
+            "Production placement must propagate the toolbar-reduced height to the guided card")
+        owner.askOnPage.state.enabled = false
+        let ordinary = owner.measuredFindPanelFrame(page: page)
+        expect(ordinary.maxY == ask.maxY && ordinary.size == CraMetrics.findBarSize,
+            "Ordinary Find and guided Ask must share the revealed toolbar's top offset")
+        owner.shell.floatingToolbarCover = 0
+        expect(owner.measuredFindPanelFrame(page: page).maxY == page.maxY - 10,
+            "The actual ordinary panel must return to the page's top inset when the toolbar hides")
+    }
+
     // promise: #393
     private static func staleSelectionCannotChangeTheNewOwner() {
         let window = SelectionWindow()
@@ -107,6 +128,7 @@ final class SelectionWindow {
 @MainActor
 final class SelectionShell {
     var findVisible = false
+    var floatingToolbarCover: CGFloat = 0
     func layoutContentChildren() {}
 }
 

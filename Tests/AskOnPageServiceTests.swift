@@ -34,6 +34,7 @@ enum AskOnPageServiceTests {
         AskOnPageSelectionTests.run()
         await AskOnPageControllerTests.run()
         await streamingAndHistory()
+        await aFollowUpKeepsItsOwnCurrentQuestionAndAnswer()
         await invalidationAndTimeout()
         await synchronousConfigurationInvalidation()
         await failuresAndOverflow()
@@ -87,6 +88,34 @@ enum AskOnPageServiceTests {
                "accent-mismatched emphasis preserves plain transformed answer and completed history without changing grounding")
         service.clear()
         expect(service.messages.isEmpty && service.current == nil && service.phase == .idle, "closing discards transient page text and dialogue")
+    }
+
+    // promise: #417
+    private static func aFollowUpKeepsItsOwnCurrentQuestionAndAnswer() async {
+        let browser = BrowserManager(), provider = Provider(), clock = ManualScheduler()
+        let service = AskOnPageService(browsers: browser, enabled: { true }, available: { true }, clock: clock,
+            countTokens: count, generate: provider.stream)
+        service.ask("When does it open?", language: "English"); browser.reply(page)
+        await provider.started(1)
+        provider.complete(quoted)
+        await settled(service)
+        service.ask("And when does it close?", language: "English"); browser.reply(page)
+        await provider.started(2)
+        expect(service.messages.count == 1 && service.messages[0].answer?.text == "It opens at 09:30."
+               && service.current?.question == "And when does it close?" && service.current?.answer == nil,
+               "a new follow-up preserves the earlier completed answer without showing it as the current answer")
+        expect(provider.requests[1].prompt.hasSuffix("CURRENT QUESTION:\n\"And when does it close?\""),
+               "the follow-up is isolated as the current question, outside quoted earlier context")
+        let closed = AskOnPage.Draft(excerpts: quoted.excerpts, answer: "It closes at 18:00.", keyAnswer: "18:00")
+        provider.emit(closed)
+        expect(service.current?.answer?.text == "It closes at 18:00." && service.messages[0].answer?.text == "It opens at 09:30.",
+               "the follow-up's stream replaces only its own answer")
+        provider.complete(closed)
+        await settled(service)
+        expect(service.messages.map { $0.answer?.text } == ["It opens at 09:30.", "It closes at 18:00."]
+               && service.messages.allSatisfy { $0.answer?.hasVerifiedQuote == true },
+               "each completed follow-up retains its own answer and exact source citation")
+        service.clear()
     }
 
     private static func invalidationAndTimeout() async {

@@ -227,7 +227,11 @@ public enum AskOnPageLayout {
     public static let maximumWidth: CGFloat = 400
     public static let maximumConversationHeight: CGFloat = 450
 
-    public static func frame(preferred: CGSize, page: CGRect, inset: CGFloat) -> CGRect {
+    public static func frame(preferred: CGSize, page: CGRect, inset: CGFloat, toolbarOverPage: CGFloat = 0) -> CGRect {
+        // The floating toolbar covers the page's top. Constrain the whole card below it,
+        // including a short page's conversation, rather than shifting a full-height card out.
+        var page = page
+        page.size.height = max(0, page.height - max(0, toolbarOverPage))
         let dx = min(max(0, inset), max(0, page.width) / 2)
         let dy = min(max(0, inset), max(0, page.height) / 2)
         let width = min(maximumWidth, max(0, preferred.width), max(0, page.width - 2 * dx))

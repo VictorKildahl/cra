@@ -117,6 +117,40 @@ background capture timed out without a response. These are unavailable capture e
 not proof of a product rendering defect or of correct native highlighting. The later native
 SCK/CUA receipts above have their own observed scale/identity and do not relabel those failures.
 
+## Upstream synchronization, 14 November 2026
+
+The merge target is `56be95df6bbe51d21eb97c85a0e28d872b9c9188`. The guided adapter retains
+its native fields, exact transmitted-source validation, quoted bounded history and complete-object
+requirement. Upstream's raw-response model fixes are not evidence that the same failure occurs or
+is fixed in this adapter. Existing model-quality failures and native acceptance limits still apply.
+
+| Upstream regression | Guided branch resolution and evidence boundary |
+|---|---|
+| #417 dialogue framing and repeated prior answer | `AskOnPagePromptTests.theModelIsNotToldToWriteADialogue` checks no generated-dialogue framing and an isolated current question. `AskOnPageServiceTests.aFollowUpKeepsItsOwnCurrentQuestionAndAnswer` checks two distinct streamed/completed answers and their exact citations. These use the production fitting/service seams; they do not prove model quality or claim native transcript turns. |
+| Hypothetical-example contamination and follow-up quote reminder | Guided instructions and field guides already require excerpts from the current source and the current question; completion rejects absent-source excerpts. Historical guided examples remain. Neither removal of examples nor a raw `<excerpt>` reminder is claimed implemented or measured here. |
+| Raw long-answer history/context and overflow | Existing prompt tests evict whole old turns before fitting a page prefix. Service tests require an incomplete guided object to remain incomplete and permit only one bounded overflow refit. Keeping a partial raw string would violate that contract. |
+| Raw quote validation before Find | `quotesRequireTheExactTransmittedSource`, `zeroOrInvalidCitationsDoNotInvalidateAnOtherwiseCompleteAnswer` and service tests already validate completed fields before enabling evidence. Full literal validation remains stricter than upstream's shortened/fuzzy quote lookup. |
+| Raw echo rejection/retry and 10 Hz, line-by-line streaming | No typed-path reproduction was established. No speculative prefix rejection/retry or pacing path was added; legitimate literal transformations and existing interrupted-stream semantics remain intact. Typed echo quality and long-stream performance remain unverified. |
+| #418 floating-toolbar Find/Ask placement | Upstream toolbar following/hover policy and ordinary Find placement are retained. Guided card fitting additionally subtracts the toolbar cover before computing available height. `aFloatingToolbarLeavesTheAskCardInsideAShortFocusedPage` covers narrow/short/fully-covered pages; existing upstream placement/toolbar tests are unchanged. Native movement/hover remains a runtime check. |
+
+Two newly upstream, raw-provider-only scenarios are deliberately excluded from this guided branch:
+
+- `Tests/Scenarios/ask-on-page-echo.scenario` requires a fake raw page-block echo, the log
+  `Ask on Page: the answer repeated the page; asking again`, and a retried completed answer.
+  The guided fixture does not generate that raw echo. There is no equivalent guided echo-retry pass.
+- `Tests/Scenarios/ask-on-page-long-answer.scenario` requires a fake 28-point streamed summary
+  with zero quotes, a quoted follow-up, and a fake made-up quote yielding the raw-parser warning
+  log and `search=[notFound]`, under `stalls50=10 stalls16=20`. The guided fixture selects a literal
+  fitted-source sentence instead. Existing service tests cover distinct follow-ups and rejected
+  citations, and the ordinary guided scenario covers the production card journey. They do not
+  substitute for the excluded long-stream performance or model-summary assertions.
+
+The two new upstream #417 lock entries move to the applicable guided prompt/service tests above.
+Every promise already present at pre-merge branch `a99ac85` retains its exact test hash. The older
+raw #393 parser/budget/quote-fallback locks had already been replaced by the guided implementation
+before this merge; no existing guided expectation was loosened. Independent review must check
+these explicit migrations and exclusions before publication.
+
 ## Remaining native acceptance
 
 - **Exact native quote highlight/selection:** representative CEF symbols/inline NFC/repeated/long

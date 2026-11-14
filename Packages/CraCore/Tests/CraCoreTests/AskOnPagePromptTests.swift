@@ -5,6 +5,20 @@ import Testing
 struct AskOnPagePromptTests {
     private let page = AskOnPagePrompt.Page(url: "https://example.com/article", title: "An article", text: "A supported sentence on this page.")
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func theModelIsNotToldToWriteADialogue() async throws {
+        var history = AskOnPage.History()
+        history.append(.init(question: "When does it open?", answer: "It opens at 09:30."))
+        let fitted = try #require(await AskOnPagePrompt.fit(page: page, question: "When does it close?", history: history,
+            language: "English", currentDate: "Today", countTokens: { ($0.utf8.count + $1.utf8.count + 3) / 4 }))
+        for framing in ["BEGIN DIALOGUE", "Human:", "Assistant:"] {
+            #expect(!fitted.instructions.contains(framing))
+            #expect(!fitted.prompt.contains(framing))
+        }
+        #expect(fitted.instructions.contains("Answer only CURRENT QUESTION"))
+        #expect(fitted.prompt.contains("Previous answer: \"It opens at 09:30.\""))
+        #expect(fitted.prompt.hasSuffix("CURRENT QUESTION:\n\"When does it close?\""))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func promptRetainsArcsQuoteGuessLanguageAndTransformationContract() async throws {
         let fitted = try #require(await AskOnPagePrompt.fit(page: page, question: "What does it say?", language: "French", currentDate: "12 November 2026",
                                                           countTokens: { ($0.utf8.count + $1.utf8.count + 3) / 4 }))

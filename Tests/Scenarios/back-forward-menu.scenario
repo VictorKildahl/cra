@@ -1,0 +1,47 @@
+# Right-click Back or Forward (GitHub #416), as in Arc: the tab's history that way in Arc's menu,
+# hung under the button with its tail on the button's centre, the nearest page first. A row goes
+# straight to its page; a right-click on the button closes the menu.
+# promise: #416
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=two'","userGesture":true}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=three'","userGesture":true}
+wait 1.5
+cra://debug?back=start
+expect-log back start: selected=\S+n=three back=1 today=1$
+
+# The sidebar's ← (toolbar hidden): two pages behind, the menu 10 pt under it, nothing picked.
+cra://debug?clickAt=238,23&button=right
+wait 1
+expect-log back-forward menu: back, 2 rows
+cra://debug?historyMenu=back
+expect-log history menu back: rows=2 width=220 tail=0 gap=10 selected=-1$
+
+# Down picks the nearest page (n=two), Down again the first (n=one); Return goes straight there.
+cra://debug?key=%EF%9C%81,125,0
+cra://debug?key=%EF%9C%81,125,0
+cra://debug?historyMenu=picked
+expect-log history menu picked: rows=2 width=220 tail=0 gap=10 selected=1$
+cra://debug?key=%0D,36,0
+wait 1.5
+cra://debug?historyMenu=jumped
+expect-log history menu jumped: closed$
+cra://debug?back=jumped
+expect-log back jumped: selected=\S+n=one back=0 today=1$
+
+# → now lists both pages ahead; a second right-click on → closes the menu and opens no other.
+cra://debug?clickAt=272,23&button=right
+wait 1
+expect-log back-forward menu: forward, 2 rows
+cra://debug?historyMenu=forward
+expect-log history menu forward: rows=2 width=220 tail=0 gap=10 selected=-1$
+cra://debug?clickAt=272,23&button=right
+wait 1
+cra://debug?historyMenu=closed
+expect-log history menu closed: closed$

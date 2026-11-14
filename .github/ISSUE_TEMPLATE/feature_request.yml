@@ -2,6 +2,15 @@ name: Feature request
 description: Something Arc did that Cra doesn't do yet.
 labels: [enhancement]
 body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app
+      options:
+        - Mac
+        - iPhone
+    validations:
+      required: true
   - type: textarea
     id: what
     attributes:
@@ -13,10 +22,10 @@ body:
     id: arc
     attributes:
       label: How Arc did it
-      description: How it looked and behaved in Arc. Screenshots or a recording from Arc are gold.
+      description: How it looked and behaved in Arc (or Arc Search, for the iPhone). Screenshots or a recording from Arc are gold.
     validations:
       required: true
   - type: markdown
     attributes:
       value: |
-        An idea Arc never had goes in [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas) instead, where others can upvote it. Cra has no built-in AI, account or telemetry, so requests in those directions will be closed. The [roadmap](https://crabrowser.app/roadmap) lists what's already planned.
+        An idea Arc never had goes in [Ideas](https://github.com/VictorKildahl/cra/discussions/categories/ideas) instead, where others can upvote it. Cra has no cloud AI (only the device's own Apple Intelligence), no account and no telemetry, so requests in those directions will be closed. The [roadmap](https://crabrowser.app/roadmap) lists what's already planned.
