@@ -89,6 +89,16 @@ extension AppSettings {
     public func destination(forExternalURL url: String) -> LinkDestination {
         linkRoutes.first { $0.matches(url) }?.destination ?? defaultLinkDestination
     }
+
+    /// The space a URL typed in the ⌘T bar opens in (#421): Arc 1.173 runs it through the routes
+    /// too, and when the first match is a route to a space the new tab opens there and the window
+    /// switches to it. Nil keeps it in the space in use: no match (the default never applies, a
+    /// typed URL that matches nothing stays put in Arc), Most Recent Space (the window's own) and
+    /// a Little Window (not seen in Arc for typed URLs).
+    public func space(forTypedURL url: String) -> UUID? {
+        guard case .space(let id)? = linkRoutes.first(where: { $0.matches(url) })?.destination else { return nil }
+        return id
+    }
 }
 
 /// Arc's Peek opens links "to other sites": the registrable domain differs, so a link from

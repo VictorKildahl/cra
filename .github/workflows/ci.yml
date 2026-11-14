@@ -53,6 +53,21 @@ jobs:
           { echo "### Coverage"; echo; cat coverage.md; } > comment.md
           gh pr comment "$PR" --body-file comment.md --edit-last 2>/dev/null || gh pr comment "$PR" --body-file comment.md
 
+  iphone:
+    name: Build the iPhone app
+    # No Chromium and no signing: the app, its widgets and share extension for the simulator.
+    # Its UI tests (docs/ios.md) take over ten minutes and run on a Mac, not here.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build for the iOS simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO build | tail -20
+
   build:
     name: Build Cra.app
     # Same runner as release.yml, so CI builds what ships.

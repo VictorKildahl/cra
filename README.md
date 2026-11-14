@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/VictorKildahl/cra/releases/latest/download/Cra.dmg"><b>Download for macOS</b></a> ·
   <a href="https://github.com/VictorKildahl/cra/releases/latest/download/Cra-Intel.dmg">Intel Mac</a> ·
+  <a href="https://crabrowser.app/iphone">iPhone beta</a> ·
   <a href="https://crabrowser.app">crabrowser.app</a> ·
   <a href="https://crabrowser.app/release-notes">What's new</a> ·
   <a href="https://crabrowser.app/help">Help</a>
@@ -151,13 +152,21 @@ everyone.
 
 <p align="center"><a href="https://crabrowser.app/support">Where the money goes</a></p>
 
+### iPhone
+
+Cra for iPhone, the open-source take on Arc Search, is in public beta on TestFlight: join at
+[crabrowser.app/iphone](https://crabrowser.app/iphone). It needs iOS 17; Browse for Me and
+Summarize run on the iPhone's own Apple Intelligence. Its code is in [`iOS/`](iOS) and its
+status in [docs/ios-parity.md](docs/ios-parity.md).
+
 ## Build from source
 
     scripts/build.sh          # fetches CEF on first run, builds build/Cra.app
     scripts/run.sh            # build if needed, then open
     scripts/dev.sh            # dev loop: debug CraDev.app, rebuilds + relaunches on save
 
-Needs Xcode 16+ and CMake (`brew install cmake`). [CONTRIBUTING.md](CONTRIBUTING.md)
+Needs Xcode 16+ and CMake (`brew install cmake`). The iPhone app builds with
+`scripts/ios.sh build` (Xcode 26 with the iOS platform, no Chromium). [CONTRIBUTING.md](CONTRIBUTING.md)
 covers sending a change, and [docs/development.md](docs/development.md) covers the code
 layout, scripting hooks and test instances.
 

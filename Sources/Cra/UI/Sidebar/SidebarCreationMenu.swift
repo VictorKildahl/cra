@@ -56,6 +56,56 @@ struct SidebarCreationMenuItem {
     let action: () -> Void
 }
 
+/// A view an ArcMenu window shows: the + menu, or Back and Forward's history (#416).
+@MainActor
+protocol ArcMenuContent: NSView {
+    /// The tail's x in the view.
+    var arrowX: CGFloat { get set }
+    func animate(opening: Bool, delegate: CAAnimationDelegate?)
+    /// Arrows, Return and Escape; false lets the key through to the browser.
+    func handleKey(_ event: NSEvent) -> Bool
+}
+
+/// ArcMenu's open and close: from 95 % about the tail's tip, 100 ms scale and 50 ms fade in, 70 ms out.
+@MainActor
+enum ArcMenuMotion {
+    /// `tip` is the tail's tip in the (flipped) view's coordinates.
+    static func animate(_ view: NSView, tip: CGPoint, opening: Bool, delegate: CAAnimationDelegate?) {
+        guard let layer = view.layer else { return }
+        let x = tip.x - view.bounds.width * layer.anchorPoint.x
+        let y = tip.y - view.bounds.height * layer.anchorPoint.y
+        var small = CATransform3DMakeTranslation(x, y, 0)
+        small = CATransform3DScale(small, 0.95, 0.95, 1)
+        small = CATransform3DTranslate(small, -x, -y, 0)
+        let oldScale = layer.animation(forKey: "creationMenuTransform") as? CABasicAnimation
+        let oldFade = layer.animation(forKey: "creationMenuOpacity") as? CABasicAnimation
+        let presented = layer.presentation()
+        let fromTransform = presented?.transform ?? (oldScale?.fromValue as? NSValue)?.caTransform3DValue ?? layer.transform
+        let fromOpacity = presented?.opacity ?? (oldFade?.fromValue as? NSNumber)?.floatValue ?? layer.opacity
+        let targetTransform = opening ? CATransform3DIdentity : small
+        let targetOpacity: Float = opening ? 1 : 0
+        let timing = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
+        let scale = CABasicAnimation(keyPath: "transform")
+        scale.fromValue = NSValue(caTransform3D: opening ? small : fromTransform)
+        scale.toValue = NSValue(caTransform3D: targetTransform)
+        scale.duration = opening ? 0.1 : 0.07
+        scale.timingFunction = timing
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = opening ? 0 : fromOpacity
+        fade.toValue = targetOpacity
+        fade.duration = opening ? 0.05 : 0.07
+        fade.timingFunction = timing
+        fade.delegate = delegate
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.transform = targetTransform
+        layer.opacity = targetOpacity
+        layer.add(scale, forKey: "creationMenuTransform")
+        layer.add(fade, forKey: "creationMenuOpacity")
+        CATransaction.commit()
+    }
+}
+
 @MainActor
 final class SidebarCreationMenuController {
     private var panel: SidebarCreationMenuWindow?
@@ -63,6 +113,11 @@ final class SidebarCreationMenuController {
     private var globalMonitor: Any?
     private var observers: [NSObjectProtocol] = []
     private var onOpenChange: ((Bool) -> Void)?
+
+    var isOpen: Bool { panel != nil }
+    /// What is showing and the button it hangs from (debug readouts).
+    var content: NSView? { panel?.contentView }
+    private(set) weak var anchor: NSView?
 
     func toggle(from anchor: NSView, items: [SidebarCreationMenuItem], colors: SidebarCreationMenuColors = .init(),
                 onOpenChange: @escaping (Bool) -> Void) {
@@ -80,33 +135,46 @@ final class SidebarCreationMenuController {
         let x = min(max(rect.midX - Self.buttonCentre, screen.minX + 4), screen.maxX - size.width - 4)
         let y = min(rect.maxY + 10, screen.maxY - size.height - 4)
         menu.arrowX = min(max(rect.midX - x - 3.5, 18), size.width - 18)
-        let popup = SidebarCreationMenuWindow(contentRect: NSRect(x: x, y: y, width: size.width, height: size.height),
-                                              styleMask: .borderless, backing: .buffered, defer: false)
+        present(menu, frame: NSRect(x: x, y: y, width: size.width, height: size.height), from: anchor, anchorTakesClicks: true,
+                onOpenChange: onOpenChange)
+    }
+
+    /// Shows `menu` at `frame` (screen) as a child of `anchor`'s window. `anchorTakesClicks`: a left
+    /// click on the anchor goes to it (the + toggles its menu); otherwise any click on the anchor
+    /// only closes the menu, as a click outside a menu does.
+    /// `systemShadow`: the window's own shadow (the + menu); false when the menu draws its own.
+    func present(_ menu: NSView & ArcMenuContent, frame: NSRect, from anchor: NSView, anchorTakesClicks: Bool = false,
+                 systemShadow: Bool = true, onOpenChange: ((Bool) -> Void)? = nil) {
+        close(animated: false)
+        guard let parent = anchor.window else { return }
+        let popup = SidebarCreationMenuWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
         popup.backgroundColor = .clear
         popup.isOpaque = false
-        popup.hasShadow = true
+        popup.hasShadow = systemShadow
         popup.isReleasedWhenClosed = false
         popup.hidesOnDeactivate = false
         popup.animationBehavior = .default
         popup.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
         popup.contentView = menu
         panel = popup
+        self.anchor = anchor
         self.onOpenChange = onOpenChange
         menu.layoutSubtreeIfNeeded()
-        menu.animate(opening: true)
+        menu.animate(opening: true, delegate: nil)
         parent.addChildWindow(popup, ordered: .above)
         popup.makeKeyAndOrderFront(nil)
         popup.makeFirstResponder(menu)
-        onOpenChange(true)
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self, weak popup] event in
+        onOpenChange?(true)
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self, weak popup, weak anchor] event in
             guard let self, let popup else { return event }
             if event.type == .keyDown {
                 if menu.handleKey(event) { return nil }
                 self.close()
             } else if event.window !== popup {
-                let overAnchor = event.type == .leftMouseDown && event.window === parent
-                    && anchor.bounds.contains(anchor.convert(event.locationInWindow, from: nil))
-                if overAnchor { return event }
+                let overAnchor = event.window === parent
+                    && anchor.map { $0.bounds.contains($0.convert(event.locationInWindow, from: nil)) } == true
+                if overAnchor, !anchorTakesClicks { self.close(); return nil }
+                if overAnchor, event.type == .leftMouseDown { return event }
                 self.close()
             }
             return event
@@ -140,8 +208,9 @@ final class SidebarCreationMenuController {
         let wasKey = popup.isKeyWindow
         popup.dismiss(animated: animated)
         if wasKey { parent?.makeKey() }
-        onOpenChange?(false)
+        let done = onOpenChange
         onOpenChange = nil
+        done?(false)
     }
 }
 
@@ -153,7 +222,7 @@ private final class SidebarCreationMenuWindow: NSWindow, CAAnimationDelegate {
 
     func dismiss(animated: Bool) {
         ignoresMouseEvents = true
-        guard animated, let menu = contentView as? SidebarCreationMenuView, menu.layer != nil else {
+        guard animated, let menu = contentView as? ArcMenuContent, menu.layer != nil else {
             finishDismissal()
             return
         }
@@ -175,7 +244,7 @@ private final class SidebarCreationMenuWindow: NSWindow, CAAnimationDelegate {
 }
 
 @MainActor
-final class SidebarCreationMenuView: NSView {
+final class SidebarCreationMenuView: NSView, ArcMenuContent {
     private let items: [SidebarCreationMenuItem]
     private let onPick: (Int?) -> Void
     private let rowOrigins: [CGFloat] = [8, 48, 105, 145, 202, 242]
@@ -221,38 +290,7 @@ final class SidebarCreationMenuView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) == nil ? nil : self }
 
     func animate(opening: Bool, delegate: CAAnimationDelegate? = nil) {
-        guard let layer else { return }
-        let x = arrowX - bounds.width * layer.anchorPoint.x
-        let y = bounds.height * (1 - layer.anchorPoint.y)
-        var small = CATransform3DMakeTranslation(x, y, 0)
-        small = CATransform3DScale(small, 0.95, 0.95, 1)
-        small = CATransform3DTranslate(small, -x, -y, 0)
-        let oldScale = layer.animation(forKey: "creationMenuTransform") as? CABasicAnimation
-        let oldFade = layer.animation(forKey: "creationMenuOpacity") as? CABasicAnimation
-        let presented = layer.presentation()
-        let fromTransform = presented?.transform ?? (oldScale?.fromValue as? NSValue)?.caTransform3DValue ?? layer.transform
-        let fromOpacity = presented?.opacity ?? (oldFade?.fromValue as? NSNumber)?.floatValue ?? layer.opacity
-        let targetTransform = opening ? CATransform3DIdentity : small
-        let targetOpacity: Float = opening ? 1 : 0
-        let timing = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
-        let scale = CABasicAnimation(keyPath: "transform")
-        scale.fromValue = NSValue(caTransform3D: opening ? small : fromTransform)
-        scale.toValue = NSValue(caTransform3D: targetTransform)
-        scale.duration = opening ? 0.1 : 0.07
-        scale.timingFunction = timing
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = opening ? 0 : fromOpacity
-        fade.toValue = targetOpacity
-        fade.duration = opening ? 0.05 : 0.07
-        fade.timingFunction = timing
-        fade.delegate = delegate
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.transform = targetTransform
-        layer.opacity = targetOpacity
-        layer.add(scale, forKey: "creationMenuTransform")
-        layer.add(fade, forKey: "creationMenuOpacity")
-        CATransaction.commit()
+        ArcMenuMotion.animate(self, tip: CGPoint(x: arrowX, y: bounds.height), opening: opening, delegate: delegate)
     }
 
     private func rowRect(_ index: Int) -> NSRect {
