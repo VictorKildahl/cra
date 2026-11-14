@@ -5,7 +5,6 @@ import Foundation
 final class MobileSettingsStore {
     private let fileURL: URL
     private(set) var value: MobileSettings
-    var onChange: (() -> Void)?
 
     init(directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -25,6 +24,5 @@ final class MobileSettingsStore {
         value = next
         AnswerLanguage.setting = next.answerLanguage
         if let data = try? JSONEncoder().encode(next) { try? data.write(to: fileURL, options: .atomic) }
-        onChange?()
     }
 }
