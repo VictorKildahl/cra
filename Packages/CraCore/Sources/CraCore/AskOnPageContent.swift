@@ -177,10 +177,11 @@ public enum AskOnPageQuoteDOM {
       const blocks = new Set(['block', 'flow-root', 'flex', 'grid', 'list-item', 'table', 'table-row',
         'table-row-group', 'table-header-group', 'table-footer-group', 'table-caption', 'table-cell']);
       const nodes = [], spans = [], stack = [{node: document.body, exit: false}];
-      let raw = '', work = 0;
-      const boundary = () => { if (raw && !raw.endsWith('\n')) raw += '\n'; };
+      // A bounded prefix can prove presence even when the unvisited suffix leaves absence unknown.
+      let raw = '', work = 0, truncated = false;
+      const boundary = () => { if (raw && !raw.endsWith('\n') && raw.length < 65536) raw += '\n'; };
       while (stack.length) {
-        if (++work > 12000 || raw.length > 65536) return null;
+        if (++work > 12000 || raw.length >= 65536) { truncated = true; break; }
         const {node, exit, block} = stack.pop();
         if (exit) { if (block) boundary(); continue; }
         if (node !== document.body && node.nextSibling) stack.push({node: node.nextSibling, exit: false});
@@ -192,10 +193,11 @@ public enum AskOnPageQuoteDOM {
           isBlock = blocks.has(style.display) || style.display.startsWith('block ');
           if (isBlock || node.tagName === 'BR') boundary();
         } else if (node.nodeType === 3) {
-          if (node.length > 65536 - raw.length) return null;
+          const length = Math.min(node.length, 65536 - raw.length);
           const index = nodes.length;
-          nodes.push(node); spans.push({index, start: raw.length, end: raw.length + node.length});
-          raw += node.substringData(0, node.length);
+          nodes.push(node); spans.push({index, start: raw.length, end: raw.length + length});
+          raw += node.substringData(0, length);
+          if (length < node.length) { truncated = true; break; }
         }
         stack.push({node, exit: true, block: isBlock});
         if (node.firstChild) stack.push({node: node.firstChild, exit: false});
@@ -206,6 +208,8 @@ public enum AskOnPageQuoteDOM {
       const starts = new Map(), ends = new Map();
       for (const part of new Intl.Segmenter(undefined, {granularity: 'grapheme'}).segment(raw)) {
         const piece = part.segment.normalize('NFC'), end = part.index + part.segment.length;
+        // Unvisited text, including another inline node, may continue this last grapheme.
+        if (truncated && end === raw.length) break;
         if (/^\p{White_Space}+$/u.test(piece)) { pendingSpace = true; continue; }
         if (pendingSpace && text) text += ' ';
         pendingSpace = false;
@@ -215,7 +219,7 @@ public enum AskOnPageQuoteDOM {
       }
       let at = text.indexOf(p.quote);
       while (at >= 0 && (!starts.has(at) || !ends.has(at + p.quote.length))) at = text.indexOf(p.quote, at + 1);
-      if (at < 0) return {found: false};
+      if (at < 0) return truncated ? null : {found: false};
       const start = starts.get(at), end = ends.get(at + p.quote.length);
       const a = spans.find(s => start >= s.start && start < s.end);
       const b = spans.find(s => end > s.start && end <= s.end);
