@@ -64,9 +64,12 @@ public enum MobileSpaces {
         }
     }
 
-    /// Reads a synced `sidebar.json`.
+    /// Reads a synced `sidebar.json`, with the Mac's dates as it writes them (ISO 8601 text,
+    /// `JSONStore` and `SettingsSyncService`).
     public static func document(from data: Data) -> SidebarDocument? {
-        try? JSONDecoder().decode(SidebarDocument.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(SidebarDocument.self, from: data)
     }
 }
 
