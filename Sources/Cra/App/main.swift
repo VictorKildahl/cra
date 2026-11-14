@@ -31,11 +31,18 @@ MainActor.assumeIsolated {
     // Chromium has it open: before initializing, and only when no other Cra runs.
     // The run loop has not started, so the list can still hold a Cra that just quit.
     let me = ProcessInfo.processInfo.processIdentifier
-    let profileIsFree = !NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").contains(where: { $0.processIdentifier != me && kill($0.processIdentifier, 0) == 0 })
+    // No other Cra runs at all: Cra's Keychain item and the performance recorder are the Mac's, not a folder's.
+    let noOtherCra = !NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").contains(where: { $0.processIdentifier != me && kill($0.processIdentifier, 0) == 0 })
+    // No other Cra has this data folder open (Chromium's profile lock in it): another Cra with a folder of its own,
+    // such as a test copy while the installed Cra runs, leaves it to this one (DataFolderOwner, #299).
+    let lockTarget = try? FileManager.default.destinationOfSymbolicLink(atPath: AppPaths.chromiumCache.appendingPathComponent("SingletonLock").path)
+    var hostBytes = [CChar](repeating: 0, count: 256)
+    let host = gethostname(&hostBytes, hostBytes.count) == 0 ? String(cString: hostBytes) : ""
+    let profileIsFree = DataFolderOwner.isFree(lockTarget: lockTarget, host: host, me: me) { kill($0, 0) == 0 }
     CraLog.startSession(owner: profileIsFree)
     // Cookies and passwords move from the mock keychain to Cra's Keychain item first,
     // staged imports included, so everything below writes with the key Chromium reads.
-    SafeStorage.prepare(profileIsFree: profileIsFree)
+    SafeStorage.prepare(profileIsFree: profileIsFree && noOtherCra)
     if profileIsFree {
         let profile = AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
         if CredentialImport.hasPending { CredentialImport.applyPending(root: AppPaths.chromiumCache) }
@@ -90,7 +97,7 @@ MainActor.assumeIsolated {
         // Only now: the "another Cra is running" and failed-start exits above leave no session marker.
         Perf.phase("chromiumStarted")
         let info = Bundle.main.infoDictionary
-        PerfRecorder.configure(owner: profileIsFree,
+        PerfRecorder.configure(owner: profileIsFree && noOtherCra,
                                recording: PerfSessionRules.recording(setting: delegate.store.settings.perfRecording,
                                                                      environment: ProcessInfo.processInfo.environment),
                                config: .init(folder: AppPaths.file("Perf"), chromiumFolder: AppPaths.chromiumCache),

@@ -498,6 +498,7 @@
 #298   Packages/CraCore/Tests/CraCoreTests/LinkSplitClickTests.swift::otherDownloadsStayDownloads  d9fe10373142
 #298   Tests/BrowserManagerLifecycleTests.swift::optionClickSplitCase  aa8e58149cbf
 #298   Tests/Scenarios/link-option-click-split.scenario  6d9f4aa10ef3
+#299   Packages/CraCore/Tests/CraCoreTests/DataFolderOwnerTests.swift::aFolderNoOneLocksIsFree  23be5ccbb5d0
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::aManifestKeyGivesBothTheSameID  01c437e8c044
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::addUnpackedCopyOfAFolderLoadedInPlace  525ccb2ef3b7
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::importedCopyIsNamedAfterTheOriginalsID  4b08e525f482
