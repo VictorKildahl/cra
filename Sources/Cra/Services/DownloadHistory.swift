@@ -131,6 +131,16 @@ final class DownloadHistory {
         file.save(entries)
     }
 
+    /// Async renames retain the original row's identity, never whichever row now owns its path.
+    @discardableResult
+    func move(id: UUID, from old: String, to new: String) -> Bool {
+        guard let i = entries.firstIndex(where: { $0.id == id && $0.path == old }) else { return false }
+        entries[i].path = new
+        thumbnails[new] = thumbnails.removeValue(forKey: old)
+        file.save(entries)
+        return true
+    }
+
     func thumbnail(for path: String) -> NSImage? {
         if let image = thumbnails[path] { return image }
         loadThumbnail(path)
