@@ -197,6 +197,7 @@ enum BrowserManagerLifecycleTests {
         musicNotesPauseWithinHoldCase()
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
+        nowPlayingSkipsUncontrollableSoundCase()
         await leaveVideoTabPictureInPictureCase()
         await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
@@ -1218,6 +1219,33 @@ enum BrowserManagerLifecycleTests {
         expect(np.entries.first?.playing == true, "the page playing again within the hold shows on the card")
         manager.browser(rb.browser, didChangeSoundPlaying: true)
         expect(np.entries.map(\.id) == [a], "sound alone doesn't make a card: the held audible state does")
+        manager.closeAll()
+    }
+
+    // promise: #411
+    /// A notification ding (a sound under 5 s) or Web Audio alone makes no player card (#411):
+    /// Arc's player follows Chromium's media session, which Chrome's media controls only offer
+    /// once it is controllable. Media that starts in the same tab, even within the ding's 2 s
+    /// hold, gets its card.
+    @MainActor
+    private static func nowPlayingSkipsUncontrollableSoundCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://chat.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.hasUncontrollableSound = true
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        expect(np.entries.isEmpty, "a notification ding makes no card")
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        ra.browser.hasUncontrollableSound = false
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        expect(np.entries.map(\.id) == [a] && np.entries.first?.playing == true,
+               "a video that starts within the ding's hold gets its card")
         manager.closeAll()
     }
 

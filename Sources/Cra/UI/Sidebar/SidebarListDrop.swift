@@ -20,7 +20,11 @@ struct SidebarListDrop: Equatable {
         var maxX: CGFloat
     }
 
+    /// The dragged row, or `link` for a link from a page or another app (#419).
     var draggedID: UUID
+    /// The stand-in for a dragged link, which has no row yet; no item has this id.
+    static let link = UUID()
+    var isLink: Bool { draggedID == Self.link }
     /// nil while the drop would leave the item where it is.
     var target: Target?
     /// Insertion line in the list's coordinate space.

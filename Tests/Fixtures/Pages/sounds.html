@@ -1,0 +1,44 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sounds fixture</title>
+<!-- Sounds for the sidebar player (#411): a notification ding (a 1 s <audio>), a Web Audio beep
+     and a 12 s tone. Each is music-notes' 440 Hz, 60 dB below full volume, which Chromium still
+     counts as audible. A scenario starts them with the protocol's user gesture. -->
+<body>
+<script>
+  // A mono 8 kHz 16-bit WAV of `seconds` of the tone.
+  function wav(seconds) {
+    const samples = 8000 * seconds, n = samples * 2, b = new ArrayBuffer(44 + n), v = new DataView(b);
+    const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < samples; i++) v.setInt16(44 + 2 * i, Math.round(33 * Math.sin(2 * Math.PI * 440 * i / 8000)), true);
+    return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+  }
+  // As a chat site's new-message sound: new Audio(…).play(), heard to the end.
+  async function ding() {
+    const a = new Audio(wav(1));
+    await a.play();
+    await new Promise(r => a.onended = r);
+    return 'ding:ended';
+  }
+  async function beep() {
+    const ctx = new AudioContext(), osc = ctx.createOscillator(), gain = ctx.createGain();
+    gain.gain.value = 0.001;
+    osc.frequency.value = 440;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    await new Promise(r => setTimeout(r, 1000));
+    osc.stop();
+    return 'beep:ended';
+  }
+  async function tone() {
+    const a = document.createElement('audio');
+    a.src = wav(12);
+    document.body.append(a);
+    await a.play();
+    return 'tone:' + (a.paused ? 'paused' : 'playing');
+  }
+</script>

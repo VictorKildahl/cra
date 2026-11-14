@@ -1,7 +1,7 @@
 import AppKit
 
 /// A space's emoji label in the dock and the space header, drawn off screen the way macOS 27 draws
-/// it: clipped to its frame (GitHub #399).
+/// it: clipped to its frame, and with the cell's text cut at the baseline (GitHub #399).
 @main
 enum EmojiLabelTests {
     private static var checks = 0
@@ -22,6 +22,8 @@ enum EmojiLabelTests {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         wholeEmojiWhenClipped()
+        wholeEmojiWhenCellCutsAtBaseline()
+        sameLookAsStockLabel()
         textUnchanged()
         print("Emoji label: \(checks) checks passed")
     }
@@ -56,6 +58,81 @@ enum EmojiLabelTests {
         }
     }
 
+    // promise: #399
+    /// The reporter's macOS 27.2 cut every dock emoji flat near the baseline, in 0.1.41 and again
+    /// in 0.1.42 with the frame grown to hold the picture: the cut is in the cell's text drawing,
+    /// not at the view's edge. Modelled by a cell that loses everything under the baseline (it
+    /// reproduces the cut on a plain sidebar label), `EmojiLabel` still draws the emoji's every
+    /// pixel, where the plain label draws it unclipped, at 1x and 2x, in the dock and the header.
+    @MainActor
+    private static func wholeEmojiWhenCellCutsAtBaseline() {
+        for place in places {
+            for emoji in ["🏠", "🎮", "🃏", "🇩🇰", "👨‍💻", "🐙"] {
+                for scale: CGFloat in [1, 2] {
+                    let (plainHolder, plain) = make(emoji, in: place)
+                    let h = plain.intrinsicContentSize.height
+                    let laidOut = NSRect(x: 0, y: place.y(place.holder.height, h), width: place.holder.width, height: h)
+                    let reference = ink(pixels(plainHolder, plain, frame: laidOut, clips: false, scale: scale))
+
+                    let (cutHolder, cut) = make(emoji, in: place, cell: BaselineCutCell.self)
+                    let cutInk = ink(pixels(cutHolder, cut, frame: cut.frameHoldingInk(laidOut), clips: true, scale: scale))
+                    // Pixel rows from the holder's top down to the baseline; a flag at 1x has no ink under it.
+                    let fromTop = place.flipped ? laidOut.minY : place.holder.height - laidOut.maxY
+                    let baselineRow = Int(((fromTop + plain.firstBaselineOffsetFromTop) * scale).rounded(.down))
+                    let width = Int(place.holder.width * scale)
+                    if reference[(baselineRow * width)...].contains(true) {
+                        expect(cutInk != reference && cutInk.filter { $0 }.count < reference.filter { $0 }.count,
+                               "\(place.name) \(emoji) at \(Int(scale))x: the model cuts a plain label, as macOS 27.2 did")
+                    }
+
+                    let (holder, label) = make(emoji, in: place, cell: BaselineCutCell.self, type: EmojiLabel.self)
+                    let drawn = ink(pixels(holder, label, frame: label.frameHoldingInk(laidOut), clips: true, scale: scale))
+                    // From the laid-out top edge down, as above: the header's 8.25 pt top cuts a quarter pixel either way.
+                    let topRow = Int((fromTop * scale).rounded(.up)) * width
+                    expect(drawn[topRow...] == reference[topRow...], "\(place.name) \(emoji) at \(Int(scale))x: EmojiLabel keeps every pixel, in place")
+                }
+            }
+        }
+    }
+
+    /// Unclipped, `EmojiLabel` draws the very pixels a stock sidebar label does, edges included, so
+    /// the dock and header look as they shipped (their snapshots in Tests/Snapshots).
+    @MainActor
+    private static func sameLookAsStockLabel() {
+        for place in places {
+            for emoji in ["🏠", "🌱", "💼", "🇩🇰", "👨‍💻", "A"] {
+                for scale: CGFloat in [1, 2] {
+                    let (plainHolder, plain) = make(emoji, in: place)
+                    let h = plain.intrinsicContentSize.height
+                    let laidOut = NSRect(x: 0, y: place.y(place.holder.height, h), width: place.holder.width, height: h)
+                    let stock = pixels(plainHolder, plain, frame: laidOut, clips: false, scale: scale)
+                    let (holder, label) = make(emoji, in: place, type: EmojiLabel.self)
+                    expect(pixels(holder, label, frame: laidOut, clips: false, scale: scale) == stock,
+                           "\(place.name) \(emoji) at \(Int(scale))x looks as a stock label draws it")
+                }
+            }
+        }
+    }
+
+    /// Which pixels the drawing covers: the model's cut cell draws through `drawInterior`, once, so
+    /// its edges are fainter than a stock label's; where the ink is is what counts.
+    private static func ink(_ bytes: [UInt8]) -> [Bool] {
+        stride(from: 3, to: bytes.count, by: 4).map { bytes[$0] > 0 }
+    }
+
+    /// A text cell that draws nothing under its first baseline: what the reporter's macOS 27.2 did
+    /// to a label's emoji whatever the label's frame.
+    private final class BaselineCutCell: NSTextFieldCell {
+        override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {
+            let baseline = (controlView as? NSTextField)?.firstBaselineOffsetFromTop ?? cellFrame.height
+            NSGraphicsContext.saveGraphicsState()
+            let top = controlView.isFlipped ? cellFrame.minY : cellFrame.maxY - baseline
+            NSRect(x: cellFrame.minX, y: top, width: cellFrame.width, height: baseline).clip()
+            super.drawInterior(withFrame: cellFrame, in: controlView)
+            NSGraphicsContext.restoreGraphicsState()
+        }
+    }
+
     /// Plain text already fits its line, so its frame stays as laid out.
     @MainActor
     private static func textUnchanged() {
@@ -68,10 +145,20 @@ enum EmojiLabelTests {
         }
     }
 
-    /// The views' label: `NSTextField.sidebarLabel`, centred, in a layer-backed holder.
+    /// The views' label: `NSTextField.sidebarLabel`'s setup, centred, in a layer-backed holder. `cell`
+    /// stands in for the system's text cell; `type` is the label class.
     @MainActor
-    private static func make(_ text: String, in place: Place) -> (NSView, NSTextField) {
-        let l = NSTextField(labelWithString: text)
+    private static func make(_ text: String, in place: Place, cell: NSTextFieldCell.Type? = nil,
+                             type: NSTextField.Type = NSTextField.self) -> (NSView, NSTextField) {
+        let l = type == EmojiLabel.self ? EmojiLabel(labelWithString: text) : NSTextField(labelWithString: text)
+        if let cell {
+            l.cell = cell.init(textCell: text)
+            l.isEditable = false
+            l.isSelectable = false
+            l.isBordered = false
+            l.drawsBackground = false
+            l.textColor = .labelColor
+        }
         l.font = .systemFont(ofSize: place.size)
         l.lineBreakMode = .byTruncatingTail
         l.usesSingleLineMode = true

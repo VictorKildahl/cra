@@ -124,28 +124,14 @@ struct SpaceIconPicker: View {
     }
 }
 
-/// The Icon tab: Arc's 56 glyphs in its order (7 rows of 8, no search). Most are SF Symbols in
-/// Arc too; its planet, pizza and skull have no SF Symbol and get the nearest one.
+/// The Icon tab: Arc's 56 glyphs in its order (7 rows of 8, no search), as SF Symbols.
 struct SpaceSymbolGrid: View {
     let current: String?
     let onPick: (String) -> Void
     @State private var hovered: String?
 
-    static let symbols = [
-        "star.fill", "bookmark.fill", "heart.fill", "flag.fill", "bolt.fill", "triangle.fill", "asterisk", "bell.fill",
-        "lightbulb.fill", "triangle.circle.fill", "square.grid.2x2.fill", "circle.grid.3x3.fill", "square.stack.3d.up.fill",
-        "cylinder.split.1x2.fill", "archivebox.fill", "square.on.square.fill",
-        "folder.fill", "tray.full.fill", "calendar", "envelope.fill", "checkmark.square.fill", "doc.fill", "book.fill",
-        "ellipsis.bubble.fill",
-        "person.2.fill", "apple.terminal.fill", "wrench.and.screwdriver.fill", "square.fill", "oval.portrait.fill",
-        "circle.fill", "moon.fill", "sun.max.fill",
-        "globe.americas.fill", "leaf.fill", "cloud.fill", "pawprint.fill", "basket.fill", "gift.fill", "bed.double.fill",
-        "fork.knife",
-        "dumbbell.fill", "airplane", "music.note", "paintpalette.fill", "video.fill", "bandage.fill",
-        "chevron.left.forwardslash.chevron.right", "baseball.fill",
-        "cloud", "map.fill", "flame.fill", "birthday.cake.fill", "theatermasks.fill", "scroll.fill", "hand.thumbsup.fill",
-        "tram.fill",
-    ]
+    /// Arc's order, shared with the Arc importer (`ArcSpaceIcon.picker`).
+    static let symbols = SpaceIcon.pickerSymbols
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(31), spacing: 0), count: 8), spacing: 0) {
