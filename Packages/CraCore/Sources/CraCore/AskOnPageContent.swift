@@ -23,7 +23,7 @@ public enum AskOnPageContent {
         while (stack.length) {
           if (++work > budget) return false;
           const {node, exit, block} = stack.pop();
-          if (exit) { if (leave && leave(node, block) === false) return false; continue; }
+          if (exit) { if (leave) leave(node, block); continue; }
           if (node !== root && node.nextSibling) stack.push({node: node.nextSibling, exit: false});
           const layout = display(node);
           if (layout === null) continue;
@@ -202,13 +202,13 @@ public enum AskOnPageQuoteDOM {
       }
       // Normalize complete graphemes, including combining sequences split across inline nodes.
       // Each normalized UTF-16 boundary maps back to the original DOM text, never transport spelling.
-      let text = '', pendingSpace = null;
+      let text = '', pendingSpace = false;
       const starts = new Map(), ends = new Map();
       for (const part of new Intl.Segmenter(undefined, {granularity: 'grapheme'}).segment(raw)) {
         const piece = part.segment.normalize('NFC'), end = part.index + part.segment.length;
-        if (/^\p{White_Space}+$/u.test(piece)) { pendingSpace = pendingSpace ?? part.index; continue; }
-        if (pendingSpace !== null && text) text += ' ';
-        pendingSpace = null;
+        if (/^\p{White_Space}+$/u.test(piece)) { pendingSpace = true; continue; }
+        if (pendingSpace && text) text += ' ';
+        pendingSpace = false;
         starts.set(text.length, part.index);
         text += piece;
         ends.set(text.length, end);
