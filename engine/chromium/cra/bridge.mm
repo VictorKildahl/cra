@@ -1776,11 +1776,16 @@ void RunReadyBlocks() {
     _pendingHistory = nil;
     std::string error;
     int count = cra::RestorePageHistory(contents, UTF8(history[@"history"]), [history[@"index"] intValue], &error);
-    if ([_delegate respondsToSelector:@selector(browser:didRestoreHistoryEntries:error:)]) {
-      [_delegate browser:self
-          didRestoreHistoryEntries:count
-                             error:count > 0 ? nil : (error.empty() ? @"nothing restored" : NS(error))];
-    }
+    // Told a moment later, as the CEF bridge does: this can run while the page is still being made, before the
+    // app knows which tab it is.
+    NSString* failure = count > 0 ? nil : (error.empty() ? @"nothing restored" : NS(error));
+    __weak CraBrowser* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      CraBrowser* page = weakSelf;
+      if (page && [page.delegate respondsToSelector:@selector(browser:didRestoreHistoryEntries:error:)]) {
+        [page.delegate browser:page didRestoreHistoryEntries:count error:failure];
+      }
+    });
     if (count > 0) {
       _pendingURL = nil;
       return;
