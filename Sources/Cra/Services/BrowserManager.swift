@@ -64,6 +64,16 @@ final class TabRuntime {
     var blockedPopups = BlockedPopups()
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
+    /// The window the page shows in: its Chrome window over the card (CEF's Chrome-style hosting) or the Cra window
+    /// whose card holds its view (the Chromium engine, which has no window per page).
+    var pageWindow: NSWindow? { hostWindow?.parent ?? hostWindow ?? browser.containerView.window }
+    /// Where the page is on screen, or nil while it isn't shown: its Chrome window's frame, else its view's.
+    var pageScreenFrame: NSRect? {
+        if let host = hostWindow { return host.isVisible ? host.frame : nil }
+        let view = browser.containerView
+        guard let window = view.window, window.isVisible, !view.isHiddenOrHasHiddenAncestor else { return nil }
+        return window.convertToScreen(view.convert(view.bounds, to: nil))
+    }
     init(tabID: UUID, browser: CraBrowser) {
         self.tabID = tabID
         self.browser = browser
