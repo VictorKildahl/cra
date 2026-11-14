@@ -310,6 +310,10 @@ built release app with a test profile. Note anything that fails in the release's
   hand. The window stays put. With the sidebar hidden, the pointer at the top of the screen
   reveals the title bar with the traffic lights in it. The `fullscreen-window-chrome` scenario
   checks the window's flags; only a hand drag shows that AppKit honours them.
+- **Blocked requests:** with Block Ads & Trackers on, ziplyfiber.com, fidelity.com and
+  allstate.com show their pages. They stayed white while a blocked request was cancelled instead of
+  failed: Adobe Target hides the page until its request ends. (The scenario checks the failure and
+  that the blocked host is never asked; this needs the real sites.)
 
 ### Sync
 
