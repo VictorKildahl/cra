@@ -1,0 +1,13 @@
+# The cookies Cra on CEF saved open on the engine. Chrome 158 makes the "v10" key unavailable outside
+# Chrome's own data folder (KeychainKeyProviderUserDataDirProtection), every value CEF saved is v10, and a
+# cookie that won't decrypt deletes its whole site's cookies: everyone signed out at the first engine launch.
+# Tests/Fixtures/CEFProfile holds a cookie database a CEF build wrote; it runs without one.
+budget rss=900 stalls50=40
+pace 0.5
+profile ${FIXTURES}/CEFProfile
+
+cra://open?url=${PAGE}?n=cef
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'cookies:'+document.cookie","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"cookies:[^"]*cra_migration=kept

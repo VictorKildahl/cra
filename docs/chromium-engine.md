@@ -89,6 +89,8 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 1. **An existing profile on a signed build.** Install the engine build over a CEF Cra with saved passwords and
    signed-in sites: the "Cra Safe Storage" Keychain item opens the same cookies and passwords (no sign-outs, no
    Keychain prompt). `scripts/test-engine-migration.sh` covers cookies and history on unsigned test copies only.
+   Done 15 Nov on a copy of a real profile (signed engine build, no Keychain prompt): 3063 cookies on 1043 sites
+   decrypt, the 2 saved passwords stay. The first try found every cookie deleted (below, 15 Nov).
 2. **The update itself.** Sparkle from the last CEF release to the engine release: the app relaunches on the
    engine, and the CEF framework is gone from the bundle.
 3. **A real Intel Mac.** The x64 build starts and loads pages; under Rosetta here its start-up stalled 1.7 s, so
@@ -235,3 +237,10 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
     on engine-158.0.8127.37-5. Last engine fixes: session cookies outlast a restart (cra-session-cookies.patch,
     session-cookies-relaunch), Safe Browsing's API key, an extension's window over a full-screen Cra joins its
     Space. What remains is the hand checks above (Before the switch ships), then the merge and a release.
+  - 15 Nov: a copy of a real CEF profile on a signed engine build lost every cookie at the first launch. Chrome
+    158 (`KeychainKeyProviderUserDataDirProtection`, on by default) makes the "v10" Keychain key unavailable
+    outside Chrome's own data folder and encrypts with a "v11" key; every value Cra on CEF saved is v10, and a
+    cookie that won't decrypt deletes its whole site's cookies. `scripts/test-engine-migration.sh` had passed on
+    the 156 engine and wasn't run again on 158. The bridge turns the feature off (the item is Cra's own, so it
+    protects nothing), and `cef-profile-cookies` opens a CEF build's cookie database (Tests/Fixtures/CEFProfile)
+    in every run, so it needs no CEF build after the switch. Engine release -6.

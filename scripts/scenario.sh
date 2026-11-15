@@ -38,6 +38,8 @@
 #                               relaunch drops it)
 #   extension <folder>          copied into the data folder's Extensions/ before launch, as an
 #                               import leaves an extension
+#   profile <folder>            its contents copied into the data folder before launch: files an
+#                               older Cra left (Tests/Fixtures/CEFProfile, Cra on CEF's cookies)
 #   home                        a throwaway home folder, so downloads stay out of ~/Downloads
 #   crash-report <file>         copied into the throwaway home's Library/Logs/DiagnosticReports
 #                               before launch, as macOS leaves one (needs home)
@@ -245,6 +247,7 @@ expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\
 app_args=(-ApplePersistenceIgnoreState YES)
 while read -r _ a; do app_args+=("$(expand "$a")"); done < <(grep '^arg ' "$FILE")
 while read -r _ f; do mkdir -p "$DATA/Extensions" && cp -R "$(expand "$f")" "$DATA/Extensions/"; done < <(grep '^extension ' "$FILE")
+while read -r _ f; do cp -R "$(expand "$f")/." "$DATA/"; done < <(grep '^profile ' "$FILE")
 while read -r _ f; do mkdir -p "$DATA/home/Library/Logs/DiagnosticReports" && cp "$(expand "$f")" "$DATA/home/Library/Logs/DiagnosticReports/"; done < <(grep '^crash-report ' "$FILE")
 for i in "${!app_env[@]}"; do app_env[$i]="$(expand "${app_env[$i]}")"; done
 
@@ -353,7 +356,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         [ -x "$OUT/compare-png" ] || xcrun swiftc -O "$ROOT/scripts/compare-png.swift" -o "$OUT/compare-png" 2>"$OUT/compare-png.log"
         verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1) || budget_problem "snapshot $3: $verdict"
       fi ;;
-    fresh|requires|port|seed|env|arg|extension|home|crash-report) ;;
+    fresh|requires|port|seed|env|arg|extension|profile|home|crash-report) ;;
     *) problem "unknown scenario line: $line" ;;
   esac
 done < "$FILE"

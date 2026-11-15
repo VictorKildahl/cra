@@ -2936,7 +2936,12 @@ void RunReadyBlocks() {
   args.push_back("--disable-blink-features=AutomationControlled");
   std::string disabled =
       "WebRtcHideLocalIpsWithMdns,WebUIOmniboxPopup,WebUIOmniboxAimPopup,AutofillAiWalletPrivatePasses,"
-      "ScalableFrameEviction,OptimizationHints,PreloadingHeuristicsMLModel,HistoryEmbeddings,Glic,LensOverlay";
+      "ScalableFrameEviction,OptimizationHints,PreloadingHeuristicsMLModel,HistoryEmbeddings,Glic,LensOverlay,"
+      // Chrome 158 makes the "v10" key (the Keychain item's) unavailable outside Chrome's own data folder and
+      // encrypts with a "v11" key instead. Every cookie and password Cra on CEF saved is v10, and a cookie that
+      // won't decrypt takes its whole site down with it: everyone signed out at the first engine launch. The
+      // item is Cra's own ("Cra Safe Storage"), so there is no other app's data to protect from.
+      "KeychainKeyProviderUserDataDirProtection";
   // CraEngineMain adds AperitifHelpers to this one.
   args.push_back("--enable-features=ForceWebRequestProxyForTest,WebContentsDiscard,InfiniteTabsFreezing,"
                  "VideoPipForceTrustedForMediaPlaybackForTesting,HideDelegatedFrameHostMac");
