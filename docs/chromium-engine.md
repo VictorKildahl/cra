@@ -119,7 +119,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 
 **15 Nov 2026: merged into main** (engine-158.0.8127.37-6), not yet released. Left before the release: a passkey
 made and used with Touch ID and a real Intel Mac (Before the switch ships), and the three numbers the switch made
-worse (docs/speed.md: tab switch, idle CPU, idle wakeups). A CEF build is still `CRA_ENGINE=cef scripts/build.sh`.
+worse (tab switch, idle CPU, idle wakeups: "Speed, 14 Nov" below). A CEF build is still `CRA_ENGINE=cef scripts/build.sh`.
 
 - 13 Nov 2026: decided; CEF 158 not built.
 - 13 Nov 2026, step 1 done, **go**. `engine/spike.sh` on Chromium 156.0.8078.96 (`out/Chrome_arm64`, the CEF tree with
