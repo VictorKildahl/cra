@@ -1118,6 +1118,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private var finishedDownloads: Set<UInt32> = []
+    /// For `cra://debug?downloadState`: downloads this window was told finished, in this launch.
+    var finishedDownloadCount: Int { finishedDownloads.count }
     /// Downloads this window's pages started (its flight and stall checks).
     private var windowDownloads: Set<UInt32> = []
 

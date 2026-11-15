@@ -77,7 +77,13 @@ class Downloads : public ProfileManagerObserver,
   // content::DownloadManager::Observer:
   void OnDownloadCreated(content::DownloadManager* manager, download::DownloadItem* item) override {
     item->AddObserver(this);
-    updated_(item);
+    // Chrome makes an item for every download in the profile's history as it starts, already finished: they
+    // aren't downloads of this session (CEF never reported them), and every one ran Cra's download flight
+    // (a profile with a hundred of them hung the app at launch). A new download starts in progress; an old one that is
+    // resumed reports through OnDownloadUpdated.
+    if (item->GetState() == download::DownloadItem::IN_PROGRESS) {
+      updated_(item);
+    }
   }
   void ManagerGoingDown(content::DownloadManager* manager) override {
     manager->RemoveObserver(this);

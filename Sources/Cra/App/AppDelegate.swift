@@ -1672,7 +1672,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["downloadState"] {
                 let rows = DownloadHistory.shared.live.map { DownloadRow.subtitle($0.row, now: Date()) }
                 let progress = DownloadHistory.shared.progress.map { String(format: "%.3f", $0) } ?? "none"
-                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows)")
+                // finished: downloads reported finished in this launch, across windows (an old one from the
+                // profile's history must not be one).
+                let finished = mainWindows.reduce(0) { $0 + $1.finishedDownloadCount }
+                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows) finished=\(finished)")
                 return
             }
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:
