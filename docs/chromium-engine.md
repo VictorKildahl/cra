@@ -104,6 +104,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
    (`CRA_BUDGETS=report`). The other 21 (full screen, Little Windows, menus, PiP placement, the permission card)
    need a live screen: the display slept at 03:18 and the session locked, after which the arm64 build fails the
    same ones. With the screen unlocked all 21 pass on x64 too: 177 of 177 under Rosetta.
+   Victor's call, 15 Nov: no real Intel Mac before the release; Intel users report what doesn't work.
 4. **Passkeys** with Touch ID (the keychain access group comes from the provisioning profile), and the Web Store
    install flow.
    15 Nov, partly: an engine build with the release profile (`CRA_PROVISIONING_PROFILE`) launches with the shipped
@@ -124,8 +125,8 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 
 ## Status
 
-**15 Nov 2026: merged into main** (engine-158.0.8127.37-8), not yet released. Left before the release: a real
-Intel Mac (Before the switch ships); the Touch ID passkey check is skipped (Victor's call). The numbers the switch made worse (tab
+**15 Nov 2026: merged into main** (engine-158.0.8127.37-8), not yet released. Nothing left before the release but
+Victor's call: a real Intel Mac and the Touch ID passkey check are skipped (his call; Intel users report). The numbers the switch made worse (tab
 switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7"). A CEF build is still
 `CRA_ENGINE=cef scripts/build.sh`.
 
