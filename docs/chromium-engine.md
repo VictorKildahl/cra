@@ -244,3 +244,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
     the 156 engine and wasn't run again on 158. The bridge turns the feature off (the item is Cra's own, so it
     protects nothing), and `cef-profile-cookies` opens a CEF build's cookie database (Tests/Fixtures/CEFProfile)
     in every run, so it needs no CEF build after the switch. Engine release -6.
+  - 15 Nov, on -6: all 177 scenarios pass, the screen ones included. `component-snapshots`' `toolbar-split-pane`
+    shot is the pointer's: with the test display (CRA_TEST_SCREEN) unplugged, the window opens under a resting
+    pointer and the split pane draws its hover buttons (CEF and the -5 build alike). It passed on 14 Nov with the
+    test display connected.
