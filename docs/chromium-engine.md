@@ -103,7 +103,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
    15 Nov, under Rosetta (no Intel Mac here): the signed x64 build on engine -6 passes 156 of 177 scenarios
    (`CRA_BUDGETS=report`). The other 21 (full screen, Little Windows, menus, PiP placement, the permission card)
    need a live screen: the display slept at 03:18 and the session locked, after which the arm64 build fails the
-   same ones. They run again on x64 once the screen is unlocked.
+   same ones. With the screen unlocked all 21 pass on x64 too: 177 of 177 under Rosetta.
 4. **Passkeys** with Touch ID (the keychain access group comes from the provisioning profile), and the Web Store
    install flow.
    15 Nov, partly: an engine build with the release profile (`CRA_PROVISIONING_PROFILE`) launches with the shipped
@@ -118,8 +118,8 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 ## Status
 
 **15 Nov 2026: merged into main** (engine-158.0.8127.37-6), not yet released. Left before the release: a passkey
-made and used with Touch ID, a real Intel Mac, and the x64 build's screen scenarios with the screen unlocked
-(Before the switch ships). A CEF build is still `CRA_ENGINE=cef scripts/build.sh`.
+made and used with Touch ID and a real Intel Mac (Before the switch ships), and the three numbers the switch made
+worse (docs/speed.md: tab switch, idle CPU, idle wakeups). A CEF build is still `CRA_ENGINE=cef scripts/build.sh`.
 
 - 13 Nov 2026: decided; CEF 158 not built.
 - 13 Nov 2026, step 1 done, **go**. `engine/spike.sh` on Chromium 156.0.8078.96 (`out/Chrome_arm64`, the CEF tree with
