@@ -102,6 +102,11 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
    scenario budgets on Intel are open.
 4. **Passkeys** with Touch ID (the keychain access group comes from the provisioning profile), and the Web Store
    install flow.
+   15 Nov, partly: an engine build with the release profile (`CRA_PROVISIONING_PROFILE`) launches with the shipped
+   app's entitlements, and `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` is true on it
+   (false on the same build without the profile), so Chrome offers Touch ID passkeys. Creating and using one needs
+   a finger. The real Chrome Web Store (past Google's consent page) offers "Add to Chrome" on the engine, with the
+   same "Install Chrome" banner it shows CEF Cra.
 5. **DRM sites**: Netflix and Disney+ open in their WebKit tabs; Spotify plays in Chromium (Widevine).
 6. **Speed**: `scripts/perf/rounds.sh` engine against CEF (memory at 20 tabs, tab switch, new tab, start-up),
    results in docs/speed.md.
