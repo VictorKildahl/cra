@@ -111,14 +111,21 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
    (false on the same build without the profile), so Chrome offers Touch ID passkeys. Creating and using one needs
    a finger. The real Chrome Web Store (past Google's consent page) offers "Add to Chrome" on the engine, with the
    same "Install Chrome" banner it shows CEF Cra.
+   Victor's call, 15 Nov: the release ships without a Touch ID passkey made and used on the engine. On his
+   profile copy the passkeys in chrome://settings/passkeys are the same as on CEF Cra.
 5. **DRM sites**: Netflix and Disney+ open in their WebKit tabs; Spotify plays in Chromium (Widevine).
 6. **Speed**: `scripts/perf/rounds.sh` engine against CEF (memory at 20 tabs, tab switch, new tab, start-up),
    results in docs/speed.md.
+7. **Daily use on a real profile.** 15 Nov, Victor on -8 with a copy of his data (`CRA_DATA_DIR`, Sync to a scratch
+   folder): signed in everywhere, saved passwords fill, extensions and their popups, tab switching, downloads,
+   video, audio and calls, and windows, spaces and tabs back after a quit and relaunch. -7 hung at that profile's
+   first launch (its download history, fixed in -8). 1Password trusts Cra only at /Applications/Cra.app, so the
+   copy needed it added by hand; an installed update keeps that path.
 
 ## Status
 
-**15 Nov 2026: merged into main** (engine-158.0.8127.37-8), not yet released. Left before the release: a passkey
-made and used with Touch ID and a real Intel Mac (Before the switch ships). The numbers the switch made worse (tab
+**15 Nov 2026: merged into main** (engine-158.0.8127.37-8), not yet released. Left before the release: a real
+Intel Mac (Before the switch ships); the Touch ID passkey check is skipped (Victor's call). The numbers the switch made worse (tab
 switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7"). A CEF build is still
 `CRA_ENGINE=cef scripts/build.sh`.
 
