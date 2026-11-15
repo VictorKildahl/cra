@@ -285,5 +285,5 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   - 15 Nov, -8: a copy of a real profile hung at its first launch on -7: Chrome makes an item for every download
     in the profile's history as it starts, and the bridge reported each as a download that had just finished, so
     every one ran the download flight. Only a download made in progress is reported now
-    (`download-history-quiet`). 1Password's helper refused a copy started from a sandboxed shell (it couldn't read
-    the parent process's signature); a copy started from Finder is still to check.
+    (`download-history-quiet`). 1Password's helper refuses any Cra outside /Applications/Cra.app, CEF builds
+    too (a test copy needs adding in 1Password ▸ Settings ▸ Browser); not the engine.
