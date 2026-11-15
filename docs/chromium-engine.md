@@ -117,7 +117,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 
 ## Status
 
-**15 Nov 2026: merged into main** (engine-158.0.8127.37-7), not yet released. Left before the release: a passkey
+**15 Nov 2026: merged into main** (engine-158.0.8127.37-8), not yet released. Left before the release: a passkey
 made and used with Touch ID and a real Intel Mac (Before the switch ships). The numbers the switch made worse (tab
 switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7"). A CEF build is still
 `CRA_ENGINE=cef scripts/build.sh`.
@@ -282,3 +282,8 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
     2.2 → 2.8 % (the runs' ranges overlap). Every scenario passes (`freezing-live-connection` once failed on
     timing and passed on both reruns); under Rosetta `extension-lifecycle` is over its stall budget on -6 and -7
     alike (first launches of a translated build).
+  - 15 Nov, -8: a copy of a real profile hung at its first launch on -7: Chrome makes an item for every download
+    in the profile's history as it starts, and the bridge reported each as a download that had just finished, so
+    every one ran the download flight. Only a download made in progress is reported now
+    (`download-history-quiet`). 1Password's helper refused a copy started from a sandboxed shell (it couldn't read
+    the parent process's signature); a copy started from Finder is still to check.
