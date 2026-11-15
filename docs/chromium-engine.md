@@ -117,9 +117,10 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 
 ## Status
 
-**15 Nov 2026: merged into main** (engine-158.0.8127.37-6), not yet released. Left before the release: a passkey
-made and used with Touch ID and a real Intel Mac (Before the switch ships), and the three numbers the switch made
-worse (tab switch, idle CPU, idle wakeups: "Speed, 14 Nov" below). A CEF build is still `CRA_ENGINE=cef scripts/build.sh`.
+**15 Nov 2026: merged into main** (engine-158.0.8127.37-7), not yet released. Left before the release: a passkey
+made and used with Touch ID and a real Intel Mac (Before the switch ships). The numbers the switch made worse (tab
+switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7"). A CEF build is still
+`CRA_ENGINE=cef scripts/build.sh`.
 
 - 13 Nov 2026: decided; CEF 158 not built.
 - 13 Nov 2026, step 1 done, **go**. `engine/spike.sh` on Chromium 156.0.8078.96 (`out/Chrome_arm64`, the CEF tree with
@@ -266,3 +267,18 @@ worse (tab switch, idle CPU, idle wakeups: "Speed, 14 Nov" below). A CEF build i
     shot is the pointer's: with the test display (CRA_TEST_SCREEN) unplugged, the window opens under a resting
     pointer and the split pane draws its hover buttons (CEF and the -5 build alike). It passed on 14 Nov with the
     test display connected.
+  - 15 Nov, -7: the three numbers the switch made worse, fixed (scripts/perf/bench.sh, 3 interleaved rounds against
+    CEF 156). Idle wakeups: a profile's hidden Chrome window (on screen, transparent, so an extension's popup can
+    show) kept its compositor drawing and the GPU process's display link ticking; its compositor is hidden now
+    (`PageHost::StopDrawing`). Ordering the window out cut as much, but then no popup ever showed, and no scenario
+    caught it: `extension-popup-shown` expects the popup Cra frames. Tab switch: Cra's pages draw with
+    compositors of their own (they are views in Cra's windows, not Chrome's), which Chrome dropped on every hide
+    and made again on every show, a new frame sink before the first frame, a display refresh late; a hidden page
+    now keeps it, detached and shrunk to a pixel so the GPU process keeps no buffers of it
+    (cra-page-compositor.patch, `tab-switch-first-frame`). Against CEF: idle wakeups at 20 tabs 70 → 42 /s
+    (-6: 91), idle CPU at 20 tabs 5.3 → 4.9 % (-6: 5.9), tab switch to shown 11.3 → 11.1 ms (-6: 22.2), memory
+    at 20 tabs 779 → 716 MB, back to 1 tab 296 → 271 MB, new tab to first paint 89 → 60 ms. Still above CEF:
+    memory at 1 tab 236 → 258 MB (most of it a renderer for the hidden window's blank page) and idle CPU at 1 tab
+    2.2 → 2.8 % (the runs' ranges overlap). Every scenario passes (`freezing-live-connection` once failed on
+    timing and passed on both reruns); under Rosetta `extension-lifecycle` is over its stall budget on -6 and -7
+    alike (first launches of a translated build).
