@@ -117,6 +117,10 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 
 ## Status
 
+**15 Nov 2026: merged into main** (engine-158.0.8127.37-6), not yet released. Left before the release: a passkey
+made and used with Touch ID, a real Intel Mac, and the x64 build's screen scenarios with the screen unlocked
+(Before the switch ships). A CEF build is still `CRA_ENGINE=cef scripts/build.sh`.
+
 - 13 Nov 2026: decided; CEF 158 not built.
 - 13 Nov 2026, step 1 done, **go**. `engine/spike.sh` on Chromium 156.0.8078.96 (`out/Chrome_arm64`, the CEF tree with
   `scripts/perf/plain-chromium.patch` and `engine/chromium/apply.sh`): all 12 checks pass. Cra's code runs in Chrome's
