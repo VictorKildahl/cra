@@ -599,6 +599,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             c.elsewhereSnapshot = c.showsElsewhere ? app.runtime(for: c.tabID)?.snapshot : nil
         }
         sidebarUI.splitPaneIDs = panes.count > 1 ? panes : []
+        // Arc closes the find bar on a tab switch. Before browsers.show, so the old page stops finding.
+        if overlay.findVisible, selected != findTabID { hideFindBar() }
         if live != browsers.visibleTabIDs || liveFocus != browsers.visibleTabID
             || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false }) {
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
@@ -1200,6 +1202,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// panel made every shot of the page blank white (#346).
     private var overlayPanel: NSPanel?
     private var findPanel: FindBarPanel?
+    /// The tab selected when the find bar opened.
+    private var findTabID: UUID?
     /// The text the page's find last ran on.
     private var lastFindText = ""
     /// The focused page's screen rect the find panel was last placed on.
@@ -4161,6 +4165,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func showFindBar() {
         syncAskOnPage()
         overlay.findVisible = true
+        findTabID = selectedTabID
         overlay.findFocusToken += 1
         shell.findVisible = true
         shell.layoutContentChildren()
