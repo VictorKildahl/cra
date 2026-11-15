@@ -93,6 +93,11 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
    decrypt, the 2 saved passwords stay. The first try found every cookie deleted (below, 15 Nov).
 2. **The update itself.** Sparkle from the last CEF release to the engine release: the app relaunches on the
    engine, and the CEF framework is gone from the bundle.
+   Done 15 Nov with two Developer ID builds under a test bundle identifier (CEF 0.1.90, engine 0.1.91; LSEnvironment
+   kept them on a test data folder and a local appcast signed with the release EdDSA key, their cra:// scheme
+   removed): the CEF copy checked in the background, downloaded, installed and relaunched as 0.1.91 within 6 s
+   (`launch: automaticUpdate`); the bundle then held Cra Framework.framework and no CEF framework, and its signature
+   verified.
 3. **A real Intel Mac.** The x64 build starts and loads pages; under Rosetta here its start-up stalled 1.7 s, so
    scenario budgets on Intel are open.
 4. **Passkeys** with Touch ID (the keychain access group comes from the provisioning profile), and the Web Store
