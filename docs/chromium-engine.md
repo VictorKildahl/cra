@@ -100,6 +100,10 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
    verified.
 3. **A real Intel Mac.** The x64 build starts and loads pages; under Rosetta here its start-up stalled 1.7 s, so
    scenario budgets on Intel are open.
+   15 Nov, under Rosetta (no Intel Mac here): the signed x64 build on engine -6 passes 156 of 177 scenarios
+   (`CRA_BUDGETS=report`). The other 21 (full screen, Little Windows, menus, PiP placement, the permission card)
+   need a live screen: the display slept at 03:18 and the session locked, after which the arm64 build fails the
+   same ones. They run again on x64 once the screen is unlocked.
 4. **Passkeys** with Touch ID (the keychain access group comes from the provisioning profile), and the Web Store
    install flow.
    15 Nov, partly: an engine build with the release profile (`CRA_PROVISIONING_PROFILE`) launches with the shipped
