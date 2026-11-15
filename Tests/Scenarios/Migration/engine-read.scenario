@@ -1,4 +1,4 @@
-# scripts/test-engine-migration.sh, second half, on the engine: the data folder a Cra on CEF left opens with the
+# scripts/engine-migration.sh, second half, on the engine: the data folder a Cra on CEF left opens with the
 # site's cookie and the tab's back and forward list.
 budget rss=900 stalls50=40
 pace 0.5

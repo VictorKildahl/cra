@@ -1,4 +1,4 @@
-# scripts/test-engine-migration.sh, first half, on a Cra on CEF: a site's cookie and a tab's back and forward
+# scripts/engine-migration.sh, first half, on a Cra on CEF: a site's cookie and a tab's back and forward
 # list, saved by a clean quit (the relaunch) into the data folder the engine opens next.
 budget rss=900 stalls50=40
 pace 0.5

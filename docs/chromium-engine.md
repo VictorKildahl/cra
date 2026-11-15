@@ -88,7 +88,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
 
 1. **An existing profile on a signed build.** Install the engine build over a CEF Cra with saved passwords and
    signed-in sites: the "Cra Safe Storage" Keychain item opens the same cookies and passwords (no sign-outs, no
-   Keychain prompt). `scripts/test-engine-migration.sh` covers cookies and history on unsigned test copies only.
+   Keychain prompt). `scripts/engine-migration.sh` covers cookies and history on unsigned test copies only.
    Done 15 Nov on a copy of a real profile (signed engine build, no Keychain prompt): 3063 cookies on 1043 sites
    decrypt, the 2 saved passwords stay. The first try found every cookie deleted (below, 15 Nov).
 2. **The update itself.** Sparkle from the last CEF release to the engine release: the app relaunches on the
@@ -192,9 +192,9 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
   extension-popup-no-popout-wait, cra-permissions, fingerprinting-protection's OfflineAudioContext part, and
   ungoogled's avatar and intranet-redirect patches); the layer needed one change (Document Picture in Picture is
   `TYPE_FLOATING`). The sidebar player follows the media session (#411's follow-up, above), and
-  `scripts/test-engine-migration.sh` checks that a Cra on CEF's data folder opens on the engine (its CEF half
+  `scripts/engine-migration.sh` checks that a Cra on CEF's data folder opens on the engine (its CEF half
   passes; the folder layout is the same, `Chromium/Default`, and so are the Keychain item's names).
-  - On 158: the app builds and `scripts/test-engine-migration.sh` passes both halves (a CEF build's cookie and back
+  - On 158: the app builds and `scripts/engine-migration.sh` passes both halves (a CEF build's cookie and back
     and forward list open on the engine).
   - Audio scenarios (player-follows-session, player-skips-dings, music-notes) couldn't be judged overnight: with
     the displays asleep, this Mac's audio output stalled after the first render quantum for the CEF build as well
@@ -254,7 +254,7 @@ What the scenarios can't reach, checked by hand on a release build (`scripts/rel
   - 15 Nov: a copy of a real CEF profile on a signed engine build lost every cookie at the first launch. Chrome
     158 (`KeychainKeyProviderUserDataDirProtection`, on by default) makes the "v10" Keychain key unavailable
     outside Chrome's own data folder and encrypts with a "v11" key; every value Cra on CEF saved is v10, and a
-    cookie that won't decrypt deletes its whole site's cookies. `scripts/test-engine-migration.sh` had passed on
+    cookie that won't decrypt deletes its whole site's cookies. `scripts/engine-migration.sh` had passed on
     the 156 engine and wasn't run again on 158. The bridge turns the feature off (the item is Cra's own, so it
     protects nothing), and `cef-profile-cookies` opens a CEF build's cookie database (Tests/Fixtures/CEFProfile)
     in every run, so it needs no CEF build after the switch. Engine release -6.

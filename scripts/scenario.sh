@@ -95,7 +95,7 @@ OUT="$ROOT/build/scenarios/$NAME${CRA_FLAGS:+-${CRA_FLAGS//[^a-z]/}}"
 rm -rf "$OUT" && mkdir -p "$OUT"
 # The physical path: /tmp is a link to /private/tmp, and CEF takes a profile's folder for one
 # outside root_cache_path through it (in-memory storage instead), so spaces on a profile need it.
-# CRA_SCENARIO_DATA keeps the data folder for the next scenario (scripts/test-engine-migration.sh).
+# CRA_SCENARIO_DATA keeps the data folder for the next scenario (scripts/engine-migration.sh).
 if [ -n "${CRA_SCENARIO_DATA:-}" ]; then
   mkdir -p "$CRA_SCENARIO_DATA" && DATA="$(cd "$CRA_SCENARIO_DATA" && pwd -P)"
 else
