@@ -1,0 +1,19 @@
+# A page shown by a tab switch draws its first frame at once, as on CEF. Cra's pages are views in Cra's
+# windows, so each has a compositor of its own; Chrome made a new one on every show, and the page's
+# first animation frame came a display refresh late (8-13 ms after the show, against 0.4 ms on CEF).
+# It keeps it now while hidden (engine/chromium/patches/cra-page-compositor.patch). The fastest of
+# three shows, so one slow frame on a busy Mac doesn't fail it.
+requires screen
+budget rss=600 stalls50=5
+cra://open?url=${PAGE}?n=first-a
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.__f=[];document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'){const t=performance.now();requestAnimationFrame(()=>__f.push(performance.now()-t))}});'armed'"}
+cra://open?url=${PAGE}?n=first-b
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.__f=[];document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'){const t=performance.now();requestAnimationFrame(()=>__f.push(performance.now()-t))}});'armed'"}
+wait 1
+pace 0.5
+repeat 6 cra://action/nextTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'shows:'+__f.length+' firstFrame:'+Math.min(...__f).toFixed(1)"}
+expect-log firstFrame:[0-4]\.[0-9]"
