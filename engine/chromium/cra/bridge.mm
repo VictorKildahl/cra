@@ -28,6 +28,8 @@
 #include <objc/runtime.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -39,6 +41,7 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -2919,8 +2922,25 @@ void RunReadyBlocks() {
 + (void)runMessageLoop {
   NSArray<NSString*>* given = NSProcessInfo.processInfo.arguments;
   std::vector<std::string> args;
+  // Feature lists given on the command line (scripts/perf/bench.sh's BENCH_ARGS) join Cra's: Chromium reads
+  // one --enable-features and one --disable-features, and a feature in both stays enabled.
+  std::vector<std::string> givenEnabled, givenDisabled;
+  auto takeList = [](const std::string& arg, const char* prefix, std::vector<std::string>* into) {
+    if (arg.rfind(prefix, 0) != 0) {
+      return false;
+    }
+    for (const std::string& name : base::SplitString(arg.substr(strlen(prefix)), ",", base::TRIM_WHITESPACE,
+                                                     base::SPLIT_WANT_NONEMPTY)) {
+      into->push_back(name);
+    }
+    return true;
+  };
   for (NSString* arg in given) {
-    args.push_back(UTF8(arg));
+    std::string a = UTF8(arg);
+    if (takeList(a, "--enable-features=", &givenEnabled) || takeList(a, "--disable-features=", &givenDisabled)) {
+      continue;
+    }
+    args.push_back(a);
   }
   // The CEF bridge's switches (OnBeforeCommandLineProcessing), which say why each is there.
   args.push_back("--user-data-dir=" + UTF8(g_cache_path));
@@ -2943,8 +2963,14 @@ void RunReadyBlocks() {
       // item is Cra's own ("Cra Safe Storage"), so there is no other app's data to protect from.
       "KeychainKeyProviderUserDataDirProtection";
   // CraEngineMain adds AperitifHelpers to this one.
-  args.push_back("--enable-features=ForceWebRequestProxyForTest,WebContentsDiscard,InfiniteTabsFreezing,"
-                 "VideoPipForceTrustedForMediaPlaybackForTesting,HideDelegatedFrameHostMac");
+  std::vector<std::string> enabled = {"ForceWebRequestProxyForTest", "WebContentsDiscard", "InfiniteTabsFreezing",
+                                      "VideoPipForceTrustedForMediaPlaybackForTesting", "HideDelegatedFrameHostMac"};
+  std::erase_if(enabled, [&](const std::string& name) { return std::ranges::contains(givenDisabled, name); });
+  enabled.insert(enabled.end(), givenEnabled.begin(), givenEnabled.end());
+  for (const std::string& name : givenDisabled) {
+    disabled += "," + name;
+  }
+  args.push_back("--enable-features=" + base::JoinString(enabled, ","));
   if (NSString* allowlist = ManagedAuthServerAllowlist()) {
     args.push_back("--auth-server-allowlist=" + UTF8(allowlist));
   }
