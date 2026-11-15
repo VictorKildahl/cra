@@ -1,5 +1,6 @@
 # An unpacked extension installed, used, turned off in chrome://extensions, clicked while off,
-# turned on and removed. A click must never reach a disabled extension (GitHub #41).
+# turned on and removed. A click must never reach a disabled extension (GitHub #41). The first click
+# shows the popup: Chrome makes it as a child of the profile's hidden window, which must stay on screen.
 # promise: #41
 budget rss=600 stalls50=5
 cra://debug?installExtension=${FIXTURES}/Extension
@@ -8,6 +9,7 @@ cra://open?url=${PAGE}?n=ext
 wait 3
 cra://debug?extensionAction=${EXTENSION_ID}
 wait 2
+expect-log extension popup shown
 cra://dismiss
 cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
 wait 3

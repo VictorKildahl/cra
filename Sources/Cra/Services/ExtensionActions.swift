@@ -125,6 +125,8 @@ final class ExtensionActions {
             let unsized = popup.frame.width <= 25 + 2 * ExtensionPopupWindow.bubbleInset
             if !unsized || popup.alphaValue > 0 || Date().timeIntervalSince(since) > 0.25 {
                 HitchMonitor.mark("extension present window=\(popup.windowNumber) frame=\(NSStringFromRect(popup.frame)) parent=\(popup.parent?.windowNumber ?? -1)")
+                // For scenarios: a popup Chrome made but never showed (its hidden window off screen) never gets here.
+                CraLog.note("extension popup shown")
                 placingOwnPopup = false
                 Perf.time(.extensionPopup) { ExtensionPopupWindow.present(popup, anchor: anchor) }
                 revealHiddenBubbles()

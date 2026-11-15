@@ -127,6 +127,8 @@
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/views/controls/webview/cra_hosted_page.h"
+#include "ui/compositor/compositor.h"
+#include "ui/views/widget/widget.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -632,6 +634,20 @@ class PageHost : public TabStripModelObserver {
     placeholder_->SetUserData(content::CraSparePageKey(), std::make_unique<base::SupportsUserData::Data>());
     browser->GetTabStripModel()->AddObserver(this);
     MakeHostWindow(window());
+    StopDrawing();
+  }
+
+  // The window is never seen, but on screen (a bubble Chrome anchors to it, an extension's popup, only shows over a
+  // window that is), and its compositor drew for it: the display link that ticked in the GPU process at idle (20 tabs
+  // idle: 95 wakeups a second against CEF's 46-50; 41 without, docs/speed.md). Chrome's macOS widgets set their
+  // compositor's visibility only with the NotifyCompositorOf* features, off, so it stays hidden. The bubbles are
+  // windows with compositors of their own.
+  void StopDrawing() {
+    NSWindow* hidden = window();
+    views::Widget* widget = hidden ? views::Widget::GetWidgetForNativeWindow(gfx::NativeWindow(hidden)) : nullptr;
+    if (ui::Compositor* compositor = widget ? widget->GetCompositor() : nullptr) {
+      compositor->SetVisible(false);
+    }
   }
 
   BrowserWindowInterface* browser() { return browser_; }
@@ -650,6 +666,7 @@ class PageHost : public TabStripModelObserver {
     [hidden.parentWindow removeChildWindow:hidden];
     [hidden setFrame:cra.frame display:NO];
     [cra addChildWindow:hidden ordered:NSWindowAbove];
+    StopDrawing();
   }
 
   // Makes the blank page the active one, so a popup that opened in front leaves Chrome's window before Cra
