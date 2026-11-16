@@ -10,8 +10,8 @@
 #                               also copies the app to <dir>/Cra.app
 #   CRA_ARCH=x86_64 scripts/build.sh
 #                               builds for the other CPU (arm64 or x86_64) into
-#                               build/<arch>/Cra.app, with that CPU's CEF in
-#                               vendor/cef-<arch> and SwiftPM's files in build/swiftpm-<arch>
+#                               build/<arch>/Cra.app, with that CPU's engine in
+#                               vendor/engine-<arch> and SwiftPM's files in build/swiftpm-<arch>
 # Cra runs on Chrome's own framework with Cra's layer (docs/chromium-engine.md), the engine
 # scripts/fetch-engine.sh downloads into vendor/engine (vendor/engine-<arch> for the other CPU).
 #   CRA_ENGINE_OUT=~/chromium.noindex/src/out/Cra_arm64 scripts/build.sh
@@ -29,8 +29,8 @@ CONFIG="${1:-release}"
 VERSION="${CRA_VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${CRA_BUILD:-$(date +%Y%m%d%H%M)}"
 
-# The host CPU keeps the usual paths; the other one gets its own CEF, SwiftPM folder and
-# app, so building it never replaces vendor/cef (worktrees share it) or build/Cra.app.
+# The host CPU keeps the usual paths; the other one gets its own engine, SwiftPM folder and
+# app, so building it never replaces vendor/engine (worktrees share it) or build/Cra.app.
 # scripts/release.sh finds the app with the same rule.
 ARCH="${CRA_ARCH:-$(uname -m)}"
 case "$ARCH" in
