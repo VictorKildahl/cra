@@ -3532,6 +3532,19 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   (black came out #2F2A36), Dark darkened every colour and Light lifted dark ones. Pinned by
   `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`, `darkGradientFollowsTheSlider` and
   `lightAndDarkKeepThePickedColourAsArcDoes`.
+- [O video] The pad's drag and + (16 Nov 2026, issue #455, the reporter's side-by-side recording of their Arc, colours sampled from
+  the video so ±10/255): a Drab red dragged round Arc's pad stayed dark, HSB brightness ≈ 0.4 through #682D33,
+  #203B5F, #1B3D5A and #273A6D: the drag turns hue and saturation and keeps the colour's brightness. Arc's +
+  is off on its black and white swatches (binary symbols `isGreyscale`, `canAddColor`). Pressing the moon
+  toggle darkened the pad's red (#6B2D36 → #461F2C) and the sun left it as it was; one sample, the rule behind it
+  (`lightnessRange`, `darkModeBiasSetting`, `preservedLightness`) is not worked out. The card behind the pad is a
+  neutral grey material, light (#7D8082) on Light and dark (#232528) on Dark.
+- Cra (#455): `SpaceColorWheel.placed` keeps the first colour's brightness on a drag (0.95 on an empty pad; a grey
+  no darker than 0.2, so black shows a hue once dragged, a Cra choice) and `adding(to:)` gives the new colour that
+  brightness; `canAdd(_ key:)` turns + off on a grey. Before, every drag and + went to brightness 0.95, so a dark
+  swatch jumped to a light colour and + on black added white. Pinned by `dragKeepsTheColoursBrightness`,
+  `emptyPadAndGreysOnTheDrag` and `plusIsOffOnGreys`. Not copied yet: the moon toggle's darkening and the light
+  card on Light.
 
 ## The theme editor's presets and commit (Arc 1.171, 4 Nov 2026, issue #170, asset catalog + strings)
 - [O static] The swatches are named colours in `ARCClients_BaseAssets.bundle`'s Assets.car (`assetutil --info`),

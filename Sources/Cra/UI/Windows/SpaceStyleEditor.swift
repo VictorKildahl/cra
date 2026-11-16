@@ -130,8 +130,9 @@ struct PadState: Equatable {
 }
 
 /// The dotted pad, a colour wheel: a handle's angle (clockwise from three o'clock) is its hue and its
-/// distance from the centre its saturation (full at 153 pt), brightness 0.95. A second and third
-/// colour follow the first 40° either side; dragging any handle turns the set.
+/// distance from the centre its saturation (full at 153 pt); a drag keeps the colour's brightness
+/// (0.95 on an empty pad). A second and third colour follow the first 40° either side; dragging any
+/// handle turns the set. + is off on a grey, as Arc's is (#455).
 private struct ColorPad: View {
     @Binding var pad: PadState
     @State private var hoveredKnob: Int?
@@ -195,7 +196,7 @@ private struct ColorPad: View {
                     HStack(spacing: 16) {
                         // − takes the last colour too: an empty pad is Arc's colourless theme (#300).
                         padButton("minus", label: "Remove a color", enabled: SpaceColorWheel.canRemove(pad.key.count)) { pad.key.removeLast() }
-                        padButton("plus", label: "Add a color", enabled: SpaceColorWheel.canAdd(pad.key.count)) { addColor() }
+                        padButton("plus", label: "Add a color", enabled: SpaceColorWheel.canAdd(pad.key)) { addColor() }
                     }
                     .padding(.bottom, 20)
                 }
@@ -213,27 +214,18 @@ private struct ColorPad: View {
         .accessibilityLabel(label)
     }
 
-    /// Handle `i` goes under the pointer; the others keep their place around it.
+    /// Handle `i` goes under the pointer; the others keep their place around it, and every colour
+    /// keeps the first one's brightness (SpaceColorWheel.placed, #455).
     private func place(handle i: Int, at p: CGPoint, centre c: CGPoint) {
         let dx = p.x - c.x, dy = p.y - c.y
-        var angle = atan2(dy, dx) * 180 / .pi - Self.offset(i)
-        angle = (angle.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
-        let sat = min(1, hypot(dx, dy) / Self.reach)
-        let count = max(1, pad.key.count)
-        pad.key = (0..<count).map { Self.hex(hue: angle + Self.offset($0), saturation: sat) }
+        let angle = Double(atan2(dy, dx) * 180 / .pi)
+        let sat = Double(min(1, hypot(dx, dy) / Self.reach))
+        pad.key = SpaceColorWheel.placed(pad.key, handle: i, hue: angle, saturation: sat)
     }
 
-    private func addColor() {
-        guard let first = pad.key.first else { return }
-        let (h, s) = Self.wheel(first)
-        pad.key.append(Self.hex(hue: h + Self.offset(pad.key.count), saturation: s))
-    }
+    private func addColor() { pad.key = SpaceColorWheel.adding(to: pad.key) }
 
     private static func offset(_ i: Int) -> CGFloat { CGFloat(SpaceColorWheel.offset(i)) }
-
-    private static func hex(hue: CGFloat, saturation: CGFloat) -> String {
-        SpaceColorWheel.hex(hue: Double(hue), saturation: Double(saturation), brightness: 0.95)
-    }
 
     private static func wheel(_ hex: String) -> (CGFloat, CGFloat) {
         let w = SpaceColorWheel.hsb(hex)
