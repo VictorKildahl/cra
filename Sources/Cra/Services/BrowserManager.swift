@@ -597,7 +597,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// asking before they close (their own onbeforeunload), in a call (even with the camera and
     /// microphone off) or using a device stay awake, and are asked again only after
     /// `refusalBackoff`; those don't count toward the policy's limit. The log says once why a page
-    /// stays awake.
+    /// stays awake. Pages on a site Settings keeps active are never asked by the clock and come
+    /// last under memory pressure (TabSleepPolicy.candidates, #458).
     func sleepIdleTabs(_ policy: TabSleepPolicy) {
         let now = clock.now
         let cutoff = now.addingTimeInterval(-policy.hiddenFor)
@@ -779,8 +780,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let recent = recentlyShown
         for (id, rt) in runtimes {
             let b = rt.browser
+            // A site the user keeps active keeps running too, as in Chrome, whose freezing reads the
+            // same list (#458); one listed after its vote drops the vote on the next pass.
             let vote = !recent.contains(id) && !rt.discarded && rt.hiddenAt.map { $0 < cutoff } == true && b.isCreated && !b.isClosed
-                && !(nowPlaying?.entries.contains { $0.id == id } ?? false)
+                && !(nowPlaying?.entries.contains { $0.id == id } ?? false) && !keptActive(rt)
             if vote != rt.freezeVoted { setFreezingVote(rt, vote) }
         }
     }
@@ -818,8 +821,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     private var sleepPages: [TabSleepPolicy.Page] {
         // A discarded page has given its memory back, like a closed one: it holds none of the 10 places.
-        runtimes.values.filter { !$0.discarded }.map { TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt) }
+        runtimes.values.filter { !$0.discarded }.map {
+            TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt, keptActive: keptActive($0))
+        }
     }
+
+    /// Settings ▸ Tabs ▸ "Always keep these sites active" lists the page's site (#458). Incognito
+    /// pages too: the list names sites, not a profile's data.
+    private func keptActive(_ rt: TabRuntime) -> Bool { store.settings.keepsActive(url: rt.browser.currentURL) }
 
     /// The tabs on screen now, then the ones hidden most recently, up to `protectedRecentTabs`.
     private var recentlyShown: Set<UUID> {

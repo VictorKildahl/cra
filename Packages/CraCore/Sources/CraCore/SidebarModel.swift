@@ -620,6 +620,10 @@ public struct AppSettings: Codable, Equatable {
     public var tabSleepAfter: TabSleepThreshold = .fourHours
     /// Tabs ▸ "Force tabs out of memory when the Mac is short of memory" (GitHub #153), off like Arc.
     public var tabSleepOnMemoryPressure: Bool = false
+    /// Tabs ▸ "Always keep these sites active" (GitHub #458), Arc's list at arc://settings/performance:
+    /// their pages are never closed by the clock or frozen, and go last when the Mac is short of memory.
+    /// For every profile: Cra's settings are one file.
+    public var keepActiveSites: [KeepActiveSite] = []
     /// Privacy ▸ "Always use secure connections": Chrome's HTTPS-Only Mode.
     public var httpsOnly: Bool = false
     /// Privacy ▸ "Fingerprinting protection" (not in Arc, off by default): Cra's Chromium adds
@@ -952,6 +956,7 @@ extension AppSettings {
         tabSleepTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .tabSleepTimerEnabled) ?? true
         tabSleepAfter = (try? c.decodeIfPresent(TabSleepThreshold.self, forKey: .tabSleepAfter)) ?? .fourHours
         tabSleepOnMemoryPressure = try c.decodeIfPresent(Bool.self, forKey: .tabSleepOnMemoryPressure) ?? false
+        keepActiveSites = (try? c.decodeIfPresent([KeepActiveSite].self, forKey: .keepActiveSites)) ?? []
         httpsOnly = try c.decodeIfPresent(Bool.self, forKey: .httpsOnly) ?? false
         fingerprintingProtection = try c.decodeIfPresent(Bool.self, forKey: .fingerprintingProtection) ?? false
         websiteAppearance = (try? c.decodeIfPresent(WebsiteAppearance.self, forKey: .websiteAppearance)) ?? .automatic

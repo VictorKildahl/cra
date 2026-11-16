@@ -143,7 +143,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     /// when a report goes out. `autoHideToolbar` and `autoHideLittleWindowToolbar` are here because a
     /// feature Arc never had adds nothing to what a report says (CONTRIBUTING.md).
     public static let unreportedSettings: Set<String> = [
-        "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "linkRoutes", "mediaFolders", "mediaHidden",
+        "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "keepActiveSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar", "autoHideLittleWindowToolbar",
     ]

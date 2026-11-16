@@ -54,6 +54,9 @@ enum TestRoot { case today }
         var shareThemeWithWebsites = true
         var blockCookieBanners = false
         var littleWindowOnOptionCommandClick = false
+        /// Settings ▸ Tabs ▸ "Always keep these sites active" (#458), by host; AppSettings matches subdomains.
+        var keepActiveHosts: Set<String> = []
+        func keepsActive(url: String) -> Bool { keepActiveHosts.contains(URL(string: url)?.host ?? "") }
     }
     func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {

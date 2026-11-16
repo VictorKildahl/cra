@@ -331,6 +331,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard TabSleepPolicy.passDue(lastPass: lastSleepPass, now: now) else { return }
         lastSleepPass = now
         let settings = store.settings
+        // A profile that loaded since the last pass gets the kept-active sites in Chromium's list, and
+        // an edit on chrome://settings/performance comes back to Settings (#458).
+        ChromeKeepActiveSites.apply(store: store)
         for w in mainWindows {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
             w.releaseHiddenFrames(now: composition.clock.now)
@@ -360,6 +363,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeChanges(of: { [store] in store.settings.httpsOnly }, apply: CraCEFRuntime.setHttpsOnlyModeEnabled)
         observeChanges(of: { [store] in store.settings.fingerprintingProtection },
                        apply: CraCEFRuntime.setFingerprintingProtectionEnabled)
+        // Settings ▸ Tabs ▸ "Always keep these sites active" (#458), for Chromium's own freezing too.
+        observeChanges(of: { [store] in store.settings.keepActiveSites }) { [store] _ in ChromeKeepActiveSites.apply(store: store) }
     }
 
     /// Chromium's secure DNS setting (Settings > Privacy, chrome://settings/security), left on
