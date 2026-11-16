@@ -25,6 +25,7 @@
 #     stalls16=<n> (dropped frames: stalls over 16 ms; no budget unless a scenario sets one)
 #     (stalls count from the first command; start-up has its own launchstall budget)
 #   helpers baseline | helpers settle [slack]
+#   renderers <max>             at most that many renderer processes (within 5 s)
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
 #   expect-log <regex>          a line Cra logged (cra.log or stdout), or ${WS}'s "ws open" / "ws closed"
 #   reject-log <regex>          no such line logged so far
@@ -276,6 +277,12 @@ count_faults() {
 }
 send() { printf '%s\n' "$1" >> "$CMD"; }
 helpers() { pgrep -P "$PID" 2>/dev/null | wc -l | tr -d ' '; }
+# Cra's renderer processes, as Chrome names them on their command lines.
+renderers() {
+  local n=0 c
+  for c in $(pgrep -P "$PID" 2>/dev/null); do ps -ww -o command= -p "$c" | grep -q -- '--type=renderer' && n=$((n + 1)); done
+  echo "$n"
+}
 alive() { kill -0 "$PID" 2>/dev/null; }
 
 # Ready once Cra reads the command file (it empties the file when it starts reading).
@@ -316,6 +323,11 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         for _ in $(seq 1 25); do now=$(helpers); [ "$now" -le $((BASELINE + slack)) ] && break; sleep 0.2; done
         [ "$now" -le $((BASELINE + slack)) ] || problem "helper processes: $now, baseline $BASELINE (+$slack) after 5 s"
       fi ;;
+    renderers)
+      now=$(renderers)
+      for _ in $(seq 1 25); do now=$(renderers); [ "$now" -le "$2" ] && break; sleep 0.2; done
+      echo "  renderers: $now (at most $2)"
+      [ "$now" -le "$2" ] || problem "renderer processes: $now, at most $2" ;;
     relaunch)
       count_faults
       # The next Cra starts its hitch log afresh: keep this one's.

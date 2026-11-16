@@ -627,11 +627,14 @@ class DevToolsFrontendObserver : public content::WebContentsObserver {
 class PageHost : public TabStripModelObserver {
  public:
   explicit PageHost(BrowserWindowInterface* browser) : browser_(browser) {
-    // The blank page: the Browser stays open with no page of Cra's in it.
-    chrome::AddTabAt(browser, GURL(url::kAboutBlankURL), -1, true);
-    placeholder_ = browser->GetTabStripModel()->GetActiveWebContents();
+    // The blank page: the Browser stays open with no page of Cra's in it. Never navigated, so it has no renderer
+    // process; about:blank took one of its own for as long as Cra ran.
+    std::unique_ptr<content::WebContents> blank =
+        content::WebContents::Create(content::WebContents::CreateParams(browser->GetProfile()));
+    placeholder_ = blank.get();
     // Not a tab to extensions (chrome.tabs.query, chrome.windows.getAll), as a spare page isn't.
     placeholder_->SetUserData(content::CraSparePageKey(), std::make_unique<base::SupportsUserData::Data>());
+    browser->GetTabStripModel()->AppendWebContents(std::move(blank), /*foreground=*/true);
     browser->GetTabStripModel()->AddObserver(this);
     MakeHostWindow(window());
     StopDrawing();

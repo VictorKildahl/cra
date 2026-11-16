@@ -295,3 +295,6 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
     every one ran the download flight. Only a download made in progress is reported now
     (`download-history-quiet`). 1Password's helper refuses any Cra outside /Applications/Cra.app, CEF builds
     too (a test copy needs adding in 1Password ▸ Settings ▸ Browser); not the engine.
+  - 16 Nov, -9: the hidden window that holds a profile's pages kept an about:blank tab, and with it a renderer
+    process for as long as Cra ran. Its blank page is now a page that never loads, which has no renderer
+    (`one-tab-renderers`).
