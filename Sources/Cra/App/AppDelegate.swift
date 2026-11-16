@@ -1491,7 +1491,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let label = dict["devToolsShown"] {
                 for (i, l) in littleWindows.enumerated() { CraLog.note("little devtools \(label): little\(i) \(l.debugDevTools)") }
-                CraLog.note("tab devtools \(label): windows=\(littleWindows.count) open=\(main.currentBrowser?.hasDevTools == true ? 1 : 0)")
+                // drawn: the frontend draws in Cra's window, which then holds the layer its frames come in
+                // (Chromium's CALayerHost, as under every page's view). Chrome drew it into its own (never
+                // shown) DevTools window, and the card stayed white (#468).
+                func drawn(_ layer: CALayer?) -> Int {
+                    guard let layer else { return 0 }
+                    let frames = layer.contents != nil || String(describing: type(of: layer)) == "CALayerHost"
+                    return (frames ? 1 : 0) + (layer.sublayers ?? []).reduce(0) { $0 + drawn($1) }
+                }
+                let dev = main.currentBrowser?.devToolsWindow?.contentView
+                CraLog.note("tab devtools \(label): windows=\(littleWindows.count) open=\(main.currentBrowser?.hasDevTools == true ? 1 : 0)"
+                    + (dev.map { " drawn=\(drawn($0.layer) > 0 ? 1 : 0)" } ?? ""))
                 return
             }
             if let label = dict["littleShown"] {

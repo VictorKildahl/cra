@@ -921,3 +921,4 @@
 #466   Tests/Scenarios/page-menu-shows.scenario  c85711765757
 #467   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::aSecondTapAcrossSpacesGoesBack  e155ddc97ee6
 #467   Tests/Scenarios/tab-switcher-all-spaces.scenario  b5befa94ecac
+#468   Tests/Scenarios/devtools-draws.scenario  97ee7dc162fd
