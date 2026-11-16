@@ -4152,7 +4152,16 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   second, line by line while it streams. A follow-up ends with "Quote the page in an <excerpt> tag if it answers
   this.": after a summary (no quotes) the model kept answering without them (9 of 24 follow-ups quoted, 16 with it).
   An earlier answer is sent again up to 800 characters: a summary that filled the context left the next questions
-  20 % of the page. The card sits
+  20 % of the page. A summary or a list (`AskOnPage.Form`: "summarize", "list out", "bullet points", "key points",
+  "tl;dr"…, unless the question asks for quotes or references) gets no quote field, as Arc's example answers
+  "summary" with a brief summary and no excerpt (#417): the answer is a list of at most eight points (guided
+  generation's count), each on its own "• " line, a repeated point left out. Measured on the on-device model
+  (16 Nov 2026, the 0.1.43 release notes and a Haiti article, 12 summary/list questions, real token counts): with the
+  quote field, 11 answers quoted the page (one refused); asked to list the release's features, it copied one
+  paragraph, or ran five features and their page sentences together.
+  With one free-text answer instead, the model wrote 11–23 points as one paragraph, copied page sentences, and 3
+  of 12 ran past its room. As a list of points: 11 lists of up to eight short points, no quotes, the same one
+  refused. The card sits
   where the find bar does, 10 pt in, with a 10 pt corner. Settings ▸ Max ▸ Ask on Page, off by default.
 
 ## Little Arc over a full-screen app (Arc 1.171, 5 Nov 2026, issue #186, Victor's Arc + a test full-screen app)

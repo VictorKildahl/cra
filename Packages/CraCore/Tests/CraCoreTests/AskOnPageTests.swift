@@ -130,6 +130,37 @@ struct AskOnPageTests {
         #expect(mixed.quotes.map(\.state) == [.verified, .notFound])
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417"), arguments: [
+        // The reporter's questions on a release page (13 Nov 2026), and other ways to ask for one.
+        "summarize the top featuress", "list out all the features released today", "Summarize this page.",
+        "summarise it in bullet points", "what are the key points?", "tl;dr", "TLDR please", "give me an overview of the history",
+        "List the main exports", "make a list of the fixes", "Sum up the article", "What are the main takeaways?",
+    ])
+    func aSummaryOrAListIsAnsweredWithoutQuotes(question: String) {
+        #expect(AskOnPage.Form(question: question) == .summary)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417"), arguments: [
+        // Questions keep Arc's quote and short answer; so does a summary that asks for quotes.
+        "what is Instant Links?", "When did Haiti become independent?", "Is the moon on the list?", "Who listed it?",
+        "summarize with quotes from the page", "List the fixes with references", "give me a summary and cite the page",
+        "Where does it say the summary is due?", "What is a bulletin?",
+    ])
+    func aQuestionOrAnAskedForQuoteIsAnsweredWithQuotes(question: String) {
+        #expect(AskOnPage.Form(question: question) == .quoted)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func aSummarysPointsEachGetALineOnce() {
+        // The model's points for "give me a short summary of the fixes" on a page with three fixes.
+        let points = ["A ⌃, ⌥ or F-key App Shortcut works while a page has the keyboard.", "• A space’s emoji draws itself.",
+                      " ", "Docked pages keep square corners.", "A ⌃, ⌥ or F-key App Shortcut works while a page has the keyboard.",
+                      "a space’s  emoji draws itself."]
+        let listed = AskOnPage.listed(points: points)
+        #expect(listed == "• A ⌃, ⌥ or F-key App Shortcut works while a page has the keyboard.\n• A space’s emoji draws itself.\n• Docked pages keep square corners.")
+        #expect(AskOnPage.lines(listed).count == 3)
+        #expect(AskOnPage.listed(points: []).isEmpty)
+    }
+
     @Test func completeRequiredFieldsAreStillRequired() {
         for draft in [AskOnPage.Draft(answer: "Answer", keyAnswer: "Answer"), .init(excerpts: [], keyAnswer: "Answer"),
                       .init(excerpts: [], answer: " ", keyAnswer: " ")] {

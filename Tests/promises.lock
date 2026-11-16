@@ -811,10 +811,14 @@
 #416   Tests/BackForwardMenuViewTests.swift::historyMenuCase  916d0b476141
 #416   Tests/Scenarios/back-forward-menu.scenario  0c2bcb383c59
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPagePromptTests.swift::aFollowUpIsItsOwnTurnAfterThePage  5c5231d46535
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPagePromptTests.swift::aSummaryIsAskedForAListWithoutQuotes  a018a252774a
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPagePromptTests.swift::arcsExamplesAreLeftOut  7fc21f372acd
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPagePromptTests.swift::theModelIsNotToldToWriteADialogue  6323419c7d10
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aQuestionOrAnAskedForQuoteIsAnsweredWithQuotes  1dd576391731
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aStreamedAnswerReachesTheCardTenTimesASecond  a6fef8165f82
 #417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aStreamingAnswerIsDrawnLineByLine  bb4bbe76e5bb
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aSummaryOrAListIsAnsweredWithoutQuotes  a2f246b6a846
+#417   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::aSummarysPointsEachGetALineOnce  e2cf00ea0ae1
 #417   Tests/AskOnPageServiceTests.swift::aFollowUpKeepsItsOwnCurrentQuestionAndAnswer  6f2dab44d9e2
 #417   Tests/AskOnPageServiceTests.swift::aStreamedAnswerReachesTheCardTenTimesASecond  575d2b3f9d9a
 #417   Tests/AskOnPageServiceTests.swift::anEchoedRequestIsAskedAgain  d1f194e424f7
