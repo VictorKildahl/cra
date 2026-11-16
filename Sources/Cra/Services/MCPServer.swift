@@ -127,10 +127,13 @@ final class MCPServer {
         guard client >= 0 else { return }
         _ = fcntl(client, F_SETFD, FD_CLOEXEC)
         _ = fcntl(client, F_SETFL, fcntl(client, F_GETFL) & ~O_NONBLOCK)
-        guard clients.count < 8 else { close(client); return }
         var uid: uid_t = 0
         var gid: gid_t = 0
         guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { close(client); return }
+        guard MCPConnection.admit(client, open: clients.count) else {
+            CraLog.note("mcp: turned a connection away, \(clients.count) agents already connected")
+            return
+        }
         var one: Int32 = 1
         setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
         clients.insert(client)
@@ -146,7 +149,9 @@ final class MCPServer {
         connections[owner] = client
         let state = MCPClientState()
         let writer = DispatchQueue(label: "cra.mcp.writer")
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        // A thread of its own: an idle agent blocks here for as long as its session runs, and
+        // dozens of them on GCD's shared pool would starve everything else queued there.
+        let thread = Thread { [weak self] in
             let reader = MCPConnection.Reader()
             let pending = DispatchGroup()
             let capacity = DispatchSemaphore(value: 32)
@@ -223,6 +228,9 @@ final class MCPServer {
                 close(client)
             }
         }
+        thread.name = "cra.mcp.client"
+        thread.qualityOfService = .utility
+        thread.start()
     }
 
     /// Whether this connection's agent may use Cra. The first time an agent connects Cra asks

@@ -175,6 +175,29 @@ public enum MCPProtocol {
         return true
     }
 
+    /// Agent connections open at once. Each agent session holds one for as long as it runs,
+    /// mostly idle (a Claude Code session from launch, Codex two per process), so eight
+    /// turned away the ninth session of an ordinary day (#459).
+    public static let clientLimit = 32
+    /// JSON-RPC error code of the answer that turns a connection away past clientLimit.
+    public static let fullCode = -32001
+    public static let fullMessage = "Cra already has \(clientLimit) agent connections open. Close an agent session you aren't using, then reconnect."
+
+    /// What a connection past clientLimit gets for its first message: an error that says why,
+    /// with that request's id so the agent shows it (null when the message had none).
+    public static func fullReply(to line: Data) -> Data {
+        let request = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any]
+        let id = request?["id"].flatMap { $0 is NSNull ? nil : $0 } ?? NSNull()
+        return (try? JSONSerialization.data(withJSONObject: error(id: id, code: fullCode, message: fullMessage), options: [.sortedKeys])) ?? Data()
+    }
+
+    /// The message of a fullReply, so the bridge can also say it on stderr; nil for any other line.
+    public static func fullMessage(in line: Data) -> String? {
+        guard let reply = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
+              let error = reply["error"] as? [String: Any], error["code"] as? Int == fullCode else { return nil }
+        return error["message"] as? String
+    }
+
     public static func error(id: Any, code: Int, message: String) -> [String: Any] {
         ["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": message]]
     }

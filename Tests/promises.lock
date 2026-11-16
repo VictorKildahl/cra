@@ -858,3 +858,5 @@
 #445   Packages/CraCore/Tests/CraCoreTests/TrafficLightLayoutTests.swift::tahoeMatchesArc  9f568ad77ed8
 #446   Tests/Scenarios/sidebar-empty-double-click.scenario  b3449dbc21f4
 #452   Tests/PolicyTests.swift::defaultBrowserPicker  ea5c3e09748a
+#459   Packages/CraCore/Tests/CraCoreTests/MCPProtocolTests.swift::fullServerReplySaysWhy  c603156a09f1
+#459   Tests/MCPTransportTests.swift::fullServerSaysWhy  78c75dce7c78
