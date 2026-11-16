@@ -1757,6 +1757,10 @@ void RunReadyBlocks() {
   NSString* _pendingURL;
   BOOL _waitingForPopup;
   BOOL _audioMuted;
+  // The app's find session (AskOnPage.FindRequest): every result Chrome reports is tagged with it. Nil
+  // after -stopFinding:, so a late result of a stopped search reaches nobody.
+  NSUUID* _findGeneration;
+  BOOL _findQuote;
   BOOL _closeRequested;
   BOOL _pendingFocus;
   // The saved back and forward list the page opens with (GitHub #273), until it has gone in.
@@ -2308,11 +2312,21 @@ void RunReadyBlocks() {
 
 - (void)pageFindResult {
   auto* find = find_in_page::FindTabHelper::FromWebContents(_contents);
-  if (!find || ![_delegate respondsToSelector:@selector(browser:didFindMatches:activeMatch:)]) {
+  SEL selector = @selector(browser:didFindMatches:activeMatch:generation:quote:identifier:finalUpdate:);
+  // The session is read here, as the result arrives: a later search never lends it its tag. Chrome's
+  // find helper drops replies to any request but its current one.
+  NSUUID* generation = _findGeneration;
+  if (!find || !generation || ![_delegate respondsToSelector:selector]) {
     return;
   }
   const find_in_page::FindNotificationDetails& result = find->find_result();
-  [_delegate browser:self didFindMatches:result.number_of_matches() activeMatch:result.active_match_ordinal()];
+  [_delegate browser:self
+      didFindMatches:result.number_of_matches()
+         activeMatch:result.active_match_ordinal()
+          generation:generation
+               quote:_findQuote
+          identifier:result.request_id()
+         finalUpdate:result.final_update()];
 }
 
 - (void)pageFocused {
@@ -2682,13 +2696,29 @@ void RunReadyBlocks() {
     zoom->SetZoomLevel(level);
   }
 }
-- (void)findText:(NSString*)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext {
-  // Chrome's find helper tells a new search from the next match of the same one itself.
-  if (auto* find = _contents ? find_in_page::FindTabHelper::FromWebContents(_contents) : nullptr) {
-    find->StartFinding(base::SysNSStringToUTF16(text), forward, matchCase, /*find_match=*/true);
+- (void)findText:(NSString*)text
+         forward:(BOOL)forward
+       matchCase:(BOOL)matchCase
+        findNext:(BOOL)findNext
+      generation:(NSUUID*)generation
+           quote:(BOOL)quote {
+  auto* find = _contents ? find_in_page::FindTabHelper::FromWebContents(_contents) : nullptr;
+  if (!find) {
+    return;
   }
+  // Within one session Chrome's find helper tells a new search from the next match itself. A new
+  // session stops the old one first, so the same text again (A, B, A) is a fresh search with its own
+  // request, and the old one's replies are dropped.
+  if (![_findGeneration isEqual:generation] || _findQuote != quote) {
+    _findGeneration = nil;
+    find->StopFinding(find_in_page::SelectionAction::kKeep);
+    _findGeneration = generation;
+    _findQuote = quote;
+  }
+  find->StartFinding(base::SysNSStringToUTF16(text), forward, matchCase, /*find_match=*/true);
 }
 - (void)stopFinding:(BOOL)clearSelection {
+  _findGeneration = nil;
   if (auto* find = _contents ? find_in_page::FindTabHelper::FromWebContents(_contents) : nullptr) {
     find->StopFinding(clearSelection ? find_in_page::SelectionAction::kClear : find_in_page::SelectionAction::kKeep);
   }
@@ -2847,6 +2877,24 @@ void RunReadyBlocks() {
 - (void)evaluateInIsolatedWorld:(NSString*)world
                          params:(NSString*)params
                      completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+  [self evaluateInIsolatedWorld:world
+                         params:params
+                      ifCurrent:^BOOL {
+                        return YES;
+                      }
+                     completion:completion];
+}
+
+// The caller's check runs again before each step and right before the script is sent: Ask on Page
+// drops an evaluation whose page or question changed while the frame and world were looked up.
+- (void)evaluateInIsolatedWorld:(NSString*)world
+                         params:(NSString*)params
+                      ifCurrent:(BOOL (^)(void))ifCurrent
+                     completion:(void (^)(NSString* _Nullable, NSString* _Nullable))completion {
+  if (!ifCurrent()) {
+    completion(nil, @"retired evaluation");
+    return;
+  }
   CraBrowser* __weak weakSelf = self;
   id (^parse)(NSString*) = ^id(NSString* json) {
     return json ? [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding]
@@ -2859,7 +2907,11 @@ void RunReadyBlocks() {
                 completion:^(NSString* tree, NSString* error) {
                   NSString* frameID = [parse(tree) valueForKeyPath:@"frameTree.frame.id"];
                   CraBrowser* strong = weakSelf;
-                  if (!strong || ![frameID isKindOfClass:NSString.class]) {
+                  if (!strong || !ifCurrent()) {
+                    completion(nil, @"retired evaluation");
+                    return;
+                  }
+                  if (![frameID isKindOfClass:NSString.class]) {
                     completion(nil, error ?: @"no frame");
                     return;
                   }
@@ -2872,13 +2924,21 @@ void RunReadyBlocks() {
                                     NSNumber* context = [parse(made) valueForKey:@"executionContextId"];
                                     NSMutableDictionary* evaluate = [parse(params) mutableCopy];
                                     CraBrowser* again = weakSelf;
-                                    if (!again || ![context isKindOfClass:NSNumber.class] ||
+                                    if (!again || !ifCurrent()) {
+                                      completion(nil, @"retired evaluation");
+                                      return;
+                                    }
+                                    if (![context isKindOfClass:NSNumber.class] ||
                                         ![evaluate isKindOfClass:NSMutableDictionary.class]) {
                                       completion(nil, madeError ?: @"no isolated world");
                                       return;
                                     }
                                     evaluate[@"contextId"] = context;
                                     NSData* json = [NSJSONSerialization dataWithJSONObject:evaluate options:0 error:nil];
+                                    if (!ifCurrent()) {
+                                      completion(nil, @"retired evaluation");
+                                      return;
+                                    }
                                     [again sendDevToolsMethod:@"Runtime.evaluate"
                                                        params:[[NSString alloc] initWithData:json
                                                                                     encoding:NSUTF8StringEncoding]

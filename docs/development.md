@@ -149,6 +149,13 @@ to Markdown or `docs/` alone runs nothing.
   popup is in front, and a closed opener's page is let go.
 - `scripts/test-link-summary-panel.sh`: 5-Second Previews' card window (`LinkSummaryPanel`) off screen with
   a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
+- Ask on Page (⌘F's find-or-ask card), four harnesses:
+  `scripts/test-ask-on-page-service.sh` runs `AskOnPageService`, the card's controller and the find panel's
+  Use Selection path on a `ManualScheduler` with a scripted model (streaming at ten updates a second, follow-ups
+  as turns, an echoed request asked again, overflow and failures); `scripts/test-ask-on-page-lifecycle.sh` the
+  same service on the real `SidebarStore` (Max switches, profiles, availability); `scripts/test-ask-on-page-content.sh`
+  the page-text and quote scripts in a real WKWebView on `Tests/Fixtures/AskOnPage`; `scripts/test-ask-on-page-quotes.sh`
+  the quote script on a scripted DOM in Node, and the CEF bridge's isolated-world evaluation.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
   shows the emoji's whole picture, in the same place (#399).

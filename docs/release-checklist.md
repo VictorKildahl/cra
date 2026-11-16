@@ -63,9 +63,10 @@ built release app with a test profile. Note anything that fails in the release's
 
 - **#393, Ask on Page:** with Apple Intelligence on and Settings ▸ Max ▸ Ask on Page on, press ⌘F on a
   long article: the card reads "Find or ask…"; typing a word finds it (count, ↑ ↓, highlights in the
-  page). Type a question and press Ask (or Return): the question in the space's colour, "This page was
-  long, so I read the first N%.", an answer with a quote on a rule. Find on Page highlights and scrolls to
-  the quote in the page, or says "Quote not found". Ask a follow-up; past 450 pt the conversation scrolls
+  page). Type a question: Return asks once the count says 0 (Ask asks at once). The question in the space's
+  colour, "This page was long, so I read the first N%.", an answer with its key words in bold and a quote on
+  a rule. Find on Page selects and scrolls to the whole quote in the page, also one across a Wikipedia "[3]";
+  a quote the page doesn't have says "Quote not found" when the answer is done. Ask a follow-up; past 450 pt the conversation scrolls
   with fades. Esc or ✕ closes it and the next ⌘F starts over. Compare with Arc's card on the same page
   (Arc's own numbers are in arc-reverse-engineering.md; its placement, corner and colours weren't read).
 
@@ -75,7 +76,9 @@ built release app with a test profile. Note anything that fails in the release's
   question. Then a factual follow-up gets its own quote. The model is on-device and varies, so ask a few times.
 
 - **Ask on Page, long answers and unanswerable questions:** ask a long article something it doesn't say
-  ("why did el salvador succeed?"): the answer never quotes a solar-power page or J.W. Peters. Ask for "the
+  ("why did el salvador succeed?"): the answer never quotes a solar-power page or J.W. Peters. Known on
+  the on-device model (16 Nov 2026): it often adds page quotes that don't answer such a question, and it
+  refuses some topics (slavery, disasters, religion) with "Sorry, I encountered an error". Ask for "the
   key points of this entire article in detailed bullet points": the window and the page keep scrolling smoothly
   while it writes, and the answer never vanishes and starts over.
 
