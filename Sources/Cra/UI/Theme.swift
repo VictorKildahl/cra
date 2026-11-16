@@ -193,25 +193,6 @@ extension Color {
     }
 }
 
-/// A tiny tiled grain texture, like Arc's "grain" overlay modifier.
-enum NoiseTexture {
-    static let image: NSImage = {
-        let size = 96
-        let img = NSImage(size: NSSize(width: size, height: size))
-        img.lockFocus()
-        var rng = SystemRandomNumberGenerator()
-        for y in 0..<size {
-            for x in 0..<size {
-                let v = Double.random(in: 0...1, using: &rng)
-                NSColor(white: v, alpha: 1).setFill()
-                NSRect(x: x, y: y, width: 1, height: 1).fill()
-            }
-        }
-        img.unlockFocus()
-        return img
-    }()
-}
-
 struct NoiseOverlay: View {
     let amount: Double
     let isDark: Bool
@@ -303,21 +284,8 @@ final class SpaceBackgroundView: NSView {
 
 }
 
-/// NoiseOverlay in AppKit: the noise texture tiled in points, drawn once per size, at 9–10%,
-/// multiplied over light themes, screened over dark.
-final class ThemeNoiseView: NSView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    func apply(_ palette: SpacePalette) {
-        alphaValue = palette.noise * (palette.isDark ? 0.1 : 0.09)
-        wantsLayer = true
-        layer?.compositingFilter = palette.isDark ? "screenBlendMode" : "multiplyBlendMode"
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor(patternImage: NoiseTexture.image).setFill()
-        dirtyRect.fill()
-    }
+extension ThemeNoiseView {
+    func apply(_ palette: SpacePalette) { apply(noise: palette.noise, isDark: palette.isDark) }
 }
 
 /// SpaceBackground(palette:) in AppKit, for a view that shows one palette (the floating sidebar).
