@@ -160,13 +160,20 @@ class Session:
         """⌘T (⌘L on a browser's first blank tab), URL over AX, Return. Returns the Return's time."""
         self.key("cmd+l" if first and self.b["blank_tab"] else "cmd+t")
         # All but the last character over AX, the last as a key: Arc's command bar updates its suggestions only on
-        # typing, and Return on stale ones opens its first row instead of the URL.
-        ok = run(f"{TOOLS}/axset", str(self.pid), url[:-1], "4")
-        if not ok.startswith("AX"):
-            self.note("axset failed", ok)
-        self.key(f"text:{url[-1]}")
-        time.sleep(0.6)
-        if os.environ.get("XBENCH_SHOT"):  # what the bar shows just before Return
+        # typing, and Return on stale ones opens its first row instead of the URL. The field is read back before
+        # Return (a bar still opening can drop what was set; Return then searched for the last character), and set
+        # again if it doesn't hold the URL. What is measured starts at Return.
+        for attempt in range(3):
+            ok = run(f"{TOOLS}/axset", str(self.pid), url[:-1], "4")
+            if not ok.startswith("AX"):
+                self.note("axset failed", ok)
+            self.key(f"text:{url[-1]}")
+            time.sleep(0.6)
+            shown = run(f"{TOOLS}/axget", str(self.pid)).strip()
+            if shown == url or shown.endswith(url.split("://", 1)[-1]):
+                break
+            self.note("field holds", repr(shown[:80]), "- setting it again")
+        if os.environ.get("XBENCH_SHOT"):
             subprocess.run(["screencapture", "-x", f"{self.out}/before-return.png"])
         return self.key("return")
 
@@ -315,6 +322,35 @@ class Session:
                 self.note("speedometer", sp[0]["v"])
                 break
             time.sleep(2)
+
+    def probe(self):
+        """One tab, settled: wakeups and CPU per process kind over 20 s (where a browser's idle goes)."""
+        self.start_server()
+        self.launch(self.profile())
+        time.sleep(4)
+        self.size_window()
+        time.sleep(1)
+        self.click_window()
+        self.open_url(self.page(1), first=True)
+        time.sleep(int(os.environ.get("XBENCH_SETTLE", "90")))
+        a, ta = self.fp(), time.time()
+        time.sleep(20)
+        b, tb = self.fp(), time.time()
+        dt = tb - ta
+        rows = {k: {"wk_s": round((b["kindsWk"].get(k, 0) - a["kindsWk"].get(k, 0)) / dt, 1),
+                    "cpu_pct": round(100 * (b["kindsCpuNs"].get(k, 0) - a["kindsCpuNs"].get(k, 0)) / 1e9 / dt, 2),
+                    "mb": round(b["kindsMB"].get(k, 0), 1)}
+                for k in b["kindsWk"]}
+        self.result["probe"] = rows
+        for k, v in sorted(rows.items(), key=lambda kv: -kv[1]["wk_s"]):
+            self.note(k, json.dumps(v))
+        procs = [l.split(None, 2) for l in run("ps", "-o", "pid=,rss=,command=", "-p", ",".join(self.tree())).splitlines()]
+        for p in procs:
+            fpj = run(FP, p[0], "--self") if os.environ.get("XBENCH_SELF") else ""
+            self.note("proc", p[0], p[1], p[2][:160].replace(B, "~"), fpj[:80])
+        if os.environ.get("XBENCH_HOLD"):
+            open(f"{self.out}/pid", "w").write(str(self.pid))
+            time.sleep(int(os.environ["XBENCH_HOLD"]))
 
     def warm(self):
         """First launch on an empty (or prepared) profile; what it leaves becomes the template."""

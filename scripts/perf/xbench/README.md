@@ -35,7 +35,7 @@ Then `rounds.sh` (five rounds, the order rotating each round; about four hours, 
 | Step | Measured |
 |---|---|
 | Launch the binary | cold launch → window on screen: the first on-screen window of the browser's process tree over 300 × 300 pt (polled every 2 ms) |
-| Open tab 1 | ⌘T (⌘L where the browser opens with a blank tab), the URL set into the focused field over AX except its last character, which is typed, then Return |
+| Open tab 1 | ⌘T (⌘L where the browser opens with a blank tab), the URL set into the focused field over AX except its last character, which is typed; the field read back (and set again if it doesn't hold the URL), then Return |
 | 5–25 s after | idle CPU and wakeups, 1 tab: the whole process tree (`build/perf/fp`), 20 s |
 | 90–110 s after | the same, settled, and memory at 1 tab (phys_footprint, process tree) |
 | Tabs 2–20 | new tab → first paint: Return to the page's first contentful paint; memory at 10 tabs 30 s after the tenth |
@@ -46,6 +46,11 @@ Then `rounds.sh` (five rounds, the order rotating each round; about four hours, 
 
 Speedometer 3.1 runs in a session of its own (one cold launch, `?startAutomatically=true`, the score posted by
 `cra-bench-hook.js`).
+
+`xbench.py probe <browser> <dir>` is one tab, settled, with wakeups, CPU and memory per process kind
+(`XBENCH_SELF=1` adds each process's own footprint): where a browser's idle and memory go.
+
+Check each session's first tab: `marks.jsonl` holds a mark with `"n": "1"` only when tab 1 loaded the bench page.
 
 Not measured: power (needs `sudo powermetrics`), launch → page painted and restored tabs (the browsers take a URL on
 launch differently).
