@@ -1,0 +1,14 @@
+# The Site Control Center lists each extension once. A pin saved twice (or two installs of one extension, two
+# folders with the same manifest key) listed it twice, and the menu's icon map trapped on the repeated ID as it
+# opened (four crash reports, 0.1.42 and 0.1.43, in SiteControlCenterView.liveIcons). PinnedExtensions.menuOrder
+# drops the repeats; CraCore's ExtensionsMenuOrderTests has both cases.
+budget rss=700 stalls50=8
+extension ${FIXTURES}/Extension
+# Tests/Fixtures/Extension/ID (seed lines take no variables), pinned twice.
+seed pinned-extensions.json ["jeackjeedkojbpbfclolioidbpgjnnjg","jeackjeedkojbpbfclolioidbpgjnnjg"]
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=menu
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?siteControls=1
+wait 2
