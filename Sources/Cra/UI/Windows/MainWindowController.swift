@@ -4863,10 +4863,12 @@ final class CraWindow: NSWindow {
 
     private func positionTrafficLights() {
         guard !styleMask.contains(.fullScreen) else { return }
-        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        for (i, type) in buttons.enumerated() {
-            guard let b = standardWindowButton(type), let sv = b.superview else { continue }
-            let x: CGFloat = 13 + CGFloat(i) * 24
+        // The system's spacing between the buttons stays (20 pt on macOS 15, 23 on 26, #445).
+        let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { standardWindowButton($0) }
+        let xs = TrafficLightLayout.originsX(system: buttons.map { Double($0.frame.minX) })
+        for (b, x) in zip(buttons, xs) {
+            guard let sv = b.superview else { continue }
+            let x = CGFloat(x)
             let y = sv.bounds.height - CraMetrics.titleRowCenter - b.frame.height / 2
             let target = NSPoint(x: x, y: y)
             if abs(b.frame.origin.x - target.x) > 0.5 || abs(b.frame.origin.y - target.y) > 0.5 {

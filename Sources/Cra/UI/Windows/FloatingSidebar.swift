@@ -525,7 +525,7 @@ final class FloatingSidebarController {
         // same spot in the sidebar's top row. Full screen has none: Arc's floating sidebar there
         // starts with the toggle, as the docked one does (#315).
         if let lights = trafficLights {
-            lights.setFrameOrigin(NSPoint(x: 13, y: slider.bounds.height - CraMetrics.titleRowCenter - lights.frame.height / 2))
+            lights.setFrameOrigin(NSPoint(x: TrafficLightLayout.leading, y: slider.bounds.height - CraMetrics.titleRowCenter - lights.frame.height / 2))
             lights.isHidden = windowFullScreen()
             slider.addSubview(lights, positioned: .above, relativeTo: host)
         }
@@ -641,9 +641,13 @@ final class FloatingTrafficLights: NSView {
         super.init(frame: .zero)
         let actions = [#selector(closeWindow), #selector(minimizeWindow), #selector(zoomWindow)]
         var height: CGFloat = 0
-        for (i, type) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
+        // Spaced like the window's own buttons, which keep the system's gaps (#445).
+        let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let system = types.compactMap { browserWindow.standardWindowButton($0).map { Double($0.frame.minX) } }
+        let xs = system.count == types.count ? TrafficLightLayout.originsX(system: system, leading: 0) : [0, 20, 40]
+        for (i, type) in types.enumerated() {
             guard let b = NSWindow.standardWindowButton(type, for: browserWindow.styleMask) else { continue }
-            b.setFrameOrigin(NSPoint(x: CGFloat(i) * 24, y: 0))
+            b.setFrameOrigin(NSPoint(x: CGFloat(xs[i]), y: 0))
             b.target = self
             b.action = actions[i]
             addSubview(b)
