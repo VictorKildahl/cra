@@ -190,6 +190,28 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         self.favicons = favicons
         self.container = container
         self.clock = clock ?? LiveScheduler.shared
+        super.init()
+        documentObserver = NotificationCenter.default.addObserver(forName: SidebarStore.documentReplaced, object: store, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reassertLivePages() }
+        }
+    }
+
+    deinit { if let documentObserver { NotificationCenter.default.removeObserver(documentObserver) } }
+
+    private var documentObserver: NSObjectProtocol?
+
+    /// A synced sidebar (SettingsSyncService) replaced the document, with the other Mac's address
+    /// and title for each tab. A page here did not move: its tab shows what the page shows, as the
+    /// bar did before (seen with the other Mac's address over this page, 13 Nov 2026). A tab asleep
+    /// has no page and takes the synced address. In the replacement itself, so the sync service's
+    /// hashes have it and nothing goes back to the other Mac for it.
+    func reassertLivePages() {
+        for (id, rt) in runtimes where !rt.discarded {
+            let url = rt.browser.currentURL
+            guard !url.isEmpty, url != "about:blank", !url.hasPrefix("data:text/html;base64,") else { continue }
+            let title = rt.browser.currentTitle
+            store.updateTab(id, url: url, title: title.isEmpty ? nil : title)
+        }
     }
 
     func runtime(for tabID: UUID) -> TabRuntime? { runtimes[tabID] }

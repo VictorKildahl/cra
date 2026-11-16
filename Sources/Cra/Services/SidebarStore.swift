@@ -837,6 +837,10 @@ final class SidebarStore {
     /// spaces; they are this Mac's windows, never in a synced document (`SidebarDocument.forSync`).
     /// Repaired like a file at launch, so a profile the other Mac deleted leaves its spaces on
     /// Default, and a window whose space is gone shows the first.
+    /// Posted with the store once `replace(document:)` has put a synced sidebar in: the browser
+    /// managers put each live page's own address back (BrowserManager.reassertLivePages).
+    static let documentReplaced = Notification.Name("CraSidebarDocumentReplaced")
+
     func replace(document synced: SidebarDocument) {
         let previousAskProfiles = askProfileOwnership(of: allTabs().map(\.id))
         let previousSpaceProfiles = spaces.mapValues(\.profileID)
@@ -866,6 +870,7 @@ final class SidebarStore {
         splitSharedFavorites(doc.favoritesContainerID)
         settings.sharedFavorites ? shareFavorites() : unshareFavorites()
         touch()
+        NotificationCenter.default.post(name: Self.documentReplaced, object: self)
     }
 
     /// What goes to disk: everything but incognito windows' spaces and tabs. Blank Windows'
