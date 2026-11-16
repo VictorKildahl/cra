@@ -63,7 +63,28 @@ struct ImportSource: Identifiable, Hashable {
 
     /// Has data to bring over. The import reads only the profile on disk, so a browser
     /// someone already deleted is still offered while its data is there; Safari is always there.
-    var isAvailable: Bool {
+    /// A folder macOS won't let Cra read is offered too, asking for Full Disk Access, as Ardia
+    /// does: current macOS keeps Chrome's and Brave's data from other apps, and hiding the
+    /// browser left a Chrome user with only Opera to pick (X DM, 15 Nov).
+    var isAvailable: Bool { hasProfile || needsFullDiskAccess }
+
+    /// The data folder is there but macOS refuses to list it.
+    var needsFullDiskAccess: Bool {
+        kind != .safari && Self.isAccessDenied(dataDir)
+    }
+
+    static func isAccessDenied(_ dir: URL) -> Bool {
+        do {
+            _ = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            return false
+        } catch let error as NSError {
+            if error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoPermissionError { return true }
+            let posix = error.userInfo[NSUnderlyingErrorKey] as? NSError
+            return posix?.domain == NSPOSIXErrorDomain && (posix?.code == Int(EPERM) || posix?.code == Int(EACCES))
+        }
+    }
+
+    private var hasProfile: Bool {
         switch kind {
         case .arc: return ArcImporter.isAvailable
         case .dia: return DiaImporter.isAvailable

@@ -17,8 +17,11 @@ enum ChromiumImporter {
     static func profiles(userData: URL) -> [ChromiumProfile] {
         let fm = FileManager.default
         let names = profileNames(userData: userData)
-        let dirs = ((try? fm.contentsOfDirectory(atPath: userData.path)) ?? [])
-            .filter { $0 == "Default" || $0.hasPrefix("Profile ") }
+        // Local State's profile list names every folder the browser uses, as Ardia's
+        // discovery reads it; the folder scan catches a profile it no longer lists.
+        let listed = Set(names.keys).subtracting(["System Profile", "Guest Profile"])
+        let found = ((try? fm.contentsOfDirectory(atPath: userData.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }
+        let dirs = listed.union(found).filter { !$0.isEmpty && !$0.contains("/") && $0 != "." && $0 != ".." }
             .sorted { $0 == "Default" ? true : ($1 == "Default" ? false : $0.localizedStandardCompare($1) == .orderedAscending) }
         var out = dirs.compactMap { d -> ChromiumProfile? in
             let dir = userData.appendingPathComponent(d, isDirectory: true)
@@ -37,8 +40,12 @@ enum ChromiumImporter {
         return cache.compactMapValues { ($0 as? [String: Any])?["name"] as? String }
     }
 
+    /// Any file a profile keeps. Chrome signed in to a Google account holds its bookmarks in
+    /// AccountBookmarks and its passwords in "Login Data For Account", and has kept cookies
+    /// under Network/ since Chrome 96; every profile has Preferences.
     private static func hasData(_ dir: URL) -> Bool {
-        ["Bookmarks", "History", "Cookies", "Login Data"].contains { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
+        ["Preferences", "Bookmarks", "AccountBookmarks", "History", "Network/Cookies", "Cookies", "Login Data", "Login Data For Account"]
+            .contains { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
     }
 
     // MARK: Plan
@@ -58,8 +65,16 @@ enum ChromiumImporter {
         return plan
     }
 
+    /// The profile's bookmarks: Bookmarks, then AccountBookmarks, where Chrome signed in to a
+    /// Google account without Sync keeps the ones saved to the account.
     static func bookmarks(profile dir: URL) -> (bar: [ImportedItem], other: [ImportedItem]) {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent("Bookmarks")),
+        let local = bookmarks(file: dir.appendingPathComponent("Bookmarks"))
+        let account = bookmarks(file: dir.appendingPathComponent("AccountBookmarks"))
+        return (local.bar + account.bar, local.other + account.other)
+    }
+
+    private static func bookmarks(file: URL) -> (bar: [ImportedItem], other: [ImportedItem]) {
+        guard let data = try? Data(contentsOf: file),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let roots = root["roots"] as? [String: Any] else { return ([], []) }
         func convert(_ node: [String: Any]) -> ImportedItem? {

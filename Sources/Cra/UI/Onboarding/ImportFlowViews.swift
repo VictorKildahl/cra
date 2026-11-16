@@ -100,6 +100,10 @@ struct ImportFlowView: View {
         }
         .frame(width: ImportWindowController.size.width, height: ImportWindowController.size.height)
         .ignoresSafeArea()
+        // Back from System Settings with Full Disk Access on: read the picked browser again.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.recheckFullDiskAccess()
+        }
     }
 }
 
@@ -199,20 +203,31 @@ private struct SourceStep: View {
             .frame(width: ImportMetrics.columnWidth, height: ImportMetrics.listHeight + 8, alignment: .topLeading)
             .mask(ScrollFade())
             .offset(y: ImportMetrics.listTop - 8)
-            if let err = model.loadError {
+            if model.needsFullDiskAccess, let name = model.source?.rawValue {
+                Text("macOS keeps \(name)'s data from other apps. Turn on Cra in Full Disk Access, then come back here. If Cra is already on, quit and reopen Cra.")
+                    .font(.system(size: 12)).foregroundStyle(c.body)
+                    .frame(width: ImportMetrics.columnWidth, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: ImportMetrics.columnWidth, height: 44, alignment: .bottomLeading)
+                    .offset(y: ImportMetrics.buttonTop - 52)
+            } else if let err = model.loadError {
                 Text(err).font(.system(size: 12)).foregroundStyle(.red.opacity(0.8))
                     .offset(y: ImportMetrics.buttonTop - 28)
             }
+            // A browser macOS keeps from Cra turns Continue into the way to Full Disk Access.
+            let title = model.needsFullDiskAccess ? "Open Full Disk Access" : "Continue"
+            let enabled = model.needsFullDiskAccess || model.canContinueFromSource
+            let action = { model.needsFullDiskAccess ? model.openFullDiskAccessSettings() : model.continueFromSource() }
             if model.firstRun {
                 // Dia's onboarding offers "skip the importing process" beside Continue.
                 HStack(spacing: 6) {
                     SecondaryButton(title: "Skip", c: c) { model.skipImport() }.frame(width: 146)
-                    PrimaryButton(title: "Continue", c: c, enabled: model.canContinueFromSource, width: 290) { model.continueFromSource() }
+                    PrimaryButton(title: title, c: c, enabled: enabled, width: 290, action: action)
                 }
                 .frame(width: ImportMetrics.columnWidth + 2)
                 .offset(x: -1, y: ImportMetrics.buttonTop)
             } else {
-                PrimaryButton(title: "Continue", c: c, enabled: model.canContinueFromSource) { model.continueFromSource() }
+                PrimaryButton(title: title, c: c, enabled: enabled, action: action)
                     .offset(x: -1, y: ImportMetrics.buttonTop)
             }
         }
@@ -388,6 +403,9 @@ private struct BrowserCard: View {
     let c: ImportColors
     @State private var hover = false
 
+    /// Checked as the card draws, so it clears once Full Disk Access is on.
+    private var blocked: Bool { model.source == source ? model.needsFullDiskAccess : source.needsFullDiskAccess }
+
     var body: some View {
         let selected = model.source == source
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -400,7 +418,10 @@ private struct BrowserCard: View {
                 .offset(x: 19, y: 14)
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.rawValue).font(.system(size: 16, weight: .medium)).foregroundStyle(c.title)
-                if selected, let plan = model.plan, !plan.spaces.isEmpty {
+                if blocked {
+                    Text("Needs Full Disk Access").font(.system(size: 11)).foregroundStyle(c.body)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                } else if selected, let plan = model.plan, !plan.spaces.isEmpty {
                     Button { model.continueFromSource() } label: {
                         Text("\(model.selectedSpaces.count) of \(plan.spaces.count) spaces")
                             .font(.system(size: 11)).foregroundStyle(c.body).underline(hover)

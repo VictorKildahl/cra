@@ -23,6 +23,8 @@ enum StoreTests {
         try diaImport()
         chromiumProfile()
         deletedBrowserStillImports()
+        protectedBrowserAsksForFullDiskAccess()
+        signedInChromeProfileImports()
         chromiumManifestV2Import()
         autoArchive()
         longAutoArchive()
@@ -290,6 +292,51 @@ enum StoreTests {
         let empty = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium,
                                  dataDir: firefoxRoot.appendingPathComponent("none"))
         expect(!empty.isAvailable, "no profile, nothing to offer")
+    }
+
+    /// Current macOS can keep Chrome's and Brave's folders from other apps. Cra listed only the
+    /// browsers it could read, so Chrome vanished from the picker while Ardia, which asks for
+    /// Full Disk Access instead, imported it (X DM, 15 Nov). A folder that is there but refused
+    /// is offered, flagged as needing Full Disk Access.
+    private static func protectedBrowserAsksForFullDiskAccess() {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("cra-protected-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: root.appendingPathComponent("Default"), withIntermediateDirectories: true)
+        fm.createFile(atPath: root.appendingPathComponent("Default/History").path, contents: Data())
+        let chrome = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium, dataDir: root)
+        expect(chrome.isAvailable && !chrome.needsFullDiskAccess, "a readable Chrome folder needs nothing more")
+        try? fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.path)
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+            try? fm.removeItem(at: root)
+        }
+        expect(chrome.isAvailable, "a Chrome folder macOS won't let Cra read is still offered")
+        expect(chrome.needsFullDiskAccess, "and it asks for Full Disk Access")
+        let missing = ImportSource(id: "brave", name: "Brave", bundleID: "app.cra.tests.not-installed", kind: .chromium,
+                                   dataDir: root.deletingLastPathComponent().appendingPathComponent("cra-none-\(UUID().uuidString)"))
+        expect(!missing.isAvailable && !missing.needsFullDiskAccess, "a browser never used is neither offered nor asks")
+    }
+
+    /// Chrome signed in to a Google account keeps the bookmarks saved there in AccountBookmarks,
+    /// and Local State lists every profile folder. Ardia reads both; Cra looked only for
+    /// Bookmarks, History, Cookies and Login Data in folders named Default or "Profile N".
+    private static func signedInChromeProfileImports() {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("cra-signed-in-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let profile = root.appendingPathComponent("Work", isDirectory: true)
+        try? fm.createDirectory(at: profile, withIntermediateDirectories: true)
+        try? Data(#"{"profile":{"info_cache":{"Work":{"name":"Work"}},"profiles_order":["Work"]}}"#.utf8)
+            .write(to: root.appendingPathComponent("Local State"))
+        try? Data("{}".utf8).write(to: profile.appendingPathComponent("Preferences"))
+        try? Data(#"{"roots":{"bookmark_bar":{"children":[{"type":"url","name":"Docs","url":"https://docs.example.com/"}]}}}"#.utf8)
+            .write(to: profile.appendingPathComponent("AccountBookmarks"))
+        let profiles = ChromiumImporter.profiles(userData: root)
+        expect(profiles.map(\.id) == ["Work"] && profiles.first?.name == "Work", "a profile Local State lists is found by its folder")
+        expect(ChromiumImporter.bookmarks(profile: profile).bar.map(\.url) == ["https://docs.example.com/"],
+               "bookmarks saved to the Google account come over")
+        let chrome = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium, dataDir: root)
+        expect(chrome.isAvailable, "a signed-in Chrome with only account bookmarks is offered")
     }
 
     // promise: #228

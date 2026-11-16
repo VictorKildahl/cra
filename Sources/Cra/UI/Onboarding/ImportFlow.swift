@@ -74,6 +74,8 @@ final class ImportFlowModel {
     private(set) var source: ImportSource?
     private(set) var plan: ImportPlan?
     private(set) var loadError: String?
+    /// macOS won't let Cra read the picked browser's folder until Cra has Full Disk Access.
+    private(set) var needsFullDiskAccess = false
 
     var selectedSpaces: Set<Int> = []
     var includeFavorites = true
@@ -227,8 +229,23 @@ final class ImportFlowModel {
 
     func select(_ s: ImportSource) {
         guard s != source else { return }
+        load(s)
+    }
+
+    /// Back from System Settings: read the browser again once Full Disk Access is on.
+    func recheckFullDiskAccess() {
+        guard needsFullDiskAccess, let source, !source.needsFullDiskAccess else { return }
+        load(source)
+    }
+
+    static let fullDiskAccessSettings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
+
+    func openFullDiskAccessSettings() { NSWorkspace.shared.open(Self.fullDiskAccessSettings) }
+
+    private func load(_ s: ImportSource) {
         source = s
         loadError = nil
+        needsFullDiskAccess = s.needsFullDiskAccess
         credentials = ImportedCredentials()
         credentialError = nil
         unlockError = nil
@@ -236,7 +253,7 @@ final class ImportFlowModel {
         exportFileName = nil
         exportError = nil
         exportTopSites = []
-        if s.needsExportedFile {
+        if s.needsExportedFile || needsFullDiskAccess {
             plan = nil
         } else {
             do {
@@ -590,7 +607,7 @@ final class ImportFlowModel {
     func loadPinCandidates() {
         guard !pinsLoaded else { return }
         pinsLoaded = true
-        let source = self.source?.kind == .safari ? nil : (self.source ?? sources.first { $0.kind != .safari })
+        let source = self.source?.kind == .safari ? nil : (self.source ?? sources.first { $0.kind != .safari && !$0.needsFullDiskAccess })
         let fromExport = exportTopSites
         let existing = Set(store.tabs(under: store.focusedSpace.favoritesContainerID).compactMap { $0.tab.flatMap { FaviconKey.key(for: $0.url) } })
         pinCandidates = Self.presetPins
