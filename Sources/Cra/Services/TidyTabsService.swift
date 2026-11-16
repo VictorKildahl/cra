@@ -62,6 +62,7 @@ final class TidyTabsService {
     /// cached status refreshes.
     var currentModelAvailable: Bool { Self.currentStatus() == .available }
     @ObservationIgnored var downloadsUnavailable: () -> Void = {}
+    @ObservationIgnored var previewsUnavailable: () -> Void = {}
 
     typealias Generate = @MainActor (TidyTabs.Request) async throws -> TidyTabsModel.Answer
     private struct Key: Hashable { let store: ObjectIdentifier; let space: UUID }
@@ -101,7 +102,7 @@ final class TidyTabsService {
     func refresh() {
         let now = Self.currentStatus()
         // Invalidate synchronously even if the unavailable status was already cached.
-        if now != .available { cancelAll(); downloadsUnavailable() }
+        if now != .available { cancelAll(); downloadsUnavailable(); previewsUnavailable() }
         if now != status { status = now }
         else if now != .available {
             // A repeated unavailable refresh must invalidate work even when the UI cache did not change.

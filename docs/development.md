@@ -156,6 +156,14 @@ to Markdown or `docs/` alone runs nothing.
   same service on the real `SidebarStore` (Max switches, profiles, availability); `scripts/test-ask-on-page-content.sh`
   the page-text and quote scripts in a real WKWebView on `Tests/Fixtures/AskOnPage`; `scripts/test-ask-on-page-quotes.sh`
   the quote script on a scripted DOM in Node, and the CEF bridge's isolated-world evaluation.
+- `scripts/test-link-summary-service.sh`: 5-Second Previews' fetch and model lifecycle (`LinkSummaryFetch`,
+  `LinkSummaryService`) on a manual clock: every redirect hop checked before it's requested (no hosts on the Mac
+  or the local network), the byte and time limits, cancellation dropping late answers, the context-overflow retry,
+  caches kept apart by profile, search and language.
+- `scripts/test-link-summary-hooks.sh`: turning 5-Second Previews off, or Apple Intelligence becoming unavailable,
+  stops the card and the work behind it.
+- `scripts/test-link-summary-image.sh`: the card's picture over a local server: images only, at most 4 MB, every
+  redirect checked, nothing kept and no cookies sent.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
   shows the emoji's whole picture, in the same place (#399).
