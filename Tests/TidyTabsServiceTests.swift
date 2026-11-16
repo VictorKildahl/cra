@@ -12,7 +12,7 @@ import Foundation
         _ = TidyTabsService.fakeModel
         setenv("CRA_TIDY_FAKE_MODEL", "1", 1)
         await entryGuards()
-        await failureRemainsRetryable()
+        await failureEndsTheRunLikeArc()
         await emptyAndFittedSuccess()
         await settingsOffOn()
         await availabilityChanges()
@@ -54,7 +54,10 @@ import Foundation
                "a valid remaining singleton keeps the approved Calendar-style grouping behavior")
     }
 
-    private static func failureRemainsRetryable() async {
+    /// Arc: "After a run Tidy is gone until Today changes, even when the run grouped nothing" (its
+    /// server had stopped answering). A failed answer ends the run like an empty one; a cancelled
+    /// run (setting off, space gone) never happened.
+    private static func failureEndsTheRunLikeArc() async {
         for kind in ["unavailable", "context", "generic", "cancelled"] {
             let f = Fixture()
             let original = f.store.document
@@ -70,22 +73,21 @@ import Foundation
             }
             f.generator.resolve(1, with: .failure(error))
             await task?.value
-            if kind != "cancelled" {
-                f.clock.advance(by: TidyTabs.minimumRun / 2)
-                expect(f.store.tidyingSpaces.contains(f.sid) && f.store.tidiedTabs[f.sid] == nil,
-                       "a fast \(kind) failure preserves the minimum broom interval without consuming IDs")
-                f.clock.advance(by: TidyTabs.minimumRun / 2)
+            if kind == "cancelled" {
+                expect(f.store.canTidy(f.sid) && f.store.tidiedTabs[f.sid] == nil && !f.store.tidyingSpaces.contains(f.sid)
+                       && f.store.document == original, "a cancelled run leaves Tidy offered and the tree alone")
+                continue
             }
-            expect(f.store.canTidy(f.sid) && f.store.tidiedTabs[f.sid] == nil && !f.store.tidyingSpaces.contains(f.sid)
-                   && f.store.document == original,
-                   "\(kind) generation ends the broom without consuming retry, tree or considered IDs")
-            let retry = f.service.tidy(f.sid, store: f.store)
-            await f.generator.waitFor(2)
-            f.generator.success(2, proposals: [.init(name: "Retry", tabs: [0, 1])])
-            await retry?.value
-            f.clock.advance(by: TidyTabs.minimumRun)
-            expect(f.store.tabGroups(in: f.sid).first?.children == Array(request.tabIDs.prefix(2)),
-                   "retry after \(kind) failure applies normally")
+            f.clock.advance(by: TidyTabs.minimumRun / 2)
+            expect(f.store.tidyingSpaces.contains(f.sid) && f.store.tidiedTabs[f.sid] == nil,
+                   "a fast \(kind) failure still runs the broom for its minimum time")
+            f.clock.advance(by: TidyTabs.minimumRun / 2)
+            expect(!f.store.canTidy(f.sid) && f.store.tidiedTabs[f.sid] == Set(request.tabIDs)
+                   && !f.store.tidyingSpaces.contains(f.sid) && f.store.document == original,
+                   "a \(kind) failure hides Tidy like Arc's empty run, without touching the tree")
+            expect(f.service.tidy(f.sid, store: f.store) == nil, "a second click after a \(kind) failure does nothing")
+            f.store.createTab(url: "https://example.org/after-\(kind)", in: f.sid, select: false)
+            expect(f.store.canTidy(f.sid), "a new tab after a \(kind) failure brings Tidy back")
         }
     }
 
@@ -112,8 +114,12 @@ import Foundation
         f.generator.resolve(2, with: .failure(CocoaError(.coderInvalidValue)))
         await failed?.value
         f.clock.advance(by: TidyTabs.minimumRun)
-        expect(f.store.tidiedTabs[f.sid] == Set(fitted.tabIDs) && f.store.canTidy(f.sid) && f.store.document == before,
-               "failure preserves previously considered fitted IDs and the remaining retry action")
+        let second = f.generator.requests[1]
+        expect(second.tabIDs.first == arrival.id, "the second run sends the tabs the first had no room for first")
+        expect(f.store.tidiedTabs[f.sid] == Set(fitted.tabIDs).union(second.tabIDs)
+               && f.store.canTidy(f.sid) == !Set(second.tabIDs).union(fitted.tabIDs).isSuperset(of: f.store.looseTodayTabs(f.sid).map(\.id))
+               && f.store.document == before,
+               "a failed run adds the tabs it sent to the ones already considered, and leaves the tree alone")
 
         let undo = Fixture()
         let original = undo.store.looseTodayTabs(undo.sid).map(\.id)

@@ -3898,6 +3898,16 @@ Apple Intelligence is on, so it's free and nothing leaves the Mac).
   ramps 0.38 s.
 - [?] Not seen: Arc's real grouping (the server is gone), what Arc does with a model answer naming an existing
   group, whether a header can be dragged, and the arrow Arc sometimes draws before "Clear" (offline copy).
+- [O static, Arc 1.173.1, 16 Nov 2026, `strings` on the arm64 binary] Next to `createUnpinnedTabGroups()` sit the
+  example's "Toaster Shopping" and "calendar.google.com/0", the request "Here are my tabs, in the format 'id:
+  title':" and "Your array of group assignments, as valid JSON within a ```code block```:". Arc asked for one
+  assignment per tab. (PR #443's decoded instructions: six example tabs, nitehawk cinema / Amazon / two toaster
+  pages / "June 25 | Weekly View" / Barbie, answered Movies, Toaster Shopping and Calendar on its own.)
+- Cra, measured on the on-device model (16 Nov 2026, macOS 26.6, three tab sets of 11–18 tabs with known groups,
+  greedy sampling): asking for each group's ids put up to 73 % of the grouped pairs in a wrong group; one group name
+  per tab, in order, with Arc's example answered that way, put none in a wrong group. Listing Today's existing groups
+  in the prompt made the model file nearly every tab into them (35 of 41 tabs went into one they had nothing to do with), so they stay out of it; a name
+  the model comes up with that matches one still joins it. One-tab groups stay, as in Arc's Calendar example.
 
 ## Tidy titles and Tidy Tab Titles (Arc 1.171, 4 Nov 2026, Swift metadata + strings, Victor's Arc, 60 fps recordings)
 

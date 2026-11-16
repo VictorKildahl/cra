@@ -2162,8 +2162,9 @@ final class SidebarStore {
         touch()
     }
 
-    /// Empty successful plans need no tree/undo mutation; every success retains its fitted IDs.
-    private func markTidied(_ sid: UUID, tabIDs: [UUID]) {
+    /// The tabs a run sent stop offering Tidy, whatever came back (Arc hid it even after a run that
+    /// grouped nothing); tabs the run had no room for still do.
+    func markTidied(_ sid: UUID, tabIDs: [UUID]) {
         guard let space = spaces[sid] else { return }
         let surviving = Set(tabs(under: space.todayContainerID).map(\.id))
         tidiedTabs[sid] = (tidiedTabs[sid] ?? []).union(tabIDs).intersection(surviving)

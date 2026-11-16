@@ -35,6 +35,8 @@ if [ "${1:-}" != core ]; then
   suite "Extension store migration" scripts/test-extension-store-migration.sh
   suite "Store and importers" scripts/test-store.sh
   suite "Tidy Downloads lifecycle" scripts/test-tidy-downloads.sh
+  suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
+  suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
   suite "Policies" scripts/test-policies.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Folder glyph" scripts/test-folder-glyph.sh

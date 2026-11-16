@@ -63,7 +63,7 @@ enum TidyTabsModel {
                 let answer = try await session.respond(to: request.prompt, generating: TidyAnswer.self,
                                                        options: GenerationOptions(sampling: .greedy,
                                                                                   maximumResponseTokens: request.responseTokens))
-                return Answer(request: request, proposals: answer.content.groups.map { .init(name: $0.name, tabs: $0.tabs) })
+                return Answer(request: request, proposals: TidyTabs.proposals(answer.content.assignments.map { ($0.tab, $0.group) }))
             } catch LanguageModelSession.GenerationError.exceededContextWindowSize {
                 throw Failure.contextLimit(request)
             }
@@ -74,19 +74,20 @@ enum TidyTabsModel {
 }
 
 #if canImport(FoundationModels)
+/// Arc's "array of group assignments": a group name for every tab, in order (TidyTabs.instructions).
 @available(macOS 26.0, *)
 @Generable
 struct TidyAnswer {
-    @Guide(description: "The groups, each with a name and the integer IDs of its tabs")
-    var groups: [TidyGroup]
+    @Guide(description: "One assignment for every tab, in the tabs' order")
+    var assignments: [TidyAssignment]
 }
 
 @available(macOS 26.0, *)
 @Generable
-struct TidyGroup {
-    @Guide(description: "A concise descriptive name, using the unique topic the tabs share")
-    var name: String
-    @Guide(description: "Integer IDs from the supplied tabs, each used in at most one group")
-    var tabs: [Int]
+struct TidyAssignment {
+    @Guide(description: "The tab's id")
+    var tab: Int
+    @Guide(description: "The name of the tab's group: the topic, trip, task or project it shares with other tabs, in one to three words")
+    var group: String
 }
 #endif

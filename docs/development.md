@@ -127,6 +127,11 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-tidy-downloads.sh`: `TidyDownloadsService` and `TidyDownloadFiles` on real files
   with a fake model: renames, Revert, and a newer download at the same path while a rename or
   undo is waiting. No Chromium or windows.
+- `scripts/test-tidy-tabs.sh`: Tidy Tabs' service on the real `SidebarStore` with a scripted
+  model: the broom's minimum run, cancellation when the setting goes off or the space goes away,
+  a failed run hiding Tidy like Arc's, undo. `scripts/test-tidy-tabs-model.sh` checks the
+  on-device adapter's context fitting; `--real` also asks the Mac's own model (needs Apple
+  Intelligence) and prints its groups.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image

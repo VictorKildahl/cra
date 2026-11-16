@@ -66,7 +66,8 @@ final class TidyTabsService {
         var task: Task<Void, Never>?
         var delay: ScheduledWork?
     }
-    private enum Outcome { case success(TidyTabsModel.Answer), failure }
+    /// A failure keeps the request it sent: Arc hides Tidy after any run, even one that grouped nothing.
+    private enum Outcome { case success(TidyTabsModel.Answer), failure(TidyTabs.Request) }
     @ObservationIgnored private let generate: Generate
     @ObservationIgnored private let availability: (@MainActor () -> Bool)?
     @ObservationIgnored private var runs: [Key: Run] = [:]
@@ -178,7 +179,7 @@ final class TidyTabsService {
                 } catch {
                     CraLog.note(error is TidyTabsModel.Failure ? "Tidy Tabs: model unavailable or context limit" : "Tidy Tabs: generation failed")
                     if Task.isCancelled { self?.finish(key, token: token) }
-                    else { self?.generated(.failure, key: key, token: token) }
+                    else { self?.generated(.failure(request), key: key, token: token) }
                 }
             } onCancel: { [weak self] in
                 Task { @MainActor [weak self] in self?.finish(key, token: token) }
@@ -206,10 +207,13 @@ final class TidyTabsService {
     private func apply(_ outcome: Outcome, key: Key, token: UUID) {
         guard let run = runs[key], run.token == token else { return }
         guard let store = run.store, eligible(key, run: run, store: store) else { finish(key, token: token); return }
-        if case .success(let answer) = outcome {
+        switch outcome {
+        case .success(let answer):
             // The adapter may have reduced this request: consume its actual fitted mapping only.
             store.applyTidy(answer.request.plan(answer.proposals), tabIDs: answer.request.tabIDs, in: key.space)
             CraLog.note("Tidy Tabs: completed \(answer.request.tabs.count) tabs, \(answer.proposals.count) proposed groups")
+        case .failure(let request):
+            store.markTidied(key.space, tabIDs: request.tabIDs)
         }
         finish(key, token: token)
     }
