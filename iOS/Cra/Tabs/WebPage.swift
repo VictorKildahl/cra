@@ -19,8 +19,10 @@ protocol WebPageDelegate: AnyObject {
 final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, WKScriptMessageHandler {
     let tabID: UUID
     let webView: WKWebView
-    /// A script popup keeps its source alive until the popup is closed, including in incognito.
-    let opener: WebPage?
+    /// The page that opened this one as a popup. Weak: the store keeps an open tab's page
+    /// (`TabStore.changed()` keeps a private popup's openers), and a closed or archived opener
+    /// must not keep running off screen. WebKit then gives the popup a null `window.opener`.
+    weak var opener: WebPage?
     let webKitOwnsInitialNavigation: Bool
     weak var delegate: WebPageDelegate?
     private var observations: [NSKeyValueObservation] = []

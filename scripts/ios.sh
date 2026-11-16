@@ -72,6 +72,22 @@ case "$command" in
     only=()
     for name in "$@"; do only+=("-only-testing:$name"); done
     rm -rf "$DERIVED/test.xcresult" "$DERIVED/test-screens"
+    # PopupTests posts forms to a local fixture server (a data: page can't take a POST). It
+    # takes a free port, so parallel runs don't collide; the simulator shares the Mac's loopback.
+    server_log="$(mktemp "${TMPDIR:-/tmp}/cra-popup-server.XXXXXX")"
+    python3 -I iOS/Tests/popup_server.py --port 0 > "$server_log" 2>&1 &
+    server=$!
+    trap 'kill "$server" 2>/dev/null || true; rm -f "$server_log"' EXIT
+    base=""
+    for _ in $(seq 100); do
+      base="$(sed -n 's#^Popup fixtures: \(http://[^/]*\)/source$#\1#p' "$server_log")"
+      [ -z "$base" ] || break
+      kill -0 "$server" 2>/dev/null || break
+      sleep 0.1
+    done
+    [ -n "$base" ] || { cat "$server_log" >&2; echo "popup fixture server didn't start" >&2; exit 1; }
+    # xcodebuild hands TEST_RUNNER_-prefixed variables to the UI test runner, without the prefix.
+    export TEST_RUNNER_CRA_POPUP_TEST_BASE_URL="$base"
     xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Debug \
       -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$DERIVED" \
       -resultBundlePath "$DERIVED/test.xcresult" \

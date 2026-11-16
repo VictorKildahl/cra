@@ -1,6 +1,7 @@
 import XCTest
 
-/// Root starts `python3 iOS/Tests/popup_server.py` on loopback before running this class.
+/// `scripts/ios.sh test` starts `iOS/Tests/popup_server.py` on loopback and passes its address
+/// as CRA_POPUP_TEST_BASE_URL; run by hand, start it yourself (it defaults to port 18765).
 /// Only synthetic form/cookie values are used; no model, clipboard or external site is involved.
 final class PopupTests: BrowserTestCase {
     private var source: String {

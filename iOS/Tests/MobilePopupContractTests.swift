@@ -16,7 +16,7 @@ protocol WebPageDelegate: AnyObject {
 }
 final class WebPage {
     let tabID: UUID
-    let opener: WebPage?
+    // PRODUCTION_OPENER
     let webView = WKWebView()
     weak var delegate: WebPageDelegate?
     init(tab: MobileTab = MobileTab(url: "about:blank", lastActive: .distantPast),
@@ -112,6 +112,27 @@ final class PopupOwner: WebPageDelegate {
               "explicitly archiving a private opener and its popup leaves neither recoverable")
         check(store.existingPage(archivedSource.id) == nil && store.existingPage(archivedChild.tabID) == nil,
               "private archive removes both live-page store entries")
+        openerLetsGo(store)
+    }
+    /// Closing or archiving an opener tab lets its page go while its popup stays open, so the
+    /// page doesn't keep running scripts or playing audio off screen. WebKit then gives the
+    /// popup a null window.opener, as Safari does when the opener's tab closes.
+    static func openerLetsGo(_ store: TabStore) {
+        let request = URLRequest(url: URL(string: "https://source.example/popup")!)
+        for archive in [false, true] {
+            weak var released: WebPage?
+            let popupID: UUID
+            do {
+                let tab = store.open(url: "https://source.example/\(archive)")
+                let source = store.page(for: tab)
+                released = source
+                popupID = store.openPopup(configuration: WKWebViewConfiguration(), request: request, from: source)!.tabID
+                if archive { store.archive(tab.id) } else { store.close(tab.id) }
+            }
+            check(store.existingPage(popupID) != nil, "the popup stays open after its opener's tab goes")
+            check(released == nil, "\(archive ? "an archived" : "a closed") opener tab's page is let go while its popup is open")
+            store.close(popupID)
+        }
     }
     static func check(_ value: Bool, _ message: String) {
         checks += 1

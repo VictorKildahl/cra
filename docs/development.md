@@ -143,6 +143,10 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-link-summary-share.sh`: 5-Second Previews' Copy as Image (`LinkSummaryShareImage`)
   against Arc's own copy of a card: size at 3x, the picture's inset, the dashed line's pattern and place,
   the footer colour.
+- `scripts/test-mobile-popup.sh`: the iPhone app's popups (`WebPage`'s `createWebViewWith` callback and
+  `TabStore` against stand-ins, no WebKit or simulator): a popup keeps WebKit's request (POST body included)
+  and takes its source's privacy, closing it returns to its opener, private openers stay only while their
+  popup is in front, and a closed opener's page is let go.
 - `scripts/test-link-summary-panel.sh`: 5-Second Previews' card window (`LinkSummaryPanel`) off screen with
   a stub service: the loading card, the answer growing in under the link, the small card above its link, closing.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn

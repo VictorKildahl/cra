@@ -6,15 +6,19 @@ TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-mobile-popup-tests.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' EXIT
 python3 - "$TEST_DIR/MobilePopupContractTests.swift" <<'PY'
 from pathlib import Path
+import re
 import sys
 source = Path('iOS/Cra/Tabs/WebPage.swift').read_text()
 start = source.index('    func webView(_ webView: WKWebView, createWebViewWith configuration:')
 end = source.index('\n    }', start) + len('\n    }')
 callback = source[start:end].strip()
+# The opener's declaration too, so the stand-in page holds its opener the way WebPage does.
+opener = next(line.strip() for line in source.splitlines() if re.match(r'\s*(weak )?(var|let) opener: WebPage\?', line))
 tests = Path('iOS/Tests/MobilePopupContractTests.swift').read_text()
+tests = tests.replace('// PRODUCTION_POPUP_CALLBACK', callback).replace('// PRODUCTION_OPENER', opener)
 store = Path('iOS/Cra/Tabs/TabStore.swift').read_text()
 store = '\n'.join(line for line in store.splitlines() if not line.startswith('import '))
-Path(sys.argv[1]).write_text(tests.replace('// PRODUCTION_POPUP_CALLBACK', callback) + '\n' + store)
+Path(sys.argv[1]).write_text(tests + '\n' + store)
 PY
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   Packages/CraCore/Sources/CraCore/Mobile/MobileTabs.swift \
