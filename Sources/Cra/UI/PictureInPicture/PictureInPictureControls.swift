@@ -3,8 +3,8 @@ import AppKit
 /// Arc's Picture in Picture hover controls, drawn over the video.
 ///
 /// Invisible until the pointer enters the window, then fades in one even dark
-/// layer with the controls: back-to-tab (top-left), the page's address (centred)
-/// and close (top-right), play/pause in the middle between ±15 s skips, as in Arc
+/// layer with the controls: back-to-tab (top-left), the page's address (centred),
+/// minimize and close (top-right), play/pause in the middle between ±15 s skips, as in Arc
 /// (#246), sized by Arc's size classes, without the skips in a tiny window (#262), and Arc's
 /// scrubber along the bottom for a video with an end. Fades out when the pointer leaves or rests for a while, and the window
 /// is the bare video again. Only the buttons and the shown scrubber take clicks; everything else passes
@@ -27,12 +27,13 @@ final class PictureInPictureControlsView: NSView {
     private let addressLabel = NSTextField(labelWithString: "")
     private static let topButtonSize: CGFloat = 26
     private let closeButton = PictureInPictureButton(symbol: "xmark", pointSize: 12, diameter: topButtonSize, tip: "Close")
+    private let minimizeButton = PictureInPictureButton(symbol: "minus", pointSize: 12, diameter: topButtonSize, tip: "Minimize")
     private let backButton = PictureInPictureButton(symbol: "pip.exit", pointSize: 13, diameter: topButtonSize, tip: "Back to Tab")
     // Sized in layout() from PictureInPictureLayout.centreControls.
     private let playButton = PictureInPictureButton(symbol: "play.fill", pointSize: 28, diameter: 52, tip: "Play")
     private let skipBackButton = PictureInPictureButton(symbol: "gobackward.15", pointSize: 28, diameter: 46, tip: "Skip back 15 seconds")
     private let skipAheadButton = PictureInPictureButton(symbol: "goforward.15", pointSize: 28, diameter: 46, tip: "Skip ahead 15 seconds")
-    private var buttons: [PictureInPictureButton] { [backButton, closeButton, playButton, skipBackButton, skipAheadButton] }
+    private var buttons: [PictureInPictureButton] { [backButton, minimizeButton, closeButton, playButton, skipBackButton, skipAheadButton] }
     private var hideTimer: Timer?
     private var shown = false
 
@@ -55,6 +56,7 @@ final class PictureInPictureControlsView: NSView {
             b.onPress = { [weak self] in self?.show() }
         }
         closeButton.onClick = { PictureInPictureChrome.shared.actions?.close() }
+        minimizeButton.onClick = { PictureInPictureChrome.shared.actions?.minimize() }
         backButton.onClick = { PictureInPictureChrome.shared.actions?.backToTab() }
         playButton.onClick = { [weak self] in
             PictureInPictureChrome.shared.actions?.togglePlayback()
@@ -97,6 +99,8 @@ final class PictureInPictureControlsView: NSView {
         let bar = PictureInPictureLayout.topBar(width: bounds.width, buttonSize: Self.topButtonSize, backWidth: backButton.fittingWidth,
                                                 addressWidth: addressLabel.stringValue.isEmpty ? 0 : PictureInPictureButton.textWidth(addressLabel))
         backButton.frame = bar.back
+        minimizeButton.isHidden = bar.minimize == nil
+        if let m = bar.minimize { minimizeButton.frame = m }
         closeButton.frame = bar.close
         addressLabel.isHidden = bar.address == nil
         if let a = bar.address {

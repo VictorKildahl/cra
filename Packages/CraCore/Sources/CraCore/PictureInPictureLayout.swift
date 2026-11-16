@@ -50,25 +50,32 @@ public enum PictureInPictureLayout {
     public static func labelsBackToTab(width: CGFloat) -> Bool { width >= 400 }
 
     /// The top bar in a window `width` wide, y going down from the top edge: back to tab on the
-    /// left (`backWidth` wide: a glyph, or the glyph and its words), close on the right, the
-    /// address centred on the window between them (truncated in the middle when it doesn't fit;
-    /// nil when there's no room at all).
+    /// left (`backWidth` wide: a glyph, or the glyph and its words), minimize and close as a group
+    /// on the right (Arc's), the address centred on the window between them (truncated in the
+    /// middle when it doesn't fit; nil when there's no room at all).
     public struct TopBar: Equatable, Sendable {
         public var back: CGRect
+        /// Nil in a tiny window (under 280 pt, where the skips go too, #262): the address keeps its room.
+        public var minimize: CGRect?
         public var close: CGRect
         public var address: CGRect?
     }
+
+    /// Between minimize and close, which Arc keeps as a group.
+    static let groupGap: CGFloat = 4
+    static let minimizeMinWidth: CGFloat = 280
 
     public static func topBar(width: CGFloat, buttonSize b: CGFloat, backWidth: CGFloat? = nil, addressWidth: CGFloat) -> TopBar {
         let c = buttonCentreInset(width: width)
         let y = c - b / 2
         let back = CGRect(x: c - b / 2, y: y, width: backWidth ?? b, height: b)
         let close = CGRect(x: width - c - b / 2, y: y, width: b, height: b)
-        let room = 2 * (min(width / 2 - back.maxX, close.minX - width / 2) - addressGap)
+        let minimize: CGRect? = width >= minimizeMinWidth ? CGRect(x: close.minX - groupGap - b, y: y, width: b, height: b) : nil
+        let room = 2 * (min(width / 2 - back.maxX, (minimize ?? close).minX - width / 2) - addressGap)
         let w = min(addressWidth, room)
         let address = addressWidth > 0 && w >= addressMinWidth
             ? CGRect(x: width / 2 - w / 2, y: c - addressFontSize, width: w, height: 2 * addressFontSize) : nil
-        return TopBar(back: back, close: close, address: address)
+        return TopBar(back: back, minimize: minimize, close: close, address: address)
     }
 
     /// The limits on the window's size: at least 224 × 126 pt for the video's shape, as in Arc

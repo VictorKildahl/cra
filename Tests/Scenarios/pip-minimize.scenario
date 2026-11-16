@@ -1,0 +1,26 @@
+# Arc's Minimize on the Picture in Picture window ("minimizes the pip window"; asked for by a user,
+# 16 Nov 2026): the video leaves the window and plays on in its tab, the sidebar's player shows the
+# tab with its Picture in Picture button, and that button brings the video back out.
+cra://open?url=file://${FIXTURES}/Pages/video.html?n=video
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?pip=before
+expect-log Cra pip before: windows=1
+cra://debug?pipMinimize=1
+expect-log minimized to the sidebar's player
+wait 1.5
+cra://debug?pip=minimized
+expect-log Cra pip minimized: windows=0
+cra://debug?nowPlaying=state&label=minimized
+expect-log Cra nowPlaying\[minimized\] \S+ playing=\d prev=\d next=\d video=1 pip=0
+# The card's button brings the video back out.
+cra://debug?nowPlaying=pip&label=back
+wait 2
+cra://debug?pip=back
+expect-log Cra pip back: windows=1

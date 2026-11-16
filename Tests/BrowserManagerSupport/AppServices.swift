@@ -131,6 +131,7 @@ struct PictureInPictureActions {
     var skip: (Double) -> Void
     var seek: (Double) -> Void
     var close: () -> Void
+    var minimize: () -> Void = {}
 }
 final class PictureInPictureChrome {
     static let shared = PictureInPictureChrome()

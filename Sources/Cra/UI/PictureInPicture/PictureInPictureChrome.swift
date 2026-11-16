@@ -9,6 +9,8 @@ struct PictureInPictureActions {
     /// Go to this many seconds from the video's start (the scrubber).
     var seek: (Double) -> Void = { _ in }
     var close: () -> Void
+    /// Arc's Minimize: the video leaves the window and plays on in the sidebar's player.
+    var minimize: () -> Void = {}
 }
 
 /// Arc's Picture in Picture window, reproduced over Chromium's.

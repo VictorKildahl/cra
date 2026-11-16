@@ -847,7 +847,11 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   glyphs with tooltips only. The address centred between them is from the reporter's captures; no
   host label was found in the binary.
 - [O static] Minimize is per site (`minimizeEnabled` in its PiP config) and asks Chromium to leave PiP;
-  `offscreen` is a separate "stash" past the screen edge. Cra has neither.
+  `offscreen` is a separate "stash" past the screen edge. Cra (16 Nov 2026, asked for by a user):
+  Minimize sits left of Close as a group from 280 pt wide, leaves PiP and the video plays on in its
+  tab; the sidebar's player shows the tab with its Picture in Picture button, which brings the
+  video back out (`BrowserManager.minimizePictureInPicture`, scenario `pip-minimize`). No per-site
+  switch and no stash.
 - [O static] Scrubber: 5 pt capsule (15 pt drag area) 8 pt above the bottom (4 when tiny), white over
   white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra draws it
   (`PictureInPictureScrubber` in CraCore, 12 Nov) for a video with an end, and a press goes to that

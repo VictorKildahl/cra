@@ -23,6 +23,17 @@ struct PictureInPictureLayoutTests {
         #expect(a.minX >= bar.back.maxX + 8 && a.maxX <= bar.close.minX - 8)
     }
 
+    /// Arc's Minimize sits with Close as a group at the top right from 280 pt wide, where the skips
+    /// come in too; a tiny window keeps the address's room. The address keeps clear of it.
+    @Test func minimizeSitsWithCloseAsAGroup() {
+        #expect(PictureInPictureLayout.topBar(width: 223, buttonSize: 26, addressWidth: 60).minimize == nil)
+        let bar = PictureInPictureLayout.topBar(width: 280, buttonSize: 26, addressWidth: 400)
+        let m = try! #require(bar.minimize)
+        #expect(m == CGRect(x: 207, y: 17, width: 26, height: 26))
+        #expect(m.maxX == bar.close.minX - 4 && m.minY == bar.close.minY)
+        #expect(bar.address?.width == 2 * (207.0 - 140 - 8))
+    }
+
     @Test func longAddressIsCutToTheRoomAndDroppedWithoutRoom() {
         let bar = PictureInPictureLayout.topBar(width: 223, buttonSize: 26, addressWidth: 400)
         #expect(bar.address?.width == 2 * (111.5 - 39 - 8))

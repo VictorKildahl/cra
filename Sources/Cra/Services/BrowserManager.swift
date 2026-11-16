@@ -1088,7 +1088,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 togglePlayback: { [weak browser] in browser?.togglePictureInPicturePlayback() },
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
                 seek: { [weak browser] s in browser?.seekPictureInPicture(to: s) },
-                close: { [weak browser] in browser?.closePictureInPicture() })
+                close: { [weak browser] in browser?.closePictureInPicture() },
+                minimize: { [weak self] in self?.minimizePictureInPicture(id) })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
             PictureInPictureChrome.shared.time = (0, 0)   // the page says where its video is right after
             PictureInPictureChrome.shared.address = PictureInPictureLayout.address(of: browser.currentURL)
@@ -1105,6 +1106,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             rt.autoPictureInPicture = false
         }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// Arc's Minimize on the Picture in Picture window ("minimizes the pip window"): the video
+    /// leaves the window and plays on in its tab, and the sidebar's player shows the tab with its
+    /// Picture in Picture button, which brings the video back out. The card is made here when the
+    /// page's sound hasn't made one (the player follows the media session, #411).
+    func minimizePictureInPicture(_ id: UUID) {
+        guard let rt = runtimes[id], rt.browser.isInPictureInPicture else { return }
+        if let np = nowPlaying {
+            if np.entries.contains(where: { $0.id == id }) {
+                np.update(id) { $0.hasVideo = true }
+            } else {
+                np.entries.append(.init(id: id, playing: rt.browser.isPictureInPicturePlaying, hasVideo: true))
+            }
+        }
+        rt.browser.exitPictureInPicture()
+        log(id, "Picture in Picture minimized to the sidebar's player")
     }
 
     // MARK: CraBrowserDelegate
