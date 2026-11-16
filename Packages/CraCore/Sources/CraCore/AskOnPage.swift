@@ -142,6 +142,14 @@ public enum AskOnPage {
     public struct Quote: Equatable, Sendable {
         public let text: String
         public let state: QuoteState
+        /// What Find looks for: the page's own characters for a verified quote (its en dash where the
+        /// answer typed a hyphen), the answer's text otherwise.
+        public let findText: String
+        public init(text: String, state: QuoteState, findText: String? = nil) {
+            self.text = text
+            self.state = state
+            self.findText = findText ?? text
+        }
     }
     public struct Answer: Equatable, Sendable {
         public let text: String
@@ -179,9 +187,16 @@ public enum AskOnPage {
               excerpts.count <= 4, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               excerpts.reduce(text.utf8.count + (draft.keyAnswer?.utf8.count ?? 0), { $0 + $1.utf8.count }) <= 65_536 else { return nil }
         let source = normalized(source)
+        let foldedSource = String(source.map(folded))
         let quotes = excerpts.map { text -> Quote in
-            let candidate = normalized(text)
-            return Quote(text: text, state: !candidate.isEmpty && source.contains(candidate) ? .verified : .notFound)
+            let candidate = String(normalized(text).map(folded))
+            guard !candidate.isEmpty, let range = foldedSource.range(of: candidate, options: .literal) else {
+                return Quote(text: text, state: .notFound)
+            }
+            // Folding swaps one character for one, so the span sits at the same characters in the source.
+            let start = source.index(source.startIndex, offsetBy: foldedSource.distance(from: foldedSource.startIndex, to: range.lowerBound))
+            let end = source.index(start, offsetBy: foldedSource.distance(from: range.lowerBound, to: range.upperBound))
+            return Quote(text: text, state: .verified, findText: String(source[start..<end]))
         }
         return Answer(text: text, keyAnswer: draft.keyAnswer, quotes: quotes, isComplete: true)
     }
@@ -195,6 +210,17 @@ public enum AskOnPage {
     /// Only canonical Unicode and whitespace fold. Case and punctuation remain evidence.
     public static func normalized(_ text: String) -> String {
         text.precomposedStringWithCanonicalMapping.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// Typographic forms of the same mark: the model types a hyphen and straight quotes where pages print
+    /// dashes, minus signs, curly quotes and primes. One character for one; other punctuation stays evidence.
+    static func folded(_ c: Character) -> Character {
+        switch c {
+        case "\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2015}", "\u{2212}", "\u{FE58}", "\u{FE63}", "\u{FF0D}": return "-"
+        case "\u{2018}", "\u{2019}", "\u{201A}", "\u{201B}", "\u{2032}", "\u{FF07}": return "'"
+        case "\u{201C}", "\u{201D}", "\u{201E}", "\u{201F}", "\u{2033}", "\u{FF02}": return "\""
+        default: return c
+        }
     }
 
     /// A byte limit that never cuts a composed character, shared by context and response bounds.

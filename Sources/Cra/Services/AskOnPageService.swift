@@ -128,7 +128,7 @@ final class AskOnPageService {
         guard enabled(), available(), let context, browsers.isCurrentAskOnPage(context),
               let message = messages.first(where: { $0.id == messageID }), let answer = message.answer,
               answer.isComplete, answer.quotes.indices.contains(index), answer.quotes[index].state == .verified else { return }
-        let text = answer.quotes[index].text
+        let text = answer.quotes[index].findText
         browsers.clearAskOnPageQuote()
         guard let request = browsers.prepareFind(text, matchCase: true, purpose: .quote) else { return }
         quoteNavigation = QuoteNavigation(messageID: messageID, index: index, request: request, status: .loading)

@@ -80,6 +80,23 @@ struct AskOnPageTests {
         #expect(AskOnPage.completeAnswer(draft, source: "This is only the transmitted page introduction.")?.hasVerifiedQuote == false)
     }
 
+    /// The model types a hyphen and straight quotes where the page prints an en dash and curly quotes
+    /// (Wikipedia's "designed in 1956–1957"): the same punctuation, so the quote is on the page, and Find
+    /// looks for the page's own characters. A different mark ("!" for ".") still isn't.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func typographicVariantsOfTheSamePunctuationMatch() throws {
+        let source = "Helvetica is a typeface designed in 1956–1957 by Max Miedinger. It was called “Neue Haas Grotesk” at first."
+        let draft = AskOnPage.Draft(excerpts: ["designed in 1956-1957 by Max Miedinger.", "It was called \"Neue Haas Grotesk\" at first."],
+                                    answer: "Max Miedinger.", keyAnswer: "Max Miedinger")
+        let answer = try #require(AskOnPage.completeAnswer(draft, source: source))
+        #expect(answer.quotes.map(\.state) == [.verified, .verified])
+        #expect(answer.quotes.map(\.findText) == ["designed in 1956–1957 by Max Miedinger.", "It was called “Neue Haas Grotesk” at first."])
+        #expect(answer.quotes.map(\.text) == draft.excerpts, "the card shows the answer's quote as written")
+        let other = AskOnPage.Draft(excerpts: ["designed in 1956-1957 by Max Miedinger!"], answer: "Max Miedinger.", keyAnswer: nil)
+        #expect(AskOnPage.completeAnswer(other, source: source)?.quotes.first?.state == .notFound)
+        let exact = try #require(AskOnPage.completeAnswer(.init(excerpts: ["It was called"], answer: "Yes.", keyAnswer: nil), source: source))
+        #expect(exact.quotes.first?.findText == "It was called")
+    }
+
     @Test func literalSourceCharactersAreDataRatherThanMarkup() throws {
         let source = "Budget < €40 & the editor says \"use <excerpt> literally\". Café stays unchanged."
         let quote = "Budget < €40 & the editor says \"use <excerpt> literally\"."

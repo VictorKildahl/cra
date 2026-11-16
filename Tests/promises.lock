@@ -752,6 +752,7 @@
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::placeholdersAreArcs  bd66b23c595c
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::quotesRequireTheExactTransmittedSource  434aa85918b2
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::returnRequiresAnOwnedFinalZeroAndNeverAsksBackward  0f6a20126e6d
+#393   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::typographicVariantsOfTheSamePunctuationMatch  8f36cc8e52bc
 #393   Tests/AskOnPageContentTests.swift::liveQuoteEdgeMatrix  5ad5d62f9672
 #393   Tests/AskOnPageContentTests.swift::liveQuoteRanges  aa4331ebb552
 #393   Tests/AskOnPageControllerTests.swift::hostedCardReleasesItsOwner  919f26c7bce2
