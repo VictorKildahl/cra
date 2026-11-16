@@ -35,6 +35,9 @@ public enum PerfCounter: String, Codable, CaseIterable, Sendable {
     case rendererResponsive
     /// Tab sleeping closed a page; the key is why (the policy).
     case tabSlept
+    /// A hidden page put to sleep because its process passed PerfRunawaySleep.bytes; the key is
+    /// its size ("9.1 GB"), and an event names the site.
+    case runawaySlept
     /// A page that refused to sleep, once per page and reason (what cra.log says); the key is the
     /// reason. `sleepRetry` counts the same page refusing again after the back-off (GitHub #214:
     /// one page asked eight times read like eight pages).

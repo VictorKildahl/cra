@@ -72,6 +72,17 @@ public enum PerfInsights {
                                    title: "\(crashes) page\(crashes == 1 ? "" : "s") stopped (“Aw, Snap!”)",
                                    detail: "A page's process crashed, ran out of memory or was ended."))
         }
+        let runaway = r.events.filter { $0.kind == "runaway" }
+        if !runaway.isEmpty {
+            var sites: [String] = []
+            for e in runaway { if let s = e.site, !sites.contains(s) { sites.append(s) } }
+            let n = runaway.count
+            out.append(PerfInsight(id: "runaway-slept", severity: .warning,
+                                   title: "Cra put \(n) tab\(n == 1 ? "" : "s") to sleep that used too much memory",
+                                   detail: "\(sites.isEmpty ? "A page" : sites.joined(separator: ", ")) grew past \(PerfRunawaySleep.bytes >> 30) GB while out of sight"
+                                       + " (\(runaway.map(\.detail).joined(separator: ", "))). It loads again when you open it."
+                                       + " Exporting diagnostics and sending them helps find out why."))
+        }
         let unresponsive = r.counters[PerfCounter.rendererUnresponsive.rawValue]?.values.reduce(0, +) ?? 0
         if unresponsive > 0 {
             out.append(PerfInsight(id: "unresponsive", severity: .warning, title: "\(unresponsive) page\(unresponsive == 1 ? "" : "s") stopped responding",

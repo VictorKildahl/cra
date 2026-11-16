@@ -700,6 +700,18 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
+    /// A hidden page whose process ran away (PerfCEF, past PerfRunawaySleep.bytes) sleeps at once,
+    /// without the probes a timer pass asks first, as Chrome's urgent discarding: a page holding
+    /// gigabytes costs the whole Mac more than what it would keep. Shown pages, Picture in Picture
+    /// and calls stay. Returns whether it was asked.
+    @discardableResult
+    func sleepRunaway(_ id: UUID) -> Bool {
+        guard let rt = runtimes[id], !rt.discarded, !visibleTabIDs.contains(id), !rt.browser.isInPictureInPicture,
+              !rt.browser.isCapturingMedia, rt.browser.isCreated, !rt.browser.isClosed else { return false }
+        discard(id, rt, rt.browser.currentURL, .runaway, SleepPass(reason: .runaway, done: sleepPassLogged))
+        return true
+    }
+
     /// An MCP client works in the page (MCPServer): that counts as use, so sleeping and freezing
     /// wait as they do after the user looks at a tab, and a discarded page loads again.
     func touchedByAgent(_ id: UUID) {

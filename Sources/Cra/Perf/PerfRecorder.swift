@@ -30,6 +30,10 @@ final class PerfRecorder: @unchecked Sendable {
     /// `pageLongTasks` and `pageFrames`.
     nonisolated(unsafe) static var mainSampler: (@MainActor (PerfRecorder) -> Void)?
 
+    /// Called on the main thread when one process runs away (PerfRunawayWatch): the app names it
+    /// and the pages with a frame in it in cra.log (PerfCEF).
+    nonisolated(unsafe) static var runawayHandler: (@MainActor ([PerfRunaway]) -> Void)?
+
     let config: Config
     let writesFiles: Bool
     let sessionID = String(UUID().uuidString.prefix(8)).lowercased()
@@ -49,6 +53,7 @@ final class PerfRecorder: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var processes = PerfProcessTable()
     private var processSampler = PerfProcessSampler()
+    private var runaways = PerfRunawayWatch()
     private var system = PerfSystemSampler()
     private var samples = 0
     private var hangs = 0
@@ -340,6 +345,10 @@ final class PerfRecorder: @unchecked Sendable {
     /// Whether the Mac had no keyboard or mouse input for a minute: the next samples count as idle.
     @MainActor func userIdle(_ idle: Bool) { lock.withLock { state.userIdle = idle } }
 
+    /// The sites with a frame in each renderer, by pid (Cra.getProcessInfo), for the history's
+    /// largest and busiest process.
+    @MainActor func processSites(_ sites: [Int32: [String]]) { lock.withLock { state.processSites = sites } }
+
     @MainActor func addMainThreadCost(ns: UInt64) { lock.withLock { cost.mainNs &+= ns } }
 
     // MARK: The queue
@@ -369,9 +378,17 @@ final class PerfRecorder: @unchecked Sendable {
     private func sampleProcesses() {
         var groups: [PerfProcessGroup] = []
         var sys: PerfSystemSample?
-        measured(\.processNs) { groups = processes.update(processSampler.read(), atNs: Perf.now()) }
+        var found: [PerfRunaway] = []
+        measured(\.processNs) {
+            groups = processes.update(processSampler.read(), atNs: Perf.now())
+            found = runaways.update(processes.usage)
+        }
         measured(\.systemNs) { sys = system.read(dataFolder: config.folder) }
+        if !found.isEmpty, let handler = Self.runawayHandler {
+            DispatchQueue.main.async { handler(found) }
+        }
         lock.withLock {
+            state.processUsage = processes.usage
             state.processes = groups
             state.system = sys
             state.idleSample(cpuPct: groups.reduce(0) { $0 + $1.cpuPct })
@@ -460,11 +477,13 @@ final class PerfRecorder: @unchecked Sendable {
         if let r { r.queue.async(execute: work) } else { DispatchQueue.global(qos: .utility).async(execute: work) }
     }
 
-    /// Every `site` value in a Perf file.
+    /// Every `site` value in a Perf file, and every host in a `sites` list (history buckets' processes).
     private static func sites(in json: Any) -> Set<String> {
         if let d = json as? [String: Any] {
             return d.reduce(into: Set<String>()) { s, kv in
-                if kv.key == "site", let host = kv.value as? String { s.insert(host) } else { s.formUnion(sites(in: kv.value)) }
+                if kv.key == "site", let host = kv.value as? String { s.insert(host) }
+                else if kv.key == "sites", let hosts = kv.value as? [String] { s.formUnion(hosts) }
+                else { s.formUnion(sites(in: kv.value)) }
             }
         }
         return (json as? [Any])?.reduce(into: Set<String>()) { $0.formUnion(sites(in: $1)) } ?? []

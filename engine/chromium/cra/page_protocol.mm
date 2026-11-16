@@ -529,6 +529,31 @@ void HandleCraMethod(content::WebContents* contents,
     } else {
       contents->RemoveUserData(content::CraSparePageKey());
     }
+  } else if (method == "Cra.getProcessInfo") {
+    // The processes the page's frames run in and each frame's site, for the performance recorder:
+    // which page and which of its frames a process that grew to gigabytes or kept cores busy holds
+    // (a 0.1.44 report had 14-17 GB with four tabs and nothing to say whose it was).
+    base::ListValue frames;
+    std::set<std::pair<base::ProcessId, std::string>> seen;
+    contents->GetPrimaryMainFrame()->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+      if (!frame->IsRenderFrameLive()) {
+        return;
+      }
+      const base::Process& process = frame->GetProcess()->GetProcess();
+      if (!process.IsValid()) {
+        return;
+      }
+      std::string site(frame->GetLastCommittedURL().host());
+      if (!seen.insert({process.Pid(), site}).second) {
+        return;
+      }
+      base::DictValue f;
+      f.Set("pid", static_cast<int>(process.Pid()));
+      f.Set("site", site);
+      f.Set("main", frame->GetParent() == nullptr);
+      frames.Append(std::move(f));
+    });
+    result->Set("frames", std::move(frames));
   } else if (method == "Cra.extensionSidePanel") {
     // An extension's side panel page: like Chrome's, it has no tab (GitHub #265).
     extensions::SetViewType(contents, extensions::mojom::ViewType::kExtensionSidePanel);

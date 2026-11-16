@@ -5,7 +5,7 @@ import Foundation
 /// change the time, turn the clock off, or close pages while macOS reports memory pressure
 /// (GitHub #153). The probes in BrowserManager still decide whether a candidate may close.
 public struct TabSleepPolicy: Equatable, Sendable {
-    public enum Reason: String, Sendable { case timer, memoryPressure, splitCopy }
+    public enum Reason: String, Sendable { case timer, memoryPressure, splitCopy, runaway }
 
     /// A page this long out of sight, and silent as long, is a candidate.
     public var hiddenFor: TimeInterval
@@ -42,6 +42,8 @@ public struct TabSleepPolicy: Equatable, Sendable {
 
     /// A pinned tab that a split pane copied (Arc): its page sleeps at once, the copy shows it.
     public static let splitCopy = TabSleepPolicy(hiddenFor: 0, keepsRecentTabs: false, limit: 1, reason: .splitCopy)
+    /// A hidden page whose process ran away (PerfRunawaySleep).
+    public static let runaway = TabSleepPolicy(hiddenFor: 0, keepsRecentTabs: false, reason: .runaway)
 
     /// How often the app's pass runs (AppComposition.tabSleepInterval).
     public static let passInterval: TimeInterval = 60
@@ -104,7 +106,8 @@ public struct TabSleepPolicy: Equatable, Sendable {
         }
 
         private var closedLines: [String] {
-            let why = reason == .memoryPressure ? ", the Mac is short of memory" : reason == .splitCopy ? ", a split shows its copy" : ""
+            let why = reason == .memoryPressure ? ", the Mac is short of memory" : reason == .splitCopy ? ", a split shows its copy"
+                : reason == .runaway ? ", its process ran away" : ""
             return [(true, "discards"), (false, "unloads")].compactMap { discarded, verb in
                 let ps = pages.filter { $0.discarded == discarded }
                 guard !ps.isEmpty else { return nil }
