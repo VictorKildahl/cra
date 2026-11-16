@@ -1804,6 +1804,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // pluginFetch=<url>: the session fetch a live folder's plug-in makes; logs what the plug-in would see.
+            if let url = dict["pluginFetch"] {
+                CraCEFRuntime.fetchPluginURL(url, headers: nil, profilePath: nil) { status, finalURL, _, body in
+                    CraLog.note("plugin fetch status=\(status) body=\(body.isEmpty ? "empty" : "\(body.count) chars") url=\(finalURL)")
+                }
+                return
+            }
             // What the command bar would list for the text (rows, the Tab scope, the search), without opening it.
             if let text = dict["suggest"] {
                 let engine = main.commandBar.engine

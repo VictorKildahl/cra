@@ -1,0 +1,11 @@
+# A live folder's plug-in gets the HTTP status of every answer, not only 2xx: GitHub's 401 (signed out),
+# 403 (rate limit, SSO) and 429 are how it knows to ask for a sign-in or to wait. On the engine the session
+# fetch dropped every non-2xx answer as a failed request (status 0), so a signed-out enterprise folder said
+# "GitHub can’t be reached" (16 Nov 2026). Status 0 stays for a request that got no answer.
+budget rss=600
+cra://debug?pluginFetch=${ORIGIN}/no-such-page
+expect-log plugin fetch status=404 body=[0-9]+ chars
+cra://debug?pluginFetch=${ORIGIN}/page.html
+expect-log plugin fetch status=200 body=[0-9]+ chars
+cra://debug?pluginFetch=http://127.0.0.1:9/
+expect-log plugin fetch status=0 body=empty

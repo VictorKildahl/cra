@@ -65,6 +65,9 @@ void Fetch(Profile* profile, const GURL& url, NSDictionary<NSString*, NSString*>
   }
   std::unique_ptr<network::SimpleURLLoader> owned = network::SimpleURLLoader::Create(std::move(request), kTraffic);
   network::SimpleURLLoader* loader = owned.get();
+  // A 4xx or 5xx is an answer, with its status and body (CEF's request gave them): a live folder's plug-in reads
+  // GitHub's 401, 403 and 429 to ask for a sign-in or wait. Without this the loader drops them as failures.
+  loader->SetAllowHttpErrorResults(true);
   if (restricted) {
     loader->SetTimeoutDuration(base::Seconds(20));
   }
