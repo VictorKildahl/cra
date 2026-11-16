@@ -608,6 +608,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Anchoring while the sidebar floats: bring it home first so it slides from there.
             if lastSidebarVisible { floatingSidebar?.prepareForAnchoring() }
             shell.animateSidebar(visible: lastSidebarVisible, floating: false, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth)
+            floatingSidebar?.sidebarVisibilityChanged()
         }
         if CGFloat(store.prefs.sidebarWidth) != lastSidebarWidth {
             lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
@@ -1154,6 +1155,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A sidebar that came out over the page's full screen goes home when the shown one comes back (#315).
         if !fullscreen, sidebarVisible { floatingSidebar?.hide(animated: false) }
         shell.contentFullscreen = fullscreen
+        floatingSidebar?.sidebarVisibilityChanged()
         contentFullscreenTab = fullscreen ? tabID : nil
         if fullscreen, !window.styleMask.contains(.fullScreen) {
             enteredFullscreenForContent = true
@@ -4428,6 +4430,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if let id = contentFullscreenTab { browsers.runtime(for: id)?.browser.exitFullscreen() }
         contentFullscreenTab = nil
         if shell.contentFullscreen { shell.contentFullscreen = false }
+        floatingSidebar?.sidebarVisibilityChanged()
         enteredFullscreenForContent = false
         shell.needsLayout = true
     }

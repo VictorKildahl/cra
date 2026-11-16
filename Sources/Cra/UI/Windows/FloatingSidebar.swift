@@ -24,7 +24,9 @@ final class FloatingSidebarController {
     /// Called after the panel is attached so the overlay panel can be re-ordered above it.
     var didAttachPanel: (() -> Void)?
 
-    private(set) var isShown = false
+    private(set) var isShown = false {
+        didSet { if isShown != oldValue { refreshPolling() } }
+    }
     /// A completed hide must not take the panel away from a newer reveal or anchor.
     private var transitionGeneration: UInt64 = 0
     private var panel: FloatingSidebarPanel?
@@ -98,17 +100,29 @@ final class FloatingSidebarController {
         activation = [(NSApplication.didBecomeActiveNotification, true), (NSApplication.didResignActiveNotification, false)].map { name, on in
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    self?.setPolling(on)
+                    self?.appActive = on
+                    self?.refreshPolling()
                     if !on { self?.resignedActive() }
                 }
             }
         }
-        setPolling(NSApp.isActive)
+        appActive = NSApp.isActive
+        refreshPolling()
         displayOptions = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshBackdrop() }
         }
+    }
+
+    /// Whether Cra is the active app, as the activation notifications last said.
+    private var appActive = false
+
+    /// The pointer matters only while Cra is active and the sidebar is hidden (it may come out) or out
+    /// floating (it may leave). With the sidebar anchored, the timer was most of an idle Cra's
+    /// wake-ups with its window in front.
+    private func refreshPolling() {
+        setPolling(appActive && (isShown || sidebarHidden()))
     }
 
     private func setPolling(_ on: Bool) {
@@ -125,6 +139,9 @@ final class FloatingSidebarController {
 
     /// Whether the pointer is being sampled (the tests check it follows the app's activation).
     var isPolling: Bool { poll != nil }
+
+    /// The anchored sidebar was shown or hidden, or a page entered or left full screen.
+    func sidebarVisibilityChanged() { refreshPolling() }
 
     private func pointerMoved() {
         guard NSApp.isActive, window.isVisible else { return }
