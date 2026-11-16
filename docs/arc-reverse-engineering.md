@@ -3956,7 +3956,12 @@ Arc Max's renameDownloads: a finished download is renamed on disk and a card abo
   ↶ renamed the file back at once (git-consortium-master.zip). Not captured: the reverted toast (Cra shows
   "Download name reverted!" in its one toast), the card in a light space (Cra: white, from Arc's Max picture), and
   whether hovering holds it.
-- Cra: TidyDownloads (CraCore: prompt with Cra's own examples, the name's checks, a free name), TidyDownloadsService
+- [O static, Arc 1.173.1, 16 Nov 2026] The prompt's full text is in Arc's main binary (`strings`): the five rule lines,
+  "Some examples, in the form \"original name, tab title, domain -> new name\"", nine `- 'file', 'title', 'domain' ->
+  'new name' (reason)` lines, a JSON schema (`newName: string // The new filename`), "Write responses (but not JSON keys)
+  in " + a language, and a request of three lines: `Original filename: '…'`, `Source tab title: '…'`, `Source domain: '…'`.
+- Cra: TidyDownloads (CraCore: Arc's prompt word for word since #441, with the Gmail example's address de-identified;
+  the name's checks; a free name, Arc's "(1)"…"(100)"), TidyDownloadsService
   (FoundationModels, renames the file, DownloadHistory.move, revert), DownloadRenameCard (SidebarView, over the bin).
   Settings ▸ Max ▸ Tidy Downloads, off by default. Deviations Victor asked for (5 Nov 2026): the body is 71 pt
   (the old name's baseline as far from the bottom as the label's cap top from the top), and the card stays while the

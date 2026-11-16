@@ -124,8 +124,8 @@ final class DownloadHistory {
     }
 
     /// A renamed (or reverted) file keeps its place in the list.
-    func move(from old: String, to new: String) {
-        guard let i = entries.lastIndex(where: { $0.path == old }) else { return }
+    func move(from old: String, to new: String, id: UUID? = nil) {
+        guard let i = entries.lastIndex(where: { $0.path == old && (id == nil || $0.id == id) }) else { return }
         entries[i].path = new
         thumbnails[new] = thumbnails.removeValue(forKey: old)
         file.save(entries)

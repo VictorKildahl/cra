@@ -40,11 +40,11 @@ enum DownloadDestinations {
     }
 
     /// The file to save as, or nil when the user cancelled the save panel.
-    static func destination(profilePath: String?, suggestedName: String, completion: @escaping @MainActor (URL?) -> Void) {
+    static func destination(profilePath: String?, suggestedName: String, replaceExisting: Bool = false, completion: @escaping @MainActor (URL?) -> Void) {
         let id = profileID(profilePath: profilePath)
         let folder = folder(profileID: id)
         guard location(profileID: id).askWhereToSave else {
-            completion(DownloadFileName.unique(suggestedName, in: folder) { FileManager.default.fileExists(atPath: $0) })
+            prepare(DownloadFileName.unique(suggestedName, in: folder) { FileManager.default.fileExists(atPath: $0) }, replacing: false, completion: completion)
             return
         }
         asks.append { done in
@@ -54,7 +54,7 @@ enum DownloadDestinations {
             panel.canCreateDirectories = true
             let finish: (NSApplication.ModalResponse) -> Void = { response in
                 MainActor.assumeIsolated {
-                    completion(response == .OK ? panel.url : nil)
+                    prepare(response == .OK ? panel.url : nil, replacing: replaceExisting, completion: completion)
                     // The sheet is still attached while its handler runs: the next one next turn.
                     DispatchQueue.main.async { done() }
                 }
@@ -71,6 +71,14 @@ enum DownloadDestinations {
             }
         }
         if asks.count == 1 { asks[0](next) }
+    }
+
+    /// Both engines reserve before their destination callback can start writing. WebKit also
+    /// needs the approved existing file removed; CEF handles that replacement itself.
+    static func prepare(_ destination: URL?, replacing: Bool, service: TidyDownloadsService? = nil, completion: @escaping @MainActor (URL?) -> Void) {
+        guard let destination else { completion(nil); return }
+        let preparation = (service ?? .shared).prepareDestination(destination.path, replacing: replacing)
+        Task { @MainActor in completion(await preparation.value ? destination : nil) }
     }
 
     /// Save panels one at a time: a second download asks once the first panel has closed.

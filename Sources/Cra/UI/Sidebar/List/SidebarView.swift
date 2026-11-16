@@ -93,13 +93,15 @@ final class SidebarView: NSView {
         v.onHover = { service.hold($0) }
         v.onOpen = { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: r.newPath)]) }
         v.onRevert = {
-            let ok = service.revert(r) { _, back in
-                if var recent = ui.recentDownload, recent.id == r.download {
-                    recent.path = back
-                    ui.recentDownload = recent
+            Task { @MainActor in
+                let ok = await service.revert(r) { old, back in
+                    if var recent = ui.recentDownload, recent.id == r.download, recent.path == old {
+                        recent.path = back
+                        ui.recentDownload = recent
+                    }
                 }
+                if ok { toast("Download name reverted!") }
             }
-            if ok { toast("Download name reverted!") }
         }
         tabs.addSubview(v)
         renameCard = v

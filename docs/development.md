@@ -124,6 +124,9 @@ to Markdown or `docs/` alone runs nothing.
   a stub to `AppServices.swift`.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
+- `scripts/test-tidy-downloads.sh`: `TidyDownloadsService` and `TidyDownloadFiles` on real files
+  with a fake model: renames, Revert, and a newer download at the same path while a rename or
+  undo is waiting. No Chromium or windows.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
