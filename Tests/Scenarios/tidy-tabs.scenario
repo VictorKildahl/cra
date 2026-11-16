@@ -1,0 +1,55 @@
+# Actual local grouping/undo journey; fake names prove structure, not semantic model quality.
+env CRA_TIDY_FAKE_MODEL=1
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"showToolbar":false,"tidyTabs":true}
+seed windows.json {"sidebarWidth":347}
+arg --host-resolver-rules=MAP nts.live 127.0.0.1
+budget rss=900 stalls50=30
+cra://debug?windowSize=1200x800
+
+# Five Today tabs do not offer Tidy. All pages are local; the nts.live host is mapped above.
+cra://open?url=${PAGE}?n=shop1
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=shop2
+cra://open?url=${MUSIC}/page.html?n=movie1
+cra://open?url=${MUSIC}/page.html?n=movie2
+cra://open?url=file://${FIXTURES}/Pages/page.html?n=calendar
+expect-log loaded file:
+cra://debug?hover=DividerRowView
+cra://debug?snapshot=TidyButton,0&out=/dev/null
+expect-log snapshot: no visible TidyButton,0$
+# Direct entry must respect the same threshold, without consuming later eligibility.
+cra://debug?tidy=1
+
+# Six total Today tabs: the existing host fake produces 3 movies, 2 shopping, 1 Calendar-like singleton.
+cra://open?url=${MUSIC}/page.html?n=movie3
+cra://debug?hover=DividerRowView
+cra://debug?snapshot=TidyButton&out=/dev/null
+expect-log snapshot: TidyButton at
+cra://debug?tidy=1
+# The fake provider pauses for 1.6 s; inspect the real running divider in the native capture run.
+cra://debug?snapshot=DividerRowView&out=/dev/null
+expect-log snapshot: DividerRowView at
+expect-log Tidy Tabs: completed 6 tabs, 3 proposed groups$
+cra://debug?snapshot=GroupHeaderRowView,0&out=/dev/null
+expect-log snapshot: GroupHeaderRowView,0 at
+cra://debug?snapshot=GroupHeaderRowView,1&out=/dev/null
+expect-log snapshot: GroupHeaderRowView,1 at
+cra://debug?snapshot=GroupHeaderRowView,2&out=/dev/null
+expect-log snapshot: GroupHeaderRowView,2 at
+cra://debug?snapshot=GroupHeaderRowView,3&out=/dev/null
+expect-log snapshot: no visible GroupHeaderRowView,3$
+cra://debug?snapshot=TidyButton&out=/dev/null
+expect-log snapshot: no visible TidyButton$
+
+# Undo removes every new header, restores original loose order and reoffers Tidy.
+cra://debug?undoTidy=1
+cra://debug?hover=DividerRowView
+cra://debug?snapshot=GroupHeaderRowView&out=/dev/null
+expect-log snapshot: no visible GroupHeaderRowView$
+cra://debug?snapshot=TidyButton,0&out=/dev/null
+expect-log snapshot: TidyButton,0 at
+cra://debug?applescript=tell%20current%20application%20to%20set%20urls%20to%20%C2%ABclass%20URL%20%C2%BB%20of%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201%0Aset%20AppleScript%27s%20text%20item%20delimiters%20to%20%22%7C%22%0Areturn%20%22tidy-tabs-after-undo%3A%22%20%26%20%28urls%20as%20text%29
+expect-log Cra applescript → tidy-tabs-after-undo:.*n=movie3.*n=calendar.*n=movie2.*n=movie1.*n=shop2.*n=shop1$
+reject-log Tidy Tabs: completed 5 tabs
+reject-log Tidy Tabs: (generation failed|model unavailable or context limit)
+cra://debug?checkStore=1
