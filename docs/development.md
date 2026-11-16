@@ -132,6 +132,13 @@ to Markdown or `docs/` alone runs nothing.
   a failed run hiding Tidy like Arc's, undo. `scripts/test-tidy-tabs-model.sh` checks the
   on-device adapter's context fitting; `--real` also asks the Mac's own model (needs Apple
   Intelligence) and prints its groups.
+- `scripts/test-tidy-titles.sh`: Tidy Tab Titles' service on the real `SidebarStore` with a
+  scripted model and a manual clock: the pin's own window measures the name, a manual rename or a
+  new home wins over a late answer, and turning the setting or the model off cancels.
+  `scripts/test-tidy-title-layout.sh` checks the row's title width and font and the rename sweep's
+  cleanup. `scripts/test-tidy-titles-model.sh` checks Arc's answer schema; `--real` also asks the
+  Mac's own model (needs Apple Intelligence) for 18 sample titles and prints the names a 230 pt row
+  would pick.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image

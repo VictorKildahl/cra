@@ -1,9 +1,6 @@
 import AppKit
 import Foundation
 import Observation
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
 
 /// Tidy Tab Titles on the Mac's Apple Intelligence model: a tab you pin gets a short name (Arc Max's
 /// renamePinnedTabs). The name becomes the tab's custom title, as in Arc, and the row plays Arc's
@@ -153,7 +150,7 @@ final class TidyTitlesService {
     /// A title has just two bounded attempts. Only an exact context overflow earns the second.
     static func ask(title: String, url: String, language: String,
                     respond: @escaping @MainActor (String, String, Int) async throws -> TidyTitles.Answer = { instructions, prompt, limit in
-                        try await TidyTitlesService.respond(instructions: instructions, prompt: prompt, responseLimit: limit)
+                        try await TidyTitlesModel.respond(instructions: instructions, prompt: prompt, responseLimit: limit)
                     }) async -> TidyTitles.Answer? {
         guard !Task.isCancelled else { return nil }
         if let fake = fakeAnswer(title) { return fake }
@@ -161,14 +158,14 @@ final class TidyTitlesService {
         for attempt in 0..<2 {
             do {
                 try Task.checkCancellation()
-                let prompt = TidyTitles.prompt(title: title, url: url, language: language, compact: attempt == 1)
+                let prompt = TidyTitles.prompt(title: title, url: url, compact: attempt == 1)
                 let answer = try await respond(instructions, prompt, TidyTitles.responseTokenLimit)
                 try Task.checkCancellation()
                 return answer
             } catch is CancellationError {
                 return nil
             } catch {
-                let overflow = isContextOverflow(error)
+                let overflow = TidyTitlesModel.isContextOverflow(error)
                 if TidyTitles.shouldRetry(attempt: attempt, contextOverflow: overflow, cancelled: Task.isCancelled) { continue }
                 if !Task.isCancelled {
                     CraLog.note(overflow ? "Tidy Tab Titles: the request exceeded its context budget" : "Tidy Tab Titles: model generation failed")
@@ -177,39 +174,6 @@ final class TidyTitlesService {
             }
         }
         return nil
-    }
-
-    static func respond(instructions: String, prompt: String, responseLimit: Int) async throws -> TidyTitles.Answer {
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
-            try Task.checkCancellation()
-            if #available(macOS 26.4, *) {
-                let model = SystemLanguageModel.default
-                let instructionTokens = try await model.tokenCount(for: Instructions(instructions))
-                try Task.checkCancellation()
-                let promptTokens = try await model.tokenCount(for: prompt)
-                try Task.checkCancellation()
-                let schemaTokens = try await model.tokenCount(for: TidyTitleAnswer.generationSchema)
-                try Task.checkCancellation()
-                guard TidyTitles.fitsContext(inputTokens: instructionTokens + promptTokens + schemaTokens, contextSize: model.contextSize) else {
-                    throw LanguageModelSession.GenerationError.exceededContextWindowSize(.init(debugDescription: "Pinned title input exceeds local context budget"))
-                }
-            }
-            let session = LanguageModelSession(instructions: instructions)
-            let result = try await session.respond(to: prompt, generating: TidyTitleAnswer.self,
-                options: GenerationOptions(sampling: .greedy, maximumResponseTokens: responseLimit))
-            return TidyTitles.Answer(filtered: result.content.filtered, rewritten: result.content.rewritten)
-        }
-        #endif
-        throw CocoaError(.featureUnsupported)
-    }
-
-    private static func isContextOverflow(_ error: Error) -> Bool {
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *), let generationError = error as? LanguageModelSession.GenerationError,
-           case .exceededContextWindowSize = generationError { return true }
-        #endif
-        return false
     }
 
     /// CRA_TIDY_FAKE_MODEL=1: the title up to its first separator, so a test copy renames without
@@ -221,14 +185,3 @@ final class TidyTitlesService {
         return TidyTitles.Answer(filtered: name, rewritten: name)
     }
 }
-
-#if canImport(FoundationModels)
-@available(macOS 26.0, *)
-@Generable
-struct TidyTitleAnswer {
-    @Guide(description: "The title translated and filtered to remove cruft, with no word limit")
-    var filtered: String
-    @Guide(description: "The title rewritten in 1–3 words, keeping specifics and proper nouns")
-    var rewritten: String
-}
-#endif

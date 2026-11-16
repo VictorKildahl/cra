@@ -3943,6 +3943,27 @@ Titles (`renamePinnedTabsEnabled`, AI endpoint `renamePinnedTabs`) gives a tab a
   opt-in).
 - [?] Not seen: whether a drag into Pinned renames (Cra does, every pin counts), a rename whose new name isn't a
   prefix of the old (Cra crossfades in the soft edge), undo.
+- [O static] Arc 1.173.1 (16 Nov 2026, arm64 disassembly, PR #444): the prompt is built in
+  WindowState+AIRenameTabs (0x1000c00b4, text at 0x1039bca00, only caller 0x1000bf1b4) and no longer goes to a
+  server endpoint: "You are a perfect editor, summarizer and translator. I am bookmarking a tab in my browser. The
+  title is `…`", "Remove the name of the site (<URL.absoluteString>), if it's not the only thing there)", SEO
+  cruft, not too general, proper nouns with context (Anna Delvey and Arc Monetization examples), no 'kind of page'
+  words, keep subject, main verb and direct object; JSON `filtered` ("translated and filtered to remove the cruft.
+  No word limit.") and `rewritten` ("rewritten in 1-3 words"); "Write responses (but not JSON keys) in <language>",
+  the language being `Locale.preferredLanguages.first ?? "en"` named by an en_US locale ("English" fallback).
+- [O static] Choosing the name: if `filtered.count < rewritten.count` only `filtered` is a candidate, else both
+  (0x1000bf6f0–0x1000bf830); empties are dropped. Each is measured with `sizeWithAttributes:` in the row's title
+  font; Arc takes the widest that fits the title width (taken from layout constants minus insets) and the
+  narrowest when none fits (0x1000bff88). A longer name than the old title is fine, and a name equal to the old
+  one still renames; the old and new lengths only feed `auto_renamed_pinned_tab`.
+- Cra since #444: Arc's instructions word for word, with the title (one line, no backticks) and the site's host
+  in the request instead of inside the instructions, and Arc's candidate and width rule against the live row.
+  Deviations: the host instead of the whole URL, and a name equal to the shown title is skipped (no sweep for
+  nothing). On the Mac's model (macOS 26.7.2, greedy) Arc's text, Cra's earlier prompt with Arc's renames as
+  examples and #444's reworded one scored 11, 12 and 11 of 18 sample titles (Arc's 7 renames above plus 11
+  judged by Arc's rules, each kept out of every prompt's examples); renaming the answer type alone moved a score
+  by 2, so those are a tie. The earlier prompt's 7 of 7 on Arc's renames was those renames being its examples.
+  `scripts/test-tidy-titles-model.sh --real` reruns it.
 
 ## Tidy Downloads (Arc 1.171, 4 Nov 2026, strings + Victor's Arc, 60 fps recordings)
 

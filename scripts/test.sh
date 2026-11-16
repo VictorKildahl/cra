@@ -50,6 +50,7 @@ if [ "${1:-}" != core ]; then
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Tidy title layout" scripts/test-tidy-title-layout.sh
   suite "Tidy title requests" scripts/test-tidy-titles.sh
+  suite "Tidy title model" scripts/test-tidy-titles-model.sh
   suite "Emoji label" scripts/test-emoji-label.sh
   suite "Theme noise" scripts/test-theme-noise.sh
   suite "Chromium window corners" scripts/test-chromium-window-corners.sh

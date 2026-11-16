@@ -419,10 +419,9 @@ enum TidyTitlesServiceTests {
             expect(recovered?.filtered == "回復した名前" && requests.count == 2,
                    "exact context overflow retries one smaller request and returns its actual answer")
             for (index, request) in requests.enumerated() {
-                let source = try JSONDecoder().decode([String: String].self, from: Data(request.1.dropFirst("Source data:\n".count).utf8))
-                expect(source["title"]?.count == (index == 0 ? 200 : 100)
-                       && source["responseLanguage"] == "Japanese" && source["site"] == "example.org"
-                       && request.0.hasSuffix("Write both response values in Japanese.")
+                let globes = String(repeating: "🌎", count: index == 0 ? 200 : 100)
+                expect(request.1 == "The title is `\(globes)` (site: example.org)"
+                       && request.0.hasSuffix("Write responses (but not JSON keys) in Japanese.")
                        && request.2 == 384 && (request.0 + request.1).utf8.count <= 4_096,
                        "the final attempt \(index) preserves trusted language/site and bounds input plus output reserve")
             }
