@@ -2155,6 +2155,60 @@ enum StoreTests {
         syncPutsAMixedBundleRight()
         syncPutsAFileThatNeverArrivesRight()
         syncLeavesAMixToItsWriterOnANewMac()
+        syncKeepsAClosedTabClosed()
+    }
+
+    /// A tab closed on one Mac came back (reported by a user, 13 Nov 2026). The other Mac still
+    /// had it and wrote its own bundle (a page there changed its title) from the bundle before
+    /// the close, and the first Mac took that whole sidebar. A bundle now says which bundle it was
+    /// written from, and a Mac that has that one merges the two: what changed on either Mac
+    /// since then is kept, and a tab closed on either stays closed.
+    @MainActor
+    private static func syncKeepsAClosedTabClosed() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-closed-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        let doomed = a.createTab(url: "https://example.com/doomed", title: "Doomed")
+        let kept = a.createTab(url: "https://example.com/kept", title: "Kept")
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+        expect(b.item(doomed.id) != nil && b.item(kept.id) != nil, "both Macs have both tabs")
+
+        // The first Mac closes a tab and writes. The provider is slow: the second Mac still sees the
+        // bundle before the close when a page there changes its title and a tab opens, and it writes.
+        let bundle = folder.appendingPathComponent(SettingsSync.folderName)
+        let names = [SettingsSync.manifestName] + SettingsSync.fileNames
+        let before = Dictionary(uniqueKeysWithValues: names.map { ($0, try? Data(contentsOf: bundle.appendingPathComponent($0))) })
+        clockA.advance(by: 10); clockB.advance(by: 10)
+        a.archiveTab(doomed.id, reason: .manual)
+        syncA.poll()
+        for name in names { try? before[name]??.write(to: bundle.appendingPathComponent(name)) }
+        clockB.advance(by: 5)
+        b.updateTab(kept.id, title: "Kept, renamed")
+        let opened = b.createTab(url: "https://example.com/opened-on-macbook", title: "Opened")
+        syncB.poll()
+        expect(b.item(doomed.id) != nil, "the second Mac has not seen the close yet")
+
+        // The second Mac's bundle is what the provider keeps. The first Mac merges it with its close.
+        clockA.advance(by: 10)
+        syncA.poll()
+        expect(a.item(doomed.id) == nil, "a tab closed on the first Mac stays closed when the second wrote before it saw the close")
+        expect(a.item(kept.id)?.displayTitle == "Kept, renamed", "the title changed on the second Mac reaches the first")
+        expect(a.item(opened.id) != nil, "and so does the tab opened there")
+        expect(a.integrityProblems().isEmpty, "the merged sidebar is sound")
+
+        // And the second Mac takes the merge: the closed tab goes there too.
+        clockB.advance(by: 10)
+        syncB.poll()
+        expect(b.item(doomed.id) == nil, "the close reaches the second Mac")
+        expect(b.item(kept.id)?.displayTitle == "Kept, renamed" && b.item(opened.id) != nil, "and its own changes stay")
+        expect(b.integrityProblems().isEmpty, "its sidebar is sound")
+        syncA.disable(); syncB.disable()
     }
 
     /// iCloud is the same bundle in the app's container, with two differences a test folder can

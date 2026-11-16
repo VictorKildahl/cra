@@ -72,7 +72,12 @@ from different writes (hashes that don't match the manifest, #378) are waited fo
 minutes (`SyncMixWait`), then the Mac writes a whole bundle again; a file the manifest names that
 is gone with no placeholder is put right the same way, after one minute on the Mac that wrote the
 manifest and ten on another. A Mac that hasn't synced in the folder yet never writes over another
-Mac's bundle: it waits for that Mac, then asks. A newer Cra's bundle is never written over. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
+Mac's bundle: it waits for that Mac, then asks. A newer Cra's bundle is never written over. Each
+bundle's manifest names the bundle it was written from (`parentID`); a Mac that still has that
+one (`sync-history.json`, the last eight written or applied, `SyncHistory`) merges the bundle
+with what changed here since (`SidebarMerge` in CraCore: a tab closed on either Mac stays
+closed, a tab opened on either is on both, an item both changed takes the other Mac's) and writes
+the merge back. A bundle from an older Cra, or from one too far back, is applied whole. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
 folder holds the location and the last bundle written or applied. To try it on one Mac, run a second instance on another
 `CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
 hardware UUID, which two instances share);
