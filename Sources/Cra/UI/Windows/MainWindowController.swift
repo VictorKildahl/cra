@@ -4837,9 +4837,13 @@ final class CraWindow: NSWindow {
         // minimize button has alpha 0 (⌘M and the floating sidebar's yellow button did nothing).
         guard animated else {
             for b in buttons { b.alphaValue = 1; b.isHidden = hide }
+            parkTrafficLights(hide)
             return
         }
-        if !hide { for b in buttons where b.isHidden { b.alphaValue = 0; b.isHidden = false } }
+        if !hide {
+            parkTrafficLights(false)
+            for b in buttons where b.isHidden { b.alphaValue = 0; b.isHidden = false }
+        }
         // Same timing as the sidebar's slide (ShellView.animateSidebar).
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.085
@@ -4847,7 +4851,21 @@ final class CraWindow: NSWindow {
         } completionHandler: { [weak self] in
             guard let self, self.appliedTrafficLightsHidden == hide else { return }
             for b in buttons { b.isHidden = hide; b.alphaValue = 1 }
+            if hide { self.parkTrafficLights(true) }
         }
+    }
+
+    /// Hidden lights also wait outside the window, `parkedShift` left of their spot and spaced as they
+    /// were. With the sidebar hidden the toolbar's toggle and ← sit where they were, and on macOS 27.2
+    /// a click on ← there did nothing or zoomed the window (GitHub #449; on 26 the toolbar gets it).
+    /// Out of the window, hidden buttons can't take a press on any macOS.
+    private var trafficLightsParked = false
+    private static let parkedShift: CGFloat = 1000
+
+    private func parkTrafficLights(_ parked: Bool) {
+        guard parked != trafficLightsParked else { return }
+        trafficLightsParked = parked
+        positionTrafficLights()
     }
 
     override func layoutIfNeeded() {
@@ -4862,13 +4880,15 @@ final class CraWindow: NSWindow {
     }
 
     private func positionTrafficLights() {
-        guard !styleMask.contains(.fullScreen) else { return }
+        // Full screen is the system's to place, except lights still out of the window (#449).
+        let fullScreen = styleMask.contains(.fullScreen)
         // The system's spacing between the buttons stays (20 pt on macOS 15, 23 on 26, #445).
         let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { standardWindowButton($0) }
         let xs = TrafficLightLayout.originsX(system: buttons.map { Double($0.frame.minX) })
         for (b, x) in zip(buttons, xs) {
             guard let sv = b.superview else { continue }
-            let x = CGFloat(x)
+            if fullScreen, trafficLightsParked || b.frame.minX > -Self.parkedShift / 2 { continue }
+            let x = CGFloat(x) - (trafficLightsParked ? Self.parkedShift : 0)
             let y = sv.bounds.height - CraMetrics.titleRowCenter - b.frame.height / 2
             let target = NSPoint(x: x, y: y)
             if abs(b.frame.origin.x - target.x) > 0.5 || abs(b.frame.origin.y - target.y) > 0.5 {
