@@ -1451,6 +1451,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
             // littleCard=<step>: the newest Little Window's card, see debugCardStep (#337).
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
+            // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
+            if let command = dict["littleToolbar"] { littleWindows.last?.debugToolbar(command); return }
             // inspectAt=x,y: Inspect in the page's right-click menu at that point of the page (the
             // newest Little Window's or Peek's with target=little); devToolsShown=<label>: where each
             // Little Window's and Peek's DevTools are, and whether the front tab has any (#348).

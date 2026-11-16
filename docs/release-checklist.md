@@ -174,6 +174,11 @@ built release app with a test profile. Note anything that fails in the release's
   a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
   with ⇧ or ⌃ down as well, it is another click. (`option-command-click-little-window` posts the click through
   the app's event queue; a click from the hardware, with the keys held on the keyboard, is this line.)
+- **#435:** with Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" on, open a Little Window
+  over another app and rest the pointer at its top edge: the bar and the traffic lights slide in over the page,
+  which doesn't move; move down past the bar and they go. Open "Open in"'s list and the command bar from the bar:
+  it stays out while they are open. (`little-window-toolbar-auto-hide` checks the layout, the strip and the keep
+  zone through `cra://debug`; the real pointer's events over the page's view are this line.)
 - **#381:** click a link to another site in a favorite, next to Arc doing the same: the peeked page's
   favicon springs onto the tile's top right corner on a white square (black in a dark space), 4 pt
   past the corner, with a soft shadow, and springs off when the Peek closes. Check a split favorite

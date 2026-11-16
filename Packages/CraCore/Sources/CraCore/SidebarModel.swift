@@ -546,6 +546,10 @@ public struct AppSettings: Codable, Equatable {
     /// Arc; Zen's compact toolbar): the toolbar floats over the page and comes out when the pointer
     /// is at the card's top edge (ToolbarAutoHide). Only means something while `showToolbar` is on.
     public var autoHideToolbar: Bool = false
+    /// Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" (not in Arc, GitHub #435):
+    /// a Little Window's page takes its toolbar's room, and the toolbar slides in over the page's top
+    /// when the pointer rests there (`ToolbarAutoHide.littleWindowFloats`). ⌘L still edits the address.
+    public var autoHideLittleWindowToolbar: Bool = false
     public var hasSeenImportPrompt: Bool = false
     /// Arc's per-site Developer Mode (⌃D): the toolbar shows the full URL in
     /// monospace with the developer icons, and the nav buttons move to the sidebar.
@@ -917,6 +921,7 @@ extension AppSettings {
         }
         toolbarShowsFullURL = try c.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? false
         autoHideToolbar = try c.decodeIfPresent(Bool.self, forKey: .autoHideToolbar) ?? false
+        autoHideLittleWindowToolbar = try c.decodeIfPresent(Bool.self, forKey: .autoHideLittleWindowToolbar) ?? false
         hasSeenImportPrompt = try c.decodeIfPresent(Bool.self, forKey: .hasSeenImportPrompt) ?? false
         developerHosts = try c.decodeIfPresent(Set<String>.self, forKey: .developerHosts) ?? []
         disabledDefaultDeveloperHosts = try c.decodeIfPresent(Set<String>.self, forKey: .disabledDefaultDeveloperHosts) ?? []
