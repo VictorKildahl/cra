@@ -822,3 +822,6 @@
 #419   Tests/Scenarios/split-drop.scenario  3bd2c37b3cb1
 #421   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::typedURLFollowsSpaceRoutes  cfbe95a599dd
 #421   Tests/Scenarios/command-bar-route.scenario  e9c6c3f45f79
+#428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::keepsCommandDigitOrderAndSharedFavoritesOnce  5d334510a308
+#428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::listsEverySpaceOpenSpaceFirst  f246d88a1570
+#428   Tests/Scenarios/applescript-every-space.scenario  4c91f6ac8331

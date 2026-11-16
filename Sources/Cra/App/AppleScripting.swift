@@ -3,7 +3,7 @@ import CraCEF
 
 /// Arc's AppleScript dictionary (Arc 1.172.1's Arc.sdef, the same terms and four-letter codes in
 /// resources/Cra.sdef, so scripts and launcher extensions written for Arc work against Cra):
-/// windows, their tabs and spaces; make new tab, select, go back/forward, reload, stop, close,
+/// windows, their tabs (every space's, #428) and spaces; make new tab, select, go back/forward, reload, stop, close,
 /// focus a space. `execute javascript` runs only while View ▸ Developer ▸ Allow JavaScript from
 /// Apple Events is on (off by default, as in Arc). macOS asks before any app may script Cra.
 
@@ -62,9 +62,11 @@ final class AppleScriptWindowWrapper: NSObject {
     @objc var activeTab: AppleScriptTabWrapper? { controller.selectedTabID.map { AppleScriptTabWrapper(tab: $0, window: self) } }
     @objc var activeSpace: AppleScriptSpaceWrapper? { AppleScriptSpaceWrapper(space: controller.focusedSpaceID, window: self) }
 
-    /// The window's space's tabs, as its sidebar lists them: favorites, pinned, then Today.
+    /// Every space's tabs, as Arc lists them (#428): the open space first, in its ⌘1…⌘9 order,
+    /// then the others; a shared favorite once (AppleScriptTabOrder).
     @objc var appleScriptTabs: [AppleScriptTabWrapper] {
-        tabIDs(in: controller.focusedSpaceID).map { AppleScriptTabWrapper(tab: $0, window: self) }
+        AppleScriptTabOrder.window(focused: controller.focusedSpaceID, spaces: appleScriptSpaces.map(\.spaceID), tabs: tabIDs(in:))
+            .map { AppleScriptTabWrapper(tab: $0, window: self) }
     }
 
     @objc var appleScriptSpaces: [AppleScriptSpaceWrapper] {
