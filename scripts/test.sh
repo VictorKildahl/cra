@@ -48,6 +48,8 @@ if [ "${1:-}" != core ]; then
   suite "Policies" scripts/test-policies.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Folder glyph" scripts/test-folder-glyph.sh
+  suite "Tidy title layout" scripts/test-tidy-title-layout.sh
+  suite "Tidy title requests" scripts/test-tidy-titles.sh
   suite "Emoji label" scripts/test-emoji-label.sh
   suite "Theme noise" scripts/test-theme-noise.sh
   suite "Chromium window corners" scripts/test-chromium-window-corners.sh

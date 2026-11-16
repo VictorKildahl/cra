@@ -867,9 +867,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private let regionLayer = CALayer()
     /// The Tidy Tab Titles rename this row last played, and what it is drawing for it.
     private var playedRename: UUID?
-    private var renameOld: NSTextField?
-    private var renameSparkles: CALayer?
-    private var renameBright = false
+    private let renameSweep = TidyTitleSweep()
 
     override var pressRow: SidebarRowPress.Row { .tab }
 
@@ -889,6 +887,11 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    var tidyTitleLayout: TidyTitleLayout {
+        layoutSubtreeIfNeeded()
+        return TidyTitleLayout(label: titleLabel, inset: SidebarText.inset)
+    }
+
     func apply(_ m: TabRowModel) {
         guard m != model else { return }
         // A subtitle coming or going moves the title (developer mode on a live tab, GitHub #88).
@@ -896,6 +899,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             needsLayout = true
         }
         model = m
+        renameSweep.update(effectToken: m.tidyRename?.token, editing: m.editing)
         if overIcon, !canReset { overIcon = false; stopWatchingFlags(); needsLayout = true }
         refreshIcon()
         slash.color = (colors.isDark ? NSColor.white : .black).withAlphaComponent(0.3)
@@ -922,7 +926,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         // A rename that just happened plays once; a row rebuilt later shows only the subtitle.
         if let e = m.tidyRename, e.token != playedRename {
             playedRename = e.token
-            if window != nil, Date().timeIntervalSince(e.start) < 0.3 { playTidyRename(from: e.oldTitle) }
+            if !m.editing, window != nil, Date().timeIntervalSince(e.start) < 0.3 { playTidyRename(from: e.oldTitle, token: e.token) }
         }
     }
 
@@ -937,7 +941,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     /// left to right at ~1,180 pt/s, fading the old title out and the new title and its "Double-click
     /// to rename" in, the subtitle bright meanwhile; sparkles rise along a band that crosses the row in
     /// 0.55 s, and everything stops at once when it has.
-    private func playTidyRename(from old: String) {
+    private func playTidyRename(from old: String, token: UUID) {
         layoutSubtreeIfNeeded()
         let total = TidyTitlesService.sweep
         let fade: CGFloat = 72, speed: CGFloat = 1180
@@ -951,34 +955,22 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
                                 width: max(titleLabel.frame.width, bounds.width - 8 - titleLabel.frame.minX), height: titleLabel.frame.height)
         oldLabel.wantsLayer = true
         addSubview(oldLabel)
-        renameOld = oldLabel
         titleLabel.wantsLayer = true
         subtitleLabel.wantsLayer = true
+        let sparkles = Self.sparkles(in: bounds, dark: colors.isDark, duration: total)
+        renameSweep.begin(token: token, oldTitle: oldLabel, sparkles: sparkles,
+                          title: titleLabel, subtitle: subtitleLabel, row: layer, duration: total) { [weak self] in
+            self?.refreshSubtitle()
+        }
         let end = oldLabel.frame.maxX + fade / 2
         let sweep = min(total, Double((end - start) / speed))
         for (view, reveal) in [(titleLabel as NSView, true), (subtitleLabel, true), (oldLabel, false)] {
             view.layer?.mask = Self.frontMask(reveal: reveal, fade: fade, height: view.bounds.height,
                                               from: start - view.frame.minX, to: end - view.frame.minX, duration: sweep)
         }
-        renameBright = true
         refreshSubtitle()
-        let sparkles = Self.sparkles(in: bounds, dark: colors.isDark, duration: total)
         layer?.addSublayer(sparkles)
-        renameSparkles = sparkles
         layer?.zPosition = 50
-        DispatchQueue.main.asyncAfter(deadline: .now() + total) { [weak self] in self?.endTidyRename() }
-    }
-
-    private func endTidyRename() {
-        renameOld?.removeFromSuperview()
-        renameOld = nil
-        renameSparkles?.removeFromSuperlayer()
-        renameSparkles = nil
-        titleLabel.layer?.mask = nil
-        subtitleLabel.layer?.mask = nil
-        layer?.zPosition = 0
-        renameBright = false
-        refreshSubtitle()
     }
 
     /// A horizontal mask whose soft edge (`fade` wide) travels `from` → `to`: opaque behind the front
@@ -1200,7 +1192,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         if subtitleLabel.alphaValue < 1, shownSubtitle != nil { subtitleFade += 1; subtitleLabel.alphaValue = 1 }
         subtitleLabel.stringValue = shownSubtitle ?? ""
         // Arc draws the subtitle bright while the rename sweeps in.
-        subtitleLabel.textColor = renameBright ? colors.textPrimary : colors.textTertiary
+        subtitleLabel.textColor = renameSweep.isActive ? colors.textPrimary : colors.textTertiary
         subtitleLabel.isHidden = shownSubtitle == nil || renameField != nil
     }
 

@@ -40,6 +40,7 @@ final class SidebarStore {
             if settings.tidyDownloads != oldValue.tidyDownloads { tidyDownloadsChanged(settings.tidyDownloads) }
             if settings.tidyTabs != oldValue.tidyTabs { tidyTabsChanged(settings.tidyTabs) }
             if settings.fiveSecondPreviews != oldValue.fiveSecondPreviews { fiveSecondPreviewsChanged(settings.fiveSecondPreviews) }
+            if settings.tidyTabTitles != oldValue.tidyTabTitles { tidyTabTitlesChanged(settings.tidyTabTitles) }
         }
     }
     @ObservationIgnored var fiveSecondPreviewsChanged: (Bool) -> Void = { _ in }
@@ -74,6 +75,18 @@ final class SidebarStore {
     @ObservationIgnored var tidyDownloadsChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var tidyTabsChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var tidyTabsSpaceRemoved: (UUID) -> Void = { _ in }
+    /// The UI window performing a synchronous tree edit; nested edits restore their caller's origin.
+    @ObservationIgnored private(set) var pinningWindowID: UUID?
+
+    func withPinningWindow(_ windowID: UUID, _ change: () -> Void) {
+        let previous = pinningWindowID
+        pinningWindowID = windowID
+        defer { pinningWindowID = previous }
+        change()
+    }
+
+    /// Settings replacement and Turn Off Max must invalidate any outstanding title generation.
+    @ObservationIgnored var tidyTabTitlesChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var liveFolderChanged: (UUID) -> Void = { _ in }
     @ObservationIgnored private var liveFolderVersions: [UUID: UUID] = [:]
 
