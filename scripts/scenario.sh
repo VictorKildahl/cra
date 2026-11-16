@@ -1,7 +1,8 @@
 #!/bin/bash
 # Drives the real Cra.app through a user journey (Tests/Scenarios/<name>.scenario) on a
 # throwaway profile, behind your other windows, then checks the same invariants for every
-# scenario: still running, no new crash report, no fault in cra.log, the sidebar sound,
+# scenario: still running, no new crash report, no page crash ("Aw, Snap!") in the performance
+# recorder's report, no fault in cra.log, the sidebar sound,
 # main-thread stalls and memory inside the scenario's budget, helper processes back to
 # baseline after tabs close, and a clean quit. Never asserts on pixels.
 #
@@ -426,10 +427,17 @@ print(f"perf: recording costs {cpu:.3f} % of a core (budget {budget}); stalls �
 if cpu > budget: print(f"PROBLEM the performance recorder costs {cpu:.3f} % of a core, budget {budget} %")
 # This run's HitchMonitor log starts after the launch the recorder also saw; a few either way is timing.
 if abs(seen - hitch) > max(2, hitch // 5): print(f"PROBLEM the recorder counted {seen} stalls of 250 ms or more, HitchMonitor {hitch}")
+# What the app does, so never a budget: no scenario crashes a page, and a renderer Cra let go
+# (tab sleep's discard) is no crash either (0.1.44 counted each one).
+ended = r["counters"].get("rendererTerminated", {})
+if ended: print("CRASH pages crashed (“Aw, Snap!”) per the recorder: " + ", ".join(f"{k} ×{n}" for k, n in sorted(ended.items())))
 PY
 )
     echo "  $(head -1 <<< "$verdict")"
-    while IFS= read -r l; do [[ "$l" == PROBLEM* ]] && budget_problem "${l#PROBLEM }"; done <<< "$verdict"
+    while IFS= read -r l; do
+      [[ "$l" == PROBLEM* ]] && budget_problem "${l#PROBLEM }"
+      [[ "$l" == CRASH* ]] && problem "${l#CRASH }"
+    done <<< "$verdict"
   fi
 fi
 

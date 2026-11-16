@@ -67,6 +67,7 @@ public struct PerfState: Sendable {
 
     /// A counted fact; renderer trouble and failed loads are events as well.
     public mutating func count(_ counter: PerfCounter, key: String, at: Double, site: String? = nil) {
+        if counter == .rendererTerminated, !PerfCounter.pageCrashes.contains(key) { return }
         counters[counter, default: [:]][key, default: 0] += 1
         switch counter {
         case .rendererTerminated: events.append(PerfEvent(at: at, kind: "renderer", detail: key, site: site))

@@ -27,7 +27,8 @@ public enum PerfMetric: String, Codable, CaseIterable, Sendable {
 public enum PerfCounter: String, Codable, CaseIterable, Sendable {
     /// A main-frame load that failed; the key is Chromium's net error code.
     case loadError
-    /// A renderer that ended; the key is how (crashed, killed, out of memory…).
+    /// A page's renderer that crashed ("Aw, Snap!"); the key is how (crashed, killed, out of
+    /// memory…, one of `pageCrashes`). A clean end isn't one: PerfState drops it.
     case rendererTerminated
     /// Chromium's "Page Unresponsive" (about 15 s without handling input), and its recovery.
     case rendererUnresponsive
@@ -45,6 +46,15 @@ public enum PerfCounter: String, Codable, CaseIterable, Sendable {
     /// A data-folder JSON file written; the key is its name, so `jsonSave`'s count can be told
     /// apart by file (GitHub #214).
     case fileSaved
+}
+
+public extension PerfCounter {
+    /// How a renderer ended, as the engine (bridge.mm) and CEF (CraCEF.mm) name the statuses that
+    /// end a page in "Aw, Snap!". Everything else arrives as "unknown": on the Mac that is a clean
+    /// end (Chromium's NORMAL_TERMINATION or STILL_RUNNING), which is how tab sleep's discard ends
+    /// a page's renderer (FastShutdown), and Chrome shows nothing for it.
+    static let pageCrashes: Set<String> = ["abnormal termination", "killed", "crashed", "out of memory",
+                                           "launch failed", "integrity failure"]
 }
 
 /// The kinds of process Cra runs, from the name macOS gives each one.
