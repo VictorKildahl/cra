@@ -831,6 +831,7 @@
 #428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::keepsCommandDigitOrderAndSharedFavoritesOnce  5d334510a308
 #428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::listsEverySpaceOpenSpaceFirst  f246d88a1570
 #428   Tests/Scenarios/applescript-every-space.scenario  4c91f6ac8331
+#429   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::anotherWindowKeepsTheKeysItTook  f4af3a890bd7
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::aLinkFromAnotherAppClosesBackToThatApp  bc01d72fbdb3
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::aLittleWindowOpenedInCraClosesBackToTheBrowser  46889d01f9fd
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::anotherAppComingForwardResetsCrasTime  e240ca9ae604

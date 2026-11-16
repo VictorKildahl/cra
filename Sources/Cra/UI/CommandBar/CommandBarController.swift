@@ -345,6 +345,31 @@ final class CommandBarController {
 
 /// Borderless floating panel that can take keyboard focus.
 final class CommandBarPanel: NSPanel {
+    /// The panel lost the keys and that closed the bar: tells `finish` which window holds them (#429).
+    /// A click says at once, so a click on the bar's own window still focuses its page before the
+    /// click lands; anything else (⌘`, the Window menu) is read once AppKit has handed the keys over.
+    /// `owns` is true for the bar's window and the windows that belong to it (its page, its Peek).
+    @MainActor
+    func keysWent(owns: @escaping (NSWindow) -> Bool, finish: @escaping (CommandBarClosing.KeyHolder) -> Void) {
+        func holder(_ w: NSWindow?) -> CommandBarClosing.KeyHolder {
+            guard let w, w !== self else { return .none }
+            var x: NSWindow? = w
+            while let c = x {
+                if owns(c) { return .barsWindow }
+                x = c.parent
+            }
+            return .otherWindow
+        }
+        let event = NSApp.currentEvent
+        if let event, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type), let clicked = event.window {
+            finish(holder(clicked))
+            return
+        }
+        DispatchQueue.main.async {
+            finish(NSApp.isActive ? holder(NSApp.keyWindow) : .none)
+        }
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 

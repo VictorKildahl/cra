@@ -59,6 +59,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
+    /// Set while the bar closes because its panel lost the keys (#429).
+    private var commandBarLostKeys = false
     private let toast = ShinyToast()
     /// Each live tab's wait for its first response (GitHub #256), the tab whose notice the toast
     /// shows (nil once another toast took its place), and the check when the next one is due.
@@ -4035,6 +4037,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let panel = commandPanel!
         // Let CommandBarView's fade-out (0.08 s) play before the panel goes away.
         panel.orderOut(nil)
+        // Lost to another window (a click in window 2 while ⌘L was open in window 1), the keys stay
+        // there: taking them back went on sending typing to this window's page (#429).
+        guard commandBarLostKeys else { focusAfterCommandBar(); return }
+        commandBarLostKeys = false
+        panel.keysWent(owns: { [weak self] w in
+            guard let self else { return false }
+            return w === self.window || self.peeks.contains { $0.peekWindows.contains { $0 === w } }
+        }, finish: { [weak self] holder in
+            guard let self, !self.commandBar.isOpen, CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
+            self.focusAfterCommandBar()
+        })
+    }
+
+    private func focusAfterCommandBar() {
         // ⌘T from a Peek and Escape: the keys go back to the Peek still over its tab (#379).
         if let peek = peeks.first(where: { !$0.isParked && $0.window?.isVisible == true }) {
             peek.window?.makeKeyAndOrderFront(nil)
@@ -4535,6 +4551,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         let event = NSApp.currentEvent
         commandBarClosingClick.panelClosed(byMouseDownAt: event?.type == .leftMouseDown ? event?.timestamp : nil)
+        commandBarLostKeys = true
         commandBar.close()
     }
 

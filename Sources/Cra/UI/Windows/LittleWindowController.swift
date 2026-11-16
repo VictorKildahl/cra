@@ -199,6 +199,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
+    /// Set while the bar closes because its panel lost the keys (#429).
+    private var commandBarLostKeys = false
     private var commandObserving = false
     private var popup: LittlePopupPanel?
     private var tooltip: LittleTooltipPanel?
@@ -1048,8 +1050,18 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
-        window?.makeKeyAndOrderFront(nil)
-        focusPage()
+        // Lost to another window, the keys stay there (#429).
+        guard commandBarLostKeys else { window?.makeKeyAndOrderFront(nil); focusPage(); return }
+        commandBarLostKeys = false
+        panel.keysWent(owns: { [weak self] w in
+            guard let self else { return false }
+            return w === self.window || w === self.popup || self.peekWindows.contains { $0 === w }
+        }, finish: { [weak self] holder in
+            guard let self, !self.commandBar.isOpen, self.window?.isVisible == true,
+                  CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
+            self.window?.makeKeyAndOrderFront(nil)
+            self.focusPage()
+        })
     }
 
     private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
@@ -1594,6 +1606,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
+        commandBarLostKeys = true
         commandBar.close()
     }
 
