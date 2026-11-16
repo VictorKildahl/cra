@@ -868,6 +868,7 @@
 #445   Packages/CraCore/Tests/CraCoreTests/TrafficLightLayoutTests.swift::tahoeMatchesArc  9f568ad77ed8
 #446   Tests/Scenarios/sidebar-empty-double-click.scenario  b3449dbc21f4
 #449   Tests/Scenarios/toolbar-back-sidebar-hidden.scenario  74807afb2520
+#450   Tests/Scenarios/about-chromium-no-update-check.scenario  b1bdfdccbe87
 #451   Packages/CraCore/Tests/CraCoreTests/ContentCaptureTests.swift::optionPicksTheTitleLineItself  b348425e499d
 #451   Packages/CraCore/Tests/CraCoreTests/ContentCaptureTests.swift::optionSkipsSpecksAndThePageButNotShadowRoots  baf32437d361
 #451   Tests/CaptureOverlayTests.swift::checkOptionPicksDeeper  189b361c0f85
