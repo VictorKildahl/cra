@@ -1128,8 +1128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags,
                                         in: [page.hostWindow?.contentView, page.containerView].compactMap { $0 }, window: w)
                 } else {
-                    // The ⌘T bar, while it is open, has the keyboard.
-                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: main.openCommandPanel ?? w)
+                    // The ⌘T bar, while it is open, has the keyboard; target=find sends it to the find bar's panel.
+                    let target = dict["target"] == "find" ? main.debugFindPanel : main.openCommandPanel
+                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: target ?? w)
                 }
                 return
             }
