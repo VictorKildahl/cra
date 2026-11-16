@@ -85,6 +85,9 @@ final class SettingsWindowController: NSWindowController {
         window.titlebarSeparatorStyle = .none
         window.isReleasedWhenClosed = false
         window.backgroundColor = SettingsPalette.window
+        // Opened from a full-screen window, Settings comes over it on that window's Space, as Arc's and Safari's
+        // do, instead of macOS swiping back to a Desktop to show it; one shown before follows to the active Space (#431).
+        window.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
         let root = SettingsRoot(nav: nav, actions: actions) { [weak window] tab in window?.title = tab.title(fullName: NSFullUserName()) }
             .environment(store).environment(bindings).environment(sync)
         let host = NSHostingController(rootView: root)
