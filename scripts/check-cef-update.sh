@@ -1,7 +1,8 @@
 #!/bin/bash
 # Compares the CEF pinned in scripts/fetch-cef.sh with the newest stable CEF for
 # macOS arm64 and, when Cra is behind, opens (or updates) one "Chromium engine
-# update" issue saying how to build it. Run daily by .github/workflows/cef-updates.yml.
+# update" issue saying how to build it. Only for CRA_ENGINE=cef builds now; the daily check is the engine's
+# (scripts/check-engine-update.sh, .github/workflows/engine-updates.yml).
 #   scripts/check-cef-update.sh --dry-run   print instead of touching issues
 #   scripts/check-cef-update.sh --check     exit 1 when Cra is behind (release.sh and the
 #                                            release-tag hook: a release ships the newest CEF)
