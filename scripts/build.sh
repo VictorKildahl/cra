@@ -185,7 +185,9 @@ sign() {  # sign <path> [entitlements]
   fi
 }
 FW="$APP/Contents/Frameworks/$FW_NAME.framework"
-find "$FW/Libraries" -name '*.dylib' -print0 2>/dev/null | while IFS= read -r -d '' lib; do sign "$lib"; done
+# The slash: Chrome's framework is versioned, Libraries is a symlink to Versions/<version>/Libraries, and find
+# doesn't descend a symlinked start point (CEF's flat framework had a real folder).
+find "$FW/Libraries/" -name '*.dylib' -print0 2>/dev/null | while IFS= read -r -d '' lib; do sign "$lib"; done
 if [ "$ENGINE" = chromium ]; then
   # Chrome's helpers and tools inside the framework, before the framework itself.
   for h in "$FW"/Versions/Current/Helpers/*; do
@@ -258,6 +260,20 @@ fi
 sign "$APP" "$APP_ENTITLEMENTS"
 if [ "$IDENTITY" != "-" ]; then
   codesign --verify --deep --strict --verbose=2 "$APP"
+  # What notarization checks in every Mach-O: the identity's team and a secure timestamp. --deep passes a
+  # binary that still carries its build's own signature (the engine's Libraries, 0.1.44's first Release run:
+  # "not signed with a valid Developer ID certificate").
+  TEAM="$(codesign -dv "$APP" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+  unsigned=0
+  while IFS= read -r -d '' bin; do
+    file -b "$bin" | grep -q '^Mach-O' || continue
+    info="$(codesign -dv --verbose=2 "$bin" 2>&1)"
+    if ! grep -q "^TeamIdentifier=$TEAM$" <<<"$info" || ! grep -q '^Timestamp=' <<<"$info"; then
+      echo "Not signed for notarization (team $TEAM and a secure timestamp): ${bin#"$APP"/}" >&2
+      unsigned=1
+    fi
+  done < <(find "$APP" -type f -print0)
+  [ "$unsigned" = 0 ] || exit 1
 fi
 
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
