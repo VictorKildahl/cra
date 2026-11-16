@@ -6,6 +6,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; B="${XBENCH_DIR:-$HOME/CraBench}"
 mkdir -p "$B/tools" "$B/pages"
 for t in wins waitwin key front axset axget; do swiftc -O "$HERE/tools/$t.swift" -o "$B/tools/$t"; done
+# fp: CPU time, wakeups and phys_footprint summed over a process tree (xbench.py reads it from build/perf).
+mkdir -p "$HERE/../../../build/perf"; xcrun swiftc -O "$HERE/../fp.swift" -o "$HERE/../../../build/perf/fp"
 cp "$HERE/offline.sb" "$B/"; cp "$HERE/pages/bench.html" "$B/pages/"
 if [ ! -d "$B/pages/speedometer" ]; then
   git clone -q --depth 1 -b release/3.1 https://github.com/WebKit/Speedometer.git "$B/pages/speedometer"

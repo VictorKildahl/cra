@@ -2,8 +2,8 @@
 """report.py [results-dir]: medians (with min–max) of every measurement per browser, as a table and results.json."""
 import glob, json, os, statistics as st, sys
 
-R = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/CraBench/results")
-NAMES = ["cra", "helium", "arc", "dia"]
+R = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get("XBENCH_DIR", os.path.expanduser("~/CraBench")), "results")
+NAMES = os.environ.get("XBENCH_NAMES", "cra helium arc dia").split()
 
 
 def load(b):

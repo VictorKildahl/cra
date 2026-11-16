@@ -23,8 +23,18 @@ SB = f"{B}/offline.sb"
 WIN = (100, 60, 1440, 900)
 
 BROWSERS = {
-    "cra": dict(app=f"{B}/Cra.app/Contents/MacOS/Cra", args=["--no-sandbox"],
+    # XBENCH_CRA_APP: another Cra build; XBENCH_CRA_ARGS: switches added to its command line (Cra passes
+    # --enable-features/--disable-features lists through to the engine).
+    "cra": dict(app=os.environ.get("XBENCH_CRA_APP", f"{B}/Cra.app/Contents/MacOS/Cra"),
+                args=["--no-sandbox", *os.environ.get("XBENCH_CRA_ARGS", "").split()],
                 env=lambda p: {"CRA_DATA_DIR": p, "CRA_SYNC_ICLOUD_DIR": p + "-sync"}, blank_tab=False),
+    # An older Cra release, for "before and after" (README: Against an older Cra).
+    "craold": dict(app=os.environ.get("XBENCH_CRA_OLD_APP", f"{B}/Cra-old.app/Contents/MacOS/Cra"), args=["--no-sandbox"],
+                   env=lambda p: {"CRA_DATA_DIR": p, "CRA_SYNC_ICLOUD_DIR": p + "-sync"}, blank_tab=False),
+    # Stock Google Chrome: a reference for Speedometer.
+    "chrome": dict(app="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                   args=["--no-sandbox", "--no-first-run", "--no-default-browser-check"],
+                   argsp=lambda p: [f"--user-data-dir={p}"], env=lambda p: {}, blank_tab=True),
     "helium": dict(app=f"{B}/Helium.app/Contents/MacOS/Helium",
                    args=["--no-sandbox", "--no-first-run", "--no-default-browser-check"],
                    argsp=lambda p: [f"--user-data-dir={p}"], env=lambda p: {}, blank_tab=True),
@@ -108,10 +118,11 @@ class Session:
         if self.proc.poll() is None:
             self.proc.kill()
         time.sleep(1)
-        # Helpers that outlive the browser.
+        # Helpers that outlive the browser (Cra's helpers don't carry the profile path).
+        bundle = self.b["app"].split(".app/")[0] + ".app/"
         for line in run("ps", "-axo", "pid=,command=").splitlines():
             pid, _, cmd = line.strip().partition(" ")
-            if f"{B}/run-prof/{self.name}" in cmd or (self.name == "cra" and f"{B}/Cra.app" in cmd):
+            if f"{B}/run-prof/{self.name}" in cmd or (self.name.startswith("cra") and bundle in cmd):
                 try:
                     os.kill(int(pid), signal.SIGKILL)
                 except Exception:
@@ -363,7 +374,7 @@ class Session:
             subprocess.run(["cp", "-c", "-R", src, p], check=True)
         else:
             os.makedirs(p)
-        if self.name == "cra":
+        if self.name.startswith("cra"):
             json.dump({"hasSeenImportPrompt": True, "toolbarDefaultMigrated": True}, open(f"{p}/settings.json", "w"))
         self.launch(p)
         time.sleep(20)
