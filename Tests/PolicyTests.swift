@@ -21,6 +21,7 @@ enum PolicyTests {
         featureFlags()
         liveScheduler()
         try webHandoff()
+        try defaultBrowserPicker()
         print("Policies: \(checks) checks passed")
     }
 
@@ -54,6 +55,23 @@ enum PolicyTests {
             expect(resume(web) == true, "continue a handed-off web page")
         }
         expect(receiver.openedURLs == urls, "only the accepted pages reach normal URL opening, once each and intact")
+    }
+
+    // promise: #452
+    /// #452: System Settings ▸ Desktop & Dock ▸ Default web browser lists only the apps that open
+    /// http and https links and both public.html and public.xhtml files (DesktopSettings.appex asks
+    /// LSOpenWithMenuConstructor for that set). With public.html alone, Cra was missing from it.
+    private static func defaultBrowserPicker() throws {
+        let plist = try Data(contentsOf: URL(fileURLWithPath: "resources/Info.plist"))
+        let info = try PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any]
+        let schemes = (info?["CFBundleURLTypes"] as? [[String: Any]] ?? [])
+            .flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+        expect(schemes.contains("http") && schemes.contains("https"), "Cra opens http and https links")
+        let types = (info?["CFBundleDocumentTypes"] as? [[String: Any]] ?? [])
+            .filter { ($0["CFBundleTypeRole"] as? String) == "Viewer" }
+            .flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }
+        expect(types.contains("public.html"), "Cra views HTML files")
+        expect(types.contains("public.xhtml"), "Cra views XHTML files, so the system's default browser picker lists it")
     }
 
     /// #41: a click never reaches an extension turned off in chrome://extensions (Chromium crashed
