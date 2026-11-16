@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import Foundation
 import Observation
@@ -26,6 +27,7 @@ enum StoreTests {
         protectedBrowserAsksForFullDiskAccess()
         signedInChromeProfileImports()
         chromiumManifestV2Import()
+        zenFaviconSize()
         autoArchive()
         longAutoArchive()
         tabSleepCadence()
@@ -2972,6 +2974,22 @@ enum StoreTests {
         clock.advance(by: 1)
         store.selectTab(link.id)
         expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
+    }
+
+    /// Zen's favicons come from Firefox's favicons.sqlite, where the widest icon is often an SVG,
+    /// and an SVG can say it is any size. Drawn at that size it ran a 0.1.43 import out of memory
+    /// (two crash reports in tiffRepresentation under ZenImporter.plan); each icon is written small.
+    private static func zenFaviconSize() {
+        let svg = #"<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="orange"/></svg>"#
+        guard let huge = NSImage(data: Data(svg.utf8)) else { return expect(false, "an SVG favicon loads") }
+        let png = ZenImporter.faviconPNG(huge).flatMap(NSBitmapImageRep.init(data:))
+        expect(png != nil, "a huge SVG favicon is written")
+        expect((png?.pixelsWide ?? .max) <= 64 && (png?.pixelsHigh ?? .max) <= 64, "at favicon size, not the size the SVG declares")
+        expect(png.map { $0.pixelsWide > $0.pixelsHigh } == true, "keeping its shape")
+
+        let small = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in NSColor.red.setFill(); r.fill(); return true }
+        let smallPNG = ZenImporter.faviconPNG(small).flatMap(NSBitmapImageRep.init(data:))
+        expect(smallPNG?.pixelsWide == 16, "a 16 px favicon stays 16 px")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
