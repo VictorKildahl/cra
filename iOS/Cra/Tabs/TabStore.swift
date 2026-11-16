@@ -13,7 +13,6 @@ final class TabStore {
     private var saveScheduled = false
     private let now: () -> Date
 
-
     init(directory: URL, now: @escaping () -> Date = Date.init) {
         self.now = now
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
