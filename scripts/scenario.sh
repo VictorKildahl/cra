@@ -27,7 +27,8 @@
 #   helpers baseline | helpers settle [slack]
 #   renderers <max>             at most that many renderer processes (within 5 s)
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
-#   expect-log <regex>          a line Cra logged (cra.log or stdout), or ${WS}'s "ws open" / "ws closed"
+#   expect-log <regex>          a line Cra logged (cra.log or stdout), ${WS}'s "ws open" / "ws closed", or a
+#                               request the fixture server answered ("GET /page.html?n=1 HTTP/1.1")
 #   reject-log <regex>          no such line logged so far
 #   snapshot <View[,n]> <name>  the nth visible view of that class drawn to PNG and compared with
 #                               Tests/Snapshots/<name>.png (CRA_SNAPSHOT_RECORD=1 records it)
@@ -345,11 +346,11 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       sleep 2 ;;
     expect-log)
       shift; re="$*"; found=""
-      for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
+      for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" "$OUT/server.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
       [ -n "$found" ] || problem "no log line matching: $re" ;;
     reject-log)
       shift; re="$*"
-      ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" 2>/dev/null || problem "a log line matching: $re" ;;
+      ! grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" "$OUT/server.log" 2>/dev/null || problem "a log line matching: $re" ;;
     snapshot)
       shot="$OUT/snapshots/$3.png"; ref="$ROOT/Tests/Snapshots/$3.png"
       # A name shot twice (before and after a relaunch) must not find the first file and stop waiting.
