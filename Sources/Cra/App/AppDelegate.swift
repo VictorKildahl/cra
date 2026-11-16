@@ -481,18 +481,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // One quit at a time (#426): Chromium's exit sends another terminate once the pages start
+        // closing, and a restart can send quit events while the question is open.
+        switch quitRequests.begin() {
+        case .new: break
+        case .asking: return .terminateCancel
+        case .quitting:
+            CraLog.note("quit: already quitting, not asked again")
+            return .terminateNow
+        }
         if MenuBarMode.outcome(enabled: store.settings.keepInMenuBar, source: quitSource()) == .stayInMenuBar {
+            quitRequests.answered(quit: false)
             stayInMenuBar()
             return .terminateCancel
         }
         // Arc asks while a download runs (quitting cancels it); otherwise Dia's Advanced ▸ "Warn
         // before quitting". Restarts skip both (#272).
+        let quits: Bool
         switch QuitPrompt.on(source: quitSource(), downloadsRunning: DownloadHistory.shared.hasRunningDownloads,
                              warnBeforeQuitting: store.settings.warnBeforeQuitting) {
-        case .downloadsInProgress: if !confirmQuitCancellingDownloads() { return .terminateCancel }
-        case .confirmQuit: if !confirmQuit() { return .terminateCancel }
-        case .none: break
+        case .downloadsInProgress: quits = confirmQuitCancellingDownloads()
+        case .confirmQuit: quits = confirmQuit()
+        case .none: quits = true
         }
+        quitRequests.answered(quit: quits)
+        guard quits else { return .terminateCancel }
         // Little Windows are not in the sidebar; keep their pages in the Library.
         for w in littleWindows { w.archivePage() }
         for w in mainWindows { w.saveFrameNow() }
@@ -548,6 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func confirmQuit() -> Bool {
+        CraLog.note("quit asks: Quit Cra?")
         let alert = AppDialog(title: "Quit Cra?",
                               actions: [DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)],
                               icon: .application, buttonSpacing: 45.5)
@@ -632,6 +646,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private var menuBarItem: MenuBarItem?
     private var quittingFromMenuBar = false
+    /// The quit asked about or under way, so one ⌘Q asks once (#426).
+    private var quitRequests = QuitRequests()
+
+    /// Chromium stopped the quit (a page's "Leave site?" ▸ Stay): the next ⌘Q asks again.
+    func quitWasCancelled() {
+        CraLog.note("quit: cancelled by a page")
+        quitRequests.cancelled()
+    }
     /// ⌘Q put Cra in the menu bar, and no browser window has been opened since.
     private(set) var inMenuBar = false
 
