@@ -599,11 +599,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             c.elsewhereSnapshot = c.showsElsewhere ? app.runtime(for: c.tabID)?.snapshot : nil
         }
         sidebarUI.splitPaneIDs = panes.count > 1 ? panes : []
+        // Arc keeps the find bar with the tab it was opened on: it goes when you switch away (before
+        // browsers.show, so the old page stops finding) and comes back when you return.
+        let findReturns = findParked && !overlay.findVisible && selected != nil && selected == findTabID
+        if overlay.findVisible, selected != findTabID { hideFindBar(); findParked = true }
         if live != browsers.visibleTabIDs || liveFocus != browsers.visibleTabID
             || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false }) {
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
         }
         shell.layoutContentChildren()
+        // After browsers.show: the bar finds on the page now in front. Typing stays with the page.
+        if findReturns { showFindBar(focus: false); find(overlay.findQuery, forward: true) }
         syncPeeks(onScreen: panes)
         syncRingPanel()
         syncSidebarUI()
@@ -1200,6 +1206,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// panel made every shot of the page blank white (#346).
     private var overlayPanel: NSPanel?
     private var findPanel: FindBarPanel?
+    /// The tab selected when the find bar opened.
+    private var findTabID: UUID?
+    /// The find bar went away because that tab was switched away from, and comes back with it.
+    private var findParked = false
     /// The text the page's find last ran on.
     private var lastFindText = ""
     /// The focused page's screen rect the find panel was last placed on.
@@ -4158,20 +4168,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Find
 
-    func showFindBar() {
+    func showFindBar(focus: Bool = true) {
         syncAskOnPage()
         overlay.findVisible = true
-        overlay.findFocusToken += 1
+        findTabID = selectedTabID
+        findParked = false
+        if focus { overlay.findFocusToken += 1 }
         shell.findVisible = true
         shell.layoutContentChildren()
         if let window, let find = findPanel {
             if find.parent !== window { window.addChildWindow(find, ordered: .above) }
             refitFindPanel()
-            find.makeKeyAndOrderFront(nil)
+            if focus { find.makeKeyAndOrderFront(nil) } else { find.orderFront(nil) }
         }
     }
 
     func hideFindBar() {
+        findParked = false
         overlay.findVisible = false
         overlay.findMatchCount = nil
         askOnPage.reset()
