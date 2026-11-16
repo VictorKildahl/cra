@@ -162,6 +162,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var permissionCards: [PermissionPopover] = []
     private var favicon: NSImage?
     private var promoted = false
+    /// The app the window was opened over (a link from it, the shortcut pressed in it), which gets
+    /// the keyboard back as the window closes (#430). AppDelegate keeps it up to date.
+    var focusReturn = LittleWindowReturn(app: nil)
+    /// The page moved into a tab of the browser window (Open in): that's where the keyboard goes.
+    private var movedToTab = false
+    private var handedBack = false
     /// Hosts a page's window.open (a sign-in popup); its URL arrives after it shows.
     private let isPopupHost: Bool
     /// Arc's Peek: this Little Window sits over a browser window, which a dimming panel
@@ -1240,6 +1246,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true, window: target.windowID)
         if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
+        movedToTab = true
         endDevTools(of: b)
         browser = nil
         target.browsers.adopt(b, for: tab.id)
@@ -1445,6 +1452,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === window else { return true }
+        // Before the page and its windows go: one of them may have the keyboard.
+        handBackFocus()
         tooltipTimer?.invalidate(); hideTooltip()
         closePopup()
         commandBar.close()
@@ -1460,8 +1469,24 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        handBackFocus()  // closes that skip windowShouldClose: the page's own window.close()
         endPeek()
         if browser == nil { app.removeLittleWindow(self) }
+    }
+
+    /// Arc's Little Arc closes back to the app it was opened over (#430). Left to AppKit, the
+    /// keyboard goes to Cra's next window, which brings the browser window (and its Space) forward.
+    /// The app comes forward before the window goes, so Cra is no longer in front by then.
+    private func handBackFocus() {
+        guard !handedBack, let window else { return }
+        handedBack = true
+        var key = NSApp.keyWindow
+        while let parent = key?.parent { key = parent }
+        let hadKeyboard = key === window || key === commandPanel || key === popup
+        guard let pid = focusReturn.target(closingKeyWindow: hadKeyboard, craActive: NSApp.isActive, movedToTab: movedToTab),
+              let other = NSRunningApplication(processIdentifier: pid), !other.isTerminated else { return }
+        CraLog.note("Little Window closed: the app it was opened over comes forward (#430)")
+        other.activate(from: .current, options: [])
     }
 
     /// Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.

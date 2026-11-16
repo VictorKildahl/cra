@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// When each Little Window was last the key window, for Arc's "Archive Little Arcs after:".
     private var littleWindowLastUsed: [ObjectIdentifier: Date] = [:]
     private var littleWindowArchiveCheck: ScheduledWork?
+    /// The app in use before Cra came forward, which a Little Window opened from it goes back to (#430).
+    private var frontmostApps = FrontmostAppHistory()
 
     /// Use Both's presses between OnPreKeyEvent and OnKeyEvent (#374).
     private var useBoth = UseBothPresses()
@@ -45,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DockedWindowAccessibility.install()
         SystemAppearance.shared.start()
         installURLEventHandler()
+        observeFrontmostApp()
         PerfCEF.install(app: self)
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
         CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
@@ -431,6 +434,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidBecomeActive(_ notification: Notification) { installURLEventHandler() }
 
+    /// Arc's frontmostApplicationHistory: which app was in front before Cra (#430).
+    private func observeFrontmostApp() {
+        let me = NSRunningApplication.current.processIdentifier
+        if let front = NSWorkspace.shared.frontmostApplication?.processIdentifier, front != me {
+            frontmostApps = FrontmostAppHistory(frontmost: front)
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+                let isCra = app.processIdentifier == me
+                self.frontmostApps.activated(app.processIdentifier, isCra: isCra, at: self.store.clock.now)
+                guard isCra else { return }
+                for w in self.littleWindows { w.focusReturn.craCameForward(from: self.frontmostApps.beforeCra) }
+            }
+        }
+    }
+
+    /// #430: the browser window or Settings taking the keyboard means Cra is in use, and a Little
+    /// Window closes back to it. Panels (command bars, menus, a Peek) don't count.
+    private func noteKeyWindow(_ top: NSWindow) {
+        if let little = littleWindows.first(where: { $0.window === top }) {
+            little.focusReturn.littleWindowBecameKey()
+            return
+        }
+        guard !(top is NSPanel), top.isVisible, top.alphaValue > 0 else { return }
+        for w in littleWindows { w.focusReturn.otherWindowBecameKey() }
+    }
+
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
         guard let s = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue else { return }
         if bootstrapped { openExternalURL(s) } else { pendingURLs.append(s) }
@@ -674,6 +705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 MainActor.assumeIsolated {
                     guard let self, var w = note.object as? NSWindow else { return }
                     while let parent = w.parent { w = parent }
+                    if name == NSWindow.didBecomeKeyNotification { self.noteKeyWindow(w) }
                     if let c = self.mainWindows.first(where: { $0.window === w }) {
                         self.store.activeWindowID = c.windowID
                         self.retitleFlippingRows()
@@ -901,7 +933,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @discardableResult
     func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
         let w = makeLittleWindow(url: url, opener: opener, space: space)
-        if activate { w.show() } else { w.orderFrontInBackground() }
+        // Opened over another app (a link from it, the shortcut pressed in it): it goes back there (#430).
+        if activate {
+            w.focusReturn = LittleWindowReturn(app: frontmostApps.returnApp(at: store.clock.now))
+            w.show()
+        } else {
+            w.orderFrontInBackground()
+        }
         return w
     }
 
