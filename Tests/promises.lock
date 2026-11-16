@@ -828,6 +828,8 @@
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::thePillIsArcs  ee28dd5ca276
 #425   Tests/Scenarios/peek-call-confirm.scenario  f211797a5db9
 #426   Packages/CraCore/Tests/CraCoreTests/DownloadMenuTests.swift::oneQuitAsksOnce  fddd1197abf9
+#426   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::windowsRememberFullScreen  2c181ea68806
+#426   Tests/Scenarios/fullscreen.scenario  bbfb3b6b5e4d
 #427   Tests/Scenarios/applescript.scenario  ea806e4ebe90
 #428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::keepsCommandDigitOrderAndSharedFavoritesOnce  5d334510a308
 #428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::listsEverySpaceOpenSpaceFirst  f246d88a1570

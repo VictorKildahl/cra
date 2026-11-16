@@ -4564,9 +4564,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func windowDidEnterFullScreen(_ notification: Notification) {
         (window as? CraWindow)?.fullScreenChanged()
         shell.needsLayout = true
+        // Remembered for the next launch (#426), unless a page's video took the window there.
+        if !enteredFullscreenForContent { store.updateWindow(windowID) { $0.fullScreen = true } }
     }
     func windowDidExitFullScreen(_ notification: Notification) {
         (window as? CraWindow)?.fullScreenChanged()
+        // Put away into the menu bar, it leaves full screen only to order out: it comes back in it.
+        if !isPutAway { store.updateWindow(windowID) { $0.fullScreen = false } }
         // Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
         if let id = contentFullscreenTab { browsers.runtime(for: id)?.browser.exitFullscreen() }
         contentFullscreenTab = nil
@@ -4687,6 +4691,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard isPutAway else { return }
         isPutAway = false
         refresh()
+        // Called as the window is about to show (browserWindowWillShow).
+        DispatchQueue.main.async { [weak self] in self?.enterSavedFullScreen() }
+    }
+
+    /// A window that was in full screen when Cra quit (or went to the menu bar) goes back into it
+    /// once shown (#426), on its own Space as before.
+    func enterSavedFullScreen() {
+        guard let window, window.isVisible, store.window(windowID).fullScreen,
+              !window.styleMask.contains(.fullScreen) else { return }
+        window.toggleFullScreen(nil)
     }
 
     /// The window closed while others stay open: its pages close (the tabs stay in

@@ -805,16 +805,20 @@ public struct WindowSession: Codable, Equatable, Identifiable {
     public var selectedTabPerSpace: [UUID: UUID] = [:]
     public var frame: String?
     public var sidebarVisible = true
+    /// In macOS full screen (the green button, ⌃⌘F; not a page's video), so the window opens in
+    /// full screen again (#426). `frame` stays the windowed frame it leaves full screen to.
+    public var fullScreen = false
     /// Incognito windows show a space of their own, never saved (SidebarStore.addIncognitoWindow).
     public var isIncognito = false
 
     public init(id: UUID = UUID(), focusedSpaceID: UUID? = nil, selectedTabPerSpace: [UUID: UUID] = [:], frame: String? = nil,
-                sidebarVisible: Bool = true, isIncognito: Bool = false) {
+                sidebarVisible: Bool = true, fullScreen: Bool = false, isIncognito: Bool = false) {
         self.id = id
         self.focusedSpaceID = focusedSpaceID
         self.selectedTabPerSpace = selectedTabPerSpace
         self.frame = frame
         self.sidebarVisible = sidebarVisible
+        self.fullScreen = fullScreen
         self.isIncognito = isIncognito
     }
 }
@@ -1023,6 +1027,7 @@ extension WindowSession {
         selectedTabPerSpace = try c.decodeIfPresent([UUID: UUID].self, forKey: .selectedTabPerSpace) ?? [:]
         frame = try c.decodeIfPresent(String.self, forKey: .frame)
         sidebarVisible = try c.decodeIfPresent(Bool.self, forKey: .sidebarVisible) ?? true
+        fullScreen = try c.decodeIfPresent(Bool.self, forKey: .fullScreen) ?? false
     }
 }
 

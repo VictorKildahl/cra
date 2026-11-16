@@ -120,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         } else {
             // The window in use last comes up in front.
             for w in mainWindows.reversed() { w.showWindow(nil) }
+            for w in mainWindows { w.enterSavedFullScreen() }
             // As ⌘T: the command bar makes the new tab, Esc leaves the window empty.
             if startOnNewTab { DispatchQueue.main.async { [weak self] in self?.main.openCommandBar(.newTab) } }
         }
@@ -1344,6 +1345,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let id = dict["pinExtension"] { ExtensionStore.shared.setPinned(id, true, inProfile: "Default"); return }
             if let id = dict["removeExtension"] {
                 if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionStore.shared.remove(e) }
+                return
+            }
+            // fullscreen=state&label=<l>: whether the window is in full screen and what windows.json
+            // keeps for it (#426).
+            if dict["fullscreen"] == "state", let w = main.window {
+                let saved = store.window(main.windowID).fullScreen
+                CraLog.note("fullscreen \(dict["label"] ?? "state"): window=\(w.styleMask.contains(.fullScreen) ? 1 : 0) saved=\(saved ? 1 : 0)")
                 return
             }
             if let v = dict["fullscreen"], let w = main.window, (v == "1") != w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil); return }
