@@ -30,11 +30,16 @@ enum WebKitStores {
     static func endIncognitoSession() { incognito = nil }
 
     /// A Cra profile was deleted with its Chromium folder (`name` "Profile <id>"): its WebKit data goes too.
-    static func removeProfile(folderName name: String) {
+    static func removeProfile(folderName name: String, done: (@MainActor () -> Void)? = nil) {
         let key = profileKey(AppPaths.chromiumCache.appendingPathComponent(name, isDirectory: true).path)
         persistent[key] = nil
+        // At launch (ProfileCleanup) nothing has started WebKit yet, and remove(forIdentifier:)
+        // doesn't: its reply goes to WebKit's main run loop, unset until WebKit's first object,
+        // and crashed Cra (0.1.42–0.1.44). Any WebKit object sets it up.
+        _ = WKWebsiteDataStore.nonPersistent()
         WKWebsiteDataStore.remove(forIdentifier: identifier(forProfileKey: key)) { error in
             if let error { NSLog("Cra: removing WebKit data of %@ failed: %@", name, error.localizedDescription) }
+            MainActor.assumeIsolated { done?() }
         }
     }
 

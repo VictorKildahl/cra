@@ -1,0 +1,8 @@
+# A profile deleted in the last session goes at the next launch, before Chromium starts, and its WebKit data with
+# it (ProfileCleanup → WebKitStores.removeProfile). Nothing had started WebKit yet, and WebKit's reply crashed Cra
+# at that launch (three crash reports, 0.1.42 to 0.1.44, in WebsiteDataStore::removeDataStoreWithIdentifierImpl).
+seed deleted-profiles.json ["Profile 9"]
+wait 3
+cra://open?url=${PAGE}?n=after-cleanup
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
