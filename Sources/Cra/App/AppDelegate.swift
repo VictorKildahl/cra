@@ -784,13 +784,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// current one, with the command bar up. With every window closed it brings the
     /// hidden one back instead. New Incognito Window (⇧⌘N) and Blank Window (⌃⌘N) always open
     /// a new one. With `url` (a page's Open Link in New Window) the window opens on that page instead.
-    func openNewWindow(incognito: Bool = false, blank: Bool = false, url: String? = nil) {
+    /// Returns the window, for AppleScript's `make new window`.
+    @discardableResult
+    func openNewWindow(incognito: Bool = false, blank: Bool = false, url: String? = nil) -> MainWindowController {
         if !incognito, !blank, let hidden = mainWindows.first(where: { !$0.isStandalone }),
            !mainWindows.contains(where: { $0.window?.isVisible == true || $0.window?.isMiniaturized == true }) {
             hidden.showWindow(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
             if let url { store.createTab(url: url, select: true, window: hidden.windowID) }
-            return
+            return hidden
         }
         var frame: String?
         if let current = main?.window, current.isVisible, !current.styleMask.contains(.fullScreen) {
@@ -805,6 +807,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             : store.addWindow(spaceID: store.focusedSpaceID(window: store.lastNormalWindowID), frame: frame)
         let c = showNewWindow(session)
         if let url { store.createTab(url: url, select: true, window: c.windowID) } else { c.openCommandBar(.newTab) }
+        return c
     }
 
     @discardableResult
@@ -813,7 +816,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindows.append(c)
         store.activeWindowID = c.windowID
         c.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // A background test instance (CRA_TEST_BACKGROUND) never comes to the front.
+        if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
         return c
     }
 
