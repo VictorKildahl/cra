@@ -9,6 +9,8 @@ final class TabRuntime {
     let browser: CraBrowser
     var progress: Double = 0
     var themeColor: String = ""
+    /// Chrome's bars over the page (the Chromium engine's; CEF draws its own): Cra's card draws them.
+    var infoBars: [PageInfoBar] = []
     /// What the page paints behind its content ("#RRGGBB", "" until reported).
     var backgroundColor: String = ""
     /// Cra popped this tab's video out because the user left the tab (Arc's
@@ -35,6 +37,10 @@ final class TabRuntime {
     var audibleAt: Date?
     /// Immediate sound state for music notes; the speaker's audible state has a 2 s hold.
     var soundPlaying = false
+    /// The sidebar player's card from the page's media session (#411), on an engine that reports it.
+    var playerCard = PlayerCardSession()
+    /// The card's removal after its media session ended, until it runs or is called off.
+    var playerCardRemoval: ScheduledWork?
     /// Tab sleeping discarded the page in place (Cra.discard): Chromium keeps its history and
     /// scroll position and loads it again when the tab is shown.
     var discarded = false
@@ -60,6 +66,22 @@ final class TabRuntime {
     var blockedPopups = BlockedPopups()
     /// Chrome-style hosting: the page's own window (nil until created, or for Alloy).
     var hostWindow: NSWindow? { browser.hostWindow }
+    /// The window the page shows in: its Chrome window over the card (CEF's Chrome-style hosting) or the Cra window
+    /// whose card holds its view (the Chromium engine, which has no window per page).
+    var pageWindow: NSWindow? { hostWindow?.parent ?? hostWindow ?? browser.containerView.window }
+    /// The page's views in its card: what EmbeddedPages moved out of its Chrome window (the page's input view last),
+    /// else the page's own view (the Chromium engine puts it in the card itself).
+    var pageViews: [NSView] {
+        if let host = hostWindow { return EmbeddedPages.pageViews(of: host) ?? [] }
+        return [browser.containerView]
+    }
+    /// Where the page is on screen, or nil while it isn't shown: its Chrome window's frame, else its view's.
+    var pageScreenFrame: NSRect? {
+        if let host = hostWindow { return host.isVisible ? host.frame : nil }
+        let view = browser.containerView
+        guard let window = view.window, window.isVisible, !view.isHiddenOrHasHiddenAncestor else { return nil }
+        return window.convertToScreen(view.convert(view.bounds, to: nil))
+    }
     init(tabID: UUID, browser: CraBrowser) {
         self.tabID = tabID
         self.browser = browser
@@ -263,6 +285,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         rt.probeWork = nil
         rt.historyWork?.cancel()
         rt.historyWork = nil
+        rt.playerCardRemoval?.cancel()
+        rt.playerCardRemoval = nil
         if rt.browser.hasDevTools { rt.browser.closeDevTools() }
         devToolsViews[tabID] = nil
         devToolsPlaceholders[tabID] = nil
@@ -1074,7 +1098,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didChangeAudible audible: Bool) {
         guard let id = tabID(of: browser) else { return }
         runtimes[id]?.audibleAt = clock.now
-        if let np = nowPlaying {
+        // The media session makes and plays the card where the engine reports it (#411).
+        if let np = nowPlaying, !browser.reportsMediaSession {
             if np.entries.contains(where: { $0.id == id }) {
                 np.update(id) { $0.playing = audible }
             } else if audible && !browser.hasUncontrollableSound {
@@ -1087,20 +1112,71 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// Music notes follow sound immediately; the speaker and player cards keep the audible hold.
     /// A card paused then resumed within that hold also needs the immediate start event.
+    func browser(_ browser: CraBrowser, didChangeInfoBars infoBars: [[String: Any]]) {
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        let bars = infoBars.compactMap { PageInfoBar($0) }
+        guard bars != rt.infoBars else { return }
+        rt.infoBars = bars
+        log(id, bars.isEmpty ? "info bars gone" : "info bars: \(bars.map { $0.message }.joined(separator: " | "))")
+        delegate?.browserManagerPageWindowsChanged(focus: false)
+    }
+
     func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
         guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
         let changed = rt.soundPlaying != playing
         rt.soundPlaying = playing
-        let resumesCard = playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
+        let followsSound = !browser.reportsMediaSession
+        let resumesCard = followsSound && playing && nowPlaying?.entries.contains(where: { $0.id == id && !$0.playing }) == true
         if resumesCard { nowPlaying?.update(id) { $0.playing = true } }
         // A ding made no card (#411); media starting within its hold has no audible edge of its own.
-        let startsCard = playing && browser.isAudible && !browser.hasUncontrollableSound
+        let startsCard = followsSound && playing && browser.isAudible && !browser.hasUncontrollableSound
             && nowPlaying?.entries.contains(where: { $0.id == id }) == false
         if startsCard {
             nowPlaying?.entries.append(.init(id: id, playing: true))
             refreshMediaControls(id)
         }
         guard changed || resumesCard || startsCard else { return }
+        delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// Chromium's media session (#411): the card is made and plays while the session is controllable
+    /// and active, shows paused while it is suspended, and leaves 2.5 s after it ends, as Chrome's
+    /// media controls do. A ding or Web Audio leaves it as it is (PlayerCardSession).
+    func browser(_ browser: CraBrowser, didChangeMediaSessionState state: CraMediaSessionState, controllable: Bool) {
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        let session: PlayerCardSession.State
+        switch state {
+        case .active: session = .active
+        case .ducking: session = .ducking
+        case .suspended: session = .suspended
+        default: session = .inactive
+        }
+        let change = rt.playerCard.update(session, controllable: controllable)
+        guard let np = nowPlaying else { return }
+        switch change {
+        case .none:
+            return
+        case .show(let playing):
+            rt.playerCardRemoval?.cancel()
+            rt.playerCardRemoval = nil
+            if np.entries.contains(where: { $0.id == id }) {
+                np.update(id) { $0.playing = playing }
+            } else if playing {
+                np.entries.append(.init(id: id, playing: true))
+            } else {
+                return
+            }
+            if playing { refreshMediaControls(id) }
+        case .removeLater:
+            guard np.entries.contains(where: { $0.id == id }), rt.playerCardRemoval == nil else { return }
+            np.update(id) { $0.playing = false }
+            rt.playerCardRemoval = clock.after(PlayerCardSession.endedDelay) { [weak self, weak rt] in
+                guard let self, let rt, self.runtimes[id] === rt else { return }
+                rt.playerCardRemoval = nil
+                self.nowPlaying?.remove(id)
+                self.delegate?.browserManagerDidUpdate(id)
+            }
+        }
         delegate?.browserManagerDidUpdate(id)
     }
 
@@ -1567,6 +1643,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
               LittleWindowTrigger.opens(url, clickModifiers: clickModifiers, clickAge: clickAge,
                                         enabled: store.settings.littleWindowOnOptionCommandClick)
         else { return false }
+        log(id, String(format: "link opens a Little Window (click keys %lu, %.2f s ago)", clickModifiers, clickAge))
         return delegate?.browserManagerOpensLittleWindow(url: url, fromTab: id) ?? false
     }
 

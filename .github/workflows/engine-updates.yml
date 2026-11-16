@@ -1,0 +1,25 @@
+name: Engine updates
+
+# Daily check for a newer Chrome stable than the one Cra's engine is built from. When there is
+# one, scripts/check-engine-update.sh opens an issue with the commands that build it on the Mac
+# (docs/chromium-engine.md); the build itself does not run here.
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Compare the engine with Chrome stable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for a newer Chrome stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-engine-update.sh --issue

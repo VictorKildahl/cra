@@ -1,0 +1,15 @@
+# Downloads from before a launch stay in Chrome's history, and Chrome makes an item for each as it
+# starts, already finished. Cra reported every one as a download that had just finished: each ran
+# the download flight into the sidebar, and a profile with a hundred of them hung the app at launch.
+# After a relaunch the download from the first launch isn't reported again.
+home
+budget rss=600 stalls50=5
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished from a data: address
+relaunch
+wait 4
+cra://debug?downloadState=relaunched
+expect-log download state relaunched: .* finished=0$

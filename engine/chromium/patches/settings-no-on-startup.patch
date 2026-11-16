@@ -1,0 +1,49 @@
+Cra: no On startup page in chrome://settings, as in Arc (its settings bundle
+sets onStartup:false). CEF writes session.restore_on_startup at every profile
+load from persist_session_cookies (chrome_browser_context.cc), and Cra's
+sidebar restores its own tabs, so the page's choice never stuck and never
+did anything: it snapped back to "Continue where you left off" (X DM 7 Nov
+2026). Choosing "New tab page" would only have dropped session cookies.
+
+diff --git a/chrome/browser/resources/settings/page_visibility.ts b/chrome/browser/resources/settings/page_visibility.ts
+index feff9bdf64..ce2ea18590 100644
+--- a/chrome/browser/resources/settings/page_visibility.ts
++++ b/chrome/browser/resources/settings/page_visibility.ts
+@@ -44,7 +44,36 @@ export interface PrivacyPageVisibility {
+ 
+ function createPageVisibility(): PageVisibility|undefined {
+   if (!loadTimeData.getBoolean('isGuest')) {
+-    return undefined;
++    // Cra: no On startup page, as in Arc. Every key is listed because the menu
++    // hides a row whose key is missing.
++    return {
++      a11y: true,
++      ai: true,
++      appearance: {
++        bookmarksBar: true,
++        homeButton: true,
++        hoverCard: true,
++        pageZoom: true,
++        setTheme: true,
++        sidePanel: true,
++      },
++      autofill: true,
++      defaultBrowser: true,
++      downloads: true,
++      extensions: true,
++      languages: true,
++      onStartup: false,
++      people: true,
++      performance: true,
++      privacy: {
++        networkPrediction: true,
++        searchPrediction: true,
++      },
++      reset: true,
++      safetyHub: true,
++      system: true,
++      yourSavedInfo: true,
++    };
+   }
+ 
+   // <if expr="not is_chromeos">

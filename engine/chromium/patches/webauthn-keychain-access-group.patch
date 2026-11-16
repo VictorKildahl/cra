@@ -1,0 +1,53 @@
+diff --git a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
+index 6fc50b6960..2d7a54a5ca 100644
+--- a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
++++ b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
+@@ -81,6 +81,11 @@
+ #endif
+ 
+ #if BUILDFLAG(IS_MAC)
++#include <Security/Security.h>
++
++#include "base/apple/scoped_cftyperef.h"
++#include "base/no_destructor.h"
++#include "base/strings/sys_string_conversions.h"
+ #include "device/fido/mac/credential_metadata.h"
+ #endif
+ 
+@@ -391,8 +396,25 @@ void ChromeWebAuthenticationDelegate::UpdateUserPasskeys(
+ ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfig
+ ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfigForProfile(
+     Profile* profile) {
+-  constexpr char kKeychainAccessGroup[] =
+-      MAC_TEAM_IDENTIFIER_STRING "." MAC_BUNDLE_IDENTIFIER_STRING ".webauthn";
++  // Cra: "<application-identifier>.webauthn" of the running app, so an embedder
++  // signed with its own team can keep passkeys in the keychain. Chromium's
++  // branding has no team ID; without the entitlement this falls back to it.
++  static const base::NoDestructor<std::string> kKeychainAccessGroup([] {
++    base::apple::ScopedCFTypeRef<SecTaskRef> task(
++        SecTaskCreateFromSelf(nullptr));
++    if (task) {
++      base::apple::ScopedCFTypeRef<CFTypeRef> app_id(
++          SecTaskCopyValueForEntitlement(
++              task.get(), CFSTR("com.apple.application-identifier"), nullptr));
++      if (app_id && CFGetTypeID(app_id.get()) == CFStringGetTypeID()) {
++        return base::SysCFStringRefToUTF8(
++                   static_cast<CFStringRef>(app_id.get())) +
++               ".webauthn";
++      }
++    }
++    return std::string(MAC_TEAM_IDENTIFIER_STRING
++                       "." MAC_BUNDLE_IDENTIFIER_STRING ".webauthn");
++  }());
+ 
+   std::string metadata_secret = profile->GetPrefs()->GetString(
+       webauthn::pref_names::kWebAuthnTouchIdMetadataSecretPrefName);
+@@ -405,7 +427,7 @@ ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfigForProfile(
+   }
+ 
+   return TouchIdAuthenticatorConfig{
+-      .keychain_access_group = kKeychainAccessGroup,
++      .keychain_access_group = *kKeychainAccessGroup,
+       .metadata_secret = std::move(metadata_secret)};
+ }
+ 

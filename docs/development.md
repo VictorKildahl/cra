@@ -6,7 +6,7 @@ Notes for working on the code. How to send a change is in
 
 ## Build
 
-    scripts/build.sh          # fetches CEF on first run, builds build/Cra.app
+    scripts/build.sh          # fetches the engine on first run, builds build/Cra.app
     scripts/build.sh debug    # debug build
     scripts/run.sh            # build if needed, then open; --rebuild [debug] forces a build
     scripts/dev.sh            # dev loop: debug CraDev.app, rebuilds + relaunches on save (~4 s)
@@ -17,26 +17,31 @@ Notes for working on the code. How to send a change is in
 `just build debug` runs `scripts/build.sh debug`. CI calls the scripts directly, and so can
 you.
 
-Requirements: macOS 14+ on Apple silicon, Xcode 16+, CMake (`brew install cmake`), about
-1 GB of disk for CEF and the build products. `CRA_ARCH=x86_64 scripts/build.sh` cross-compiles the
+Requirements: macOS 14+ on Apple silicon, Xcode 16+, about 1 GB of disk for the engine and the
+build products. `CRA_ARCH=x86_64 scripts/build.sh` cross-compiles the
 Intel app into `build/x86_64/Cra.app` (another ~1 GB); every release ships both.
 
-`scripts/fetch-cef.sh` pins the CEF version and downloads it into `vendor/cef` (not
-committed). It fetches Cra's own CEF build, made by `scripts/build-cef.sh` with H.264/AAC
-and the patches in `scripts/cef-patches` and published as a `cef-*` release by
-`scripts/publish-cef.sh`; `CEF_URL` points it at Spotify's stock build instead. A daily workflow (`.github/workflows/cef-updates.yml`) opens an
-issue when a newer stable CEF is out; `scripts/update-cef.sh` moves the pin.
-If the release download fails, `scripts/download-cef.py` retrieves the same Cra asset
-through GitHub's public API and verifies its published SHA-256 before unpacking.
-Custom `CEF_URL` downloads never fall back to a different Cra build.
+Cra runs on Chrome's own framework with a thin layer of Cra's code built into it: the engine
+([chromium-engine.md](chromium-engine.md)). `scripts/fetch-engine.sh` pins its version and downloads it into
+`vendor/engine` (not committed), from an `engine-*` release that `scripts/publish-engine.sh` publishes.
+`scripts/build-chromium.sh` builds it from a Chrome stable tag (~45 GB, 2–4 h a CPU) with the layer, Cra's
+patches and ungoogled-chromium's in `engine/chromium` (`apply.sh` puts them in the tree);
+`CRA_ENGINE_OUT=<out dir> scripts/build.sh` builds the app on such a local build. `scripts/check-engine-update.sh`
+says when Chrome has a newer stable; a release needs the newest.
+
+`CRA_ENGINE=cef scripts/build.sh` still builds on CEF: `scripts/fetch-cef.sh` downloads Cra's CEF build
+(`scripts/build-cef.sh`, `scripts/cef-patches`, published by `scripts/publish-cef.sh`) into `vendor/cef`, and
+`Sources/CraCEF/CraCEF.mm` is the bridge.
 
 ## Layout
 
 - `Sources/Cra` — the app: `App` (delegate, key bindings), `Services` (sidebar store,
   persistence, import, updates, extensions, live folders), `UI` (sidebar, command bar, split
   view, windows, settings, onboarding)
-- `Sources/CraCEF` — Objective-C++ bridge between Swift and CEF
-- `Sources/CraHelper` — Chromium subprocess executable
+- `Sources/CraCEF` — the bridge's header (`include/CraCEF.h`), which Swift sees; on the engine it is
+  implemented inside Chrome's framework (`engine/chromium/cra`), on CEF by `CraCEF.mm`
+- `engine/chromium` — the engine's layer, Chrome hooks, patches and branding
+- `Sources/CraHelper` — CEF's Chromium subprocess (the engine has Chrome's own helpers)
 - `Sources/Cra/Services/WebKit` — the WebKit page that DRM services open in
   ([protected-media.md](protected-media.md))
 - `iOS/` — the iPhone app (UIKit on WebKit, matching Arc Search), its widgets, share
@@ -50,7 +55,7 @@ Custom `CEF_URL` downloads never fall back to a different Cra build.
 - `scripts/` — build, release, CEF and test tooling; `scripts/clips` records release clips
 - `docs/arc-reverse-engineering.md` — what was learned from Arc and how
 - `docs/release.md` — signing, notarization and the release workflow
-- `vendor/cef` — CEF binary distribution (fetched, not committed)
+- `vendor/engine` — the engine (fetched, not committed); `vendor/cef` for CEF builds
 
 Data lives in `~/Library/Application Support/Cra`: the sidebar and archive as JSON,
 `keybindings.json`, each tab's back and forward list in `PageHistory/`, cached favicons, the logs
@@ -135,6 +140,8 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
   shows the emoji's whole picture, in the same place (#399).
+- `scripts/test-theme-noise.sh`: the theme's grain over the main window (`ThemeNoiseView`) is a pattern
+  Core Animation tiles, with no window-sized backing store, and shows the grain the drawn view did at 1x and 2x.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds
   at 1x and 2x, checking light-theme contrast and the dark-theme tint without CEF or a visible window.
 - `scripts/test-live-folder-plugins.sh`: the real `CraPluginHost` (sandboxed JavaScriptCore) and

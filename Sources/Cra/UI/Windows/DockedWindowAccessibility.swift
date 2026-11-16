@@ -152,6 +152,9 @@ enum DockedWindowAccessibility {
             if attribute == .windows {
                 guard let windows = appKit as? [AnyObject] else { return appKit }
                 return windows.filter { element in
+                    // Never a window nobody sees: Chrome's own on the Chromium engine (a page's DevTools window
+                    // once Cra has its frontend) stays on screen at alpha 0.
+                    if let w = element as? NSWindow, w.alphaValue == 0 { return false }
                     guard let w = element as? NSWindow, w.parent != nil else { return true }
                     return w.accessibilityAttributeValue(.role) as? String != NSAccessibility.Role.group.rawValue
                 } as NSArray

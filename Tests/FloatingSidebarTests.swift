@@ -110,6 +110,20 @@ enum FloatingSidebarTests {
         expect(sidebar.isPolling, "becoming active starts the pointer timer")
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
         expect(!sidebar.isPolling, "leaving the app stops it")
+
+        // With the sidebar anchored there is nothing to float: no timer, so an idle Cra in front
+        // doesn't wake 30 times a second for it.
+        var hidden = false
+        sidebar.sidebarHidden = { hidden }
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        expect(!sidebar.isPolling, "an anchored sidebar installs no pointer timer")
+        hidden = true
+        sidebar.sidebarVisibilityChanged()
+        expect(sidebar.isPolling, "hiding the sidebar starts the pointer timer")
+        hidden = false
+        sidebar.sidebarVisibilityChanged()
+        expect(!sidebar.isPolling, "showing it again stops it")
+        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
         window.close()
         print("Floating sidebar: \(checks) checks passed")
     }

@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/extensions/api/tabs/tabs_api.h"
++
++#include "chrome/browser/cra_engine_hooks.h"
+ 
+ #include "base/memory/weak_ptr.h"
+ #include "base/metrics/histogram_functions.h"
+@@ -1583,6 +1585,11 @@
+     tab_list.ActivateTab(tab_list.GetTab(tab_index)->GetHandle());
+     CHECK_EQ(tab_index, tab_list.GetActiveIndex(), base::NotFatalUntil::M161);
+   }
++  // Cra: Chrome's window never shows, so Cra selects the tab in its own (SwitchyOmega's Options focuses its
++  // open settings tab this way).
++  if (cra::g_page_activation) {
++    cra::g_page_activation(tab_list.GetTab(tab_index)->GetContents(), /*by_page=*/false);
++  }
+   return true;
+ }
+ 

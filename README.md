@@ -161,11 +161,13 @@ status in [docs/ios-parity.md](docs/ios-parity.md).
 
 ## Build from source
 
-    scripts/build.sh          # fetches CEF on first run, builds build/Cra.app
+    scripts/build.sh          # fetches the engine on first run, builds build/Cra.app
     scripts/run.sh            # build if needed, then open
     scripts/dev.sh            # dev loop: debug CraDev.app, rebuilds + relaunches on save
 
-Needs Xcode 16+ and CMake (`brew install cmake`). The iPhone app builds with
+Needs Xcode 16+. The engine is Chrome's own framework with Cra's layer built into it
+([docs/chromium-engine.md](docs/chromium-engine.md)); the build downloads a published copy, and
+`scripts/build-chromium.sh` builds it from Chrome's source. The iPhone app builds with
 `scripts/ios.sh build` (Xcode 26 with the iOS platform, no Chromium). [CONTRIBUTING.md](CONTRIBUTING.md)
 covers sending a change, and [docs/development.md](docs/development.md) covers the code
 layout, scripting hooks and test instances.

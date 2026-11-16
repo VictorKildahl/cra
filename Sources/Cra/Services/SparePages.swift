@@ -27,7 +27,7 @@ final class SparePages {
     /// Makes `profilePath`'s next spare `SparePage.refillDelay` from now, unless it has one.
     func refill(profilePath: String?, frame: NSRect, clock: Scheduler) {
         let key = SparePage.key(profilePath: profilePath)
-        guard Self.isEnabled, CraCEFRuntime.chromeHosting(), spares[key] == nil, pending[key] == nil else { return }
+        guard Self.isEnabled, CraCEFRuntime.supportsSparePages(), spares[key] == nil, pending[key] == nil else { return }
         pending[key] = clock.after(SparePage.refillDelay) { [weak self] in
             guard let self else { return }
             self.pending[key] = nil

@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -558,6 +558,12 @@
+   }
+ #endif
+ 
++  // Cra: its app opens the launch's URLs (cra::g_relaunch).
++  if (cra::g_relaunch) {
++    cra::g_relaunch(command_line);
++    return;
++  }
++
+   StartupProfilePathInfo startup_profile_path_info =
+       GetStartupProfilePath(current_directory, command_line,
+                             /*ignore_profile_picker=*/false);

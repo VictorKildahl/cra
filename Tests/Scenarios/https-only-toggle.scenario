@@ -1,0 +1,21 @@
+# promise: #36
+# Settings ▸ Privacy's HTTPS-only switch, flipped while pages are open, reaches Chromium at once and
+# pages keep loading: turning it on as onboarding's import ended crashed Cra (#36, a CHECK in
+# Chromium's log as the setting was applied).
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=before
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?httpsOnly=1
+expect-log https only: on
+wait 1
+cra://open?url=${PAGE}?n=on
+wait 3
+cra://debug?httpsOnly=0
+expect-log https only: off
+wait 1
+cra://open?url=${PAGE}?n=off
+expect-log tab \S+ loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'alive:'+location.search"}
+expect-log "value":"alive:\?n=off"

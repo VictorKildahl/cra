@@ -150,7 +150,7 @@ struct AdvancedPane: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
                             .font(.system(size: 14, weight: .semibold))
-                        Text("Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())")
+                        Text(EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                         Text(AppPaths.supportDir.path).font(.system(size: 11)).foregroundStyle(.secondary)
                             .textSelection(.enabled)

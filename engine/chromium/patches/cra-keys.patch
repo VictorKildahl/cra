@@ -1,0 +1,39 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -321,6 +321,15 @@
+     return content::KeyboardEventProcessingResult::HANDLED;
+   }
+ 
++  // Cra: its pages' keys go to Cra (its reserved shortcuts), never to Chrome's shortcuts.
++  if (cra::g_key_event) {
++    int handled = cra::g_key_event(source, event, /*unhandled=*/false);
++    if (handled >= 0) {
++      return handled ? content::KeyboardEventProcessingResult::HANDLED
++                     : content::KeyboardEventProcessingResult::NOT_HANDLED;
++    }
++  }
++
+   return window_->PreHandleKeyboardEvent(event);
+ }
+ 
+@@ -329,8 +338,17 @@
+     const input::NativeWebKeyboardEvent& event) {
+   DevToolsWindow* devtools_window =
+       DevToolsWindow::GetInstanceForInspectedWebContents(source);
+-  return (devtools_window && devtools_window->ForwardKeyboardEvent(event)) ||
+-         window_->HandleKeyboardEvent(event);
++  if (devtools_window && devtools_window->ForwardKeyboardEvent(event)) {
++    return true;
++  }
++  // Cra: keys its pages left alone go to Cra, then its menu bar.
++  if (cra::g_key_event) {
++    int handled = cra::g_key_event(source, event, /*unhandled=*/true);
++    if (handled >= 0) {
++      return handled;
++    }
++  }
++  return window_->HandleKeyboardEvent(event);
+ }
+ 
+ void BrowserWebContentsDelegate::RequestPointerLock(

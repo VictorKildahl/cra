@@ -1,0 +1,40 @@
+# promise: #411
+# On Chrome's framework the sidebar player follows the page's media session, as Arc's: a 7 s track
+# gets a card, a pause of more than 5 s keeps it, a ding in the paused tab leaves it paused, playing
+# again plays it, and once the track ends the card leaves 2.5 s later.
+budget rss=800 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+pace 0.5
+
+cra://open?url=file://${FIXTURES}/Pages/sounds.html
+expect-log loaded file:
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"track(7)"}
+expect-log "value":"track:playing"
+wait 1
+cra://debug?nowPlaying=state&label=playing
+expect-log Cra nowPlaying\[playing\] .*playing=1
+
+cra://debug?cdp=Runtime.evaluate&params={"returnByValue":true,"expression":"pauseTrack()"}
+expect-log "value":"track:paused"
+wait 7
+cra://debug?nowPlaying=state&label=paused
+expect-log Cra nowPlaying\[paused\] .*playing=0
+
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"ding()"}
+expect-log "value":"ding:ended"
+wait 4
+cra://debug?nowPlaying=state&label=dinged
+expect-log Cra nowPlaying\[dinged\] .*playing=0
+reject-log Cra nowPlaying\[dinged\] none
+
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"resumeTrack()"}
+expect-log "value":"track:playing"
+wait 1
+cra://debug?nowPlaying=state&label=resumed
+expect-log Cra nowPlaying\[resumed\] .*playing=1
+
+# About 5 s of the track are left, then the 2.5 s wait.
+wait 10
+cra://debug?nowPlaying=state&label=ended
+expect-log Cra nowPlaying\[ended\] none

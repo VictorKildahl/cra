@@ -20,6 +20,13 @@ let cefLinkerFlags: [String] = [
     "-L\(cefRoot)/build/libcef_dll_wrapper",
 ]
 
+// Cra builds on Chrome's own framework (docs/chromium-engine.md; CRA_ENGINE=cef builds on CEF instead): CraCEF is
+// then only its header, implemented inside the framework, which CRA_ENGINE_FRAMEWORKS holds (vendor/engine from
+// scripts/fetch-engine.sh by default, or the Cra.app/Contents/Frameworks of a scripts/build-chromium.sh build).
+// No CraHelper: Chrome's own helpers come with the framework.
+let chromiumEngine = Context.environment["CRA_ENGINE"] != "cef"
+let engineFrameworks = Context.environment["CRA_ENGINE_FRAMEWORKS"] ?? "\(Context.packageDirectory)/vendor/engine"
+
 // Sparkle, the updater framework Arc ships, lives in vendor/sparkle (scripts/fetch-sparkle.sh);
 // scripts/build.sh copies Sparkle.framework into Cra.app/Contents/Frameworks.
 let sparkleRoot = "\(Context.packageDirectory)/vendor/sparkle"
@@ -29,7 +36,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Cra", targets: ["Cra"]),
-        .executable(name: "CraHelper", targets: ["CraHelper"]),
+    ] + (chromiumEngine ? [] : [.executable(name: "CraHelper", targets: ["CraHelper"])]) + [
         .executable(name: "CraPluginHost", targets: ["CraPluginHost"]),
         // Loaded by the Dock, not by Cra; scripts/build.sh wraps it in
         // Cra.app/Contents/PlugIns/CraDockTile.docktileplugin.
@@ -40,10 +47,25 @@ let package = Package(
     targets: [
         .executableTarget(name: "CraPluginHost", path: "Sources/CraPluginHost",
                           linkerSettings: [.linkedFramework("JavaScriptCore")]),
+    ] + (chromiumEngine ? [
+        // The bridge lives in Chrome's framework (engine/chromium/cra/bridge.mm); this target is its header.
+        .target(
+            name: "CraCEF",
+            path: "Sources/CraCEF",
+            exclude: ["CraCEF.mm", "CraContentBlocker.h"],
+            sources: ["ChromiumEngine.m"],
+            publicHeadersPath: "include",
+            linkerSettings: [
+                .unsafeFlags(["-F", engineFrameworks, "-Xlinker", "-needed_framework", "-Xlinker", "Cra Framework"]),
+                .linkedFramework("AppKit"),
+            ]
+        ),
+    ] : [
         // Objective-C++ bridge between Swift and CEF.
         .target(
             name: "CraCEF",
             path: "Sources/CraCEF",
+            exclude: ["ChromiumEngine.m"],
             publicHeadersPath: "include",
             cxxSettings: [.unsafeFlags(cefCXXFlags + ["-fobjc-arc"])],
             linkerSettings: [
@@ -71,6 +93,7 @@ let package = Package(
                 .linkedFramework("IOSurface"),
             ]
         ),
+    ]) + [
         // Dock tile plug-in: keeps the icon picked in Settings after Cra quits.
         .target(
             name: "CraDockTile",

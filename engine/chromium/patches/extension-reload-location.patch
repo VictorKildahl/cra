@@ -1,0 +1,82 @@
+diff --git a/chrome/browser/extensions/chrome_extension_registrar_delegate.cc b/chrome/browser/extensions/chrome_extension_registrar_delegate.cc
+index 7ff5fb3095..63b6de5564 100644
+--- a/chrome/browser/extensions/chrome_extension_registrar_delegate.cc
++++ b/chrome/browser/extensions/chrome_extension_registrar_delegate.cc
+@@ -289,6 +289,12 @@ void ChromeExtensionRegistrarDelegate::DoLoadExtensionForReload(
+     unpacked_installer->set_completion_callback(base::BindOnce(
+         &ChromeExtensionRegistrarDelegate::OnUnpackedReloadFailure,
+         weak_factory_.GetWeakPtr()));
++    // Cra: prefs keep no manifest for a --load-extension extension either, so
++    // it comes here too; it reloads as what it was, not as kUnpacked.
++    if (installed_extension && installed_extension->extension_location ==
++                                   mojom::ManifestLocation::kCommandLine) {
++      unpacked_installer->set_location(mojom::ManifestLocation::kCommandLine);
++    }
+     unpacked_installer->Load(path);
+   }
+ }
+diff --git a/extensions/browser/unpacked_installer.cc b/extensions/browser/unpacked_installer.cc
+index c3626959e7..b2d1a88fa0 100644
+--- a/extensions/browser/unpacked_installer.cc
++++ b/extensions/browser/unpacked_installer.cc
+@@ -24,6 +24,7 @@
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "extensions/browser/api/declarative_net_request/install_index_helper.h"
++#include "extensions/browser/disable_reason.h"
+ #include "extensions/browser/event_router_factory.h"
+ #include "extensions/browser/extension_file_task_runner.h"
+ #include "extensions/browser/extension_management_client.h"
+@@ -406,7 +407,7 @@ void UnpackedInstaller::CheckExtensionFileAccess() {
+ 
+ void UnpackedInstaller::LoadWithFileAccessOnFileThread(int flags) {
+   std::u16string error;
+-  if (!LoadExtension(mojom::ManifestLocation::kUnpacked, flags, &error)) {
++  if (!LoadExtension(location_, flags, &error)) {
+     // Set priority explicitly to avoid unwanted task priority inheritance.
+     content::GetUIThreadTaskRunner({base::TaskPriority::USER_BLOCKING})
+         ->PostTask(FROM_HERE,
+@@ -445,6 +446,17 @@ void UnpackedInstaller::InstallExtension() {
+   // Force file access and/or incognito state and set install param if
+   // requested.
+   ExtensionPrefs* prefs = ExtensionPrefs::Get(browser_context_);
++  // Cra: developer mode never applies to a --load-extension extension. A
++  // reload used to turn one into kUnpacked, which got it this reason, and the
++  // reason stayed when the command line loaded it again: clear it.
++  if (extension()->location() == mojom::ManifestLocation::kCommandLine &&
++      prefs->HasDisableReason(
++          extension()->id(),
++          disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION)) {
++    prefs->RemoveDisableReason(
++        extension()->id(),
++        disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION);
++  }
+   if (allow_file_access_.has_value()) {
+     prefs->SetAllowFileAccess(extension()->id(), *allow_file_access_);
+   }
+diff --git a/extensions/browser/unpacked_installer.h b/extensions/browser/unpacked_installer.h
+index 723fcd2407..56ad8fa4a6 100644
+--- a/extensions/browser/unpacked_installer.h
++++ b/extensions/browser/unpacked_installer.h
+@@ -103,6 +103,11 @@ class UnpackedInstaller : public base::RefCountedThreadSafe<
+     installed_via_cdp_ = installed_via_cdp;
+   }
+ 
++  // Cra: the location Load() installs with. A --load-extension extension that
++  // reloads (chrome.runtime.reload(), chrome://extensions) keeps kCommandLine;
++  // as kUnpacked it would be turned off without developer mode.
++  void set_location(mojom::ManifestLocation location) { location_ = location; }
++
+  private:
+   friend struct content::BrowserThread::DeleteOnThread<
+       content::BrowserThread::UI>;
+@@ -206,6 +211,9 @@ class UnpackedInstaller : public base::RefCountedThreadSafe<
+ 
+   bool installed_via_cdp_ = false;
+ 
++  // Cra: see set_location().
++  mojom::ManifestLocation location_ = mojom::ManifestLocation::kUnpacked;
++
+   // Subscription for a callback that runs when the BrowserContext* is
+   // destroyed.
+   base::CallbackListSubscription browser_context_shutdown_subscription_;

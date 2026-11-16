@@ -608,6 +608,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Anchoring while the sidebar floats: bring it home first so it slides from there.
             if lastSidebarVisible { floatingSidebar?.prepareForAnchoring() }
             shell.animateSidebar(visible: lastSidebarVisible, floating: false, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth)
+            floatingSidebar?.sidebarVisibilityChanged()
         }
         if CGFloat(store.prefs.sidebarWidth) != lastSidebarWidth {
             lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
@@ -981,8 +982,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             LinkSummaryPreviewController.shared.linkHoverChanged(nil)
             return
         }
-        let pointerInPage = { (host: NSWindow) -> CGPoint? in
-            let f = host.frame, m = NSEvent.mouseLocation
+        let pointerInPage = { (f: NSRect) -> CGPoint? in
+            let m = NSEvent.mouseLocation
             return f.contains(m) ? CGPoint(x: (m.x - f.minX) / f.width, y: (f.maxY - m.y) / f.height) : nil
         }
         let site = LinkSummaryPolicy.autoSite(page: page)
@@ -995,15 +996,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 ?? FaviconKey.key(for: url.absoluteString).flatMap { app.favicons.image(forKey: FaviconKey.siteKey(of: $0)) },
             inspect: { [weak rt] done in
                 // The link under the pointer, its frame, and whether it is one of Arc's (LinkSummaryPolicy.hoverScript).
-                guard let rt, let host = rt.hostWindow, host.isVisible, let pointer = pointerInPage(host) else { done(nil); return }
+                guard let rt, let frame = rt.pageScreenFrame, let pointer = pointerInPage(frame) else { done(nil); return }
                 let params = (try? JSONSerialization.data(withJSONObject: [
                     "expression": LinkSummaryPolicy.hoverScript(pointer: pointer, site: site), "returnByValue": true]))
                     .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-                rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak host] result, _ in
+                rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak rt] result, _ in
                     let value = PeekSource.value(result)
                     DispatchQueue.main.async {
-                        guard let host, let value else { done(nil); return }
-                        let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: host.frame) }
+                        guard let frame = rt?.pageScreenFrame, let value else { done(nil); return }
+                        let rect = PeekLayout.fraction(fromScript: value).flatMap { PeekLayout.source(fraction: $0, in: frame) }
                         done(.init(rect: rect, arcLink: value["arc"] as? Bool ?? false))
                     }
                 }
@@ -1118,6 +1119,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private var finishedDownloads: Set<UInt32> = []
+    /// For `cra://debug?downloadState`: downloads this window was told finished, in this launch.
+    var finishedDownloadCount: Int { finishedDownloads.count }
     /// Downloads this window's pages started (its flight and stall checks).
     private var windowDownloads: Set<UInt32> = []
 
@@ -1152,6 +1155,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A sidebar that came out over the page's full screen goes home when the shown one comes back (#315).
         if !fullscreen, sidebarVisible { floatingSidebar?.hide(animated: false) }
         shell.contentFullscreen = fullscreen
+        floatingSidebar?.sidebarVisibilityChanged()
         contentFullscreenTab = fullscreen ? tabID : nil
         if fullscreen, !window.styleMask.contains(.fullScreen) {
             enteredFullscreenForContent = true
@@ -1316,6 +1320,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
     func browserManagerPageWindowsChanged(focus: Bool) {
         guard let window else { return }
+        syncInfoBars()
         frameReleaseAfterChange?.cancel()
         frameReleaseAfterChange = app.composition.clock.after(HiddenFrameRelease.afterPageChange) { [weak self] in
             guard let self else { return }
@@ -1515,7 +1520,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// `cra://debug?pageInsets=1`: where the focused page's input view sits against the compositor
     /// that draws the page, after its card lays out again, and the insets Chromium gave it. While
     /// the debugger bar shows, both say the bar's height at the top (#241).
+    /// Each shown tab's card draws its page's bars (the Chromium engine's: PageInfoBar) and gives the page what is
+    /// left below them.
+    private func syncInfoBars() {
+        for id in browsers.visibleTabIDs {
+            guard let card = shell.card(for: id), let rt = browsers.runtime(for: id) else { continue }
+            let before = card.infoBarStrip.height
+            card.infoBarStrip.onAction = { [weak rt] bar, action in rt?.browser.infoBar(bar, action: action) }
+            card.infoBarStrip.show(rt.infoBars)
+            // A tab coming in gets the whole web area from BrowserManager: under bars it lays out again.
+            if !rt.infoBars.isEmpty { card.needsLayout = true }
+            guard card.infoBarStrip.height != before else { continue }
+            card.needsLayout = true
+            // The line EmbeddedPages writes when Chromium's own bar moves the page down on CEF (#241).
+            CraLog.note("page view: Chromium insets top=\(Int(card.infoBarStrip.height)) left=0 bottom=0 right=0")
+        }
+    }
+
     func pageInsetsReadout() -> String {
+        // The Chromium engine: the page's view in its card, under Cra's drawing of Chrome's bars.
+        if let rt = browsers.visibleRuntime, rt.hostWindow == nil, let card = shell.card(for: rt.tabID) {
+            pageInsetsReadouts += 1
+            card.needsLayout = true
+            card.layoutSubtreeIfNeeded()
+            let c = card.webArea.bounds, p = rt.browser.containerView.frame
+            let bars = Int(card.infoBarStrip.height)
+            let inWindow = card.webArea.convert(c, to: nil)
+            let origin = "\(Int(inWindow.minX)),\(Int((window?.frame.height ?? 0) - inWindow.maxY))"
+            return "page view insets \(pageInsetsReadouts): top=\(Int(c.maxY - p.maxY)) left=\(Int(p.minX - c.minX)) bottom=\(Int(p.minY - c.minY)) right=\(Int(c.maxX - p.maxX)); Chromium's top=\(bars) left=0 bottom=0 right=0; page area at \(origin) \(Int(c.width))x\(Int(c.height))"
+        }
         guard let host = browsers.visibleRuntime?.hostWindow, let views = EmbeddedPages.pageViews(of: host),
               let compositor = views.first, let page = views.last, let area = page.superview else { return "page view insets: no page" }
         pageInsetsReadouts += 1
@@ -1581,7 +1614,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func releaseUnfocusedEmbeddedPage() {
         guard EmbeddedPages.isEnabled, let window, let responder = window.firstResponder as? NSView,
               NSStringFromClass(type(of: responder)) == "RenderWidgetHostViewCocoa" else { return }
-        let focused = browsers.visibleTabID.flatMap { browsers.runtime(for: $0)?.hostWindow }.flatMap(EmbeddedPages.pageViews(of:)) ?? []
+        let focused = browsers.visibleTabID.flatMap { browsers.runtime(for: $0)?.pageViews } ?? []
         // The extension side panel's page keeps the keys it has.
         let panel = sidePanel.isShowing ? sidePanel.embeddedViews : []
         if !(focused + panel).contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
@@ -1591,14 +1624,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var embedFocusTab: UUID?
 
     private func focusEmbeddedPage(_ id: UUID) {
-        guard let window, let host = browsers.runtime(for: id)?.hostWindow,
-              let view = EmbeddedPages.pageViews(of: host)?.last, view.window === window else { return }
+        guard let window, let rt = browsers.runtime(for: id), let view = rt.pageViews.last, view.window === window else { return }
         embedFocusTab = nil
         // Never from a panel that has the keys (the command bar filling a split pane, the find bar).
         if let key = NSApp.keyWindow, key !== window, !EmbeddedPages.isHost(key), key.parent === window { return }
         window.makeKey()
         if let render = EmbeddedPages.renderView(in: view) { window.makeFirstResponder(render) }
-        ChromiumPageFocus.focus(host)
+        if let host = rt.hostWindow { ChromiumPageFocus.focus(host) } else { rt.browser.setFocused(true) }
     }
 
     /// Diagnostic log shared with the bridge: `defaults write dk.kildahl.cra devToolsLog -bool YES`.
@@ -2119,8 +2151,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// mouse's own for cra://debug?peekFrom.
     func peekSource(fromTab tabID: UUID?, pointer: NSPoint? = nil, sinceMouseDown: Double? = nil,
                     completion: @escaping (PeekSource?) -> Void) {
-        guard let tabID, let window, let rt = browsers.runtimes[tabID], let host = rt.hostWindow, host.parent === window,
-              host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else {
+        guard let tabID, let window, let rt = browsers.runtimes[tabID], rt.pageWindow === window,
+              let pageFrame = rt.pageScreenFrame, rt.browser.isCreated, !rt.browser.isClosed else {
             CraLog.note("peek: from the whole area (no page to find the link in)")
             completion(nil)
             return
@@ -2130,7 +2162,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 ?? "peek: from the whole area (no link under the pointer or focused)")
             completion(source)
         }
-        let pageFrame = host.frame
         let m = pointer ?? NSEvent.mouseLocation
         let clickAge = sinceMouseDown ?? CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown)
         let fractionPointer = pageFrame.contains(m)
@@ -2175,8 +2206,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// `x`, `y` (fractions of the page, y down), `clicked` or resting there: "link W×H", "click W×H"
     /// or "area" (#359).
     func peekSourceReadout(x: Double, y: Double, clicked: Bool, completion: @escaping (String) -> Void) {
-        guard let tab = selectedTab?.id, let host = browsers.runtimes[tab]?.hostWindow else { completion("no page"); return }
-        let f = host.frame
+        guard let tab = selectedTab?.id, let f = browsers.runtimes[tab]?.pageScreenFrame else { completion("no page"); return }
         let pointer = NSPoint(x: f.minX + x * f.width, y: f.maxY - y * f.height)
         peekSource(fromTab: tab, pointer: pointer, sinceMouseDown: clicked ? 0 : .infinity) { source in
             completion(source.map { "\($0.fromLink ? "link" : "click") \(Int($0.rect.width.rounded()))×\(Int($0.rect.height.rounded()))" } ?? "area")
@@ -2186,18 +2216,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Where the link a Peek came from is now (the page may have scrolled), in this window's
     /// coordinates; nil when it's gone, off the page or Chromium doesn't answer in time.
     func peekSourceAgain(_ source: PeekSource, completion: @escaping (NSRect?) -> Void) {
-        guard let window, let rt = browsers.runtimes[source.tabID], let host = rt.hostWindow, host.parent === window,
-              host.isVisible, rt.browser.isCreated, !rt.browser.isClosed else { completion(nil); return }
+        guard let window, let rt = browsers.runtimes[source.tabID], rt.pageWindow === window, rt.pageScreenFrame != nil,
+              rt.browser.isCreated, !rt.browser.isClosed else { completion(nil); return }
         var answered = false
         let params = (try? JSONSerialization.data(withJSONObject: ["expression": PeekLayout.sourceAgainScript, "returnByValue": true]))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak window, weak host] result, _ in
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak window, weak rt] result, _ in
             let found = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
             DispatchQueue.main.async {
                 guard !answered else { return }
                 answered = true
-                guard let window, let host, let found else { completion(nil); return }
-                completion(PeekLayout.source(fraction: found, in: window.convertFromScreen(host.frame)))
+                guard let window, let frame = rt?.pageScreenFrame, let found else { completion(nil); return }
+                completion(PeekLayout.source(fraction: found, in: window.convertFromScreen(frame)))
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) {
@@ -4134,7 +4164,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.layoutContentChildren()
         if let find = findPanel, let window {
             // Typing goes back to the page, unless focus already moved elsewhere.
-            if find.isKeyWindow { browsers.visibleRuntime?.hostWindow?.makeKey() }
+            if find.isKeyWindow, let rt = browsers.visibleRuntime {
+                // The page's Chrome window (CEF), else the page's view in this window (the Chromium engine).
+                if let host = rt.hostWindow { host.makeKey() } else {
+                    window.makeKey()
+                    if let render = rt.pageViews.last.flatMap(EmbeddedPages.renderView(in:)) { window.makeFirstResponder(render) }
+                }
+            }
             window.removeChildWindow(find)
             find.orderOut(nil)
         }
@@ -4394,6 +4430,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if let id = contentFullscreenTab { browsers.runtime(for: id)?.browser.exitFullscreen() }
         contentFullscreenTab = nil
         if shell.contentFullscreen { shell.contentFullscreen = false }
+        floatingSidebar?.sidebarVisibilityChanged()
         enteredFullscreenForContent = false
         shell.needsLayout = true
     }

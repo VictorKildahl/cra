@@ -409,10 +409,23 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, !rectInWindow.isEmpty else { return }
         let area = window.convertToScreen(rectInWindow)
         var page = area
+        // The Chromium engine has no Chrome window per page and its frontend reports no hole: DevTools go beside
+        // the page, and the page's view in the card shrinks to its part.
+        let besidePage = browser.map { $0.hostWindow == nil && !($0 is WebKitBrowser) } ?? false
         if let view = devToolsView, let dev = view.window, dev.parent === window {
-            place(dev, at: area, corners: .bottom)
+            if besidePage, devToolsDocked {
+                let split = DevToolsPlaceholder.besidePage(in: area)
+                page = split.page
+                place(dev, at: split.devTools, corners: AreaCorners.shared(by: split.devTools, with: area).intersection(.bottom))
+            } else {
+                place(dev, at: area, corners: .bottom)
+                if let hole = devToolsPlaceholder { page = hole.pageRect(in: area) }
+            }
             if let cv = dev.contentView, view.frame != cv.bounds { view.frame = cv.bounds }
-            if let hole = devToolsPlaceholder { page = hole.pageRect(in: area) }
+        }
+        if besidePage, let v = browser?.containerView, let parent = v.superview {
+            let frame = parent.convert(window.convertFromScreen(page), from: nil)
+            if v.frame != frame { v.frame = frame }
         }
         guard let w = browser?.hostWindow, w.parent === window else { return }
         // The window's bottom corners are the page's only where it reaches them: beside DevTools
@@ -449,6 +462,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let w = b.hostWindow, w.parent === window {
             w.makeKey()
             ChromiumPageFocus.focus(w)
+        } else if b.hostWindow == nil, !(b is WebKitBrowser), let window, b.containerView.window === window {
+            // The Chromium engine: the page's view is in this window, which takes the keys itself.
+            window.makeKey()
+            if let render = EmbeddedPages.renderView(in: b.containerView) { window.makeFirstResponder(render) }
         }
         b.setFocused(true)
     }
@@ -575,11 +592,19 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         func same(_ a: NSRect, _ b: NSRect) -> Bool {
             abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1 && abs(a.width - b.width) < 1 && abs(a.height - b.height) < 1
         }
-        let page = browser?.hostWindow.flatMap { $0.parent === window ? $0.frame : nil } ?? .zero
+        // The page's Chrome window (CEF), else its view in this window (the Chromium engine).
+        let page: NSRect = {
+            if let host = browser?.hostWindow { return host.parent === window ? host.frame : .zero }
+            guard let view = browser?.containerView, view.window === window, !view.isHiddenOrHasHiddenAncestor else { return .zero }
+            return window.convertToScreen(view.convert(view.bounds, to: nil))
+        }()
         var out = "peek=\(isPeek ? 1 : 0) parked=\(isParked ? 1 : 0) open=\(browser?.hasDevTools == true ? 1 : 0)"
         if let dev = browser?.devToolsWindow {
             let split = area.insetBy(dx: -1, dy: -1).contains(page) && (page.width < area.width - 1 || page.height < area.height - 1)
-            out += " docked=\(dev.parent === window && same(dev.frame, area) && split ? 1 : 0)"
+            // Over the area with the page in its hole (Chrome's docked frontend), or beside the page (the engine's).
+            let beside = DevToolsPlaceholder.besidePage(in: area)
+            let placed = same(dev.frame, area) || (same(dev.frame, beside.devTools) && same(page, beside.page))
+            out += " docked=\(dev.parent === window && placed && split ? 1 : 0)"
                 + " shown=\(dev.isVisible && dev.alphaValue > 0 && dev.contentView?.isHidden == false ? 1 : 0)"
                 + String(format: " size=%.0fx%.0f", dev.frame.width, dev.frame.height)
         }
@@ -1672,7 +1697,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func runDevTools(_ command: DevToolsToggle.Command) {
         guard let b = browser else { return }
         // WebKit's inspector (a DRM service's page) reports nothing back: it is only ever asked to show.
-        guard b.hostWindow != nil else {
+        guard !(b is WebKitBrowser) else {
             b.showDevTools()
             return
         }

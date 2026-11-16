@@ -1,0 +1,120 @@
+Cra: a page Cra hosts keeps its compositor while hidden. Cra's pages are views
+in Cra's windows, not in Chrome's, so each draws with a compositor of its own
+(BrowserCompositorMac's HasOwnCompositor), which Chrome dropped on every hide
+and made again on every show: a new frame sink from the GPU process before the
+page's first frame, one display refresh late on every tab switch (first
+animation frame 8.9 ms after the show against 0.4 ms on CEF, where pages sat in
+Chrome's windows). Hidden, the page is detached from it as from a dropped one,
+and it draws one frame of a pixel before it stops drawing: a compositor keeps
+the buffers of the last frame it drew (kept at full size, the GPU process held
+11 MB a hidden page, 154 -> 372 MB at 20 tabs; with the pixel frame 146 MB).
+
+diff --git a/content/browser/renderer_host/browser_compositor_view_mac.h b/content/browser/renderer_host/browser_compositor_view_mac.h
+index 625bfb2402..dfeed7bc03 100644
+--- a/content/browser/renderer_host/browser_compositor_view_mac.h
++++ b/content/browser/renderer_host/browser_compositor_view_mac.h
+@@ -175,6 +175,8 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient,
+   State state_ = HasNoCompositor;
+   void UpdateState();
+   void TransitionToState(State new_state);
++  // Cra: stops a kept compositor once it has drawn its one-pixel frame.
++  void StopHiddenCompositor();
+ 
+   // Weak pointer to the layer supplied and reset via SetParentUiLayer. |this|
+   // is an observer of |parent_ui_layer_|, to ensure that |parent_ui_layer_|
+@@ -187,6 +189,8 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient,
+   raw_ptr<ui::AcceleratedWidgetMacNSView> accelerated_widget_mac_ns_view_ =
+       nullptr;
+   std::unique_ptr<ui::RecyclableCompositorMac> recyclable_compositor_;
++  // Cra: |recyclable_compositor_| kept, not drawing, while the page is hidden.
++  bool own_compositor_hidden_ = false;
+ 
+   std::unique_ptr<DelegatedFrameHost> delegated_frame_host_;
+   std::unique_ptr<ui::LayerSurface> root_layer_;
+diff --git a/content/browser/renderer_host/browser_compositor_view_mac.mm b/content/browser/renderer_host/browser_compositor_view_mac.mm
+index 4ab8a9cf16..15d0072dcf 100644
+--- a/content/browser/renderer_host/browser_compositor_view_mac.mm
++++ b/content/browser/renderer_host/browser_compositor_view_mac.mm
+@@ -12,6 +12,7 @@
+ 
+ #include "base/command_line.h"
+ #include "base/containers/circular_deque.h"
++#include "base/functional/bind.h"
+ #include "base/no_destructor.h"
+ #include "base/trace_event/trace_event.h"
+ #include "components/viz/common/features.h"
+@@ -220,14 +221,66 @@ void BrowserCompositorMac::UpdateState() {
+ 
+   // If the host is visible and a compositor is required then create one.
+   if (!render_widget_host_is_hidden_) {
++    // Cra: a page shown again draws with the compositor it kept while hidden.
++    if (state_ == HasOwnCompositor && own_compositor_hidden_) {
++      own_compositor_hidden_ = false;
++      ui::Compositor* compositor = recyclable_compositor_->compositor();
++      display::ScreenInfo current = client_->GetCurrentScreenInfo();
++      recyclable_compositor_->UpdateSurface(
++          dfh_size_pixels_, current.device_scale_factor,
++          current.display_color_spaces, current.display_id,
++          current.display_frequency);
++      compositor->SetRootLayer(root_layer_.get());
++      compositor->SetVisible(true);
++      delegated_frame_host_->AttachToCompositor(compositor);
++      delegated_frame_host_->WasShown(GetRendererLocalSurfaceId(),
++                                      dfh_size_dip_,
++                                      {} /* record_tab_switch_time_request */);
++      return;
++    }
+     TransitionToState(HasOwnCompositor);
+     return;
+   }
+ 
++  // Cra: a page Cra hosts outside Chrome's windows has a compositor of its
++  // own, and a new one on every show took a frame sink from the GPU process
++  // first: the page's first frame came a display refresh later on every tab
++  // switch. It keeps the compositor with the page detached from it, as from
++  // a dropped one, and draws one frame of a pixel before it stops drawing: a
++  // compositor keeps the buffers of the last frame it drew, 11 MB a hidden
++  // page at full size.
++  if (state_ == HasOwnCompositor) {
++    if (!own_compositor_hidden_) {
++      own_compositor_hidden_ = true;
++      delegated_frame_host_->DetachFromCompositor();
++      delegated_frame_host_->WasHidden(DelegatedFrameHost::HiddenCause::kOther);
++      ui::Compositor* compositor = recyclable_compositor_->compositor();
++      compositor->SetRootLayer(nullptr);
++      display::ScreenInfo current = client_->GetCurrentScreenInfo();
++      recyclable_compositor_->UpdateSurface(
++          gfx::Size(1, 1), current.device_scale_factor,
++          current.display_color_spaces, current.display_id,
++          current.display_frequency);
++      compositor->ScheduleFullRedraw();
++      GetUIThreadTaskRunner({})->PostDelayedTask(
++          FROM_HERE,
++          base::BindOnce(&BrowserCompositorMac::StopHiddenCompositor,
++                         weak_factory_.GetWeakPtr()),
++          base::Milliseconds(200));
++    }
++    return;
++  }
++
+   // Otherwise put the compositor up for recycling.
+   TransitionToState(HasNoCompositor);
+ }
+ 
++void BrowserCompositorMac::StopHiddenCompositor() {
++  if (state_ == HasOwnCompositor && own_compositor_hidden_) {
++    recyclable_compositor_->compositor()->SetVisible(false);
++  }
++}
++
+ void BrowserCompositorMac::TransitionToState(State new_state) {
+   // Skip if there is no change to make.
+   bool is_no_op = false;
+@@ -249,6 +302,7 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
+     root_layer_->parent()->Remove(root_layer_.get());
+   }
+   if (state_ == HasOwnCompositor) {
++    own_compositor_hidden_ = false;
+     recyclable_compositor_->widget()->ResetNSView();
+     recyclable_compositor_->compositor()->SetRootLayer(nullptr);
+     recyclable_compositor_.reset();

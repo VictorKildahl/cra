@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <title>Sounds fixture</title>
 <!-- Sounds for the sidebar player (#411): a notification ding (a 1 s <audio>), a Web Audio beep
-     and a 12 s tone. Each is music-notes' 440 Hz, 60 dB below full volume, which Chromium still
+     a 12 s tone and a track to play to its end. Each is music-notes' 440 Hz, 60 dB below full volume, which Chromium still
      counts as audible. A scenario starts them with the protocol's user gesture. -->
 <body>
 <script>
@@ -41,4 +41,15 @@
     await a.play();
     return 'tone:' + (a.paused ? 'paused' : 'playing');
   }
+  // A track just over Chromium's 5 s, played to its end (player-follows-session), paused and played again.
+  let song;
+  async function track(seconds) {
+    song = document.createElement('audio');
+    song.src = wav(seconds);
+    document.body.append(song);
+    await song.play();
+    return 'track:' + (song.paused ? 'paused' : 'playing');
+  }
+  function pauseTrack() { song.pause(); return 'track:paused'; }
+  async function resumeTrack() { await song.play(); return 'track:' + (song.paused ? 'paused' : 'playing'); }
 </script>

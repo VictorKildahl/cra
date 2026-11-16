@@ -32,6 +32,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   } else if (message === 'popup-fullscreen') {
     action = chrome.windows.getAll({ windowTypes: ['popup'] }).then((windows) =>
       Promise.all(windows.map((window) => chrome.windows.update(window.id, { state: 'fullscreen' }))));
+  } else if (message === 'badge') {
+    // GitHub #106: what an extension sets on its toolbar action reaches Cra's button.
+    action = Promise.all([chrome.action.setBadgeText({ text: '7' }), chrome.action.setTitle({ title: 'Seven' })]);
   } else if (message === 'close-popup') {
     action = chrome.windows.getAll({ windowTypes: ['popup'] }).then((windows) =>
       Promise.all(windows.map((window) => chrome.windows.remove(window.id))));

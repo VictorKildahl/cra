@@ -1,0 +1,18 @@
+# promise: #111
+# A page that asks for the camera and microphone twice in a row (Google Meet does) gets one card, and
+# answering it ends both requests without a crash: answering one Chromium had already dropped crashed Cra
+# (#111). Not Now, so macOS is never asked.
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=asker
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.r=[];for(let i=0;i<2;i++)navigator.mediaDevices.getUserMedia({audio:true,video:true}).then(()=>r.push('ok'),e=>r.push(e.name));'armed'","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"armed"
+wait 2
+cra://debug?permissionCard=1
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to use your camera and microphone
+cra://debug?permissionCard=Not Now
+expect-log permission card: .*; pressed Not Now
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'answers:'+r.join(',')"}
+expect-log "value":"answers:NotAllowedError,NotAllowedError"

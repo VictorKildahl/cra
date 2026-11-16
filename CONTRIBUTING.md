@@ -33,7 +33,7 @@ you can send. Code is welcome too, within the few rules below.
 - **No account, and nothing shared without asking.** Everything stays on the user's Mac. The
   one exception is opt-in: anonymous usage stats and crash reports, off until the user turns
   them on ([docs/sharing.md](docs/sharing.md)). A feature doesn't add to what they send.
-- **Native first.** The app is AppKit and SwiftUI; web content is Chromium through CEF.
+- **Native first.** The app is AppKit and SwiftUI; web content is Chromium, Chrome's own framework with a thin layer of Cra's.
 
 For anything bigger than a bug fix, open an issue or a
 [discussion](https://github.com/VictorKildahl/cra/discussions) first, so we can agree on
@@ -78,11 +78,11 @@ features ship and there are real examples to point at
 
     git clone https://github.com/VictorKildahl/cra.git
     cd cra
-    scripts/build.sh          # fetches CEF on first run, builds build/Cra.app
+    scripts/build.sh          # fetches the engine on first run, builds build/Cra.app
     scripts/build.sh debug    # debug build
     scripts/dev.sh            # dev loop: debug CraDev.app, rebuilds + relaunches on save
 
-You need macOS 14+ on Apple silicon, Xcode 16+ and CMake (`brew install cmake`). With
+You need macOS 14+ on Apple silicon and Xcode 16+. With
 [just](https://just.systems) (`brew install just`), `just` lists every script with what it
 does, and `just build debug` runs `scripts/build.sh debug`.
 [docs/development.md](docs/development.md) has the code layout, the `cra://` scripting
@@ -108,7 +108,7 @@ for either app use the same issue forms, which ask which app it is.
    app, but none of that sees the screen: say in the PR how you tested it, and add a
    screenshot or a short clip for anything visible. A fix for a bug that a test could
    have caught comes with that test ([docs/development.md](docs/development.md#tests)).
-4. Don't touch the release pipeline, signing or the CEF pin unless that's the point of
+4. Don't touch the release pipeline, signing or the engine pin unless that's the point of
    the PR. Releases are cut by the maintainer.
 
 [docs/reviewing.md](docs/reviewing.md) lists what a review checks, so you can check it first.
@@ -116,13 +116,15 @@ for either app use the same issue forms, which ask which app it is.
 A Boost for the gallery on crabrowser.app/boosts needs no Swift: one `boost.json` in
 [boosts/](boosts/README.md), which says what a gallery Boost may do and how to send one.
 
-## Chromium and CEF
+## Chromium
 
-The CEF version is pinned in `scripts/fetch-cef.sh`, which downloads Cra's own CEF build
-(H.264/AAC and the patches in `scripts/cef-patches`) from this repository's releases, so
-you never need to build Chromium yourself. If your fix needs a new CEF patch, say so in
-the issue first: the maintainer rebuilds CEF for it, and every patch has to be carried
-through each Chromium update.
+The engine is Chrome's own framework, built from a Chrome stable tag with Cra's layer
+(`engine/chromium/cra`), H.264/AAC and the patches in `engine/chromium/patches`
+([docs/chromium-engine.md](docs/chromium-engine.md)). Its version is pinned in
+`scripts/fetch-engine.sh`, which downloads the build from this repository's releases, so you
+never need to build Chromium yourself. If your fix needs a change inside the engine, say so in
+the issue first: the maintainer rebuilds the engine for it, and every patch has to be carried
+through each Chrome update.
 
 ## Security
 

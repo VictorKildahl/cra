@@ -27,6 +27,7 @@
 #33    Tests/BrowserManagerLifecycleTests.swift::nowPlayingCase  896f39d0c04e
 #33    Tests/BrowserManagerLifecycleTests.swift::nowPlayingSkipsPictureInPictureCase  df2bec09cf49
 #33    Tests/BrowserManagerLifecycleTests.swift::playerMediaSessionCase  70013060dd84
+#36    Tests/Scenarios/https-only-toggle.scenario  c2f25093ac38
 #38    Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInAnotherSpaceOfTheProfileIsSelected  f9b7280ab4a7
 #38    Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::openInThisSpaceWins  d378e29544b8
 #38    Tests/BrowserManagerLifecycleTests.swift::extensionTabActivationCase  49320dcef25f
@@ -136,6 +137,7 @@
 #106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::noTextNoBadge  b76de0288933
 #106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::textContrastsWithTheBackground  b7f04612d473
 #106   Packages/CraCore/Tests/CraCoreTests/ExtensionBadgeTests.swift::widthAndAlignment  b820c2ebeeb2
+#106   Tests/Scenarios/extension-action-updates.scenario  5917f3644e30
 #107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::anotherProfilesPageGoesToItsSpace  314ef64164d1
 #107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::anotherProfilesTabIsNeverReused  7bf17f29af57
 #107   Packages/CraCore/Tests/CraCoreTests/ExtensionPagePlacementTests.swift::incognitoKeepsToItsOwnSpace  7074cccd4929
@@ -163,6 +165,7 @@
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::line  fe1dcfb4701b
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::severalTemplatesAreOneServerEach  dc2fe791c93f
 #110   Tests/Scenarios/secure-dns-default.scenario  1042904fb8ce
+#111   Tests/Scenarios/permission-doubled-request.scenario  b5196411ebdf
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::arcSpaceProfiles  c9cf90d32a72
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::commandLineFollowsTheLoadExtensionOrder  eb3441dc88ab
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::importedExtensionsGoWhereTheirProfilesWent  689676ea4e95
@@ -304,6 +307,7 @@
 #195   Packages/CraCore/Tests/CraCoreTests/HiddenFrameReleaseTests.swift::tabsPastTheCapAreDueOldestFirst  9f22e8eec03c
 #195   Packages/CraCore/Tests/CraCoreTests/ShippedWindowsTests.swift::littleWindowShortcutWorksFromAnyAppUnlessTurnedOff  d7c46d24f219
 #198   Tests/BrowserManagerLifecycleTests.swift::callPictureInPictureCase  86106e6d910d
+#198   Tests/Scenarios/meet-auto-picture-in-picture.scenario  ea966258dd42
 #202   Packages/CraCore/Tests/CraCoreTests/PeekTriggerTests.swift::aNewTabLinkInsideThePeekLeavesIt  97e7217fdf7d
 #203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::folderStopsLoadingWhereTheStoreHasIt  7dd24962094b
 #203   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::onlyStoreCopiesNamedAfterTheirID  d8e4376933ca
@@ -320,6 +324,7 @@
 #205   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::iconsNeverStack  7ffc5abe0004
 #205   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::readingTheStoredPair  517e549811b6
 #205   Packages/CraCore/Tests/CraCoreTests/SpaceIconTests.swift::savingTheIconItReadsChangesNothing  d7e745d4f478
+#208   Tests/Scenarios/middle-click-page.scenario  745469858ccb
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::dropsWhatIsNotALanguageList  92f271a1ba67
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::namesLanguagesInEnglish  11c15535bb75
 #209   Packages/CraCore/Tests/CraCoreTests/BrowserLanguagesTests.swift::readsAProfilesPreferencesFile  1c42ec3c75b3
@@ -378,6 +383,7 @@
 #239   Packages/CraCore/Tests/CraCoreTests/TabActivationRaiseTests.swift::anExtensionLeavesTheWindowInUseAndOtherAppsAlone  7cb88923ff3f
 #239   Packages/CraCore/Tests/CraCoreTests/TabActivationRaiseTests.swift::anExtensionNeverRaisesAWindowBehindTheOneInUse  28a7fc24ff4d
 #239   Packages/CraCore/Tests/CraCoreTests/TabActivationRaiseTests.swift::anExtensionRaisesItsWindowWhenNoOtherBrowserWindowIsInUse  a38928b7bdda
+#241   Packages/CraCore/Tests/CraCoreTests/PageInfoBarTests.swift::decodesTheDebuggerBar  2268630d7ed3
 #241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::placesTheViewBelowTheBarInTheCard  7ba2374d493e
 #241   Packages/CraCore/Tests/CraCoreTests/PageViewInsetsTests.swift::readsTheBarAboveThePageInEitherSuperview  548a9473598d
 #241   Tests/Scenarios/debugger-infobar.scenario  189c93dc5b96
@@ -497,6 +503,7 @@
 #298   Packages/CraCore/Tests/CraCoreTests/LinkSplitClickTests.swift::otherDownloadsStayDownloads  d9fe10373142
 #298   Tests/BrowserManagerLifecycleTests.swift::optionClickSplitCase  aa8e58149cbf
 #298   Tests/Scenarios/link-option-click-split.scenario  6d9f4aa10ef3
+#299   Packages/CraCore/Tests/CraCoreTests/DataFolderOwnerTests.swift::aFolderNoOneLocksIsFree  23be5ccbb5d0
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::aManifestKeyGivesBothTheSameID  01c437e8c044
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::addUnpackedCopyOfAFolderLoadedInPlace  525ccb2ef3b7
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::importedCopyIsNamedAfterTheOriginalsID  4b08e525f482
@@ -605,6 +612,7 @@
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aHoleOutsideTheAreaGivesThePageAllOfIt  3a0f4dda2441
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aResizedAreaGrowsThePageNotDevTools  746a2e32946a
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aSmallAreaStillHoldsThePage  3148260fec5a
+#348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::besidePageDocksOnTheRight  5195e6651f1e
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::dockedBottomLeavesThePageTheTop  a3ca0df4b098
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::dockedRightLeavesThePageTheLeft  b4527a6c2478
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::thePageRoundsOnlyTheCornersItSharesWithItsArea  de6492820d94
@@ -756,7 +764,16 @@
 #408   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::everyQuestionReadsOnItsCard  4700f64b8bc7
 #408   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::lightSpaceOnDarkMacGetsALightQuestion  462fb908f263
 #408   Tests/Scenarios/ask-on-page-dark-card.scenario  b4f7984975ed
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::aDingAfterAPauseLeavesThePausedCard  9f3902ec65dc
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::aDingAfterAnEndLeavesTheCardGoing  425a9d81d374
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::aDingOrWebAudioAloneMakesNoCard  de4f74a1dc75
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::aNewTrackWithinTheWaitKeepsTheCard  0b3514c46344
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::aPauseKeepsThePausedCard  9a4925226707
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::aTrackThatEndsRemovesTheCardAfterTheWait  8cdd4bd5ec4c
+#411   Packages/CraCore/Tests/CraCoreTests/PlayerCardSessionTests.swift::mediaPlayingMakesAPlayingCard  07251c71ede9
+#411   Tests/BrowserManagerLifecycleTests.swift::nowPlayingFollowsMediaSessionCase  a35d831887cc
 #411   Tests/BrowserManagerLifecycleTests.swift::nowPlayingSkipsUncontrollableSoundCase  834fe4ecbf39
+#411   Tests/Scenarios/player-follows-session.scenario  e115e9dba0e8
 #411   Tests/Scenarios/player-skips-dings.scenario  1cc76ac02572
 #413   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::incognitoSpaceOffersNoProfile  ba6e000f474d
 #413   Tests/Scenarios/incognito-space-menu.scenario  6a20db2d4b60

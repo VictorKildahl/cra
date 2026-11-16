@@ -868,8 +868,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         // No key window while the app is inactive (e.g. during a cra:// handoff from a
         // second launch): the frontmost window stands in for it.
-        guard let front = NSApp.orderedWindows.first(where: { $0.isVisible && !($0 is NSPanel) }) else { return nil }
-        return littleWindows.first { !$0.isParked && ($0.window === front || $0.window === front.parent) }
+        // Never a window no one can see: Chrome's own on the Chromium engine (a page's DevTools window before Cra
+        // takes its frontend, the window holding a profile's pages) stays on screen at alpha 0.
+        // A Little Window (or Peek) is a panel of its own; other panels (Peek's dimming, tooltips) never count.
+        guard let front = NSApp.orderedWindows.first(where: { $0.isVisible && $0.alphaValue > 0 && (!($0 is NSPanel) || $0 is LittleWindow) }) else { return nil }
+        if let little = littleWindows.first(where: { !$0.isParked && ($0.window === front || $0.window === front.parent) }) { return little }
+        // A Peek is a child of the browser window, above it.
+        return littleWindows.first { !$0.isParked && $0.window?.isVisible == true && $0.window?.parent === front }
     }
 
     /// A space a link from outside may name (cra://open, an Air Traffic Control Little Window):
@@ -974,6 +979,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let url = q("url") { main.loadInSelectedTab(url) }
         case "open":
             guard let url = q("url") else { break }
+            // As for a link from another app (openExternalURL): its tab is what the window shows, so the bar
+            // that was waiting for a new tab goes. CEF's new page window took the bar's key and closed it anyway.
+            if !background, !little, store.settings.startOnNewTab, let m = main, m.commandBar.isOpen, m.selectedTab == nil {
+                m.commandBar.close()
+            }
             // space=<id> (#168): a real, normal space, as Air Traffic Control routes to; an unknown
             // or incognito one opens where it did before, in the space in use.
             let space = openableSpace(q("space").flatMap(UUID.init(uuidString:)))
@@ -1025,6 +1035,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // actionState=<extension id>: what the extension set on its toolbar action, as Cra's buttons show it
+            // (chrome.action.setTitle, setBadgeText; GitHub #106).
+            if let id = dict["actionState"] {
+                let state = ExtensionStore.shared.actions.state(extensionID: id, profile: "Default", tab: nil)
+                CraLog.note("action state \(id): title=\(state.title) badge=\(state.badgeText) icon=\(state.icon == nil ? "manifest" : "set")")
+                return
+            }
+            // httpsOnly=1|0: Settings ▸ Privacy's HTTPS-only switch, flipped while pages are open: Chromium takes the
+            // change at once (#36: it crashed doing so once onboarding ended).
+            if let v = dict["httpsOnly"] {
+                store.settings.httpsOnly = v == "1"
+                CraLog.note("https only: \(store.settings.httpsOnly ? "on" : "off")")
+                return
+            }
             // toolbar=out|in|sample|state: the floating toolbar (Settings ▸ Tabs), and where it is.
             if let command = dict["toolbar"] { CraLog.note(main.shell.debugToolbar(command)); return }
             if let label = dict["findBar"] { CraLog.note(main.debugFindBar(label)); return }
@@ -1058,6 +1082,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
                     let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
                     CraLog.note("mouse \(b) at \(Int(g[0])),\(Int(g[1])): \(taken ? "switched space" : "passed on")")
+                    return
+                }
+                // button=middle: a middle click through the event queue, which the window's monitors see as
+                // they see the mouse's: on a page it closes nothing, on a sidebar row it closes the tab (#208).
+                if dict["button"] == "middle" {
+                    let under = NSEvent.mouseEvent(with: .otherMouseUp, location: point, modifierFlags: [], timestamp: 0,
+                                                   windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+                        .flatMap(SpaceListView.tabID(under:)).flatMap { store.item($0)?.displayTitle }
+                    CraLog.note("middle click at \(Int(g[0])),\(Int(g[1])): \(under.map { "tab row \($0)" } ?? "no tab row")")
+                    // probe=1: only what is under the point, no click.
+                    if dict["probe"] != "1" { TestGesture.middleClick(at: point, in: w) }
                     return
                 }
                 // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264); mods=<modifier
@@ -1637,7 +1672,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["downloadState"] {
                 let rows = DownloadHistory.shared.live.map { DownloadRow.subtitle($0.row, now: Date()) }
                 let progress = DownloadHistory.shared.progress.map { String(format: "%.3f", $0) } ?? "none"
-                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows)")
+                // finished: downloads reported finished in this launch, across windows (an old one from the
+                // profile's history must not be one).
+                let finished = mainWindows.reduce(0) { $0 + $1.finishedDownloadCount }
+                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows) finished=\(finished)")
                 return
             }
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:
@@ -1763,6 +1801,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let b = dict["target"] == "little" ? littleWindows.last?.browser : tab ?? main.currentBrowser
                 b?.sendDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
                     CraLog.note("Cra cdp \(method) → \(result ?? "error: \(error ?? "?")")")
+                }
+                return
+            }
+            // pluginFetch=<url>: the session fetch a live folder's plug-in makes; logs what the plug-in would see.
+            if let url = dict["pluginFetch"] {
+                CraCEFRuntime.fetchPluginURL(url, headers: nil, profilePath: nil) { status, finalURL, _, body in
+                    CraLog.note("plugin fetch status=\(status) body=\(body.isEmpty ? "empty" : "\(body.count) chars") url=\(finalURL)")
                 }
                 return
             }
@@ -2511,7 +2556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return """
         Cra \(info?["CFBundleShortVersionString"] as? String ?? "") (\(info?["CFBundleVersion"] as? String ?? ""))
-        Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())
+        \(EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()))
         macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)
         """
     }
@@ -2553,7 +2598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// active (as keyLittleWindow reads it). A sheet on Settings (an open panel) counts as Settings.
     var settingsInFront: Bool {
         guard let settings = settingsWindow, settings.isVisible else { return false }
-        let front = NSApp.keyWindow ?? NSApp.orderedWindows.first { $0.isVisible && !($0 is NSPanel) }
+        let front = NSApp.keyWindow ?? NSApp.orderedWindows.first { $0.isVisible && $0.alphaValue > 0 && !($0 is NSPanel) }
         return front === settings || front?.sheetParent === settings
     }
 
@@ -2764,7 +2809,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.windowsMenu = window
 
         let help = NSMenu(title: "Help")
-        help.addItem(withTitle: "Chromium \(CraCEFRuntime.chromiumVersion()) · CEF \(CraCEFRuntime.cefVersion())", action: nil, keyEquivalent: "")
+        help.addItem(withTitle: EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()), action: nil, keyEquivalent: "")
         help.addItem(.separator())
         help.addItem(item("essentialShortcuts"))
         for (title, url) in [("Cra Help", "https://crabrowser.app/help"), ("Release Notes", "https://crabrowser.app/release-notes"),

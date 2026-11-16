@@ -159,7 +159,7 @@ enum Diagnostics {
         let stageManager = UserDefaults.standard.persistentDomain(forName: "com.apple.WindowManager")?["GloballyEnabled"] as? Bool ?? false
         var lines = [
             "Cra \(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))",
-            "Chromium \(CraCEFRuntime.chromiumVersion()), CEF \(CraCEFRuntime.cefVersion())",
+            EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion(), separator: ", "),
             "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(String(cString: model)), \(ProcessInfo.processInfo.physicalMemory >> 30) GB, \(ProcessInfo.processInfo.activeProcessorCount) cores",
             DisplayDiagnostics.summary(displays),
             "Stage Manager: \(stageManager ? "on" : "off")",

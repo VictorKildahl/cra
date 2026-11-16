@@ -1,0 +1,56 @@
+diff --git a/chrome/browser/extensions/api/developer_private/extension_info_generator.cc b/chrome/browser/extensions/api/developer_private/extension_info_generator.cc
+index d4ef0e322b..19066f8ad0 100644
+--- a/chrome/browser/extensions/api/developer_private/extension_info_generator.cc
++++ b/chrome/browser/extensions/api/developer_private/extension_info_generator.cc
+@@ -900,8 +900,9 @@ void ExtensionInfoGenerator::FillExtensionInfo(const Extension& extension,
+   // MV2 deprecation.
+   ManifestV2Handler* mv2_handler = ManifestV2Handler::Get(profile);
+   CHECK(mv2_handler);
+-  info.is_affected_by_mv2_deprecation =
+-      mv2_handler->IsExtensionAffected(extension);
++  // Cra supports Manifest V2: chrome://extensions shows no "no longer
++  // supported" notice for them.
++  info.is_affected_by_mv2_deprecation = false;
+   if (info.web_store_url.length() > 0) {
+     info.recommendations_url =
+         extension_urls::GetNewWebstoreItemRecommendationsUrl(extension.id())
+diff --git a/extensions/browser/manifest_v2_handler.cc b/extensions/browser/manifest_v2_handler.cc
+index 5841d3dfbc..f216fd34de 100644
+--- a/extensions/browser/manifest_v2_handler.cc
++++ b/extensions/browser/manifest_v2_handler.cc
+@@ -108,13 +108,11 @@ bool ManifestV2HandlerFactory::ServiceIsCreatedWithBrowserContext() const {
+ }
+ 
+ // Returns true if legacy extensions should be disabled.
++// Cra keeps Manifest V2 extensions (uBlock Origin among them) installable and on,
++// as Chrome did before 139; the ones Chromium turned off come back on at the next
++// profile load (CheckDisabledExtensions). GitHub #228.
+ bool ShouldDisableLegacyExtensions() {
+-  if (g_allow_mv2_for_testing) {
+-    // We allow legacy MV2 extensions for testing purposes.
+-    return false;
+-  }
+-
+-  return true;
++  return false;
+ }
+ 
+ }  // namespace
+diff --git a/extensions/common/extension.cc b/extensions/common/extension.cc
+index 28a3cac375..22618c16e6 100644
+--- a/extensions/common/extension.cc
++++ b/extensions/common/extension.cc
+@@ -97,12 +97,7 @@ bool IsManifestSupported(int manifest_version,
+   // Supported versions are always safe.
+   if (manifest_version >= kMinimumSupportedManifestVersion &&
+       manifest_version <= kMaximumSupportedManifestVersion) {
+-    // Emit a warning for unpacked extensions on Manifest V2 warning that
+-    // MV2 is deprecated.
+-    if (type == Manifest::Type::kExtension && manifest_version == 2 &&
+-        Manifest::IsUnpackedLocation(location)) {
+-      *warning = errors::kManifestV2IsDeprecatedWarning;
+-    }
++    // Cra supports Manifest V2: no deprecation warning on unpacked ones.
+     return true;
+   }
+ 

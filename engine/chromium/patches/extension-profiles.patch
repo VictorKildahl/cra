@@ -1,0 +1,42 @@
+diff --git a/chrome/browser/extensions/extension_service.cc b/chrome/browser/extensions/extension_service.cc
+--- a/chrome/browser/extensions/extension_service.cc
++++ b/chrome/browser/extensions/extension_service.cc
+@@ -26,6 +26,7 @@
+ #include "base/one_shot_event.h"
+ #include "base/stl_util.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
+ #include "base/strings/string_tokenizer.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -452,7 +453,30 @@ void ExtensionService::LoadExtensionsFromCommandLineFlag(
+   base::StringTokenizerT<base::CommandLine::StringType,
+                          base::CommandLine::StringType::const_iterator>
+       t(path_list, FILE_PATH_LITERAL(","));
++  // Cra: --cra-load-extension-profiles names, for each --load-extension path in
++  // the same order, the profile folders that load it ("Default|Profile <id>"),
++  // or "*" for every profile. A path a profile does not list is not loaded
++  // there, so it is not installed in that profile at all.
++  std::vector<std::string> cra_profiles;
++  if (switch_name == switches::kLoadExtension &&
++      command_line_->HasSwitch("cra-load-extension-profiles")) {
++    cra_profiles = base::SplitString(
++        command_line_->GetSwitchValueASCII("cra-load-extension-profiles"), ",",
++        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
++  }
++  const std::string cra_profile = profile_->GetBaseName().AsUTF8Unsafe();
++  size_t cra_index = 0;
+   while (t.GetNext()) {
++    const size_t cra_path = cra_index++;
++    if (cra_path < cra_profiles.size() && cra_profiles[cra_path] != "*") {
++      const std::vector<std::string> allowed =
++          base::SplitString(cra_profiles[cra_path], "|", base::TRIM_WHITESPACE,
++                            base::SPLIT_WANT_NONEMPTY);
++      if (std::find(allowed.begin(), allowed.end(), cra_profile) ==
++          allowed.end()) {
++        continue;
++      }
++    }
+     std::string extension_id;
+     UnpackedInstaller::Create(profile_)->LoadFromCommandLine(
+         base::FilePath(t.token_piece()), &extension_id,

@@ -2979,6 +2979,9 @@ static BOOL g_makingSpare = NO;
 - (void)stopLoading { if (_browser) _browser->StopLoad(); }
 - (void)exitFullscreen { if (_browser) _browser->GetHost()->ExitFullscreen(true); }
 
+- (NSArray<NSDictionary<NSString*, id>*>*)infoBars { return @[]; }  // Chrome draws its own bars in CEF's views
+- (void)infoBar:(NSInteger)identifier action:(NSString*)action {}
+
 - (void)setFocused:(BOOL)focused {
     if (_browser) _browser->GetHost()->SetFocus(focused);
     else if (focused) _pendingFocus = YES;
@@ -3100,6 +3103,11 @@ static BOOL g_makingSpare = NO;
 
 // Chrome's RecentlyAudibleHelper: quiet only once the page stayed quiet for 2 s, so the
 // gap between two tracks doesn't blink the speaker.
+// CEF has no media session callback: the sidebar player follows the audible state (#411).
+- (BOOL)reportsMediaSession {
+    return NO;
+}
+
 - (void)audibleChanged:(BOOL)audible {
     NSUInteger change = ++_audibleChanges;
     if ([self.delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)])
@@ -3499,6 +3507,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     g_documentStartParams = all;
 }
 + (BOOL)chromeHosting { return g_chromeHosting; }
++ (BOOL)supportsSparePages { return g_chromeHosting; }
 
 + (void)setContentBlockingEnabled:(BOOL)enabled { cra_blocker::Enabled().store(enabled); }
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }
@@ -3672,6 +3681,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 
 + (void)runMessageLoop { CefRunMessageLoop(); }
++ (void)whenReady:(void (^)(void))block { block(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }
 + (void)shutdown {
     g_quitting = true;

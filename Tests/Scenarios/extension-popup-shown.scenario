@@ -1,0 +1,14 @@
+# An extension's popup shows when its button is clicked. Chrome makes it as a child of the profile's
+# hidden window, and shows it only while that window is on screen: with the window ordered out (one
+# way to stop its compositor ticking at idle) every popup stayed hidden while the scenarios that
+# click a button, which check what the popup does, still passed.
+budget rss=600 stalls50=5
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://open?url=${PAGE}?n=ext
+wait 3
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 2
+expect-log extension popup shown
+cra://dismiss
+cra://debug?removeExtension=${EXTENSION_ID}

@@ -18,12 +18,17 @@ export CRA_RELEASE=1
 IDENTITY="${CRA_SIGN_IDENTITY:--}"
 ARCHS="${CRA_ARCHS:-arm64 x86_64}"
 
-# A release ships the newest stable CEF: Chromium fixes security bugs only in its newest
-# version. CRA_ALLOW_OLD_CEF=1 ships the pinned one anyway (an urgent fix while the new CEF
-# is still building); say so in the release notes.
-if [ "${CRA_ALLOW_OLD_CEF:-}" != 1 ]; then
-  scripts/check-cef-update.sh --check ||
-    { echo "Release stopped: CEF is behind (CRA_ALLOW_OLD_CEF=1 to ship it anyway)" >&2; exit 1; }
+# A release ships the newest stable engine: Chromium fixes security bugs only in its newest
+# version. CRA_ALLOW_OLD_ENGINE=1 ships the pinned one anyway (an urgent fix while the new engine
+# is still building); say so in the release notes. CRA_ENGINE=cef releases on CEF, with CEF's check.
+if [ "${CRA_ENGINE:-chromium}" = cef ]; then
+  if [ "${CRA_ALLOW_OLD_CEF:-}" != 1 ]; then
+    scripts/check-cef-update.sh --check ||
+      { echo "Release stopped: CEF is behind (CRA_ALLOW_OLD_CEF=1 to ship it anyway)" >&2; exit 1; }
+  fi
+elif [ "${CRA_ALLOW_OLD_ENGINE:-}" != 1 ]; then
+  scripts/check-engine-update.sh --check ||
+    { echo "Release stopped: the engine is behind Chrome stable (CRA_ALLOW_OLD_ENGINE=1 to ship it anyway)" >&2; exit 1; }
 fi
 
 rm -rf build/dist

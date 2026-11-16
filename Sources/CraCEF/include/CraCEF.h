@@ -1,6 +1,14 @@
-// CraCEF: the Objective-C surface Swift uses to drive Chromium (CEF).
+// CraCEF: the Objective-C surface Swift uses to drive Chromium. Two engines implement it: CEF
+// (CraCEF.mm) and Chrome's own framework (engine/chromium/cra/bridge, docs/chromium-engine.md).
 // Everything here runs on the main thread.
 #import <Cocoa/Cocoa.h>
+
+// The classes are exported from Chrome's framework, which hides everything else.
+#define CRA_EXPORT __attribute__((visibility("default")))
+// Chrome's framework needs NSApp to be its BrowserCrApplication; CEF only needs an NSApplication.
+#ifndef CRA_APPLICATION_SUPERCLASS
+#define CRA_APPLICATION_SUPERCLASS NSApplication
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -37,7 +45,18 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
     CraChromiumStringSearchWebForImage = 2,
 };
 
-@interface CraDownloadInfo : NSObject
+/// The page's media session as Chromium reports it (MediaSessionInfo's state, #411).
+typedef NS_ENUM(NSInteger, CraMediaSessionState) {
+    /// No media holds audio focus: nothing plays, or what played ended or left the page.
+    CraMediaSessionStateInactive = 0,
+    CraMediaSessionStateActive = 1,
+    /// Playing, quieter while another app's sound has the focus for a moment.
+    CraMediaSessionStateDucking = 2,
+    /// Paused, still holding the focus.
+    CraMediaSessionStateSuspended = 3,
+};
+
+CRA_EXPORT @interface CraDownloadInfo : NSObject
 @property (nonatomic) uint32_t identifier;
 @property (nonatomic, copy) NSString *url;
 @property (nonatomic, copy) NSString *fullPath;
@@ -51,7 +70,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 @end
 
 /// The connection of the page on screen (Chromium's SSL status of the visible navigation entry).
-@interface CraSSLStatus : NSObject
+CRA_EXPORT @interface CraSSLStatus : NSObject
 /// The page came over a connection with a certificate (https, whatever the certificate's errors).
 @property (nonatomic) BOOL secureConnection;
 /// net::CertStatus bits: the certificate's errors and notes.
@@ -148,9 +167,18 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser didRestoreHistoryEntries:(NSInteger)count error:(nullable NSString *)error;
 /// The page started or stopped playing sound (see `isAudible`).
 - (void)browser:(CraBrowser *)browser didChangeAudible:(BOOL)audible;
+/// The page's media session changed (#411): its state, and whether Chrome's global media controls
+/// offer it (`controllable`: media over 5 s or of unknown length, or a page media session with a
+/// playbackState; never a ding alone or Web Audio). Only an engine whose `reportsMediaSession` is YES
+/// sends it; the sidebar player follows it then instead of the audible state.
+- (void)browser:(CraBrowser *)browser didChangeMediaSessionState:(CraMediaSessionState)state controllable:(BOOL)controllable
+    NS_SWIFT_NAME(browser(_:didChangeMediaSessionState:controllable:));
 /// The page's sound started or stopped as it happened, before the 2 s that `isAudible` and
 /// `browser:didChangeAudible:` hold a quiet page audible.
 - (void)browser:(CraBrowser *)browser didChangeSoundPlaying:(BOOL)playing;
+/// Chrome's bars over the page changed (`infoBars`): "<extension> started debugging this browser" and the other
+/// yes/no bars Chrome shows in a tab. Only the Chromium engine reports them; on CEF Chrome draws its own.
+- (void)browser:(CraBrowser *)browser didChangeInfoBars:(NSArray<NSDictionary<NSString *, id> *> *)infoBars;
 /// `hasCommittedLoad` changed: the main frame committed, or a new navigation started.
 - (void)browser:(CraBrowser *)browser didChangeCommittedLoad:(BOOL)committed;
 /// The page's main-frame load failed with a net error (ERR_ABORTED, a navigation cut off,
@@ -188,7 +216,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;
 @end
 
-@interface CraBrowser : NSObject
+CRA_EXPORT @interface CraBrowser : NSObject
 @property (nonatomic, weak, nullable) id<CraBrowserDelegate> delegate;
 /// Embedded (Alloy) hosting: a plain NSView that owns the Chromium view. Put
 /// it in your hierarchy and size it; Chromium follows.
@@ -284,6 +312,12 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// Leaves element fullscreen (a video), as Esc does.
 - (void)exitFullscreen;
 - (void)setFocused:(BOOL)focused;
+/// Chrome's bars over the page, top first: `id` (NSNumber), `message`, `ok` and `cancel` (button titles, when the
+/// bar has them), `link` (its link's title, when it has one) and `closeable` (an NSNumber: it has a ✕). Empty on
+/// CEF, which draws Chrome's own.
+@property (nonatomic, readonly) NSArray<NSDictionary<NSString *, id> *> *infoBars;
+/// A press on a bar of `infoBars`: "ok", "cancel", "link" or "close".
+- (void)infoBar:(NSInteger)identifier action:(NSString *)action;
 - (void)showDevToolsInspectingPoint:(NSPoint)point;
 - (void)showDevTools;
 /// What the next -showDevTools asks of the frontend, as Chrome's DevToolsToggleAction does: a
@@ -324,6 +358,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// (Chromium's media session isn't controllable): a sound under 5 s, such as a notification
 /// ding, or Web Audio alone. The sidebar player makes no card for it, as Arc (#411).
 @property (nonatomic, readonly) BOOL hasUncontrollableSound;
+/// The engine sends `browser:didChangeMediaSessionState:controllable:` (Chrome's framework does,
+/// CEF and WebKit pages don't).
+@property (nonatomic, readonly) BOOL reportsMediaSession;
 /// Play/pause the video in the Picture in Picture window.
 - (void)togglePictureInPicturePlayback;
 /// Seek the video in the Picture in Picture window by `seconds` (negative = back).
@@ -358,7 +395,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 - (void)close;
 @end
 
-@interface CraCEFRuntime : NSObject
+CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// Call once, after NSApplication exists, before creating browsers.
 /// Experiment: a Chrome-style (extension-capable) Views window; the handler gets its NSWindow.
 + (void)spikeChromeWindowWithURL:(NSString *)url handler:(void (^)(NSWindow *))handler;
@@ -366,6 +403,8 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// DevTools) instead of embedded Alloy views. Set before any browser exists.
 + (void)setChromeHosting:(BOOL)enabled;
 + (BOOL)chromeHosting;
+/// Whether pages can be made ahead for the next tab (SparePages): CEF's Chrome-style hosting and the Chromium engine.
++ (BOOL)supportsSparePages;
 /// The "Open Link in New Tab" item at the top of a page's context menu: its title and whether it
 /// opens its tab in the background. Read when a menu opens.
 + (void)setLinkMenuTitle:(NSString *)title opensInBackground:(BOOL)background;
@@ -433,6 +472,9 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
                   useMockKeychain:(BOOL)useMockKeychain;
 /// Runs the Chromium-integrated AppKit run loop. Returns after -quitMessageLoop.
 + (void)runMessageLoop;
+/// Runs `block` once Chromium is up and before the app finishes launching: at once with CEF (initialize
+/// starts Chromium), from inside -runMessageLoop with Chrome's framework (ChromeMain starts it there).
++ (void)whenReady:(void (^)(void))block;
 + (void)quitMessageLoop;
 + (void)shutdown;
 /// Closes every browser, then quits the message loop once they are gone.
@@ -441,8 +483,8 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 /// The last incognito window closed: the next incognito page starts a fresh
 /// off-the-record profile (no cookies or storage carried over).
 + (void)endIncognitoSession;
-/// YES when initialize failed because another Cra is running and was told
-/// about this launch (exit quietly).
+/// YES when another Cra is running and was told about this launch (exit quietly): after initialize
+/// fails with CEF, after -runMessageLoop returns with Chrome's framework.
 + (BOOL)anotherInstanceWasNotified;
 /// Called in the running instance when another launch is handed over.
 + (void)setRelaunchHandler:(void (^)(NSArray<NSString *> *urls))handler;
@@ -548,7 +590,7 @@ typedef NS_ENUM(NSInteger, CraChromiumString) {
 
 /// NSApplication subclass CEF requires (CefAppProtocol). Set as
 /// NSPrincipalClass and created with +sharedApplication before anything else.
-@interface CraApplication : NSApplication
+CRA_EXPORT @interface CraApplication : CRA_APPLICATION_SUPERCLASS
 /// How many requests to bring Cra to the front, made while it was in the background, went
 /// through (a background test copy counts them, then refuses them all).
 @property (class, readonly) NSInteger backgroundActivations;

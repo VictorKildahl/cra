@@ -198,6 +198,7 @@ enum BrowserManagerLifecycleTests {
         await nowPlayingPictureInPictureCase()
         nowPlayingSkipsPictureInPictureCase()
         nowPlayingSkipsUncontrollableSoundCase()
+        nowPlayingFollowsMediaSessionCase()
         await leaveVideoTabPictureInPictureCase()
         await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
@@ -1246,6 +1247,72 @@ enum BrowserManagerLifecycleTests {
         manager.browser(ra.browser, didChangeSoundPlaying: true)
         expect(np.entries.map(\.id) == [a] && np.entries.first?.playing == true,
                "a video that starts within the ding's hold gets its card")
+        manager.closeAll()
+    }
+
+    // promise: #411
+    /// On Chrome's framework the sidebar player follows the page's media session, as Arc's (#411):
+    /// a track that ends leaves 2.5 s later, a pause keeps its card, a next track within the wait
+    /// keeps it, and a ding or Web Audio sound (its speaker shows) neither plays a paused card nor
+    /// makes one.
+    @MainActor
+    private static func nowPlayingFollowsMediaSessionCase() {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://music.example.test/").id, b = store.createTab(url: "https://example.test/other").id
+        let ra = manager.ensureRuntime(for: a)!
+        manager.show(b, focus: false)
+        ra.browser.reportsMediaSession = true
+        let card = { np.entries.first { $0.id == a } }
+
+        // A ding or Web Audio: the speaker, no card.
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        manager.browser(ra.browser, didChangeMediaSessionState: .active, controllable: false)
+        expect(np.entries.isEmpty, "a ding makes no card")
+        manager.browser(ra.browser, didChangeMediaSessionState: .inactive, controllable: false)
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        manager.browser(ra.browser, didChangeAudible: false)
+
+        // A track plays, then pauses for longer than any hold.
+        manager.browser(ra.browser, didChangeMediaSessionState: .active, controllable: true)
+        expect(card()?.playing == true, "media playing makes a playing card")
+        manager.browser(ra.browser, didChangeMediaSessionState: .suspended, controllable: true)
+        clock.advance(by: 60)
+        expect(card()?.playing == false, "a paused track keeps its card, paused")
+
+        // A ding in the paused tab: the speaker shows it, the card stays paused.
+        manager.browser(ra.browser, didChangeSoundPlaying: true)
+        manager.browser(ra.browser, didChangeAudible: true)
+        manager.browser(ra.browser, didChangeMediaSessionState: .active, controllable: false)
+        expect(card()?.playing == false, "a ding doesn't play a paused card")
+        manager.browser(ra.browser, didChangeMediaSessionState: .inactive, controllable: false)
+        manager.browser(ra.browser, didChangeSoundPlaying: false)
+        manager.browser(ra.browser, didChangeAudible: false)
+        clock.advance(by: 10)
+        expect(card()?.playing == false, "the ding's session ending leaves the paused card")
+
+        // Played again, then the track ends; the next one starts within the wait.
+        manager.browser(ra.browser, didChangeMediaSessionState: .active, controllable: true)
+        manager.browser(ra.browser, didChangeMediaSessionState: .inactive, controllable: false)
+        clock.advance(by: 1)
+        manager.browser(ra.browser, didChangeMediaSessionState: .active, controllable: true)
+        clock.advance(by: 5)
+        expect(card()?.playing == true, "a next track within the wait keeps the card; the old wait can't remove it")
+
+        // The last track ends, a ding plays within the wait: the card goes all the same.
+        manager.browser(ra.browser, didChangeMediaSessionState: .inactive, controllable: false)
+        clock.advance(by: 1)
+        manager.browser(ra.browser, didChangeMediaSessionState: .active, controllable: false)
+        expect(card() != nil, "the card waits before it goes")
+        clock.advance(by: 2)
+        expect(card() == nil, "a track that ended leaves the player 2.5 s later, a ding or not")
+        manager.browser(ra.browser, didChangeMediaSessionState: .inactive, controllable: false)
+        expect(np.entries.isEmpty, "the ding's end makes no card")
         manager.closeAll()
     }
 

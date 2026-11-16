@@ -1,0 +1,13 @@
+diff --git a/components/os_crypt/common/keychain_password_mac.mm b/components/os_crypt/common/keychain_password_mac.mm
+--- a/components/os_crypt/common/keychain_password_mac.mm
++++ b/components/os_crypt/common/keychain_password_mac.mm
+@@ -30,5 +30,8 @@
+ const char kDefaultAccountName[] = "Chrome";
+ #else
+-const char kDefaultServiceName[] = "Chromium Safe Storage";
++// Cra: its own item rather than the one every Chromium-based app shares. Cra creates
++// it before Chromium starts (SafeStorage.swift); the account stays "Chromium", as in
++// the items Cra made with the 156 framework scripts/fetch-cef.sh patched.
++const char kDefaultServiceName[] = "Cra Safe Storage";
+ const char kDefaultAccountName[] = "Chromium";
+ #endif

@@ -1,0 +1,31 @@
+# promise: #208
+# A middle click on a page never closes a tab, a split pane's page included; on a sidebar tab row it closes
+# that tab, as in Arc and Chrome. It closed a tab from inside a split view (#208): the one the pointer had
+# last rested on in the sidebar.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+cra://open?url=${PAGE}?n=two
+cra://open?url=${PAGE}?n=three
+cra://open?url=${PAGE}?n=four
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+
+# On a row: that tab closes (Today lists the newest first).
+cra://debug?clickAt=120,300&button=middle
+expect-log middle click at 120,300: tab row Fixture four
+wait 1.5
+cra://debug?back=row
+expect-log back row: selected=\S+ back=0 today=3$
+
+# Two tabs side by side, then a middle click on the page: nothing closes.
+cra://debug?pickedMenu=2&label=split&run=Open in Split View
+wait 1.5
+cra://debug?split=before
+expect-log split before: panes=\S+ \| \S+ selected=
+cra://debug?clickAt=760,400&button=middle
+expect-log middle click at 760,400: no tab row
+wait 1.5
+cra://debug?back=page
+expect-log back page: selected=\S+ back=0 today=3$

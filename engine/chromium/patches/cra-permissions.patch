@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/ui/views/permissions/permission_prompt_factory.cc b/chrome/browser/ui/views/permissions/permission_prompt_factory.cc
+--- a/chrome/browser/ui/views/permissions/permission_prompt_factory.cc
++++ b/chrome/browser/ui/views/permissions/permission_prompt_factory.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/permissions/permission_prompt_factory.h"
++
++#include "chrome/browser/cra_permission_hook.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -323,6 +325,14 @@
+     return nullptr;
+   }
+ 
++  // Cra: its pages' prompts are Cra's (cra_permission_hook.h); Chrome's would hang off its never-shown window.
++  if (cra::g_permission_prompt) {
++    if (std::unique_ptr<permissions::PermissionPrompt> prompt =
++            cra::g_permission_prompt(web_contents, delegate)) {
++      return prompt;
++    }
++  }
++
+   if (web_app::AppBrowserController::IsWebApp(GetBrowser(web_contents))) {
+     return CreatePwaPrompt(web_contents, delegate);
+   } else if (delegate->ShouldCurrentRequestUseQuietUI()) {

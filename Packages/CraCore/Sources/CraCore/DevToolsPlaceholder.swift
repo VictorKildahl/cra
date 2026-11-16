@@ -27,6 +27,18 @@ public struct DevToolsPlaceholder: Equatable, Sendable {
         let page = CGRect(x: area.minX + bounds.minX, y: area.minY + bottom, width: width, height: height).intersection(area)
         return page.isEmpty ? area : page
     }
+
+    /// DevTools beside the page when the frontend isn't docked over the area (the Chromium engine: its frontend
+    /// is a window of its own, with no hole to report): docked on the right as Chrome docks them, 40 % of the
+    /// area, never under 320 pt, and the page keeps at least 240 pt. An area too narrow for both gives
+    /// DevTools what is left beside those 240 pt.
+    public static func besidePage(in area: CGRect) -> (page: CGRect, devTools: CGRect) {
+        let minimumPage: CGFloat = 240
+        let width = max(0, min(max(320, (area.width * 0.4).rounded()), area.width - minimumPage))
+        let page = CGRect(x: area.minX, y: area.minY, width: area.width - width, height: area.height)
+        let devTools = CGRect(x: page.maxX, y: area.minY, width: width, height: area.height)
+        return (page, devTools)
+    }
 }
 
 /// Corners of a page's area. The page and its DevTools are windows of their own, which the window

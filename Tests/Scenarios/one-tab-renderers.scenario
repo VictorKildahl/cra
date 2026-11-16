@@ -1,0 +1,7 @@
+# One tab takes the page's renderer and the spares that make the next tab quick, nothing more. The hidden
+# window that holds a profile's pages keeps a blank page that never loads, so it has no renderer of its own
+# (about:blank took one for as long as Cra ran).
+budget rss=600 stalls50=8
+cra://open?url=${PAGE}?n=one
+wait 10
+renderers 4
