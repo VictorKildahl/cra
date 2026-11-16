@@ -224,6 +224,8 @@ enum DialogTests {
 
     @MainActor
     private static func bitmap(of view: NSView) -> NSBitmapImageRep {
+        // Keep fixed RGB assertions independent of the monitor's ICC profile.
+        view.window?.colorSpace = .sRGB
         view.layoutSubtreeIfNeeded()
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { fatalError("Dialog bitmap missing") }
         view.cacheDisplay(in: view.bounds, to: bitmap)

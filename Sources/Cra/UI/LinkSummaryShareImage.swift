@@ -15,7 +15,7 @@ enum LinkSummaryShareImage {
         NSColor(srgbRed: CGFloat(hex >> 16 & 0xff) / 255, green: CGFloat(hex >> 8 & 0xff) / 255, blue: CGFloat(hex & 0xff) / 255, alpha: 1)
     }
 
-    static func render(_ r: LinkSummaryResult, image: NSImage?, favicon: NSImage?) -> NSImage {
+    static func render(_ r: LinkSummaryResult, image: NSImage?, favicon: NSImage?) -> NSImage? {
         let ink = color(0x191B1F), muted = color(0x9A9AB3)
         let inner = width - 2 * (L.margin + 2)
         let rowWidth = width - (L.rowIndent + 2) - (L.margin + 2)
@@ -35,24 +35,38 @@ enum LinkSummaryShareImage {
         func height(_ s: NSAttributedString, _ w: CGFloat) -> CGFloat {
             ceil(s.boundingRect(with: NSSize(width: w, height: 1000), options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
         }
-        let banner: CGFloat = image.map { $0.size.width > 0 ? ((width - 4) * $0.size.height / $0.size.width).rounded() : 0 } ?? 0
-        var y: CGFloat = banner > 0 ? 2 + banner + 15 : 15
-        let summaryY = y
+        // Measure the text first so the picture can keep its natural aspect only when
+        // the entire output fits. A pathological picture leaves a normal text card.
+        var y: CGFloat = 15
+        var summaryY = y
         if let summary { y += height(summary, inner) + L.rowGap }
         var rowYs: [CGFloat] = []
         for row in rows {
             rowYs.append(y)
             y += max(L.lineHeight, height(row, rowWidth)) + L.rowGap
         }
-        let separator = (y - L.rowGap + 18).rounded()
-        let total = separator + footerHeight
+        var separator = (y - L.rowGap + 18).rounded()
+        var total = separator + footerHeight
+        var banner: CGFloat = 0
+        if let image, image.size.width.isFinite, image.size.width > 0,
+           image.size.height.isFinite, image.size.height > 0 {
+            let candidate = ((width - 4) * image.size.height / image.size.width).rounded()
+            if candidate.isFinite, candidate > 0,
+               LinkSummaryShareBitmap(pointSize: NSSize(width: width, height: total + candidate + 2)) != nil {
+                banner = candidate
+                summaryY += banner + 2
+                rowYs = rowYs.map { $0 + banner + 2 }
+                separator += banner + 2
+                total += banner + 2
+            }
+        }
         let size = NSSize(width: width, height: total)
-
-        let scale: CGFloat = 3
-        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(width * scale), pixelsHigh: Int(total * scale),
+        guard let bitmap = LinkSummaryShareBitmap(pointSize: size) else { return nil }
+        let scale = LinkSummaryShareBitmap.scale
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: bitmap.width, pixelsHigh: bitmap.height,
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
-              let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return NSImage(size: size) }
+              let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
         rep.size = size
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx.cgContext, flipped: true)

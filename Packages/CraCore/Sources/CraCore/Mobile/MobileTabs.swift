@@ -160,8 +160,8 @@ extension MobileTabsDocument {
     /// Incognito tabs live only while they are on screen: Arc Search keeps them out of the tab
     /// row, so one that is left has no way back and closes. Returns the tabs that closed.
     @discardableResult
-    public mutating func closeIncognitoTabsLeftBehind() -> [UUID] {
-        let left = tabs.filter { $0.isIncognito && $0.id != selected }.map(\.id)
+    public mutating func closeIncognitoTabsLeftBehind(keeping liveOpeners: Set<UUID> = []) -> [UUID] {
+        let left = tabs.filter { $0.isIncognito && $0.id != selected && !liveOpeners.contains($0.id) }.map(\.id)
         tabs.removeAll { left.contains($0.id) }
         return left
     }

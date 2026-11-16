@@ -816,6 +816,15 @@ struct MobileBrowseToggleTests {
         #expect(MobileBrowseToggle.state(tabAddress: "", pageURL: "https://www.bing.com/search?q=x", engine: .google) == nil)
     }
 
+    @Test(arguments: ["C++ tutorial", "a+b c&d=e", "100% + # ? /", "café + 東京 🧪"])
+    func literalPlusSearchQueriesRoundTrip(_ query: String) {
+        for engine in MobileSearchEngine.allCases {
+            let address = engine.searchURL(query)
+            #expect(address.contains("%2B"), "literal plus must be percent encoded for \(engine)")
+            #expect(engine.query(fromResultsURL: address) == query, "\(engine)")
+        }
+    }
+
     /// Every engine's own results address reads back the query it was made from.
     @Test func everyEnginesResultsReadBack() {
         for engine in MobileSearchEngine.allCases {

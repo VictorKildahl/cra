@@ -498,7 +498,7 @@ public enum SearchEngine: String, Codable, CaseIterable, Identifiable {
     }
     public func searchURL(_ query: String) -> String {
         let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?
-            .replacingOccurrences(of: "&", with: "%26") ?? query
+            .replacingOccurrences(of: "&", with: "%26").replacingOccurrences(of: "+", with: "%2B") ?? query
         switch self {
         case .google: return "https://www.google.com/search?q=\(q)"
         case .duckduckgo: return "https://duckduckgo.com/?q=\(q)"
