@@ -114,6 +114,12 @@ cp -R resources/live-folder-plugins "$APP/Contents/Resources/live-folder-plugins
 if [ "$ENGINE" = chromium ]; then
   FW_NAME="Cra Framework"
   ditto "$CRA_ENGINE_FRAMEWORKS/$FW_NAME.framework" "$APP/Contents/Frameworks/$FW_NAME.framework"
+  # Chrome's helpers name Chromium's icon in an asset catalog, which macOS prefers to their app.icns (Cra's, from
+  # engine/chromium/apply.sh): without the catalog they show Cra's icon in notifications and their prompt.
+  for helper in "$APP/Contents/Frameworks/$FW_NAME.framework/Versions/"*/Helpers/*.app; do
+    rm -f "$helper/Contents/Resources/Assets.car"
+    /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$helper/Contents/Info.plist" 2>/dev/null || true
+  done
 else
   FW_NAME="Chromium Embedded Framework"
   cp -R "$ROOT/$CEF_DIR/Release/$FW_NAME.framework" "$APP/Contents/Frameworks/"
@@ -168,6 +174,18 @@ FW_LINK="$(otool -L "$HELPER_EXE" | grep -o '@executable_path/.*Chromium Embedde
 [ -n "$FW_LINK" ] && [ -f "$(dirname "$HELPER_EXE")/${FW_LINK#@executable_path/}" ] ||
   { echo "Cra Helper doesn't link the framework at launch (${FW_LINK:-no load command})" >&2; exit 1; }
 fi
+
+# Every app in the bundle shows Cra's icon. macOS takes a bundle's icon from its asset catalog (CFBundleIconName)
+# before its .icns, and Chrome's alerts helpers carry Chromium's: the "Cra" notification prompt and every page's
+# notification showed Chromium's icon (0.1.44, a user's screenshot).
+for plist in $(find "$APP" -path '*.app/Contents/Info.plist' | tr ' ' '\001'); do
+  plist="$(tr '\001' ' ' <<<"$plist")"
+  if /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$plist" >/dev/null 2>&1 ||
+     [ -e "$(dirname "$plist")/Resources/Assets.car" ]; then
+    echo "An app in the bundle takes its icon from an asset catalog, not Cra's .icns: ${plist#"$APP"/}" >&2
+    exit 1
+  fi
+done
 
 # Code signing, innermost first. Ad-hoc by default; set CRA_SIGN_IDENTITY to a
 # "Developer ID Application: …" identity for a distributable build with the
