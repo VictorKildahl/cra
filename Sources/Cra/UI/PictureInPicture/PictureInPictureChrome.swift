@@ -9,6 +9,9 @@ struct PictureInPictureActions {
     /// Go to this many seconds from the video's start (the scrubber).
     var seek: (Double) -> Void = { _ in }
     var close: () -> Void
+    /// Arc's Minimize: out of Picture in Picture with the video playing on in its tab, which
+    /// stays where it is; the sidebar player then has it (#434).
+    var minimize: () -> Void = {}
 }
 
 /// Arc's Picture in Picture window, reproduced over Chromium's.
@@ -212,6 +215,11 @@ final class PictureInPictureChrome {
     private static func share(of w: NSWindow) -> String {
         guard let visible = (w.screen ?? NSScreen.main)?.visibleFrame, visible.width > 0 else { return "-" }
         return String(format: "%.2f", w.frame.width / visible.width)
+    }
+
+    /// `cra://debug?pipButton=back|minimize|close`: that hover button clicked.
+    func debugPress(_ name: String) {
+        for o in overlays.values { o.controls.debugPress(name) }
     }
 
     /// `cra://debug?pipSeek=<0…1>`: the scrubber pressed that far along and let go.

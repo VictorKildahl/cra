@@ -41,6 +41,19 @@ struct PictureInPictureLayoutTests {
         #expect(bar.address?.midX == 400.5)
     }
 
+    /// Arc's Minimize sits left of Close, 6 pt from it, from the small size class on: none at 224
+    /// and 277 pt wide (the #246 reporter's Arc windows), there at 396. The address keeps clear of it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/434"))
+    func minimizeSitsBeforeCloseOnAWindowWideEnough() {
+        #expect(PictureInPictureLayout.topBar(width: 223, buttonSize: 26, addressWidth: 85).minimize == nil)
+        #expect(PictureInPictureLayout.topBar(width: 277, buttonSize: 26, addressWidth: 85).minimize == nil)
+        let bar = PictureInPictureLayout.topBar(width: 396, buttonSize: 26, addressWidth: 400)
+        #expect(bar.close == CGRect(x: 353, y: 17, width: 26, height: 26))
+        #expect(bar.minimize == CGRect(x: 321, y: 17, width: 26, height: 26))
+        let a = try! #require(bar.address)
+        #expect(a.midX == 198 && a.maxX <= 321 - 8)
+    }
+
     let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
     let visible = CGRect(x: 0, y: 80, width: 1920, height: 975)
 

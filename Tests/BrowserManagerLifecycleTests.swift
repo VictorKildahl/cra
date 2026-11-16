@@ -204,6 +204,7 @@ enum BrowserManagerLifecycleTests {
         await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
+        pictureInPictureMinimizeCase()
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
@@ -1951,6 +1952,31 @@ enum BrowserManagerLifecycleTests {
         PictureInPictureChrome.shared.actions?.close()
         expect(ra.browser.pictureInPictureCloses == 1 && !ra.browser.isInPictureInPicture,
                "the window's close button pauses the video as it comes home (Arc)")
+        manager.closeAll()
+    }
+
+    // promise: #434
+    /// Arc's Minimize takes the video out of Picture in Picture without pausing it and without
+    /// going to its tab, and the sidebar player has the tab again (#434). Close pauses it.
+    @MainActor
+    private static func pictureInPictureMinimizeCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/video").id
+        let ra = manager.ensureRuntime(for: a)!
+        np.entries.append(.init(id: a, playing: true))
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        expect(np.shown.isEmpty, "a video in Picture in Picture has no card (Arc)")
+        let selected = store.selections.count
+        PictureInPictureChrome.shared.actions?.minimize()
+        expect(!ra.browser.isInPictureInPicture && ra.browser.pictureInPictureCloses == 0,
+               "Minimize leaves Picture in Picture without pausing the video")
+        expect(store.selections.count == selected, "Minimize doesn't go to the video's tab")
+        manager.browser(ra.browser, didChangePictureInPicture: false)
+        expect(np.shown.map(\.id) == [a], "the minimized video is in the sidebar player")
         manager.closeAll()
     }
 

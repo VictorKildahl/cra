@@ -831,3 +831,6 @@
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::comingBackFromAnotherAppReturnsThere  76c11b67eaba
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::onlyAClosedKeyWindowInFrontHandsTheKeyboardOver  b03fd4b59163
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::usingTheBrowserWindowMeanwhileKeepsItInFront  7669e50f2b53
+#434   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseOnAWindowWideEnough  411e4369f60b
+#434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeCase  c115e90bb609
+#434   Tests/Scenarios/pip-minimize.scenario  303a5054c8ba

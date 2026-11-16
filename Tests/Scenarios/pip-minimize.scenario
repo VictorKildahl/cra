@@ -1,0 +1,30 @@
+# Arc's Picture in Picture window has Minimize beside Close: the video leaves the floating window
+# and plays on in its tab, without going to that tab, and the sidebar player has it again. Cra had
+# only Back to Tab and Close (#434). Here a playing clip is in Picture in Picture and another tab is
+# in front. Minimize closes the window, the other tab stays in front, and back on the video's tab
+# it is still playing and was never paused. (No pointer: the test copy runs in the background, so
+# the click is handed to the button.)
+# promise: #434
+cra://open?url=file://${FIXTURES}/Pages/media.html?n=video
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(window.pauses=0,v.addEventListener('pause',()=>pauses++),v.play().then(()=>v.requestPictureInPicture()).then(()=>'pip:open')))(document.getElementById('v'))","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pip=open
+expect-log Cra pip open: windows=1 .* min=1
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?pipButton=minimize
+expect-log minimizes Picture in Picture, keeps playing
+expect-log leaves Picture in Picture
+wait 1
+cra://debug?pip=minimized
+expect-log Cra pip minimized: windows=0
+cra://debug?back=minimized
+expect-log back minimized: selected=\S+n=other
+cra://debug?selectTab=n=video
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>'after:'+pauses+':'+!v.paused+':'+!document.pictureInPictureElement)(document.getElementById('v'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after:0:true:true"

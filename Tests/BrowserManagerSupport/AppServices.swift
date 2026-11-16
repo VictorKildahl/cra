@@ -89,7 +89,9 @@ enum TestRoot { case today }
     var visits: [String] = []
     func recordVisit(url: String, title: String) { visits.append(url) }
     func clearHistory(_ range: BrowsingDataClear.Range) {}
-    func selectTab(_ id: UUID, window: UUID?) {}
+    /// The tabs selected, in order (Picture in Picture's Back to Tab selects; Minimize doesn't).
+    private(set) var selections: [UUID] = []
+    func selectTab(_ id: UUID, window: UUID?) { selections.append(id) }
     func markUnread(_ id: UUID, _ unread: Bool) {}
     @discardableResult
     func createTab(url: String, in space: UUID? = nil, select: Bool = false,
@@ -131,6 +133,7 @@ struct PictureInPictureActions {
     var skip: (Double) -> Void
     var seek: (Double) -> Void
     var close: () -> Void
+    var minimize: () -> Void = {}
 }
 final class PictureInPictureChrome {
     static let shared = PictureInPictureChrome()

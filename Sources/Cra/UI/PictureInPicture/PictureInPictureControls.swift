@@ -4,8 +4,8 @@ import AppKit
 ///
 /// Invisible until the pointer enters the window, then fades in one even dark
 /// layer with the controls: back-to-tab (top-left), the page's address (centred)
-/// and close (top-right), play/pause in the middle between ±15 s skips, as in Arc
-/// (#246), sized by Arc's size classes, without the skips in a tiny window (#262), and Arc's
+/// and minimize and close (top-right, minimize from 280 pt wide, #434), play/pause
+/// in the middle between ±15 s skips, as in Arc (#246), sized by Arc's size classes, without the skips in a tiny window (#262), and Arc's
 /// scrubber along the bottom for a video with an end. Fades out when the pointer leaves or rests for a while, and the window
 /// is the bare video again. Only the buttons and the shown scrubber take clicks; everything else passes
 /// through to the overlay, which drags and resizes the window.
@@ -28,11 +28,13 @@ final class PictureInPictureControlsView: NSView {
     private static let topButtonSize: CGFloat = 26
     private let closeButton = PictureInPictureButton(symbol: "xmark", pointSize: 12, diameter: topButtonSize, tip: "Close")
     private let backButton = PictureInPictureButton(symbol: "pip.exit", pointSize: 13, diameter: topButtonSize, tip: "Back to Tab")
+    // Arc's `minus` with "Minimize" (Arc 1.173 binary).
+    private let minimizeButton = PictureInPictureButton(symbol: "minus", pointSize: 12, diameter: topButtonSize, tip: "Minimize")
     // Sized in layout() from PictureInPictureLayout.centreControls.
     private let playButton = PictureInPictureButton(symbol: "play.fill", pointSize: 28, diameter: 52, tip: "Play")
     private let skipBackButton = PictureInPictureButton(symbol: "gobackward.15", pointSize: 28, diameter: 46, tip: "Skip back 15 seconds")
     private let skipAheadButton = PictureInPictureButton(symbol: "goforward.15", pointSize: 28, diameter: 46, tip: "Skip ahead 15 seconds")
-    private var buttons: [PictureInPictureButton] { [backButton, closeButton, playButton, skipBackButton, skipAheadButton] }
+    private var buttons: [PictureInPictureButton] { [backButton, minimizeButton, closeButton, playButton, skipBackButton, skipAheadButton] }
     private var hideTimer: Timer?
     private var shown = false
 
@@ -56,6 +58,7 @@ final class PictureInPictureControlsView: NSView {
         }
         closeButton.onClick = { PictureInPictureChrome.shared.actions?.close() }
         backButton.onClick = { PictureInPictureChrome.shared.actions?.backToTab() }
+        minimizeButton.onClick = { PictureInPictureChrome.shared.actions?.minimize() }
         playButton.onClick = { [weak self] in
             PictureInPictureChrome.shared.actions?.togglePlayback()
             self?.isPlaying.toggle()   // optimistic; the page confirms through didChangePictureInPicturePlayback
@@ -76,7 +79,7 @@ final class PictureInPictureControlsView: NSView {
     /// The centre cluster as laid out, for `cra://debug?pip`.
     var readout: String {
         layoutSubtreeIfNeeded()
-        return "play=\(Int(playButton.frame.width)) skips=\(skipBackButton.isHidden ? 0 : 1) scrub=\(scrubber.isHidden ? 0 : 1) at=\(scrubber.percent)"
+        return "play=\(Int(playButton.frame.width)) min=\(minimizeButton.isHidden ? 0 : 1) skips=\(skipBackButton.isHidden ? 0 : 1) scrub=\(scrubber.isHidden ? 0 : 1) at=\(scrubber.percent)"
     }
 
     /// `cra://debug?pipSeek=<0…1>`: the scrubber pressed and let go that far along.
@@ -85,6 +88,14 @@ final class PictureInPictureControlsView: NSView {
         let track = PictureInPictureScrubber.track(in: bounds.size)
         scrubber.press(at: CGPoint(x: track.minX + track.width * fraction, y: track.midY), in: bounds.size)
         scrubber.release()
+    }
+
+    /// `cra://debug?pipButton=back|minimize|close`: that button clicked.
+    func debugPress(_ name: String) {
+        layoutSubtreeIfNeeded()
+        let button = ["back": backButton, "minimize": minimizeButton, "close": closeButton][name]
+        guard let button, !button.isHidden else { return CraLog.note("pip: no \(name) button") }
+        button.onClick()
     }
 
     override func layout() {
@@ -98,6 +109,8 @@ final class PictureInPictureControlsView: NSView {
                                                 addressWidth: addressLabel.stringValue.isEmpty ? 0 : PictureInPictureButton.textWidth(addressLabel))
         backButton.frame = bar.back
         closeButton.frame = bar.close
+        minimizeButton.isHidden = bar.minimize == nil
+        if let m = bar.minimize { minimizeButton.frame = m }
         addressLabel.isHidden = bar.address == nil
         if let a = bar.address {
             let h = ceil(addressLabel.intrinsicContentSize.height)

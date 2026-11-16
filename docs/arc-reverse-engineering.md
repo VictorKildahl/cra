@@ -847,7 +847,15 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   glyphs with tooltips only. The address centred between them is from the reporter's captures; no
   host label was found in the binary.
 - [O static] Minimize is per site (`minimizeEnabled` in its PiP config) and asks Chromium to leave PiP;
-  `offscreen` is a separate "stash" past the screen edge. Cra has neither.
+  `offscreen` is a separate "stash" past the screen edge. [O static, Arc 1.173.1, x86_64 slice, #434]
+  Minimize is SF Symbol `minus` with the tooltip "Minimize", built next to Close (`xmark`, "Close")
+  with a 6.0 constant beside the pair [I: the group's spacing]; the log line "The user requested
+  minimizing this PIP window, but .shouldHidePIP has not been received yet" and `userRequestedMinimize`
+  say it leaves PiP and the video plays on; the sidebar card (`isBackToPIPButtonEnabled`,
+  `backToPipClicked`) then has it. The #246 reporter's Arc windows had no Minimize at 224 and 277 pt
+  wide and had it at 396. Cra (#434): Minimize from 280 pt wide [I: the small size class], 6 pt left
+  of Close; it leaves PiP without pausing and without selecting the tab (`exitPictureInPicture`), so
+  the tab's card comes back in the sidebar player. No per-site switch, and no `offscreen` stash.
 - [O static] Scrubber: 5 pt capsule (15 pt drag area) 8 pt above the bottom (4 when tiny), white over
   white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra draws it
   (`PictureInPictureScrubber` in CraCore, 12 Nov) for a video with an end, and a press goes to that
@@ -2818,7 +2826,7 @@ Theme palettes in a hand-built space can be borrowed; only the `background` styl
   previous, play/pause, next, volume, laid out like an HStack (glyphs 16 / 13 / 8.5 / 13 / 19 pt, equal gaps,
   14 pt in on the left, 12.5 on the right); up to two more peek out, each 7 pt higher, 5 pt narrower a side and
   0.2 fainter, the second showing the tops of its controls at ~15 % (raised 7.25 pt). Hover: all cards 65.5 pt,
-  title row (tab title, 13 pt, 14.5 pt in, centred 16.25 pt from the top; Picture in Picture glyph 15.5 pt wide
+  title row (tab title, 13 pt, 14.5 pt in, centred 16.25 pt from the top; Picture in Picture glyph (`pip` at 12 pt, from the binary, #434) 15.5 pt wide
   centred 45.5 pt from the right on video tabs; ✕ 11 pt centred 21.75 pt from the right), stacked upward 5 pt
   apart, oldest on top, ~0.2 s ease-out both ways (collapse starts at once). Tooltips: "Back to Tab", "Previous
   Track", "Pause"/"Play", "Next Track", "Adjust Tab Volume", "Open Picture in Picture", "Close Mini Player";
