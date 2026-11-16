@@ -587,18 +587,17 @@ void PageSession::Send(const std::string& method, const std::string& params_json
   if (method == "Cra.installFromWebStore") {
     std::optional<base::DictValue> params =
         base::JSONReader::ReadDict(params_json.empty() ? "{}" : params_json, base::JSON_PARSE_RFC);
-    PageSession* me = this;
-    base::WeakPtr<PageSession> alive = weak_factory_.GetWeakPtr();
+    // Only the weak pointer: the install can end after this page closed, and Chrome checks every raw pointer
+    // bound into a callback before it runs (UnretainedDanglingRawPtrDetectedCrash, 0.1.44 crash reports).
     InstallFromWebStore(contents_, params ? &*params : nullptr,
                         base::BindOnce(
-                            [](base::WeakPtr<PageSession> alive, PageSession* me, int id, base::DictValue result,
-                               std::string error) {
+                            [](base::WeakPtr<PageSession> alive, int id, base::DictValue result, std::string error) {
                               if (alive) {
-                                me->Answer(id, error.empty() ? JSON(base::Value(std::move(result))) : nil,
-                                           error.empty() ? nil : ErrorJSON(error));
+                                alive->Answer(id, error.empty() ? JSON(base::Value(std::move(result))) : nil,
+                                              error.empty() ? nil : ErrorJSON(error));
                               }
                             },
-                            alive, me, id));
+                            weak_factory_.GetWeakPtr(), id));
     return;
   }
   if (method.rfind("Cra.", 0) == 0) {

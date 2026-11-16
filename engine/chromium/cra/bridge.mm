@@ -2000,6 +2000,11 @@ void RunReadyBlocks() {
   page.frame = _container.bounds;
   page.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [_container addSubview:page];
+  // A page made hidden (a background tab: a ⌘-click, a restored tab) gets a hidden view from Chrome
+  // (WebContentsViewMac::CreateView), and Chrome's view host unhides it when it attaches the page. Cra's
+  // pages never attach there (cra_hosted_page.h), so Cra unhides it: the page is shown and hidden with
+  // Cra's container. Left hidden, such a tab stayed black whenever it was shown (0.1.44).
+  page.hidden = NO;
   [self installDocumentStartScripts];
   __weak CraBrowser* weakSelf = self;
   cra::WatchMediaSession(contents, ^(NSInteger state, bool controllable) {
@@ -2458,11 +2463,24 @@ void RunReadyBlocks() {
     return;
   }
   // A forced close, as CEF's CloseBrowser(true): no "Leave site?" (beforeunload), which would keep a closed tab's
-  // page alive. Deleting the page closes its DevTools too.
-  if (PageHost* host = HostOf(_contents)) {
-    TabStripModel* tabs = host->browser()->GetTabStripModel();
-    tabs->DetachAndDeleteWebContentsAt(tabs->GetIndexOfWebContents(_contents));
-  }
+  // page alive. Deleting the page closes its DevTools too. It is deleted on the next turn, as CEF's close
+  // was: close can come from inside the page's own callbacks (a hidden page that answers from its
+  // navigation, and its owner closes it), and Chrome stops when a page is deleted while it tells its
+  // observers something (~WebContentsImpl, 0.1.44 crash reports).
+  Later(base::BindOnce(
+      [](base::WeakPtr<content::WebContents> contents) {
+        if (!contents) {
+          return;
+        }
+        if (PageHost* host = HostOf(contents.get())) {
+          TabStripModel* tabs = host->browser()->GetTabStripModel();
+          const int index = tabs->GetIndexOfWebContents(contents.get());
+          if (index != TabStripModel::kNoTab) {
+            tabs->DetachAndDeleteWebContentsAt(index);
+          }
+        }
+      },
+      _contents->GetWeakPtr()));
 }
 
 #pragma mark Not yet

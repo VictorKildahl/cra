@@ -1232,6 +1232,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 FavoritePreviewCard.shared.demoOutlook(which, unread: dict["unread"].flatMap(Int.init) ?? 3, in: w); return
             }
             if dict["notionCalendarPreview"] != nil, let w = main.window { FavoritePreviewCard.shared.demoNotionCalendar(in: w); return }
+            // hiddenPageSignIn=<url>: a hidden page as Outlook's reader makes one; an address with "sign-in" in it
+            // answers from inside the page's address change, and the answer closes the page, as OutlookClient does.
+            if let url = dict["hiddenPageSignIn"] {
+                var page: HiddenPage?
+                page = HiddenPage(url: url, profilePath: nil, watch: { _, _ in nil }, isSignIn: { $0.contains("sign-in") }) { answer in
+                    NSLog("Cra hidden page answered %@", answer ?? "nothing")
+                    page?.close()
+                    page = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSLog("Cra hidden page closed") }
+                }
+                return
+            }
             // recentPages=<linear|notion|figma|confluence>&pages=<n>: that site's recent pages card (n = 0: Arc's empty line).
             if let site = dict["recentPages"].flatMap(RecentPagesPreview.Site.init(rawValue:)), let w = main.window {
                 FavoritePreviewCard.shared.demoRecentPages(site, count: dict["pages"].flatMap(Int.init) ?? 6, in: w); return

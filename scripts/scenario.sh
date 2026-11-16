@@ -47,6 +47,7 @@
 #                               before launch, as macOS leaves one (needs home)
 #   requires screen
 #   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
+# The fixture server answers an address with ?delay=<s> (or &delay=<s>) that many seconds late.
 # ${FIXTURES}, ${ORIGIN} (that server's http://127.0.0.1:<port>, which also answers a POST with 204,
 # logs it to server.log and keeps its body in posts/), ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
 # for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
@@ -155,6 +156,14 @@ class Server(http.server.ThreadingHTTPServer):
         socketserver.TCPServer.server_bind(self)
         self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
 class Handler(http.server.SimpleHTTPRequestHandler):
+    # ?delay=<s> anywhere in the address: the answer (a page, or a 404) comes that many seconds late.
+    def do_GET(self):
+        import re, time
+        m = re.search(r"[?&]delay=([0-9.]+)", self.path)
+        if m:
+            time.sleep(float(m.group(1)))
+            self.path = self.path.split("?", 1)[0]
+        super().do_GET()
     # Settings ▸ Privacy sharing posts here under CRA_SHARING_ENDPOINT=${ORIGIN}.
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
