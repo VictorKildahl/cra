@@ -1,0 +1,26 @@
+# promise: #446
+# A double click on the sidebar's empty space under the tabs opens the New Tab bar, as Arc's does
+# (sidebarEmptySpaceDoubleClick). A single click there opens nothing. The clicks go through the
+# event queue, as the pointer's would.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# One click on the empty space: no bar.
+cra://debug?clickAt=120,520
+wait 1
+reject-log sidebar empty space double-click
+cra://debug?commandBarRows=single
+expect-log Cra command bar rows single: open=0
+
+# A double click there: the New Tab bar.
+cra://debug?clickAt=120,520&clicks=2
+expect-log sidebar empty space double-click: new tab
+wait 1
+cra://debug?commandBarRows=double
+expect-log Cra command bar rows double: open=1 mode=newTab
+cra://dismiss
+wait 0.5

@@ -85,7 +85,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   badge with search suggestions off. Cra: CraCore SearchSuggestionsNotice, CommandBarView.
 - [O] Entry points: keyboardShortcutT, keyboardShortcutL, keyboardShortcutFocusSidebar, keyboardShortcutCommandOptionG,
   sidebarDoubleClick, sidebarNewTabButton, placeholderClick, littleArcPlaceholderClick, topbar, appMenu*,
-  toggleBetweenTypeTravelAndCommandBar.
+  toggleBetweenTypeTravelAndCommandBar. The 1.172 binary also has sidebarEmptySpaceDoubleClick and
+  onDidDoubleClickSidebarBackground: a double click on the sidebar's empty space opens the New Tab bar (#446).
+  Cra: SpaceListDocument.mouseDown, scenario sidebar-empty-double-click.
 - [O] Result archetypes: tab (switch to open tab; carries customTitle), chromiumHistory, chromiumSearchWhatYouTyped,
   chromiumSearchSuggestion, chromiumNavigateWhatYouTyped, chromiumSearchHistory, chromiumNavigateSuggestion, chromiumBookmark,
   chromiumSearchOtherEngine, chromiumSearchCalculatorAnswer, topDomain (bundled popularDomains.json), typeTravel

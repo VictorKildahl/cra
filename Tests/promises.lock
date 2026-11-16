@@ -850,3 +850,4 @@
 #434   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseOnAWindowWideEnough  411e4369f60b
 #434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeCase  c115e90bb609
 #434   Tests/Scenarios/pip-minimize.scenario  303a5054c8ba
+#446   Tests/Scenarios/sidebar-empty-double-click.scenario  b3449dbc21f4

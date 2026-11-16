@@ -1378,6 +1378,15 @@ final class SpaceListDocument: NSView {
     // Right-click on empty list space; rows have their own menus.
     override func menu(for event: NSEvent) -> NSMenu? { list?.listMenu() }
 
+    /// A double click on empty list space opens the New Tab bar, as Arc's does
+    /// (onDidDoubleClickSidebarBackground, command bar source sidebarEmptySpaceDoubleClick, #446).
+    /// Rows take their own clicks; a single press goes on to the sidebar, which moves the window.
+    override func mouseDown(with event: NSEvent) {
+        guard event.clickCount == 2, let list else { return super.mouseDown(with: event) }
+        CraLog.note("sidebar empty space double-click: new tab")
+        list.actions.openCommandBar(.newTab)
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { list?.dragUpdated(sender, entered: true) ?? [] }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { list?.dragUpdated(sender, entered: false) ?? [] }
     override func draggingExited(_ sender: NSDraggingInfo?) { list?.dragExited() }
