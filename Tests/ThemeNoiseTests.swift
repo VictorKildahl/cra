@@ -13,6 +13,7 @@ enum ThemeNoiseTests {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         noWindowSizedBackingStore()
+        textureIsTwoXOnAnyScreen()
         sameGrainAsTheDrawnPattern()
         blendAndOpacityPerTheme()
         print("Theme noise: \(checks) checks passed")
@@ -47,6 +48,16 @@ enum ThemeNoiseTests {
         let drawSel = #selector(NSView.draw(_:))
         check(class_getMethodImplementation(ThemeNoiseView.self, drawSel) == class_getMethodImplementation(NSView.self, drawSel),
               "ThemeNoiseView doesn't draw")
+    }
+
+    /// The texture is 96 pt at 2x whatever screen is main: made with lockFocus it took the main screen's scale, so on a
+    /// 1x monitor it was 1x and blurred on a Retina screen (this test failed with a 1x monitor as the main screen).
+    @MainActor
+    private static func textureIsTwoXOnAnyScreen() {
+        let image = NoiseTexture.image
+        check(image.size == NSSize(width: 96, height: 96), "96 pt texture")
+        let widest = image.representations.map(\.pixelsWide).max() ?? 0
+        check(widest == 192, "2x pixels whatever screen is main (main screen at \(NSScreen.main?.backingScaleFactor ?? 0)x, texture \(widest) px)")
     }
 
     /// The layer shows the grain the view drew: the texture tiled from the view's corner, 96 pt a tile, at 1x and 2x.
