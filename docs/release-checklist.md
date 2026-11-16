@@ -20,6 +20,11 @@ built release app with a test profile. Note anything that fails in the release's
   name, its colour and nickname, EARLY '26, a months stamp after a month), Share / Save / Copy under it (the saved PNG is the card at 2x),
   and Share Cra: the sheet's COPY LINK puts the tagged crabrowser.app link on the clipboard and Share… offers Messages and Mail. (The scenario checks the
   size, the tab order and the first tab; this is how it looks.)
+- **Displays:** On a Mac with two displays of different scale (a 2x and a 1x), drag the window from one display to the other and
+  back, several times, by the strip above the toolbar, by the toolbar's URL and by the sidebar's top next to the traffic lights:
+  the window stays under the pointer the whole way, with no jump at the crossing and no flicker. AppKit's screen-layout adjustment
+  ran mid-drag for a window a window controller owns (16 Nov 2026); `CraWindow` skips it while the button is down. The
+  `window-frame-adjust` scenario only checks that answer is in place; a test copy never crosses a display.
 
 - **#155:** a space on Auto, with one colour or two, changes look when macOS switches between
   light and dark. A space on Light or Dark doesn't.

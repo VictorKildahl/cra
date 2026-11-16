@@ -4602,6 +4602,17 @@ screen on a click.
   grabber starts the drag on the first drag event, from that event's point; the page gets the release unless the
   press brought Cra forward (the two releases above). [U] Arc's split panes and its 40 pt developer bar: the same
   `60 − y` rule read statically, not measured.
+- [O AppKit, 16 Nov 2026, three displays at 1x, 2x and 1x, `-NSScreenLoggingEnabled YES`] A system drag (`performDrag`, also
+  AppKit's own title-bar drag) that takes a window a window controller owns to another display runs AppKit's screen-layout
+  adjustment at the crossing: `_windowMoved:` → `_setFrameAfterMove:` → `_matchingWindowLayoutForScreen:…` →
+  `_setFrame:fromAdjustmentToScreen:anchorIfNeeded:animate:`, to the frame the window last had on that display, or with none
+  saved to `_NSPositionWindowOnScreen`'s proportional place (autoPositionMask 15). The drag goes on from there with a new grab
+  offset: the jump Peter saw. A plain NSWindow (no controller) in the same process never enters that path; `isRestorable`,
+  cascading, child windows, the shell, the delegate and the `NSScreenLayoutIgnoreHistoricalFrame` default change nothing. Chromium's
+  `NativeWidgetMacNSWindow` skips the same two private callbacks while its move loop drags a tab across displays
+  (components/remote_cocoa/app_shim/native_widget_mac_nswindow.mm). `CraWindow` answers the adjustment and skips it while the
+  left button is down. Moving the window by hand on each event instead drew the window at both scales at the crossing and
+  flickered; Peter turned it down.
 
 ## The hidden sidebar from past the window's edge (Arc 1.172.2, 11 Nov 2026, GitHub #350, live Arc, real pointer at 120 fps)
 

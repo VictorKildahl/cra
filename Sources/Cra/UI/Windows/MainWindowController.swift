@@ -1,5 +1,6 @@
 import AppKit
 import CraCEF
+import ObjectiveC
 import QuickLookThumbnailing
 import SwiftUI
 import UniformTypeIdentifiers
@@ -4753,6 +4754,46 @@ final class CraWindow: NSWindow {
     override func performDrag(with event: NSEvent) {
         guard isMovable else { return }
         super.performDrag(with: event)
+    }
+
+    /// AppKit's screen-layout manager adjusts a window's frame on a move that takes it to another
+    /// display (`_setFrameAfterMove:`, the server's report of a move, calls this): to the frame the
+    /// window last had on that display, or, with none saved, to a proportional place on it. Meant
+    /// for a display coming or going, it runs on a drag's moves and on its release as well, for a
+    /// window an NSWindowController owns (a plain window is left alone), so the window jumped away
+    /// from the pointer at each crossing, or at the release, and the offsets added up (three
+    /// displays at 1x, 2x and 1x, 16 Nov 2026). Chromium's NativeWidgetMacNSWindow skips the same
+    /// two callbacks while its move loop drags a tab across displays. Here the adjustment is skipped
+    /// for every move the server reports, drags and their release; a display change, which comes
+    /// another way, still gets AppKit's own adjustment.
+    @objc(_setFrameAfterMove:)
+    func setFrameAfterMove(_ frameRect: NSRect) {
+        guard let method = class_getInstanceMethod(NSWindow.self, Self.frameAfterMoveSelector) else { return }
+        inFrameAfterMove = true
+        defer { inFrameAfterMove = false }
+        typealias After = @convention(c) (NSWindow, Selector, NSRect) -> Void
+        unsafeBitCast(method_getImplementation(method), to: After.self)(self, Self.frameAfterMoveSelector, frameRect)
+    }
+
+    @objc(_setFrame:fromAdjustmentToScreen:anchorIfNeeded:animate:)
+    func setFrame(_ frameRect: NSRect, fromAdjustmentToScreen screen: NSScreen?, anchorIfNeeded anchor: UnsafePointer<CGPoint>?, animate: Bool) {
+        if inFrameAfterMove { return }
+        guard let method = class_getInstanceMethod(NSWindow.self, Self.frameAdjustmentSelector) else { return }
+        typealias Adjust = @convention(c) (NSWindow, Selector, NSRect, NSScreen?, UnsafePointer<CGPoint>?, Bool) -> Void
+        unsafeBitCast(method_getImplementation(method), to: Adjust.self)(self, Self.frameAdjustmentSelector, frameRect, screen, anchor, animate)
+    }
+
+    private var inFrameAfterMove = false
+    private static let frameAfterMoveSelector = NSSelectorFromString("_setFrameAfterMove:")
+    private static let frameAdjustmentSelector = NSSelectorFromString("_setFrame:fromAdjustmentToScreen:anchorIfNeeded:animate:")
+
+    /// For the windowState readout: `own` when this class answers the adjustment and AppKit still
+    /// has both callbacks, `appkit` when AppKit's run, `none` when AppKit no longer has them.
+    static var frameAdjustment: String {
+        let selectors = [frameAfterMoveSelector, frameAdjustmentSelector]
+        guard selectors.allSatisfy(NSWindow.instancesRespond(to:)) else { return "none" }
+        let own = selectors.allSatisfy { class_getMethodImplementation(CraWindow.self, $0) != class_getMethodImplementation(NSWindow.self, $0) }
+        return own ? "own" : "appkit"
     }
 
     override func sendEvent(_ event: NSEvent) {
