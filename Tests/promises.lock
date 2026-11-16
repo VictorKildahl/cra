@@ -795,6 +795,10 @@
 #411   Tests/BrowserManagerLifecycleTests.swift::nowPlayingSkipsUncontrollableSoundCase  834fe4ecbf39
 #411   Tests/Scenarios/player-follows-session.scenario  e115e9dba0e8
 #411   Tests/Scenarios/player-skips-dings.scenario  1cc76ac02572
+#412   Packages/CraCore/Tests/CraCoreTests/IncognitoPagesTests.swift::chromesNormalProfilePagesStayOut  0ae90bb7b039
+#412   Packages/CraCore/Tests/CraCoreTests/IncognitoPagesTests.swift::everythingElseOpensInIncognito  15d1cab57052
+#412   Tests/Scenarios/incognito-chrome-pages.scenario  862777ce5413
+#412   Tests/StoreTests.swift::chromePagesLeaveIncognito  f24b28a839d6
 #413   Packages/CraCore/Tests/CraCoreTests/SpaceMenuLayoutTests.swift::incognitoSpaceOffersNoProfile  ba6e000f474d
 #413   Tests/Scenarios/incognito-space-menu.scenario  6a20db2d4b60
 #413   Tests/StoreTests.swift::incognitoSpaceKeepsItsContext  8803458c0f95

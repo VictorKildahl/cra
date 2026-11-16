@@ -203,6 +203,11 @@ final class AppleScriptTabWrapper: NSObject {
         get { item?.tab?.url ?? pendingURL ?? "" }
         set {
             guard let tabID, let controller else { pendingURL = newValue; return }
+            // Not over an incognito tab: a tab in the normal window, as createTab sends it (#412).
+            if controller.store.isIncognito(item: tabID), !IncognitoPages.allows(newValue) {
+                controller.store.createTab(url: newValue, in: controller.store.spaceID(ofItem: tabID))
+                return
+            }
             controller.store.updateTab(tabID, url: newValue)
             browser?.loadURL(newValue)
         }

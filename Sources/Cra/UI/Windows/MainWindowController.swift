@@ -4236,6 +4236,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Navigate the focused tab (an empty split pane gets its first page here).
     func loadInSelectedTab(_ url: String) {
         guard let id = selectedTabID else { return }
+        // Typed over an incognito tab, Chrome's Settings or Extensions page opens in a new tab of the
+        // normal window (createTab sends it there), as Chrome's omnibox does; the tab keeps its page (#412).
+        if store.isIncognito(item: id), !IncognitoPages.allows(url) {
+            store.createTab(url: url, window: windowID)
+            return
+        }
         let wasEmpty = store.item(id)?.isEmptyTab == true
         store.updateTab(id, url: url)
         if let rt = browsers.ensureRuntime(for: id), !wasEmpty { rt.browser.loadURL(url) }

@@ -46,6 +46,7 @@ enum StoreTests {
         stampsUseTheClock()
         persistenceFaults()
         incognitoStaysOffDisk()
+        chromePagesLeaveIncognito()
         mcpExcludesPrivateTabs()
         pinnedURL()
         tabFavicons()
@@ -834,6 +835,35 @@ enum StoreTests {
         expect(store.mcpTab(UUID()) == nil, "MCP refuses unknown IDs")
         expect(store.spaces.values.allSatisfy { store.mcpTab($0.todayContainerID) == nil },
                "MCP refuses containers")
+    }
+
+    // promise: #412
+    /// Chrome keeps chrome://extensions, settings, history and the password manager out of
+    /// incognito; Cra built the incognito page for chrome://extensions and quit (#412). From an
+    /// incognito window they open in the normal window in use last, which becomes the active one;
+    /// pages Chrome allows there stay.
+    @MainActor
+    private static func chromePagesLeaveIncognito() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let normal = store.activeWindowID
+        let normalSpace = store.focusedSpaceID(window: normal)
+        let incognito = store.addIncognitoWindow(frame: nil)
+        store.activeWindowID = incognito.id
+        var fronted: [UUID] = []
+        store.pageLeftIncognito = { fronted.append($0) }
+        let extensions = store.createTab(url: "chrome://extensions", select: true, window: incognito.id)
+        expect(store.spaceID(ofItem: extensions.id) == normalSpace, "chrome://extensions from incognito opens in the normal window's space")
+        expect(store.selectedTabID(window: normal) == extensions.id, "and is the tab the normal window shows")
+        expect(store.selectedTabID(window: incognito.id) == nil, "the incognito window keeps none")
+        expect(store.activeWindowID == normal && fronted == [normal], "and the normal window comes to the front")
+        let settings = store.createTab(url: "chrome://settings/privacy", in: incognito.focusedSpaceID, select: false)
+        expect(store.spaceID(ofItem: settings.id) == normalSpace, "a page asked for in the incognito space by name goes too")
+        store.activeWindowID = incognito.id
+        let version = store.createTab(url: "chrome://version", select: true, window: incognito.id)
+        expect(store.isIncognito(item: version.id) && store.activeWindowID == incognito.id, "chrome://version stays in incognito, as in Chrome")
+        let web = store.createTab(url: "https://example.com", select: true, window: incognito.id)
+        expect(store.isIncognito(item: web.id), "and so does a web page")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     /// Incognito tabs never reach sidebar.json (#46's review: updateTab saved every item), and

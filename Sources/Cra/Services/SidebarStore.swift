@@ -71,6 +71,9 @@ final class SidebarStore {
     /// A tab came into a space's pinned tabs from elsewhere (⌘D, a drag, a menu): Tidy Tab Titles
     /// may give it a shorter name (TidyTitlesService).
     @ObservationIgnored var tabPinned: (UUID) -> Void = { _ in }
+    /// A page Chrome keeps out of incognito was opened from an incognito window and went to this
+    /// normal window instead (#412): AppDelegate brings that window to the front.
+    @ObservationIgnored var pageLeftIncognito: (UUID) -> Void = { _ in }
     /// Synchronous so an off/on change in one actor turn cannot revive an older download name.
     @ObservationIgnored var tidyDownloadsChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var tidyTabsChanged: (Bool) -> Void = { _ in }
@@ -606,7 +609,16 @@ final class SidebarStore {
     func createTab(url: String, title: String = "", in spaceID: UUID? = nil, pinned: Bool = false,
                    select: Bool = true, parent: UUID? = nil, index: Int? = nil, window: UUID? = nil,
                    referrer: UUID? = nil) -> SidebarItem {
-        let sid = spaceID ?? focusedSpaceID(window: window)
+        var sid = spaceID ?? focusedSpaceID(window: window), window = window, parent = parent, index = index
+        // Chrome's Settings, Extensions, History and password pages never load in incognito: as in
+        // Chrome they open in the normal window in use last, which comes to the front (#412).
+        let leavesIncognito = isIncognito(space: sid) && !IncognitoPages.allows(url)
+        if leavesIncognito {
+            window = lastNormalWindowID
+            sid = focusedSpaceID(window: lastNormalWindowID)
+            parent = nil
+            index = nil
+        }
         let space = spaces[sid] ?? focusedSpace(window: window)
         let requestedParent = parent ?? (pinned ? space.pinnedContainerID : space.todayContainerID)
         let parentID = liveFolder(containing: requestedParent) == nil ? requestedParent : space.todayContainerID
@@ -626,6 +638,10 @@ final class SidebarStore {
         p.children.insert(tab.id, at: min(max(0, at), p.children.count))
         items[parentID] = p
         if select { selectTab(tab.id, window: window) } else { touch() }
+        if leavesIncognito, let window {
+            activeWindowID = window
+            pageLeftIncognito(window)
+        }
         return tab
     }
 

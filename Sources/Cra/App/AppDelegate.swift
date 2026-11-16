@@ -58,6 +58,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         buildMenus()
         store.hasPage = { [unowned self] in self.runtime(for: $0).map { !$0.discarded } ?? false }
         store.tabPinned = { [unowned self] in TidyTitlesService.shared.tabPinned($0, store: self.store) }
+        // On the next turn: the incognito window's own caller may still bring itself forward (#412).
+        store.pageLeftIncognito = { [unowned self] id in
+            DispatchQueue.main.async {
+                let normal = self.mainWindows.first { $0.windowID == id } ?? self.useNormalWindow()
+                self.store.activeWindowID = normal.windowID
+                normal.showWindow(nil)
+            }
+        }
         store.tidyDownloadsChanged = { enabled in if !enabled { TidyDownloadsService.shared.cancelAll() } }
         TidyTabsService.shared.downloadsUnavailable = { TidyDownloadsService.shared.cancelAll() }
         store.tidyTabsChanged = { [unowned self] enabled in if !enabled { TidyTabsService.shared.cancelAll(store: self.store) } }
@@ -1989,13 +1997,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let tabs = (store.tabs(under: space.pinnedContainerID) + store.tabs(under: space.todayContainerID)).compactMap { $0.tab?.url }
                     let open = store.selectedTabID(window: m.windowID).flatMap { store.item($0)?.tab?.url } ?? "-"
                     let folders = (store.children(of: space.pinnedContainerID) + store.children(of: space.todayContainerID)).filter { $0.isFolder && !$0.isTabGroup }
-                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@ onTop=%d pinnedCollapsed=%d openFolders=%d/%d commandBar=%d pages=%d", label,
+                    NSLog("Cra browser windows %@: kind=%@ space=%@ listed=%d tabs=[%@] open=%@ page=%d frame=%@ onTop=%d pinnedCollapsed=%d openFolders=%d/%d commandBar=%d pages=%d active=%d", label,
                           m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal", space.title,
                           store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0, tabs.joined(separator: " "), open,
                           store.selectedTabID(window: m.windowID).flatMap { m.browsers.runtime(for: $0) } != nil ? 1 : 0,
                           m.window.map { NSStringFromRect($0.frame) } ?? "-", m.staysOnTop ? 1 : 0,
                           store.isPinnedCollapsed(space.id) ? 1 : 0, folders.filter { store.isExpanded($0.id) }.count, folders.count,
-                          m.commandBar.isOpen ? 1 : 0, m.browsers.runtimes.count)
+                          m.commandBar.isOpen ? 1 : 0, m.browsers.runtimes.count, store.activeWindowID == m.windowID ? 1 : 0)
                     // cra.log (which a relaunch keeps) gets no addresses or names: kinds and counts.
                     CraLog.note("browser windows \(label): kind=\(m.isBlank ? "blank" : m.isIncognito ? "incognito" : "normal") "
                         + "listed=\(store.orderedSpaces.contains { $0.id == space.id } ? 1 : 0) tabs=\(tabs.count) open=\(open == "-" ? 0 : 1) "
@@ -2028,6 +2036,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // pickedMenu=<n>[&label=][&run=<row>]: the menu on n picked tabs, see testPickedMenu (#356).
             if let n = dict["pickedMenu"].flatMap(Int.init) {
                 main.testPickedMenu(count: n, label: dict["label"] ?? "\(n)", run: dict["run"])
+                return
+            }
+            // incognitoWindow=<url>: a page's Open Link in Incognito Window, a new incognito window
+            // showing that page, without the command bar's keys (#412).
+            if let url = dict["incognitoWindow"] {
+                openLink(url, in: .incognito, space: nil, fromIncognito: false)
                 return
             }
             // spaceMenu=<label>[&window=incognito]: the open space's header menu in the window in use,
