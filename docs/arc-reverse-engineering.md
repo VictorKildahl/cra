@@ -3658,6 +3658,27 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   own layers so the press can scale about the centre. Past Arc, at the reporter's request: ⌘W and ⌘O press their
   button (PeekControl.pressed(byAction:)) for 0.15 s on the press spring while the action runs at once. Close's
   closing picture, taken within 80 ms, carries the pressed button; Expand's Peek is gone that frame.
+- [S, 16 Nov, GitHub #425] Close turns red only to confirm a close, never on hover (Arc 1.173.1's arm64 code,
+  body witnesses of `ModalV2ControlsViewSwiftUI` and `ModalV2ControlButton`, no symbols). `ModalV2ControlButton`
+  holds `baseConfig` and `expandedConfig` (`ButtonViewModel`: text, systemImageName, fillColor, accentColor, title)
+  and `isExpanded`. Close's base is xmark on the space's fill, title "Close"; its expanded config is the same glyph
+  (phone.down.fill when the reason is `mediaInputActive`), text "Confirm", title "Close" ("Hang up" for a call),
+  filled with the `DestructiveButtonFace` asset (ARCUI.bundle, sRGB 245/55/20, one value for light and dark) and
+  white ink. `isExpanded` = `dismissConfirmationReason != nil`, animated on `.spring(response: 0.25,
+  dampingFraction: 0.8)`. The label is an `HStack(spacing: 4)`: the glyph (15 pt semibold, padding 1) and, when
+  expanded, `Text` 13 pt medium with `.move(edge: .leading).combined(with: .opacity)`; `ModalButtonStyle` adds its
+  padding 8 and capsule, so the pill grows right from the button's left edge.
+- [S] When a close waits (`WindowData+ModalContent`, the function that returns `DismissConfirmationReason?`): with
+  no wait on, `escapeKeyPressed(prefersConfirmation:)` waits only when its sender asks (that sender wasn't found);
+  close button, ⌘W, a background click, a swipe, redo close and exit wait only while the page uses the camera or
+  microphone (`mediaInputActive`). While waiting (`awaitingDismissConfirmation(attempts:reason:)`), Esc, the close
+  button and ⌘W close; a background click, a swipe or redo close keep a call's wait and end an Esc's.
+  `ModalV2HostViewController.dismissConfirmationReset` gives up after 10 s for a call and 1 s for Esc, and the
+  button is round again. Not seen live (a Peek needs Victor's Arc).
+- Cra (#425): PeekCloseHold (CraCore) has the rule, the timeouts and the pill's numbers; PeekControlButton draws the
+  pill on its own layers (face ▸ clip ▸ glyphs and a CATextLayer) and PeekControlsPanel widens itself while it is up.
+  LittleWindowController.attemptPeekClose takes the Close button, ⌘W, Esc and the click catcher; Cra's Esc never asks,
+  so only a Peek using the camera or microphone (CraBrowser.isCapturingMedia) holds its first close.
 - [O, 4 Nov] Which links peek, with both Links settings on (`modalEnabled` and
   `shiftClickModalEntryPointEnabled` set for the run, the sidebar reset before each run), HID clicks on a
   lab page at 127.0.0.1 in a pinned tab: a link to localhost peeked, plain or target=_blank; a link to

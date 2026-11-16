@@ -1590,6 +1590,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("peek expand \(how): selected=\(tab?.url ?? "-") home=\(tab?.savedURL ?? "-") today=\(today)")
                 return
             }
+            // peekClose=<label>[&attempt=closeButton|closeShortcut|escape|background]: the front window's
+            // Peek after that close attempt: whether it is still open, whether its page uses the camera or
+            // microphone, and its Close button, round or Arc's red Confirm pill (#425).
+            if let label = dict["peekClose"] {
+                guard let peek = littleWindows.first(where: { $0.isPeek && !$0.isParked && $0.peekParent === main }) else {
+                    CraLog.note("peek close \(label): no Peek"); return
+                }
+                let attempt: PeekCloseAttempt? = switch dict["attempt"] {
+                case "closeButton": .closeButton
+                case "closeShortcut": .closeShortcut
+                case "escape": .escape(prefersConfirmation: false)
+                case "background": .background
+                default: nil
+                }
+                if let attempt { peek.attemptPeekClose(attempt) }
+                CraLog.note("peek close \(label): \(peek.peekCloseReadout())")
+                return
+            }
             // peeks=<label>: each window's Peeks, on screen or waiting on their tab, and their pages (#242).
             if let label = dict["peeks"] {
                 for m in mainWindows { NSLog("Cra peeks %@: %@", label, m.peeksShown()) }

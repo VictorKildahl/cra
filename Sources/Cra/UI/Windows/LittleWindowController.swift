@@ -182,6 +182,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// Another tab is on screen: the Peek is out of sight, its page alive, until its tab is back.
     private(set) var isParked = false
     private var dim: PeekDimPanel?
+    /// The Peek's Close is the red Confirm pill, waiting for a second close (#425).
+    private var closeHold: PeekCloseHold?
+    private var closeHoldReset: DispatchWorkItem?
     /// The click catcher's frame (screen coordinates), for cra://debug?peekCatcher.
     var dimFrame: NSRect? { dim?.frame }
     private var controls: PeekControlsPanel?
@@ -674,7 +677,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// lands.
     func showAsPeek(fromTab tabID: UUID?) {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
-        let dim = PeekDimPanel(covering: parent.peekDismissArea(), of: pw) { [weak self] in self?.closeWindow() }
+        let dim = PeekDimPanel(covering: parent.peekDismissArea(), of: pw) { [weak self] in self?.attemptPeekClose(.background) }
         self.dim = dim
         pw.addChildWindow(dim, ordered: .above)
         dim.orderFront(nil)
@@ -686,7 +689,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             easel.usePeekLook()
         }
         var buttons: [PeekControlsPanel.Button] = [
-            .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
+            .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.attemptPeekClose(.closeButton) },
             .init(control: .expand, symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
                 self?.expandPeek(commandClick: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
             },
@@ -1344,7 +1347,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if isPeek, !closingPeek, let control = PeekControl.pressed(byAction: id) { controls?.pressFromKey(control) }
         switch id {
         // ⌘W on the card fades it out, as Esc does (#337).
-        case "closeTab", "closeWindow": if isCard, !cardFading, window?.isVisible == true { dismissCard() } else { closeWindow() }
+        case "closeTab", "closeWindow":
+            if isCard, !cardFading, window?.isVisible == true { dismissCard() } else if isPeek { attemptPeekClose(.closeShortcut) } else { closeWindow() }
         case "newTab", "editURL":
             // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
             let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
@@ -1426,6 +1430,34 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, let content = window.contentView else { return }
         slowResponseShown = false
         toast.show(text, action: action, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)
+    }
+
+    /// The Peek's user closes (its Close button, ⌘W, Esc, a click outside) go through here. A Peek on
+    /// a call holds the first one: Close becomes Arc's red Confirm pill and the next close goes through
+    /// (PeekCloseHold, GitHub #425). Everything else closes as before.
+    func attemptPeekClose(_ attempt: PeekCloseAttempt) {
+        guard isPeek, !closingPeek else { closeWindow(); return }
+        let next = PeekCloseHold.after(attempt, holding: closeHold, capturingMedia: browser?.isCapturingMedia == true)
+        closeHoldReset?.cancel()
+        closeHoldReset = nil
+        closeHold = next
+        controls?.showHold(next)
+        guard let next else { closeWindow(); return }
+        // Arc gives up waiting after a while, and Close is round again.
+        let reset = DispatchWorkItem { [weak self] in
+            guard let self, self.closeHold != nil else { return }
+            self.closeHold = nil
+            self.controls?.showHold(nil)
+        }
+        closeHoldReset = reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + next.timeout, execute: reset)
+    }
+
+    /// `cra://debug?peekClose`: open or closing, capturing, and the Close button's state.
+    func peekCloseReadout() -> String {
+        let hold = closeHold.map { "\($0)" } ?? "none"
+        let capturing = browser?.isCapturingMedia == true ? 1 : 0
+        return "open=\(closingPeek ? 0 : 1) capturing=\(capturing) hold=\(hold) close=\(controls?.closeReadout() ?? "-")"
     }
 
     /// ⌘W / Close Window: the same path as the close button. (performClose is
@@ -1870,7 +1902,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, handleUnhandledKeyEvent event: NSEvent) -> Bool {
         // Arc's "Exit the current context": Escape the page didn't use closes a Peek.
         if isPeek, event.type == .keyDown, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
-            closeWindow()
+            attemptPeekClose(.escape(prefersConfirmation: false))
             return true
         }
         return app.handleUnhandledKey(event)

@@ -822,6 +822,11 @@
 #419   Tests/Scenarios/split-drop.scenario  3bd2c37b3cb1
 #421   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::typedURLFollowsSpaceRoutes  cfbe95a599dd
 #421   Tests/Scenarios/command-bar-route.scenario  e9c6c3f45f79
+#425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::aPeekOnACallHoldsItsFirstClose  bba8b358c791
+#425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::aSecondCloseGoesThrough  5d87f80b126d
+#425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::thePillGrowsRightFromTheButton  7c49ec85af44
+#425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::thePillIsArcs  ee28dd5ca276
+#425   Tests/Scenarios/peek-call-confirm.scenario  f211797a5db9
 #428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::keepsCommandDigitOrderAndSharedFavoritesOnce  5d334510a308
 #428   Packages/CraCore/Tests/CraCoreTests/AppleScriptTabOrderTests.swift::listsEverySpaceOpenSpaceFirst  f246d88a1570
 #428   Tests/Scenarios/applescript-every-space.scenario  4c91f6ac8331
