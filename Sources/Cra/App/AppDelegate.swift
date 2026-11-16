@@ -1317,8 +1317,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let scripts = dict["mcpScripts"] { MCPServer.shared.allowsScripts = scripts == "on"; return }
             // mcpHistory=on|off: Settings ▸ Advanced ▸ Let agents read your history.
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
-            // mcpStop=1: the pill's Stop (every agent disconnects, MCP turns off).
-            if dict["mcpStop"] != nil { MCPServer.shared.stopFromPill(); return }
+            // mcpStop=1: the latest pill's Stop (that agent disconnects, MCP stays on).
+            if dict["mcpStop"] != nil { MCPServer.shared.stopLatestPill(); return }
             // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸
             // Advanced ▸ Reset Translated-site Prompts and the translate choices it forgets, in every profile.
             if let t = dict["translatePrompts"] {

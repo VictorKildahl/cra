@@ -41,7 +41,8 @@ ask again) in `mcp.json` in the data folder. Settings ▸ Advanced lists the age
 **Forget** asks again next time and closes the agent's open connections.
 
 While an agent acts in a page, Cra's toast says so in the window it works in ("Claude Code is
-using Cra"), with **Stop**: every agent disconnects and MCP turns off until you turn it on again.
+using Cra"), with **Stop**: that agent's session disconnects and its calls stop. MCP stays on,
+so other agents keep working and the stopped one can connect again; only Settings turns it off.
 The toast stays while the agent works and goes a few seconds after its last action; reading,
 organizing tabs and notes never show it.
 
