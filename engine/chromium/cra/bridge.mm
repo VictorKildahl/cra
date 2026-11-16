@@ -131,6 +131,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 extern "C" int CraEngineMain(int argc, const char** argv);
 
@@ -963,16 +964,20 @@ bool TargetURL(content::WebContents* contents, const GURL& url) {
 }
 
 // Cra's ad and tracker blocking (patches/cra-content-blocking.patch): a request third-party to its top-level
-// page, to a listed domain.
-bool BlockRequest(const GURL& url, const content::GlobalRenderFrameHostId& frame) {
+// page, to a listed domain. The page is the asking frame's; a frame's navigation has none, and then it is the
+// navigation's top frame (up to engine -10 such frames were never blocked).
+bool BlockRequest(const GURL& url, const content::GlobalRenderFrameHostId& frame, const url::Origin* top_frame) {
   if (!cra_blocker::Enabled().load(std::memory_order_relaxed)) {
     return false;
   }
-  content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame);
-  if (!host) {
+  std::string page;
+  if (content::RenderFrameHost* host = content::RenderFrameHost::FromID(frame)) {
+    page = cra_blocker::WebHost(host->GetOutermostMainFrame()->GetLastCommittedURL().spec());
+  } else if (top_frame && !top_frame->opaque()) {
+    page = cra_blocker::WebHost(top_frame->GetURL().spec());
+  } else {
     return false;
   }
-  std::string page = cra_blocker::WebHost(host->GetOutermostMainFrame()->GetLastCommittedURL().spec());
   return cra_blocker::ShouldBlock(cra_blocker::WebHost(url.spec()), page);
 }
 

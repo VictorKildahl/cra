@@ -33,6 +33,9 @@ namespace download {
 class DownloadItem;
 }
 class GURL;
+namespace url {
+class Origin;
+}
 
 namespace cra {
 
@@ -90,10 +93,13 @@ inline TargetURLHook g_target_url = nullptr;
 using IsCraPageHook = bool (*)(const content::WebContents* contents);
 inline IsCraPageHook g_is_cra_page = nullptr;
 
-// Cra's ad and tracker blocking (Settings): whether a subresource or subframe request from `frame` is cancelled,
-// as the CEF bridge's OnBeforeResourceLoad decided (CraContentBlocker.h). Top-level navigations never come here
-// (patches/cra-content-blocking.patch).
-using BlockRequestHook = bool (*)(const GURL& url, const content::GlobalRenderFrameHostId& frame);
+// Cra's ad and tracker blocking (Settings): whether a subresource or subframe request from `frame` is stopped,
+// as the CEF bridge decides (CraContentBlocker.h). A frame's navigation has no `frame` (Chromium proxies it with
+// no process); `top_frame` is then the origin of the page it navigates in, from the navigation's isolation info,
+// or null. Top-level navigations never come here (patches/cra-content-blocking.patch).
+using BlockRequestHook = bool (*)(const GURL& url,
+                                  const content::GlobalRenderFrameHostId& frame,
+                                  const url::Origin* top_frame);
 inline BlockRequestHook g_block_request = nullptr;
 
 // A page's context menu, Arc's in Cra's pages (patches/cra-page-menu.patch): Cra changes the model Chrome built,

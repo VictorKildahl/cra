@@ -1,27 +1,39 @@
 diff --git a/extensions/browser/api/web_request/web_request_proxying_url_loader_factory.cc b/extensions/browser/api/web_request/web_request_proxying_url_loader_factory.cc
 --- a/extensions/browser/api/web_request/web_request_proxying_url_loader_factory.cc
 +++ b/extensions/browser/api/web_request/web_request_proxying_url_loader_factory.cc
-@@ -3,6 +3,8 @@
- // found in the LICENSE file.
+@@ -4,6 +4,8 @@
  
  #include "extensions/browser/api/web_request/web_request_proxying_url_loader_factory.h"
-+
-+#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
  
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
++
  #include <memory>
  #include <optional>
-@@ -339,6 +341,15 @@
+ #include <ostream>
+@@ -339,6 +341,27 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::RestartInternal() {
    }
    redirect_url_ = GURL();
    bool should_collapse_initiator = false;
-+  // Cra: its ad and tracker blocking, before extensions see the request.
++  // Cra: its ad and tracker blocking, before extensions see the request. A frame's navigation has no process,
++  // so the blocker gets the page it navigates in from the navigation's isolation info. A blocked frame
++  // collapses, as Chrome does for a frame its blockers stop, instead of showing an error page where the ad was.
 +  if (cra::g_block_request &&
-+      info_->web_request_type != WebRequestResourceType::MAIN_FRAME &&
-+      cra::g_block_request(request_.url, info_->global_id)) {
-+    OnRequestError(CreateURLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT,
-+                                                   should_collapse_initiator),
-+                   state_on_error);
-+    return;
++      info_->web_request_type != WebRequestResourceType::MAIN_FRAME) {
++    const std::optional<url::Origin>* top_frame =
++        request_.trusted_params
++            ? &request_.trusted_params->isolation_info.top_frame_origin()
++            : nullptr;
++    if (cra::g_block_request(request_.url, info_->global_id,
++                             top_frame && top_frame->has_value()
++                                 ? &top_frame->value()
++                                 : nullptr)) {
++      OnRequestError(
++          CreateURLLoaderCompletionStatus(
++              net::ERR_BLOCKED_BY_CLIENT,
++              info_->web_request_type == WebRequestResourceType::SUB_FRAME),
++          state_on_error);
++      return;
++    }
 +  }
    int result = WebRequestEventRouter::Get(factory_->browser_context_)
                     ->OnBeforeRequest(factory_->browser_context_, &info_.value(),
