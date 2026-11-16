@@ -1955,6 +1955,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSLog("Cra next page menu command %@: %@", name, CraCEFRuntime.runNextPageMenuCommand(name) ? "set" : "unknown")
                 return
             }
+            // menuShown=next: the next menu that opens logs its rows and closes. A page's right-click menu has to
+            // open on screen, not only be built (#466: 0.1.44 built it and never showed it).
+            if dict["menuShown"] == "next" {
+                var token: NSObjectProtocol?
+                token = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { note in
+                    guard let menu = note.object as? NSMenu else { return }
+                    if let token { NotificationCenter.default.removeObserver(token) }
+                    token = nil
+                    let rows = menu.items.filter { !$0.isHidden && !$0.isSeparatorItem }.map(\.title)
+                    NSLog("Cra menu shown: %@", rows.joined(separator: "|"))
+                    RunLoop.main.perform(inModes: [.eventTracking, .default]) { menu.cancelTrackingWithoutAnimation() }
+                }
+                NSLog("Cra menu shown: waiting")
+                return
+            }
             if let method = dict["cdp"] {
                 // target=little: the newest Little Window's (or Peek's) page; tab=<id>: that tab's page.
                 let tab = dict["tab"].flatMap(UUID.init(uuidString:)).flatMap { main.browsers.runtime(for: $0)?.browser }

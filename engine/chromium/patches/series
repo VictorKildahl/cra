@@ -31,6 +31,7 @@ cra-devtools.patch
 cra-download-tabs.patch
 cra-content-blocking.patch
 cra-page-menu.patch
+context-menu-embedded-view.patch
 cra-relaunch.patch
 cra-links.patch
 fingerprinting-protection.patch
