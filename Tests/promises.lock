@@ -863,3 +863,4 @@
 #455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::plusIsOffOnGreys  c8ce7fe1d6dd
 #459   Packages/CraCore/Tests/CraCoreTests/MCPProtocolTests.swift::fullServerReplySaysWhy  c603156a09f1
 #459   Tests/MCPTransportTests.swift::fullServerSaysWhy  78c75dce7c78
+#463   Tests/PictureInPictureCornersTests.swift::hoverLayerKeepsTheCorners  226a463777da

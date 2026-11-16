@@ -44,7 +44,7 @@ final class PictureInPictureChrome {
         didSet { for o in overlays.values { o.controls.address = address } }
     }
 
-    static let cornerRadius: CGFloat = 6
+    static let cornerRadius = PictureInPictureLayout.cornerRadius
     static let edgeMargin = PictureInPictureLayout.edgeMargin
     private static let frameKey = "CraPictureInPictureFrame"
     /// The display the frame was left on and that display's frame then (#316).
@@ -220,6 +220,11 @@ final class PictureInPictureChrome {
     /// `cra://debug?pipButton=back|minimize|close`: that hover button clicked.
     func debugPress(_ name: String) {
         for o in overlays.values { o.controls.debugPress(name) }
+    }
+
+    /// `cra://debug?pipShow=1`: the hover controls shown as the pointer shows them, and kept up.
+    func debugShow() {
+        for o in overlays.values { o.controls.debugShow() }
     }
 
     /// `cra://debug?pipSeek=<0…1>`: the scrubber pressed that far along and let go.

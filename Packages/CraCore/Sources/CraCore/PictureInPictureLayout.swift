@@ -3,6 +3,9 @@ import Foundation
 
 /// Where Arc's Picture in Picture window opens, and how its hover controls are laid out.
 public enum PictureInPictureLayout {
+    /// The window's continuous corners (Arc 1.168). Chromium's window is clipped to them, and so
+    /// is everything drawn over it on hover (#463).
+    public static let cornerRadius: CGFloat = 6
     /// The even layer over the whole frame while the controls show: Arc's
     /// `Color.black.opacity(0.33)`, in and out with `.easeInOut(duration: 0.2)` (Arc 1.172 binary).
     public static let scrimAlpha: CGFloat = 0.33

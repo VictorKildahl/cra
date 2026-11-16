@@ -176,6 +176,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
   shows the emoji's whole picture, in the same place (#399).
+- `scripts/test-pip-corners.sh`: the Picture in Picture hover controls in a transparent window like the
+  overlay, read back through the window server: shown, the dark layer stays inside the window's 6 pt
+  corners at every size class (#463).
 - `scripts/test-theme-noise.sh`: the theme's grain over the main window (`ThemeNoiseView`) is a pattern
   Core Animation tiles, with no window-sized backing store, and shows the grain the drawn view did at 1x and 2x.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds

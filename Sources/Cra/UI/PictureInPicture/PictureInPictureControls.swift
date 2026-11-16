@@ -42,6 +42,11 @@ final class PictureInPictureControlsView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.opacity = 0
+        // The overlay window is a plain rectangle over Chromium's rounded one: clipped to the same
+        // corners, the dark layer and the buttons stay inside them (#463).
+        layer?.cornerRadius = PictureInPictureLayout.cornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
         // Arc dims the whole frame evenly, from the top bar to the bottom edge; Cra's gradient
         // darkened the top and bottom and left the middle almost clear (#246).
         scrim.backgroundColor = NSColor.black.withAlphaComponent(PictureInPictureLayout.scrimAlpha).cgColor
@@ -88,6 +93,12 @@ final class PictureInPictureControlsView: NSView {
         let track = PictureInPictureScrubber.track(in: bounds.size)
         scrubber.press(at: CGPoint(x: track.minX + track.width * fraction, y: track.midY), in: bounds.size)
         scrubber.release()
+    }
+
+    /// `cra://debug?pipShow=1`: shown as on hover, without the timer that fades them out again.
+    func debugShow() {
+        show()
+        hideTimer?.invalidate()
     }
 
     /// `cra://debug?pipButton=back|minimize|close`: that button clicked.
