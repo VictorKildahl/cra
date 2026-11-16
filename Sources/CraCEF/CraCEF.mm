@@ -1289,14 +1289,6 @@ static const char kLoadingBackgroundProbe[] =
 
 // MARK: - Content blocking and app links
 
-// Cancels third-party requests to listed ad and tracker domains (CraContentBlocker.h).
-// Runs on the IO thread; stateless, the list and the switch are global atomics.
-//
-// Also lets links with a scheme Chromium can't load (macappstore:, mailto:, zoommtg:,
-// slack:, …) reach the app registered for it. CEF only asks a resource request handler,
-// so without this every such link failed with ERR_UNKNOWN_URL_SCHEME. Allowing it hands
-// the link to Chrome's ExternalProtocolHandler, which blocks dangerous schemes and asks
-// "Open <app>?" with "Always allow" like Chrome and Arc.
 // What a blocked request gets instead of the network: no bytes and Chromium's
 // ERR_BLOCKED_BY_CLIENT, the error Chrome's own blockers give. The page sees a request that
 // failed (XMLHttpRequest's `error`, a rejected fetch), as from an unreachable server.
@@ -1320,6 +1312,15 @@ private:
     IMPLEMENT_REFCOUNTING(CraBlockedRequestHandler);
 };
 
+// Stops third-party requests to listed ad and tracker domains (CraContentBlocker.h):
+// a frame is cancelled, anything else fails (CraBlockedRequestHandler).
+// Runs on the IO thread; stateless, the list and the switch are global atomics.
+//
+// Also lets links with a scheme Chromium can't load (macappstore:, mailto:, zoommtg:,
+// slack:, …) reach the app registered for it. CEF only asks a resource request handler,
+// so without this every such link failed with ERR_UNKNOWN_URL_SCHEME. Allowing it hands
+// the link to Chrome's ExternalProtocolHandler, which blocks dangerous schemes and asks
+// "Open <app>?" with "Always allow" like Chrome and Arc.
 class CraContentBlockingHandler : public CefResourceRequestHandler {
 public:
     explicit CraContentBlockingHandler(bool external = true) : external_(external) {}
