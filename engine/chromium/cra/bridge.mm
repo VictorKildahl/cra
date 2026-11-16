@@ -1228,6 +1228,11 @@ PageHost* HostFor(Profile* profile) {
   g_making_host = true;
   BrowserWindowInterface* browser = CreateBrowserWindow(BrowserWindowCreateParams(*profile, false));
   g_making_host = false;
+  // Its WebViews attach no page (cra_hosted_page.h): a page Chrome puts in front here (a link opened in a new
+  // tab) drew into this never-shown window from then on, and its Cra tab stayed blank (GitHub #469).
+  if (views::Widget* widget = views::Widget::GetWidgetForNativeWindow(browser->GetWindow()->GetNativeWindow())) {
+    widget->SetNativeWindowProperty(views::kCraPageHostWindow, widget);
+  }
   auto* host = new PageHost(browser);
   Hosts()[profile] = host;
   return host;

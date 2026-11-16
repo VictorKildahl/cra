@@ -621,7 +621,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let findReturns = findParked && !overlay.findVisible && selected != nil && selected == findTabID
         if overlay.findVisible, selected != findTabID { hideFindBar(); findParked = true }
         if live != browsers.visibleTabIDs || liveFocus != browsers.visibleTabID
-            || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false }) {
+            || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false })
+            || live.contains(where: browsers.waitsForItsPane) {
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
         }
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }

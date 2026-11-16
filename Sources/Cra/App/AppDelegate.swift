@@ -1124,6 +1124,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
+            // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
+            // never-shown window drew there instead, and the tab stayed blank (GitHub #469).
+            if let label = dict["pageDrawn"] {
+                func hosts(_ layer: CALayer?) -> Bool {
+                    guard let layer else { return false }
+                    return String(describing: type(of: layer)) == "CALayerHost" || (layer.sublayers ?? []).contains { hosts($0) }
+                }
+                let id = main.browsers.visibleTabID
+                let view = id.flatMap { main.browsers.runtime(for: $0) }?.browser.containerView
+                let inCard = id.map { !main.browsers.waitsForItsPane($0) && view?.window === main.window } ?? false
+                CraLog.note("page drawn \(label): inCard=\(inCard ? 1 : 0) drawn=\(hosts(view?.layer) ? 1 : 0)")
+                return
+            }
             // actionState=<extension id>: what the extension set on its toolbar action, as Cra's buttons show it
             // (chrome.action.setTitle, setBadgeText; GitHub #106).
             if let id = dict["actionState"] {
