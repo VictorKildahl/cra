@@ -13,8 +13,6 @@ final class TabStore {
     private var saveScheduled = false
     private let now: () -> Date
 
-    /// Called after the open tabs or the selection change.
-    var onChange: (() -> Void)?
 
     init(directory: URL, now: @escaping () -> Date = Date.init) {
         self.now = now
@@ -122,7 +120,6 @@ final class TabStore {
             snapshots[id] = nil
         }
         scheduleSave()
-        onChange?()
     }
 
     // MARK: Pages
