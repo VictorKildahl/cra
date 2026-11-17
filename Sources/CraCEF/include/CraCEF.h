@@ -196,7 +196,9 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 /// is left out): `url` is the address that failed.
 - (void)browser:(CraBrowser *)browser didFailLoadingURL:(NSString *)url errorCode:(NSInteger)errorCode;
 /// An extension asked to bring this page's tab to the front (chrome.tabs.update with
-/// active: true; scripts/cef-patches/extension-tab-activate.patch), or with byPage the page
+/// active: true; scripts/cef-patches/extension-tab-activate.patch; on the engine also
+/// chrome.windows.update with focused: true for its window's active tab,
+/// engine/chromium/patches/extension-window-focus.patch, #503), or with byPage the page
 /// did (window.focus(), or clients.focus() from a notification click; page-activate.patch).
 - (void)browserRequestsActivation:(CraBrowser *)browser byPage:(BOOL)byPage;
 /// The page's translate state changed, as JSON (CraCore's PageTranslation; GitHub #310,

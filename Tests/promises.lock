@@ -969,6 +969,7 @@
 #497   Tests/Scenarios/command-bar-close-shortcut.scenario  37c8d8eb9aa6
 #498   Tests/StoreTests.swift::fullSplitTakesNoMorePanes  7b27b455e777
 #500   Tests/Scenarios/little-window-over-browser.scenario  95a396732422
+#503   Tests/Scenarios/extension-window-focus.scenario  93c9f59c585d
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7
 #508   Tests/Scenarios/devtools-link-hover.scenario  32f0a400e052
 #509   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aTapUnderThePageBringsTheBarBack  bdd673327a2a

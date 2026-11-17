@@ -1,0 +1,35 @@
+--- a/chrome/browser/extensions/api/tabs/windows_api.cc
++++ b/chrome/browser/extensions/api/tabs/windows_api.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/extensions/api/tabs/windows_api.h"
+ 
++#include "chrome/browser/cra_engine_hooks.h"
++
+ #include <stdint.h>
+ 
+ #include <algorithm>
+@@ -36,6 +38,7 @@
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/web_applications/web_app_helpers.h"
+ #include "components/sessions/core/session_id.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/navigation_handle.h"
+ #include "extensions/common/extension.h"
+ #include "extensions/common/mojom/api_permission_id.mojom-shared.h"
+@@ -1210,7 +1213,14 @@
+   }
+ 
+   if (params.update_info.focused) {
+-    if (*params.update_info.focused) {
++    if (*params.update_info.focused && cra::g_page_activation) {
++      // Cra: Chrome's window never shows, and activating it brings the whole app in front of the one in use
++      // (GitHub #503: an extension focused a shop's window every second). Its active tab goes through Cra's rule
++      // for extensions instead, as chrome.tabs.update's does (extension-tab-activate.patch).
++      if (tabs::TabInterface* tab = browser->GetActiveTabInterface()) {
++        cra::g_page_activation(tab->GetContents(), /*by_page=*/false);
++      }
++    } else if (*params.update_info.focused) {
+       browser_window->Activate();
+     } else {
+       browser_window->Deactivate();

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Window Focus Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: on a page opened with ?n=focus-window it calls chrome.windows.update(tab.windowId, {focused: true}) for that page's window three times, as an extension that keeps one shop's tab in front does (GitHub #503), then asks the fixture server for page.html?n=focused-3.",
+  "permissions": ["tabs"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "worker.js" },
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["content.js"] }]
+}

@@ -1,0 +1,18 @@
+# promise: #503
+# An extension that focuses a tab's window (chrome.windows.update(id, {focused: true})) never
+# brings Cra in front of the app in use (#503). Chrome activated its window for the extension, and
+# on Mac that activates the app: an extension that kept a shop's order list in front did it every
+# second, so Cra took the front from every other app. Now the request goes through Cra's rule
+# for extensions, as chrome.tabs.update's does (TabActivationRaise): a window may come forward
+# while Cra is the app in use, and Cra itself never does. The run sits behind other windows, so
+# `background` counts the requests to bring Cra forward that would have gone through: the unfixed
+# engine let all 3 through.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+extension ${FIXTURES}/WindowFocusExtension
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=focus-window&background=1
+expect-log GET /page\.html\?n=focused-3
+cra://debug?activations=extension-window
+expect-log activations extension-window: active=0 background=0

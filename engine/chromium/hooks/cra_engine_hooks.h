@@ -47,9 +47,10 @@ inline ExtraPartsFactory g_extra_parts_factory = nullptr;
 // (NSApp's delegate in Chrome) and Chrome's main menu are never made (chrome_browser_main_mac.mm).
 inline bool g_embedder_owns_app = false;
 
-// A page asked to come to the front: an extension (chrome.tabs.update with active: true, by_page false) or the
-// page itself (window.focus(), clients.focus() after a notification click). Cra selects its tab; Chrome's
-// window never shows (patches/page-activate.patch, patches/extension-tab-activate.patch).
+// A page asked to come to the front: an extension (chrome.tabs.update with active: true, or chrome.windows.update
+// with focused: true for its window's active tab; by_page false) or the page itself (window.focus(), clients.focus()
+// after a notification click). Cra selects its tab; Chrome's window never shows (patches/page-activate.patch,
+// patches/extension-tab-activate.patch, patches/extension-window-focus.patch).
 using PageActivationHook = void (*)(content::WebContents* contents, bool by_page);
 inline PageActivationHook g_page_activation = nullptr;
 
