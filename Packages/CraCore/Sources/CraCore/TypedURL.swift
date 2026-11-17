@@ -24,6 +24,14 @@ public enum TypedURL {
         return "https://" + t
     }
 
+    /// The page a command bar "go to" row opens on Return. While the typed text is still what the
+    /// row was made for, the row's own address. Text typed past it before the rows caught up (a comma
+    /// after "example.com") opens only if it is an address itself; nil means search it (#512).
+    public static func navigation(typed: String, rowURL: String?, rowIsForTyped: Bool) -> String? {
+        if rowIsForTyped { return rowURL ?? fromInput(typed) }
+        return looksLikeURL(typed) ? fromInput(typed) : nil
+    }
+
     /// Arc's Edit Pinned URL dialog: the address a pinned tab or favorite gets from the typed text,
     /// or nil when it isn't one (a search, a script, a web address without a host).
     public static func pinnedDestination(_ s: String) -> String? {

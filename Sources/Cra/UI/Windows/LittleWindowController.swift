@@ -1248,7 +1248,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             store.restoreArchived(id)
             app.main.showWindow(nil)
         case .navigate:
-            open(typed == query ? (s.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed))
+            open(TypedURL.navigation(typed: typed, rowURL: s.url, rowIsForTyped: typed == query) ?? commandBar.engine.searchURL(typed))
         case .search:
             open(s.url ?? commandBar.engine.searchURL(typed))
         case .history, .topDomain:

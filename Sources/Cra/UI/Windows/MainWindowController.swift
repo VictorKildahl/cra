@@ -4220,8 +4220,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .archived(let id):
             store.restoreArchived(id)
         case .navigate:
-            let url = typed == commandBar.query ? (s.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed)
-            open(url)
+            open(TypedURL.navigation(typed: typed, rowURL: s.url, rowIsForTyped: typed == commandBar.query) ?? commandBar.engine.searchURL(typed))
         case .search:
             open(s.url ?? commandBar.engine.searchURL(typed))
         case .history, .topDomain:
@@ -4298,7 +4297,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case nil:
             url = typed.isEmpty ? nil : SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed)
         case .navigate?:
-            url = typed == commandBar.query ? (s?.url ?? SuggestionEngine.urlFromInput(typed)) : SuggestionEngine.urlFromInput(typed)
+            url = TypedURL.navigation(typed: typed, rowURL: s?.url, rowIsForTyped: typed == commandBar.query) ?? commandBar.engine.searchURL(typed)
         case .search?:
             url = s?.url ?? commandBar.engine.searchURL(typed)
         case .switchToTab?, .archived?, .history?, .topDomain?:

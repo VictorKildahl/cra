@@ -20,6 +20,16 @@ struct TypedURLTests {
         #expect(TypedURL.pinnedDestination(input) == url)
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/512"))
+    func textTypedPastAGoToRowIsSearchedUnlessItIsAnAddress() {
+        // Still the row's text: the row's address.
+        #expect(TypedURL.navigation(typed: "example.com", rowURL: "https://example.com/", rowIsForTyped: true) == "https://example.com/")
+        // A comma typed before the rows caught up: not an address, so it is searched.
+        #expect(TypedURL.navigation(typed: "example.com,", rowURL: "https://example.com/", rowIsForTyped: false) == nil)
+        // More of an address typed past the row: that address.
+        #expect(TypedURL.navigation(typed: "example.com/shop", rowURL: "https://example.com/", rowIsForTyped: false) == "https://example.com/shop")
+    }
+
     @Test func searchesAreNotAddresses() {
         #expect(!TypedURL.looksLikeURL("cra browser"))
         #expect(TypedURL.looksLikeURL("view-source:https://example.com"))

@@ -967,3 +967,4 @@
 #495   Tests/Scenarios/little-window-typed-back.scenario  56bca9fe43e8
 #497   Tests/Scenarios/command-bar-close-shortcut.scenario  37c8d8eb9aa6
 #500   Tests/Scenarios/little-window-over-browser.scenario  95a396732422
+#512   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::textTypedPastAGoToRowIsSearchedUnlessItIsAnAddress  5cf5fa75d3e3
