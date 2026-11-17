@@ -4463,7 +4463,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                    defaultEngineName: defaultEngine.name, onSave: { [weak panel] title, icon, theme, profile, newName, searchEngine in
             let id: UUID
             if let sid = space?.id, var s = store.space(sid) {
-                s.title = title; s.icon = icon; s.theme = theme
+                s.rename(to: title); s.icon = icon; s.theme = theme
                 store.updateSpace(s)
                 id = s.id
             } else {

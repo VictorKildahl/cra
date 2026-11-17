@@ -67,6 +67,7 @@ struct SpaceEditorView: View {
                     HStack(spacing: 6) {
                         iconButton
                         TextField("Name", text: $title).textFieldStyle(.roundedBorder)
+                            .onChange(of: title) { _, value in title = Space.limitedTitle(value) }
                     }
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(28), spacing: 4), count: 8), spacing: 4) {
                         ForEach(Self.emojis, id: \.self) { e in

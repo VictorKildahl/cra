@@ -1,0 +1,15 @@
+# promise: #471
+# A permitted Space name stays intact in storage, while its menu row abbreviates it by rendered
+# width and keeps the full title in a tooltip.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A4710000-0000-0000-0000-000000000001"],"spaces":[{"id":"A4710000-0000-0000-0000-000000000001","title":"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW","emoji":"📚","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C4710000-0000-0000-1000-000000000001","pinnedContainerID":"C4710000-0000-0000-2000-000000000001","todayContainerID":"C4710000-0000-0000-3000-000000000001","createdAt":"2026-11-16T08:00:00Z"}],"items":[{"id":"C4710000-0000-0000-1000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-16T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A4710000-0000-0000-0000-000000000001"}}}}},{"id":"C4710000-0000-0000-2000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-16T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A4710000-0000-0000-0000-000000000001"}}}}},{"id":"C4710000-0000-0000-3000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-16T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A4710000-0000-0000-0000-000000000001"}}}}}]}
+cra://open?url=${PAGE}?n=long-space-name
+wait 2
+cra://debug?menuRows=Spaces&marks=1&icons=1&tips=1&label=long
+expect-log menu rows long: .*\|✓\[icon\]\[tip\]WWWWWWWWWWWWWWWWWWWW…\|──\|Manage Spaces…$
+cra://debug?spaceMenu=long-context
+expect-log space menu long-context: .*Export “WWWWWWWWWWWWWWWWWWWW…” into Folder ▸.*
+# Arc 1.172 keeps 24 characters before the ellipsis: "HomeHomeHomeHomeHomeHome…" (PR #481's Arc capture).
+cra://debug?spacesMenuChange=add&title=HomeHomeHomeHomeHomeHomeHome
+cra://debug?menuRows=Spaces&marks=1&icons=1&tips=1&label=arc
+expect-log menu rows arc: .*\|(\[icon\])?\[tip\]HomeHomeHomeHomeHomeHome…\|──\|Manage Spaces…$

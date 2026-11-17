@@ -3140,6 +3140,10 @@ Two new Arc windows, both with View ▸ Hide Sidebar and a tab selected, capture
 - [O AX] No key binding: Arc's menu bar has no move-to-space item (Spaces: New Space…, Edit Theme…, Rename Space,
   Change Profile, Next/Previous Space ⌥⌘→/←, one item per space ⌃1…, Manage Spaces…; Tabs has none either), and
   the binary's `moveToSpace` / `moveToSpaceTabContextMenuOption` are analytics names, not key-binding actions.
+- [O] Spaces ▸ (Arc 1.172, Jelena Jansson's 2x capture on PR #481, 17 Nov 2026): one row per real space in sidebar
+  order with its icon, ✓ on the window's space, ⌃1–⌃9 on the first nine. A long name keeps 24 characters, then an
+  ellipsis ("HomeHomeHomeHomeHomeHome…", about 222 pt). Whether Arc counts characters or measures width is not known
+  (one sample); Cra keeps 24 characters with a 260 pt backstop (`SpaceMenuTitle`).
 - [O] Command bar: typing "move" on a Today tab lists "Move to Today in <space chip>" for each other space, with no
   shortcut glyph (strings also have "Move to Pinned in <space>"). Choosing it closes the bar, takes the row out of
   the old list, then plays the ordinary space switch (list slides, theme cross-fades, ~300 ms): the window follows
