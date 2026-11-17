@@ -1,0 +1,24 @@
+# Install and Relaunch in the updater window asks "Downloads in progress" while a download runs (#272). Asked
+# from inside the updater's SwiftUI button action, the question's own buttons took no click until that action
+# returned, which it didn't while the question waited: neither Keep browsing nor Close Cra did anything, and the
+# 450 pt question hung off both sides of the 270 pt updater window (X, 17 Nov 2026). The hook clicks through
+# the windows the way a person's click arrives. The question hangs from a window it fits, and both answers land.
+home
+env CRA_TEST_HOLD_DOWNLOAD_DESTINATION=1
+cra://open?url=${PAGE}
+wait 2
+cra://open?url=${TRICKLE}/trickle.bin
+wait 3
+cra://debug?downloadGuards=held
+expect-log download guards held: .*installAndRelaunch=asks$
+cra://debug?updaterRelaunch=Keep%20browsing
+wait 4
+expect-log updater relaunch Keep browsing: asked over a browser window \(fits\), answered$
+# A test copy has no update to restart into, so Close Cra answers and nothing quits.
+cra://debug?updaterRelaunch=Close%20Cra
+wait 4
+expect-log updater relaunch Close Cra: asked over a browser window \(fits\), answered$
+cra://debug?downloadDestination=cancel
+wait 2
+cra://debug?downloadGuards=cancelled
+expect-log download guards cancelled: quit=none autoUpdate=none installAndRelaunch=none$

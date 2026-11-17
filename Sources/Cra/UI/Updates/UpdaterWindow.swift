@@ -152,6 +152,7 @@ private struct UpdaterButton: View {
         Button(title, action: action)
             .buttonStyle(UpdaterButtonStyle())
             .accessibilityLabel(title)
+            .clickTarget(title)
             .keyboardShortcut(.defaultAction)
             .padding(.top, 19)
     }

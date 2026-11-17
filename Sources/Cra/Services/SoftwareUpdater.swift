@@ -209,7 +209,24 @@ final class SoftwareUpdater: NSObject {
         // automatic restart never gets here while one runs (autoUpdateBlocker).
         var restarts = installNow != nil || phase == .readyToInstall
         if case .found(_, downloaded: true) = phase { restarts = true }
-        if restarts, relaunchAsksAboutDownloads, app?.confirmQuitCancellingDownloads() == false { return }
+        guard restarts, relaunchAsksAboutDownloads else { return restartIntoUpdate() }
+        // Asked once the click that got here is over. Inside the updater window's SwiftUI button action, the
+        // question's own SwiftUI buttons took no click until that action returned, which it never did while the
+        // question waited: neither answer did anything (X, 17 Nov 2026).
+        guard !askingAboutDownloads else { return }
+        askingAboutDownloads = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let restart = app?.confirmQuitCancellingDownloads() == true
+            askingAboutDownloads = false
+            if restart { restartIntoUpdate() }
+        }
+    }
+
+    /// "Downloads in progress" is up for Install and Relaunch.
+    @ObservationIgnored private var askingAboutDownloads = false
+
+    private func restartIntoUpdate() {
         if let reply = choiceReply {
             choiceReply = nil
             switch phase {
@@ -286,6 +303,47 @@ final class SoftwareUpdater: NSObject {
         window?.showWindow(nil)
         window?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// `cra://debug?updaterRelaunch=<button>`: the updater window at Ready to Install, its Install and Relaunch
+    /// clicked the way a person's click arrives (an event through the window, so through SwiftUI's button), and once
+    /// "Downloads in progress" asks, `button` clicked the same way. Logs the window the question hangs from and
+    /// whether the answer got through (X, 17 Nov 2026: over the updater window neither button answered).
+    func debugRelaunchClick(answer: String) {
+        let label = "updater relaunch \(answer)"
+        phase = .readyToInstall
+        showWindow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let w = self?.window?.window, DialogClick.post("Install and Relaunch", in: w) else {
+                CraLog.note("\(label): no Install and Relaunch button"); return
+            }
+            // Timers in the common modes run inside the question's modal loop too.
+            let started = Date()
+            let poll = Timer(timeInterval: 0.25, repeats: true) { timer in
+                MainActor.assumeIsolated {
+                    guard let dialog = AppDialog.presented, dialog.title == "Downloads in progress", let panel = dialog.window else {
+                        if Date().timeIntervalSince(started) > 5 { timer.invalidate(); CraLog.note("\(label): no question") }
+                        return
+                    }
+                    timer.invalidate()
+                    let parent = panel.sheetParent
+                    let over = parent === w ? "the updater window" : parent == nil ? "no window" : "a browser window"
+                    let fits = (parent?.frame.width ?? 0) >= panel.frame.width ? "fits" : "hangs off it"
+                    // A button SwiftUI never laid out has no frame to click: the question can't be answered either.
+                    let clicked = DialogClick.post(answer, in: panel)
+                    let check = Timer(timeInterval: 1.5, repeats: false) { _ in
+                        MainActor.assumeIsolated {
+                            let answered = !dialog.isShowing
+                            CraLog.note("\(label): asked over \(over) (\(fits)), \(answered ? "answered" : clicked ? "not answered" : "not answered, its buttons never laid out")")
+                            // Not answered: closed the way Esc closes it, so the run goes on.
+                            if !answered, let cancel = dialog.actions.cancelIndex { dialog.select(cancel) }
+                        }
+                    }
+                    RunLoop.main.add(check, forMode: .common)
+                }
+            }
+            RunLoop.main.add(poll, forMode: .common)
+        }
     }
 
     func windowDidClose() {

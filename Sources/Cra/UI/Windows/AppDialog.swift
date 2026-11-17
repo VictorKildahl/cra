@@ -67,19 +67,27 @@ final class AppDialog {
                   icon: .envelope, width: 560, buttonSpacing: 32, buttonOutset: 21, older: true)
     }
 
-    static var parentWindow: NSWindow? {
+    static var parentWindow: NSWindow? { parentWindow(fitting: 0) }
+
+    /// The window a dialog `width` wide hangs from: the key or main window, else the frontmost, that is that wide.
+    /// A sheet wider than its window hangs off both sides (the 450 pt "Downloads in progress" over the 270 pt
+    /// updater window, X 17 Nov 2026). Without one that wide, the first that can hold a sheet.
+    static func parentWindow(fitting width: CGFloat) -> NSWindow? {
         let candidates = [NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 } + NSApp.orderedWindows
+        var narrower: NSWindow?
         for candidate in candidates {
             var window = candidate
             while let parent = window.parent { window = parent }
-            if window.isVisible && window.canBecomeMain { return window }
+            guard window.isVisible && window.canBecomeMain else { continue }
+            if window.frame.width >= width { return window }
+            if narrower == nil { narrower = window }
         }
-        return nil
+        return narrower
     }
 
     @discardableResult
     func runModal() -> NSApplication.ModalResponse {
-        runModal(over: Self.parentWindow)
+        runModal(over: Self.parentWindow(fitting: width))
     }
 
     @discardableResult
@@ -87,12 +95,17 @@ final class AppDialog {
         if let parent, parent.attachedSheet != nil { return .abort }
         let window = prepareWindow(over: parent)
         runningModal = true
+        Self.presented = self
         window.show()
         let response = NSApp.runModal(for: window)
         runningModal = false
         window.close()
         return response
     }
+
+    /// The dialog's window while it shows, for scenario hooks.
+    var window: DialogPanel? { presentedWindow }
+    var isShowing: Bool { presentedWindow != nil }
 
     func present(over parent: NSWindow, completion: @escaping (NSApplication.ModalResponse) -> Void) {
         guard parent.attachedSheet == nil else {
@@ -104,7 +117,7 @@ final class AppDialog {
         prepareWindow(over: parent).show()
     }
 
-    /// The dialog last presented as a sheet, for `cra://debug?answerDialog=`.
+    /// The dialog last presented, for `cra://debug?answerDialog=` and `updaterRelaunch=`.
     static weak var presented: AppDialog?
 
     /// Takes a presented sheet down as if nothing was chosen: its completion gets `.abort`.

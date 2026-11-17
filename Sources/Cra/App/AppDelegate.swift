@@ -2066,6 +2066,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // What the guards a running download holds would do now: ⌘Q's question, the automatic update
             // restart's wait and Install and Relaunch's question (#272). Downloads Cra doesn't list must
             // hold none of them (#491).
+            // updaterRelaunch=<button>: Install and Relaunch clicked in the updater window and <button> of its
+            // question clicked, see SoftwareUpdater.debugRelaunchClick (X, 17 Nov 2026).
+            if let button = dict["updaterRelaunch"] { SoftwareUpdater.shared.debugRelaunchClick(answer: button); return }
             if let label = dict["downloadGuards"] {
                 let quit: String = switch quitPrompt(source: .appMenu) {
                 case .downloadsInProgress: "downloads in progress"

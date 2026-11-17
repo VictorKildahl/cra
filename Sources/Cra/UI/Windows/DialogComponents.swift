@@ -98,6 +98,7 @@ struct DialogButton: View {
         .animation(.easeOut(duration: 0.1), value: hovered)
         .accessibilityLabel(title)
         .fixedSize()
+        .clickTarget(title)
     }
 }
 
