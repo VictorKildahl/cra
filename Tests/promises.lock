@@ -961,3 +961,4 @@
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  f0565ab13475
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::theStripIsTheCardsTopEdge  17c35a231c12
 #493   Tests/Scenarios/peek-toolbar-auto-hide.scenario  9c5540af6a44
+#497   Tests/Scenarios/command-bar-close-shortcut.scenario  37c8d8eb9aa6

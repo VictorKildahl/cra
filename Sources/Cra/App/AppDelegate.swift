@@ -2822,8 +2822,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "deleteSpace": if !main.isStandalone { confirmDeleteSpace(store.focusedSpace) }
         case "manageSpaces": if !main.isStandalone { main.showManageSpaces() }
         case "closeTab":
-            // Arc: "Close current tab or window".
-            if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
+            // Arc: "Close current tab or window". With the command bar open, ⌘W closes the bar, as
+            // Escape does, and the tab behind it stays (#497).
+            if main.commandBar.isOpen { main.commandBar.close() }
+            else if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
         case "closeWindow": main.window?.performClose(nil)
         case "reopenClosedTab":
             guard !main.isIncognito else { break }  // incognito tabs leave nothing to restore

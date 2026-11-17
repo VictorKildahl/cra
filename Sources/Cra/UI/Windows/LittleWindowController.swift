@@ -1516,9 +1516,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // A shortcut for a Peek button presses it as a click would, and the action runs at once (#385).
         if isPeek, !closingPeek, let control = PeekControl.pressed(byAction: id) { controls?.pressFromKey(control) }
         switch id {
-        // ⌘W on the card fades it out, as Esc does (#337).
+        // ⌘W on the card fades it out, as Esc does (#337). With the bar open over the page, ⌘W closes
+        // the bar as Esc does and the window stays (#497); ⇧⌘W still closes the window.
         case "closeTab", "closeWindow":
-            if isCard, !cardFading, window?.isVisible == true { dismissCard() } else if isPeek { attemptPeekClose(.closeShortcut) } else { closeWindow() }
+            if isCard, !cardFading, window?.isVisible == true { dismissCard() }
+            else if id == "closeTab", commandBar.isOpen { commandBar.close() }
+            else if isPeek { attemptPeekClose(.closeShortcut) } else { closeWindow() }
         case "newTab", "editURL":
             // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
             let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
