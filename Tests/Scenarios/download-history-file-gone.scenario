@@ -1,0 +1,26 @@
+# A download from an earlier launch whose file is gone isn't a new download. When an extension lists the
+# downloads (chrome.downloads.search), Chrome checks that each finished download's file is still on disk and
+# updates the ones it can't find. Cra took that update for a download that had just finished: at every launch
+# "Download finished" for old files (moved or deleted since), the download flight, and the same files added to
+# downloads.json again (GitHub #519: two .mp4s from a week before, ten entries after a few launches).
+# Here the fixture extension deletes the file it saw finish, and after the relaunch it searches as pages load.
+# promise: #519
+home
+budget rss=600 stalls50=5
+extension ${FIXTURES}/DownloadSearchExtension
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished from a data: address
+wait 2
+relaunch
+# Chrome checks the files at most every 10 s, and the first search may come before the profile's
+# history has loaded.
+wait 11
+cra://open?url=${PAGE}?n=first
+wait 3
+cra://open?url=${PAGE}?n=second
+expect-log GET /page.html\?n=downloads-1-gone-1
+cra://debug?downloadState=relaunched
+expect-log download state relaunched: .* finished=0$

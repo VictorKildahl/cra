@@ -7,6 +7,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/supports_user_data.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -17,6 +18,9 @@
 
 namespace cra {
 namespace {
+
+// On a download that was already over when Chrome made its item (one from the profile's history).
+const char kFromHistory[] = "cra.download_from_history";
 
 class Downloads : public ProfileManagerObserver,
                   public ProfileObserver,
@@ -85,10 +89,12 @@ class Downloads : public ProfileManagerObserver,
     item->AddObserver(this);
     // Chrome makes an item for every download in the profile's history as it starts, already finished: they
     // aren't downloads of this session (CEF never reported them), and every one ran Cra's download flight
-    // (a profile with a hundred of them hung the app at launch). A new download starts in progress; an old one that is
-    // resumed reports through OnDownloadUpdated.
+    // (a profile with a hundred of them hung the app at launch). A new download starts in progress; an old one
+    // stays quiet until it runs again (resumed), and then reports through OnDownloadUpdated.
     if (item->GetState() == download::DownloadItem::IN_PROGRESS) {
       updated_(item);
+    } else {
+      item->SetUserData(kFromHistory, std::make_unique<base::SupportsUserData::Data>());
     }
   }
   void ManagerGoingDown(content::DownloadManager* manager) override {
@@ -97,7 +103,18 @@ class Downloads : public ProfileManagerObserver,
   }
 
   // download::DownloadItem::Observer:
-  void OnDownloadUpdated(download::DownloadItem* item) override { updated_(item); }
+  // An old download changes without running again when Chrome finds its file gone (an extension's
+  // chrome.downloads.search or chrome://downloads makes it check every finished file): Cra took that for a
+  // download that had just finished, and added the file to its own list again at every launch (GitHub #519).
+  void OnDownloadUpdated(download::DownloadItem* item) override {
+    if (item->GetUserData(kFromHistory)) {
+      if (item->GetState() != download::DownloadItem::IN_PROGRESS) {
+        return;
+      }
+      item->RemoveUserData(kFromHistory);
+    }
+    updated_(item);
+  }
   void OnDownloadDestroyed(download::DownloadItem* item) override { item->RemoveObserver(this); }
 
  private:

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Download Search Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: deletes each file it sees finish downloading, and lists the downloads with chrome.downloads.search whenever a page loads, as a download manager extension does (GitHub #519).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwp+4DQet2nrw4ptcWSUd0XH+mMz8EvcB97clgf9Fb3V8sPanrZyC9HHSeTjjy+GhQCFcsas4ss3lrIXTummlE/uD8HGb0CiLZhQGqgCHaAoLD2/kOpCuEGoPFwH9ma5fkEkOjYpa3VjaHyJHM2q5GGy5v9d+DOHE8oyeUpBHzh7Sywb10lJ+aN23lCQBKe3KmTgDouiP7QbveJGIFXC9GuGBNSdZOrQKeFfe7F7BQ4+p+NYkj/b0IJH/IE516XY/utQ+b426vECtRUbGMtnZUs0Gizdg9KJJSJVwq7t851YPhJt/aL+u04DCnWuVmqs1EsRfyrBj6Na808In2pHU8QIDAQAB",
+  "permissions": ["downloads", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "worker.js" }
+}
