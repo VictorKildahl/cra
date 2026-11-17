@@ -396,7 +396,7 @@
 #243   Packages/CraCore/Tests/CraCoreTests/TabRowTrailingTests.swift::restingTailIsUnchanged  f479053f4258
 #245   Packages/CraCore/Tests/CraCoreTests/DownloadListTests.swift::libraryListsRunningDownloads  fec003db07c1
 #246   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::sizeStaysInTheLimits  5f329cd4f0d0
-#246   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::topBarIsArcs  ac06153d1f62
+#246   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::topBarIsArcs  10b6eff069fc
 #246   Tests/Scenarios/pip-title-strip.scenario  3aab46cf7e80
 #252   Packages/CraCore/Tests/CraCoreTests/SpaceDockTests.swift::aHoveredSqueezedDotTakesTheWideCell  bd71414025c3
 #252   Packages/CraCore/Tests/CraCoreTests/SpaceDockTests.swift::aSpaceWithNoIconIsADot  a262c9d5ab89
@@ -851,7 +851,7 @@
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::onlyAClosedKeyWindowInFrontHandsTheKeyboardOver  b03fd4b59163
 #430   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::usingTheBrowserWindowMeanwhileKeepsItInFront  7669e50f2b53
 #431   Tests/Scenarios/settings-fullscreen.scenario  a1a5c7267959
-#434   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseOnAWindowWideEnough  411e4369f60b
+#434   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseAtEverySize  732fadede9fa
 #434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeCase  c115e90bb609
 #434   Tests/Scenarios/pip-minimize.scenario  303a5054c8ba
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::floatsOnlyOverAPageInTheWindowsOwnView  684578ecc041
@@ -892,4 +892,5 @@
 #458   Tests/Scenarios/keep-active-sites.scenario  880f87b22cb2
 #459   Packages/CraCore/Tests/CraCoreTests/MCPProtocolTests.swift::fullServerReplySaysWhy  c603156a09f1
 #459   Tests/MCPTransportTests.swift::fullServerSaysWhy  78c75dce7c78
+#462   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseAtEverySize  732fadede9fa
 #463   Tests/PictureInPictureCornersTests.swift::hoverLayerKeepsTheCorners  226a463777da

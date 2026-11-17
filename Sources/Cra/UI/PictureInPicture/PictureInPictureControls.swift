@@ -4,7 +4,7 @@ import AppKit
 ///
 /// Invisible until the pointer enters the window, then fades in one even dark
 /// layer with the controls: back-to-tab (top-left), the page's address (centred)
-/// and minimize and close (top-right, minimize from 280 pt wide, #434), play/pause
+/// and minimize and close (top-right, minimize at every size, #434, #462), play/pause
 /// in the middle between ±15 s skips, as in Arc (#246), sized by Arc's size classes, without the skips in a tiny window (#262), and Arc's
 /// scrubber along the bottom for a video with an end. Fades out when the pointer leaves or rests for a while, and the window
 /// is the bare video again. Only the buttons and the shown scrubber take clicks; everything else passes
@@ -120,8 +120,7 @@ final class PictureInPictureControlsView: NSView {
                                                 addressWidth: addressLabel.stringValue.isEmpty ? 0 : PictureInPictureButton.textWidth(addressLabel))
         backButton.frame = bar.back
         closeButton.frame = bar.close
-        minimizeButton.isHidden = bar.minimize == nil
-        if let m = bar.minimize { minimizeButton.frame = m }
+        minimizeButton.frame = bar.minimize
         addressLabel.isHidden = bar.address == nil
         if let a = bar.address {
             let h = ceil(addressLabel.intrinsicContentSize.height)

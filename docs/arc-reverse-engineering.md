@@ -855,8 +855,8 @@ Arc 1.172 binary (otool/llvm-objdump on the arm64 slice, 8 Nov, #246):
   minimizing this PIP window, but .shouldHidePIP has not been received yet" and `userRequestedMinimize`
   say it leaves PiP and the video plays on; the sidebar card (`isBackToPIPButtonEnabled`,
   `backToPipClicked`) then has it. The #246 reporter's Arc windows had no Minimize at 224 and 277 pt
-  wide and had it at 396. Cra (#434): Minimize from 280 pt wide [I: the small size class], 6 pt left
-  of Close; it leaves PiP without pausing and without selecting the tab (`exitPictureInPicture`), so
+  wide and had it at 396. Cra (#434): Minimize 6 pt left of Close at every window size (from 280 pt
+  until #462, when the maintainer chose to show it on tiny windows too, which have the room); it leaves PiP without pausing and without selecting the tab (`exitPictureInPicture`), so
   the tab's card comes back in the sidebar player. No per-site switch, and no `offscreen` stash.
 - [O static] Scrubber: 5 pt capsule (15 pt drag area) 8 pt above the bottom (4 when tiny), white over
   white 30 %; dragging upwards slows seeking by 2^round(dy / 60 pt), down to 1/16. Cra draws it
