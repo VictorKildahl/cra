@@ -7,6 +7,7 @@ import SwiftUI
 /// looks, so each is a plain row (name, what it does, control); About closes the pane.
 struct AdvancedPane: View {
     let actions: SettingsActions
+    private static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     @Environment(SidebarStore.self) private var store
 
     var body: some View {
@@ -56,6 +57,27 @@ struct AdvancedPane: View {
                         Text(updater.lastCheckSummary).foregroundStyle(.secondary)
                     }
                 }
+                SettingsCardDivider()
+                // GitHub #476, not in Arc: a version that breaks something stays on New until it's fixed.
+                SettingsPlainRow("Update channel",
+                                 detail: "New gets each version of Cra the day it comes out. Stable gets a version once it has held up on New.",
+                                 trailing: {
+                                     Picker("Update channel", selection: $updater.channel) {
+                                         ForEach(UpdateChannel.allCases, id: \.self) { Text($0.title).tag($0) }
+                                     }
+                                     .labelsHidden().fixedSize()
+                                     .disabled(!updater.isAvailable)
+                                 }) {
+                    // Sparkle never installs an older version: going back to Stable now is a download.
+                    if let stable = updater.olderStable, let diskImage = stable.diskImageURL {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Stable is Cra \(stable.version). This Mac stays on Cra \(Self.version) until Stable passes it, or you can install Stable now.")
+                                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Button("Download Cra \(stable.version)") { actions.openURL(diskImage) }
+                        }
+                    }
+                }
+                .onAppear { updater.lookUpStable() }
                 SettingsCardDivider()
                 SettingsToggleRow("Chrome engine for pages",
                                   detail: "Pages run on Chromium, with Chrome extensions and Chrome DevTools. Takes effect when Cra restarts.",
