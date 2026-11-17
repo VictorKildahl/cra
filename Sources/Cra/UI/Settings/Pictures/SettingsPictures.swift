@@ -104,6 +104,17 @@ extension SettingsArt {
         }
     }
 
+    /// The sidebar, traffic lights and all, on the window's right (#464).
+    static var sidebarOnRight: some View {
+        let t = ArtTint.peach
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t, sidebarOnRight: true) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+        }
+    }
+
     /// The space's name at the top and its icon at the bottom of the sidebar.
     static var spaceHeader: some View {
         let t = ArtTint.mauve

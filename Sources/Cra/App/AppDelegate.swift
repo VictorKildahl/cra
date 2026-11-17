@@ -1244,6 +1244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // instantLinks=<label>: the Instant Links row and the last run, as one line (#407).
             if let v = dict["instantLinksSetting"] { store.settings.instantLinks = v == "on"; return }
+            // sidebarSide=left|right: Settings ▸ Sidebar on the right, as its switch sets it (#464).
+            if let v = dict["sidebarSide"].flatMap(SidebarSide.init(rawValue:)) { store.settings.sidebarSide = v; return }
             if let v = dict["instantLinksFail"] {
                 InstantLinksService.failsOnPurpose = v == "plan"
                 InstantLinksService.modelFailsOnPurpose = v == "model"
@@ -1507,7 +1509,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // windowState=<label>: each window's full screen, Space, traffic lights (#277), whether a
             // drag can move it (#308), where the page card sits in it (#315), whether it floats (Stay On
-            // Top) and has a sheet open (#333). Lights are "hidden", or their alpha; "-" when a window has none.
+            // Top) and has a sheet open (#333), and which side its sidebar is on (#464). Lights are "hidden", or
+            // their alpha; "-" when a window has none.
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
                     [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
@@ -1530,7 +1533,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "layout=\(flag(m.shell.windowFullscreen)) sidebarUI=\(flag(m.sidebarUI.windowFullscreen)) "
                         + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w)) "
                         + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
-                        + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout) "
+                        + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout) sidebar=\(m.shell.sidebarReadout) "
+                        + "floating=\(m.floatingSidebar?.edgeReadout ?? "-") "
                         + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil))")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {

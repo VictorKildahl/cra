@@ -94,8 +94,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     var selectedTabID: UUID? { store.selectedTabID(window: windowID) }
     /// A sidebar tab or a link dragged over the panes (#419).
     private(set) lazy var splitDrop = PageSplitDrop(owner: self)
-    /// The sidebar holds the content area's left edge: shown and docked, not floating over the page.
-    var sidebarDocksLeft: Bool { sidebarVisible && !shell.floatingSidebar }
+    /// The sidebar holds the content area's edge on its side: shown and docked, not floating over the page.
+    var sidebarDocked: Bool { sidebarVisible && !shell.floatingSidebar }
     var selectedTab: SidebarItem? { store.selectedTab(window: windowID) }
     var sidebarVisible: Bool {
         get { store.window(windowID).sidebarVisible }
@@ -150,6 +150,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.showToolbar = store.settings.showsBar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.autoHideToolbar = store.settings.hidesToolbar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.edgeToEdge = store.settings.edgeToEdgeContent
+        shell.sidebarSide = store.settings.sidebarSide
         lastSidebarVisible = sidebarVisible
         window.trafficLightsHidden = !sidebarVisible
         lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
@@ -594,6 +595,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let hidesBar = store.settings.hidesToolbar(above: panes.count == 1 ? store.item(panes[0])?.tab?.url : nil)
         if shell.autoHideToolbar != hidesBar { shell.autoHideToolbar = hidesBar }
         if shell.edgeToEdge != store.settings.edgeToEdgeContent { shell.edgeToEdge = store.settings.edgeToEdgeContent }
+        if shell.sidebarSide != store.settings.sidebarSide { moveSidebar(to: store.settings.sidebarSide) }
         // Before setPanes: a pane whose page is not live yet gets its bar colour now, not white.
         let bars = toolbarColors(panes: panes)
         if bars != shell.toolbarColors { shell.toolbarColors = bars }
@@ -2170,24 +2172,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// window's edge, top to bottom; the whole window with the sidebar out of the way.
     private func peekAreaInWindow() -> NSRect {
         guard let window else { return .zero }
-        return PeekLayout.area(window: window.frame.size, contentMinX: peekContentMinX())
+        let span = peekContentSpan()
+        return PeekLayout.area(window: window.frame.size, contentMinX: span.minX, contentMaxX: span.maxX)
     }
 
-    /// Where the sidebar ends (window coordinates), 0 with it hidden.
-    private func peekContentMinX() -> CGFloat {
+    /// Where the page area starts and ends beside the sidebar (window coordinates): from its edge
+    /// to the window's other one, the whole width with it hidden (`maxX` nil: the window's edge).
+    private func peekContentSpan() -> (minX: CGFloat, maxX: CGFloat?) {
         // Asked from windowDidResize, before the shell has laid out at the new size.
         shell.layoutSubtreeIfNeeded()
         let content = shell.convert(shell.contentContainer.frame, to: nil)
         // While the sidebar slides, the edge is where the slide has it, on the way out too.
-        let sidebarShown = (store.window(windowID).sidebarVisible || shell.slidingSidebar) && content.minX > CraMetrics.contentInset
-        return sidebarShown ? content.minX : 0
+        let shown = store.window(windowID).sidebarVisible || shell.slidingSidebar
+        if shell.sidebarSide == .right {
+            let width = shell.bounds.width
+            return (0, shown && width - content.maxX > CraMetrics.contentInset ? content.maxX : nil)
+        }
+        return (shown && content.minX > CraMetrics.contentInset ? content.minX : 0, nil)
     }
 
     /// Where a click closes a Peek (screen coordinates): the page area, not the sidebar, whose rows
     /// still open their tabs (#242).
     func peekDismissArea() -> NSRect {
         guard let window else { return .zero }
-        return PeekLayout.dismissArea(covering: window.frame, contentMinX: peekContentMinX())
+        let span = peekContentSpan()
+        return PeekLayout.dismissArea(covering: window.frame, contentMinX: span.minX, contentMaxX: span.maxX)
     }
 
     /// cra://debug?peekCatcher: whether the shown Peek's click catcher leaves the sidebar's rows to
@@ -2841,6 +2850,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Arc's floating sidebar lives in its own panel above the page windows (see FloatingSidebarController).
     private(set) var floatingSidebar: FloatingSidebarController?
+
+    /// Settings ▸ Sidebar on the right (#464): the window is laid out again at once, the traffic
+    /// lights with the sidebar. A hidden sidebar that is out goes home first, from the old edge.
+    private func moveSidebar(to side: SidebarSide) {
+        floatingSidebar?.hide(animated: false)
+        shell.sidebarSide = side
+        shell.needsLayout = true
+        shell.layoutSubtreeIfNeeded()
+        (window as? CraWindow)?.positionTrafficLights()
+        CraLog.note("sidebar on the \(side.rawValue)")
+    }
 
     private func setFloatingSidebar(_ show: Bool) {
         guard let floatingSidebar else { return }
@@ -4893,12 +4913,17 @@ final class CraWindow: NSWindow {
         positionTrafficLights()
     }
 
-    private func positionTrafficLights() {
+    /// Also from the shell's layout while the sidebar is on the right, where the lights go with it.
+    func positionTrafficLights() {
         // Full screen is the system's to place, except lights still out of the window (#449).
         let fullScreen = styleMask.contains(.fullScreen)
         // The system's spacing between the buttons stays (20 pt on macOS 15, 23 on 26, #445).
         let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { standardWindowButton($0) }
-        let xs = TrafficLightLayout.originsX(system: buttons.map { Double($0.frame.minX) })
+        // In the sidebar's top row, wherever the sidebar docks (#464). Parked lights wait left of the
+        // window whatever the side (#449: 1000 pt left of a right-hand sidebar's would still be inside),
+        // and full screen's come back to the system's left-hand spot.
+        let offset = trafficLightsParked || fullScreen ? 0 : Double((contentView as? ShellView)?.trafficLightsOffset ?? 0)
+        let xs = TrafficLightLayout.originsX(system: buttons.map { Double($0.frame.minX) }, leading: TrafficLightLayout.leading + offset)
         for (b, x) in zip(buttons, xs) {
             guard let sv = b.superview else { continue }
             if fullScreen, trafficLightsParked || b.frame.minX > -Self.parkedShift / 2 { continue }

@@ -248,10 +248,12 @@ final class FavoritePreviewCard {
             let side = window.convertToScreen(list.convert(list.bounds, to: nil))
             let height = p.cardFrame.height
             let top = max(t.maxY, window.frame.minY + FolderPreviewMetrics.windowInset + height)
-            p.place(cardTopLeft: NSPoint(x: side.maxX + FolderPreviewMetrics.gapFromSidebar, y: top))
+            let x = window.sidebarSide.cardMinX(beside: side, gap: FolderPreviewMetrics.gapFromSidebar, width: p.cardFrame.width)
+            p.place(cardTopLeft: NSPoint(x: x, y: top))
         } else {
             // Arc: the card's left edge 4 pt in from the tile's right edge, its top 3.5 pt above the tile's bottom.
-            p.place(cardTopLeft: NSPoint(x: t.maxX - 4, y: t.minY + 3.5))
+            // With the sidebar on the right, its right edge 4 pt in from the tile's left one (#464).
+            p.place(cardTopLeft: NSPoint(x: window.sidebarSide.cardMinX(beside: t, gap: -4, width: p.cardFrame.width), y: t.minY + 3.5))
         }
         window.addChildWindow(p, ordered: .above)
         p.open()
@@ -396,7 +398,7 @@ final class MeetingReminder {
         close()
         let p = PreviewPanel(content: view)
         let t = window.convertToScreen(tile.convert(tile.bounds, to: nil))
-        p.place(cardTopLeft: NSPoint(x: t.maxX - 4, y: t.minY + 3.5))
+        p.place(cardTopLeft: NSPoint(x: window.sidebarSide.cardMinX(beside: t, gap: -4, width: p.cardFrame.width), y: t.minY + 3.5))
         window.addChildWindow(p, ordered: .above)
         p.open()
         panel = p

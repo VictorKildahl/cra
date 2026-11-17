@@ -39,16 +39,18 @@ public enum PeekLayout {
 
     /// The part of a browser window (`window`, its frame) where a click closes the Peek over it: all
     /// of it right of the sidebar (`contentMinX` in from the window's left edge, 0 with the sidebar
-    /// hidden) but the band along its edges that macOS keeps for resizing.
+    /// hidden), or left of one on the right (`contentMaxX`, #464), but the band along its edges that
+    /// macOS keeps for resizing.
     ///
     /// The sidebar stays the sidebar under a Peek. Arc 1.172.1 (offline Arc, HID clicks, 8 Nov 2026,
     /// GitHub #242): a click on another tab's row opens that tab and the Peek waits on its own tab,
     /// the page behind it alive and where it was scrolled; clicks 1–6 pt into the sidebar kept the
     /// Peek (6 Nov). Only the page area closes it.
-    public static func dismissArea(covering window: CGRect, contentMinX: CGFloat = 0) -> CGRect {
+    public static func dismissArea(covering window: CGRect, contentMinX: CGFloat = 0, contentMaxX: CGFloat? = nil) -> CGRect {
         let inside = window.insetBy(dx: dismissInset, dy: dismissInset)
         let left = max(inside.minX, window.minX + contentMinX)
-        return CGRect(x: left, y: inside.minY, width: max(0, inside.maxX - left), height: inside.height)
+        let right = min(inside.maxX, window.minX + (contentMaxX ?? window.width))
+        return CGRect(x: left, y: inside.minY, width: max(0, right - left), height: inside.height)
     }
 
     public struct Backdrop: Sendable, Equatable {
@@ -268,9 +270,10 @@ public enum PeekLayout {
     }
 
     /// The area a Peek covers: right of the sidebar (`contentMinX`, window coordinates) to the
-    /// window's right edge, its full height.
-    public static func area(window: CGSize, contentMinX: CGFloat) -> CGRect {
-        CGRect(x: contentMinX, y: 0, width: max(0, window.width - contentMinX), height: window.height)
+    /// window's right edge, its full height. A sidebar on the right ends it at `contentMaxX` (#464).
+    public static func area(window: CGSize, contentMinX: CGFloat, contentMaxX: CGFloat? = nil) -> CGRect {
+        let maxX = contentMaxX ?? window.width
+        return CGRect(x: contentMinX, y: 0, width: max(0, maxX - contentMinX), height: window.height)
     }
 
     public static func card(in area: CGRect) -> CGRect {
