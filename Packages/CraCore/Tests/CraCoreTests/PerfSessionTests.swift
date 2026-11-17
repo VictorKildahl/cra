@@ -121,6 +121,18 @@ struct PerfProcessTableTests {
         #expect(gone.count == 0 && gone.ended == 3 && gone.available)
     }
 
+    /// A 0.1.45 crash report: the sampler clamps rusage's UInt64 counters to Int64, so one process can read
+    /// Int64.max disk bytes, and adding a second process's to it trapped on overflow in the perf queue.
+    @Test func hugeCountersSaturateInsteadOfOverflowing() throws {
+        var t = PerfProcessTable()
+        let huge = PerfProcessReading(pid: 1, kind: .renderer, cpuNs: 1, footprintBytes: .max, diskReadBytes: .max,
+                                      diskWriteBytes: .max, wakeups: .max)
+        let groups = t.update([huge, reading(2, .renderer, cpuMs: 1)], atNs: 1)
+        let renderers = try #require(groups.first { $0.kind == .renderer })
+        #expect(renderers.footprintBytes == .max && renderers.diskReadBytes == .max)
+        #expect(renderers.diskWriteBytes == .max && renderers.wakeups == .max)
+    }
+
     @Test func aGroupMacOSRefusedEntirelyIsUnavailable() throws {
         var t = PerfProcessTable()
         let g = t.update([reading(9, .gpu, cpuMs: nil)], atNs: 1)

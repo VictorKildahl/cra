@@ -122,6 +122,14 @@ struct PerfStateTests {
         #expect(s.historySample().rendererCrashes == crashes.count)
     }
 
+    /// PerfProcessTable saturates a group at Int64.max; the history's total adds the groups again.
+    @Test func historyFootprintSaturatesInsteadOfOverflowing() {
+        var s = PerfState()
+        s.processes = [PerfProcessGroup(kind: .renderer, count: 1, footprintBytes: .max),
+                       PerfProcessGroup(kind: .gpu, count: 1, footprintBytes: 1 << 20)]
+        #expect(s.historySample().footprintBytes == .max)
+    }
+
     @Test func historySamplesCountWhatHappenedSinceTheLastOne() {
         var s = Self.sampleState()
         let first = s.historySample()

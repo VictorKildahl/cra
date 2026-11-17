@@ -110,7 +110,7 @@ public struct PerfState: Sendable {
     public mutating func historySample() -> PerfHistorySample {
         let crashes = counters[.rendererTerminated]?.values.reduce(0, +) ?? 0
         let s = PerfHistorySample(cpuPct: processes.reduce(0) { $0 + $1.cpuPct },
-                                  footprintBytes: processes.reduce(0) { $0 + $1.footprintBytes },
+                                  footprintBytes: processes.reduce(0) { $0.saturatingAdding($1.footprintBytes) },
                                   stalls: freezeCount - historyBase.stalls, longStalls: longFreezeCount - historyBase.long,
                                   longTasks: longTasks - historyBase.longTasks, rendererCrashes: crashes - historyBase.crashes,
                                   liveTabs: tabs?.live ?? 0,
