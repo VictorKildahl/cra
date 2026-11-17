@@ -164,5 +164,6 @@ On GitHub's runners the scenarios run with `CRA_BUDGETS=report`: budgets (stalls
 recorder's cost) and snapshot differences go in the job summary but don't fail the job, because
 they were set on a Mac and a runner VM measures differently (macOS 26.7.2 draws system symbols a
 few pixels apart; one system sample there costs 11–27 ms of CPU against under 1 ms on a Mac).
-What the app does fails it: `expect-log`, faults, crash reports, helper counts, quitting. Judge
-budgets and snapshots with a release build on a Mac.
+What the app does fails it: `expect-log`, faults, crash reports, a page crash ("Aw, Snap!") in
+the recorder's `perf.json`, helper counts, quitting. Judge budgets and snapshots with a release
+build on a Mac.

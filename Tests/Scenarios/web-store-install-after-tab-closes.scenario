@@ -1,0 +1,14 @@
+# An imported extension's Web Store install ends (here: the store's download fails) after the tab that
+# asked for it has closed. On 0.1.44 the answer went to the closed tab's protocol session and Chromium's
+# dangling-pointer check stopped Cra (6 of the first 16 0.1.44 crash reports:
+# UnretainedDanglingRawPtrDetectedCrash in PageSession::Send's callback, from WebstoreInstaller).
+budget rss=700
+extension ${FIXTURES}/WebStoreCopy/${WEB_STORE_COPY_ID}
+# The store's download answers 404, four seconds late.
+arg --apps-gallery-download-url=${ORIGIN}/missing/%s.crx?delay=4
+cra://open?url=${PAGE}?n=store
+expect-log extension ${WEB_STORE_COPY_ID}: installing from the Web Store in Default
+cra://action/closeTab
+wait 7
+expect-log GET /missing/
+expect-log Web Store install in Default failed

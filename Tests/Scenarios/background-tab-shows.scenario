@@ -1,0 +1,21 @@
+# A page opened in a background tab (a ⌘-click, Open Links in Foreground off) draws when its tab is shown.
+# Chromium makes a page that starts hidden with its view hidden, and in Chrome the window's view host
+# unhides it; Cra hosts its pages itself, so on 0.1.44 such a tab stayed black for good (X DM 16 Nov:
+# Instagram, Reddit, X, LinkedIn "go pitch black").
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "openLinksInForeground": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"const a=document.createElement('a');a.href=location.origin+'/page.html?n=background';a.textContent='bg';a.style='position:fixed;left:0;top:0;width:300px;height:300px;display:block;z-index:99999';document.body.appendChild(a);'link ready'"}
+expect-log link ready
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":50,"y":50,"button":"left","buttons":1,"clickCount":1,"modifiers":4}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":50,"y":50,"button":"left","buttons":0,"clickCount":1,"modifiers":4}
+expect-log GET /page\.html\?n=background
+wait 3
+# The background tab is the newest, first in Today.
+cra://action/nextTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{let n=0;const t0=performance.now();const f=()=>{n++;if(performance.now()-t0<1000)requestAnimationFrame(f);else r('shown tab '+location.search+' '+document.visibilityState+' frames:'+n)};requestAnimationFrame(f);setTimeout(()=>r('shown tab '+location.search+' '+document.visibilityState+' frames:0'),3000)})","awaitPromise":true}
+expect-log shown tab \?n=background visible frames:[1-9]

@@ -40,6 +40,7 @@ final class SidebarStore {
             if settings.tidyDownloads != oldValue.tidyDownloads { tidyDownloadsChanged(settings.tidyDownloads) }
             if settings.tidyTabs != oldValue.tidyTabs { tidyTabsChanged(settings.tidyTabs) }
             if settings.fiveSecondPreviews != oldValue.fiveSecondPreviews { fiveSecondPreviewsChanged(settings.fiveSecondPreviews) }
+            if settings.tidyTabTitles != oldValue.tidyTabTitles { tidyTabTitlesChanged(settings.tidyTabTitles) }
         }
     }
     @ObservationIgnored var fiveSecondPreviewsChanged: (Bool) -> Void = { _ in }
@@ -70,10 +71,25 @@ final class SidebarStore {
     /// A tab came into a space's pinned tabs from elsewhere (⌘D, a drag, a menu): Tidy Tab Titles
     /// may give it a shorter name (TidyTitlesService).
     @ObservationIgnored var tabPinned: (UUID) -> Void = { _ in }
+    /// A page Chrome keeps out of incognito was opened from an incognito window and went to this
+    /// normal window instead (#412): AppDelegate brings that window to the front.
+    @ObservationIgnored var pageLeftIncognito: (UUID) -> Void = { _ in }
     /// Synchronous so an off/on change in one actor turn cannot revive an older download name.
     @ObservationIgnored var tidyDownloadsChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var tidyTabsChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var tidyTabsSpaceRemoved: (UUID) -> Void = { _ in }
+    /// The UI window performing a synchronous tree edit; nested edits restore their caller's origin.
+    @ObservationIgnored private(set) var pinningWindowID: UUID?
+
+    func withPinningWindow(_ windowID: UUID, _ change: () -> Void) {
+        let previous = pinningWindowID
+        pinningWindowID = windowID
+        defer { pinningWindowID = previous }
+        change()
+    }
+
+    /// Settings replacement and Turn Off Max must invalidate any outstanding title generation.
+    @ObservationIgnored var tidyTabTitlesChanged: (Bool) -> Void = { _ in }
     @ObservationIgnored var liveFolderChanged: (UUID) -> Void = { _ in }
     @ObservationIgnored private var liveFolderVersions: [UUID: UUID] = [:]
 
@@ -593,7 +609,16 @@ final class SidebarStore {
     func createTab(url: String, title: String = "", in spaceID: UUID? = nil, pinned: Bool = false,
                    select: Bool = true, parent: UUID? = nil, index: Int? = nil, window: UUID? = nil,
                    referrer: UUID? = nil) -> SidebarItem {
-        let sid = spaceID ?? focusedSpaceID(window: window)
+        var sid = spaceID ?? focusedSpaceID(window: window), window = window, parent = parent, index = index
+        // Chrome's Settings, Extensions, History and password pages never load in incognito: as in
+        // Chrome they open in the normal window in use last, which comes to the front (#412).
+        let leavesIncognito = isIncognito(space: sid) && !IncognitoPages.allows(url)
+        if leavesIncognito {
+            window = lastNormalWindowID
+            sid = focusedSpaceID(window: lastNormalWindowID)
+            parent = nil
+            index = nil
+        }
         let space = spaces[sid] ?? focusedSpace(window: window)
         let requestedParent = parent ?? (pinned ? space.pinnedContainerID : space.todayContainerID)
         let parentID = liveFolder(containing: requestedParent) == nil ? requestedParent : space.todayContainerID
@@ -613,6 +638,10 @@ final class SidebarStore {
         p.children.insert(tab.id, at: min(max(0, at), p.children.count))
         items[parentID] = p
         if select { selectTab(tab.id, window: window) } else { touch() }
+        if leavesIncognito, let window {
+            activeWindowID = window
+            pageLeftIncognito(window)
+        }
         return tab
     }
 
@@ -889,14 +918,21 @@ final class SidebarStore {
     /// (Arc shows five, the current tab first).
     func recentTabs(in sid: UUID, limit: Int, window: UUID? = nil) -> [UUID] {
         // A tab opened in the background since is newer than the current one, which still comes first.
-        let current = selectedTabID(in: sid, window: window)
-        return visibleTabs(in: sid)
-            .filter { $0.tab?.timeLastActiveAt != nil }
-            .sorted { a, b in
-                if (a.id == current) != (b.id == current) { return a.id == current }
-                return a.tab!.timeLastActiveAt! > b.tab!.timeLastActiveAt!
-            }
-            .prefix(limit).map(\.id)
+        Array(RecentTabOrder.ordered(recentEntries(in: sid), current: selectedTabID(in: sid, window: window)).prefix(limit))
+    }
+
+    /// ⌃⌥Tab (#467, not in Arc): the recent tabs of every space the window can show, its own tab
+    /// first. An incognito or Blank Window has only its own space.
+    func recentTabsInAllSpaces(limit: Int, window: UUID? = nil) -> [UUID] {
+        let w = self.window(window).id
+        let focused = focusedSpaceID(window: w)
+        let sids = isStandalone(window: w) ? [focused] : spaceOrder.filter { !isStandalone(space: $0) }
+        let current = selectedTabID(in: focused, window: w)
+        return Array(RecentTabOrder.ordered(sids.flatMap(recentEntries(in:)), current: current).prefix(limit))
+    }
+
+    private func recentEntries(in sid: UUID) -> [RecentTabOrder.Entry] {
+        visibleTabs(in: sid).map { RecentTabOrder.Entry(id: $0.id, lastActive: $0.tab?.timeLastActiveAt) }
     }
 
     // MARK: Tree moves

@@ -56,6 +56,8 @@ final class CaptureOverlay {
     /// keeps them so the capture can show the live page (Easel.Capture).
     var takenRect: CGRect? { view.takenRect }
     var pageSize: CGSize { view.bounds.size }
+    /// The element a click would take now, in page points (the harness reads it).
+    var pickedElement: CGRect? { view.pickedElement }
 
     private func finish(_ action: Action?, _ png: Data?) {
         guard !closed else { return }
@@ -226,6 +228,7 @@ final class CaptureView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func start() {
+        deeper = NSEvent.modifierFlags.contains(.option)
         browser?.evaluate(inIsolatedWorld: PageScript.world, params: #"{"expression":"devicePixelRatio","returnByValue":true}"#) { [weak self] result, _ in
             let ratio = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 .flatMap { ($0["result"] as? [String: Any])?["value"] as? Double }
@@ -271,13 +274,17 @@ final class CaptureView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         if let actionsMenu, actionsMenu.frame.contains(p) { NSCursor.arrow.set(); return }
-        if case .selecting = mode { pointerMoved(to: p) }
+        if case .selecting = mode {
+            deeper = event.modifierFlags.contains(.option)
+            pointerMoved(to: p)
+        }
         updateCursor()
     }
 
     override func mouseExited(with event: NSEvent) {
         if case .selecting = mode {
             pointer = nil
+            stack = nil
             setElement(nil)
         }
     }
@@ -442,22 +449,40 @@ final class CaptureView: NSView {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.probing = false
-                var rect: CGRect?
-                if let data = result?.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let value = (json["result"] as? [String: Any])?["value"] as? [String: Any] {
-                    rect = ContentCapture.elementRect(fromPicker: value, scale: self.scale, pageBounds: self.bounds)
-                }
+                let stack = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                    .flatMap { ($0["result"] as? [String: Any])?["value"] as? [String: Any] }
+                    .flatMap(ContentCapture.pickerStack(from:))
                 if let next = self.pendingProbe {
                     self.pendingProbe = nil
                     self.probe(next)
                 }
                 // Only while the pointer is still choosing, and only if it is still over this answer's point.
                 guard case .selecting = self.mode, self.pointer != nil else { return }
-                if let rect, let ptr = self.pointer, !rect.insetBy(dx: -2, dy: -2).contains(ptr) { return }
-                self.setElement(rect)
+                self.stack = stack
+                self.choose()
             }
         }
+    }
+
+    /// What the page last said is under the pointer, so ⌥ can choose again without asking it.
+    private var stack: ContentCapture.PickerStack?
+    /// ⌥ held, as the last event said: the element right under the pointer instead of Arc's choice (#451).
+    private var deeper = false
+    var pickedElement: CGRect? { element }
+
+    private func choose() {
+        let rect = stack.flatMap { ContentCapture.elementRect(ContentCapture.choose(in: $0, deeper: deeper), scale: scale, pageBounds: bounds) }
+        if let rect, let ptr = pointer, !rect.insetBy(dx: -2, dy: -2).contains(ptr) { return }
+        setElement(rect)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        let held = event.modifierFlags.contains(.option)
+        if held != deeper {
+            deeper = held
+            if case .selecting = mode, pointer != nil { choose() }
+        }
+        super.flagsChanged(with: event)
     }
 
     private func setElement(_ rect: CGRect?) {

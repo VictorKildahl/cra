@@ -151,6 +151,18 @@ struct ModelFixtureTests {
         #expect(legacy == legacyRecorded)
     }
 
+    /// A window quit in macOS full screen opens in full screen again. Files from before #426
+    /// have no `fullScreen` and open windowed, as they always did.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/426"))
+    func windowsRememberFullScreen() throws {
+        let (loaded, recorded) = try Self.load("windows.json", as: WindowPrefs.self)
+        #expect(loaded.windows.map(\.fullScreen) == [true, false])
+        #expect(recorded.windows.map(\.fullScreen) == [true, false])
+        #expect(try Self.roundTrips(loaded))
+        let legacy = try Self.load("windows-legacy.json", as: WindowPrefs.self).loaded
+        #expect(legacy.windows.allSatisfy { !$0.fullScreen })
+    }
+
     @Test func archiveHistoryAndRankingLoadAsRecorded() throws {
         let archive = try Self.load("archive.json", as: [ArchivedItem].self)
         #expect(archive.loaded == archive.recorded)

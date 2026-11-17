@@ -38,6 +38,29 @@ extension MainWindowController {
         }
     }
 
+    /// Testing without the pointer (cra://debug?capturePick=x,y, `deeper=1` as if ⌥ were held): what
+    /// a click at that point of the page (points from its top left) would capture. Logs
+    /// "capture pick: <tag> x,y wxh" in page points, or "capture pick: nothing".
+    func debugCapturePick(at point: NSPoint, deeper: Bool) {
+        guard let source = captureSource(in: nil) else { CraLog.note("capture pick: no page"); return }
+        let scale = source.window.backingScaleFactor
+        let script = ContentCapture.pickerScript(x: point.x * scale, y: point.y * scale)
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        source.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { result, _ in
+            DispatchQueue.main.async {
+                let chosen = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+                    .flatMap { ($0["result"] as? [String: Any])?["value"] as? [String: Any] }
+                    .flatMap(ContentCapture.pickerStack(from:))
+                    .flatMap { ContentCapture.choose(in: $0, deeper: deeper) }
+                guard let chosen, let r = ContentCapture.elementRect(chosen, scale: scale, pageBounds: CGRect(origin: .zero, size: source.rect.size)) else {
+                    CraLog.note("capture pick: nothing"); return
+                }
+                CraLog.note("capture pick: \(chosen.tag) \(Int(r.minX.rounded())),\(Int(r.minY.rounded())) \(Int(r.width.rounded()))x\(Int(r.height.rounded()))")
+            }
+        }
+    }
+
     private func takeCapture(_ b: CraBrowser, liftImageAt image: CGRect?, in peek: LittleWindowController?, request: UUID) {
         let lift = image
         b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self, weak b] shot, error in

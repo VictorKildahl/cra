@@ -6,6 +6,7 @@ import SwiftUI
 /// bar picks between onboarding's two layout pictures. Links have a pane of their own, as in Arc.
 struct TabsPane: View {
     @Environment(SidebarStore.self) private var store
+    @State private var showsKeepActiveSites = false
 
     var body: some View {
         @Bindable var store = store
@@ -52,6 +53,12 @@ struct TabsPane: View {
                 SettingsSwitchRow("Space header with one space",
                                   detail: "Show the space’s name at the top and its icon at the bottom of the sidebar, even while you have only one space.",
                                   isOn: $store.settings.showSpaceHeaderOnSingleSpace) { SettingsArt.spaceHeader }
+                SettingsCardDivider()
+                // GitHub #464, not in Arc: the window's layout in a mirror (SidebarSide).
+                SettingsSwitchRow("Sidebar on the right",
+                                  detail: "The sidebar, with the window’s close, minimize and zoom buttons, sits on the right of the window. Hidden, it slides in from the right edge.",
+                                  isOn: Binding(get: { store.settings.sidebarSide == .right },
+                                                set: { store.settings.sidebarSide = $0 ? .right : .left })) { SettingsArt.sidebarOnRight }
             }
 
             SettingsHeader("Pages").padding(.top, 20)
@@ -89,17 +96,40 @@ struct TabsPane: View {
                 SettingsToggleRow("Free memory when the Mac runs short",
                                   detail: "While macOS is short of memory, the tabs hidden longest are forced out of it, a few at a time.",
                                   isOn: $store.settings.tabSleepOnMemoryPressure)
+                SettingsCardDivider()
+                // #458: Arc's (and Chrome's) list at arc://settings/performance.
+                SettingsPlainRow("Always keep these sites active", detail: keepActiveDetail) {
+                    Button("Sites…") { showsKeepActiveSites = true }
+                }
             }
             SettingsFootnote(tabSleepNote)
+        }
+        .sheet(isPresented: $showsKeepActiveSites) {
+            KeepActiveSitesView().environment(store)
+        }
+    }
+
+    private var keepActiveDetail: String {
+        let lead = "Tabs on these sites stay in memory and keep running, however long they’re hidden."
+        switch store.settings.keepActiveSites.count {
+        case 0: return lead
+        case 1: return lead + " 1 site listed."
+        case let n: return lead + " \(n) sites listed."
         }
     }
 
     /// Says which tabs stay in memory, before the user finds out.
     private var tabSleepNote: String {
         let s = store.settings
-        let note = "Tabs playing sound, recording or holding text you typed stay in memory."
-        guard s.tabSleepTimerEnabled, TabSleepPolicy.timer(s.tabSleepAfter).keepsRecentTabs else { return note }
-        return note + (s.tabSleepOnMemoryPressure ? " So do the 10 tabs you used last, unless the Mac is short of memory." : " So do the 10 tabs you used last.")
+        var note = "Tabs playing sound, recording or holding text you typed stay in memory."
+        if s.tabSleepTimerEnabled, TabSleepPolicy.timer(s.tabSleepAfter).keepsRecentTabs {
+            note += s.tabSleepOnMemoryPressure ? " So do the 10 tabs you used last, unless the Mac is short of memory." : " So do the 10 tabs you used last."
+        }
+        // #458: Chrome's urgent discarding takes kept sites after every other tab; say so where it applies.
+        if !s.keepActiveSites.isEmpty, s.tabSleepOnMemoryPressure {
+            note += " Sites you keep active are the last to go when the Mac is short of memory."
+        }
+        return note
     }
 }
 

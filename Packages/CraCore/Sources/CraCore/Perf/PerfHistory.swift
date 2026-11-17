@@ -57,9 +57,15 @@ public struct PerfHistorySample: Equatable, Sendable {
     public var longTasks: Int
     public var rendererCrashes: Int
     public var liveTabs: Int
+    /// The process with the most memory, and the one with the most CPU, at this sample.
+    public var largest: PerfHistoryProcess?
+    public var busiest: PerfHistoryProcess?
 
     public init(cpuPct: Double, footprintBytes: Int64, stalls: Int = 0, longStalls: Int = 0, longTasks: Int = 0,
-                rendererCrashes: Int = 0, liveTabs: Int = 0) {
+                rendererCrashes: Int = 0, liveTabs: Int = 0, largest: PerfHistoryProcess? = nil,
+                busiest: PerfHistoryProcess? = nil) {
+        self.largest = largest
+        self.busiest = busiest
         self.cpuPct = cpuPct
         self.footprintBytes = footprintBytes
         self.stalls = stalls
@@ -82,6 +88,10 @@ public struct PerfHistoryBucket: Codable, Equatable, Sendable {
     public var longTasks = 0
     public var rendererCrashes = 0
     public var liveTabs = 0
+    /// The process with the most memory at any sample of the bucket, and the one with the most CPU
+    /// at any sample (absent in buckets from before 0.1.45).
+    public var largest: PerfHistoryProcess?
+    public var busiest: PerfHistoryProcess?
 
     public init(start: Date) { self.start = start }
 
@@ -94,5 +104,7 @@ public struct PerfHistoryBucket: Codable, Equatable, Sendable {
         longTasks += s.longTasks
         rendererCrashes += s.rendererCrashes
         liveTabs = max(liveTabs, s.liveTabs)
+        if let l = s.largest, l.footprintMB > largest?.footprintMB ?? -1 { largest = l }
+        if let b = s.busiest, b.cpuPct > busiest?.cpuPct ?? -1 { busiest = b }
     }
 }

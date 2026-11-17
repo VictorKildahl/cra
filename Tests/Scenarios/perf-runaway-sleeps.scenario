@@ -1,0 +1,18 @@
+# A hidden page whose process passes the runaway limit sleeps at once, and the Performance pane
+# says so: a 0.1.44 report had one process at 14-17 GB and 4-5 cores for 15 minutes with four tabs.
+# The limit is 2 GB here instead of 8. Needs an engine with Cra.getProcessInfo (engine -14).
+budget rss=900 stalls50=40
+pace 0.5
+env CRA_RUNAWAY_SLEEP_GB=2
+
+cra://open?url=${PAGE}?n=hog
+expect-log loaded 127\.0\.0\.1
+# The page fills 2.25 GB three seconds from now, once it is out of sight.
+cra://debug?cdp=Runtime.evaluate&params={"returnByValue":true,"expression":"(()=>{setTimeout(()=>{window.keep=[];for(let i=0;i<9;i++){const b=new Uint8Array(256*1024*1024);b.fill(1);window.keep.push(b)}},3000);return 'armed'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"armed"
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1
+expect-log perf: renderer pid [0-9]+ passed 2 GB
+expect-log perf: page 127\.0\.0\.1 hidden: pid [0-9]+
+expect-log tab sleep discards 127\.0\.0\.1.*its process ran away
+reject-log perf: can't tell which pages

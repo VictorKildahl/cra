@@ -85,22 +85,27 @@ struct ArtWindow<Page: View>: View {
     var selected: Int? = 1
     var toolbar = false
     var edgeToEdge = false
+    /// The sidebar, and the traffic lights in its top row, on the window's right (#464).
+    var sidebarOnRight = false
     @ViewBuilder var page: Page
 
     private let sidebarWidth: CGFloat = 18
 
     var body: some View {
-        let x: CGFloat = sidebar ? sidebarWidth : (edgeToEdge ? 0 : 2)
+        let right = sidebar && sidebarOnRight
         let inset: CGFloat = edgeToEdge ? 0 : 2
+        let x: CGFloat = right ? inset : sidebar ? sidebarWidth : (edgeToEdge ? 0 : 2)
+        // Where the sidebar's column starts.
+        let column: CGFloat = right ? width - sidebarWidth : 0
         ZStack(alignment: .topLeading) {
             tint.theme
-            ArtLights().at(3, 3.5)
+            ArtLights().at(column + 3, 3.5)
             if sidebar {
                 ForEach(0..<rows, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
                         .fill(Color.white.opacity(i == selected ? 0.95 : 0.45))
                         .frame(width: sidebarWidth - 5, height: 3.2)
-                        .at(2.5, 10 + CGFloat(i) * 5.2)
+                        .at(column + 2.5, 10 + CGFloat(i) * 5.2)
                 }
             }
             ZStack(alignment: .topLeading) {
@@ -113,7 +118,7 @@ struct ArtWindow<Page: View>: View {
                     page
                 }
             }
-            .frame(width: width - x - inset, height: height - 2 * inset, alignment: .topLeading)
+            .frame(width: right ? width - sidebarWidth - inset : width - x - inset, height: height - 2 * inset, alignment: .topLeading)
             .clipShape(RoundedRectangle(cornerRadius: edgeToEdge ? 0 : 2.5, style: .continuous))
             .at(x, inset)
         }

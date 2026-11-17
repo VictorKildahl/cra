@@ -7,7 +7,8 @@ import Foundation
 /// the navigation for copy · divider · Console, Network, Inspect (Arc's Toggle Console, Toggle
 /// Network Panel and Inspect Element, GitHub #88; Arc's Capture Window and Capture between them
 /// are not in Cra). The toggle is there only while the sidebar is hidden or floating: otherwise
-/// the sidebar's header carries it (Arc 1.171, GitHub #50).
+/// the sidebar's header carries it (Arc 1.171, GitHub #50). With the sidebar on the right (#464)
+/// the toggle ends the bar instead, on the side the sidebar comes from.
 ///
 /// A split pane's bar (Arc 1.171, GitHub #178) has no toggle and no Split View button. The
 /// focused pane carries ← → ↻, the address, the pinned extensions, Extensions, the split options
@@ -51,13 +52,15 @@ public struct ToolbarComposition: Equatable, Sendable {
     /// `hovered`: the pointer is over this bar, which reveals an unfocused pane's controls.
     /// `translatable`: the page offers translation (PageTranslation.offersTranslation).
     /// `blockedPopups`: Chromium holds back pop-ups the page opened (BlockedPopups.waiting).
-    public init(kind: Kind, inSplit: Bool, sidebarVisible: Bool, focusedPane: Bool, hovered: Bool = false, canGoBack: Bool,
-                canGoForward: Bool, isLoading: Bool, pinnedExtensions: [String], translatable: Bool = false,
-                blockedPopups: Bool = false) {
+    public init(kind: Kind, inSplit: Bool, sidebarVisible: Bool, sidebarSide: SidebarSide = .left, focusedPane: Bool,
+                hovered: Bool = false, canGoBack: Bool, canGoForward: Bool, isLoading: Bool, pinnedExtensions: [String],
+                translatable: Bool = false, blockedPopups: Bool = false) {
         // Arc's essential controls only: a split pane that neither has the focus nor the pointer.
         let essentialOnly = inSplit && !focusedPane && !hovered
         // Never in a split pane or an empty one.
-        if !inSplit, !sidebarVisible, kind != .emptyPane { left.append(.toggleSidebar) }
+        let toggles = !inSplit && !sidebarVisible && kind != .emptyPane
+        defer { if toggles, sidebarSide == .right { right.append(.toggleSidebar) } }
+        if toggles, sidebarSide == .left { left.append(.toggleSidebar) }
         switch kind {
         case .noTab:
             left += [.back(enabled: false), .forward(enabled: false), .reload(loading: false, enabled: false)]

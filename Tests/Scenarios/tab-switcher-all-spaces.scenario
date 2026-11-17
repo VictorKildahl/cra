@@ -1,0 +1,24 @@
+# promise: #467
+# ⌃⌥Tab (#467, not in Arc): the tab switcher over every space's tabs. Home holds home-a, Work
+# holds work-a (on screen). A tap goes to Home's home-a and the next tap comes back to work-a,
+# while ⌃Tab on work-a stays in Work, where it is the only tab. Commands from the command file
+# are taps (no held modifier), so each one switches at once.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=home-a&space=A0000000-0000-0000-0000-000000000001
+wait 1
+cra://open?url=${PAGE}?n=work-a&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://action/recentTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'within:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"within:\?n=work-a"
+cra://action/recentTabAllSpaces
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'across:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"across:\?n=home-a"
+cra://action/recentTabAllSpaces
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'back:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"back:\?n=work-a"

@@ -127,6 +127,10 @@ private final class TabSwitcherCardView: NSView {
     private let favicon = NSImageView()
     private let placeholder = NSView()
     private let title = NSTextField.sidebarLabel(size: 14, weight: .medium)
+    /// ⌃⌥Tab's space name over the thumbnail's corner, in the pill of Arc's hover tooltips.
+    private let spacePill = NSView()
+    private let spaceIcon = NSImageView()
+    private let spaceTitle = NSTextField.sidebarLabel(size: 11, weight: .medium)
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -155,6 +159,14 @@ private final class TabSwitcherCardView: NSView {
         placeholder.layer?.cornerCurve = .continuous
         addSubview(placeholder)
         addSubview(title)
+        spacePill.wantsLayer = true
+        spacePill.layer?.cornerRadius = 6
+        spacePill.layer?.cornerCurve = .continuous
+        spaceIcon.imageScaling = .scaleProportionallyUpOrDown
+        spaceTitle.lineBreakMode = .byTruncatingTail
+        spacePill.addSubview(spaceIcon)
+        spacePill.addSubview(spaceTitle)
+        addSubview(spacePill)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -194,6 +206,16 @@ private final class TabSwitcherCardView: NSView {
         // Arc's titles measure as SF 14 medium (ink width and cap height match).
         title.stringValue = item.title
         title.textColor = dark ? .white : NSColor.black.withAlphaComponent(0.85)
+        spacePill.isHidden = item.space == nil
+        if let space = item.space {
+            let ink = dark ? NSColor.white.withAlphaComponent(0.92) : NSColor.black.withAlphaComponent(0.85)
+            spacePill.layer?.backgroundColor = (dark ? NSColor(white: 0.1, alpha: 0.85) : NSColor(white: 1, alpha: 0.9)).cgColor
+            spaceIcon.image = space.icon
+            spaceIcon.isHidden = space.icon == nil
+            spaceIcon.contentTintColor = ink
+            spaceTitle.stringValue = space.title
+            spaceTitle.textColor = ink
+        }
         needsLayout = true
     }
 
@@ -215,6 +237,16 @@ private final class TabSwitcherCardView: NSView {
         placeholder.frame = f
         let tx = 13.5 + M.favicon + 8
         title.frame = NSRect(x: tx - SidebarText.inset, y: mid - 17 / 2, width: bounds.width - tx - 10.5 + 2 * SidebarText.inset, height: 17)
+        if !spacePill.isHidden {
+            let pad: CGFloat = 6, icon: CGFloat = spaceIcon.isHidden ? 0 : 12, gap: CGFloat = spaceIcon.isHidden ? 0 : 4
+            let maxText = M.thumbnail.width - 2 * pad - 2 * 7 - icon - gap
+            let measured = (spaceTitle.stringValue as NSString).size(withAttributes: [.font: spaceTitle.font ?? .systemFont(ofSize: 11, weight: .medium)]).width
+            let text = min(ceil(measured) + 1, maxText)
+            let size = NSSize(width: 7 + icon + gap + text + 7, height: 20)
+            spacePill.frame = NSRect(x: M.thumbnailOrigin.x + pad, y: h - M.thumbnailOrigin.y - pad - size.height, width: size.width, height: size.height)
+            spaceIcon.frame = NSRect(x: 7, y: (size.height - icon) / 2, width: icon, height: icon)
+            spaceTitle.frame = NSRect(x: 7 + icon + gap - SidebarText.inset, y: (size.height - 14) / 2, width: text + 2 * SidebarText.inset, height: 14)
+        }
     }
 
     override func updateTrackingAreas() {

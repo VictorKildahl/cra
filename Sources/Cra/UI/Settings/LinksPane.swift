@@ -27,6 +27,12 @@ struct LinksPane: View {
                         SettingsCardDivider()
                         SettingsSwitchLine("Links from other apps open in Little Window", isOn: $store.settings.openExternalLinksInLittleWindow)
                         SettingsCardDivider()
+                        // Not in Arc (GitHub #435): the toolbar floats over the page (ToolbarAutoHide.littleWindowFloats).
+                        SettingsSwitchLine("Hide the Little Window toolbar until you need it", isOn: $store.settings.autoHideLittleWindowToolbar) {
+                            Text("The page takes the toolbar’s room. Move the pointer to the top of the window and the toolbar slides in over the page. ⌘L still edits the address.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        SettingsCardDivider()
                         // Arc: "Archive Little Arcs after:" 1 hour, 6 hours (default), 12 hours.
                         SettingsCardRow { Text("Archive Little Windows after:").font(.system(size: 13)) } trailing: {
                             Picker("Archive Little Windows after", selection: $store.settings.littleWindowArchiveAfter) {

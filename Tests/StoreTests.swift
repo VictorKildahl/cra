@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import Foundation
 import Observation
@@ -26,6 +27,7 @@ enum StoreTests {
         protectedBrowserAsksForFullDiskAccess()
         signedInChromeProfileImports()
         chromiumManifestV2Import()
+        zenFaviconSize()
         autoArchive()
         longAutoArchive()
         tabSleepCadence()
@@ -46,6 +48,7 @@ enum StoreTests {
         stampsUseTheClock()
         persistenceFaults()
         incognitoStaysOffDisk()
+        chromePagesLeaveIncognito()
         mcpExcludesPrivateTabs()
         pinnedURL()
         tabFavicons()
@@ -87,6 +90,7 @@ enum StoreTests {
         openLinkInSplit()
         backToReferrer()
         recentTabsTakeBackgroundTabs()
+        recentTabsInAllSpacesGoBack()
         incognitoSpaceKeepsItsContext()
         print("Store: \(checks) checks passed")
     }
@@ -834,6 +838,35 @@ enum StoreTests {
         expect(store.mcpTab(UUID()) == nil, "MCP refuses unknown IDs")
         expect(store.spaces.values.allSatisfy { store.mcpTab($0.todayContainerID) == nil },
                "MCP refuses containers")
+    }
+
+    // promise: #412
+    /// Chrome keeps chrome://extensions, settings, history and the password manager out of
+    /// incognito; Cra built the incognito page for chrome://extensions and quit (#412). From an
+    /// incognito window they open in the normal window in use last, which becomes the active one;
+    /// pages Chrome allows there stay.
+    @MainActor
+    private static func chromePagesLeaveIncognito() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let normal = store.activeWindowID
+        let normalSpace = store.focusedSpaceID(window: normal)
+        let incognito = store.addIncognitoWindow(frame: nil)
+        store.activeWindowID = incognito.id
+        var fronted: [UUID] = []
+        store.pageLeftIncognito = { fronted.append($0) }
+        let extensions = store.createTab(url: "chrome://extensions", select: true, window: incognito.id)
+        expect(store.spaceID(ofItem: extensions.id) == normalSpace, "chrome://extensions from incognito opens in the normal window's space")
+        expect(store.selectedTabID(window: normal) == extensions.id, "and is the tab the normal window shows")
+        expect(store.selectedTabID(window: incognito.id) == nil, "the incognito window keeps none")
+        expect(store.activeWindowID == normal && fronted == [normal], "and the normal window comes to the front")
+        let settings = store.createTab(url: "chrome://settings/privacy", in: incognito.focusedSpaceID, select: false)
+        expect(store.spaceID(ofItem: settings.id) == normalSpace, "a page asked for in the incognito space by name goes too")
+        store.activeWindowID = incognito.id
+        let version = store.createTab(url: "chrome://version", select: true, window: incognito.id)
+        expect(store.isIncognito(item: version.id) && store.activeWindowID == incognito.id, "chrome://version stays in incognito, as in Chrome")
+        let web = store.createTab(url: "https://example.com", select: true, window: incognito.id)
+        expect(store.isIncognito(item: web.id), "and so does a web page")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     /// Incognito tabs never reach sidebar.json (#46's review: updateTab saved every item), and
@@ -2942,6 +2975,46 @@ enum StoreTests {
         clock.advance(by: 1)
         store.selectTab(link.id)
         expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
+    }
+
+    /// ⌃⌥Tab (#467): every space's recent tabs, the window's own first. Picking another space's tab
+    /// goes to that space, and the next tap comes back to the tab it left.
+    @MainActor
+    private static func recentTabsInAllSpacesGoBack() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let work = store.createSpace(title: "Work", emoji: "💼").id
+        let workTab = store.createTab(url: "https://example.com/work", in: work)
+        clock.advance(by: 1)
+        let home = store.createSpace(title: "Home", emoji: "🏠").id
+        let homeOld = store.createTab(url: "https://example.com/home-old", in: home)
+        clock.advance(by: 1)
+        let homeTab = store.createTab(url: "https://example.com/home", in: home)
+        clock.advance(by: 1)
+        store.selectTab(homeTab.id)
+        expect(store.recentTabs(in: home, limit: .max) == [homeTab.id, homeOld.id], "⌃Tab stays in the space")
+        let all = store.recentTabsInAllSpaces(limit: .max)
+        expect(all.prefix(3) == [homeTab.id, homeOld.id, workTab.id][...], "⌃⌥Tab lists the other space's tabs too")
+        clock.advance(by: 1)
+        store.selectTab(workTab.id)
+        expect(store.focusedSpaceID == work, "picking another space's tab goes to its space")
+        expect(store.recentTabsInAllSpaces(limit: 2) == [workTab.id, homeTab.id], "and the next tap comes back")
+    }
+
+    /// Zen's favicons come from Firefox's favicons.sqlite, where the widest icon is often an SVG,
+    /// and an SVG can say it is any size. Drawn at that size it ran a 0.1.43 import out of memory
+    /// (two crash reports in tiffRepresentation under ZenImporter.plan); each icon is written small.
+    private static func zenFaviconSize() {
+        let svg = #"<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="orange"/></svg>"#
+        guard let huge = NSImage(data: Data(svg.utf8)) else { return expect(false, "an SVG favicon loads") }
+        let png = ZenImporter.faviconPNG(huge).flatMap(NSBitmapImageRep.init(data:))
+        expect(png != nil, "a huge SVG favicon is written")
+        expect((png?.pixelsWide ?? .max) <= 64 && (png?.pixelsHigh ?? .max) <= 64, "at favicon size, not the size the SVG declares")
+        expect(png.map { $0.pixelsWide > $0.pixelsHigh } == true, "keeping its shape")
+
+        let small = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in NSColor.red.setFill(); r.fill(); return true }
+        let smallPNG = ZenImporter.faviconPNG(small).flatMap(NSBitmapImageRep.init(data:))
+        expect(smallPNG?.pixelsWide == 16, "a 16 px favicon stays 16 px")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

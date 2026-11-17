@@ -6,6 +6,8 @@ TEST_DIR="$(mktemp -d /tmp/cra-sidebar-tests.XXXXXX)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 xcrun swiftc -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} Packages/CraCore/Sources/CraCore/FloatingSidebarGeometry.swift \
   Sources/Cra/UI/Windows/FloatingSidebar.swift Packages/CraCore/Sources/CraCore/SidebarBackdrop.swift \
+  Packages/CraCore/Sources/CraCore/TrafficLightLayout.swift \
+  Packages/CraCore/Sources/CraCore/SidebarSide.swift \
   Tests/FloatingSidebarTests.swift \
   -o "$TEST_DIR/sidebar-tests"
 "$TEST_DIR/sidebar-tests"

@@ -1,0 +1,23 @@
+# promise: #458
+# Settings ▸ Tabs ▸ "Always keep these sites active": a page on a listed site, left behind seven
+# others, is neither frozen by Chromium's own freezing past the five tabs used last (Cra writes the
+# list into Chrome's pref, which that freezing reads: "opted out") nor put to sleep by Cra's pass,
+# while a page on another site left as long is frozen and then slept. kept.example is mapped to the
+# fixture server, so the kept page has a host of its own.
+port 48731
+arg --host-resolver-rules=MAP kept.example 127.0.0.1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "keepActiveSites": [{"host": "kept.example", "includesSubdomains": false}]}
+cra://open?url=http://kept.example:48731/page.html?n=kept
+wait 2
+cra://open?url=${PAGE}?n=quiet
+wait 2
+repeat 6 cra://open?url=${PAGE}?n=${i}
+wait 8
+cra://debug?freezingState=1
+expect-log freezing state .*kept\.example.* title=Fixture kept: frozen=false .*reasons=.*opted out
+expect-log freezing state .*n=quiet title=Fixture quiet: frozen=true
+cra://debug?sleepTabs=1
+wait 4
+expect-log tab sleep (unloads|discards) 127\.0\.0\.1
+reject-log tab sleep (unloads|discards).* kept\.example
+reject-log tab sleep passes over kept\.example

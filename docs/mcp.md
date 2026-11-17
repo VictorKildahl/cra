@@ -41,7 +41,8 @@ ask again) in `mcp.json` in the data folder. Settings ▸ Advanced lists the age
 **Forget** asks again next time and closes the agent's open connections.
 
 While an agent acts in a page, Cra's toast says so in the window it works in ("Claude Code is
-using Cra"), with **Stop**: every agent disconnects and MCP turns off until you turn it on again.
+using Cra"), with **Stop**: that agent's session disconnects and its calls stop. MCP stays on,
+so other agents keep working and the stopped one can connect again; only Settings turns it off.
 The toast stays while the agent works and goes a few seconds after its last action; reading,
 organizing tabs and notes never show it.
 
@@ -235,9 +236,11 @@ some pages look for, so it stays off until asked.
 
 The bridge (`Cra --mcp <socket>`) talks to the running app over a Unix socket in the profile
 folder, mode 0600; both ends check they run as the same macOS user. No TCP port is opened. An
-exclusive lock keeps a second instance from taking a live socket. Eight clients and 32 messages
-in flight per client are admitted. A socket path is limited to 104 bytes, so a data folder
-deep in the file system can't run MCP (Settings shows the error).
+exclusive lock keeps a second instance from taking a live socket. 32 clients and 32 messages
+in flight per client are admitted. An agent session holds its connection for as long as it runs,
+idle or not; past 32, the agent's first request is answered with an error that says Cra is
+full, and the bridge prints the same on stderr and exits 1. A socket path is limited to 104
+bytes, so a data folder deep in the file system can't run MCP (Settings shows the error).
 
 Turning MCP on lets the agents you allow read your pages and act as you in them. It is not a
 per-site permission system, and Cra doesn't ask before a purchase or a message is sent. Set

@@ -266,6 +266,11 @@ final class KeyBindingRegistry {
             KeyAction(id: "revealTab", name: "Reveal Tab in Sidebar", section: .tabs, shortcuts: [Shortcut(Shortcut.space, .control)], triggers: ["reveal", "find tab"]),
             KeyAction(id: "recentTab", name: "Next Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, .control)], inCommandBar: false),
             KeyAction(id: "recentTabBackward", name: "Previous Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, [.control, .shift])], inCommandBar: false),
+            // Not in Arc (#467): the same switcher over every space's tabs.
+            KeyAction(id: "recentTabAllSpaces", name: "Next Recent Tab in All Spaces", section: .tabs,
+                      shortcuts: [Shortcut(Shortcut.tab, [.control, .option])], inCommandBar: false),
+            KeyAction(id: "recentTabAllSpacesBackward", name: "Previous Recent Tab in All Spaces", section: .tabs,
+                      shortcuts: [Shortcut(Shortcut.tab, [.control, .option, .shift])], inCommandBar: false),
             KeyAction(id: "clearToday", name: "Clear Today", section: .tabs, shortcuts: [Shortcut("k", cmdShift)], triggers: ["clear", "tidy"]),
             KeyAction(id: "favoriteTab", name: "Add to Favorites", section: .tabs, shortcuts: [], triggers: ["favorite", "top app"]),
             // Arc's Join Meeting ⌃⌘J (Settings ▸ Shortcuts; the command bar's "Join next video conference"):
@@ -276,6 +281,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "duplicateTab", name: "Duplicate Tab", section: .tabs, shortcuts: [], triggers: ["duplicate"]),
             KeyAction(id: "resetTab", name: "Reset Pinned Tab", section: .tabs, shortcuts: [], triggers: ["reset", "home"]),
             KeyAction(id: "muteTab", name: "Mute / Unmute Tab", section: .tabs, shortcuts: [], triggers: ["mute"]),
+            // Not in Arc (#438): pauses what plays in every loaded page; also AppleScript's `pause media`.
+            KeyAction(id: "pauseAllMedia", name: "Pause All Media", section: .none, shortcuts: [],
+                      triggers: ["pause", "pause all", "stop music", "stop video", "media", "silence"], symbol: "pause.fill"),
             KeyAction(id: "resetSpaceTabs", name: "Reset all tabs in this Space", section: .tabs, shortcuts: [], triggers: ["reset all", "reset pinned"]),
             // Arc lists these in Settings ▸ Shortcuts and the command bar only.
             KeyAction(id: "collapseAllFolders", name: "Collapse All Folders", section: .none, shortcuts: [], triggers: ["collapse folders", "close folders"]),

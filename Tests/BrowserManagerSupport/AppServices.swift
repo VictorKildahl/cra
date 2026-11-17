@@ -54,6 +54,9 @@ enum TestRoot { case today }
         var shareThemeWithWebsites = true
         var blockCookieBanners = false
         var littleWindowOnOptionCommandClick = false
+        /// Settings ▸ Tabs ▸ "Always keep these sites active" (#458), by host; AppSettings matches subdomains.
+        var keepActiveHosts: Set<String> = []
+        func keepsActive(url: String) -> Bool { keepActiveHosts.contains(URL(string: url)?.host ?? "") }
     }
     func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
@@ -89,7 +92,9 @@ enum TestRoot { case today }
     var visits: [String] = []
     func recordVisit(url: String, title: String) { visits.append(url) }
     func clearHistory(_ range: BrowsingDataClear.Range) {}
-    func selectTab(_ id: UUID, window: UUID?) {}
+    /// The tabs selected, in order (Picture in Picture's Back to Tab selects; Minimize doesn't).
+    private(set) var selections: [UUID] = []
+    func selectTab(_ id: UUID, window: UUID?) { selections.append(id) }
     func markUnread(_ id: UUID, _ unread: Bool) {}
     @discardableResult
     func createTab(url: String, in space: UUID? = nil, select: Bool = false,
@@ -131,6 +136,7 @@ struct PictureInPictureActions {
     var skip: (Double) -> Void
     var seek: (Double) -> Void
     var close: () -> Void
+    var minimize: () -> Void = {}
 }
 final class PictureInPictureChrome {
     static let shared = PictureInPictureChrome()

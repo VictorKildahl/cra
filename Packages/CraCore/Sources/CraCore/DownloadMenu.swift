@@ -78,3 +78,40 @@ public enum QuitPrompt: Equatable, Sendable {
         return warnBeforeQuitting ? .confirmQuit : .none
     }
 }
+
+/// One quit at a time (#426). Once a quit is asked about, more requests are part of it. macOS
+/// can send quit events while "Quit Cra?" is open (a restart). Chromium's own exit sends a
+/// terminate once Cra starts closing its pages. Neither asks again. A quit that doesn't happen
+/// (Cancel, Cra staying in the menu bar, a page's "Leave site?" ▸ Stay) lets the next one ask.
+public struct QuitRequests: Equatable, Sendable {
+    private enum Phase: Equatable, Sendable { case idle, asking, quitting }
+    private var phase = Phase.idle
+
+    public init() {}
+
+    public enum Request: Equatable, Sendable {
+        /// A new quit: ask, then quit or stay.
+        case new
+        /// "Quit Cra?" (or "Downloads in progress") is open and answers this one too.
+        case asking
+        /// Already quitting: go on without asking or saving again.
+        case quitting
+    }
+
+    /// A terminate request, and what it is part of.
+    public mutating func begin() -> Request {
+        switch phase {
+        case .asking: return .asking
+        case .quitting: return .quitting
+        case .idle:
+            phase = .asking
+            return .new
+        }
+    }
+
+    /// How the question (or no question) came out: quitting, or staying.
+    public mutating func answered(quit: Bool) { phase = quit ? .quitting : .idle }
+
+    /// Chromium stopped the quit under way (a page's "Leave site?" ▸ Stay).
+    public mutating func cancelled() { phase = .idle }
+}

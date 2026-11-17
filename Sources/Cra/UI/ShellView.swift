@@ -29,6 +29,8 @@ final class ShellView: NSView {
     private(set) var vibrantLight = false
     /// Arc's one-colour themes, light or dark: the blur under SpacePalette.solidAlpha's material.
     private(set) var solidBackdrop = false
+    /// Arc's light material under a solid theme, for a space on Light (or Auto while macOS is light, #455).
+    private(set) var solidLightMaterial = false
     /// System Settings ▸ Accessibility ▸ Display ▸ Reduce transparency (or Increase contrast):
     /// AppKit's materials, and Arc's sidebar, go opaque. The backdrop layer path follows (GitHub #156).
     private var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -135,6 +137,20 @@ final class ShellView: NSView {
     var contentFullscreen = false { didSet { needsLayout = true } }
     /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
     var edgeToEdge = false { didSet { needsLayout = true } }
+    /// Settings ▸ Sidebar on the right (GitHub #464): the window's layout in a mirror (SidebarSide).
+    var sidebarSide: SidebarSide = .left {
+        didSet {
+            guard sidebarSide != oldValue else { return }
+            resizeHandle.side = sidebarSide
+            needsLayout = true
+        }
+    }
+    /// How far right of their spot in a left-hand sidebar the window's traffic lights sit. They
+    /// stay in the sidebar's top row, so on the right they go with the sidebar (#464).
+    var trafficLightsOffset: CGFloat {
+        guard sidebarSide == .right else { return 0 }
+        return max(0, frames(sidebarVisible: true, floating: false, fullscreen: false, width: sidebarWidth).sidebar.minX)
+    }
     /// The card fills the window: edge to edge, or full screen with the sidebar hidden, as in Arc
     /// (CraCore CardFill, #315), or a page in full screen.
     var fillsWindow: Bool { contentFullscreen || fills(sidebarVisible: sidebarVisible) }
@@ -147,6 +163,15 @@ final class ShellView: NSView {
         let f = contentContainer.frame
         return String(format: "%.0f,%.0f,%.0f,%.0f r%.0f fills=%d", f.minX, f.minY, bounds.maxX - f.maxX, bounds.maxY - f.maxY,
                       cardCornerRadius, fillsWindow ? 1 : 0)
+    }
+    /// For `cra://debug?windowState`: the sidebar's side, the window edge it stands on ("none" while it
+    /// is hidden, "floating" while it is out over the page), its width, and how far the window's close
+    /// button sits inside it, e.g. `right edge=right w=264 lights=+13` (#464).
+    var sidebarReadout: String {
+        let f = sidebarHost.frame
+        let edge = sidebarDetached ? "floating" : abs(f.minX - bounds.minX) < 0.5 ? "left" : abs(f.maxX - bounds.maxX) < 0.5 ? "right" : "none"
+        let lights = window?.standardWindowButton(.closeButton).map { "\(Int(($0.frame.minX - f.minX).rounded()))" } ?? "-"
+        return "\(sidebarSide.rawValue) edge=\(edge) w=\(Int(f.width)) lights=+\(lights)"
     }
     /// Whether a lone page has a bar: the toolbar, or the developer bar on a Developer Mode site
     /// (AppSettings.showsBar(above:), #185).
@@ -200,10 +225,11 @@ final class ShellView: NSView {
 
     /// A space's theme in one refresh: set one flag at a time, a switch from a vibrant to a solid
     /// space drew a frame with the vibrant calibration (two cra.log lines, dim 0.36 then 0.30).
-    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool) {
+    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool, lightMaterial: Bool = false) {
         self.vibrantDark = vibrantDark
         self.vibrantLight = vibrantLight
         solidBackdrop = solid
+        solidLightMaterial = lightMaterial
         refreshLift()
     }
 
@@ -264,7 +290,8 @@ final class ShellView: NSView {
                 solid: solidBackdrop, active: windowActive, fullscreen: windowFullscreen,
                 reduceTransparency: reduceTransparency, tintAvailable: desktopTintLayer != nil,
                 vibrant: .init(dim: t.blurDim, liftTop: t.liftActive, liftBottom: t.liftActiveBottom,
-                               dimInactive: t.blurDimInactive, liftInactive: t.liftInactive))
+                               dimInactive: t.blurDimInactive, liftInactive: t.liftInactive),
+                lightMaterial: solidLightMaterial)
             dimLayer.opacity = Float(backdrop.dim)
             // The desktop tint stays in the tree, as in AppKit's material: at 0.05 windowed, active or not,
             // and in place of the blur in full screen. Only Reduce transparency takes it out. Inserted
@@ -747,10 +774,11 @@ final class ShellView: NSView {
         super.mouseMoved(with: event)
         let p = convert(event.locationInWindow, from: nil)
         guard FloatingSidebarGeometry.mayReveal(sidebarShown: sidebarVisible, pageFullscreen: contentFullscreen) else { return }
-        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: fillsWindow) {
+        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: fillsWindow, side: sidebarSide) {
             onEdgeHover?(true)
         } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth,
-                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: fillsWindow) {
+                                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: fillsWindow,
+                                                                     side: sidebarSide) {
             onEdgeHover?(false)
         }
     }
@@ -921,7 +949,17 @@ final class ShellView: NSView {
         var sidebarCorner: CGFloat
     }
 
+    /// Where the sidebar, its resize edge and the page card go: laid out for Arc's left-hand
+    /// sidebar, then mirrored when it docks on the right (#464).
     func frames(sidebarVisible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat) -> Frames {
+        var f = leftHandFrames(sidebarVisible: sidebarVisible, floating: floating, fullscreen: fullscreen, width: width)
+        f.sidebar = sidebarSide.place(f.sidebar, in: bounds)
+        f.handle = f.handle.isEmpty ? f.handle : sidebarSide.place(f.handle, in: bounds)
+        f.content = sidebarSide.place(f.content, in: bounds)
+        return f
+    }
+
+    private func leftHandFrames(sidebarVisible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat) -> Frames {
         let b = bounds
         if fullscreen {
             return Frames(sidebar: NSRect(x: -width, y: 0, width: width, height: b.height),
@@ -981,6 +1019,7 @@ final class ShellView: NSView {
             resizeHandle.isHidden = f.handle.isEmpty || !sidebarResizable
         }
         contentContainer.frame = f.content
+        if sidebarSide == .right { (window as? CraWindow)?.positionTrafficLights() }
         placeLoadingIndicator(over: f.content)
         cardCornerRadius = f.cornerRadius
         sidebarHost.layer?.cornerRadius = f.sidebarCorner
@@ -1256,6 +1295,19 @@ final class ShellView: NSView {
     }
 }
 
+extension NSWindow {
+    /// The side the sidebar docks on in this browser window, or in the one whose floating sidebar or
+    /// preview this is (#464). Left (Arc's) for any other window.
+    var sidebarSide: SidebarSide {
+        var w: NSWindow? = self
+        while let c = w {
+            if let shell = c.contentView as? ShellView { return shell.sidebarSide }
+            w = c.parent
+        }
+        return .left
+    }
+}
+
 /// Thin vertical strip between sidebar and content that drags the width.
 final class ResizeHandleView: NSView {
     var onDrag: ((CGFloat) -> Void)?
@@ -1266,6 +1318,8 @@ final class ResizeHandleView: NSView {
     /// pointer, snaps at slow speeds and hides the sidebar when dragged far enough).
     var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
+    /// The sidebar's side: on the right a drag toward the window's left makes it wider (#464).
+    var side: SidebarSide = .left
     private var lastX: CGFloat = 0
     private var startX: CGFloat = 0
     private var lastTime: TimeInterval = 0
@@ -1294,8 +1348,11 @@ final class ResizeHandleView: NSView {
     override func mouseEntered(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
     override func mouseExited(with event: NSEvent) { if !dragging { NSCursor.arrow.set() } }
 
+    /// The pointer's x as a left-hand sidebar's drag sees it: + is wider.
+    private func x(_ event: NSEvent) -> CGFloat { side.place(dx: event.locationInWindow.x) }
+
     override func mouseDown(with event: NSEvent) {
-        lastX = event.locationInWindow.x
+        lastX = x(event)
         startX = lastX
         lastTime = event.timestamp
         speed = 0
@@ -1303,7 +1360,7 @@ final class ResizeHandleView: NSView {
         onBegin?()
     }
     override func mouseDragged(with event: NSEvent) {
-        let x = event.locationInWindow.x
+        let x = x(event)
         let dt = event.timestamp - lastTime
         // Smoothed like a pan recognizer's velocity, so one quick event doesn't read as a fling.
         if dt > 0 { speed = speed * 0.5 + (x - lastX) / CGFloat(dt) * 0.5 }
