@@ -269,6 +269,10 @@ built release app with a test profile. Note anything that fails in the release's
   PiP and coming back closes it. The tab shows the recording dot and doesn't sleep.
 - **#134:** with another app in front, the PiP edges show resize cursors, and a click on play
   doesn't move the window.
+- **#516:** on a trackpad, swipe the PiP with two fingers hard into each edge of the screen, into
+  the menu bar and into the Dock, and keep pushing before you lift. The window stops with the hidden
+  pointer still on it, then flies into a corner on the lift, and the pointer shows again there.
+  The CraCore test covers where it stops; only real fingers show that the lift still reaches it.
 - **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the

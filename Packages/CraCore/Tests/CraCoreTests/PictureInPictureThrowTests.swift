@@ -118,6 +118,77 @@ struct PictureInPictureThrowTests {
         #expect(furthestLeft > 0)
     }
 
+    /// The pointer hides and rides along at its spot in the window while the fingers move it,
+    /// because scroll events go to the window under the pointer. It can't go past the screen's
+    /// edge, so a window swiped on past it slid out from under the pointer: the lift went to
+    /// another window, and the window stayed off the screen with the pointer hidden for good
+    /// (#516). The fingers now take the window only as far as the pointer can follow it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/516"))
+    func theWindowStopsWhereThePointerMeetsTheScreenEdge() {
+        // A 1728 × 1117 display under a 33 pt menu bar.
+        let visible = CGRect(x: 0, y: 0, width: 1728, height: 1084)
+        // The pointer 100 pt in from the window's left edge and 50 pt up from its bottom.
+        var s = PictureInPictureThrow(frame: window, at: 0, pointer: CGVector(dx: 100, dy: 50), displays: [visible])
+        var t = 0.0
+        for _ in 0..<40 {
+            t += 1.0 / 120
+            _ = s.move(dx: 30, dy: 0, at: t)
+        }
+        // The pointer's spot stops on the screen's last column, 1727; most of the window is
+        // past the edge, but it is still under the pointer.
+        #expect(s.frame.minX == 1627)
+        #expect(s.frame.minY == window.minY)
+        #expect(visible.contains(CGPoint(x: s.frame.minX + 100, y: s.frame.minY + 50)))
+        // Its speed is the window's, not the fingers' pushing on at the edge.
+        #expect(s.velocity(at: t).dx == 0)
+        // The fingers moved: lifting them throws the window into a corner.
+        #expect(s.hasMoved)
+
+        // Up toward the menu bar, which lies above the window and would take the scroll events:
+        // the pointer stops on the row below it, 1083. Back the other way, the window moves at once.
+        for _ in 0..<40 {
+            t += 1.0 / 120
+            _ = s.move(dx: 0, dy: 30, at: t)
+        }
+        #expect(s.frame.minY == 1033)
+        t += 1.0 / 120
+        _ = s.move(dx: -10, dy: -10, at: t)
+        #expect(s.frame.origin == CGPoint(x: 1617, y: 1023))
+    }
+
+    /// The Dock lies above the window as well: the pointer stops at its edge.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/516"))
+    func theWindowStopsAtTheDock() {
+        // A 70 pt Dock along the bottom.
+        let visible = CGRect(x: 0, y: 70, width: 1728, height: 1014)
+        var s = PictureInPictureThrow(frame: CGRect(x: 936, y: 200, width: 782, height: 440), at: 0,
+                                      pointer: CGVector(dx: 300, dy: 20), displays: [visible])
+        for i in 1...20 { _ = s.move(dx: -5, dy: -30, at: Double(i) / 120) }
+        #expect(s.frame.origin == CGPoint(x: 836, y: 50))
+    }
+
+    /// With a second display beside the first, the window carries on onto it; past that one's
+    /// own edges, where the two displays' heights differ, it stops again.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/516"))
+    func theWindowCrossesOntoAnotherDisplay() {
+        let main = CGRect(x: 0, y: 0, width: 1728, height: 1084)
+        // 1920 × 1080 under a 25 pt menu bar.
+        let right = CGRect(x: 1728, y: 0, width: 1920, height: 1055)
+        var s = PictureInPictureThrow(frame: window, at: 0, pointer: CGVector(dx: 100, dy: 50), displays: [main, right])
+        var t = 0.0
+        for _ in 0..<40 {
+            t += 1.0 / 120
+            _ = s.move(dx: 30, dy: 0, at: t)
+        }
+        #expect(s.frame.minX == 2136)
+        for _ in 0..<40 {
+            t += 1.0 / 120
+            _ = s.move(dx: 0, dy: 30, at: t)
+        }
+        // The right display's last row under its menu bar, 1054, less 50.
+        #expect(s.frame.minY == 1004)
+    }
+
     /// A long stall (the Mac busy for a quarter of a second) doesn't fling the window away.
     @Test func aDroppedFrameStaysStable() {
         var f = PictureInPictureFlight(from: CGPoint(x: 900, y: 600), velocity: .zero, to: CGPoint(x: 10, y: 10))
