@@ -25,9 +25,6 @@ final class SettingsSyncService {
         var lastApplied: SyncManifest?
         var lastWritten: SyncManifest?
         var devices: [String] = []
-        /// The bundle written or applied last (`SyncManifest.id`): what the next write says it
-        /// was written from, so the other Mac can merge it (SidebarMerge).
-        var lastSeenID: UUID?
     }
 
     /// What turning sync on leads to: the bundle went up; a bundle from another Mac is there and
@@ -85,8 +82,9 @@ final class SettingsSyncService {
     private var state: State
     /// The last few bundles written or applied here, so a bundle the other Mac wrote from one of
     /// them is merged with what changed here since, not applied whole (SidebarMerge).
+    /// Loaded on first use, not at launch: eight sidebars to decode.
     private let historyFile = JSONStore<SyncHistory>("sync-history.json")
-    private var history: SyncHistory
+    @ObservationIgnored private lazy var history: SyncHistory = historyFile.load(or: { SyncHistory() })
     private var iCloudContainer: URL?
     private var poller: ScheduledWork?
     private var watcher: DispatchSourceFileSystemObject?
@@ -103,7 +101,6 @@ final class SettingsSyncService {
         self.device = device ?? testDevice ?? Host.current().localizedName ?? "Mac"
         self.deviceID = deviceID ?? testDevice ?? Self.hardwareDeviceID()
         state = stateFile.load(or: { State() })
-        history = historyFile.load(or: { SyncHistory() })
         location = state.location
         if case .folder(let path)? = state.location { folder = Self.bundleFolder(in: URL(fileURLWithPath: path, isDirectory: true)) }
         otherDevices = state.devices
@@ -206,7 +203,6 @@ final class SettingsSyncService {
         state.location = newLocation
         state.lastApplied = nil
         state.lastWritten = nil
-        state.lastSeenID = nil
         history = SyncHistory()
         historyFile.saveNow(history)
         error = nil
@@ -410,9 +406,8 @@ final class SettingsSyncService {
         guard let folder else { return }
         do {
             let bundle = localBundle()
-            let manifest = try write(bundle, to: folder, parentID: state.lastSeenID)
+            let manifest = try write(bundle, to: folder, parentIDs: history.ids)
             state.lastWritten = manifest
-            state.lastSeenID = manifest.id
             lastSync = manifest.writtenAt
             error = nil
             stateFile.save(state)
@@ -428,12 +423,12 @@ final class SettingsSyncService {
 
     /// The files first, the manifest last: a reader with a manifest whose hashes match has it all.
     /// Through a file coordinator, so iCloud sees whole files (a plain folder does not mind).
-    private func write(_ bundle: Bundle, to folder: URL, parentID: UUID? = nil) throws -> SyncManifest {
+    private func write(_ bundle: Bundle, to folder: URL, parentIDs: [UUID] = []) throws -> SyncManifest {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let files = try files(of: bundle)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
-                                    id: UUID(), parentID: parentID)
+                                    id: UUID(), parentIDs: parentIDs)
         try coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
         return manifest
     }
@@ -516,11 +511,11 @@ final class SettingsSyncService {
             + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-")"
     }
 
-    /// `merge`: the bundle was written from one this Mac still has (SyncHistory), so what changed
+    /// `merge`: the bundle was written from one this Mac still has (SyncHistory.base), so what changed
     /// here since is kept (SidebarMerge); the user's "Use That Sidebar" and an import take it whole.
     private func apply(_ manifest: SyncManifest, _ bundle: Bundle, merge: Bool = true, remember: Bool = true) {
         var document = bundle.document
-        if merge, let base = history.document(for: manifest.parentID) {
+        if merge, let base = history.base(for: manifest) {
             document = SidebarMerge.merge(base: base, local: localBundle().document, remote: bundle.document)
             CraLog.note("sync: \(manifest.device)'s bundle merged with what changed here since the one it was written from")
         }
@@ -530,7 +525,6 @@ final class SettingsSyncService {
         keybindingsChanged()
         guard remember else { return }
         state.lastApplied = manifest
-        state.lastSeenID = manifest.id
         if let id = manifest.id {
             history.remember(id, bundle.document)
             historyFile.save(history)

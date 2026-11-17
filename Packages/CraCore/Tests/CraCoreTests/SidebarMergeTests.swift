@@ -142,6 +142,30 @@ struct SidebarMergeTests {
         #expect(Set(merged.spaces.map(\.id)) == [other.id, f.doc.spaces[0].id, made.id])
     }
 
+    /// A folder closed here while the other Mac put a tab in it: the tab is kept, in the list
+    /// the folder was in, not dropped in the first space's Today by the store's repair.
+    @Test func aTabPutInAFolderClosedHereGoesWhereTheFolderWas() {
+        let f = Fixture()
+        let pinned = f.doc.spaces[0].pinnedContainerID
+        let local = without(f.second.id, without(f.first.id, without(f.folder.id, f.doc)))
+        let there = SidebarItem.tab("https://example.com/there", title: "There", parent: f.folder.id)
+        let remote = added(there, under: f.folder.id, f.doc)
+        let merged = SidebarMerge.merge(base: f.doc, local: local, remote: remote)
+        #expect(item(f.folder.id, in: merged) == nil && item(f.first.id, in: merged) == nil)
+        #expect(item(there.id, in: merged)?.parentID == pinned)
+        #expect(item(pinned, in: merged)?.children == [there.id])
+    }
+
+    /// Both Macs changed one space: the other Mac's, as for an item. One changed only here stays.
+    @Test func theOtherMacWinsASpaceBothChanged() {
+        let f = Fixture()
+        var local = f.doc, remote = f.doc
+        local.spaces[0].title = "Mine"
+        remote.spaces[0].title = "Theirs"
+        #expect(SidebarMerge.merge(base: f.doc, local: local, remote: remote).spaces[0].title == "Theirs")
+        #expect(SidebarMerge.merge(base: f.doc, local: local, remote: f.doc).spaces[0].title == "Mine")
+    }
+
     @Test func listsMergeAroundTheItemAnAdditionFollows() {
         let a = UUID(), b = UUID(), c = UUID(), d = UUID(), e = UUID()
         #expect(SidebarMerge.mergeList(base: [a, b, c], local: [a, d, b, c], remote: [a, b, c, e]) == [a, d, b, c, e])
@@ -166,18 +190,37 @@ struct SidebarMergeTests {
         #expect(back.entries.map(\.id) == history.entries.map(\.id) && back.entries[0].document.items.count == history.entries[0].document.items.count)
     }
 
-    /// A manifest names its bundle and the bundle it was written from; one from an older Cra
+    /// A manifest names its bundle and the bundles it was written from; one from an older Cra
     /// names neither and is applied whole.
-    @Test func aManifestNamesItsBundleAndItsParent() throws {
+    @Test func aManifestNamesItsBundleAndItsParents() throws {
         let t0 = Date(timeIntervalSince1970: 1_700_000_000)
-        let parent = UUID(), id = UUID()
-        let m = SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: t0, files: ["sidebar.json": "abc"], id: id, parentID: parent)
+        let parents = [UUID(), UUID()], id = UUID()
+        let m = SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: t0, files: ["sidebar.json": "abc"], id: id, parentIDs: parents)
         let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601
         let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601
         let back = try d.decode(SyncManifest.self, from: e.encode(m))
-        #expect(back == m && back.id == id && back.parentID == parent)
+        #expect(back == m && back.id == id && back.parentIDs == parents)
         let old = Data(#"{"version":1,"device":"Studio","deviceID":"id-Studio","writtenAt":"2023-11-14T22:13:20Z","files":{"sidebar.json":"abc"}}"#.utf8)
         let decoded = try d.decode(SyncManifest.self, from: old)
-        #expect(decoded.id == nil && decoded.parentID == nil && decoded.files == ["sidebar.json": "abc"])
+        #expect(decoded.id == nil && decoded.parentIDs == nil && decoded.files == ["sidebar.json": "abc"])
+        #expect(SyncHistory().base(for: decoded) == nil)
+    }
+
+    /// The other Mac wrote twice before this one looked: its newest bundle names the one before
+    /// it first, which never reached here, then one this Mac has. The merge is against that one,
+    /// the newest both have.
+    @Test func theBaseIsTheNewestParentThisMacHas() {
+        var history = SyncHistory()
+        let older = SidebarDocument.fresh(), newer = SidebarDocument.fresh()
+        let olderID = UUID(), newerID = UUID(), unseen = UUID()
+        history.remember(olderID, older)
+        history.remember(newerID, newer)
+        #expect(history.ids == [newerID, olderID])
+        func manifest(_ parents: [UUID]?) -> SyncManifest {
+            SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: Date(timeIntervalSince1970: 0), files: [:], id: UUID(), parentIDs: parents)
+        }
+        #expect(history.base(for: manifest([unseen, olderID, newerID])) == older)
+        #expect(history.base(for: manifest([newerID, olderID])) == newer)
+        #expect(history.base(for: manifest([unseen])) == nil && history.base(for: manifest(nil)) == nil)
     }
 }

@@ -34,15 +34,32 @@ public enum SidebarMerge {
         for id in ids {
             if let merged = mergeItem(base: b[id], local: l[id], remote: r[id]) { out[id] = merged }
         }
+        // An item whose folder (or space's list) is gone on the other Mac, made or moved into it
+        // here: it goes to the nearest folder up the chain still there, not to the first space.
+        for (id, var it) in out {
+            guard let p = it.parentID, out[p] == nil else { continue }
+            var up: UUID? = p
+            var steps = 0
+            while let cur = up, out[cur] == nil, steps < 64 {
+                up = (l[cur] ?? r[cur] ?? b[cur])?.parentID
+                steps += 1
+            }
+            guard let found = up, out[found] != nil else { continue }
+            it.parentID = found
+            out[id] = it
+        }
         for (id, var it) in out {
             var kept = Set<UUID>()
             it.children = it.children.filter { out[$0]?.parentID == id && kept.insert($0).inserted }
             out[id] = it
         }
+        // Sets, not `children.contains`: Today can hold thousands of tabs.
+        var listed = out.mapValues { Set($0.children) }
         for id in ids {
-            guard let it = out[id], let parentID = it.parentID, var parent = out[parentID], !parent.children.contains(id) else { continue }
+            guard let it = out[id], let parentID = it.parentID, var parent = out[parentID], listed[parentID]?.contains(id) == false else { continue }
             parent.children.append(id)
             out[parentID] = parent
+            listed[parentID]?.insert(id)
         }
         return ids.compactMap { out[$0] }
     }
@@ -64,7 +81,8 @@ public enum SidebarMerge {
         }
     }
 
-    /// The other Mac's in its order, then the ones made here; one gone on either Mac is left out.
+    /// The other Mac's in its order, then the ones made here; one gone on either Mac is left out,
+    /// and one both changed is the other Mac's, as with items.
     static func mergeByID<T: Identifiable & Equatable>(base: [T], local: [T], remote: [T]) -> [T] where T.ID == UUID {
         let b = table(base), l = table(local), r = table(remote)
         var ids: [UUID] = []
@@ -75,7 +93,7 @@ public enum SidebarMerge {
             case (nil, let l?, nil): return l
             case (nil, _, let r?): return r
             case (_?, nil, _), (_?, _, nil), (nil, nil, nil): return nil
-            case (let b?, let l?, let r?): return l == b ? r : l
+            case (let b?, let l?, let r?): return l != b && r == b ? l : r
             }
         }
     }
@@ -87,12 +105,14 @@ public enum SidebarMerge {
         if remote == base { return local }
         let baseSet = Set(base), localSet = Set(local)
         var result = remote.filter { !(baseSet.contains($0) && !localSet.contains($0)) }
-        for (i, id) in local.enumerated() where !baseSet.contains(id) && !result.contains(id) {
-            if let before = local[..<i].last(where: { result.contains($0) }), let at = result.firstIndex(of: before) {
+        var inResult = Set(result)
+        for (i, id) in local.enumerated() where !baseSet.contains(id) && !inResult.contains(id) {
+            if let before = local[..<i].last(where: { inResult.contains($0) }), let at = result.firstIndex(of: before) {
                 result.insert(id, at: at + 1)
             } else {
                 result.insert(id, at: 0)
             }
+            inResult.insert(id)
         }
         var seen = Set<UUID>()
         return result.filter { seen.insert($0).inserted }
@@ -133,4 +153,15 @@ public struct SyncHistory: Codable, Equatable {
         guard let id else { return nil }
         return entries.first { $0.id == id }?.document
     }
+
+    /// What to merge a bundle against: the newest of the bundles its writer had (`parentIDs`,
+    /// newest first) that this Mac has too. Nil, so the bundle is applied whole, for a bundle from
+    /// an older Cra or one written from bundles all gone from here.
+    public func base(for manifest: SyncManifest) -> SidebarDocument? {
+        for id in manifest.parentIDs ?? [] { if let doc = document(for: id) { return doc } }
+        return nil
+    }
+
+    /// The ids a bundle written now names as its parents (`SyncManifest.parentIDs`).
+    public var ids: [UUID] { entries.map(\.id) }
 }
