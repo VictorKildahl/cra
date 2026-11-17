@@ -1573,7 +1573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
                         + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout) sidebar=\(m.shell.sidebarReadout) "
                         + "floating=\(m.floatingSidebar?.edgeReadout ?? "-") "
-                        + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil))")
+                        + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil)) frameAdjust=\(CraWindow.frameAdjustment)")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {
                     guard let w = l.window else { continue }
