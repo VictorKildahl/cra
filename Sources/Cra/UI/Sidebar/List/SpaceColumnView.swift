@@ -408,6 +408,9 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         refresh()
         DispatchQueue.main.async { [weak self, weak f] in
             guard let f, let w = self?.window else { return }
+            // The sidebar sliding out at the edge is a panel that becomes key only when a click needs
+            // it, and a click on a row doesn't: the field showed selected while keys went to the page (#424).
+            w.makeKey()
             w.makeFirstResponder(f)
             f.currentEditor()?.selectAll(nil)
         }

@@ -12,6 +12,9 @@ public enum InternalURLRaise {
         // A Little Window opens on the Space in use, over the app in use, by itself (#186).
         // background=1 adds the tab without switching to it: Cra stays behind the app in use.
         case "open": return !little && !background
+        // A debug readout or test gesture reads the windows as they are: raising the browser window
+        // first took the keyboard from the sidebar's panel it was asked about (#424).
+        case "debug": return false
         default: return true
         }
     }

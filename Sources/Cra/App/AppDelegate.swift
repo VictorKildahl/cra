@@ -1191,8 +1191,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // target=little as for menuAt. button=back|forward: that mouse button released there,
             // handed to what the window's otherMouseUp monitor runs (#233); AppKit can't make a
             // window's event with button 3 or 4.
+            // target=floating: the sidebar sliding out at the edge, in its own panel (#424).
             if let g = dict["clickAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
-               let w = dict["target"] == "little" ? littleWindows.last?.window : main.window {
+               let w = dict["target"] == "little" ? littleWindows.last?.window
+                    : dict["target"] == "floating" ? main.floatingSidebar?.panelWindow : main.window {
                 let point = NSPoint(x: g[0], y: w.frame.height - g[1])
                 if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
                     let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
@@ -1237,6 +1239,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     // The ⌘T bar, while it is open, has the keyboard.
                     TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: main.openCommandPanel ?? w)
                 }
+                return
+            }
+            // activate=1: Cra to the front with its window key, for a screen scenario that types (#424).
+            if dict["activate"] == "1" { main.showWindow(nil); NSApp.activate(ignoringOtherApps: true); main.window?.makeKey(); return }
+            // keys=<label>: which window has the keyboard and what in it takes typed keys (#424).
+            if let label = dict["keys"] {
+                let key = NSApp.keyWindow
+                let kind = key == nil ? "none" : key === main.window ? "window"
+                    : key === main.floatingSidebar?.panelWindow ? "floating sidebar" : "other"
+                let to = key?.firstResponder.map { NSStringFromClass(type(of: $0)) } ?? "nothing"
+                CraLog.note("keys \(label): \(kind), to \(to)\(NSApp.isActive ? "" : " (Cra inactive)")")
                 return
             }
             if dict["zoomLevel"] != nil {
@@ -2024,7 +2037,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 Diagnostics.export(windows: mainWindows, store: store, to: URL(fileURLWithPath: path))
                 return
             }
-            if let f = dict["floatingSidebar"] { if f == "1" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }; return }
+            // floatingSidebar=1 out, =0 away, =hold out and kept there whatever the pointer does (#424).
+            if let f = dict["floatingSidebar"] {
+                main.floatingSidebar?.heldOut = f == "hold"
+                if f == "1" || f == "hold" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }
+                return
+            }
             if let method = dict["bcdp"] {
                 // To cra.log: a scenario reads it after a relaunch too, when stdout isn't kept (#299).
                 CraCEFRuntime.sendBrowserDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
