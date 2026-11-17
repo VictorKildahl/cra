@@ -166,9 +166,8 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   outline tintedLight (#ECEDFF exact). The back reads a little darker under its 0 → 0.36 shade (midTone #8389FF
   shows #797FEF). Cra had a translucent white front on dark themes (white 0.14 over the sidebar; an X report on
   4 Nov said the open folder looked see-through next to light mode) and cream on both light panels.
-  Palette fits (`SpaceTheme.midTone` / `tintedLight`, Arc's three palettes within 2/255): midTone = the theme
-  colour with its OKLab lightness clamped to 0.68…0.794, at the nearer bound the gamut edge of its HSB hue;
-  tintedLight = that colour (floored at 0.68) mixed toward white in sRGB to OKLab 0.95. Cra: FolderTones.
+  Palette rule: see "The space's primary palette" below (#490; the OKLab gamut-edge fits from these three
+  palettes painted every colour of a hue the same). Cra: FolderTones.
 - [O] Sidebar glyphs (29 Oct, 1x and 2x captures, fitted pixel by pixel): the tab row's hover ✕ is two 2 pt
   round-capped strokes 4.25 pt out from a centre on a whole point, white 0.6 over the hover fill; at 1x it is
   perfectly symmetric (176/142/85), which no SF Symbol size reproduces (xmark 13.5 bold is closest at 2x but
@@ -2405,8 +2404,8 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   than a control's 1.6 s. Moving along the icons replaces it in place in one frame. The cell's hover fill fades
   in over ~0.2 s.
 - Cra: `ArcTooltipController.tones` (AppDelegate: the window's focused space → CraCore `TooltipTones`, nil and
-  Little Arc's navy elsewhere); `SpaceTheme.shadedDark` rebuilds Arc's shade from the theme colour (the hue at
-  10 % luminance, the rule Now Playing already used); `SpaceCellView` gives the name, the profile and
+  Little Arc's navy elsewhere); `SpaceTheme.shadedDark` rebuilds Arc's shade from the theme colour (10 % luminance
+  at the colour's own P3 hue and saturation, "The space's primary palette"); `SpaceCellView` gives the name, the profile and
   `space<N>`'s keys; `ProfilePill` / `ProfileAvatarView` (the smiley redrawn as a path, fitted to the image's
   pixels at RMS 1.7/255). Compared side by side with Arc in both themes: widths within 1 px at 2x, tones
   within ~5/255 where Arc's shade stays in the sRGB gamut. The dock's timer is 0.55 s: with a real pointer Cra's
@@ -3611,6 +3610,27 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   Both preview every change without writing it (SidebarStore.previewTheme). Edit Theme Color… writes it when it
   closes (Escape, a click elsewhere, the app deactivating), as Arc does; the sheet writes it on Save and puts the
   stored theme back on Cancel.
+
+## The space's primary palette (Arc 1.172.2, 17 Nov 2026, issue #490, offline Arc)
+- [O live] Offline Arc on a fake home (network denied), Spaces ▸ Edit Theme… over AX, one swatch pressed, Escape,
+  then StorableSidebar.json read once Arc had written it (the write lags the Escape by a few seconds; read too
+  early it holds the swatch before). 21 presses gave 18 distinct `single` themes with their `primaryColorPalette`
+  (Brand2–9, Drab1/3/5–9, Pastel2/4/7/9), plus a 1x window capture of ⌘T over each (Mac in Dark).
+- [O] Rule, all four slots of all 18 within 5.6/255, the out-of-gamut ones too: convert the colour to Display P3,
+  keep its HSL hue and saturation, and move only the HSL lightness until the luminance reaches the slot's bound.
+  shadedDark: down to 0.10 when lighter (a darker colour is its own: Drab1 #4E3A5A, Drab8 #226149, Drab9 #26456B).
+  shaded: down to 0.495 when lighter. midTone: shaded, then up to 0.306 when darker. tintedLight: up to 0.856 when
+  darker. Values are extended sRGB: a saturated light colour runs below 0 (Pastel7 #DEFDEB → shadedDark
+  (−44,103,33), Victor's gold → (111,86,−20)). HSL in sRGB instead of P3 misses by up to 50/255; Cra's old rule
+  (sRGB HSB hue at 0.94 saturation, OKLab gamut-edge mid/light tones) by up to 142/255 (Brand9 slate #666789 →
+  pure blue (15,22,255) against Arc's (84,85,113)), which made every green the same green.
+- [O live] ⌘T's selected row follows it: Drab7 sage (102,129,110) and Drab8 (78,129,115) muted, Brand7 #34E895 and
+  the pale but saturated Pastel7 (0,132,96) / (0,133,90) vivid (pixel mid-row, sRGB). The colourless default keeps
+  the palette Arc stores for it (shadedDark (31,42,262), shaded (47,57,261), midTone (131,137,259), tintedLight
+  (236,237,256)), which no single colour rebuilds.
+- Cra: `SpaceTheme.shadedDark` / `shaded` / `midTone` / `tintedLight` (CraCore ThemeTones), pinned by
+  `arcPalettesFollowTheColoursSaturation` with the 18 palettes; the colourless halves and Arc imports of the
+  default (#010220, #01021F, #C8CAFF) take Arc's stored default palette.
 
 ## Little Arc: Copy URL and Shift-click (Arc 1.171, 3 Nov 2026, X DM, offline Arc)
 
