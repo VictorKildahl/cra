@@ -1232,7 +1232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let st = dict["status"] { main.browserManager(statusMessage: st, tabID: nil); return }
             // key=<characters>,<key code>,<modifier bits>: a key press as a layout reports it
             // (Turkish Q's ⌘- is "-",24,1048576), through the app's event queue (#212); the
-            // characters are percent-encoded. zoomLevel logs the page's zoom. page=1: straight to the
+            // characters are percent-encoded. zoomLevel logs the page's zoom. page=1 (devtools=1: its DevTools'): straight to the
             // current page, as the keyboard reaches a page that has it (a background copy has no key window);
             // with target=little, the newest Little Window's or Peek's page (#402).
             if let k = dict["key"]?.split(separator: ",", omittingEmptySubsequences: false), k.count == 3,
@@ -1242,8 +1242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let little = dict["target"] == "little" ? littleWindows.last : nil
                     guard let page = little != nil ? little?.browser : main.currentBrowser else { NSLog("Cra TestGesture: no page"); return }
                     let w = little?.window ?? w
-                    TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags,
-                                        in: [page.hostWindow?.contentView, page.containerView].compactMap { $0 }, window: w)
+                    // devtools=1: the page's DevTools frontend has the keyboard (docked in the card, or its window).
+                    let devTools = page.devToolsWindow
+                    let roots: [NSView] = dict["devtools"] == "1"
+                        ? [EmbeddedDevTools.holder(of: devTools).flatMap { $0.superview != nil ? $0 : nil } ?? devTools?.contentView].compactMap { $0 }
+                        : [page.hostWindow?.contentView, page.containerView].compactMap { $0 }
+                    TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags, in: roots, window: w)
                 } else {
                     // The ⌘T bar, while it is open, has the keyboard; target=find sends it to the find bar's panel.
                     let target = dict["target"] == "find" ? main.debugFindPanel : main.openCommandPanel
@@ -1527,6 +1531,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 b?.showDevToolsInspectingPoint(NSPoint(x: g[0], y: g[1]))
                 return
             }
+            // devtoolsClick=1: a click in the middle of the current tab's docked DevTools (EmbeddedDevTools.debugClick).
+            if dict["devtoolsClick"] != nil {
+                if let holder = EmbeddedDevTools.holder(of: main.currentBrowser?.devToolsWindow), holder.superview != nil,
+                   let page = main.currentBrowser?.containerView {
+                    EmbeddedDevTools.debugClick(holder, page: page)
+                }
+                return
+            }
             if let label = dict["devToolsShown"] {
                 for (i, l) in littleWindows.enumerated() { CraLog.note("little devtools \(label): little\(i) \(l.debugDevTools)") }
                 // drawn: the frontend draws in Cra's window, which then holds the layer its frames come in
@@ -1537,9 +1549,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let frames = layer.contents != nil || String(describing: type(of: layer)) == "CALayerHost"
                     return (frames ? 1 : 0) + (layer.sublayers ?? []).reduce(0) { $0 + drawn($1) }
                 }
-                let dev = main.currentBrowser?.devToolsWindow?.contentView
+                // The engine's frontend docks in the card (EmbeddedDevTools): docked=1 when it is there, in the main
+                // window itself (its own window out of sight), with the page's view over the room it left (smaller than
+                // the frontend); side= where DevTools sit beside the page. undocked=1 when it is in a window of its own.
+                // shellDock=1: the shell's own dock beside the page shows (white until a frontend covers it).
+                let window = main.currentBrowser?.devToolsWindow
+                let holder = EmbeddedDevTools.holder(of: window).flatMap { $0.superview != nil ? $0 : nil }
+                let dev = holder ?? window?.contentView
+                var docked = ""
+                if let holder, let page = main.currentBrowser?.containerView, page.superview === holder.superview {
+                    let h = holder.frame, p = page.frame
+                    let split = p.width < h.width - 1 || p.height < h.height - 1
+                    let inside = h.contains(p.insetBy(dx: 0.5, dy: 0.5)) && window?.isVisible != true && holder.window === main.window
+                    let side = p.height < h.height - 1 ? (p.minY > h.minY + 0.5 ? "bottom" : "top")
+                        : p.minX > h.minX + 0.5 ? "left" : "right"
+                    docked = " docked=\(split && inside ? 1 : 0)" + (split ? " side=\(side)" : "")
+                        + (EmbeddedDevTools.debugHits(holder, page: page).map { " hits=\($0)" } ?? "")
+                    // focus=devtools: the frontend has the keys; key=main: Cra's window is the key one (none: a
+                    // background test copy has no key window), not Chrome's hidden DevTools window.
+                    let responder = main.window?.firstResponder as? NSView
+                    let key = NSApp.keyWindow
+                    let focus = responder.map { $0.isDescendant(of: holder) } == true ? "devtools"
+                        : responder.map { $0.isDescendant(of: page) } == true ? "page" : "other"
+                    docked += " focus=\(focus) key=\(key == nil ? "none" : key === main.window ? "main" : "other")"
+                } else if window != nil {
+                    docked = " docked=0 undocked=\(window?.isVisible == true && window?.styleMask.contains(.titled) == true ? 1 : 0)"
+                }
+                docked += " shellDock=\(main.shell.devToolsHost.isHidden ? 0 : 1)"
+                // chromeKeyable=1: Chrome's own (hidden) DevTools window could take the keys from Cra's window.
+                let hidden = NSApp.windows.filter { $0.title.hasPrefix("DevTools") && $0.alphaValue == 0 && $0 !== window }
+                docked += " chromeKeyable=\(hidden.contains { $0.canBecomeKey } ? 1 : 0)"
                 CraLog.note("tab devtools \(label): windows=\(littleWindows.count) open=\(main.currentBrowser?.hasDevTools == true ? 1 : 0)"
-                    + (dev.map { " drawn=\(drawn($0.layer) > 0 ? 1 : 0)" } ?? ""))
+                    + (dev.map { " drawn=\(drawn($0.layer) > 0 ? 1 : 0)" } ?? "") + docked)
                 return
             }
             if let label = dict["littleShown"] {

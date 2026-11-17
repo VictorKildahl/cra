@@ -1,0 +1,35 @@
+# One click in DevTools docked in the card lands and gives them the keys, and Cra's window stays the
+# key one, so the frontend keeps getting mouse moves (the splitter's resize cursor, hover states).
+# On the first build that docked the engine's frontend in the card, Chrome made its own hidden DevTools
+# window key whenever the frontend took focus: Cra's window lost the keys, Chromium dropped the mouse
+# moves over DevTools, and it took several clicks before one registered. `hits` says the pointer
+# reaches the frontend at its toolbar, its middle and its splitter (Chromium's own hit test);
+# `chromeKeyable=0` that Chrome's hidden DevTools window can't take the keys.
+requires screen
+# Cra has to come to the front to have a key window; a background test copy never does.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=dev
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/devTools
+wait 6
+cra://debug?activate=1
+wait 1
+cra://debug?devToolsShown=open
+expect-log tab devtools open: windows=0 open=1 drawn=1 docked=1 side=right hits=1,1,1 focus=page key=main shellDock=0 chromeKeyable=0
+
+# One click into DevTools: they have the keys, and Cra's window is still key.
+cra://debug?devtoolsClick=1
+wait 2
+cra://debug?devToolsShown=clicked
+expect-log tab devtools clicked: windows=0 open=1 drawn=1 docked=1 side=right hits=1,1,1 focus=devtools key=main shellDock=0 chromeKeyable=0
+
+# Docked at the bottom, the same.
+cra://debug?devtoolsjs=import('./ui/legacy/legacy.js').then(function(m){m.DockController.DockController.instance().setDockSide('bottom')})
+wait 3
+cra://debug?activate=1
+wait 1
+cra://debug?devtoolsClick=1
+wait 2
+cra://debug?devToolsShown=bottom
+expect-log tab devtools bottom: windows=0 open=1 drawn=1 docked=1 side=bottom hits=1,1,1 focus=devtools key=main shellDock=0 chromeKeyable=0

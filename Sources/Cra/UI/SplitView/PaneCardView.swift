@@ -95,6 +95,8 @@ final class PaneCardView: NSView {
     var frozenWebBounds: NSRect? { didSet { if frozenWebBounds == nil { frozenPageInWindow = nil } } }
     /// The page's final frame in the window while the sidebar slides. Cleared with `frozenWebBounds`.
     var frozenPageInWindow: NSRect?
+    /// Where the page goes inside its area while the engine's DevTools frontend fills it (EmbeddedDevTools).
+    var devToolsPlaceholder: DevToolsPlaceholder? { didSet { if oldValue != devToolsPlaceholder { needsLayout = true } } }
     var pageBounds: NSRect {
         if let f = frozenPageInWindow, window != nil { return webArea.convert(f, from: nil) }
         return frozenWebBounds ?? webArea.bounds
@@ -292,7 +294,7 @@ final class PaneCardView: NSView {
         infoBarStrip.frame = NSRect(x: webArea.frame.minX, y: webArea.frame.maxY - barHeight, width: webArea.frame.width, height: barHeight)
         var page = pageBounds
         page.size.height = max(0, page.height - barHeight)  // the web area isn't flipped: the bars take its top
-        EmbeddedPages.place(webArea.subviews, in: page)
+        EmbeddedDevTools.place(in: webArea, page: page, placeholder: devToolsPlaceholder)
         ring.frame = b
     }
 

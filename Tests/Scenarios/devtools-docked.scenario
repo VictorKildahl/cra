@@ -1,0 +1,56 @@
+# DevTools on the Chromium engine work as they did on CEF (and as in Chrome): the frontend docks in
+# the card, inside the main window, and the page sits where it leaves room, so the frontend has its
+# close button, its dock menu and its splitter; its keys are the page's, so ⌥⌘I closes them from
+# inside DevTools too. Up to engine -17 the frontend was a window of its own beside the page, over the
+# shell's white dock, and believed itself undocked: no close button, no dock menu, the page squeezed
+# by the shell's split, and ⌥⌘I typed in it went to Chrome's hidden DevTools window instead of Cra.
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=dev
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# Docked in the card on the right (Chrome's default): drawn, the page in the room the frontend
+# reported, and no white shell dock behind anything; the pointer reaches the frontend (its toolbar,
+# its middle, its splitter) and Chrome's hidden DevTools window can't take the keys from Cra's.
+cra://action/devTools
+wait 6
+cra://debug?devToolsShown=open
+expect-log tab devtools open: windows=0 open=1 drawn=1 docked=1 side=right hits=1,1,1 focus=\S+ key=\S+ shellDock=0 chromeKeyable=0
+
+# ⌥⌘I typed in DevTools closes them, as it does from the page.
+cra://debug?key=i,34,1572864&page=1&devtools=1
+wait 3
+cra://debug?devToolsShown=keyclosed
+expect-log tab devtools keyclosed: windows=0 open=0
+
+# ⌥⌘I from the page opens them again.
+cra://debug?key=i,34,1572864&page=1
+wait 6
+cra://debug?devToolsShown=keyopened
+expect-log tab devtools keyopened: windows=0 open=1 drawn=1 docked=1 side=right hits=1,1,1 focus=\S+ key=\S+ shellDock=0 chromeKeyable=0
+
+# The frontend's dock menu: Undock into separate window gives DevTools a titled window of their own
+# and the page its whole area; no tab opens for the device toolbar's frame the frontend loads then.
+cra://debug?devtoolsjs=import('./ui/legacy/legacy.js').then(function(m){m.DockController.DockController.instance().setDockSide('undocked')})
+wait 3
+cra://debug?devToolsShown=undocked
+expect-log tab devtools undocked: windows=0 open=1 drawn=1 docked=0 undocked=1 shellDock=0 chromeKeyable=0
+reject-log loaded devtools
+
+# Dock to bottom: back in the card, under the page.
+cra://debug?devtoolsjs=import('./ui/legacy/legacy.js').then(function(m){m.DockController.DockController.instance().setDockSide('bottom')})
+wait 3
+cra://debug?devToolsShown=bottom
+expect-log tab devtools bottom: windows=0 open=1 drawn=1 docked=1 side=bottom hits=1,1,1 focus=\S+ key=\S+ shellDock=0 chromeKeyable=0
+
+# The frontend's own close button, clicked only where it shows (in the docked toolbar; an
+# undocked frontend keeps it out of its layout), closes them. (Scripts here use no spaces or "=".)
+cra://debug?devtoolsjs=import('./ui/legacy/legacy.js').then(function(m){return(m.DockController.DockController.instance().closeButton.element)}).then(function(e){if(e.shadowRoot.querySelector('button').getBoundingClientRect().width>10)e.click()})
+wait 3
+cra://debug?devToolsShown=buttonclosed
+expect-log tab devtools buttonclosed: windows=0 open=0
+
+# Open again: they come back docked where they were left (the frontend keeps its dock side).
+cra://action/devTools
+wait 6
+cra://debug?devToolsShown=reopened
+expect-log tab devtools reopened: windows=0 open=1 drawn=1 docked=1 side=bottom hits=1,1,1 focus=\S+ key=\S+ shellDock=0 chromeKeyable=0

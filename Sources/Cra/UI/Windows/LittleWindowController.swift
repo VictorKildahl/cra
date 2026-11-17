@@ -428,18 +428,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, !rectInWindow.isEmpty else { return }
         let area = window.convertToScreen(rectInWindow)
         var page = area
-        // The Chromium engine has no Chrome window per page and its frontend reports no hole: DevTools go beside
-        // the page, and the page's view in the card shrinks to its part.
-        let besidePage = browser.map { $0.hostWindow == nil && !($0 is WebKitBrowser) } ?? false
-        if let view = devToolsView, let dev = view.window, dev.parent === window {
-            if besidePage, devToolsDocked {
-                let split = DevToolsPlaceholder.besidePage(in: area)
-                page = split.page
-                place(dev, at: split.devTools, corners: AreaCorners.shared(by: split.devTools, with: area).intersection(.bottom))
-            } else {
-                place(dev, at: area, corners: .bottom)
-                if let hole = devToolsPlaceholder { page = hole.pageRect(in: area) }
-            }
+        // The Chromium engine has no Chrome window per page: its docked frontend comes into the card under the page's
+        // view, over the whole area, and the page's view goes where the frontend left room (EmbeddedDevTools).
+        let besidePage = EmbeddedDevTools.applies(to: browser)
+        if besidePage, devToolsDocked, let dev = devToolsView?.window, let v = browser?.containerView, let parent = v.superview,
+           let holder = EmbeddedDevTools.embed(dev, in: parent, below: v) {
+            let frame = parent.convert(window.convertFromScreen(area), from: nil)
+            if holder.frame != frame { holder.frame = frame }
+            if let hole = devToolsPlaceholder { page = hole.pageRect(in: area) }
+        } else if let view = devToolsView, let dev = view.window, dev.parent === window {
+            place(dev, at: area, corners: .bottom)
+            if let hole = devToolsPlaceholder { page = hole.pageRect(in: area) }
             if let cv = dev.contentView, view.frame != cv.bounds { view.frame = cv.bounds }
         }
         if besidePage, let v = browser?.containerView, let parent = v.superview {
@@ -762,12 +761,16 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         var out = "peek=\(isPeek ? 1 : 0) parked=\(isParked ? 1 : 0) open=\(browser?.hasDevTools == true ? 1 : 0)"
         if let dev = browser?.devToolsWindow {
             let split = area.insetBy(dx: -1, dy: -1).contains(page) && (page.width < area.width - 1 || page.height < area.height - 1)
-            // Over the area with the page in its hole (Chrome's docked frontend), or beside the page (the engine's).
-            let beside = DevToolsPlaceholder.besidePage(in: area)
-            let placed = same(dev.frame, area) || (same(dev.frame, beside.devTools) && same(page, beside.page))
-            out += " docked=\(dev.parent === window && placed && split ? 1 : 0)"
-                + " shown=\(dev.isVisible && dev.alphaValue > 0 && dev.contentView?.isHidden == false ? 1 : 0)"
-                + String(format: " size=%.0fx%.0f", dev.frame.width, dev.frame.height)
+            // Over the area with the page in its hole: Chrome's docked frontend in a window of its own (CEF), or in
+            // this window's card under the page's view (the engine, EmbeddedDevTools).
+            let holder = EmbeddedDevTools.holder(of: dev).flatMap { $0.window === window ? $0 : nil }
+            let frame = holder.map { window.convertToScreen($0.convert($0.bounds, to: nil)) } ?? dev.frame
+            let attached = holder != nil || dev.parent === window
+            let shown = holder.map { !$0.isHiddenOrHasHiddenAncestor && window.isVisible && window.alphaValue > 0 }
+                ?? (dev.isVisible && dev.alphaValue > 0 && dev.contentView?.isHidden == false)
+            out += " docked=\(attached && same(frame, area) && split ? 1 : 0)"
+                + " shown=\(shown ? 1 : 0)"
+                + String(format: " size=%.0fx%.0f", frame.width, frame.height)
         }
         return out + " pageFills=\(same(page, area) ? 1 : 0)" + String(format: " area=%.0fx%.0f", area.width, area.height)
     }
@@ -1977,7 +1980,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, devToolsPageBounds bounds: NSRect) {
         // Undocked frontends still report bounds (device mode); only setIsDocked changes the dock state.
         guard browser === self.browser, devToolsDocked, let dev = devToolsView?.window else { return }
-        let size = dev.contentView?.bounds.size ?? NSSize(width: bounds.maxX, height: bounds.maxY)
+        // The frontend's size: the card area it fills on the engine (EmbeddedDevTools), else its window's.
+        let embedded = EmbeddedDevTools.holder(of: dev).flatMap { $0.superview != nil ? $0 : nil }
+        let size = embedded?.bounds.size ?? dev.contentView?.bounds.size ?? NSSize(width: bounds.maxX, height: bounds.maxY)
         devToolsPlaceholder = DevToolsPlaceholder(bounds: bounds, frontendSize: size)
         layoutPageWindows()
     }
@@ -1998,6 +2003,22 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// once the frontend's "Undock into separate window" is picked, lets it go as a window of its own.
     private func syncDevToolsWindow() {
         guard let window, let dev = devToolsView?.window else { layoutPageWindows(); return }
+        if EmbeddedDevTools.applies(to: browser) {
+            // Docked, layoutPageWindows takes the frontend into the card; undocked it goes back to its window.
+            if devToolsDocked {
+                layoutPageWindows()
+            } else {
+                EmbeddedDevTools.restore(dev)
+                layoutPageWindows()
+                if !dev.styleMask.contains(.titled) {
+                    DevToolsWindowChrome.undock(dev, over: window, pageURL: currentURL)
+                    dev.makeKeyAndOrderFront(nil)
+                } else if !dev.isVisible {
+                    dev.orderFront(nil)
+                }
+            }
+            return
+        }
         if !devToolsDocked {
             guard dev.parent === window else { return }
             window.removeChildWindow(dev)
@@ -2047,6 +2068,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     private func clearDevTools() {
         defer { syncFloatingBar() }
+        if let dev = devToolsView?.window { EmbeddedDevTools.park(dev) }
         devToolsView = nil
         devToolsPlaceholder = nil
         devToolsDocked = true

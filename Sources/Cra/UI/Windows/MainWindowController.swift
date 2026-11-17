@@ -1246,6 +1246,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// CEF owns the DevTools window (embedding in our NSView trips a Chromium CHECK on macOS).
     /// DevTools docks inside the content card (Chrome's default), to the right of the page.
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? {
+        // The engine's frontend docks in the card itself (EmbeddedDevTools): no room is made beside the page.
+        if EmbeddedDevTools.applies(to: browsers.runtime(for: tabID)?.browser) { return nil }
         shell.devToolsVisible = true
         shell.needsLayout = true
         shell.layoutSubtreeIfNeeded()
@@ -1714,7 +1716,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let focused = browsers.visibleTabID.flatMap { browsers.runtime(for: $0)?.pageViews } ?? []
         // The extension side panel's page keeps the keys it has.
         let panel = sidePanel.isShowing ? sidePanel.embeddedViews : []
-        if !(focused + panel).contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
+        // The engine's DevTools docked in a card (EmbeddedDevTools) keep the keys too: clicked into, they have them.
+        let devTools = shell.paneCards.compactMap { EmbeddedDevTools.holder(in: $0.webArea) }
+        if !(focused + panel + devTools).contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
     }
 
     /// One of Cra's own text fields in this window has the keys (the field editor is an NSText; a
@@ -1863,7 +1867,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// from the body's edges while the body is still resizing, so the page follows at
     /// once instead of waiting for the frontend's next layout.
     private func pageRect(forBody body: NSRect, tab: UUID) -> NSRect {
-        guard browsers.devToolsViews[tab] != nil, browsers.runtime(for: tab)?.hostWindow != nil,
+        guard browsers.devToolsViews[tab] != nil,
+              browsers.runtime(for: tab)?.hostWindow != nil || EmbeddedDevTools.applies(to: browsers.runtime(for: tab)?.browser),
               browsers.devToolsDockedState[tab] ?? true,
               let p = browsers.devToolsPlaceholders[tab] else { return body }
         return p.pageRect(in: body)
@@ -1949,9 +1954,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let visible = browsers.visibleDevToolsWindow
         let shown = browsers.visibleDevToolsWindows
         for (_, view) in browsers.devToolsViews {
-            if let w = view.window, !shown.values.contains(where: { $0 === w }) { w.orderOut(nil) }
+            if let w = view.window, !shown.values.contains(where: { $0 === w }) {
+                w.orderOut(nil)
+                EmbeddedDevTools.park(w)
+            }
         }
-        let selfDock = visible != nil && browsers.visibleRuntime?.hostWindow != nil
+        // The engine's frontend docks over its pane's body too, in the card (EmbeddedDevTools).
+        let selfDock = visible != nil && (browsers.visibleRuntime?.hostWindow != nil || EmbeddedDevTools.applies(to: browsers.visibleRuntime?.browser))
         let docked = browsers.visibleTabID.flatMap { browsers.devToolsDockedState[$0] } ?? true
         devToolsLog("devToolsChanged visible=\(visible?.windowNumber ?? -1) selfDock=\(selfDock) docked=\(docked) visibleTabs=\(browsers.visibleTabIDs.map { $0.uuidString.prefix(8) }) overlay=\(overlayPanel?.windowNumber ?? -1)")
         // This runs on every tab switch; the shell is laid out again only when the dock changed.
@@ -1963,9 +1972,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.layoutSubtreeIfNeeded()
         }
         if visible == nil, shell.frontendPageRect != nil { shell.frontendPageRect = nil }
+        syncEmbeddedDevTools()
         var attached = false
         for id in browsers.visibleTabIDs {
             guard let w = shown[id] else { continue }
+            if EmbeddedDevTools.applies(to: browsers.runtime(for: id)?.browser) {
+                if browsers.devToolsDockedState[id] == false { undockEmbeddedDevTools(w, tab: id) }
+                continue
+            }
             let chrome = browsers.runtime(for: id)?.hostWindow != nil
             if chrome, browsers.devToolsDockedState[id] == false {
                 detachDevToolsWindow(w, tab: id)
@@ -1982,8 +1996,43 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         positionPageWindows(lastPaneFrames)
     }
 
+    /// The engine's docked frontends in their panes' cards, under the pages, which go where each left room; a card
+    /// whose tab has none docked (closed, undocked, another tab now) lets go of the one it had.
+    private func syncEmbeddedDevTools() {
+        for card in shell.paneCards {
+            let id = card.tabID
+            let rt = browsers.runtime(for: id)
+            let docked = browsers.visibleTabIDs.contains(id) && EmbeddedDevTools.applies(to: rt?.browser)
+                && browsers.devToolsDockedState[id] ?? true
+            let w = docked ? browsers.devToolsViews[id]?.window : nil
+            if let held = EmbeddedDevTools.holder(in: card.webArea), held.home == nil || held.home !== w {
+                held.removeFromSuperview()
+            }
+            if let w {
+                EmbeddedDevTools.embed(w, in: card.webArea)
+                card.devToolsPlaceholder = browsers.devToolsPlaceholders[id]
+            } else {
+                card.devToolsPlaceholder = nil
+            }
+            card.needsLayout = true
+        }
+    }
+
+    /// "Undock into separate window" on the engine: the frontend leaves the card for its own window.
+    private func undockEmbeddedDevTools(_ w: NSWindow, tab: UUID) {
+        guard let window else { return }
+        EmbeddedDevTools.restore(w)
+        if !w.styleMask.contains(.titled) {
+            DevToolsWindowChrome.undock(w, over: window, pageURL: browsers.runtime(for: tab)?.browser.currentURL)
+            w.makeKeyAndOrderFront(nil)
+        } else if !w.isVisible {
+            w.orderFront(nil)
+        }
+    }
+
     /// The docked frontend moved its placeholder (also streamed while its splitter is dragged).
     func browserManagerDevToolsPageBoundsChanged() {
+        syncEmbeddedDevTools()
         positionPageWindows(lastPaneFrames)
         if Self.devToolsLogEnabled, devToolsTreeDumps < 2 {
             devToolsTreeDumps += 1

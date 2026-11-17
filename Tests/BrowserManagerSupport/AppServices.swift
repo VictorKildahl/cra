@@ -127,6 +127,16 @@ enum EmbeddedPages {
     static func isHost(_ window: NSWindow) -> Bool { viewsByHost[ObjectIdentifier(window)] != nil }
     static func pageViews(of window: NSWindow) -> [NSView]? { viewsByHost[ObjectIdentifier(window)] }
 }
+/// The engine's DevTools in a card (Sources/Cra/UI/Windows/EmbeddedDevTools.swift): the same rule for whose they
+/// are, and no card here, so no frontend is ever in one.
+@MainActor enum EmbeddedDevTools {
+    final class Holder: NSView {}
+    static func applies(to browser: CraBrowser?) -> Bool {
+        guard let browser else { return false }
+        return browser.hostWindow == nil && !(browser is WebKitBrowser)
+    }
+    static func holder(of w: NSWindow?) -> Holder? { nil }
+}
 final class LiveFolderManager {
     static let shared = LiveFolderManager()
     func pageChanged(tab: UUID, to url: String) {}

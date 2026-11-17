@@ -177,6 +177,15 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
 - (void)devToolsClosed:(BrowserWindowInterface*)devtools;
 - (void)devToolsShowsPanel:(NSString*)panel;
+- (void)devToolsFrontendDocked:(BOOL)docked;
+- (void)devToolsFrontendPageBounds:(NSRect)bounds;
+- (void)makeChromeActiveTab;
+@end
+
+// The window that holds a page's DevTools frontend for the app (-devToolsWindow): docked in a card it lends its
+// view, undocked it is the DevTools window. Its title bar's close button closes DevTools, as Chrome's does.
+@interface CraDevToolsHostWindow : NSWindow
+@property(nonatomic, weak) CraBrowser* page;
 @end
 
 // A page's view: counted once for cra://debug?pageWindows= when it first shows in a window (a Cra window, the only
@@ -590,7 +599,12 @@ void MakeHostWindow(NSWindow* window) {
   NeverFullScreen(window);
   if (!g_host_windows) {
     g_host_windows = [NSHashTable weakObjectsHashTable];
-    Class cls = [window class];
+  }
+  // Once per class: a page's host and a page's DevTools window can be different kinds of Chrome window.
+  static NSMutableSet<NSString*>* patched = [NSMutableSet set];
+  Class cls = [window class];
+  if (![patched containsObject:NSStringFromClass(cls)]) {
+    [patched addObject:NSStringFromClass(cls)];
     for (NSString* name in @[ @"canBecomeKeyWindow", @"canBecomeMainWindow" ]) {
       SEL selector = NSSelectorFromString(name);
       Method method = class_getInstanceMethod(cls, selector);
@@ -619,6 +633,26 @@ const char kDevToolsPanelScript[] =
     "report();new MutationObserver(report).observe(tabs,{attributes:true,subtree:true,attributeFilter:['class']});return;}"
     "if(++n>200)clearInterval(w);},150);})();";
 
+// The frontend docked in Cra's card, as on CEF (Sources/CraCEF/CraCEF.mm, kCraDevToolsHooks): Chrome's DevTools window
+// is never shown and stays undocked (patches/cra-devtools.patch), while the frontend loads with can_dock=true, so
+// it draws the page's place, its splitter, its close button and its dock menu. Its embedder calls for docking come
+// back here as console messages instead of going to Chrome: setIsDocked (acknowledged at once; Cra lays the window
+// out), setInspectedPageBounds (where Cra puts the page) and closeWindow (the close button).
+const char kDevToolsDockScript[] =
+    "(function(){var h=window.InspectorFrontendHost;if(!h||h.__craDock)return;h.__craDock=1;"
+    "if(!/[?&]can_dock=true/.test(location.search))return;"
+    "h.closeWindow=function(){console.log('__cra_devtools_close');};"
+    "var sent=false;"
+    "h.setInspectedPageBounds=function(b){sent=true;try{console.log('__cra_devtools_bounds:'+JSON.stringify("
+    "{x:b.x,y:b.y,width:b.width,height:b.height}));}catch(e){}};"
+    "h.setIsDocked=function(d,cb){console.log('__cra_devtools_docked:'+(d?1:0));if(cb)setTimeout(function(){cb();},0);};"
+    // The frontend may have laid out before these hooks: a resize makes a docked one send its placeholder again,
+    // and one that stays silent is undocked.
+    "window.dispatchEvent(new Event('resize'));"
+    "requestAnimationFrame(function(){requestAnimationFrame(function(){setTimeout(function(){"
+    "if(!sent)console.log('__cra_devtools_docked:0');},80);});});"
+    "})();";
+
 class DevToolsFrontendObserver : public content::WebContentsObserver {
  public:
   DevToolsFrontendObserver(content::WebContents* frontend, CraBrowser* page)
@@ -639,15 +673,39 @@ class DevToolsFrontendObserver : public content::WebContentsObserver {
                                 const std::u16string& source,
                                 const std::optional<std::u16string>& stack) override {
     constexpr std::u16string_view kPanel = u"__cra_devtools_panel:";
+    constexpr std::u16string_view kClose = u"__cra_devtools_close";
+    constexpr std::u16string_view kDocked = u"__cra_devtools_docked:";
+    constexpr std::u16string_view kBounds = u"__cra_devtools_bounds:";
     if (message.starts_with(kPanel) && message.size() > kPanel.size()) {
       [page_ devToolsShowsPanel:base::SysUTF16ToNSString(message.substr(kPanel.size()))];
+    } else if (message == kClose) {
+      // Later: closing destroys this observer's WebContents.
+      CraBrowser* page = page_;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [page closeDevTools];
+      });
+    } else if (message.starts_with(kDocked) && message.size() > kDocked.size()) {
+      [page_ devToolsFrontendDocked:message[kDocked.size()] == u'1'];
+    } else if (message.starts_with(kBounds)) {
+      NSData* data = [base::SysUTF16ToNSString(message.substr(kBounds.size())) dataUsingEncoding:NSUTF8StringEncoding];
+      id d = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+      if ([d isKindOfClass:[NSDictionary class]]) {
+        NSDictionary* b = d;
+        [page_ devToolsFrontendPageBounds:NSMakeRect([b[@"x"] doubleValue], [b[@"y"] doubleValue],
+                                                     [b[@"width"] doubleValue], [b[@"height"] doubleValue])];
+      }
     }
   }
 
- private:
+  void Execute(const std::u16string& script) {
+    web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(script, base::NullCallback(), /*world_id=*/0);
+  }
+
   void Run() {
-    web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16(std::string_view(kDevToolsPanelScript)),
-                                                                     base::NullCallback(), /*world_id=*/0);
+    for (const char* script : {kDevToolsDockScript, kDevToolsPanelScript}) {
+      web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(base::UTF8ToUTF16(std::string_view(script)),
+                                                                       base::NullCallback(), /*world_id=*/0);
+    }
   }
 
   CraBrowser* __weak page_;
@@ -777,6 +835,19 @@ class PageHost : public TabStripModelObserver {
       OpenedFrom().erase(clicked);
     }
     CraBrowser* from = opener ? BrowserFor(opener.get()) : nil;
+    // A page's DevTools: their own helper pages (the device toolbar's frame when undocked) never become tabs, as
+    // Chrome never shows them either; a link they open (a source's URL) is a tab from the page they inspect.
+    if (!from && opener) {
+      if (DevToolsWindow* devtools = DevToolsWindow::AsDevToolsWindow(opener.get())) {
+        if (target.SchemeIs("devtools") || target.is_empty() || target.IsAboutBlank()) {
+          chrome::CloseWebContents(browser_, page.get(), false);
+          // KeepPlaceholderActive made the blank page Chrome's active tab for it: the page is again.
+          [BrowserFor(devtools->GetInspectedWebContents()) makeChromeActiveTab];
+          return;
+        }
+        from = BrowserFor(devtools->GetInspectedWebContents());
+      }
+    }
     CraBrowser* host = nil;
     if (from && [from.delegate respondsToSelector:@selector(browser:popupHostForURL:inBackground:)]) {
       host = [from.delegate browser:from popupHostForURL:url inBackground:background];
@@ -838,6 +909,13 @@ void PageActivation(content::WebContents* contents, bool by_page) {
 // Edit menu items sent to the page).
 int KeyEvent(content::WebContents* contents, const input::NativeWebKeyboardEvent& event, bool unhandled) {
   CraBrowser* browser = BrowserFor(contents);
+  // A page's DevTools: their keys are the page's, as in Chrome, where the frontend sits in the page's window (⌥⌘I
+  // closes them, ⌘L goes to the address). Chrome's DevTools window, which would get them otherwise, is never shown.
+  if (!browser) {
+    if (DevToolsWindow* devtools = DevToolsWindow::AsDevToolsWindow(contents)) {
+      browser = BrowserFor(devtools->GetInspectedWebContents());
+    }
+  }
   if (!browser) {
     return -1;
   }
@@ -1324,12 +1402,10 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
     NSWindow* window = browser->GetWindow()->GetNativeWindow().GetNativeNSWindow();
     if (browser->GetType() == BrowserWindowInterface::TYPE_DEVTOOLS) {
       // A page of Cra's DevTools (patches/cra-devtools.patch): never shown; Cra takes its frontend once Chrome
-      // has put it in.
-      window.alphaValue = 0;
-      window.ignoresMouseEvents = YES;
-      NeverFullScreen(window);
-      PlaceChromeWindow(window);
-      NoteChromeWindowShown(window);
+      // has put it in. Never key either, as a page's host window: Chrome activates the frontend's window when the
+      // frontend takes focus (a click in it), and Cra's window, where the frontend is, lost the keys. Chromium then
+      // dropped mouse moves (no splitter cursor, no hover) and the next click only made Cra's window key again.
+      MakeHostWindow(window);
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
       return;
     }
@@ -1384,6 +1460,8 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
     if (!page) {
       // Not a page of Cra's (an extension's background page, say): Chrome's own DevTools window.
       NSWindow* window = browser->GetWindow()->GetNativeWindow().GetNativeNSWindow();
+      [g_host_windows removeObject:window];
+      window.sharingType = NSWindowSharingReadOnly;
       window.alphaValue = 1;
       window.ignoresMouseEvents = NO;
       return;
@@ -1929,6 +2007,8 @@ bool HandleDebugMethod(content::WebContents* contents,
   // frontend's view.
   base::WeakPtr<BrowserWindowInterface> _devToolsBrowser;
   NSWindow* _devToolsHost;
+  // The frontend's view, wherever the app put it (its window, or a card while docked).
+  NSView* __weak _devToolsFrontendView;
   // An agent page (MCP) renders while never on screen, as the CEF bridge's windowless page did.
   base::ScopedClosureRunner _agentCapture;
   // The download the agent asked for (startAgentDownload:…); anything else the site starts is cancelled.
@@ -2831,15 +2911,17 @@ bool HandleDebugMethod(content::WebContents* contents,
   _devToolsFrontend = std::make_unique<DevToolsFrontendObserver>(frontend, self);
   frontend->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
   if (!_devToolsHost) {
-    _devToolsHost = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 400)
-                                                styleMask:NSWindowStyleMaskBorderless
-                                                  backing:NSBackingStoreBuffered
-                                                    defer:NO];
+    _devToolsHost = [[CraDevToolsHostWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 400)
+                                                             styleMask:NSWindowStyleMaskBorderless
+                                                               backing:NSBackingStoreBuffered
+                                                                 defer:NO];
     _devToolsHost.releasedWhenClosed = NO;
+    static_cast<CraDevToolsHostWindow*>(_devToolsHost).page = self;
     _devToolsHost.contentView.autoresizesSubviews = YES;
   }
   NSView* view = frontend->GetNativeView().GetNativeNSView();
   [view removeFromSuperview];
+  _devToolsFrontendView = view;
   view.frame = _devToolsHost.contentView.bounds;
   view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [_devToolsHost.contentView addSubview:view];
@@ -2854,6 +2936,9 @@ bool HandleDebugMethod(content::WebContents* contents,
   _devToolsBrowser = nullptr;
   _devToolsFrontend.reset();
   _hasDevTools = NO;
+  // Out of the card it was docked in, if the app had it there.
+  [_devToolsFrontendView removeFromSuperview];
+  _devToolsFrontendView = nil;
   [_devToolsHost.parentWindow removeChildWindow:_devToolsHost];
   [_devToolsHost orderOut:nil];
   [_delegate browserDidCloseDevTools:self];
@@ -2861,6 +2946,20 @@ bool HandleDebugMethod(content::WebContents* contents,
 
 - (NSWindow*)devToolsWindow {
   return _hasDevTools ? _devToolsHost : nil;
+}
+
+// The frontend's dock calls (kDevToolsDockScript): docked on a side, or undocked into a window of its own.
+- (void)devToolsFrontendDocked:(BOOL)docked {
+  if (_hasDevTools && [_delegate respondsToSelector:@selector(browser:devToolsDocked:)]) {
+    [_delegate browser:self devToolsDocked:docked];
+  }
+}
+
+// Where the docked frontend left room for the page, in points from its top left.
+- (void)devToolsFrontendPageBounds:(NSRect)bounds {
+  if (_hasDevTools && [_delegate respondsToSelector:@selector(browser:devToolsPageBounds:)]) {
+    [_delegate browser:self devToolsPageBounds:bounds];
+  }
 }
 - (double)zoomLevel {
   auto* zoom = _contents ? zoom::ZoomController::FromWebContents(_contents) : nullptr;
@@ -3004,6 +3103,9 @@ bool HandleDebugMethod(content::WebContents* contents,
 - (void)executeJavaScript:(NSString*)script inDevTools:(BOOL)inDevTools {
   if (!inDevTools) {
     [self executeJavaScript:script];
+  } else if (_devToolsFrontend) {
+    // The frontend (cra://debug?devtoolsjs=, the undocked window's title bar inset).
+    _devToolsFrontend->Execute(base::SysNSStringToUTF16(script));
   }
 }
 #pragma mark DevTools protocol
@@ -3782,6 +3884,20 @@ BOOL CraIsSystemHotKey(NSEvent* event) {
   }
 }
 
+@end
+
+@implementation CraDevToolsHostWindow
+// Undocked it is a titled window the frontend's keys go to; docked, the app takes its view into a card.
+- (BOOL)canBecomeKeyWindow {
+  return YES;
+}
+- (BOOL)canBecomeMainWindow {
+  return (self.styleMask & NSWindowStyleMaskTitled) != 0;
+}
+// The close button and ⌘W on the undocked window close DevTools; the window stays for the next time.
+- (void)performClose:(id)sender {
+  [self.page closeDevTools];
+}
 @end
 
 @implementation CraPageContainerView {

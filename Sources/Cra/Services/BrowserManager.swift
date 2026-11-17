@@ -1848,7 +1848,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         // Undocked frontends still report bounds (device mode); only setIsDocked changes the dock state.
         guard devToolsDockedState[id] != false else { return }
-        let size = devToolsViews[id]?.window?.contentView?.bounds.size ?? NSSize(width: bounds.maxX, height: bounds.maxY)
+        // The frontend's size: its card's area when the engine's frontend is in one (EmbeddedDevTools), else its window's.
+        let window = devToolsViews[id]?.window
+        let embedded = EmbeddedDevTools.holder(of: window).flatMap { $0.superview != nil ? $0 : nil }
+        let size = embedded?.bounds.size ?? window?.contentView?.bounds.size ?? NSSize(width: bounds.maxX, height: bounds.maxY)
         devToolsPlaceholders[id] = DevToolsPlaceholder(bounds: bounds, frontendSize: size)
         delegate?.browserManagerDevToolsPageBoundsChanged()
     }
@@ -1876,7 +1879,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         var out: [UUID: NSWindow] = [:]
         for id in visibleTabIDs {
             guard let w = devToolsViews[id]?.window else { continue }
-            if id == visibleTabID || runtimes[id]?.hostWindow != nil { out[id] = w }
+            if id == visibleTabID || runtimes[id]?.hostWindow != nil || EmbeddedDevTools.applies(to: runtimes[id]?.browser) { out[id] = w }
         }
         return out
     }

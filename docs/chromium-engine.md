@@ -306,3 +306,9 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
     `extension-remove`). And Chrome on macOS takes its language from the app bundle's translation folders, which
     Cra's doesn't have, so it ignored `--lang` and stayed English, extensions' chrome.i18n too; it reads `--lang`
     now (`cra-locale.patch`, `chromium-locale`).
+  - 17 Nov, -18: a page's DevTools were a window of their own beside the page whose frontend believed itself
+    undocked (no close button, no dock menu) and whose keys went to Chrome's hidden DevTools window (⌥⌘I did nothing
+    inside DevTools). The frontend now loads dockable while Chrome's window stays undocked, its dock calls come back
+    to Cra as on CEF, and its view goes into the card under the page (`cra-devtools.patch`, `EmbeddedDevTools`);
+    Chrome's hidden DevTools window never becomes key, which had cost clicks and hover (`devtools-docked`,
+    `devtools-docked-clicks`).
