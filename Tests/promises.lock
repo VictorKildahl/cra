@@ -166,6 +166,7 @@
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::severalTemplatesAreOneServerEach  dc2fe791c93f
 #110   Tests/Scenarios/secure-dns-default.scenario  1042904fb8ce
 #111   Tests/Scenarios/permission-doubled-request.scenario  b5196411ebdf
+#111   Tests/Scenarios/permission-element-system-denied.scenario  bd00ce2acf5e
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::arcSpaceProfiles  c9cf90d32a72
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::commandLineFollowsTheLoadExtensionOrder  eb3441dc88ab
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::importedExtensionsGoWhereTheirProfilesWent  689676ea4e95

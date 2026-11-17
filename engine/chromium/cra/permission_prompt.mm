@@ -7,8 +7,12 @@
 #include <optional>
 #include <vector>
 
+#include "base/auto_reset.h"
+#include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_uma_constants.h"
 #include "components/permissions/request_type.h"
@@ -19,6 +23,9 @@ namespace cra {
 namespace {
 
 using permissions::RequestType;
+
+// The requests a Cra prompt is answering, while its Accept or Deny runs.
+const permissions::PermissionPrompt::Delegate* g_answering = nullptr;
 
 // Chrome's request types as CraCEF.h's `kinds` bits, the CEF bridge's kPermissionKinds: 1 camera, 2 microphone,
 // 4 location, 8 notifications, 16 a type with no bit, and from 1 << 5 Chrome's other types.
@@ -88,12 +95,29 @@ class Prompt : public permissions::PermissionPrompt {
  public:
   Prompt(permissions::PermissionPrompt::Delegate* delegate, PermissionAsker ask, PermissionWithdrawn withdrawn)
       : delegate_(delegate->GetWeakPtr()), withdrawn_(withdrawn) {
+    base::WeakPtr<Prompt> me = weak_factory_.GetWeakPtr();
+    if (g_answering == delegate) {
+      // A page's <usermedia> or <geolocation> element, and macOS hasn't given Cra that access: answering runs
+      // Chrome's next step for it, which shows the same requests, already answered, again (its "allow in System
+      // Settings" step). Answering them a second time ran a spent callback and stopped Cra (GitHub #111, three
+      // 0.1.45 crash reports). Cra asks nothing more: the requests finish on the next turn, as Chrome's step does
+      // when it closes.
+      answered_ = true;
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(
+                         [](base::WeakPtr<Prompt> me) {
+                           if (me && me->delegate_) {
+                             me->delegate_->FinalizeCurrentRequests();
+                           }
+                         },
+                         me));
+      return;
+    }
     NSUInteger kinds = 0;
     for (const auto& request : delegate->Requests()) {
       kinds |= KindOf(request->request_type());
     }
     NSString* origin = base::SysUTF8ToNSString(delegate->GetRequestingOrigin().spec());
-    base::WeakPtr<Prompt> me = weak_factory_.GetWeakPtr();
     ask(origin, kinds, ^(BOOL allowed) {
       if (!me || !me->delegate_) {
         return;
@@ -101,6 +125,7 @@ class Prompt : public permissions::PermissionPrompt {
       me->answered_ = true;
       // Accepting or denying finishes the request, which can delete this prompt: nothing of it after.
       base::WeakPtr<permissions::PermissionPrompt::Delegate> requests = me->delegate_;
+      base::AutoReset<const permissions::PermissionPrompt::Delegate*> answering(&g_answering, requests.get());
       if (allowed) {
         requests->Accept(std::monostate());
       } else {

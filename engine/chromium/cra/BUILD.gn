@@ -26,6 +26,7 @@ source_set("core") {
     "//base",
     "//chrome/browser",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/permissions/system",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/tabs:tab_strip",
     "//content/public/browser",

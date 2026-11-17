@@ -1,0 +1,29 @@
+# promise: #111
+# A page's <geolocation> element (Chrome's permission elements; <usermedia> takes the same path) while macOS
+# hasn't given Cra location access: Allow on Cra's card runs Chrome's next step for the element, which showed
+# the same, already answered request again. Cra put up a second card, and answering it ran a spent callback and
+# stopped Cra (#111 on CEF, three 0.1.45 crash reports on the engine). One card, one answer, and Cra goes on.
+# Cra.debugSystemPermission makes macOS's answer "denied" as Chrome reads it, whatever this Mac says.
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=element
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Cra.debugSystemPermission&params={"type":"geolocation","denied":true}
+expect-log Cra cdp Cra\.debugSystemPermission .*"denied":true
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.body.insertAdjacentHTML('beforeend','<geolocation id=g style=\"position:fixed;left:20px;top:20px\"></geolocation>');'armed'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"armed"
+# Chrome takes a click on a permission element only once it has been on screen a moment.
+wait 2
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":32,"y":30,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":32,"y":30,"button":"left","clickCount":1}
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to .*location
+cra://debug?permissionCard=Allow
+expect-log permission card: .*; pressed Allow
+wait 2
+# The element's next step asks nothing more of Cra: no second card to answer.
+cra://debug?permissionCard=1
+expect-log permission card: none
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'still '+document.title.length"}
+expect-log "value":"still [0-9]+"
+cra://debug?cdp=Cra.debugSystemPermission&params={"type":"geolocation"}
+cra://open?url=${PAGE}?n=after
+expect-log GET /page\.html\?n=after

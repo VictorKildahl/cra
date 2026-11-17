@@ -1,0 +1,17 @@
+# A site's "Sign in with" button that uses FedCM's active mode: Chrome opens its loading dialog at once, as a
+# tab-modal dialog over the page's window. A page of Cra's sits in Cra's own window, which no Chrome widget owns,
+# and parenting the dialog to that missing widget stopped Cra (two 0.1.45 crash reports, in
+# FedCmAccountSelectionView::CreateDialogWidget). The dialog now goes over the tab's Browser window, which Cra
+# keeps where its own window is (cra-fedcm-dialog.patch). The identity provider doesn't exist, so the
+# request ends with an error after the dialog.
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=rp
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.fedcm='waiting';navigator.credentials.get({identity:{mode:'active',providers:[{configURL:'${ORIGIN}/fedcm/config.json',clientId:'cra-scenario'}]}}).then(()=>fedcm='signed in',e=>fedcm=e.name);'armed'","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"armed"
+expect-log GET /fedcm/config\.json
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'fedcm '+fedcm"}
+expect-log "value":"fedcm [A-Za-z ]+"
+cra://open?url=${PAGE}?n=after
+expect-log GET /page\.html\?n=after

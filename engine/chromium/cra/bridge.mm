@@ -68,6 +68,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -1827,6 +1828,38 @@ bool HandleDebugMethod(content::WebContents* contents,
         },
         browser->GetWeakPtr()));
     result->Set("closing", true);
+    return true;
+  }
+  if (method == "Cra.debugSystemPermission") {
+    // macOS's answer for camera, microphone or location, as Chrome reads it (denied: true or false; no denied:
+    // macOS's own again). A page's <geolocation> or <usermedia> element then takes Chrome's System Settings step.
+    const std::string* type = params ? params->FindString("type") : nullptr;
+    ContentSettingsType types[2] = {ContentSettingsType::DEFAULT, ContentSettingsType::DEFAULT};
+    if (type && *type == "geolocation") {
+      types[0] = ContentSettingsType::GEOLOCATION;
+      types[1] = ContentSettingsType::GEOLOCATION_WITH_OPTIONS;
+    } else if (type && *type == "camera") {
+      types[0] = ContentSettingsType::MEDIASTREAM_CAMERA;
+    } else if (type && *type == "microphone") {
+      types[0] = ContentSettingsType::MEDIASTREAM_MIC;
+    } else {
+      *error = "type is geolocation, camera or microphone";
+      return true;
+    }
+    static base::NoDestructor<
+        std::map<ContentSettingsType, std::unique_ptr<system_permission_settings::ScopedSettingsForTesting>>>
+        overrides;
+    std::optional<bool> denied = params->FindBool("denied");
+    for (ContentSettingsType t : types) {
+      if (t == ContentSettingsType::DEFAULT) {
+        continue;
+      }
+      overrides->erase(t);
+      if (denied) {
+        (*overrides)[t] = std::make_unique<system_permission_settings::ScopedSettingsForTesting>(t, *denied);
+      }
+    }
+    result->Set("denied", denied ? base::Value(*denied) : base::Value());
     return true;
   }
   if (method == "Cra.debugConnectClosedTabGroup") {
