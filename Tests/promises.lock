@@ -943,7 +943,10 @@
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::colorsMatchArcs  501e393ad819
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::dragsPickHueClockwiseAndStrengthByDistance  9fda21ba2d34
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::untintedHandlesRestAtThreeOClock  1372e31c2305
+#478   Packages/CraCore/Tests/CraCoreTests/BoostZapTests.swift::thePointerStepsThroughCandidatesInEqualSlices  82616c3903f1
+#478   Packages/CraCore/Tests/CraCoreTests/BoostZapTests.swift::theScriptIsASlider  48f22c8e433f
 #478   Tests/Scenarios/boost-editor.scenario  0c037f9b7e45
+#478   Tests/Scenarios/zap-related.scenario  50571144aa8b
 #480   Tests/Scenarios/native-window-hide.scenario  a18926843adf
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
