@@ -3535,16 +3535,38 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
 - [O video] The pad's drag and + (16 Nov 2026, issue #455, the reporter's side-by-side recording of their Arc, colours sampled from
   the video so ±10/255): a Drab red dragged round Arc's pad stayed dark, HSB brightness ≈ 0.4 through #682D33,
   #203B5F, #1B3D5A and #273A6D: the drag turns hue and saturation and keeps the colour's brightness. Arc's +
-  is off on its black and white swatches (binary symbols `isGreyscale`, `canAddColor`). Pressing the moon
-  toggle darkened the pad's red (#6B2D36 → #461F2C) and the sun left it as it was; one sample, the rule behind it
-  (`lightnessRange`, `darkModeBiasSetting`, `preservedLightness`) is not worked out. The card behind the pad is a
-  neutral grey material, light (#7D8082) on Light and dark (#232528) on Dark.
+  is off on its black and white swatches (binary symbols `isGreyscale`, `canAddColor`). The card behind the pad
+  is a neutral grey material, light (#7D8082) on Light and dark (#232528) on Dark. (The red's darkening seen
+  next to a moon press in that recording came from a small drag: the toggles never change the colour, below.)
+- [O live] Sun and moon (offline Arc 1.172, 17 Nov 2026; swatches pressed over AX, toggles clicked, Escape, the
+  saved StorableSidebar.json read): Brand4, Brand8, Drab3, Drab9, Grey5 and black were saved as themselves
+  whichever way the appearance was switched, one `single` `blendedSingleColor`, `contentOverBackgroundAppearance`
+  by the colour's own lightness. The toggles are View ▸ Appearance; what changes is the material under the colour.
+- [O live] One-colour material by appearance (same Arc, View ▸ Appearance set over AX, the window raised over a
+  full-screen white and then black window, region captures converted from the display's P3 to sRGB; navy
+  #26456B, red #F25E6B and pastel #F1D1EC at intensity 0.8): sidebar = α·colour + (1 − α)·material with
+  α = 0.64 (solidAlpha(0.8) = 0.63) and material = 166 + 0.315·backdrop under Light, 63 + 0.529·backdrop under
+  Dark, each within 1.1/255 over all three colours and both backdrops. The 31 Oct fit (66 + 0.52·backdrop) is the
+  Dark one; that run never set the appearance. So the same navy reads (84,104,128) over black on Light and (46,67,91) on
+  Dark. A two-colour vibrant gradient (Brand8 pair) moves too: (120,186,195) / (95,162,170) over black.
+  Inactive (another app in front) the material is flat: 252 under Light, 207 under Dark (Cra's 31 Oct 212).
+- [O live] The theme editor's card follows the same appearance (captures of the popover, same run): under Light a
+  near-white tint of the space colour (navy 237/241/246, red 253/237/238, pastel 253/245/248) with the controls in
+  black at the dark card's opacities (sun ≈ 0.6, − ≈ 0.52, the lit wave ≈ 0.45); under Dark the darkened card with
+  white controls. The handle rings, the slider thumb and the dial knob stay white on both.
+- Cra (#455): `SidebarBackdrop.solidActiveLight` (dim 0.10, lift 0.65: 166 + 0.315·backdrop) under a one-colour
+  space on Light, `solidActive` (dim 0.30, lift 0.26) on Dark; Auto follows macOS
+  (`SpaceTheme.usesLightMaterial`). Before, every space took the dark material, so Light and Dark looked alike and a
+  Light space was darker and less see-through than Arc's. Pinned by `solidThemesOnLightUseArcsLightMaterial`,
+  `materialFollowsTheSpacesAppearance` and the `theme-material` scenario (`themeShown` prints `material=`);
+  `solidInactiveLight` (flat 252) while inactive. Checked against the same backdrops: Cra's navy and red on Light
+  and Dark within 3/255 of Arc's. The editor's card follows the pad's Light or Dark (Auto: macOS) through
+  `SpaceTheme.isLight`: white 0.92 over the theme and black controls on Light (`editorInk`), as before on Dark.
 - Cra (#455): `SpaceColorWheel.placed` keeps the first colour's brightness on a drag (0.95 on an empty pad; a grey
   no darker than 0.2, so black shows a hue once dragged, a Cra choice) and `adding(to:)` gives the new colour that
   brightness; `canAdd(_ key:)` turns + off on a grey. Before, every drag and + went to brightness 0.95, so a dark
   swatch jumped to a light colour and + on black added white. Pinned by `dragKeepsTheColoursBrightness`,
-  `emptyPadAndGreysOnTheDrag` and `plusIsOffOnGreys`. Not copied yet: the moon toggle's darkening and the light
-  card on Light.
+  `emptyPadAndGreysOnTheDrag` and `plusIsOffOnGreys`.
 
 ## The theme editor's presets and commit (Arc 1.171, 4 Nov 2026, issue #170, asset catalog + strings)
 - [O static] The swatches are named colours in `ARCClients_BaseAssets.bundle`'s Assets.car (`assetutil --info`),

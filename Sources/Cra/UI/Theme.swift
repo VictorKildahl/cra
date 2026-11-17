@@ -36,6 +36,8 @@ struct SpacePalette {
     let vibrant: Bool
     /// One flat colour over Arc's solid-theme material (ShellView.solidBackdrop).
     let solid: Bool
+    /// Whether that material is Arc's light one: the space's Light or Dark, or macOS' on Auto (#455).
+    var lightMaterial = false
 
     /// Arc's one-colour opacity (SpaceTheme.solidAlpha, where the measurements are).
     static func solidAlpha(intensity: Double) -> Double { SpaceTheme.solidAlpha(intensity: intensity) }
@@ -95,10 +97,15 @@ extension SpaceTheme {
     /// observation tracking, a switch of macOS' appearance redraws whatever showed the old half.
     var shown: SpaceTheme { resolved(systemDark: SystemAppearance.shared.isDark) }
 
-    var palette: SpacePalette { shown.fixedPalette }
+    var palette: SpacePalette {
+        let systemDark = SystemAppearance.shared.isDark
+        var p = resolved(systemDark: systemDark).fixedPalette(lightMaterial: usesLightMaterial(systemDark: systemDark))
+        p.lightMaterial = usesLightMaterial(systemDark: systemDark)
+        return p
+    }
 
     /// The palette of a resolved theme (its appearance is light or dark, or judged by colour).
-    private var fixedPalette: SpacePalette {
+    private func fixedPalette(lightMaterial: Bool) -> SpacePalette {
         let dark = isDark
         let base = colors.isEmpty ? ["#DDDDDD"] : colors
         // Vibrant (Arc): raw colors at `intensity` opacity over the blur.
@@ -115,8 +122,10 @@ extension SpaceTheme {
         // Dark themes: Arc's palette tones (shadedDark front, midTone back) read wrong next to Cra's
         // dark sidebar (Victor, 4 Nov), so the folder keeps the earlier white-over-sidebar look, made
         // opaque. Under a translucent theme the sidebar is the top colour over the dark material
-        // (underWindowBackground with ShellView's lift), about 20 % white.
-        let ground = alphaTop < 1 ? Color(white: 0.2).blendedToward(stops[0], alphaTop) : stops[0]
+        // (underWindowBackground with ShellView's lift), about 20 % white; a solid one on Light is over
+        // Arc's light material instead, about 75 % white over a typical desktop (#455).
+        let material = solid && lightMaterial ? 0.75 : 0.2
+        let ground = alphaTop < 1 ? Color(white: material).blendedToward(stops[0], alphaTop) : stops[0]
         let darkFill = ground.blendedToward(.white, 0.14)
         return SpacePalette(
             isDark: dark,

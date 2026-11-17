@@ -874,9 +874,12 @@
 #451   Tests/CaptureOverlayTests.swift::checkOptionPicksDeeper  189b361c0f85
 #451   Tests/Scenarios/capture-pick.scenario  ba7b97eb1e40
 #452   Tests/PolicyTests.swift::defaultBrowserPicker  ea5c3e09748a
+#455   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::materialFollowsTheSpacesAppearance  9fdd8d37a5ca
+#455   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::solidThemesOnLightUseArcsLightMaterial  91f673d9b3d9
 #455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::dragKeepsTheColoursBrightness  c0ca845abdf1
 #455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::emptyPadAndGreysOnTheDrag  054bd4904f81
 #455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::plusIsOffOnGreys  c8ce7fe1d6dd
+#455   Tests/Scenarios/theme-material.scenario  0f0829a439b4
 #457   Packages/CraCore/Tests/CraCoreTests/ScopedSearchFillTests.swift::darkBarMatchesTheRequest  f8ff4a25f631
 #457   Packages/CraCore/Tests/CraCoreTests/ScopedSearchFillTests.swift::lightBarIsAPaleWash  a9835ca239f4
 #457   Packages/CraCore/Tests/CraCoreTests/ScopedSearchFillTests.swift::offByDefaultAndKeptInSettingsJSON  44ecd5d4dbfc

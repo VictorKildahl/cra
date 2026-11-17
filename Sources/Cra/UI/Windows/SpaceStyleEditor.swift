@@ -30,6 +30,9 @@ struct SpaceStyleEditor: View {
     }
 
     private static let pageKey = "themeEditorPresetPage"
+
+    /// Arc's card follows its appearance, which the sun and moon set: here the pad's Light or Dark (#455).
+    private var lightCard: Bool { SpaceTheme.isLight(pad.appearance, systemDark: SystemAppearance.shared.isDark) }
     @State private var swatchPage: Int
 
     var body: some View {
@@ -68,15 +71,18 @@ struct SpaceStyleEditor: View {
             Spacer(minLength: 0)
         }
         .frame(width: 355, height: 503)
-        // The space's own theme, darkened ~58% (Arc: #CDC2A5 behind → #554F37).
+        // The space's own theme, darkened ~58% (Arc: #CDC2A5 behind → #554F37) on Dark, and lightened to a
+        // near-white tint of it on Light, where Arc's controls turn black at the same opacities (offline
+        // Arc 1.172, 17 Nov 2026: navy card 237/241/246, red 253/237/238; #455). Auto follows macOS.
         .background(
             ZStack {
                 SpaceBackground(palette: theme.palette)
-                Color.black.opacity(0.58)
+                lightCard ? Color.white.opacity(0.92) : Color.black.opacity(0.58)
             }
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         )
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, lightCard ? .light : .dark)
+        .environment(\.editorInk, lightCard ? .black : .white)
         // Opening the editor leaves the theme as it is; the first change rebuilds it from the pad.
         .onChange(of: pad) { _, p in
             theme = SpaceThemeVariants.theme(key: p.key, intensity: p.intensity, noise: p.noise, appearance: p.appearance)
@@ -97,6 +103,7 @@ struct SpaceStyleEditor: View {
 /// SpaceStyleButtonStyle); the arrow past the last page is 0.2 and does neither. Not a SwiftUI
 /// Button: a Button keeps the plain arrow pointer whatever pointer style it's given.
 private struct PageArrow: View {
+    @Environment(\.editorInk) private var ink
     let symbol: String
     let enabled: Bool
     let label: String
@@ -108,7 +115,7 @@ private struct PageArrow: View {
         let hot = enabled && isHovered
         Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 36, height: 30)
             .contentShape(Rectangle())
-            .foregroundStyle(.white.opacity(enabled ? (hot ? 0.85 : 0.55) : 0.2))
+            .foregroundStyle(ink.opacity(enabled ? (hot ? 0.85 : 0.55) : 0.2))
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hot)
             .onHover { isHovered = $0 }
             .onTapGesture { if enabled { action() } }
@@ -134,6 +141,7 @@ struct PadState: Equatable {
 /// (0.95 on an empty pad). A second and third colour follow the first 40° either side; dragging any
 /// handle turns the set. + is off on a grey, as Arc's is (#455).
 private struct ColorPad: View {
+    @Environment(\.editorInk) private var ink
     @Binding var pad: PadState
     @State private var hoveredKnob: Int?
     @State private var draggingKnob: Int?
@@ -145,13 +153,13 @@ private struct ColorPad: View {
             let size = geo.size
             let centre = CGPoint(x: size.width / 2, y: size.height / 2)
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.04))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(ink.opacity(0.04))
                 Canvas { ctx, s in
                     var p = Path()
                     for x in stride(from: 4.0, to: s.width, by: 4) {
                         for y in stride(from: 4.0, to: s.height, by: 4) { p.addEllipse(in: CGRect(x: x - 0.5, y: y - 0.5, width: 1, height: 1)) }
                     }
-                    ctx.fill(p, with: .color(.white.opacity(0.12)))
+                    ctx.fill(p, with: .color(ink.opacity(0.12)))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
@@ -160,7 +168,7 @@ private struct ColorPad: View {
                 if pad.key.isEmpty {
                     Text("Tap to pick a color for this space")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(ink.opacity(0.85))
                         .allowsHitTesting(false)
                 }
                 ForEach(Array(pad.key.prefix(3).enumerated()), id: \.offset) { i, hex in
@@ -241,6 +249,7 @@ private struct ColorPad: View {
 
 /// Auto (sparkles), Light (sun) and Dark (moon) over the pad; the chosen one on a 32 pt tile.
 private struct AppearanceToggles: View {
+    @Environment(\.editorInk) private var ink
     @Binding var appearance: String
 
     var body: some View {
@@ -256,7 +265,7 @@ private struct AppearanceToggles: View {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .medium))
                 .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(appearance == value ? 0.12 : 0)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(ink.opacity(appearance == value ? 0.12 : 0)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(SpaceStyleButtonStyle(opacity: appearance == value ? 0.8 : 0.55, enabled: appearance != value))
@@ -266,6 +275,7 @@ private struct AppearanceToggles: View {
 /// The intensity: a wave over a 15 pt track with a white 16 × 46.5 pt thumb; the wave grows with the
 /// value and is bright up to the thumb, faint after it.
 private struct WaveSlider: View {
+    @Environment(\.editorInk) private var ink
     @Binding var value: Double
 
     var body: some View {
@@ -281,9 +291,10 @@ private struct WaveSlider: View {
             }
             let style = StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round)
             ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.1)).frame(height: 15)
-                wave.stroke(.white.opacity(0.25), style: style)
-                wave.stroke(.white.opacity(0.75), style: style).mask(Rectangle().frame(width: x).frame(maxWidth: .infinity, alignment: .leading))
+                Capsule().fill(ink.opacity(0.1)).frame(height: 15)
+                wave.stroke(ink.opacity(ink == .black ? 0.12 : 0.25), style: style)
+                // Arc's light card draws the lit wave at about half black (130 on 237), its dark one brighter.
+                wave.stroke(ink.opacity(ink == .black ? 0.36 : 0.75), style: style).mask(Rectangle().frame(width: x).frame(maxWidth: .infinity, alignment: .leading))
                 Capsule().fill(.white).frame(width: 16, height: 46.5).position(x: x, y: h / 2)
             }
             .contentShape(Rectangle())
@@ -295,6 +306,7 @@ private struct WaveSlider: View {
 /// The grain: a dark disc showing it, a ring of dots lit from twelve o'clock round to a white knob;
 /// turning the knob sets the value.
 private struct GrainDial: View {
+    @Environment(\.editorInk) private var ink
     @Binding var value: Double
     private let count = 24
 
@@ -306,12 +318,12 @@ private struct GrainDial: View {
                 ForEach(0..<count, id: \.self) { i in
                     let a = Double(i) / Double(count) * 2 * .pi - .pi / 2
                     Circle()
-                        .fill(.white.opacity(Double(i) / Double(count) <= value ? 0.55 : 0.18))
+                        .fill(ink.opacity(Double(i) / Double(count) <= value ? 0.55 : 0.18))
                         .frame(width: 3.5, height: 3.5)
                         .position(x: c.x + 34 * cos(a), y: c.y + 34 * sin(a))
                 }
                 Circle().fill(.black.opacity(0.12)).overlay(NoiseDisc(amount: value)).clipShape(Circle())
-                    .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+                    .overlay(Circle().strokeBorder(ink.opacity(0.12), lineWidth: 1))
                     .frame(width: 41, height: 41)
                 Capsule().fill(.white).frame(width: 4.5, height: 12)
                     .rotationEffect(.radians(knob + .pi / 2))
@@ -361,10 +373,12 @@ struct SpaceStyleButtonStyle: ButtonStyle {
     @State private var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @Environment(\.editorInk) private var ink
+
     func makeBody(configuration: Configuration) -> some View {
         let hot = enabled && isHovered
         return configuration.label
-            .foregroundStyle(.white.opacity(hot ? min(1, opacity + 0.3) : opacity))
+            .foregroundStyle(ink.opacity(hot ? min(1, opacity + 0.3) : opacity))
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hot)
             .onHover { isHovered = $0 }
     }
@@ -386,5 +400,15 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+/// The editor controls' ink: white on Arc's dark card, black on its light one (#455).
+private struct EditorInkKey: EnvironmentKey { static let defaultValue = Color.white }
+
+extension EnvironmentValues {
+    var editorInk: Color {
+        get { self[EditorInkKey.self] }
+        set { self[EditorInkKey.self] = newValue }
     }
 }
