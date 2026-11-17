@@ -2167,6 +2167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 ArcTooltipController.shared.debugShowSpaceTip(n, in: content)
                 return
             }
+            // tooltipShown=<label>: whether a tip is on screen.
+            if let label = dict["tooltipShown"] {
+                CraLog.note("tooltip \(label): shown=\(ArcTooltipController.shared.debugShown ? 1 : 0)")
+                return
+            }
             if let t = dict["tooltip"], let content = main.window?.contentView {
                 ArcTooltipController.shared.debugShow(t, in: content, at: NSRect(x: 380, y: content.bounds.height - 120, width: 28, height: 28))
                 return

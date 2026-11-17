@@ -103,6 +103,9 @@ final class ArcTooltipController {
         pendingFor = nil
     }
 
+    /// Testing: whether a tip is on screen.
+    var debugShown: Bool { panel != nil }
+
     /// Testing: the tip for `help` over a rect of `view`, without a pointer.
     func debugShow(_ help: String, in view: NSView, at rect: NSRect) {
         let a = ArcTooltipAnchorView(frame: rect)
@@ -129,6 +132,7 @@ final class ArcTooltipController {
         cancelPending()
         guard let window = view.hostWindow, !view.text.isEmpty else { return }
         removePanel()
+        guard !Self.blockedBySheet(window) else { return }
         let p = LittleTooltipPanel()
         let option = NSEvent.modifierFlags.contains(.option) ? view.optionText : nil
         let colors = tones(window).map(ArcTooltipLabel.Colors.init) ?? .little
@@ -161,6 +165,22 @@ final class ArcTooltipController {
         panel = p
         shownFor = view
         view.onShow?()
+    }
+
+    /// Whether a sheet that `window` isn't part of is open on it or a window it is docked in. Such
+    /// a window takes no input, and adding a tip to its group orders the sheet again: a Save
+    /// panel's remote view threw from that on macOS 27.0 and quit Cra (0.1.45 crash report).
+    private static func blockedBySheet(_ window: NSWindow) -> Bool {
+        var chain: [NSWindow] = []
+        var next: NSWindow? = window
+        while let w = next {
+            chain.append(w)
+            next = w.parent ?? w.sheetParent
+        }
+        return chain.contains { w in
+            guard let sheet = w.attachedSheet else { return false }
+            return !chain.contains { $0 === sheet }
+        }
     }
 
     private func hide() {

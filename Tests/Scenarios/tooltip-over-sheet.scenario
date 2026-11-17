@@ -1,0 +1,25 @@
+# No tip shows over a window that has a sheet open. Showing one adds it to the window's group of
+# windows, and AppKit orders the group again, the sheet included. On macOS 27.0 the Save panel's
+# remote view threw from that, and the uncaught exception quit Cra (0.1.45 crash report, 17 Nov 2026).
+# Once the sheet is gone, tips show again.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?tooltip=Before
+cra://debug?tooltipShown=before
+expect-log tooltip before: shown=1
+
+cra://action/savePageAs
+wait 2
+cra://debug?windowState=save
+expect-log window state save: main0 .* sheet=1
+cra://debug?tooltip=Over the sheet
+cra://debug?tooltipShown=sheet
+expect-log tooltip sheet: shown=0
+
+cra://debug?endSheets=1
+wait 1
+cra://debug?tooltip=After
+cra://debug?tooltipShown=after
+expect-log tooltip after: shown=1
