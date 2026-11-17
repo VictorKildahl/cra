@@ -300,8 +300,14 @@ public struct SidebarItem: Identifiable, Codable, Equatable {
 }
 
 public struct Space: Identifiable, Codable, Equatable {
+    /// User-entered Space names are short labels. Count Swift Characters so a composed emoji or
+    /// non-Latin character consumes one place rather than its UTF-8 byte count.
+    public static let maximumTitleLength = 60
+
     public var id: UUID
-    public var title: String
+    public var title: String {
+        didSet { title = Self.limitedTitle(title) }
+    }
     public var emoji: String
     public var theme: SpaceTheme
     public var favoritesContainerID: UUID
@@ -328,7 +334,7 @@ public struct Space: Identifiable, Codable, Equatable {
                 todayContainerID: UUID, createdAt: Date, profileID: UUID? = nil, symbol: String? = nil, standaloneWindowID: UUID? = nil,
                 iconImage: Data? = nil) {
         self.id = id
-        self.title = title
+        self.title = Self.limitedTitle(title)
         self.emoji = emoji
         self.theme = theme
         self.favoritesContainerID = favoritesContainerID
@@ -339,6 +345,12 @@ public struct Space: Identifiable, Codable, Equatable {
         self.symbol = symbol
         self.standaloneWindowID = standaloneWindowID
         self.iconImage = iconImage
+    }
+
+    public mutating func rename(to title: String) { self.title = Self.limitedTitle(title) }
+
+    public static func limitedTitle(_ title: String) -> String {
+        title.count <= maximumTitleLength ? title : String(title.prefix(maximumTitleLength))
     }
 }
 
@@ -1053,6 +1065,8 @@ extension Space {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
+        // A name saved before the limit, or by another Mac, loads as it was: the limit applies where a
+        // name is typed, and menus abbreviate a long one (SpaceMenuTitle), so loading never rewrites it.
         title = try c.decode(String.self, forKey: .title)
         emoji = try c.decode(String.self, forKey: .emoji)
         theme = try c.decode(SpaceTheme.self, forKey: .theme)
@@ -1127,4 +1141,3 @@ public enum WebsiteAppearance: String, Codable, CaseIterable, Sendable {
         }
     }
 }
-

@@ -1,0 +1,5 @@
+Browser icons in resources/browsers (Brave, Chrome, Chromium, Edge, Firefox, Opera, Opera GX, Vivaldi)
+
+The marks come from https://github.com/alrra/browser-logos (npm @browser-logos/*), placed by Cra on a
+plain macOS-style tile. They are trademarks of their owners and are shown only to name the browsers Cra
+can import from. Arc, Dia and Zen are their apps' own icons; Helium's tile is a generic globe.

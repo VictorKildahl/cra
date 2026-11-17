@@ -193,7 +193,7 @@ private struct SourceStep: View {
             // Three rows of cards fit; more browsers scroll under a soft edge.
             ScrollView {
                 LazyVGrid(columns: cols, alignment: .leading, spacing: ImportMetrics.gap) {
-                    ForEach(model.sources) { s in
+                    ForEach(model.listedSources) { s in
                         BrowserCard(source: s, model: model, c: c)
                     }
                 }
@@ -408,17 +408,25 @@ private struct BrowserCard: View {
 
     var body: some View {
         let selected = model.source == source
+        // Listed but not on this Mac (or nothing to bring over): shown dimmed, not pickable.
+        let available = model.sources.contains(source)
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         ZStack(alignment: .topLeading) {
-            shape.fill(hover ? c.cardHover : .clear)
+            shape.fill(hover && available ? c.cardHover : .clear)
             shape.strokeBorder(selected ? c.cardBorderSelected : c.cardBorder, lineWidth: 0.5)
             Image(nsImage: source.icon)
                 .resizable().interpolation(.high)
                 .frame(width: 52, height: 52)
+                .saturation(available ? 1 : 0.2)
+                .opacity(available ? 1 : 0.45)
                 .offset(x: 19, y: 14)
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.rawValue).font(.system(size: 16, weight: .medium)).foregroundStyle(c.title)
-                if blocked {
+                    .opacity(available ? 1 : 0.45)
+                if !available {
+                    Text(source.isInstalled ? "Nothing to import" : "Not on this Mac")
+                        .font(.system(size: 11)).foregroundStyle(c.caption).lineLimit(1)
+                } else if blocked {
                     Text("Needs Full Disk Access").font(.system(size: 11)).foregroundStyle(c.body)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 } else if selected, let plan = model.plan, !plan.spaces.isEmpty {
@@ -430,17 +438,19 @@ private struct BrowserCard: View {
                     .transition(.opacity)
                 }
             }
-            .frame(width: 80, height: ImportMetrics.card.height, alignment: .leading)
+            .frame(width: available ? 80 : 120, height: ImportMetrics.card.height, alignment: .leading)
             .offset(x: 82)
-            RadioDot(on: selected, c: c)
-                .offset(x: 161.5, y: 28)
+            if available {
+                RadioDot(on: selected, c: c)
+                    .offset(x: 161.5, y: 28)
+            }
         }
         .frame(width: ImportMetrics.card.width, height: ImportMetrics.card.height)
         .contentShape(shape)
         .onHover { hover = $0 }
         .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { model.select(source) } }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(source.rawValue)
+        .accessibilityLabel(available ? source.rawValue : "\(source.rawValue), \(source.isInstalled ? "nothing to import" : "not on this Mac")")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { withAnimation(.easeOut(duration: 0.18)) { model.select(source) } }
     }
