@@ -300,3 +300,9 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   - 16 Nov, -9: the hidden window that holds a profile's pages kept an about:blank tab, and with it a renderer
     process for as long as Cra ran. Its blank page is now a page that never loads, which has no renderer
     (`one-tab-renderers`).
+  - 17 Nov, -18 (#484): Chrome hangs an extension's browser-modal dialogs (chrome://extensions' Remove asks
+    first) on the current browser window, which is the hidden page host, so Remove did nothing at all. Such a
+    dialog now gets no parent and Cra shows it over its own window, as on CEF (`cra-extension-dialogs-parent.patch`,
+    `extension-remove`). And Chrome on macOS takes its language from the app bundle's translation folders, which
+    Cra's doesn't have, so it ignored `--lang` and stayed English, extensions' chrome.i18n too; it reads `--lang`
+    now (`cra-locale.patch`, `chromium-locale`).

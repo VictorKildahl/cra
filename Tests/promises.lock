@@ -940,3 +940,5 @@
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
 #480   Tests/Scenarios/native-window-hide.scenario  a18926843adf
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
+#484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
+#484   Tests/Scenarios/extension-remove.scenario  ce468889560a

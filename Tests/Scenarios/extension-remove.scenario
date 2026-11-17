@@ -1,0 +1,21 @@
+# Remove in chrome://extensions asks first, in Chromium's own dialog. On the Chrome engine Chromium gave that
+# dialog the (never shown) window that holds Cra's pages, so Remove did nothing at all, for every extension
+# (GitHub #484). The dialog must show over Cra's window, and its Remove must remove the extension.
+# promise: #484
+budget rss=600
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.uninstall('${EXTENSION_ID}',{showConfirmDialog:true}).catch(()=>0);'asked'","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*asked
+expect-log Chromium dialog [0-9]+ shown over window
+# Chromium ignores a press in the first moments a dialog shows (its input protection).
+wait 1
+cra://debug?chromiumDialogs=Remove
+expect-log Chromium dialogs: frame=\{\{.*\}\} over=\{\{.*\}\} onScreen=true titleBarHidden=true
+expect-log Chromium dialog pressed Remove
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.getAll().then(a=>a.map(e=>e.id).includes('${EXTENSION_ID}')?'fixture still installed':'fixture removed')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*fixture (still installed|removed)
+reject-log fixture still installed

@@ -1,0 +1,50 @@
+diff --git a/chrome/browser/ui/extensions/extension_dialog_utils_views.cc b/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
+index e59ca9ea38..630dca9312 100644
+--- a/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
++++ b/chrome/browser/ui/extensions/extension_dialog_utils_views.cc
+@@ -12,6 +12,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/bubble/bubble_dialog_model_host.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
+ #include "ui/views/widget/widget.h"
+ 
+ namespace {
+@@ -31,6 +32,19 @@ views::BubbleAnchor GetDialogAnchor(
+   return container->GetExtensionsButtonAnchor();
+ }
+ 
++// Cra: Chrome takes the (never shown) window that holds a profile's pages (cra_hosted_page.h) for the
++// current browser window, so a dialog for a page in Cra's own window went there and never showed:
++// Remove in chrome://extensions did nothing at all (GitHub #484). Without a parent the dialog shows
++// on its own, and Cra puts it over its window as a sheet would hang (Cra's ChromiumDialogs, #349).
++gfx::NativeWindow CraShownParent(gfx::NativeWindow parent) {
++  views::Widget* widget =
++      parent ? views::Widget::GetWidgetForNativeWindow(parent) : nullptr;
++  if (widget && widget->GetNativeWindowProperty(views::kCraPageHostWindow)) {
++    return gfx::NativeWindow();
++  }
++  return parent;
++}
++
+ }  // namespace
+ 
+ void ShowDialog(gfx::NativeWindow parent,
+@@ -41,7 +55,8 @@ void ShowDialog(gfx::NativeWindow parent,
+ 
+ void ShowModalDialog(gfx::NativeWindow parent,
+                      std::unique_ptr<ui::DialogModel> dialog_model) {
+-  constrained_window::ShowBrowserModal(std::move(dialog_model), parent);
++  constrained_window::ShowBrowserModal(std::move(dialog_model),
++                                       CraShownParent(parent));
+ }
+ 
+ void ShowWebModalDialog(content::WebContents* web_contents,
+@@ -52,6 +67,7 @@ void ShowWebModalDialog(content::WebContents* web_contents,
+ void ShowDialog(gfx::NativeWindow parent,
+                 const std::vector<extensions::ExtensionId>& extension_ids,
+                 std::unique_ptr<ui::DialogModel> dialog_model) {
++  parent = CraShownParent(parent);
+   ExtensionsContainerViews* const container =
+       parent ? GetExtensionsContainerViews(parent) : nullptr;
+   if (container && container->IsVisible() &&

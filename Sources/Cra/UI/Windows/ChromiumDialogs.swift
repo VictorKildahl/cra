@@ -43,6 +43,28 @@ enum ChromiumDialogs {
         }.joined(separator: "; ")
     }
 
+    /// For scenarios: presses the button with that title in the Chromium dialog showing, the way
+    /// VoiceOver does (its accessibility press), so no pointer or key goes anywhere (#484).
+    static func press(_ title: String) -> String {
+        for w in NSApp.windows where w.isVisible && NSStringFromClass(type(of: w)) == ChromiumDialog.windowClass
+            && w.styleMask.rawValue == ChromiumDialog.windowModalStyle {
+            if let button = button(title, in: w.contentView, depth: 0) {
+                button.accessibilityPerformPress()
+                return "Chromium dialog pressed \(title)"
+            }
+        }
+        return "Chromium dialog press \(title): no such button"
+    }
+
+    private static func button(_ title: String, in element: Any?, depth: Int) -> NSAccessibilityProtocol? {
+        guard depth < 40, let e = element as? NSAccessibilityProtocol else { return nil }
+        if e.accessibilityRole() == .button, e.accessibilityTitle() == title || e.accessibilityLabel() == title { return e }
+        for child in e.accessibilityChildren() ?? [] {
+            if let found = button(title, in: child, depth: depth + 1) { return found }
+        }
+        return nil
+    }
+
     private static func willOrderIn(_ w: NSWindow) {
         guard !framed.contains(w),
               ChromiumDialog.isParentless(className: NSStringFromClass(type(of: w)), styleMask: w.styleMask.rawValue,

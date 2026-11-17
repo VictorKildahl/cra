@@ -1,0 +1,31 @@
+diff --git a/ui/base/l10n/l10n_util_mac.mm b/ui/base/l10n/l10n_util_mac.mm
+index efc4bf25fd..cefc829bed 100644
+--- a/ui/base/l10n/l10n_util_mac.mm
++++ b/ui/base/l10n/l10n_util_mac.mm
+@@ -8,6 +8,7 @@
+ 
+ #import "base/apple/bundle_locations.h"
+ #import "base/check.h"
++#import "base/command_line.h"
+ #import "base/lazy_instance.h"
+ #import "base/strings/sys_string_conversions.h"
+ #import "ui/base/l10n/l10n_util.h"
+@@ -54,6 +55,18 @@ void OverrideLocaleWithCocoaLocale() {
+   // macOS uses "_" instead of "-", so swap to get a real locale value.
+   std::string locale_value = base::SysNSStringToUTF8(
+       [first_locale stringByReplacingOccurrencesOfString:@"_" withString:@"-"]);
++  // Cra: its app bundle carries no translation folders, so macOS offers it
++  // English only. Cra picks the locale from the macOS languages the way this
++  // does for Chrome's bundle (its ChromiumLocale) and passes it as --lang;
++  // without this Chromium stayed English, its pages and its extensions
++  // (chrome.i18n) too, whatever macOS was set to (GitHub #484).
++  const base::CommandLine* command_line =
++      base::CommandLine::InitializedForCurrentProcess()
++          ? base::CommandLine::ForCurrentProcess()
++          : nullptr;
++  if (command_line && command_line->HasSwitch("lang")) {
++    locale_value = command_line->GetSwitchValueASCII("lang");
++  }
+ 
+   // On disk the "en-US" resources are just "en" (http://crbug.com/25578), so
+   // the reverse mapping is done here to continue to feed Chrome the same values
