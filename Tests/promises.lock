@@ -877,3 +877,7 @@
 #459   Packages/CraCore/Tests/CraCoreTests/MCPProtocolTests.swift::fullServerReplySaysWhy  c603156a09f1
 #459   Tests/MCPTransportTests.swift::fullServerSaysWhy  78c75dce7c78
 #463   Tests/PictureInPictureCornersTests.swift::hoverLayerKeepsTheCorners  226a463777da
+#471   Packages/CraCore/Tests/CraCoreTests/SpaceTitleTests.swift::creationDecodeAndEveryRenameShareAUnicodeSafeLimit  c98a8c064655
+#471   Packages/CraCore/Tests/CraCoreTests/SpacesMenuCompositionTests.swift::navigationContainsEveryRealSpaceInOrder  8685c1bac8c8
+#471   Tests/Scenarios/spaces-menu-long-name.scenario  1fb73e6628c1
+#471   Tests/Scenarios/spaces-menu-rows.scenario  2f97a92f3d0c
