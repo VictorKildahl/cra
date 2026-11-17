@@ -831,6 +831,8 @@
 #419   Tests/Scenarios/split-drop.scenario  3bd2c37b3cb1
 #421   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::typedURLFollowsSpaceRoutes  cfbe95a599dd
 #421   Tests/Scenarios/command-bar-route.scenario  e9c6c3f45f79
+#424   Tests/Scenarios/floating-sidebar-rename.scenario  08db592c6da8
+#424   Tests/Scenarios/rename-waking-tab.scenario  d17e983e5dc1
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::aPeekOnACallHoldsItsFirstClose  bba8b358c791
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::aSecondCloseGoesThrough  5d87f80b126d
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::thePillGrowsRightFromTheButton  7c49ec85af44
