@@ -4,6 +4,7 @@ import Testing
 
 /// A Space name has one user-facing limit at creation and rename. The limit counts Swift
 /// Characters, so composed emoji and non-Latin names are not penalized by their UTF-8 size.
+/// A longer name already on disk (saved before the limit, or synced) loads unchanged.
 struct SpaceTitleTests {
     private func space(title: String) -> Space {
         Space(id: UUID(), title: title, emoji: "", theme: SpaceTheme.presets[0],
@@ -11,7 +12,7 @@ struct SpaceTitleTests {
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/471"))
-    func creationDecodeAndEveryRenameShareAUnicodeSafeLimit() throws {
+    func creationAndEveryRenameShareAUnicodeSafeLimit() throws {
         #expect(Space.maximumTitleLength == 60)
 
         let exact = String(repeating: "a", count: Space.maximumTitleLength)
@@ -22,7 +23,7 @@ struct SpaceTitleTests {
         var stored = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(space(title: "Home"))) as? [String: Any])
         stored["title"] = tooLong
         let decoded = try JSONDecoder().decode(Space.self, from: JSONSerialization.data(withJSONObject: stored))
-        #expect(decoded.title == exact)
+        #expect(decoded.title == tooLong, "a stored name loads as saved, so loading never shortens it on disk")
 
         var renamed = space(title: "Home")
         let unicode = String(repeating: "🧑‍💻", count: Space.maximumTitleLength + 1)

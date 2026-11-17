@@ -13,9 +13,10 @@ enum SpaceMenuTitle {
         var toolTip: String? { title == fullTitle ? nil : fullTitle }
     }
 
-    /// Arc shows about twenty characters before abbreviating a Space name. Keep a rendered-width
-    /// backstop as well, so twenty unusually wide characters still cannot stretch a menu without bound.
-    static let maximumDisplayedNameLength = 20
+    /// Arc 1.172 keeps 24 characters of a long Space name before the ellipsis ("HomeHomeHomeHomeHomeHome…",
+    /// about 222 pt, in Spaces ▸ on a 2x capture, PR #481). Keep a rendered-width backstop as well, so
+    /// 24 unusually wide characters still cannot stretch a menu without bound.
+    static let maximumDisplayedNameLength = 24
     static let maximumDisplayedNameWidth: CGFloat = 260
 
     static func plain(_ title: String) -> Value { named(title) }

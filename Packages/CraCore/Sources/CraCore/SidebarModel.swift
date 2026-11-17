@@ -1065,9 +1065,9 @@ extension Space {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
-        // Decoding assigns stored properties during initialization, so title's didSet does not
-        // run. Apply the same limit here to keep older, synced and hand-edited files bounded.
-        title = Self.limitedTitle(try c.decode(String.self, forKey: .title))
+        // A name saved before the limit, or by another Mac, loads as it was: the limit applies where a
+        // name is typed, and menus abbreviate a long one (SpaceMenuTitle), so loading never rewrites it.
+        title = try c.decode(String.self, forKey: .title)
         emoji = try c.decode(String.self, forKey: .emoji)
         theme = try c.decode(SpaceTheme.self, forKey: .theme)
         // Spaces saved while favorites were shared get a container on load (SidebarStore.repair).

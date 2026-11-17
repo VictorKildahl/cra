@@ -9,3 +9,7 @@ cra://debug?menuRows=Spaces&marks=1&icons=1&tips=1&label=long
 expect-log menu rows long: .*\|✓\[icon\]\[tip\]WWWWWWWWWWWWWWWWWWWW…\|──\|Manage Spaces…$
 cra://debug?spaceMenu=long-context
 expect-log space menu long-context: .*Export “WWWWWWWWWWWWWWWWWWWW…” into Folder ▸.*
+# Arc 1.172 keeps 24 characters before the ellipsis: "HomeHomeHomeHomeHomeHome…" (PR #481's Arc capture).
+cra://debug?spacesMenuChange=add&title=HomeHomeHomeHomeHomeHomeHome
+cra://debug?menuRows=Spaces&marks=1&icons=1&tips=1&label=arc
+expect-log menu rows arc: .*\|(\[icon\])?\[tip\]HomeHomeHomeHomeHomeHome…\|──\|Manage Spaces…$

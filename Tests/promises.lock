@@ -926,9 +926,10 @@
 #467   Tests/Scenarios/tab-switcher-all-spaces.scenario  b5befa94ecac
 #468   Tests/Scenarios/devtools-draws.scenario  97ee7dc162fd
 #469   Tests/Scenarios/new-tab-link-shows.scenario  97ea83e9c9b1
-#471   Packages/CraCore/Tests/CraCoreTests/SpaceTitleTests.swift::creationDecodeAndEveryRenameShareAUnicodeSafeLimit  c98a8c064655
+#471   Packages/CraCore/Tests/CraCoreTests/SpaceTitleTests.swift::creationAndEveryRenameShareAUnicodeSafeLimit  85aae0eea9be
 #471   Packages/CraCore/Tests/CraCoreTests/SpacesMenuCompositionTests.swift::navigationContainsEveryRealSpaceInOrder  8685c1bac8c8
-#471   Tests/Scenarios/spaces-menu-long-name.scenario  1fb73e6628c1
+#471   Tests/Scenarios/spaces-menu-keys.scenario  e64b4304c942
+#471   Tests/Scenarios/spaces-menu-long-name.scenario  ed10d7719926
 #471   Tests/Scenarios/spaces-menu-rows.scenario  2f97a92f3d0c
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
