@@ -2425,10 +2425,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
-    /// A key before the page sees it (CEF OnPreKeyEvent): Cra takes the shortcuts that prefer Cra,
-    /// and Use Both's second press of a shortcut the page kept (Settings ▸ Shortcuts, #374). The rest
-    /// go to the page and come back through handleUnhandledKey if it leaves them alone.
+    /// A key before the page sees it: Cra takes native window commands, the shortcuts that prefer
+    /// Cra, and Use Both's second press of a shortcut the page kept (Settings ▸ Shortcuts, #374).
+    /// The rest go to the page and come back through handleUnhandledKey if it leaves them alone.
     func handleReservedKey(_ event: NSEvent) -> Bool {
+        if performNativePageShortcut(event) { return true }
         guard let action = bindings.action(for: event) else { return false }
         let priority = bindings.priority(of: action.id)
         let takes: Bool
@@ -2441,6 +2442,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard takes else { return false }
         perform(action.id)
         return true
+    }
+
+    private var nativePageShortcuts: [(item: NSMenuItem, defaultKey: Shortcut)] = []
+
+    private func performNativePageShortcut(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return false }
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control, .function])
+        guard !modifiers.isEmpty else { return false }
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        let typed = event.characters?.lowercased()
+        func matches(_ item: NSMenuItem) -> Bool {
+            let equivalent = item.keyEquivalent
+            let letter = equivalent.lowercased()
+            guard letter == key || letter == typed else { return false }
+            // AppKit also lets a menu encode Shift with an uppercase letter.
+            var mask = item.keyEquivalentModifierMask
+            if equivalent != letter { mask.insert(.shift) }
+            return mask == modifiers
+        }
+        let shortcut = nativePageShortcuts.lazy.compactMap { native -> NSMenuItem? in
+            let item = native.item
+            if matches(item) { return item.copy() as? NSMenuItem }
+            // A user-configurable command on the same chord can clear the native item's key
+            // in the main menu. The native command still takes precedence over a page.
+            if item.keyEquivalent.isEmpty, item.userKeyEquivalent.isEmpty, native.defaultKey.flags == modifiers,
+               native.defaultKey.key == key || native.defaultKey.key == typed,
+               self.bindings.action(for: event)?.shortcuts.contains(native.defaultKey) == true,
+               let copy = item.copy() as? NSMenuItem {
+                copy.keyEquivalent = native.defaultKey.key
+                copy.keyEquivalentModifierMask = native.defaultKey.flags
+                return copy
+            }
+            // macOS also installs an alternate for Full Screen (Fn+F and Control-Command-F).
+            guard item.action == #selector(NSWindow.toggleFullScreen(_:)) else { return nil }
+            return item.menu?.items.first { $0.action == item.action && matches($0) }?.copy() as? NSMenuItem
+        }.first
+        guard let shortcut else { return false }
+        if shortcut.isAlternate { shortcut.isAlternate = false }
+
+        if shortcut.action == #selector(NSWindow.performMiniaturize(_:)) || shortcut.action == #selector(NSWindow.toggleFullScreen(_:)) {
+            // Chromium's page may own the keyboard in a child window. Act on its Cra window.
+            // Stop at a Little Window or Peek before reaching the browser window behind it.
+            var target = event.window ?? NSApp.keyWindow
+            while let parent = target?.parent, !(target is CraWindow), !(target is LittleWindow) {
+                target = parent
+            }
+            guard let target else { return false }
+            shortcut.target = target
+        }
+
+        // Let AppKit validate and dispatch the native item without picking a configurable shortcut
+        // that uses the same keys. In particular, keep Cra's normal Quit and window availability rules.
+        let menu = NSMenu()
+        menu.addItem(shortcut)
+        menu.update()
+        guard shortcut.isEnabled else { return false }
+        return menu.performKeyEquivalent(with: event)
     }
 
     /// Use Both: a press the page hasn't handed back by UseBothPresses.answerTime was the page's. Cra
@@ -2834,13 +2892,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return m
     }
 
-    private func std(_ title: String, _ sel: Selector, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command) -> NSMenuItem {
+    private func std(_ title: String, _ sel: Selector, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command,
+                     beforePage: Bool = false) -> NSMenuItem {
         let m = NSMenuItem(title: title, action: sel, keyEquivalent: key)
         m.keyEquivalentModifierMask = mods
+        if beforePage { nativePageShortcuts.append((m, Shortcut(key, mods))) }
         return m
     }
 
     func buildMenus() {
+        nativePageShortcuts.removeAll()
         let menubar = NSMenu()
 
         let appMenu = NSMenu(title: "Cra")
@@ -2855,11 +2916,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(item("importData"))
         appMenu.addItem(item("checkForUpdates"))
         appMenu.addItem(.separator())
-        appMenu.addItem(std("Hide Cra", #selector(NSApplication.hide(_:)), "h"))
-        appMenu.addItem(std("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
+        appMenu.addItem(std("Hide Cra", #selector(NSApplication.hide(_:)), "h", beforePage: true))
+        appMenu.addItem(std("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option], beforePage: true))
         appMenu.addItem(std("Show All", #selector(NSApplication.unhideAllApplications(_:))))
         appMenu.addItem(.separator())
-        appMenu.addItem(std("Quit Cra", #selector(NSApplication.terminate(_:)), "q"))
+        appMenu.addItem(std("Quit Cra", #selector(NSApplication.terminate(_:)), "q", beforePage: true))
         menubar.addItem(submenu: appMenu, title: "Cra")
 
         // Arc's File menu, its sections and rows (FileMenu, #279).
@@ -2918,7 +2979,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         dev.addItem(item("toggleDeveloperMode"))
         view.addItem(submenu: dev, title: "Developer")
         view.addItem(.separator())
-        view.addItem(std("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]))
+        view.addItem(std("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control], beforePage: true))
         menubar.addItem(submenu: view, title: "View")
 
         let spaces = NSMenu(title: "Spaces")
@@ -2958,7 +3019,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         let window = NSMenu(title: "Window")
         window.addItem(item("stayOnTop"))
-        window.addItem(std("Minimize Window", #selector(NSWindow.performMiniaturize(_:)), "m"))
+        window.addItem(std("Minimize Window", #selector(NSWindow.performMiniaturize(_:)), "m", beforePage: true))
         window.addItem(std("Zoom", #selector(NSWindow.performZoom(_:))))
         window.addItem(.separator())
         window.addItem(item("openLibrary")); window.addItem(item("viewDownloads")); window.addItem(item("viewEasels")); window.addItem(item("viewMedia")); window.addItem(item("viewBoosts"))
