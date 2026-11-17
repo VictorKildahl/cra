@@ -4443,9 +4443,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// from the focused page's top and trailing edges.
     func debugFindBar(_ label: String) -> String {
         guard let find = findPanel, overlay.findVisible, let page = lastFindPage else { return "findBar \(label): visible=0" }
+        // `focused`: the bar's field is its panel's first responder, so it has the keys whenever the panel is key
+        // (a background copy never has a key window); `selected`: all of its text is selected, so typing replaces it.
+        let editor = find.firstResponder as? NSTextView
+        let focused = editor?.delegate is NSTextField
+        let selected = editor.map { !$0.string.isEmpty && $0.selectedRange() == NSRange(location: 0, length: ($0.string as NSString).length) } ?? false
         return "findBar \(label): visible=1 top=\(Int(page.maxY - find.frame.maxY)) trailing=\(Int(page.maxX - find.frame.maxX)) "
-            + "size=\(Int(find.frame.width))x\(Int(find.frame.height))"
+            + "size=\(Int(find.frame.width))x\(Int(find.frame.height)) focused=\(focused ? 1 : 0) selected=\(selected ? 1 : 0) query=\(overlay.findQuery)"
     }
+
+    /// For `cra://debug?key=…&target=find`: the find bar's panel, which has the keys while the bar is up.
+    var debugFindPanel: NSWindow? { findPanel }
 
     // MARK: Sheets
 
