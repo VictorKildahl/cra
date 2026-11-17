@@ -14,6 +14,10 @@ wait 3
 cra://debug?downloadState=held
 expect-log Download [0-9]+ started: no file name yet
 expect-log download state held: running=true .* bin=shown \(no file\), its edge hits [A-Z]
+# The download the person started holds every guard: ⌘Q asks, the automatic update restart waits and Install and
+# Relaunch asks. The readout below must say so, or its "none" in web-store-install-quit-guards proves nothing.
+cra://debug?downloadGuards=held
+expect-log download guards held: quit=downloads in progress autoUpdate=a download is in progress installAndRelaunch=asks$
 wait 37
 cra://debug?downloadState=stuck
 expect-log Download [0-9]+ stuck for 30 s: no file name yet
@@ -22,3 +26,5 @@ cra://debug?downloadDestination=cancel
 wait 2
 cra://debug?downloadState=cancelled
 expect-log download state cancelled: running=false progress=none rows=\["Cancelled"\] bin=none
+cra://debug?downloadGuards=cancelled
+expect-log download guards cancelled: quit=none autoUpdate=none installAndRelaunch=none$

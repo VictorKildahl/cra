@@ -513,8 +513,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Arc asks while a download runs (quitting cancels it); otherwise Dia's Advanced ▸ "Warn
         // before quitting". Restarts skip both (#272).
         let quits: Bool
-        switch QuitPrompt.on(source: quitSource(), downloadsRunning: DownloadHistory.shared.hasRunningDownloads,
-                             warnBeforeQuitting: store.settings.warnBeforeQuitting) {
+        switch quitPrompt(source: quitSource()) {
         case .downloadsInProgress: quits = confirmQuitCancellingDownloads()
         case .confirmQuit: quits = confirmQuit()
         case .none: quits = true
@@ -541,6 +540,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         group.notify(queue: .main, execute: reply)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: reply)
         return .terminateLater
+    }
+
+    /// What quitting from `source` asks first. The `downloadGuards` readout asks it too, so a download
+    /// Cra doesn't list (a Web Store install's CRX, Chrome's own fetches) can't hold it unseen (#491).
+    private func quitPrompt(source: MenuBarMode.QuitSource) -> QuitPrompt {
+        QuitPrompt.on(source: source, downloadsRunning: DownloadHistory.shared.hasRunningDownloads,
+                      warnBeforeQuitting: store.settings.warnBeforeQuitting)
     }
 
     func applicationWillShutdown() { MCPServer.shared.stop(); store.saveAll() }
@@ -2027,6 +2033,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 // bin: the file over the Library button, and what its edge takes (#491).
                 let bin = (main.sidebarUI.libraryAnchor as? LibraryButtonView)?.binReadout ?? "none"
                 CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows) bin=\(bin) finished=\(finished)")
+                return
+            }
+            // What the guards a running download holds would do now: ⌘Q's question, the automatic update
+            // restart's wait and Install and Relaunch's question (#272). Downloads Cra doesn't list must
+            // hold none of them (#491).
+            if let label = dict["downloadGuards"] {
+                let quit: String = switch quitPrompt(source: .appMenu) {
+                case .downloadsInProgress: "downloads in progress"
+                case .confirmQuit: "Quit Cra?"
+                case .none: "none"
+                }
+                let relaunch = SoftwareUpdater.shared.relaunchAsksAboutDownloads ? "asks" : "none"
+                CraLog.note("download guards \(label): quit=\(quit) autoUpdate=\(autoUpdateBlocker() ?? "none") installAndRelaunch=\(relaunch)")
                 return
             }
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:

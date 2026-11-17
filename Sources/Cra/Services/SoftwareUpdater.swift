@@ -199,13 +199,17 @@ final class SoftwareUpdater: NSObject {
         updater?.checkForUpdates()
     }
 
+    /// Install and Relaunch asks before cancelling a running download (#272); the `downloadGuards`
+    /// readout reads it too (#491).
+    var relaunchAsksAboutDownloads: Bool { DownloadHistory.shared.hasRunningDownloads }
+
     /// Restart into the downloaded update (the banner, Install and Relaunch).
     func installAndRelaunch() {
         // The restart would cancel a running download: ask first, as quitting does (#272). The
         // automatic restart never gets here while one runs (autoUpdateBlocker).
         var restarts = installNow != nil || phase == .readyToInstall
         if case .found(_, downloaded: true) = phase { restarts = true }
-        if restarts, DownloadHistory.shared.hasRunningDownloads, app?.confirmQuitCancellingDownloads() == false { return }
+        if restarts, relaunchAsksAboutDownloads, app?.confirmQuitCancellingDownloads() == false { return }
         if let reply = choiceReply {
             choiceReply = nil
             switch phase {

@@ -1,0 +1,19 @@
+# An imported extension's Web Store install downloads its CRX through Chrome's downloads, which Chrome's own UI
+# never shows. On the Chromium engine Cra counted it as a running download of the profile's last page, so ⌘Q asked
+# "Downloads in progress" when every download the person started had finished, and an automatic update restart
+# would have waited on it (GitHub #491, 17 Nov 2026). Here the store sends 64 KB of the CRX and then nothing, so
+# the install is still downloading when the guards are read: none of them may wait for it. On engine -17 all
+# three held, and the scenario's own quit stopped at "Downloads in progress".
+# promise: #491
+home
+budget rss=600
+extension ${FIXTURES}/WebStoreCopy/${WEB_STORE_COPY_ID}
+arg --apps-gallery-download-url=${TRICKLE}/%s.crx
+cra://open?url=${PAGE}?n=store
+expect-log extension ${WEB_STORE_COPY_ID}: installing from the Web Store in Default
+wait 3
+reject-log Web Store install in Default failed
+cra://debug?downloadState=installing
+expect-log download state installing: running=false progress=none rows=\[\] bin=none finished=0$
+cra://debug?downloadGuards=installing
+expect-log download guards installing: quit=none autoUpdate=none installAndRelaunch=none$
