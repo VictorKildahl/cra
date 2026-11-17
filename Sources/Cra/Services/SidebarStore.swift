@@ -918,14 +918,21 @@ final class SidebarStore {
     /// (Arc shows five, the current tab first).
     func recentTabs(in sid: UUID, limit: Int, window: UUID? = nil) -> [UUID] {
         // A tab opened in the background since is newer than the current one, which still comes first.
-        let current = selectedTabID(in: sid, window: window)
-        return visibleTabs(in: sid)
-            .filter { $0.tab?.timeLastActiveAt != nil }
-            .sorted { a, b in
-                if (a.id == current) != (b.id == current) { return a.id == current }
-                return a.tab!.timeLastActiveAt! > b.tab!.timeLastActiveAt!
-            }
-            .prefix(limit).map(\.id)
+        Array(RecentTabOrder.ordered(recentEntries(in: sid), current: selectedTabID(in: sid, window: window)).prefix(limit))
+    }
+
+    /// ⌃⌥Tab (#467, not in Arc): the recent tabs of every space the window can show, its own tab
+    /// first. An incognito or Blank Window has only its own space.
+    func recentTabsInAllSpaces(limit: Int, window: UUID? = nil) -> [UUID] {
+        let w = self.window(window).id
+        let focused = focusedSpaceID(window: w)
+        let sids = isStandalone(window: w) ? [focused] : spaceOrder.filter { !isStandalone(space: $0) }
+        let current = selectedTabID(in: focused, window: w)
+        return Array(RecentTabOrder.ordered(sids.flatMap(recentEntries(in:)), current: current).prefix(limit))
+    }
+
+    private func recentEntries(in sid: UUID) -> [RecentTabOrder.Entry] {
+        visibleTabs(in: sid).map { RecentTabOrder.Entry(id: $0.id, lastActive: $0.tab?.timeLastActiveAt) }
     }
 
     // MARK: Tree moves

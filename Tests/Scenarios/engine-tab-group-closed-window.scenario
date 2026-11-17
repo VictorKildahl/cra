@@ -1,0 +1,13 @@
+# Session restore asks to connect a restored window's tab group, and the tab group service does it once it has
+# loaded. Cra closes the Chrome windows it didn't make, so by then no window held the group, and Chrome's CHECK in
+# GetTabStripModelForLocalGroup stopped Cra, at every launch on one Mac (four 0.1.44 crash reports). The saved
+# group now lets go of a window that is gone (engine/chromium/patches/tab-group-sync-closed-window.patch).
+# Cra.debugConnectClosedTabGroup makes that call for a group no window holds.
+budget rss=700
+cra://open?url=${PAGE}?n=group
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Cra.debugConnectClosedTabGroup
+expect-log Cra cdp Cra\.debugConnectClosedTabGroup → .*connected
+cra://open?url=${PAGE}?n=after-group
+expect-log GET /page\.html\?n=after-group
+wait 2

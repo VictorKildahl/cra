@@ -1,0 +1,19 @@
+# promise: #455
+# A one-colour space is drawn over Arc's light material on Light and its dark one on Dark, whatever
+# macOS shows, as Arc draws it under View ▸ Appearance (#455): the same navy on both used to look
+# the same, over the dark material. The colour itself and its white text stay. systemAppearance flips
+# only the app.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Navy Light","emoji":"\ud83e\udee7","theme":{"colors":["#26456B","#26456B"],"intensity":0.8,"noise":0,"appearance":"light","accent":"#26456B","solid":true,"key":["#26456B"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Navy Dark","emoji":"\u2600\ufe0f","theme":{"colors":["#26456B","#26456B"],"intensity":0.8,"noise":0,"appearance":"dark","accent":"#26456B","solid":true,"key":["#26456B"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?systemAppearance=dark
+wait 1
+cra://debug?themeShown=light-on-dark-mac
+expect-log Cra theme shown light-on-dark-mac: space=Navy Light follows=0 theme=dark .* material=light
+cra://action/space2
+wait 1
+cra://debug?systemAppearance=light
+wait 1
+cra://debug?themeShown=dark-on-light-mac
+expect-log Cra theme shown dark-on-light-mac: space=Navy Dark follows=0 theme=dark .* material=dark
+cra://debug?systemAppearance=system

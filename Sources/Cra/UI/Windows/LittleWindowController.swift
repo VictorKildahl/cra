@@ -179,6 +179,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The tab the Peek came from: links that leave the Peek open as tabs placed from it, and
     /// the Peek waits on it while another tab is on screen (#242).
     let peekSourceTab: UUID?
+    /// Names this window's page for Pause All Media (#438), as a tab's id names a tab's.
+    let pageID = UUID()
+    /// The page's sound as it starts or stops (the speaker's audible state holds 2 s), for Pause
+    /// All Media's check that the page went quiet.
+    private(set) var soundPlaying = false
     /// Another tab is on screen: the Peek is out of sight, its page alive, until its tab is back.
     private(set) var isParked = false
     private var dim: PeekDimPanel?
@@ -1547,6 +1552,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // No find bar, sidebar or split in little windows; keep them off the main window.
         case "find", "findNext", "findPrevious", "useSelectionForFind", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
+             "recentTabAllSpaces", "recentTabAllSpacesBackward",
              "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
              "addSplitView", "closeSplitPane", "separateFromSplit", "expandSplitPane", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":
             break
@@ -1755,6 +1761,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeTitle title: String) {
         state.title = title
         window?.title = title.isEmpty ? "Little Window" : title
+    }
+
+    func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
+        if browser === self.browser { soundPlaying = playing }
     }
 
     func browser(_ browser: CraBrowser, didChangeURL url: String) {

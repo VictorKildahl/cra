@@ -116,6 +116,22 @@ public struct SpaceTheme: Codable, Equatable {
         return t
     }
 
+    /// Whether a one-colour sidebar is drawn over Arc's light material rather than its dark one. Arc's
+    /// follows its own appearance (View ▸ Appearance, which the theme editor's sun and moon set) and
+    /// never changes the colour for it (offline Arc 1.172, 17 Nov 2026); a Cra space's Light or Dark
+    /// stands in for that appearance, and Auto follows macOS, as Arc on Automatic does (#455).
+    public func usesLightMaterial(systemDark: Bool) -> Bool { Self.isLight(appearance, systemDark: systemDark) }
+
+    /// Light or Dark as they are, Auto as macOS shows: Arc's appearance setting, which picks the
+    /// one-colour material and the theme editor's card (light card, black controls) alike (#455).
+    public static func isLight(_ appearance: String, systemDark: Bool) -> Bool {
+        switch appearance {
+        case "light": return true
+        case "dark": return false
+        default: return !systemDark
+        }
+    }
+
     /// Dark first: colors borrowed from Victor's other projects (GhostWriter
     /// ink + brand purple, Spook's "wall" browns, Phantom's greys, moss, gold,
     /// ember), then a few lighter Arc-style gradients.

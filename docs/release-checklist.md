@@ -33,6 +33,11 @@ built release app with a test profile. Note anything that fails in the release's
 - **#6:** a new window's empty card has rounded corners.
 - **#24:** edge to edge, there is no margin and the card is square, with the sidebar shown and
   hidden.
+- **#464:** with Settings ▸ Tabs ▸ Sidebar on the right, the sidebar and its traffic lights sit on the
+  right, ⌘S slides it out to the right and back, and dragging its left edge resizes it (snap and
+  drag-to-hide too). Hidden, the right edge brings it out on Arc's spring with its shadow and the
+  window's rounded corners clipping it; folder, pinned-tab and favorite previews open to its left.
+  (The scenario checks where things are; this is how the motion looks.)
 - **#10:** neighbouring tab highlights keep a 5 pt gap.
 - **#11:** the Library glyph is centred in its hover square.
 - **#39:** the header chevron is about 12.5 pt and points right when the pinned tabs are
@@ -74,6 +79,10 @@ built release app with a test profile. Note anything that fails in the release's
   salvador succeed?"), then "Summarize the key points of this article in bullet points": the second answer
   is a summary, not the first answer again, and no answer starts with "BEGIN DIALOGUE", "Human:" or a made-up
   question. Then a factual follow-up gets its own quote. The model is on-device and varies, so ask a few times.
+  On a release-notes page (crabrowser.app's 0.1.43 notes), ask "summarize the top features", then "list out
+  all the features released today": each answer is a list of at most eight short points, one per line, with
+  no quotes and no Find on Page, naming more than the first feature and no point twice. "Summarize it with
+  quotes" still quotes the page.
 
 - **Ask on Page, long answers and unanswerable questions:** ask a long article something it doesn't say
   ("why did el salvador succeed?"): the answer never quotes a solar-power page or J.W. Peters. Known on

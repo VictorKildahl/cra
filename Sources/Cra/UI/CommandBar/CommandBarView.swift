@@ -42,6 +42,8 @@ final class CommandBarView: NSView {
     private var shownScope: CommandBarScope?
     private var splash: NSPanel?
     private var innerSplash: NSView?
+    /// The site's colour the bar holds while its search is on (#457), nil while it keeps its own.
+    private var shownFill: RGB?
 
     init(controller: CommandBarController, favicons: FaviconCache) {
         self.controller = controller
@@ -113,6 +115,11 @@ final class CommandBarView: NSView {
     var debugNoticeShown: Bool { !notice.isHidden }
     func debugPressBadge() -> Bool { info.accessibilityPerformPress() }
     func debugPressNotice(_ button: String) -> Bool { notice.debugPress(button) }
+    /// "#RRGGBB" for the site's fill (#457), "default" for the bar's own.
+    var debugFill: String {
+        guard let f = shownFill else { return "default" }
+        return String(format: "#%02X%02X%02X", Int((f.r * 255).rounded()), Int((f.g * 255).rounded()), Int((f.b * 255).rounded()))
+    }
 
     override var isFlipped: Bool { true }
 
@@ -178,6 +185,12 @@ final class CommandBarView: NSView {
         // colour of its rows (Arc's rows take theirs from the theme's palette, CommandBar.SuggestionsView).
         let highlight: NSColor
         if case .site(let site) = scope, let hex = site.color { highlight = NSColor(hex: hex) } else { highlight = Self.ink(tones.selection.rgb, tones.selection.alpha) }
+        // Not in Arc (#457, off by default): the site's colour fills the bar until its search ends. The wash
+        // still plays on Tab and fades into it.
+        shownFill = if c.isOpen, case .site(let site) = scope {
+            ScopedSearchFill.fill(enabled: c.fillsSiteScope, siteColor: site.color, space: tones.selection.rgb, dark: dark)
+        } else { nil }
+        if let fill = shownFill { tint.layer?.backgroundColor = Self.ink(fill, 0.97).cgColor }
         divider.isHidden = items.isEmpty && !c.showsNoticeBanner
         pill.isHidden = scope == nil
         if let scope {

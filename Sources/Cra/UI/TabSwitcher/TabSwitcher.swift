@@ -15,6 +15,13 @@ final class TabSwitcher {
         var title: String
         var iconKey: String?
         var snapshot: NSImage?
+        /// The tab's space, shown on its card when the switcher spans every space (⌃⌥Tab, #467).
+        var space: SpaceLabel? = nil
+    }
+
+    struct SpaceLabel {
+        var title: String
+        var icon: NSImage?
     }
 
     private(set) var items: [Item] = []

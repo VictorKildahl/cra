@@ -1,0 +1,14 @@
+# promise: #466
+# A right-click on a page opens Chromium's page menu (Arc's items) on screen. 0.1.44, the first
+# release on Cra's own engine, built the menu and then showed nothing: Chrome only draws it in a
+# views window, and Cra's pages sit in Cra's windows (engine patch context-menu-embedded-view).
+# The menu's rows are read as it opens, then it closes.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=page
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?menuShown=next
+expect-log Cra menu shown: waiting
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":300,"y":300,"button":"right","buttons":2,"clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":300,"y":300,"button":"right","buttons":0,"clickCount":1}
+expect-log Cra menu shown: Back\|.*Reload\|.*View Page Source\|Inspect$

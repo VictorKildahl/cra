@@ -336,6 +336,12 @@ enum AskOnPageLocalModel {
             return .init(excerpts: final.excerpts, answer: final.answer, keyAnswer: final.keyAnswer)
         } catch { throw AskOnPageService.Failure.invalidAnswer }
     }
+    @available(macOS 26.0, *)
+    static func completeSummary(from raw: GeneratedContent?) throws -> AskOnPage.Draft {
+        guard let raw, raw.isComplete else { throw AskOnPageService.Failure.incompleteAnswer }
+        guard let final = try? AskOnPageGeneratedSummary(raw) else { throw AskOnPageService.Failure.invalidAnswer }
+        return .init(excerpts: [], answer: AskOnPage.listed(points: final.points))
+    }
     @available(macOS 26.4, *)
     static func measuredCounts(instructions: String, prompt: String) async throws -> (base: Int, schema: Int, typed: Int, total: Int) {
         let model = SystemLanguageModel.default
@@ -385,6 +391,17 @@ enum AskOnPageLocalModel {
         if #available(macOS 26.0, *) {
             do {
                 let session = session(for: fitted)
+                if fitted.form == .summary {
+                    // No quote field: asked for a list, the model copied a page paragraph as the quote and the answer (#417).
+                    var last: GeneratedContent?
+                    for try await snapshot in session.streamResponse(to: fitted.prompt, generating: AskOnPageGeneratedSummary.self, options: options) {
+                        try Task.checkCancellation()
+                        guard snapshot.rawContent.jsonString.utf8.count <= 300_000 else { throw AskOnPageService.Failure.invalidAnswer }
+                        last = snapshot.rawContent
+                        update(.init(excerpts: [], answer: AskOnPage.listed(points: snapshot.content.points ?? [])))
+                    }
+                    return try completeSummary(from: last)
+                }
                 var last: GeneratedContent?
                 for try await snapshot in session.streamResponse(to: fitted.prompt, generating: AskOnPageGeneratedAnswer.self, options: options) {
                     try Task.checkCancellation()
@@ -418,5 +435,14 @@ struct AskOnPageGeneratedAnswer {
     var answer: String
     @Guide(description: "Optional bold hint copied exactly from answer, preserving accents, punctuation and case. Prefer a decisive number/name; nil if no suitable phrase.")
     var keyAnswer: String?
+}
+
+/// A summary or a list: points alone, no quotes and no bold hint. A list of at most eight, so a long
+/// page can't run the answer past the model's room (#417).
+@available(macOS 26.0, *)
+@Generable
+struct AskOnPageGeneratedSummary {
+    @Guide(description: AskOnPagePrompt.summaryPointsGuide, .count(1...AskOnPagePrompt.summaryPoints))
+    var points: [String]
 }
 #endif

@@ -2,8 +2,8 @@
 # Full distributable build: build, sign, notarize, package, notarize the DMG, and
 # write the Sparkle appcast for the update archive, once per CPU.
 #   CRA_VERSION=0.1.0 CRA_SIGN_IDENTITY="Developer ID Application: …" scripts/release.sh
-# Every release ships Apple silicon (Cra.dmg, Cra.zip, appcast.xml) and Intel
-# (Cra-Intel.dmg, Cra-Intel.zip, appcast-intel.xml). CRA_ARCHS="arm64" (or "x86_64")
+# Every release ships Apple silicon (Cra.dmg, Cra.zip, appcast.xml, appcast-stable.xml) and Intel
+# (Cra-Intel.dmg, Cra-Intel.zip, appcast-intel.xml, appcast-stable-intel.xml). CRA_ARCHS="arm64" (or "x86_64")
 # builds one; the Release workflow runs one per job and merges them.
 # Without CRA_SIGN_IDENTITY it still produces an ad-hoc build and packages, so
 # the pipeline can be exercised before certificates exist. The appcast needs the
@@ -31,6 +31,12 @@ elif [ "${CRA_ALLOW_OLD_ENGINE:-}" != 1 ]; then
     { echo "Release stopped: the engine is behind Chrome stable (CRA_ALLOW_OLD_ENGINE=1 to ship it anyway)" >&2; exit 1; }
 fi
 
+# The Stable channel's release (GitHub #476, docs/release.md "Channels"): scripts/promote.sh sets it. Its own
+# appcast holds its signed item, which goes into this release's feeds next to the new one.
+export CRA_STABLE_VERSION="${CRA_STABLE_VERSION:-$(tr -d '[:space:]' < scripts/stable-version)}"
+STABLE_DIR="$(mktemp -d /tmp/cra-stable.XXXXXX)"
+trap 'rm -rf "$STABLE_DIR"' EXIT
+
 rm -rf build/dist
 for ARCH in $ARCHS; do
   CRA_ARCH="$ARCH" scripts/build.sh release
@@ -57,6 +63,14 @@ for ARCH in $ARCHS; do
     echo "Gatekeeper accepts $APP"
   else
     echo "Ad-hoc build: not notarized. Set CRA_SIGN_IDENTITY and notary credentials for a distributable build." >&2
+  fi
+  SUFFIX_LOWER="$(echo "$SUFFIX" | tr '[:upper:]' '[:lower:]')"
+  export CRA_STABLE_FEED="$STABLE_DIR/appcast$SUFFIX_LOWER.xml"
+  if [ "$CRA_STABLE_VERSION" != "$CRA_VERSION" ]; then
+    curl -fsSL -o "$CRA_STABLE_FEED" \
+      "https://github.com/VictorKildahl/cra/releases/download/v$CRA_STABLE_VERSION/appcast$SUFFIX_LOWER.xml"
+  else
+    unset CRA_STABLE_FEED  # this release is Stable itself
   fi
   # Installed copies update from the zip; the appcast must sign the final one.
   scripts/appcast.sh "build/dist/Cra$SUFFIX.zip" "$APP" "${CRA_RELEASE_NOTES:-}"

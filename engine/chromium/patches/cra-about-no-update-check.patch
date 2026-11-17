@@ -1,0 +1,49 @@
+Cra: chrome://settings/help (About Chromium) checks for no update. Sparkle
+updates Cra, and Cra's Chrome is built without Google's updater
+(enable_updater is false off Chrome branding), so the page's check went to
+updater_no_updater.cc, which always answers kUpdateError with code 0: "An
+error occurred while checking for updates: 0 (error code 0)" (GitHub #450).
+The page now gets what Chromium's Linux page gets (version_updater_basic.cc):
+no update line, or Relaunch when Chrome already knows of a newer version.
+
+diff --git a/chrome/browser/ui/webui/help/version_updater_mac.mm b/chrome/browser/ui/webui/help/version_updater_mac.mm
+--- a/chrome/browser/ui/webui/help/version_updater_mac.mm
++++ b/chrome/browser/ui/webui/help/version_updater_mac.mm
+@@ -43,8 +43,10 @@
+                           0.0, 1.0);
+ }
+ 
+-void UpdateStatus(VersionUpdater::StatusCallback status_callback,
+-                  const updater::UpdateService::UpdateState& update_state) {
++// Cra: unused, see VersionUpdaterMac::CheckForUpdate.
++[[maybe_unused]] void UpdateStatus(
++    VersionUpdater::StatusCallback status_callback,
++    const updater::UpdateService::UpdateState& update_state) {
+   VersionUpdater::Status status = VersionUpdater::Status::CHECKING;
+   int progress = 0;
+   std::string version;
+@@ -118,15 +120,18 @@
+   ~VersionUpdaterMac() override = default;
+ 
+   // VersionUpdater implementation.
++  // Cra: Sparkle updates Cra, and Cra's Chrome has no Google updater, whose
++  // check (updater_no_updater.cc) always reported "An error occurred while
++  // checking for updates: 0 (error code 0)" (GitHub #450). The About page
++  // shows no update line, as Chromium's on Linux (version_updater_basic.cc).
+   void CheckForUpdate(StatusCallback status_callback,
+                       PromoteCallback promote_callback) override {
+-    updater::EnsureUpdater(
+-        base::TaskPriority::USER_VISIBLE,
+-        base::BindOnce(promote_callback, PromotionState::PROMOTE_ENABLED),
+-        base::BindOnce(&updater::CheckForUpdate,
+-                       base::BindRepeating(&UpdateStatus, status_callback)));
++    status_callback.Run(UpgradeDetector::GetInstance()->is_upgrade_available()
++                            ? NEARLY_UPDATED
++                            : DISABLED,
++                        0, false, false, std::string(), 0, std::u16string());
+   }
+-  void PromoteUpdater() override { updater::SetUpSystemUpdater(); }
++  void PromoteUpdater() override {}
+ };
+ 
+ }  // namespace

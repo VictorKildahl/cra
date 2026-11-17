@@ -1,0 +1,15 @@
+# Chrome closes the hidden Browser that holds a profile's pages, and the bridge's next page arrives after Chrome
+# has scheduled that Browser's deletion. The page went into the closing Browser's tab strip, which was no longer
+# empty when Chrome deleted it, after the window's features had gone: ExclusiveAccessManager::OnTabClosing on a
+# null manager from ~Browser stopped Cra (three 0.1.44 crash reports from three Macs). HostFor now leaves a
+# closing host to close and makes a new one (bridge.mm). Cra.debugCloseHost with addPage adds that page as Chrome
+# finishes closing; without the change Chrome stops there instead (TabStripModel::InsertDetachedTabAt, checked 17 Nov).
+budget rss=700
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Cra.debugCloseHost&params={"addPage":true}
+expect-log Cra cdp Cra\.debugCloseHost → .*closing
+wait 3
+cra://open?url=${PAGE}?n=after-close
+expect-log GET /page\.html\?n=after-close
+wait 2

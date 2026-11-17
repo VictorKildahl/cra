@@ -153,6 +153,11 @@ final class AppleScriptSpaceWrapper: NSObject {
         guard let controller = window.controller else { return "" }
         return controller.isBlank ? "This Window" : controller.store.space(spaceID)?.title ?? ""
     }
+    /// Not in Arc (#438): the profile's name, so `pause media` and scripts can pick a profile.
+    @objc var profile: String {
+        guard let store = window.controller?.store else { return "" }
+        return store.profile(store.space(spaceID)?.profileID)?.name ?? CraPauseMediaCommand.defaultProfile
+    }
     @objc var appleScriptTabs: [AppleScriptTabWrapper] {
         window.tabIDs(in: spaceID).map { AppleScriptTabWrapper(tab: $0, window: window) }
     }
@@ -267,5 +272,60 @@ final class AppleScriptTabWrapper: NSObject {
     override var objectSpecifier: NSScriptObjectSpecifier? {
         guard let window, let container = window.objectSpecifier, let desc = container.keyClassDescription else { return nil }
         return NSUniqueIDSpecifier(containerClassDescription: desc, containerSpecifier: container, key: "appleScriptTabs", uniqueID: id)
+    }
+}
+
+/// `pause media [only …] [except …] [profile "…"] [closing picture in picture …]` (GitHub #438, not
+/// in Arc): Pause All Media for scripts. Answers {paused:n, kept playing:{titles}} once every page
+/// has been checked, about a second later.
+@objc(CraPauseMediaCommand)
+final class CraPauseMediaCommand: NSScriptCommand {
+    static let defaultProfile = "Default"
+
+    override func performDefaultImplementation() -> Any? {
+        MainActor.assumeIsolated { run() }
+        return nil
+    }
+
+    @MainActor private func run() {
+        guard let app = NSApp.delegate as? AppDelegate else { return }
+        let args = evaluatedArguments ?? [:]
+        var scope = MediaPause.Scope(except: Self.names(args["except"]))
+        if args["only"] != nil { scope.only = Self.names(args["only"]) }
+        if let name = args["profile"] as? String {
+            if name == Self.defaultProfile {
+                scope.profile = .some(nil)
+            } else if let p = app.store.profiles.first(where: { $0.name == name }) {
+                scope.profile = .some(p.id)
+            } else {
+                scriptErrorNumber = -1728  // errAENoSuchObject
+                scriptErrorString = "Cra has no profile named \"\(name)\"."
+                return
+            }
+        }
+        let close = args["closePictureInPicture"] as? Bool ?? false
+        let targets = app.mediaPauseTargets().filter { MediaPause.isTarget($0.page, in: scope) }
+        suspendExecution()
+        PauseAllMedia.run(targets, closingPictureInPicture: close) { [self] report in
+            CraLog.note("pause media (AppleScript): \(targets.count) pages, paused \(report.paused.count), kept playing \(report.keptPlaying.count)")
+            resumeExecution(withResult: ["paused": report.paused.count, "keptPlaying": report.keptPlaying.map { targets[$0].title }] as NSDictionary)
+        }
+    }
+
+    /// The windows, spaces and tabs a parameter names (one, or a list).
+    @MainActor private static func names(_ value: Any?) -> MediaPause.Scope.Names {
+        var names = MediaPause.Scope.Names()
+        func add(_ v: Any?) {
+            switch v {
+            case let s as NSScriptObjectSpecifier: add(s.objectsByEvaluatingSpecifier)
+            case let list as [Any]: list.forEach(add)
+            case let w as AppleScriptWindowWrapper: if let id = w.controller?.windowID { names.windows.insert(id) }
+            case let s as AppleScriptSpaceWrapper: names.spaces.insert(s.spaceID)
+            case let t as AppleScriptTabWrapper: if let id = t.tabID { names.tabs.insert(id) }
+            default: break
+            }
+        }
+        add(value)
+        return names
     }
 }

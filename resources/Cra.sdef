@@ -178,6 +178,37 @@
         <direct-parameter description="The space to focus." type="specifier"/>
     </command>
 
+    <command name="pause media" code="CrSuPaMe" description="Pause the audio and video playing in Cra's loaded pages: every browser window's tabs (in every space and profile), Little Windows and Peeks. Pauses, never plays: paused media stays paused. Sleeping tabs aren't woken, no tab is selected and no window comes forward. Not in Arc.">
+        <cocoa class="CraPauseMediaCommand"/>
+        <parameter name="only" code="PaOn" optional="yes" description="Pause only these windows, spaces or tabs (a space's tabs in every window; a window's Peeks with it). All loaded pages when left out.">
+            <type type="specifier"/>
+            <type type="specifier" list="yes"/>
+            <cocoa key="only"/>
+        </parameter>
+        <parameter name="except" code="PaEx" optional="yes" description="Leave these windows, spaces or tabs playing.">
+            <type type="specifier"/>
+            <type type="specifier" list="yes"/>
+            <cocoa key="except"/>
+        </parameter>
+        <parameter name="profile" code="prFl" type="text" optional="yes" description="Pause only pages of the profile with this name (&quot;Default&quot; for the Default profile).">
+            <cocoa key="profile"/>
+        </parameter>
+        <parameter name="closing picture in picture" code="PaPi" type="boolean" optional="yes" description="Also close Picture in Picture: its video goes back to its page, paused. Off when left out.">
+            <cocoa key="closePictureInPicture"/>
+        </parameter>
+        <result type="pause result" description="What was paused, and what kept playing."/>
+    </command>
+
+    <record-type name="pause result" code="PaRs">
+        <property name="paused" code="PaPd" type="integer" description="How many pages were playing and are paused now.">
+            <cocoa key="paused"/>
+        </property>
+        <property name="kept playing" code="PaKp" description="The titles of pages still playing a moment after the pause: Web Audio, a player in a frame that didn't answer, or a page that played again.">
+            <type type="text" list="yes"/>
+            <cocoa key="keptPlaying"/>
+        </property>
+    </record-type>
+
     <class name="space" code="sPaC" description="A space" plural="spaces">
         <cocoa class="AppleScriptSpaceWrapper"/>
         <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the space.">
@@ -185,6 +216,9 @@
         </property>
         <property name="title" code="pnam" type="text" access="r" description="The full title of the space.">
             <cocoa key="title"/>
+        </property>
+        <property name="profile" code="prFl" type="text" access="r" description="The name of the profile the space's pages load in (&quot;Default&quot; for the Default profile). Not in Arc.">
+            <cocoa key="profile"/>
         </property>
         <element description="The tabs contained within this window." type="tab" access="rw">
             <cocoa key="appleScriptTabs"/>

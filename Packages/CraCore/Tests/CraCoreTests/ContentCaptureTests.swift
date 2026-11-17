@@ -57,6 +57,83 @@ struct ContentCaptureTests {
         #expect(ContentCapture.elementRect(fromPicker: ["x": 0, "y": 0, "width": 10, "height": 10], scale: 0, pageBounds: Self.page) == nil)
     }
 
+    // MARK: Choosing the element (Arc's score, and ⌥ for the one right under the pointer, #451)
+
+    /// One row of the picker script's stack: CSS size for the score, device pixels for the rect (1x here).
+    static func el(_ tag: String, _ x: Double, _ y: Double, _ w: Double, _ h: Double, inline: Bool = false, shadow: Bool = false) -> [String: Any] {
+        ["tag": tag, "inline": inline, "shadow": shadow, "w": w, "h": h, "x": x, "y": y, "width": w, "height": h]
+    }
+
+    /// YouTube's home page, 1383 × 1064 CSS px (16 Nov 2026), the pointer on a video's title line:
+    /// the elements under it, topmost first, as `document.elementsFromPoint` gave them.
+    static let youTubeTitle: [String: Any] = ["view": ["w": 1383.0, "h": 1064.0], "stack": [
+        el("A", 678, 347, 263, 20, inline: true),
+        el("H3", 678, 347, 263, 20),
+        el("DIV", 678, 347, 263, 44),
+        el("YT-LOCKUP-METADATA-VIEW-MODEL", 634, 347, 354, 44),
+        el("DIV", 634, 136, 354, 255),
+        el("YT-LOCKUP-VIEW-MODEL", 634, 136, 354, 255),
+        el("DIV", 634, 136, 354, 331),
+        el("YTD-RICH-ITEM-RENDERER", 634, 136, 354, 331),
+        el("DIV", 256, 112, 1111, 4829),
+        el("YTD-APP", 0, 0, 1383, 4957),
+        el("HTML", 0, 0, 1383, 0),
+    ]]
+
+    @Test func arcPicksTheCardAroundATitle() throws {
+        // Arc's score: the line is under 100 px tall (and the link inline), so the card wins; the
+        // first of equal scores, the topmost, as Arc's stable sort keeps it.
+        let stack = try #require(ContentCapture.pickerStack(from: Self.youTubeTitle))
+        let chosen = try #require(ContentCapture.choose(in: stack, deeper: false))
+        #expect(chosen.rect == CGRect(x: 634, y: 136, width: 354, height: 331))
+        #expect(chosen.tag == "DIV")
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/451"))
+    func optionPicksTheTitleLineItself() throws {
+        let stack = try #require(ContentCapture.pickerStack(from: Self.youTubeTitle))
+        let chosen = try #require(ContentCapture.choose(in: stack, deeper: true))
+        #expect(chosen.tag == "A")
+        #expect(chosen.rect == CGRect(x: 678, y: 347, width: 263, height: 20))
+    }
+
+    @Test func arcPicksTheThumbnailImage() throws {
+        let stack = try #require(ContentCapture.pickerStack(from: ["view": ["w": 1383.0, "h": 1064.0], "stack": [
+            Self.el("IMG", 634, 136, 354, 199), Self.el("DIV", 634, 136, 354, 199),
+            Self.el("DIV", 634, 136, 354, 331), Self.el("DIV", 256, 112, 1111, 4829),
+        ]]))
+        #expect(ContentCapture.choose(in: stack, deeper: false)?.tag == "IMG")
+        #expect(ContentCapture.choose(in: stack, deeper: true)?.tag == "IMG")
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/451"))
+    func optionSkipsSpecksAndThePageButNotShadowRoots() throws {
+        let stack = try #require(ContentCapture.pickerStack(from: ["view": ["w": 1000.0, "h": 700.0], "stack": [
+            Self.el("SPAN", 10, 10, 40, 6, shadow: true),      // a hairline: too thin to capture
+            Self.el("BUTTON", 10, 8, 40, 24, shadow: true),    // inside an open shadow root
+            Self.el("SHREDDIT-POST", 0, 0, 600, 400),          // its host
+            Self.el("BODY", 0, 0, 1000, 2000),                 // the page itself
+        ]]))
+        #expect(ContentCapture.choose(in: stack, deeper: true)?.tag == "BUTTON")
+        // Arc's score never looks inside a shadow root.
+        #expect(ContentCapture.choose(in: stack, deeper: false)?.tag == "SHREDDIT-POST")
+        // Over the page alone neither finds anything; the page then only takes drags.
+        let bare = try #require(ContentCapture.pickerStack(from: ["view": ["w": 1000.0, "h": 700.0], "stack": [Self.el("BODY", 0, 0, 1000, 2000)]]))
+        #expect(ContentCapture.choose(in: bare, deeper: true) == nil)
+        #expect(ContentCapture.choose(in: bare, deeper: false) == nil)
+    }
+
+    @Test func pickerStackRejectsWhatItCannotRead() {
+        #expect(ContentCapture.pickerStack(from: [:]) == nil)
+        #expect(ContentCapture.pickerStack(from: ["view": ["w": 0, "h": 700], "stack": []] as [String: Any]) == nil)
+        // A row missing its numbers is left out, not the whole stack; JSON numbers arrive as NSNumber.
+        let json = try? JSONSerialization.jsonObject(with: Data(#"{"view":{"w":800,"h":600},"stack":[{"tag":"P"},{"tag":"DIV","inline":false,"shadow":false,"w":200,"h":150,"x":2,"y":4,"width":400,"height":300}]}"#.utf8)) as? [String: Any]
+        let stack = ContentCapture.pickerStack(from: json ?? [:])
+        #expect(stack?.elements.count == 1)
+        #expect(stack?.elements.first?.rect == CGRect(x: 2, y: 4, width: 400, height: 300))
+        #expect(stack?.elements.first?.size == CGSize(width: 200, height: 150))
+    }
+
     @Test func lensMatchesArc() {
         // Arc: the image at page (32, 224) 480 × 300 showed in colour from 30, its ring's outer edge 6 pt out.
         let clear = ContentCapture.clearArea(element: CGRect(x: 32, y: 224, width: 480, height: 300))

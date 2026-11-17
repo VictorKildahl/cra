@@ -193,6 +193,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func runtime(for tabID: UUID) -> TabRuntime? { runtimes[tabID] }
+
+    /// A shown page that is not in its pane: show placed it before the window had made the
+    /// pane's card. A link opened in a new tab is shown from inside the page's pop-up request,
+    /// before the window lays out the tab, and its page waited outside the card for good: the
+    /// tab stayed blank (GitHub #469). The window shows its panes again until each page is in.
+    func waitsForItsPane(_ tabID: UUID) -> Bool {
+        guard let rt = runtimes[tabID], rt.browser.hostWindow == nil, let host = paneHost?(tabID) else { return false }
+        return rt.browser.containerView.superview !== host
+    }
     /// The tab whose page the download being reported came from (set only during that report).
     private(set) var downloadSourceTab: UUID?
     var visibleRuntime: TabRuntime? { visibleTabID.flatMap { runtimes[$0] } }
