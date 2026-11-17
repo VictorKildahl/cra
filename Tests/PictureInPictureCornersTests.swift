@@ -79,11 +79,22 @@ enum PictureInPictureCornersTests {
             return ([], [])
         }
         let rep = NSBitmapImageRep(cgImage: image)
-        let (x, y) = (image.width - 1, image.height - 1)
         let a = { (p: (Int, Int)) in Int(((rep.colorAt(x: p.0, y: p.1)?.alphaComponent ?? -1) * 255).rounded()) }
-        // Edge points a quarter of the way along, off the top bar's buttons and the centre cluster.
-        let edges = [(x / 4, 0), (0, y * 3 / 4), (x * 3 / 4, y), (x, y * 3 / 4), (x / 2, y / 4)]
-        return ([(0, 0), (x, 0), (0, y), (x, y)].map(a), edges.map(a))
+        // Where the window's pixels are in the capture: an off-screen window on 1x displays came back
+        // with an extra row and half-covered outer pixels (240×137 for 240×135), so the box is found
+        // along the middle row and column rather than taken to be the whole image.
+        let (midX, midY) = (image.width / 2, image.height / 2)
+        let cols = (0..<image.width).filter { a(($0, midY)) > 0 }, rows = (0..<image.height).filter { a((midX, $0)) > 0 }
+        guard let left = cols.first, let right = cols.last, let top = rows.first, let bottom = rows.last else {
+            expect(false, "the window has pixels in the capture")
+            return ([], [])
+        }
+        let (w, h) = (right - left, bottom - top)
+        // Edge points a quarter of the way along, off the top bar's buttons and the centre cluster, one
+        // pixel inside the box (the outermost pixel is anti-aliased on a 1x screen).
+        let edges = [(left + w / 4, top + 1), (left + 1, top + h * 3 / 4), (left + w * 3 / 4, bottom - 1),
+                     (right - 1, top + h * 3 / 4), (left + w / 2, top + h / 4)]
+        return ([(left, top), (right, top), (left, bottom), (right, bottom)].map(a), edges.map(a))
     }
 
     private static func expect(_ condition: Bool, _ message: String) {
