@@ -1,0 +1,14 @@
+# AppKit adjusts a window's frame on a move that takes it to another display (its screen-layout
+# manager), in the middle of a drag as well for a window a window controller owns: Cra's window
+# jumped away from the pointer at each crossing (16 Nov 2026). CraWindow answers that private
+# callback and skips it for a move the window server reports (a drag and its release). A test copy's window never crosses a
+# display, so this checks the answer is in place and AppKit still has the callback; the drag
+# itself is a line in docs/release-checklist.md.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?windowState=adjust
+expect-log window state adjust: main0 .* frameAdjust=own$
