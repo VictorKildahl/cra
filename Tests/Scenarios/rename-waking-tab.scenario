@@ -1,0 +1,35 @@
+# promise: #424
+# A double-click on the name of a pinned tab with no page opens the rename field, and what is
+# typed next goes into it. The first press switches to the tab and starts its page; the page
+# arrives after the second press has opened the field. Before the fix, the page took the
+# keyboard as it arrived (on CEF its own window became key, on the engine its view became the
+# window's first responder), so the typed name never reached the field and the tab kept its
+# old name. No spare page here: a spare is ready at once, and the page has to arrive late.
+budget rss=800 stalls50=12
+env CRA_SPARE_PAGES=0
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=today
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=pinned
+wait 1.5
+cra://action/pinTab
+wait 1
+# Closing a pinned tab keeps its row and lets its page go (Arc), and Today's tab opens.
+cra://action/closeTab
+wait 2
+expect-log closes its page
+# The pinned tab is the first row (8,234, 312x40); its title starts past the 18 pt favicon.
+cra://debug?snapshot=TabRowView&out=/dev/null
+expect-log snapshot: TabRowView at 8,234 size 312x40
+cra://debug?clickAt=150,254&clicks=2
+expect-log sidebar double-click: rename
+# Let the new page arrive while the field is open.
+wait 3
+cra://debug?zoomLevel=1
+cra://debug?key=Q,12,0
+cra://debug?key=x,7,0
+cra://debug?key=%0D,36,0
+wait 1
+expect-log sidebar rename: new name, 2 characters
+cra://debug?checkStore=1

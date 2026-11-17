@@ -28,4 +28,11 @@ struct InternalURLRaiseTests {
         #expect(InternalURLRaise.raises(host: "commandbar", little: false, background: false, littleWindowIsKey: true))
         #expect(InternalURLRaise.raises(host: "dismiss", little: false, background: false, littleWindowIsKey: false))
     }
+
+    /// A `cra://debug` readout or test gesture leaves the windows as they are: raising the browser
+    /// window made it key, so a scenario asking which window had the keyboard always heard "the
+    /// browser window" (#424).
+    @Test func aDebugCommandMovesNoWindow() {
+        #expect(!InternalURLRaise.raises(host: "debug", little: false, background: false, littleWindowIsKey: false))
+    }
 }

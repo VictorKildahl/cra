@@ -1356,6 +1356,9 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         needsLayout = true
         DispatchQueue.main.async { [weak self, weak f] in
             guard let f, let w = self?.window else { return }
+            // The sidebar sliding out at the edge is a panel that becomes key only when a click needs
+            // it, and a click on a row doesn't: the field showed selected while keys went to the page (#424).
+            w.makeKey()
             w.makeFirstResponder(f)
         }
     }
@@ -1372,8 +1375,11 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
 
     private func commitRename() {
         guard let m = model, let list, list.ui.renamingID == m.id, let f = renameField else { return }
-        list.store.rename(m.id, to: f.stringValue)
+        let typed = f.stringValue
+        list.store.rename(m.id, to: typed)
         list.ui.renamingID = nil
+        // Whether typed keys reached the field (#424), without the name itself.
+        CraLog.note(typed == m.renameText ? "sidebar rename: name unchanged" : "sidebar rename: new name, \(typed.count) characters")
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
@@ -1610,6 +1616,9 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         needsLayout = true
         DispatchQueue.main.async { [weak self, weak f] in
             guard let f, let w = self?.window else { return }
+            // The sidebar sliding out at the edge is a panel that becomes key only when a click needs
+            // it, and a click on a row doesn't: the field showed selected while keys went to the page (#424).
+            w.makeKey()
             w.makeFirstResponder(f)
         }
     }
@@ -1892,6 +1901,9 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
         needsLayout = true
         DispatchQueue.main.async { [weak self, weak f] in
             guard let f, let w = self?.window else { return }
+            // The sidebar sliding out at the edge is a panel that becomes key only when a click needs
+            // it, and a click on a row doesn't: the field showed selected while keys went to the page (#424).
+            w.makeKey()
             w.makeFirstResponder(f)
         }
     }
