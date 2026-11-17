@@ -642,17 +642,23 @@ private final class DevMenuChevron: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        ReloadMenu.make(actions).popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: self)
+    }
+}
+
+/// Arc's menu (Reload ✓ ⌘R, Refresh (Ignore Cache) ⇧⌘R | Clear Cookies and Refresh) in the
+/// registry's words, with Clear Cache beside Clear Cookies and Cra's developer items under
+/// them (#89). Developer Mode's ⌄ after ↻ opens it, and so does a right-click on the toolbar's ↻.
+@MainActor
+enum ReloadMenu {
+    static func make(_ actions: SidebarActions) -> NSMenu {
         let m = NSMenu()
         m.autoenablesItems = false
-        let a = actions
-        // Arc's menu (Reload ✓ ⌘R, Refresh (Ignore Cache) ⇧⌘R | Clear Cookies and Refresh) in the
-        // registry's words, with Clear Cache beside Clear Cookies and Cra's developer items under
-        // them (#89).
         for group in [["reload", "hardReload"], ["clearCookies", "clearCache"], ["viewSource", "devTools"]] {
             if m.numberOfItems > 0 { m.addItem(.separator()) }
-            for id in group { MenuItems.add(m, action: id, on: id == "reload" ? true : nil) { a.performAction(id) } }
+            for id in group { MenuItems.add(m, action: id, on: id == "reload" ? true : nil) { actions.performAction(id) } }
         }
-        m.popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: self)
+        return m
     }
 }
 

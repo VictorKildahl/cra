@@ -306,8 +306,12 @@ final class PaneToolbarView: NSView {
                 return glyph("forward", "arrow.right", help: wide ? "" : "Go Forward (⌘])", enabled: enabled, width: 37, iconSize: 15,
                              history: wide ? nil : .forward) { if !wide { $0.navigate("goForward") } }
             case .reload(let loading, let enabled):
-                return glyph("reload", loading ? "xmark" : "arrow.clockwise", help: enabled ? "Refresh (⌘R)" : "", enabled: enabled, width: 37,
-                             iconSize: 15, animated: enabled) { if !wide { $0.navigate("reload") } }
+                let b = glyph("reload", loading ? "xmark" : "arrow.clockwise", help: enabled ? "Refresh (⌘R)" : "", enabled: enabled, width: 37,
+                              iconSize: 15, animated: enabled) { if !wide { $0.navigate("reload") } }
+                // A right-click (or ⌃-click) shows the reload menu: Force Refresh, Clear Cookies, Clear Cache and the
+                // developer items. Its commands act on the focused page, so a split pane's bar keeps a plain button.
+                b.menuProvider = enabled && !m.inSplit ? { [actions] in ReloadMenu.make(actions) } : nil
+                return b
             case .copyURL:
                 return glyph("copy", "link", help: "Copy URL (⇧⌘C)", width: 28) { $0.actions.performAction("copyURL") }
             case .divider:
