@@ -1521,14 +1521,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // A shortcut for a Peek button presses it as a click would, and the action runs at once (#385).
         if isPeek, !closingPeek, let control = PeekControl.pressed(byAction: id) { controls?.pressFromKey(control) }
         switch id {
-        // ⌘W on the card fades it out, as Esc does (#337).
+        // ⌘W on the card fades it out, as Esc does (#337). With the bar open over the page, ⌘W closes
+        // the bar as Esc does and the window stays (#497); ⇧⌘W still closes the window.
         case "closeTab", "closeWindow":
-            if isCard, !cardFading, window?.isVisible == true { dismissCard() } else if isPeek { attemptPeekClose(.closeShortcut) } else { closeWindow() }
+            if isCard, !cardFading, window?.isVisible == true { dismissCard() }
+            else if id == "closeTab", commandBar.isOpen { commandBar.close() }
+            else if isPeek { attemptPeekClose(.closeShortcut) } else { closeWindow() }
         case "newTab", "editURL":
             // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
             let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
             if opening.owner == .browserWindow, let parent = peekParent { parent.openCommandBar(opening.mode) } else { openCommandBar() }
-        case "goBack": browser?.goBack()
+        case "goBack": goBack()
         case "goForward": browser?.goForward()
         case "reload": browser?.reload()
         case "hardReload": browser?.reloadIgnoringCache()
@@ -1634,6 +1637,30 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let hold = closeHold.map { "\($0)" } ?? "none"
         let capturing = browser?.isCapturingMedia == true ? 1 : 0
         return "open=\(closingPeek ? 0 : 1) capturing=\(capturing) hold=\(hold) close=\(controls?.closeReadout() ?? "-")"
+    }
+
+    /// Back (⌘[, the menu): the page's own history, else the window closes, as in Arc (#495).
+    func goBack() {
+        guard let b = browser else { return }
+        switch LittleWindowBack.step(pageCanGoBack: b.canGoBack, hasPage: hasPage, peek: isPeek) {
+        case .history: b.goBack()
+        case .close: closeWindow()
+        case .none: break
+        }
+    }
+
+    /// The close a two-finger swipe back ends in when the page behind `view` is this window's and
+    /// has nothing behind it (#495); nil otherwise (ChromiumHistorySwipe).
+    func swipeBackClose(pageView view: NSView) -> (() -> Void)? {
+        guard let b = browser, owns(pageView: view, of: b),
+              LittleWindowBack.step(pageCanGoBack: false, hasPage: hasPage, peek: isPeek) == .close else { return nil }
+        return { [weak self] in self?.closeWindow() }
+    }
+
+    private func owns(pageView view: NSView, of b: CraBrowser) -> Bool {
+        if view.isDescendant(of: b.containerView) { return true }
+        guard let host = b.hostWindow else { return false }
+        return view.window === host || (EmbeddedPages.pageViews(of: host)?.contains { view.isDescendant(of: $0) } ?? false)
     }
 
     /// ⌘W / Close Window: the same path as the close button. (performClose is

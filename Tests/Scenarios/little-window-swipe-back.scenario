@@ -1,0 +1,32 @@
+# promise: #495
+# A two-finger swipe back over a Little Window's page with nothing behind it closes the window, as
+# in Arc (a swipe goes where Back goes, WebContentsUIDelegate::CanExternallyNavigate), and Back
+# (⌘[) does the same. A test can't make the gesture, so cra://debug?littleSwipeBack= asks the
+# newest Little Window's page delegate what Chromium's swipe asks before it starts (go=1: the end).
+budget rss=700 stalls50=20
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# A link from another app opens in a Little Window, on its first page: the swipe may start, and
+# its end closes the window.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleShown=open
+expect-log little shown open: windows=1
+cra://debug?littleSwipeBack=first&go=1
+expect-log little swipe back first: can=1$
+wait 1.5
+cra://debug?littleShown=swiped
+expect-log little shown swiped: windows=0
+
+# Back (⌘[) on a Little Window's first page closes it too.
+cra://debug?externalURL=${PAGE}?n=again
+wait 3
+cra://debug?littleShown=again
+expect-log little shown again: windows=1
+cra://action/goBack
+wait 1.5
+cra://debug?littleShown=back
+expect-log little shown back: windows=0

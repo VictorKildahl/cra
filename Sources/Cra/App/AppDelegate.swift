@@ -1529,12 +1529,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
             if let command = dict["littleToolbar"] { littleWindows.last?.debugToolbar(command); return }
+            // littleSwipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the newest Little
+            // Window's page before a swipe back starts, and with go=1 what it does at the end (#495).
+            if let label = dict["littleSwipeBack"] {
+                let b = littleWindows.last?.browser
+                let root = b?.hostWindow.flatMap { EmbeddedPages.pageViews(of: $0)?.last ?? $0.contentView } ?? b?.containerView
+                CraLog.note("little swipe back \(label): \(root.map { ChromiumHistorySwipe.debugSwipeBack(in: $0, perform: dict["go"] == "1") } ?? "no window")")
+                return
+            }
             // inspectAt=x,y: Inspect in the page's right-click menu at that point of the page (the
             // newest Little Window's or Peek's with target=little); devToolsShown=<label>: where each
             // Little Window's and Peek's DevTools are, and whether the front tab has any (#348).
             if let g = dict["inspectAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 let b = dict["target"] == "little" ? littleWindows.last?.browser : main.currentBrowser
                 b?.showDevToolsInspectingPoint(NSPoint(x: g[0], y: g[1]))
+                return
+            }
+            // front=<label>: the Little Window that takes actions now (keyLittleWindow), and the windows in front-to-back
+            // order (class, alpha, visible), for a test copy that has no key window.
+            if let label = dict["front"] {
+                let little = keyLittleWindow.flatMap { l in littleWindows.firstIndex { $0 === l } }.map { "little\($0)" } ?? "none"
+                let order = NSApp.orderedWindows.prefix(6).map { w in
+                    let name = littleWindows.contains { $0.window === w } ? "Little" : mainWindows.contains { $0.window === w } ? "Main"
+                        : String(describing: type(of: w))
+                    return "\(name)(a=\(w.alphaValue == 0 ? 0 : 1),v=\(w.isVisible ? 1 : 0))"
+                }
+                CraLog.note("front \(label): key=\(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none") little=\(little) order=\(order.joined(separator: ","))")
                 return
             }
             // devtoolsClick=1: a click in the middle of the current tab's docked DevTools (EmbeddedDevTools.debugClick).
@@ -2819,8 +2839,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "deleteSpace": if !main.isStandalone { confirmDeleteSpace(store.focusedSpace) }
         case "manageSpaces": if !main.isStandalone { main.showManageSpaces() }
         case "closeTab":
-            // Arc: "Close current tab or window".
-            if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
+            // Arc: "Close current tab or window". With the command bar open, ⌘W closes the bar, as
+            // Escape does, and the tab behind it stays (#497).
+            if main.commandBar.isOpen { main.commandBar.close() }
+            else if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
         case "closeWindow": main.window?.performClose(nil)
         case "reopenClosedTab":
             guard !main.isIncognito else { break }  // incognito tabs leave nothing to restore

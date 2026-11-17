@@ -1,0 +1,46 @@
+# ⌘W with the command bar open closes the bar, as Escape does and as Arc does, not the tab behind it
+# (GitHub #497). Close Tab went to the browser window's tab whether or not the bar was open, so ⌘T,
+# some typing and ⌘W closed the tab you were on and left the bar up; in a Little Window it closed the
+# whole window. ⇧⌘W (Close Window) is unchanged. cra://action/closeTab is what the File menu's Close Tab
+# (⌘W) runs; a posted ⌘W never reaches the menu in a background test copy.
+# promise: #497
+budget rss=900 stalls50=20
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# ⌘T, type a little, ⌘W: the bar closes, the tab stays.
+cra://commandbar?query=half typed
+wait 1
+cra://debug?commandBarRows=open
+expect-log Cra command bar rows open: open=1 mode=newTab
+cra://action/closeTab
+wait 1
+cra://debug?commandBarRows=after-w
+expect-log Cra command bar rows after-w: open=0
+cra://debug?browserWindows=after-w
+expect-log browser windows after-w: kind=normal .*tabs=\[\S*n=kept\] open=\S*n=kept
+
+# With the bar shut, ⌘W is the tab's again.
+cra://action/closeTab
+wait 1
+cra://debug?browserWindows=tab-closed
+expect-log browser windows tab-closed: kind=normal .*tabs=\[\] open=-
+
+# A Little Window: ⌘L opens its own bar, ⌘W closes the bar and the Little Window stays.
+cra://open?url=${PAGE}?n=little&little=1
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1.5
+cra://action/editURL
+wait 1
+cra://debug?commandBarRows=little-open
+expect-log Cra command bar rows little-open little: open=1 mode=editURL
+cra://action/closeTab
+wait 1
+cra://debug?commandBarRows=little-after-w
+reject-log Cra command bar rows little-after-w little:
+cra://debug?littleShown=little-after-w
+expect-log little shown little-after-w: windows=1 .* card=0

@@ -8,8 +8,8 @@ import ObjectiveC
 /// where Back closes the tab and shows the one it came from (#273), the swipe did nothing
 /// (GitHub #370). Arc's Chromium asks the app when the page can't go back
 /// (WebContentsUIDelegate::CanExternallyNavigate, then WillExternallyNavigate); here the same two
-/// methods ask the tab's window then, and BackToReferrer.swipeBack decides. Forward stays
-/// Chromium's.
+/// methods ask the tab's window then, and BackToReferrer.swipeBack decides; over a Little Window's
+/// page, LittleWindowBack does and the window closes (#495). Forward stays Chromium's.
 @MainActor
 enum ChromiumHistorySwipe {
     private typealias CanIMP = @convention(c) (AnyObject, Selector, Int32, NSWindow?) -> Bool
@@ -51,14 +51,18 @@ enum ChromiumHistorySwipe {
     }
 
     /// The swipe back's close on the tab whose page `delegate` serves, when that page has nothing
-    /// behind it; nil for a page that isn't a tab on screen (DevTools, an extension's popup) or a
-    /// tab Back doesn't close.
+    /// behind it, or the Little Window's whose page it is; nil for a page that isn't a tab on
+    /// screen or a Little Window (DevTools, an extension's popup), or one Back doesn't close.
     private static func closeToReferrer(_ delegate: AnyObject) -> (() -> Void)? {
         guard let method = class_getInstanceMethod(type(of: delegate), viewSel),
               let view = unsafeBitCast(method_getImplementation(method), to: ViewIMP.self)(delegate, viewSel),
               let app = NSApp.delegate as? AppDelegate else { return nil }
         for main in app.mainWindows {
             if let id = main.browsers.visibleTabID(ofPageView: view) { return main.swipeBackClose(id) }
+        }
+        // A Little Window's page closes the window (#495).
+        for little in app.littleWindows {
+            if let close = little.swipeBackClose(pageView: view) { return close }
         }
         return nil
     }

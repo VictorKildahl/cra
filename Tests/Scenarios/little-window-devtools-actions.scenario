@@ -1,0 +1,22 @@
+# With DevTools open in a Little Window, the Little Window still takes the window's actions: ⌥⌘I closes
+# its DevTools, and the browser window's tab is left alone. Up to engine -17, Chrome's own (hidden) DevTools
+# window became key when DevTools opened (key=none little=none after Inspect), so ⌥⌘I and the rest went to
+# the browser window's tab instead: it opened DevTools there and the Little Window's stayed open.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?target=little&inspectAt=40,40
+wait 5
+cra://debug?devToolsShown=inspected
+expect-log little devtools inspected: little0 peek=0 parked=0 open=1 docked=1 shown=1
+cra://debug?front=inspected
+expect-log front inspected: key=LittleWindow little=little0
+
+cra://action/devTools
+wait 3
+cra://debug?devToolsShown=closed
+expect-log little devtools closed: little0 peek=0 parked=0 open=0 pageFills=1
+expect-log tab devtools closed: windows=1 open=0

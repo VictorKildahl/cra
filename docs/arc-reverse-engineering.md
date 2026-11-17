@@ -4440,6 +4440,10 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   asks `BackToReferrer.swipeBack` for the tab whose page view it is, and at the end closes the tab to its
   referrer. Forward stays Chromium's. Readout `cra://debug?swipeBack=<label>[&go=1]` calls the page's real
   delegate (scenario `swipe-back`).
+- Cra (#495, reporter's Arc recording): in a Little Arc window the same swipe with no page behind closes
+  the window. `LittleWindowBack` (CraCore) decides for the swipe and for ⌘[; a Peek keeps its own history
+  only (unverified in Arc). Readout `cra://debug?littleSwipeBack=<label>[&go=1]` (scenario
+  `little-window-swipe-back`).
 
 ## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
 - [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new

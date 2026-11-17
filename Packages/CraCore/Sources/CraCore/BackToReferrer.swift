@@ -45,3 +45,27 @@ public enum BackToReferrer {
         step(canGoBack: pageCanGoBack, tab: tab, referrer: referrer, inSplit: inSplit, pinned: pinned)
     }
 }
+
+/// Back in a Little Window, and a two-finger swipe back over its page (GitHub #495). A Little Window
+/// is one page that came from somewhere else, so Arc treats it as a link's tab: when the page has
+/// nothing behind it, Back, and the swipe that goes where Back goes (CanExternallyNavigate), close
+/// the window. A Peek keeps its page's own history only; Escape and its close button end it.
+public enum LittleWindowBack {
+    public enum Step: Equatable {
+        /// The page goes back in its own history.
+        case history
+        /// The window closes (its page is archived, as any close of it does).
+        case close
+        /// Nothing to go back to.
+        case none
+    }
+
+    /// - Parameters:
+    ///   - pageCanGoBack: the page has an entry behind the current one.
+    ///   - hasPage: the window shows a page (not just its command bar, before anything was opened).
+    ///   - peek: the window is a Peek over a browser window.
+    public static func step(pageCanGoBack: Bool, hasPage: Bool, peek: Bool) -> Step {
+        if pageCanGoBack { return .history }
+        return hasPage && !peek ? .close : .none
+    }
+}

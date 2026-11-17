@@ -363,13 +363,16 @@ public enum AskOnPageLayout {
 }
 
 /// The card's theme colour (Arc's WindowTheme palette, read at run time there): the question, the
-/// Ask button. Arc's capture on a lavender space shows a mid purple; here it is the space's colour
-/// at a readable strength, kept to its hue. A grey space gets Max's blue.
+/// Ask button. Arc's capture on a lavender space shows a mid purple; here it is the space's own colour
+/// with only its lightness moved (#490): a dark one is first lifted to mid strength (luminance 0.306,
+/// Arc's midTone floor), then each card's question goes only as far as reading needs. Hue and saturation
+/// stay, so a sage space asks in sage and a vivid one is never bolder than itself. The colourless
+/// default asks in Arc's default blue (its midTone). A grey space gets Max's blue.
 ///
 /// The card follows macOS, not the space (its panel isn't in the space's shell), so a light space
 /// on a dark Mac has a dark card (#408). Both questions are made, the card picks by its own
 /// appearance, and each one reads at least 4.5:1 (WCAG AA) on its card: a colour too dark for the
-/// dark card is lifted, then washed toward white; one too light for the light card is darkened.
+/// dark card is lightened, one too light for the light card is darkened, both keeping hue and saturation.
 /// The Ask button carries white text, so it takes the light card's question in both appearances.
 public struct AskOnPageTone {
     public typealias RGB = (r: Double, g: Double, b: Double)
@@ -386,18 +389,50 @@ public struct AskOnPageTone {
     public func question(dark: Bool) -> RGB { dark ? questionOnDark : questionOnLight }
 
     public init(themeHex: String) {
-        let c = HexColor.components(themeHex) ?? (0.5, 0.5, 0.5)
-        var (h, s, _) = Self.hsb(c.r, c.g, c.b)
-        var light = (s: max(s, 0.55), v: 0.62), dark = (s: max(s, 0.45), v: 0.92)
-        if s < 0.08 {
-            // Max's blue: (0.22, 0.24, 1) on light, (0.47, 0.50, 1) on dark.
-            (h, s, _) = Self.hsb(0.22, 0.24, 1)
-            light = (s, 1)
-            dark = (Self.hsb(0.47, 0.50, 1).1, 1)
-        }
         let lightCard = Self.card(dark: false), darkCard = Self.card(dark: true)
-        questionOnLight = Self.readable(h: h, s: light.s, v: light.v, on: (lightCard, lightCard, lightCard), lighter: false)
-        questionOnDark = Self.readable(h: h, s: dark.s, v: dark.v, on: (darkCard, darkCard, darkCard), lighter: true)
+        let colourless = ["#010220", "#01021F", "#C8CAFF"].contains(themeHex.uppercased())
+        let own = HexColor.components(themeHex) ?? (0.5, 0.5, 0.5)
+        // Arc's stored default palette's midTone, (131.1, 137.2, 258.7) (SpaceTheme.midTone of these colours).
+        let source = colourless ? (r: 131.1 / 255, g: 137.2 / 255, b: 258.7 / 255) : own
+        let c = (r: min(1, max(0, source.r)), g: min(1, max(0, source.g)), b: min(1, max(0, source.b)))
+        if Self.hsb(c.r, c.g, c.b).1 < 0.08 {
+            // Max's blue: (0.22, 0.24, 1) on light, (0.47, 0.50, 1) on dark.
+            let (h, s, _) = Self.hsb(0.22, 0.24, 1)
+            questionOnLight = Self.readable(h: h, s: s, v: 1, on: (lightCard, lightCard, lightCard), lighter: false)
+            questionOnDark = Self.readable(h: h, s: Self.hsb(0.47, 0.50, 1).1, v: 1, on: (darkCard, darkCard, darkCard), lighter: true)
+            return
+        }
+        let base = Self.lifted(c, toLuminance: 0.306)
+        questionOnLight = Self.readable(base, on: (lightCard, lightCard, lightCard), lighter: false)
+        questionOnDark = Self.readable(base, on: (darkCard, darkCard, darkCard), lighter: true)
+    }
+
+    /// `c` with its HSL lightness raised until its luminance is at least `floor`; hue and saturation kept.
+    static func lifted(_ c: RGB, toLuminance floor: Double) -> RGB {
+        var (h, s, l) = hsl(c)
+        while luminance(at(h, s, l)) < floor, l < 1 { l = min(1, l + 0.005) }
+        return at(h, s, l)
+    }
+
+    static func hsl(_ c: RGB) -> (h: Double, s: Double, l: Double) {
+        let mx = max(c.r, c.g, c.b), mn = min(c.r, c.g, c.b), d = mx - mn, l = (mx + mn) / 2
+        return (hsb(c.r, c.g, c.b).0, d < 0.00001 ? 0 : (l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn)), l)
+    }
+
+    static func at(_ h: Double, _ s: Double, _ l: Double) -> RGB {
+        let chroma = (1 - abs(2 * l - 1)) * s, m = l - chroma / 2, o = rgb(h: h, s: 1, v: 1)
+        return (m + o.r * chroma, m + o.g * chroma, m + o.b * chroma)
+    }
+
+    /// `c` with its HSL lightness stepped until it reads on bg, hue and saturation kept: lighter toward
+    /// white, darker toward black (both ends read on the card's greys). A colour that reads is kept.
+    static func readable(_ c: RGB, on bg: RGB, lighter: Bool) -> RGB {
+        var (h, s, l) = hsl(c)
+        if s == 0 { h = 0 }
+        while contrast(at(h, s, l), bg) < minimumContrast {
+            if lighter { guard l < 1 else { break }; l = min(1, l + 0.005) } else { guard l > 0 else { break }; l = max(0, l - 0.005) }
+        }
+        return at(h, s, l)
     }
 
     /// WCAG 2 contrast ratio of two sRGB colours (1 to 21).

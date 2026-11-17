@@ -1,0 +1,27 @@
+# promise: #478
+# Zap's "Zap all related elements" is a slider, as in Arc 1.172.2 (measured on Hacker News, 17 Nov
+# 2026): the pointer across it steps through candidate selectors from 1 match to the most, the
+# footer shows each one's count and selector, every match is highlighted, and a click zaps that
+# selector. 0.1.45 had one fixed "related" selector, so Zap could not reach a list's items the way
+# Arc's could.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=zaprelated
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const t=document.createElement('table');t.className='itemlist';let h='';for(let i=0;i<30;i++)h+='<tr class=athing><td class=title><span class=titleline><a href=/s'+i+'>Story '+i+'</a> <span class=sitebit>(site'+i+'.com)</span></span></td></tr><tr><td class=subtext><a class=hnuser href=/u'+i+'>user'+i+'</a> <a href=/h'+i+'>hide</a></td></tr>';t.innerHTML=h;document.body.prepend(t);return 'list'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"list"
+cra://action/newBoost
+wait 1
+cra://debug?boostZap=1
+expect-log zap on: shelf under the page
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{document.querySelector('.titleline a').click();const st=JSON.parse(window.__craZap.state());return 'held-'+st.footer+'-c'+st.candidates.join(',')})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"held-1.*-c1,[0-9,]*30[0-9,]*"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const c=JSON.parse(window.__craZap.state()).candidates,i=c.indexOf(30);window.__craZap.scrub((i+.5)/c.length);const st=JSON.parse(window.__craZap.state());return 'scrub-'+st.footer.split(' ')[0]+'-lit'+st.lit})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"scrub-30.*-lit30"
+cra://debug?zapPress=related
+expect-log zap kept 1 selector$
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'titles-'+[...document.querySelectorAll('.titleline a')].filter(a=>getComputedStyle(a).display!=='none').length+'-users-'+[...document.querySelectorAll('.hnuser')].filter(a=>getComputedStyle(a).display!=='none').length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"titles-0-users-30"
+cra://debug?boostZap=0

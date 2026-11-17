@@ -76,6 +76,12 @@ class Downloads : public ProfileManagerObserver,
 
   // content::DownloadManager::Observer:
   void OnDownloadCreated(content::DownloadManager* manager, download::DownloadItem* item) override {
+    // A transient download is Chrome's own (the download service's model and component fetches), never
+    // the user's: Chrome's download UI skips it (DownloadItemModel::ShouldNotifyUI), and Cra listed it with
+    // the profile's last page, a row that may never finish (#491). Transient is set when the item is made.
+    if (item->IsTransient()) {
+      return;
+    }
     item->AddObserver(this);
     // Chrome makes an item for every download in the profile's history as it starts, already finished: they
     // aren't downloads of this session (CEF never reported them), and every one ran Cra's download flight

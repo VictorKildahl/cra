@@ -45,3 +45,24 @@ struct BoostZapTests {
         #expect(BoostZap.script.contains("mix-blend-mode:multiply") && BoostZap.script.contains("display-p3 0.9686 0.8078 0.2745"))
     }
 }
+
+/// Arc 1.172.2's "Zap all related elements" slider (Hacker News, 17 Nov 2026, #478).
+struct BoostZapSliderTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
+    func thePointerStepsThroughCandidatesInEqualSlices() {
+        // Arc, 8 candidates over 250 pt: 1 at the left edge, the most at the right, a slice each.
+        #expect(BoostZap.candidateIndex(fraction: 0, count: 8) == 0)
+        #expect(BoostZap.candidateIndex(fraction: 0.124, count: 8) == 0)
+        #expect(BoostZap.candidateIndex(fraction: 0.126, count: 8) == 1)
+        #expect(BoostZap.candidateIndex(fraction: 0.999, count: 8) == 7)
+        #expect(BoostZap.candidateIndex(fraction: 1.2, count: 8) == 7 && BoostZap.candidateIndex(fraction: -1, count: 8) == 0)
+        #expect(BoostZap.candidateIndex(fraction: 0.5, count: 0) == 0)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
+    func theScriptIsASlider() {
+        #expect(BoostZap.script.contains("scrub") && BoostZap.script.contains("display-p3 0.9608 0.7020 0.4510"),
+                "the fill takes Arc's lighter orange")
+        #expect(!BoostZap.script.contains("relSel"), "no single fixed related selector")
+    }
+}

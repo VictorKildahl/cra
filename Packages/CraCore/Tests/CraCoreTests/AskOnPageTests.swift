@@ -280,12 +280,12 @@ struct AskOnPageToneTests {
         // Arc's lavender space (#B9A3D9-ish) gives a mid purple: blue and red over green.
         let purple = AskOnPageTone(themeHex: "#B9A3D9").questionOnLight
         #expect(purple.b > purple.r && purple.r > purple.g)
-        #expect(max(purple.r, purple.g, purple.b) == 0.62)
+        #expect(max(purple.r, purple.g, purple.b) > 0.5 && max(purple.r, purple.g, purple.b) < 0.75)
         let grey = AskOnPageTone(themeHex: "#DDDDDD").questionOnLight
         #expect(abs(grey.r - 0.22) < 0.005 && abs(grey.g - 0.24) < 0.005 && abs(grey.b - 1) < 0.005)
         // On the dark card the same purple is light and keeps its hue.
         let onDark = AskOnPageTone(themeHex: "#B9A3D9").questionOnDark
-        #expect(onDark.b > onDark.r && onDark.r > onDark.g && onDark.b >= 0.92)
+        #expect(onDark.b > onDark.r && onDark.r > onDark.g)
     }
 
     /// Every preset's colours and the hue wheel at several strengths, on both cards: the question
@@ -310,6 +310,37 @@ struct AskOnPageToneTests {
             }
             #expect(AskOnPageTone.contrast(tone.button, white) >= 4.5, "Ask on \(hex)")
         }
+    }
+
+    static func hsl(_ c: AskOnPageTone.RGB) -> (h: Double, s: Double, l: Double) {
+        let x = SpaceTheme.hsl(RGB(c.r, c.g, c.b)); return (x.h, x.s, x.l)
+    }
+
+    /// #490: the card kept only the space's hue and raised its saturation (to 0.55 on the light card),
+    /// so a sage space asked in a loud green. It now moves only the space colour's lightness: Arc's muted
+    /// sage and slate swatches keep their saturation on both cards, a vivid green is never bolder than
+    /// itself, and every one still reads at 4.5:1.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/490"), arguments: ["#7AA982", "#666789", "#226149", "#34E895"])
+    func theCardKeepsTheSpacesSaturation(hex: String) {
+        let tone = AskOnPageTone(themeHex: hex)
+        let own = HexColor.components(hex)!
+        let source = Self.hsl((own.r, own.g, own.b))
+        for (dark, q) in [(false, tone.questionOnLight), (true, tone.questionOnDark)] {
+            let got = Self.hsl(q)
+            #expect(abs(got.s - source.s) < 0.03 || got.l < 0.02 || got.l > 0.98, "\(hex) \(dark ? "dark" : "light"): s \(got.s) vs \(source.s)")
+            #expect(abs(got.h - source.h) < 0.01, "\(hex) hue")
+            let card = AskOnPageTone.card(dark: dark)
+            #expect(AskOnPageTone.contrast(q, (card, card, card)) >= 4.5)
+        }
+        // Sage and slate stay muted (the old recipe pushed both past 0.55).
+        if hex == "#7AA982" || hex == "#666789" { #expect(Self.hsl(tone.button).s < 0.3) }
+    }
+
+    /// The colourless default asks in Arc's default blue at mid strength, not its near-black navy half.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/490"), arguments: ["#010220", "#C8CAFF"])
+    func theColourlessDefaultAsksInArcsBlue(hex: String) {
+        let b = AskOnPageTone(themeHex: hex).button
+        #expect(b.b > b.r && b.b > b.g && AskOnPageTone.luminance(b) > 0.05)
     }
 
     /// The reporter's case: a light space (Arc's lavender preset) with macOS dark. The dark card's
