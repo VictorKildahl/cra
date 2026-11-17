@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_delegate_desktop.cc
 +++ b/chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_delegate_desktop.cc
-@@ -227,6 +227,17 @@
+@@ -227,6 +227,19 @@
      return;
    }
  
@@ -10,8 +10,10 @@
 +  // by then no window may hold the group, and GetTabStripModelForLocalGroup
 +  // CHECKed: a crash at every launch on a Mac whose last session had a tab
 +  // group in such a window (0.1.44 crash reports). With no window there is no
-+  // local group to connect.
++  // local group to connect: the saved group lets go of it, as when a group's
++  // window closes (SavedTabGroupModelListener).
 +  if (!SavedTabGroupUtils::GetBrowserWithTabGroupId(group_id)) {
++    service_->RemoveLocalTabGroupMapping(group_id, ClosingSource::kUnknown);
 +    return;
 +  }
 +

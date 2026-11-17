@@ -3,6 +3,8 @@
 
 #include "cra/page_protocol.h"
 
+#include "cra/bridge.h"
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -683,7 +685,7 @@ void HandleCraMethod(content::WebContents* contents,
   } else if (method == "Cra.extensionSidePanel") {
     // An extension's side panel page: like Chrome's, it has no tab (GitHub #265).
     extensions::SetViewType(contents, extensions::mojom::ViewType::kExtensionSidePanel);
-  } else {
+  } else if (!HandleDebugMethod(contents, method, params, result, error)) {
     // Cra.installFromWebStore and Cra.pauseMedia are asynchronous (PageSession::Send).
     // need Cra's Chromium patches (scripts/cef-patches).
     *error = "not yet on Chrome's framework: " + method;

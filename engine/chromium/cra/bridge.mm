@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "base/no_destructor.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -67,6 +68,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -77,6 +79,12 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/unload_controller.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/types.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -1753,6 +1761,73 @@ void RunReadyBlocks() {
   for (void (^block)(void) in blocks) {
     block();
   }
+}
+
+// Scenarios' way to what Chrome does to the bridge's hidden pieces (Tests/Scenarios/engine-*.scenario).
+bool HandleDebugMethod(content::WebContents* contents,
+                       const std::string& method,
+                       const base::DictValue* params,
+                       base::DictValue* result,
+                       std::string* error) {
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  if (method == "Cra.debugCloseHost") {
+    // Chrome closes the hidden Browser that holds the profile's pages, as it does its other windows. With
+    // addPage, a page goes to the profile's host the moment Chrome has closed that Browser and scheduled its
+    // deletion, as the bridge's next page would.
+    auto it = Hosts().find(profile);
+    if (it == Hosts().end() || !it->second->browser()) {
+      *error = "no host for this profile";
+      return true;
+    }
+    BrowserWindowInterface* browser = it->second->browser();
+    if (params && params->FindBool("addPage").value_or(false)) {
+      static base::NoDestructor<std::vector<base::CallbackListSubscription>> subscriptions;
+      subscriptions->push_back(browser->RegisterBrowserDidClose(base::BindRepeating(
+          [](Profile* profile, BrowserWindowInterface* closed) {
+            PageHost* host = HostFor(profile);
+            if (!host) {
+              LOG(WARNING) << "Cra: debug page after host closed: no host";
+              return;
+            }
+            LOG(WARNING) << "Cra: debug page after host closed: "
+                         << (host->browser() == closed ? "the closed host" : "a new host");
+            g_adding_own_page = true;
+            host->browser()->GetTabStripModel()->AppendWebContents(
+                content::WebContents::Create(content::WebContents::CreateParams(profile)), /*foreground=*/false);
+            g_adding_own_page = false;
+          },
+          profile)));
+    }
+    // On the next turn: closing takes the page this call came from with it, and its reply is still on the way.
+    Later(base::BindOnce(
+        [](base::WeakPtr<BrowserWindowInterface> browser) {
+          if (browser) {
+            chrome::CloseWindow(browser.get());
+          }
+        },
+        browser->GetWeakPtr()));
+    result->Set("closing", true);
+    return true;
+  }
+  if (method == "Cra.debugConnectClosedTabGroup") {
+    // Session restore asks to connect a restored window's tab group (ProcessSavedGroup), and the window is
+    // gone by then: Cra closes the Chrome windows it didn't make.
+    tab_groups::TabGroupSyncService* service = tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
+    if (!service) {
+      *error = "no tab group sync service";
+      return true;
+    }
+    tab_groups::SavedTabGroup group(u"Cra scenario", tab_groups::TabGroupColorId::kBlue, {});
+    group.AddTabLocally(tab_groups::SavedTabGroupTab(GURL("https://example.com/"), u"Example", group.saved_guid(),
+                                                     /*position=*/0));
+    base::Uuid sync_id = group.saved_guid();
+    service->AddGroup(std::move(group));
+    service->ConnectLocalTabGroup(sync_id, tab_groups::TabGroupId::GenerateNew(),
+                                  tab_groups::OpeningSource::kConnectOnSessionRestore);
+    result->Set("connected", true);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace cra

@@ -1,0 +1,23 @@
+# Chrome closes the hidden Browser that holds a profile's pages and, with its last Chrome window gone, unloaded
+# the profile while Cra's pages still used it: Chrome's check that a profile's pages close before it does stopped
+# Cra (~WebContentsOfBrowserContext from ProfileDestroyer::Timeout, two 0.1.44 crash reports). Cra turns
+# DestroyProfileOnBrowserClose off, so its profiles stay loaded until it quits (bridge.mm). Default never unloads
+# (Cra's DevTools pipe keeps it), so the page is on the space Random, on the profile Hobbies (as in
+# new-document-command). On an engine without the change it stops in ~WebContentsOfBrowserContext, as the reports
+# did (checked 17 Nov; an `arg` can't turn the feature back on: the bridge's --disable-features wins).
+budget rss=700
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "newDocumentApps": {"Default": "googleDoc"}}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=personal
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
+expect-log GET /page\.html\?n=random
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'at:'+location.search"}
+expect-log Cra cdp Runtime\.evaluate .*at:\?n=random
+cra://debug?cdp=Cra.debugCloseHost
+expect-log Cra cdp Cra\.debugCloseHost → .*closing
+wait 6
+cra://open?url=${PAGE}?n=random-again&space=A0000000-0000-0000-0000-000000000002
+expect-log GET /page\.html\?n=random-again
+wait 2
