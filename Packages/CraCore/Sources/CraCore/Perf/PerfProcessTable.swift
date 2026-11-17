@@ -59,10 +59,11 @@ public struct PerfProcessTable: Sendable {
             if r.cpuNs != nil || r.footprintBytes != nil {
                 usage.append(PerfProcessUsage(pid: r.pid, kind: r.kind, cpuPct: pct, footprintBytes: r.footprintBytes ?? 0))
             }
-            g.footprintBytes += r.footprintBytes ?? 0
-            g.diskReadBytes += r.diskReadBytes ?? 0
-            g.diskWriteBytes += r.diskWriteBytes ?? 0
-            g.wakeups += r.wakeups ?? 0
+            // The sampler clamps macOS's UInt64 counters, so a reading can be Int64.max: sums saturate.
+            g.footprintBytes = g.footprintBytes.saturatingAdding(r.footprintBytes ?? 0)
+            g.diskReadBytes = g.diskReadBytes.saturatingAdding(r.diskReadBytes ?? 0)
+            g.diskWriteBytes = g.diskWriteBytes.saturatingAdding(r.diskWriteBytes ?? 0)
+            g.wakeups = g.wakeups.saturatingAdding(r.wakeups ?? 0)
             groups[r.kind] = g
         }
         let kinds = Dictionary(readings.map { ($0.pid, $0.kind) }, uniquingKeysWith: { a, _ in a })
@@ -81,5 +82,13 @@ public struct PerfProcessTable: Sendable {
             if g.count == 0 { g.available = true }
             return g.count > 0 || g.started > 0 || g.ended > 0 ? g : nil
         }
+    }
+}
+
+extension Int64 {
+    /// Counters only grow: a sum past Int64.max stays there instead of trapping.
+    func saturatingAdding(_ value: Int64) -> Int64 {
+        let (sum, overflow) = addingReportingOverflow(Swift.max(value, 0))
+        return overflow ? .max : sum
     }
 }

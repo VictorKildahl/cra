@@ -1,0 +1,41 @@
+# promise: #480
+# A page can cancel Find and other web shortcuts, but not Quit, Hide or Minimize: those run before the page
+# sees them (Arc measured: ⌘Q and ⌘M). Full Screen's ⌃⌘F still reaches the page outside full screen, as in Arc.
+# Keys the user gave a Cra shortcut (here New Tab on ⌘H, Prefer Websites) are that shortcut's: the page keeps
+# them and Cra stays on screen.
+# Keep Cra in the menu bar so we can observe the quit command without ending the scenario.
+budget rss=700 stalls50=15
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "keepInMenuBar": true}
+seed keybindings.json {"find":[{"key":"f","modifiers":1048576,"priority":"low"}],"newTab":[{"key":"h","modifiers":1048576,"priority":"low"}]}
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{window.keys=[];addEventListener('keydown',e=>{if(e.metaKey){e.preventDefault();keys.push(e.key)}},true);return 'listening'})()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"listening"
+cra://debug?key=f,3,1048576&page=1
+cra://debug?key=m,46,1179648&page=1
+cra://debug?key=f,3,1310720&page=1
+cra://debug?key=h,4,1048576&page=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page-keys-'+keys.map(k=>k.toLowerCase()).join(',')"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"page-keys-f,m,f,h"
+cra://debug?windowState=page-kept
+expect-log window state page-kept: main0 fullscreen=0 visible=1
+cra://debug?key=q,12,1048576&page=1
+expect-log menu bar: quit keeps Cra in the menu bar
+cra://debug?browserWindows=after-quit
+expect-log browser windows after-quit: count=0
+
+# Minimize the page's own browser window.
+cra://action/newWindow
+expect-log menu bar: browser windows back
+cra://open?url=${PAGE}?n=minimize
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{addEventListener('keydown',e=>e.preventDefault(),true);return 'minimize-listening'})()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"minimize-listening"
+cra://debug?windowState=before-minimize
+expect-log window state before-minimize: main0 fullscreen=0 visible=1
+cra://debug?key=m,46,1048576&page=1
+wait 2
+cra://debug?windowState=minimized
+expect-log window state minimized: main0 fullscreen=0 visible=0

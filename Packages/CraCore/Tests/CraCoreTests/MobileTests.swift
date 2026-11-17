@@ -637,7 +637,7 @@ struct MobileSpacesTests {
 
     /// The phone reads the sidebar.json the Mac saves, dates as ISO 8601 text and all. A plain
     /// decoder wants numbers there, so every real Mac's Spaces came out as "nothing synced".
-    @Test func theMacsSavedSidebarReads() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/465")) func theMacsSavedSidebarReads() throws {
         let url = try #require(Bundle.module.url(forResource: "sidebar.json", withExtension: nil, subdirectory: "Fixtures/Model/recorded"))
         let document = try #require(MobileSpaces.document(from: Data(contentsOf: url)))
         #expect(!document.spaces.isEmpty)

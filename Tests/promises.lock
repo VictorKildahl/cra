@@ -925,6 +925,7 @@
 #464   Packages/CraCore/Tests/CraCoreTests/SidebarSideTests.swift::theToolbarToggleEndsTheBar  51c4ecdcfbb2
 #464   Tests/FloatingSidebarTests.swift::comesOutOnTheRight  6dc3f93807f4
 #464   Tests/Scenarios/sidebar-right.scenario  95d3b89abc54
+#465   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theMacsSavedSidebarReads  b95aa727ca6e
 #466   Tests/Scenarios/page-menu-shows.scenario  c85711765757
 #467   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::aSecondTapAcrossSpacesGoesBack  e155ddc97ee6
 #467   Tests/Scenarios/tab-switcher-all-spaces.scenario  b5befa94ecac
@@ -937,3 +938,5 @@
 #471   Tests/Scenarios/spaces-menu-rows.scenario  2f97a92f3d0c
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
+#480   Tests/Scenarios/native-window-hide.scenario  a18926843adf
+#480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae

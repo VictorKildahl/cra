@@ -1,0 +1,16 @@
+# promise: #480
+# A page that cancels ⌘H cannot stop Cra from hiding its window.
+budget rss=700 stalls50=15
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{addEventListener('keydown',e=>e.preventDefault(),true);return 'hide-listening'})()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"hide-listening"
+cra://debug?windowState=before-hide
+expect-log window state before-hide: main0 fullscreen=0 visible=1
+wait 0.5
+cra://debug?key=h,4,1048576&page=1
+wait 2
+cra://debug?windowState=hidden
+expect-log window state hidden: main0 fullscreen=0 visible=0
