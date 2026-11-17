@@ -66,6 +66,7 @@
 #include "chrome/browser/cra_permission_hook.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -75,6 +76,7 @@
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -1204,10 +1206,24 @@ bool TranslateState(content::WebContents* contents, const std::string& state) {
   return true;
 }
 
+// A host Browser that is closing (Chrome closing its windows, an extension's windows.remove) takes no more pages.
+bool IsClosing(BrowserWindowInterface* browser) {
+  return !browser || browser->IsDeleteScheduled() || UnloadController::From(browser)->is_attempting_to_close_browser();
+}
+
+// The profile's host, or nullptr while Chrome shuts down. A page added to a host that was closing stayed in its tab
+// strip when Chrome deleted it, after its window's features had gone: ExclusiveAccessManager::OnTabClosing on a null
+// manager from ~Browser (0.1.44 crash reports). A closing host is left to close; a new one takes the page.
 PageHost* HostFor(Profile* profile) {
   auto it = Hosts().find(profile);
   if (it != Hosts().end()) {
-    return it->second;
+    if (!IsClosing(it->second->browser())) {
+      return it->second;
+    }
+    Hosts().erase(it);
+  }
+  if (browser_shutdown::IsTryingToQuit() || browser_shutdown::HasShutdownStarted()) {
+    return nullptr;
   }
   g_making_host = true;
   BrowserWindowInterface* browser = CreateBrowserWindow(BrowserWindowCreateParams(*profile, false));
@@ -1907,6 +1923,9 @@ void RunReadyBlocks() {
 // loads: its saved history (GitHub #273), else its address.
 - (void)insertContents:(std::unique_ptr<content::WebContents>)made profile:(Profile*)profile {
   PageHost* host = HostFor(profile);
+  if (!host) {
+    return;  // Chrome is shutting down: the page goes with it.
+  }
   content::WebContents* contents = made.get();
   g_adding_own_page = true;
   host->browser()->GetTabStripModel()->AppendWebContents(std::move(made), /*foreground=*/false);
@@ -3069,7 +3088,11 @@ void RunReadyBlocks() {
       // encrypts with a "v11" key instead. Every cookie and password Cra on CEF saved is v10, and a cookie that
       // won't decrypt takes its whole site down with it: everyone signed out at the first engine launch. The
       // item is Cra's own ("Cra Safe Storage"), so there is no other app's data to protect from.
-      "KeychainKeyProviderUserDataDirProtection";
+      "KeychainKeyProviderUserDataDirProtection,"
+      // Chrome unloads a profile once its last Chrome window closes. Cra's pages and spares live outside Chrome's
+      // windows, so a profile whose hidden host closed went with pages still in it: ~WebContentsOfBrowserContext
+      // from ProfileDestroyer::Timeout (0.1.44 crash reports). Cra's profiles stay loaded until it quits.
+      "DestroyProfileOnBrowserClose";
   // CraEngineMain adds AperitifHelpers to this one.
   std::vector<std::string> enabled = {"ForceWebRequestProxyForTest", "WebContentsDiscard", "InfiniteTabsFreezing",
                                       "VideoPipForceTrustedForMediaPlaybackForTesting", "HideDelegatedFrameHostMac"};

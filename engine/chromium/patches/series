@@ -36,6 +36,7 @@ cra-relaunch.patch
 cra-links.patch
 fingerprinting-protection.patch
 cra-about-no-update-check.patch
+tab-group-sync-closed-window.patch
 
 # Google's background services, off: ungoogled-chromium's patches (BSD 3-Clause, ungoogled/LICENSE), taken one
 # by one from its 157.0.8103.78 series (commit 8c886df). Left out on purpose: GCM (push
