@@ -1,0 +1,25 @@
+# promise: #495
+# Back on a Little Window's first page closes it also while Cra isn't the active app (another app
+# clicked, a cra://action from a script): with no key window the window in front stands in, and a
+# Little Window is a panel, which NSApp.orderedWindows leaves out, so Back went to the browser window
+# behind it and the Little Window stayed. little-window-typed-back failed this way whenever another app
+# was in front during the run.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleCard=go:${PAGE}?n=typed
+wait 3
+cra://debug?littleShown=typed
+expect-log little shown typed: windows=1 .* card=0
+
+# Nothing of Cra's is key; the Little Window in front still takes the actions.
+cra://debug?deactivate=away
+expect-log deactivated away: active=[01] key=0 little=1
+
+cra://action/goBack
+wait 1.5
+cra://debug?littleShown=back
+expect-log little shown back: windows=0

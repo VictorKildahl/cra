@@ -957,7 +957,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Never a window no one can see: Chrome's own on the Chromium engine (a page's DevTools window before Cra
         // takes its frontend, the window holding a profile's pages) stays on screen at alpha 0.
         // A Little Window (or Peek) is a panel of its own; other panels (Peek's dimming, tooltips) never count.
-        guard let front = NSApp.orderedWindows.first(where: { $0.isVisible && $0.alphaValue > 0 && (!($0 is NSPanel) || $0 is LittleWindow) }) else { return nil }
+        // The window server's order, front to back: NSApp.orderedWindows leaves panels out, so a Little
+        // Window was never the front one there and Back (⌘[, cra://action/goBack) sent while Cra wasn't
+        // the active app went to the browser window behind it (#495's little-window-typed-back failed so).
+        let onScreen = (NSWindow.windowNumbers(options: []) ?? []).compactMap { NSApp.window(withWindowNumber: $0.intValue) }
+        guard let front = (onScreen.isEmpty ? NSApp.orderedWindows : onScreen).first(where: { $0.isVisible && $0.alphaValue > 0 && (!($0 is NSPanel) || $0 is LittleWindow) }) else { return nil }
         if let little = littleWindows.first(where: { !$0.isParked && ($0.window === front || $0.window === front.parent) }) { return little }
         // A Peek is a child of the browser window, above it.
         return littleWindows.first { !$0.isParked && $0.window?.isVisible == true && $0.window?.parent === front }
@@ -1556,6 +1560,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
             if let command = dict["littleToolbar"] { littleWindows.last?.debugToolbar(command); return }
+            // deactivate=<label> (any but 1, which hands activation to Finder above): Cra stops being the
+            // active app without bringing another one forward, so nothing of Cra's is key; then logs whether
+            // the actions (⌘[, ⌘W…) still find the Little Window in front (keyLittleWindow's front-window
+            // path, #495).
+            if let label = dict["deactivate"] {
+                NSApp.deactivate()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self else { return }
+                    CraLog.note("deactivated \(label): active=\(NSApp.isActive ? 1 : 0) key=\(NSApp.keyWindow == nil ? 0 : 1) little=\(self.keyLittleWindow == nil ? 0 : 1)")
+                }
+                return
+            }
             // littleBarSwipe=<label>&fingers=right|left[&points=n]: a two-finger swipe over the newest
             // Little Window's address bar (#495).
             if let label = dict["littleBarSwipe"] {

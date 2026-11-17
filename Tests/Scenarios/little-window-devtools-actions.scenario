@@ -13,7 +13,9 @@ wait 5
 cra://debug?devToolsShown=inspected
 expect-log little devtools inspected: little0 peek=0 parked=0 open=1 docked=1 shown=1
 cra://debug?front=inspected
-expect-log front inspected: key=LittleWindow little=little0
+# Nothing of Cra's is key when another app took the keyboard during the run; the Little Window in front
+# still takes the actions then. Chrome's window key (the bug) gives little=none.
+expect-log front inspected: key=(LittleWindow|none) little=little0
 
 cra://action/devTools
 wait 3

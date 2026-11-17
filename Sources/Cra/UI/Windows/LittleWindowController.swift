@@ -210,6 +210,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var commandBarLostKeys = false
     private var commandObserving = false
     private var popup: LittlePopupPanel?
+    /// The "Open in" menu last closed because Cra lost the keyboard to another app (cra://debug?littleMenu).
+    private var popupClosedByFocusLoss = false
     private var tooltip: LittleTooltipPanel?
     private var tooltipTimer: Timer?
     private let toast = ShinyToast()
@@ -1327,7 +1329,15 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// cra://debug?littleMenu=<step>: drives the "Open in" menu (#331) and logs what it shows.
     /// open (as the ⌄ or ⇧⌘O), down<n> (↓ n times), type:<text> (the filter), close.
+    /// A step after the open finds the menu as it was even when another app took the keyboard between
+    /// steps (the scenario runs while the Mac is in use), which rightly closes the menu: then it opens again
+    /// first, and every step it is driven by gives the same menu on a fresh one.
     func debugMenu(_ step: String) {
+        if popup == nil, popupClosedByFocusLoss, step.hasPrefix("down") || step.hasPrefix("type:") {
+            CraLog.note("little menu \(step): closed by another app taking the keyboard, opened again")
+            openPopup()
+        }
+        popupClosedByFocusLoss = false
         switch step {
         case "open": if popup == nil { openPopup() }
         case "close": closePopup()
@@ -1813,7 +1823,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if w === popup {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let p = self.popup, !p.isKeyWindow else { return }
+                let ours = NSApp.keyWindow.map { $0 === self.window || $0 === p || $0.parent === self.window } ?? false
                 self.closePopup()
+                self.popupClosedByFocusLoss = !ours
             }
             return
         }

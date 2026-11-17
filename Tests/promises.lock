@@ -966,6 +966,7 @@
 #495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::fingersRightGoBackLeftGoForward  e3c741861f4f
 #495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::historyComesFirstAndNothingElseCloses  565900329190
 #495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::shortVerticalOrTakenBackSwipesDoNothing  0b697dfe95e4
+#495   Tests/Scenarios/little-window-back-inactive.scenario  62f21ec052ff
 #495   Tests/Scenarios/little-window-bar-swipe.scenario  65bdbd1f11d7
 #495   Tests/Scenarios/little-window-swipe-back.scenario  2a12df243277
 #495   Tests/Scenarios/little-window-typed-back.scenario  56bca9fe43e8
