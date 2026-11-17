@@ -316,7 +316,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
         } else {
-            // Little Arc is a non-activating panel (AX subrole AXSystemDialog), so it opens over
+            // Little Arc is a non-activating panel (it answers AX as a standard window), so it opens over
             // the app in front even when that app is full screen (#186). An ordinary window can't
             // join another app's full-screen Space: macOS switched to the desktop to show it.
             // Auxiliary only: AppKit puts a full-screen-primary window shown while one of Cra's
@@ -2335,6 +2335,18 @@ final class LittleWindow: NSPanel {
     /// A panel never becomes main; a titled window did, and the browser window's active look
     /// and the page's hover state follow the main window.
     override var canBecomeMain: Bool { styleMask.contains(.titled) }
+    /// AppKit tells accessibility a non-activating panel is a system dialog, and window managers
+    /// (Raycast, Rectangle, Magnet) leave those alone: their shortcuts did nothing to a Little
+    /// Window (X, 17 Nov 2026). It is a window a person works in, so it answers as a standard one.
+    /// A Peek (borderless) is part of the browser window and keeps AppKit's answer.
+    /// Clients ask by attribute name, which NSWindow answers without its getter, so both answer.
+    override func accessibilitySubrole() -> NSAccessibility.Subrole? {
+        styleMask.contains(.titled) ? .standardWindow : super.accessibilitySubrole()
+    }
+    override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
+        if attribute == .subrole, styleMask.contains(.titled) { return NSAccessibility.Subrole.standardWindow.rawValue }
+        return super.accessibilityAttributeValue(attribute)
+    }
     /// NSPanel closes itself on Escape; a window passes it on.
     override func cancelOperation(_ sender: Any?) {
         nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
