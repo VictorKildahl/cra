@@ -1,0 +1,31 @@
+# promise: #495
+# A two-finger swipe over a Little Window's address bar goes where Back and Forward go, as over its
+# page: on the first page, fingers to the right close the window (bensk on #495: "Could a swipe over
+# the address bar work as well?"). The bar isn't the page, so Chromium's history swipe never sees it.
+# cra://debug?littleBarSwipe= gives the bar's own scrollWheel the events a trackpad sends.
+budget rss=700 stalls50=20
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleShown=open
+expect-log little shown open: windows=1
+
+# A short swipe, and one to the left (nothing ahead), leave the window open.
+cra://debug?littleBarSwipe=short&fingers=right&points=30
+expect-log little bar swipe short: none pages=1
+cra://debug?littleBarSwipe=left&fingers=left
+expect-log little bar swipe left: forward pages=1
+wait 1
+cra://debug?littleShown=kept
+expect-log little shown kept: windows=1
+
+# Fingers to the right on the first page close it.
+cra://debug?littleBarSwipe=right&fingers=right
+expect-log little bar swipe right: back pages=1
+wait 1.5
+cra://debug?littleShown=swiped
+expect-log little shown swiped: windows=0

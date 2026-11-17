@@ -1535,6 +1535,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
             if let command = dict["littleToolbar"] { littleWindows.last?.debugToolbar(command); return }
+            // littleBarSwipe=<label>&fingers=right|left[&points=n]: a two-finger swipe over the newest
+            // Little Window's address bar (#495).
+            if let label = dict["littleBarSwipe"] {
+                littleWindows.last?.debugBarSwipe(label, fingersRight: dict["fingers"] != "left",
+                                                  points: dict["points"].flatMap { Double($0) }.map { CGFloat($0) } ?? 120)
+                return
+            }
             // littleSwipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the newest Little
             // Window's page before a swipe back starts, and with go=1 what it does at the end (#495).
             if let label = dict["littleSwipeBack"] {

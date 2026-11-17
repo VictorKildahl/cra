@@ -963,7 +963,10 @@
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::theStripIsTheCardsTopEdge  17c35a231c12
 #493   Tests/Scenarios/peek-toolbar-auto-hide.scenario  9c5540af6a44
 #495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::backOnALittleWindowsFirstPageClosesIt  2bcb433fc7dc
+#495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::fingersRightGoBackLeftGoForward  e3c741861f4f
 #495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::historyComesFirstAndNothingElseCloses  565900329190
+#495   Packages/CraCore/Tests/CraCoreTests/BackToReferrerTests.swift::shortVerticalOrTakenBackSwipesDoNothing  0b697dfe95e4
+#495   Tests/Scenarios/little-window-bar-swipe.scenario  65bdbd1f11d7
 #495   Tests/Scenarios/little-window-swipe-back.scenario  2a12df243277
 #495   Tests/Scenarios/little-window-typed-back.scenario  56bca9fe43e8
 #497   Tests/Scenarios/command-bar-close-shortcut.scenario  37c8d8eb9aa6

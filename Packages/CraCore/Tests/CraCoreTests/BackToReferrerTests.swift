@@ -69,3 +69,50 @@ struct LittleWindowBackTests {
         #expect(LittleWindowBack.step(pageCanGoBack: false, hasPage: true, peek: true) == .none)
     }
 }
+
+/// A two-finger swipe over a Little Window's address bar goes where Back and Forward go (GitHub
+/// #495, bensk: "Could a swipe over the address bar work as well?").
+struct LittleBarSwipeTests {
+    /// Feeds `steps` scroll events of (dx, dy) and lets go.
+    private func swipe(_ steps: [(CGFloat, CGFloat)], inverted: Bool = true, cancelled: Bool = false) -> LittleBarSwipe.Direction? {
+        var s = LittleBarSwipe()
+        s.begin()
+        for (dx, dy) in steps { _ = s.move(dx: dx, dy: dy, inverted: inverted) }
+        return s.end(cancelled: cancelled)
+    }
+
+    /// The reporter's case: fingers to the right over the bar go back; to the left, forward.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/495"))
+    func fingersRightGoBackLeftGoForward() {
+        #expect(swipe(Array(repeating: (8, 0), count: 10)) == .back)
+        #expect(swipe(Array(repeating: (-8, 0), count: 10)) == .forward)
+        // Natural scrolling off reports the deltas the other way round; the fingers still decide.
+        #expect(swipe(Array(repeating: (-8, 0), count: 10), inverted: false) == .back)
+    }
+
+    /// A short swipe, one taken back, one that started up or down, or one the system took: nothing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/495"))
+    func shortVerticalOrTakenBackSwipesDoNothing() {
+        #expect(swipe(Array(repeating: (8, 0), count: 5)) == nil)
+        #expect(swipe(Array(repeating: (8, 0), count: 10) + Array(repeating: (-8, 0), count: 8)) == nil)
+        #expect(swipe([(1, 8)] + Array(repeating: (12, 0), count: 10)) == nil)
+        #expect(swipe(Array(repeating: (8, 0), count: 10), cancelled: true) == nil)
+    }
+
+    /// The bar keeps a sideways swipe's events, and leaves an upright one's to the window.
+    @Test func keepsOnlySidewaysEvents() {
+        var s = LittleBarSwipe()
+        s.begin()
+        let early = s.move(dx: 3, dy: 0, inverted: true)
+        let sideways = s.move(dx: 5, dy: 1, inverted: true)
+        #expect(!early && sideways)
+        s.begin()
+        let upright = s.move(dx: 1, dy: 9, inverted: true)
+        let after = s.move(dx: 30, dy: 0, inverted: true)
+        #expect(!upright && !after)
+        var idle = LittleBarSwipe()
+        let untouched = idle.move(dx: 30, dy: 0, inverted: true)
+        let ended = idle.end()
+        #expect(!untouched && ended == nil)
+    }
+}
