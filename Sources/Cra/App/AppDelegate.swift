@@ -1518,8 +1518,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
-            // littleShown=<label>: the newest Little Window's "Open in" space, page profile, and its address
-            // pill's padlock and text (#330).
+            // littleShown=<label>: the newest Little Window's "Open in" space, page profile, its address
+            // pill's padlock and text (#330), and how many browser windows are in front of it on screen (#500).
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
@@ -1598,6 +1598,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let named: BrowserProfile? = store.profile(state.profileID)
                     profile = named?.name ?? "Default"
                     shown = " \(w.debugCard) \(w.debugReadout)"
+                    // The window server's order, front to back.
+                    let order = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
+                        .compactMap { $0[kCGWindowNumber as String] as? Int }
+                    if let mine = w.window.flatMap({ order.firstIndex(of: $0.windowNumber) }) {
+                        let browsers = Set(mainWindows.compactMap { $0.window?.windowNumber })
+                        shown += " behind=\(order[..<mine].filter { browsers.contains($0) }.count)"
+                    } else {
+                        shown += " behind=-"
+                    }
                 }
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)\(shown)")
                 return

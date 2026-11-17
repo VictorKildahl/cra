@@ -1,0 +1,23 @@
+# promise: #500
+# A link from another app opens a Little Window that stays in front of the browser window (#500).
+# With a page loaded in the browser window, focusing the Little Window's page moved Chrome's hidden
+# window between Cra's windows, AppKit rebuilt the browser window's ordering group, and the browser
+# window rose over the Little Window about 150 ms after it grew in. The scenario runs behind other
+# apps, as a link clicked in another app does.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+cra://debug?littleShown=first
+expect-log little shown first: windows=1 .* behind=0
+
+# A second one, over the first.
+cra://debug?externalURL=${PAGE}?n=again
+wait 2
+cra://debug?littleShown=second
+expect-log little shown second: windows=2 .* behind=0
