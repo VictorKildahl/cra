@@ -154,8 +154,14 @@ struct AdvancedPane: View {
                 HStack(spacing: 14) {
                     BrandMark(size: 48)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
-                            .font(.system(size: 14, weight: .semibold))
+                        // A click copies the version with its build and engine, for a bug report (GitHub #461).
+                        Button(action: actions.copyVersion) {
+                            Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy the Cra version")
+                        .editorPointer(.link)
                         Text(EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                         Text(AppPaths.supportDir.path).font(.system(size: 11)).foregroundStyle(.secondary)

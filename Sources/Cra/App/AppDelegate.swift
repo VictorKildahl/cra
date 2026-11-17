@@ -2620,7 +2620,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 self?.settingsController?.show(.shortcuts)
             }
         case "revealData": NSWorkspace.shared.activateFileViewerSelecting([AppPaths.supportDir])
-        case "copyAppInfo": copy(appInfo())
+        case "copyAppInfo":
+            copy(appInfo())
+            main.showToast("Copied Cra Info!")  // Arc's `basicInfoCopied` toast, "Copied Arc Info!"
         case "print": main.currentBrowser?.print()
         case "capturePage": main.capturePage()
         case "find": main.showFindBar()
@@ -2725,6 +2727,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         """
     }
 
+    /// Settings ▸ Advanced ▸ About: a click on the version copies it on one line (GitHub #461) and says so with
+    /// Arc's `didCopyVersionToClipboard` toast, "Arc version copied to clipboard".
+    private func copyVersion() {
+        let info = Bundle.main.infoDictionary
+        copy(CraVersion.line(short: info?["CFBundleShortVersionString"] as? String ?? "dev",
+                             build: info?["CFBundleVersion"] as? String ?? "",
+                             engine: EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion())))
+        settingsController?.showToast("Cra version copied to clipboard", colors: ShinyToast.colors(main.focusedSpace.theme))
+    }
+
     private func copy(_ s: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
@@ -2808,7 +2820,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     guard let self else { return }
                     TranslatedSitePrompts.reset(store: self.store)
                 },
-                essentialShortcuts: { [weak self] in self?.perform("essentialShortcuts") })
+                essentialShortcuts: { [weak self] in self?.perform("essentialShortcuts") },
+                copyVersion: { [weak self] in self?.copyVersion() })
             let c = SettingsWindowController(store: store, bindings: bindings, sync: composition.sync, actions: actions)
             settingsController = c
             settingsWindow = c.window
