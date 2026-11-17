@@ -948,6 +948,8 @@
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
 #484   Tests/Scenarios/extension-remove.scenario  ce468889560a
+#490   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theCardKeepsTheSpacesSaturation  9a2fea86634b
+#490   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theColourlessDefaultAsksInArcsBlue  2643c19c95b2
 #490   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::arcPalettesFollowTheColoursSaturation  97f12ede4f23
 #490   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::greensOfDifferentSaturationGetTheirOwnSelection  577c40ad2567
 #491   Packages/CraCore/Tests/CraCoreTests/DownloadListTests.swift::stuckDownloadDoesNotHoldTheBin  8c802f518e5c
