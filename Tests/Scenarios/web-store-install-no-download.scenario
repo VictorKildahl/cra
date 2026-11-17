@@ -14,4 +14,4 @@ expect-log Web Store install in Default failed
 wait 2
 reject-log Download finished
 cra://debug?downloadState=store
-expect-log download state store: running=false progress=none rows=\[\] finished=0$
+expect-log download state store: running=false progress=none rows=\[\] bin=none finished=0$
