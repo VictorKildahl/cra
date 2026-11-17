@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Link hover fixture</title>
+<style>
+  body { font: 15px -apple-system, sans-serif; margin: 0; }
+  a { position: absolute; left: 40px; top: 40px; width: 300px; height: 60px; line-height: 60px; display: block; background: #eef; }
+</style>
+<a id="link" href="https://example.com/hovered">A link to hover</a>
+<script>
+  // Every width the page is laid out at, and how often the pointer came onto the link, so a scenario
+  // can tell that hovering a link never resizes the page (GitHub #508). mark() starts over.
+  var widths = [innerWidth], hovers = 0;
+  addEventListener('resize', function () { widths.push(innerWidth); });
+  document.getElementById('link').addEventListener('mouseenter', function () { hovers++; });
+  function mark() { widths = [innerWidth]; hovers = 0; return innerWidth; }
+  function report() {
+    var steady = widths.every(function (w) { return w === widths[0]; });
+    return 'hovers' + hovers + (steady ? ' steady' : ' resized ' + widths.join(','));
+  }
+</script>

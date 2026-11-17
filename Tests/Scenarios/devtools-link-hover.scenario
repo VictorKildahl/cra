@@ -1,0 +1,31 @@
+# promise: #508
+# Hovering a link while DevTools are open leaves the page's width alone. Up to engine -17 (0.1.46) the
+# shell's dock squeezed the page: each layout of its card put the page back at the card's full width
+# before the shell narrowed it again, and a link's address showing at the bottom laid the card out, so
+# the page flashed wide on every hover. The fixture records each width the page is laid out at and
+# each time the pointer comes onto its link.
+budget rss=900 stalls50=40
+cra://open?url=${ORIGIN}/link-hover.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+cra://action/devTools
+wait 6
+cra://debug?cdp=Runtime.evaluate&params={"expression":"mark()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":\d+
+
+# Onto the link and off it, three times, as a pointer crossing a page does: its address shows and goes.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":120,"y":70}
+wait 1
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":20,"y":300}
+wait 1
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":200,"y":60}
+wait 1
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":20,"y":300}
+wait 1
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":100,"y":80}
+wait 1
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":20,"y":300}
+wait 2
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"report()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"hovers3 steady"
