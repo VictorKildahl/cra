@@ -1912,6 +1912,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The URL field edited in place (#344): a click on it, then typing and Return or Escape.
             if let step = dict["urlFieldEdit"] { main.debugURLFieldEdit(step); return }
             if let step = dict["commandBarNotice"] { main.debugCommandBarNotice(step); return }
+            if let step = dict["commandBarScope"] { main.debugCommandBarScope(step); return }
             // Arc's translate UI (#310): what shows, and a press on its parts.
             if let step = dict["translate"] { main.debugTranslate(step); return }
             // The n-th space icon's tip, without a pointer.

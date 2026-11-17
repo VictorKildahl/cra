@@ -65,10 +65,16 @@ struct AdvancedPane: View {
             // The search engine and its suggestions are in Profiles, where Arc has them.
             SettingsHeader("Command bar").padding(.top, 20)
             SettingsFeatureCard {
+                // GitHub #457, not in Arc: Arc's bar stays neutral, with the site in the pill and a short wash.
+                SettingsSwitchRow("Fill the command bar with the site’s color",
+                                  detail: "When Tab starts a search on a site, like YouTube or GitHub, the command bar takes that site’s color until you leave the search.",
+                                  isOn: $store.settings.commandBarSiteColor) { SettingsArt.commandBarSiteColor }
+                SettingsCardDivider()
                 // GitHub #307, not in Arc: ⌘T finds tabs in the window's space only.
                 SettingsToggleRow("Only this space’s tabs",
                                   detail: "The command bar finds open tabs in the space you’re in, not in all your spaces.",
                                   isOn: $store.settings.commandBarCurrentSpaceOnly)
+                    .settingsTextColumn()
             }
 
             SettingsHeader("Opening and quitting").padding(.top, 20)

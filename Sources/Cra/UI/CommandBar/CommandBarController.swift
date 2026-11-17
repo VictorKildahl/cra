@@ -35,6 +35,9 @@ final class CommandBarController {
     /// tabs, on the empty field to the browser's actions (a pill before the field) until Backspace
     /// on an empty field or Escape.
     private(set) var scope: CommandBarScope?
+    /// Settings ▸ Advanced ▸ Command bar (#457, not in Arc): a site search fills the bar with the
+    /// site's colour (CraCore ScopedSearchFill).
+    var fillsSiteScope: Bool { store.settings.commandBarSiteColor }
     /// What was typed when Tab entered the scope; Backspace puts it back.
     private var scopeTyped = ""
     /// The URL ⌘L opened with (the page's), nil for ⌘T.
