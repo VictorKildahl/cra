@@ -240,3 +240,56 @@ struct ToolbarAutoHideTests {
         #expect(tracker == ToolbarAutoHideTracker())
     }
 }
+
+/// Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" (GitHub #435): the Little
+/// Window's page takes the toolbar's room, and the toolbar comes out the way the browser window's does.
+struct LittleWindowToolbarAutoHideTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/435"))
+    func offByDefaultAndKeptInSettingsJSON() throws {
+        #expect(!AppSettings().autoHideLittleWindowToolbar)
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"autoHideToolbar": true}"#.utf8))
+        #expect(!old.autoHideLittleWindowToolbar)
+        var settings = AppSettings()
+        settings.autoHideLittleWindowToolbar = true
+        let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(saved.autoHideLittleWindowToolbar)
+        #expect(saved == settings)
+        // Its own switch: the browser window's toolbar is left as it was.
+        #expect(!saved.autoHideToolbar)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/435"))
+    func floatsOnlyOverAPageInTheWindowsOwnView() {
+        func floats(enabled: Bool = true, card: Bool = false, peek: Bool = false, pageFullscreen: Bool = false,
+                    devToolsOpen: Bool = false, pageInOwnWindow: Bool = false) -> Bool {
+            ToolbarAutoHide.littleWindowFloats(enabled: enabled, card: card, peek: peek, pageFullscreen: pageFullscreen,
+                                               devToolsOpen: devToolsOpen, pageInOwnWindow: pageInOwnWindow)
+        }
+        #expect(floats())
+        #expect(!floats(enabled: false))
+        // ⌥⌘N's card is the command bar and nothing else.
+        #expect(!floats(card: true))
+        // A Peek has a bar of its own.
+        #expect(!floats(peek: true))
+        #expect(!floats(pageFullscreen: true))
+        // DevTools and a Chrome-style page window sit above anything the Little Window draws.
+        #expect(!floats(devToolsOpen: true))
+        #expect(!floats(pageInOwnWindow: true))
+    }
+
+    /// The Little Window's page sits 1 pt inside the window on every side once the bar floats (46 pt bar):
+    /// that rim and the page's first 6 pt bring the bar out; the bar and 16 pt under it keep it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/435"))
+    func theStripIsTheWindowsTopEdge() {
+        let container = CGRect(x: 0, y: 0, width: 700, height: 600)
+        let page = container.insetBy(dx: 1, dy: 1)
+        func classify(_ y: CGFloat, shown: Bool) -> ToolbarAutoHide.Pointer {
+            ToolbarAutoHide.classify(CGPoint(x: 350, y: y), card: page, container: container, barHeight: 46, shown: shown)
+        }
+        #expect(classify(600, shown: false) == .strip)
+        #expect(classify(599 - ToolbarAutoHide.revealInside, shown: false) == .strip)
+        #expect(classify(599 - ToolbarAutoHide.revealInside - 1, shown: false) == .away)
+        #expect(classify(599 - 46 - ToolbarAutoHide.leaveSlack, shown: true) == .bar)
+        #expect(classify(599 - 46 - ToolbarAutoHide.leaveSlack - 1, shown: true) == .away)
+    }
+}

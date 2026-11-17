@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pause fixture</title>
+<!-- Pause All Media (#438): media to pause, where pausing it is hard. start() plays a looping
+     track inside an open shadow root, with the page's own media session pause handler (as YouTube
+     or Spotify), plus a muted looping video, and optionally a frame from another site whose muted
+     video tells this page when it plays or pauses. webAudio() plays a tone through Web Audio, which
+     nothing outside the page can pause. report(label) says where everything is. ?tab=<name> names
+     the page ("Pause <name>"); ?child=1 is the frame. A scenario starts them with the protocol's
+     user gesture. The tone is music-notes' 440 Hz, 60 dB below full volume. -->
+<body>
+<div id="host"></div>
+<video id="loop" src="clip.mp4" muted loop playsinline width="160"></video>
+<script>
+  const params = new URLSearchParams(location.search);
+  if (params.get('tab')) document.title = 'Pause ' + params.get('tab');
+  const loop = document.getElementById('loop');
+  const state = { handler: false, frame: '-' };
+  addEventListener('message', e => { if (e.data && e.data.frame) state.frame = e.data.frame; });
+  if (params.has('child')) {
+    const tell = () => parent.postMessage({ frame: loop.paused ? 'paused' : 'playing' }, '*');
+    loop.onplay = tell;
+    loop.onpause = tell;
+    loop.play();
+  }
+
+  // A mono 8 kHz 16-bit WAV of `seconds` of the tone.
+  function wav(seconds) {
+    const samples = 8000 * seconds, n = samples * 2, b = new ArrayBuffer(44 + n), v = new DataView(b);
+    const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < samples; i++) v.setInt16(44 + 2 * i, Math.round(33 * Math.sin(2 * Math.PI * 440 * i / 8000)), true);
+    return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+  }
+
+  let song;
+  async function start(frameURL) {
+    const root = document.getElementById('host').attachShadow({ mode: 'open' });
+    song = document.createElement('audio');
+    song.src = wav(30);
+    song.loop = true;
+    root.append(song);
+    navigator.mediaSession.setActionHandler('pause', () => { state.handler = true; song.pause(); });
+    navigator.mediaSession.setActionHandler('play', () => song.play());
+    await song.play();
+    await loop.play();
+    if (frameURL) {
+      const f = document.createElement('iframe');
+      f.src = frameURL;
+      document.body.append(f);
+      for (let i = 0; i < 100 && state.frame !== 'playing'; i++) await new Promise(r => setTimeout(r, 100));
+    }
+    return report('started');
+  }
+
+  async function resume() {
+    await song.play();
+    return report('resumed');
+  }
+
+  async function webAudio() {
+    const ctx = new AudioContext(), osc = ctx.createOscillator(), gain = ctx.createGain();
+    gain.gain.value = 0.001;
+    osc.frequency.value = 440;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    return 'webaudio:' + ctx.state;
+  }
+
+  function report(label) {
+    const s = e => !e ? '-' : e.paused ? 'paused' : 'playing';
+    return `${label} song:${s(song)} loop:${s(loop)} frame:${state.frame} handler:${state.handler}`;
+  }
+</script>

@@ -1736,7 +1736,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let id = itemID
         if item.isSplit, let m = model {
             return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions) {
-                MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
+                MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) } }
                 Self.moveToProfile($0, id, store)
                 $0.addItem(.separator())
             }
@@ -1748,7 +1748,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             Self.liveCalendarMenu(m, url: url, profilePath: store.profilePath(item: id), store: store)
             m.addItem(.separator())
         }
-        MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.removeFromFavorites(id) }
+        MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) } }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
         // Arc's favorite menu has Mute after Rename… (Unmute on a muted tab), as a tab's menu does (#387).
         if let t = item.tab {

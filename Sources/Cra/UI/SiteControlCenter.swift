@@ -88,11 +88,7 @@ final class SiteControlCenterView: NSView {
 
     /// Arc: pinned extensions in toolbar order, then the rest by name.
     private var orderedExtensions: [ExtensionStore.Entry] {
-        let entries = extensions.entries(inProfile: profile)
-        let pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in entries.first { $0.extensionID == id } }
-        let rest = entries.filter { !extensions.isPinned($0.extensionID, inProfile: profile) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        return pinned + rest
+        extensions.pinned.menuOrder(extensions.entries(inProfile: profile), inProfile: profile, id: \.extensionID, name: \.name)
     }
 
     private func observe() {

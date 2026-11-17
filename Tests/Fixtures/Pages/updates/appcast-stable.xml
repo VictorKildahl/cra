@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Cra</title>
+    <link>https://crabrowser.app/release-notes</link>
+    <item>
+      <title>Cra 0.1.43</title>
+      <pubDate>Fri, 13 Nov 2026 19:00:26 +0000</pubDate>
+      <sparkle:version>202611131845</sparkle:version>
+      <sparkle:shortVersionString>0.1.43</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:fullReleaseNotesLink>https://crabrowser.app/release-notes</sparkle:fullReleaseNotesLink>
+      <enclosure url="https://github.com/VictorKildahl/cra/releases/download/v0.1.43/Cra.zip" type="application/octet-stream" sparkle:edSignature="CAPiJf9+i8urDfX6u11t17Kkp/vtVZPobcb+J8KTorpNomZRGz6ay07cxFWtJ2mWnYKzfdvwe4ROFdDffOIsDg==" length="160210643"/>
+    </item>
+  </channel>
+</rss>

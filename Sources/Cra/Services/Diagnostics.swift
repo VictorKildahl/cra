@@ -175,7 +175,7 @@ enum Diagnostics {
         // Sites the user listed (Developer Mode, Picture in Picture, link routes) are counted, not named.
         if let data = try? JSONEncoder().encode(store.settings),
            var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            for key in ["developerHosts", "disabledDefaultDeveloperHosts", "linkRoutes"] { json[key] = (json[key] as? [Any])?.count }
+            for key in ["developerHosts", "disabledDefaultDeveloperHosts", "keepActiveSites", "linkRoutes"] { json[key] = (json[key] as? [Any])?.count }
             json["autoPictureInPictureSites"] = (json["autoPictureInPictureSites"] as? [String: Any])?.count
             if let pretty = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
                 lines += ["", "Settings:", String(decoding: pretty, as: UTF8.self)]

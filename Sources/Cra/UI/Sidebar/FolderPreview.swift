@@ -90,12 +90,13 @@ final class FolderPreviewController {
         let panel = self.panel ?? FolderPreviewPanel()
         self.panel = panel
         panel.preview.show(title: folder.title ?? "Folder", items: items)
-        // Right of the sidebar, centred on the folder, kept 18 pt inside the window.
+        // Right of the sidebar (left of one on the right, #464), centred on the folder, kept 18 pt inside the window.
         let size = NSSize(width: FolderPreviewMetrics.width, height: FolderPreviewMetrics.height(rows: items.count))
         let rowRect = host.convertToScreen(row.convert(row.bounds, to: nil))
         let sidebarRect = host.convertToScreen(list.convert(list.bounds, to: nil))
         let inset = FolderPreviewMetrics.windowInset
-        var origin = NSPoint(x: sidebarRect.maxX + FolderPreviewMetrics.gapFromSidebar, y: rowRect.midY - size.height / 2)
+        let x = host.sidebarSide.cardMinX(beside: sidebarRect, gap: FolderPreviewMetrics.gapFromSidebar, width: size.width)
+        var origin = NSPoint(x: x, y: rowRect.midY - size.height / 2)
         let bounds = host.parent?.frame ?? host.frame
         origin.y = max(min(origin.y, bounds.maxY - inset - size.height), bounds.minY + inset)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)

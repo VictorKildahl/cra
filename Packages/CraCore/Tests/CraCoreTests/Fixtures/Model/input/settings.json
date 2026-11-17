@@ -3,6 +3,10 @@
   "chromeEngine": false, "defaultLinkDestination": {"space": {"_0": "A0000000-0000-0000-0000-000000000002"}},
   "developerHosts": ["localhost"], "edgeToEdgeContent": true, "folderPreviews": false, "hapticFeedbackOnReorder": false,
   "hasSeenImportPrompt": true, "httpsOnly": true,
+  "keepActiveSites": [
+    {"id": "F0000000-0000-0000-0000-000000000001", "host": "mail.example.com", "includesSubdomains": false},
+    {"id": "F0000000-0000-0000-0000-000000000002", "host": "example.org", "includesSubdomains": true}
+  ],
   "linkRoutes": [
     {"id": "E0000000-0000-0000-0000-000000000001", "match": "contains", "text": "meet.google.com", "destination": {"mostRecentSpace": {}}},
     {"id": "E0000000-0000-0000-0000-000000000002", "match": "equals", "text": "example.com/standup", "destination": {"littleWindow": {}}}

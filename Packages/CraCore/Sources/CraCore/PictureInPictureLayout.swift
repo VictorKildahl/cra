@@ -3,6 +3,9 @@ import Foundation
 
 /// Where Arc's Picture in Picture window opens, and how its hover controls are laid out.
 public enum PictureInPictureLayout {
+    /// The window's continuous corners (Arc 1.168). Chromium's window is clipped to them, and so
+    /// is everything drawn over it on hover (#463).
+    public static let cornerRadius: CGFloat = 6
     /// The even layer over the whole frame while the controls show: Arc's
     /// `Color.black.opacity(0.33)`, in and out with `.easeInOut(duration: 0.2)` (Arc 1.172 binary).
     public static let scrimAlpha: CGFloat = 0.33
@@ -49,12 +52,21 @@ public enum PictureInPictureLayout {
     /// Back to Tab grows its words from 400 pt wide; Minimize and Close stay glyphs.
     public static func labelsBackToTab(width: CGFloat) -> Bool { width >= 400 }
 
+    /// Arc's Minimize (`minus`, "Minimize") sits left of Close and leaves Picture in Picture with
+    /// the video playing on in its tab (#434). Arc leaves it out of its smallest windows (none at
+    /// 224 and 277 pt wide in the #246 reporter's captures, there at 396); Cra shows it at every
+    /// size, since a tiny window has room for it too (the maintainer's decision, #462).
+    /// Between Minimize and Close: the 6 pt next to the pair in Arc 1.173's binary (inferred to be
+    /// the group's spacing).
+    static let minimizeGap: CGFloat = 6
+
     /// The top bar in a window `width` wide, y going down from the top edge: back to tab on the
-    /// left (`backWidth` wide: a glyph, or the glyph and its words), close on the right, the
-    /// address centred on the window between them (truncated in the middle when it doesn't fit;
-    /// nil when there's no room at all).
+    /// left (`backWidth` wide: a glyph, or the glyph and its words), close on the right with
+    /// minimize before it, the address centred on the window
+    /// between them (truncated in the middle when it doesn't fit; nil when there's no room at all).
     public struct TopBar: Equatable, Sendable {
         public var back: CGRect
+        public var minimize: CGRect
         public var close: CGRect
         public var address: CGRect?
     }
@@ -64,11 +76,12 @@ public enum PictureInPictureLayout {
         let y = c - b / 2
         let back = CGRect(x: c - b / 2, y: y, width: backWidth ?? b, height: b)
         let close = CGRect(x: width - c - b / 2, y: y, width: b, height: b)
-        let room = 2 * (min(width / 2 - back.maxX, close.minX - width / 2) - addressGap)
+        let minimize = CGRect(x: close.minX - minimizeGap - b, y: y, width: b, height: b)
+        let room = 2 * (min(width / 2 - back.maxX, minimize.minX - width / 2) - addressGap)
         let w = min(addressWidth, room)
         let address = addressWidth > 0 && w >= addressMinWidth
             ? CGRect(x: width / 2 - w / 2, y: c - addressFontSize, width: w, height: 2 * addressFontSize) : nil
-        return TopBar(back: back, close: close, address: address)
+        return TopBar(back: back, minimize: minimize, close: close, address: address)
     }
 
     /// The limits on the window's size: at least 224 × 126 pt for the video's shape, as in Arc

@@ -1,0 +1,10 @@
+# promise: #450
+# chrome://settings/help (About Chromium) has no update check, as in Chromium on Linux: Sparkle updates
+# Cra, and Cra's Chrome has no Google updater, so Chrome's check always ended in "An error occurred
+# while checking for updates: 0 (error code 0)" (GitHub #450). The update line stays hidden and the
+# version line shows.
+budget rss=700 stalls50=10
+cra://open?url=chrome://settings/help
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const q=(x,s)=>{if(x.matches?x.matches(s):false)return x;for(const c of[...(x.shadowRoot?x.shadowRoot.children:[]),...x.children]){const f=q(c,s);if(f)return f}return null};const m=q(document.documentElement,'[id=updateStatusMessage]');const v=q(document.documentElement,'settings-about-page');r('about:'+location.pathname+'|'+(m?(m.hidden?'hidden':'shown '+m.innerText.trim().split('\\n')[0]):'missing')+'|'+(/Version \\d+\\./.test(v?v.shadowRoot.textContent:'')?'version':'noversion'))},2000))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"about:/help\|hidden\|version"

@@ -221,4 +221,38 @@ struct TabSleepPolicyTests {
         #expect(with { $0.loading = true; $0.devTools = true } == .loading, "the first that holds is the one said")
         #expect(TabSleepPolicy.Hold.loading.rawValue == "loading", "the key in perf.json and the word in cra.log")
     }
+
+    /// Sites the user keeps active (#458): the clock never asks them, however long they're hidden,
+    /// while a quiet page on another site still goes. Removing the site makes it a candidate again.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/458")) func keptActivePagesOutlastTheClock() {
+        let kept = TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-9 * 3600), keptActive: true)
+        let other = TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-9 * 3600))
+        let policy = TabSleepPolicy.timer(.fifteenMinutes)
+        #expect(policy.candidates([kept, other], visible: [], now: now) == [other.id])
+        var unlisted = kept
+        unlisted.keptActive = false
+        #expect(policy.candidates([unlisted, other], visible: [], now: now).contains(kept.id))
+    }
+
+    /// Under memory pressure they go, as Chrome's urgent discarding takes protected tabs, but after
+    /// every other page, whatever how long those were hidden.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/458")) func keptActivePagesGoLastUnderPressure() {
+        let kept = TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-9 * 3600), keptActive: true)
+        let newer = TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-10 * 60))
+        let older = TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-60 * 60))
+        #expect(TabSleepPolicy.memoryPressure(.warning).candidates([kept, newer, older], visible: [], now: now) == [older.id, newer.id, kept.id])
+        #expect(TabSleepPolicy.memoryPressure(.warning).leavesKeptActivePages == false)
+        #expect(TabSleepPolicy.splitCopy.leavesKeptActivePages == false && TabSleepPolicy.runaway.leavesKeptActivePages == false)
+        #expect(TabSleepPolicy.timer(.fourHours).leavesKeptActivePages)
+    }
+
+    /// Kept pages take none of the 10 places of the tabs used last: listing a site never makes
+    /// another tab sleep sooner.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/458")) func keptActivePagesTakeNoRecentPlace() {
+        let kept = (0..<3).map { TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-Double($0 + 1) * 60), keptActive: true) }
+        let others = (0..<3).map { TabSleepPolicy.Page(id: UUID(), hiddenAt: now.addingTimeInterval(-Double($0 + 10) * 3600)) }
+        let shown = TabSleepPolicy.recentlyShown(kept + others, visible: [kept[0].id], count: 3)
+        #expect(shown == Set(others.map(\.id)))
+        #expect(TabSleepPolicy.timer(.fourHours).candidates(kept + others, visible: [kept[0].id], protectedRecent: 3, now: now) == [])
+    }
 }

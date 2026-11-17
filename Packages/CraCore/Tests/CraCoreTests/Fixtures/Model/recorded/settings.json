@@ -20,6 +20,18 @@
   "hapticFeedbackOnReorder" : false,
   "hasSeenImportPrompt" : true,
   "httpsOnly" : true,
+  "keepActiveSites" : [
+    {
+      "host" : "mail.example.com",
+      "id" : "F0000000-0000-0000-0000-000000000001",
+      "includesSubdomains" : false
+    },
+    {
+      "host" : "example.org",
+      "id" : "F0000000-0000-0000-0000-000000000002",
+      "includesSubdomains" : true
+    }
+  ],
   "linkRoutes" : [
     {
       "destination" : {

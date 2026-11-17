@@ -90,4 +90,25 @@ struct DownloadMenuTests {
         #expect(QuitPrompt.on(source: .appMenu, downloadsRunning: false, warnBeforeQuitting: true) == .confirmQuit)
         #expect(QuitPrompt.on(source: .appMenu, downloadsRunning: false, warnBeforeQuitting: false) == .none)
     }
+
+    /// One ⌘Q asks once. Chromium's own exit sends a second terminate while Cra closes its pages,
+    /// and macOS can send more quit events while the question is open (a restart): neither asks
+    /// again. Saying Cancel, or a page's "Leave site?" ▸ Stay, ends that quit, so the next asks.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/426"))
+    func oneQuitAsksOnce() {
+        var quit = QuitRequests()
+        var requests: [QuitRequests.Request] = []
+        requests.append(quit.begin())  // ⌘Q
+        requests.append(quit.begin())  // macOS asks again while "Quit Cra?" is open
+        quit.answered(quit: true)
+        requests.append(quit.begin())  // Chromium's terminate while the pages close
+        requests.append(quit.begin())
+        #expect(requests == [.new, .asking, .quitting, .quitting])
+
+        quit.cancelled()  // "Leave site?" ▸ Stay
+        requests = [quit.begin()]
+        quit.answered(quit: false)  // Cancel
+        requests.append(quit.begin())
+        #expect(requests == [.new, .new])
+    }
 }

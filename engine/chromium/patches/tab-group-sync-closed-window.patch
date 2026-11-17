@@ -1,0 +1,22 @@
+--- a/chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_delegate_desktop.cc
++++ b/chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_delegate_desktop.cc
+@@ -227,6 +227,19 @@
+     return;
+   }
+ 
++  // Cra: session restore asks to connect a restored window's groups before
++  // the service has loaded, and the service connects them once it has. Cra
++  // closes the Chrome windows it didn't make (StrayWindows in the bridge), so
++  // by then no window may hold the group, and GetTabStripModelForLocalGroup
++  // CHECKed: a crash at every launch on a Mac whose last session had a tab
++  // group in such a window (0.1.44 crash reports). With no window there is no
++  // local group to connect: the saved group lets go of it, as when a group's
++  // window closes (SavedTabGroupModelListener).
++  if (!SavedTabGroupUtils::GetBrowserWithTabGroupId(group_id)) {
++    service_->RemoveLocalTabGroupMapping(group_id, ClosingSource::kUnknown);
++    return;
++  }
++
+   // Before tracking, the local group needs to close tabs if there are more tabs
+   // than in the saved group. This is needed because ConnectToLocalTabGroup()
+   // expects that there exists a corresponding saved tab for each local tab.

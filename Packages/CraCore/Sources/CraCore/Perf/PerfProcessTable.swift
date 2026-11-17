@@ -32,6 +32,8 @@ public struct PerfProcessTable: Sendable {
     private var previousAtNs: UInt64 = 0
     private var started: [PerfProcessKind: Int] = [:]
     private var ended: [PerfProcessKind: Int] = [:]
+    /// Each process at the last update, for the history's largest and busiest and the runaway watch.
+    public private(set) var usage: [PerfProcessUsage] = []
 
     public init() {}
 
@@ -41,15 +43,21 @@ public struct PerfProcessTable: Sendable {
         let interval = previousAtNs > 0 && atNs > previousAtNs ? Double(atNs - previousAtNs) : 0
         var groups = Dictionary(uniqueKeysWithValues: PerfProcessKind.allCases.map { ($0, PerfProcessGroup(kind: $0, available: false)) })
         var cpu: [Int32: UInt64] = [:]
+        usage = []
         for r in readings {
             var g = groups[r.kind]!
             g.count += 1
+            var pct = 0.0
             if let now = r.cpuNs {
                 g.available = true
                 cpu[r.pid] = now
                 if interval > 0, let before = previousCPU[r.pid], now >= before {
-                    g.cpuPct += Double(now - before) / interval * 100
+                    pct = Double(now - before) / interval * 100
+                    g.cpuPct += pct
                 }
+            }
+            if r.cpuNs != nil || r.footprintBytes != nil {
+                usage.append(PerfProcessUsage(pid: r.pid, kind: r.kind, cpuPct: pct, footprintBytes: r.footprintBytes ?? 0))
             }
             g.footprintBytes += r.footprintBytes ?? 0
             g.diskReadBytes += r.diskReadBytes ?? 0

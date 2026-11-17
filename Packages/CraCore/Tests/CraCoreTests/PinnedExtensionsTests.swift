@@ -65,3 +65,35 @@ struct PinnedExtensionsTests {
         #expect(try JSONDecoder().decode(PinnedExtensions.self, from: Data("{}".utf8)) == PinnedExtensions())
     }
 }
+
+/// The extensions menu lists each extension once. Two installs of one extension (two folders
+/// with the same manifest key) or a pin saved twice listed it twice, and the menu's icon map
+/// trapped on the repeated ID (crash reports from 0.1.42 and 0.1.43, SiteControlCenterView.liveIcons).
+struct ExtensionsMenuOrderTests {
+    struct E: Equatable { let id: String, name: String }
+
+    func order(_ entries: [E], pins: PinnedExtensions) -> [String] {
+        pins.menuOrder(entries, inProfile: "Default", id: \.id, name: \.name).map(\.id)
+    }
+
+    @Test func pinnedFirstThenByName() {
+        let entries = [E(id: "c", name: "Charlie"), E(id: "a", name: "alpha"), E(id: "b", name: "Bravo")]
+        #expect(order(entries, pins: PinnedExtensions(shared: ["c"])) == ["c", "a", "b"])
+    }
+
+    @Test func twoInstallsOfOneExtensionShowOnce() {
+        let entries = [E(id: "a", name: "Alpha"), E(id: "b", name: "Bravo"), E(id: "a", name: "Alpha copy")]
+        #expect(order(entries, pins: PinnedExtensions()) == ["a", "b"])
+        #expect(order(entries, pins: PinnedExtensions(shared: ["a"])) == ["a", "b"])
+    }
+
+    @Test func aPinSavedTwiceShowsOnce() {
+        let entries = [E(id: "a", name: "Alpha"), E(id: "b", name: "Bravo")]
+        #expect(order(entries, pins: PinnedExtensions(shared: ["b", "a", "b"])) == ["b", "a"])
+    }
+
+    @Test func aPinOfAnotherProfileIsNotShown() {
+        let entries = [E(id: "a", name: "Alpha")]
+        #expect(order(entries, pins: PinnedExtensions(shared: ["z"])) == ["a"])
+    }
+}

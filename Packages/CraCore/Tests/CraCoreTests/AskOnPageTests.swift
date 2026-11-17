@@ -80,6 +80,23 @@ struct AskOnPageTests {
         #expect(AskOnPage.completeAnswer(draft, source: "This is only the transmitted page introduction.")?.hasVerifiedQuote == false)
     }
 
+    /// The model types a hyphen and straight quotes where the page prints an en dash and curly quotes
+    /// (Wikipedia's "designed in 1956–1957"): the same punctuation, so the quote is on the page, and Find
+    /// looks for the page's own characters. A different mark ("!" for ".") still isn't.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/393")) func typographicVariantsOfTheSamePunctuationMatch() throws {
+        let source = "Helvetica is a typeface designed in 1956–1957 by Max Miedinger. It was called “Neue Haas Grotesk” at first."
+        let draft = AskOnPage.Draft(excerpts: ["designed in 1956-1957 by Max Miedinger.", "It was called \"Neue Haas Grotesk\" at first."],
+                                    answer: "Max Miedinger.", keyAnswer: "Max Miedinger")
+        let answer = try #require(AskOnPage.completeAnswer(draft, source: source))
+        #expect(answer.quotes.map(\.state) == [.verified, .verified])
+        #expect(answer.quotes.map(\.findText) == ["designed in 1956–1957 by Max Miedinger.", "It was called “Neue Haas Grotesk” at first."])
+        #expect(answer.quotes.map(\.text) == draft.excerpts, "the card shows the answer's quote as written")
+        let other = AskOnPage.Draft(excerpts: ["designed in 1956-1957 by Max Miedinger!"], answer: "Max Miedinger.", keyAnswer: nil)
+        #expect(AskOnPage.completeAnswer(other, source: source)?.quotes.first?.state == .notFound)
+        let exact = try #require(AskOnPage.completeAnswer(.init(excerpts: ["It was called"], answer: "Yes.", keyAnswer: nil), source: source))
+        #expect(exact.quotes.first?.findText == "It was called")
+    }
+
     @Test func literalSourceCharactersAreDataRatherThanMarkup() throws {
         let source = "Budget < €40 & the editor says \"use <excerpt> literally\". Café stays unchanged."
         let quote = "Budget < €40 & the editor says \"use <excerpt> literally\"."
@@ -111,6 +128,37 @@ struct AskOnPageTests {
         #expect(guess.isComplete && guess.quotes.isEmpty && !guess.hasVerifiedQuote)
         let mixed = try #require(AskOnPage.completeAnswer(.init(excerpts: ["A fact.", "An invention."], answer: "A mixed answer.", keyAnswer: "mixed"), source: "A fact."))
         #expect(mixed.quotes.map(\.state) == [.verified, .notFound])
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417"), arguments: [
+        // The reporter's questions on a release page (13 Nov 2026), and other ways to ask for one.
+        "summarize the top featuress", "list out all the features released today", "Summarize this page.",
+        "summarise it in bullet points", "what are the key points?", "tl;dr", "TLDR please", "give me an overview of the history",
+        "List the main exports", "make a list of the fixes", "Sum up the article", "What are the main takeaways?",
+    ])
+    func aSummaryOrAListIsAnsweredWithoutQuotes(question: String) {
+        #expect(AskOnPage.Form(question: question) == .summary)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417"), arguments: [
+        // Questions keep Arc's quote and short answer; so does a summary that asks for quotes.
+        "what is Instant Links?", "When did Haiti become independent?", "Is the moon on the list?", "Who listed it?",
+        "summarize with quotes from the page", "List the fixes with references", "give me a summary and cite the page",
+        "Where does it say the summary is due?", "What is a bulletin?",
+    ])
+    func aQuestionOrAnAskedForQuoteIsAnsweredWithQuotes(question: String) {
+        #expect(AskOnPage.Form(question: question) == .quoted)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func aSummarysPointsEachGetALineOnce() {
+        // The model's points for "give me a short summary of the fixes" on a page with three fixes.
+        let points = ["A ⌃, ⌥ or F-key App Shortcut works while a page has the keyboard.", "• A space’s emoji draws itself.",
+                      " ", "Docked pages keep square corners.", "A ⌃, ⌥ or F-key App Shortcut works while a page has the keyboard.",
+                      "a space’s  emoji draws itself."]
+        let listed = AskOnPage.listed(points: points)
+        #expect(listed == "• A ⌃, ⌥ or F-key App Shortcut works while a page has the keyboard.\n• A space’s emoji draws itself.\n• Docked pages keep square corners.")
+        #expect(AskOnPage.lines(listed).count == 3)
+        #expect(AskOnPage.listed(points: []).isEmpty)
     }
 
     @Test func completeRequiredFieldsAreStillRequired() {

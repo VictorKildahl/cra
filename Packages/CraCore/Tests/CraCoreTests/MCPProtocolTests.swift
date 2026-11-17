@@ -69,6 +69,25 @@ struct MCPProtocolTests {
         #expect(MCPProtocol.tools.count == 33)
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/459")) func fullServerReplySaysWhy() throws {
+        let reply = MCPProtocol.fullReply(to: Data(#"{"jsonrpc":"2.0","id":"init-1","method":"initialize","params":{}}"#.utf8))
+        let object = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        #expect(object["id"] as? String == "init-1")
+        #expect((object["error"] as? [String: Any])?["code"] as? Int == MCPProtocol.fullCode)
+        #expect(MCPProtocol.fullMessage(in: reply) == MCPProtocol.fullMessage)
+        #expect(MCPProtocol.fullMessage.contains("32 agent connections"))
+        // A connection that sent nothing (or garbage) still gets the reason, with id null.
+        for line in [Data(), Data("not json".utf8), Data(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#.utf8)] {
+            let unanswered = try #require(try JSONSerialization.jsonObject(with: MCPProtocol.fullReply(to: line)) as? [String: Any])
+            #expect(unanswered["id"] is NSNull)
+            #expect(MCPProtocol.fullMessage(in: MCPProtocol.fullReply(to: line)) == MCPProtocol.fullMessage)
+        }
+        // Ordinary traffic isn't mistaken for it, other errors included.
+        #expect(MCPProtocol.fullMessage(in: Data(#"{"jsonrpc":"2.0","id":1,"result":{}}"#.utf8)) == nil)
+        #expect(MCPProtocol.fullMessage(in: Data(#"{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"x"}}"#.utf8)) == nil)
+        #expect(MCPProtocol.fullMessage(in: Data("{".utf8)) == nil)
+    }
+
     @Test func navigationSchemes() {
         for url in ["https://example.com/a", "http://localhost:8080", "HTTPS://example.com"] {
             #expect(MCPProtocol.navigable(url))
