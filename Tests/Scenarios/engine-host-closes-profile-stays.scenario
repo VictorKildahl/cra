@@ -1,3 +1,4 @@
+# promise: #476
 # Chrome closes the hidden Browser that holds a profile's pages and, with its last Chrome window gone, unloaded
 # the profile while Cra's pages still used it: Chrome's check that a profile's pages close before it does stopped
 # Cra (~WebContentsOfBrowserContext from ProfileDestroyer::Timeout, two 0.1.44 crash reports). Cra turns

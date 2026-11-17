@@ -924,3 +924,4 @@
 #468   Tests/Scenarios/devtools-draws.scenario  97ee7dc162fd
 #469   Tests/Scenarios/new-tab-link-shows.scenario  97ea83e9c9b1
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
+#476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
