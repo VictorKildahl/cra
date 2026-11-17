@@ -94,8 +94,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     var selectedTabID: UUID? { store.selectedTabID(window: windowID) }
     /// A sidebar tab or a link dragged over the panes (#419).
     private(set) lazy var splitDrop = PageSplitDrop(owner: self)
-    /// The sidebar holds the content area's left edge: shown and docked, not floating over the page.
-    var sidebarDocksLeft: Bool { sidebarVisible && !shell.floatingSidebar }
+    /// The sidebar holds the content area's edge on its side: shown and docked, not floating over the page.
+    var sidebarDocked: Bool { sidebarVisible && !shell.floatingSidebar }
     var selectedTab: SidebarItem? { store.selectedTab(window: windowID) }
     var sidebarVisible: Bool {
         get { store.window(windowID).sidebarVisible }
@@ -150,6 +150,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.showToolbar = store.settings.showsBar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.autoHideToolbar = store.settings.hidesToolbar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.edgeToEdge = store.settings.edgeToEdgeContent
+        shell.sidebarSide = store.settings.sidebarSide
         lastSidebarVisible = sidebarVisible
         window.trafficLightsHidden = !sidebarVisible
         lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
@@ -221,8 +222,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         tabSwitcher.direction = { [weak app] event in
             switch app?.bindings.action(for: event)?.id {
-            case "recentTab": return 1
-            case "recentTabBackward": return -1
+            case "recentTab", "recentTabAllSpaces": return 1
+            case "recentTabBackward", "recentTabAllSpacesBackward": return -1
             default: return nil
             }
         }
@@ -573,7 +574,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Vibrant themes see through to the desktop like Arc; others are opaque.
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
-            shell.setTheme(vibrantDark: palette.isDark, vibrantLight: palette.vibrant && !palette.isDark, solid: palette.solid)
+            shell.setTheme(vibrantDark: palette.isDark, vibrantLight: palette.vibrant && !palette.isDark, solid: palette.solid,
+                           lightMaterial: palette.lightMaterial)
             window?.isOpaque = !palette.vibrant
             window?.backgroundColor = palette.vibrant ? .clear : NSColor(palette.gradientColors.first ?? .gray)
         }
@@ -594,6 +596,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let hidesBar = store.settings.hidesToolbar(above: panes.count == 1 ? store.item(panes[0])?.tab?.url : nil)
         if shell.autoHideToolbar != hidesBar { shell.autoHideToolbar = hidesBar }
         if shell.edgeToEdge != store.settings.edgeToEdgeContent { shell.edgeToEdge = store.settings.edgeToEdgeContent }
+        if shell.sidebarSide != store.settings.sidebarSide { moveSidebar(to: store.settings.sidebarSide) }
         // Before setPanes: a pane whose page is not live yet gets its bar colour now, not white.
         let bars = toolbarColors(panes: panes)
         if bars != shell.toolbarColors { shell.toolbarColors = bars }
@@ -619,7 +622,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let findReturns = findParked && !overlay.findVisible && selected != nil && selected == findTabID
         if overlay.findVisible, selected != findTabID { hideFindBar(); findParked = true }
         if live != browsers.visibleTabIDs || liveFocus != browsers.visibleTabID
-            || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false }) {
+            || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false })
+            || live.contains(where: browsers.waitsForItsPane) {
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
         }
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
@@ -2170,24 +2174,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// window's edge, top to bottom; the whole window with the sidebar out of the way.
     private func peekAreaInWindow() -> NSRect {
         guard let window else { return .zero }
-        return PeekLayout.area(window: window.frame.size, contentMinX: peekContentMinX())
+        let span = peekContentSpan()
+        return PeekLayout.area(window: window.frame.size, contentMinX: span.minX, contentMaxX: span.maxX)
     }
 
-    /// Where the sidebar ends (window coordinates), 0 with it hidden.
-    private func peekContentMinX() -> CGFloat {
+    /// Where the page area starts and ends beside the sidebar (window coordinates): from its edge
+    /// to the window's other one, the whole width with it hidden (`maxX` nil: the window's edge).
+    private func peekContentSpan() -> (minX: CGFloat, maxX: CGFloat?) {
         // Asked from windowDidResize, before the shell has laid out at the new size.
         shell.layoutSubtreeIfNeeded()
         let content = shell.convert(shell.contentContainer.frame, to: nil)
         // While the sidebar slides, the edge is where the slide has it, on the way out too.
-        let sidebarShown = (store.window(windowID).sidebarVisible || shell.slidingSidebar) && content.minX > CraMetrics.contentInset
-        return sidebarShown ? content.minX : 0
+        let shown = store.window(windowID).sidebarVisible || shell.slidingSidebar
+        if shell.sidebarSide == .right {
+            let width = shell.bounds.width
+            return (0, shown && width - content.maxX > CraMetrics.contentInset ? content.maxX : nil)
+        }
+        return (shown && content.minX > CraMetrics.contentInset ? content.minX : 0, nil)
     }
 
     /// Where a click closes a Peek (screen coordinates): the page area, not the sidebar, whose rows
     /// still open their tabs (#242).
     func peekDismissArea() -> NSRect {
         guard let window else { return .zero }
-        return PeekLayout.dismissArea(covering: window.frame, contentMinX: peekContentMinX())
+        let span = peekContentSpan()
+        return PeekLayout.dismissArea(covering: window.frame, contentMinX: span.minX, contentMaxX: span.maxX)
     }
 
     /// cra://debug?peekCatcher: whether the shown Peek's click catcher leaves the sidebar's rows to
@@ -2581,10 +2592,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
     /// open: ⌃Tab doesn't list it.
-    private func openRecentTabs(limit: Int) -> [UUID] {
-        Array(store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
-            .filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
-            .prefix(limit))
+    private func openRecentTabs(limit: Int, allSpaces: Bool = false) -> [UUID] {
+        let recent = allSpaces ? store.recentTabsInAllSpaces(limit: .max, window: windowID)
+            : store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
+        return Array(recent.filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }.prefix(limit))
     }
 
     func resetPinnedTab(_ id: UUID) {
@@ -2841,6 +2852,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Arc's floating sidebar lives in its own panel above the page windows (see FloatingSidebarController).
     private(set) var floatingSidebar: FloatingSidebarController?
+
+    /// Settings ▸ Sidebar on the right (#464): the window is laid out again at once, the traffic
+    /// lights with the sidebar. A hidden sidebar that is out goes home first, from the old edge.
+    private func moveSidebar(to side: SidebarSide) {
+        floatingSidebar?.hide(animated: false)
+        shell.sidebarSide = side
+        shell.needsLayout = true
+        shell.layoutSubtreeIfNeeded()
+        (window as? CraWindow)?.positionTrafficLights()
+        CraLog.note("sidebar on the \(side.rawValue)")
+    }
 
     private func setFloatingSidebar(_ show: Bool) {
         guard let floatingSidebar else { return }
@@ -3490,16 +3512,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func debugSiteControls() { showToolbarExtensionsMenu() }
 
-    func debugTabSwitcher() {
+    /// `cra://debug?switcher` (`=all`: ⌃⌥Tab's, #467).
+    func debugTabSwitcher(allSpaces: Bool = false) {
         let theme = focusedSpace.theme
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         tabSwitcher.isDark = dark
         tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
         tabSwitcher.palette = theme.palette
-        tabSwitcher.debugOpen(openRecentTabs(limit: TabSwitcherMetrics.maxItems).compactMap { id in
-            guard let it = store.item(id), let tab = it.tab else { return nil }
-            return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
-        })
+        tabSwitcher.debugOpen(tabSwitcherItems(allSpaces: allSpaces))
     }
 
     /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
@@ -3613,6 +3633,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 + "banner \(self.commandHost.debugNoticeShown), rows \(self.commandBar.result.items.count), "
                 + "bar \(self.commandBar.isOpen ? "open" : "closed"), dismissed \(self.store.prefs.searchSuggestionsNoticeDismissed), "
                 + "settings \(self.app.debugSettingsPane ?? "closed")")
+        }
+    }
+
+    /// Scenario hook (#457): "enter" presses Tab on what the bar holds, "leave" Backspaces out of the
+    /// scope, "state" only reads; then logs "command bar scope <step>: <scope name or none>, fill <#RRGGBB
+    /// or default>" once the bar has drawn.
+    func debugCommandBarScope(_ step: String) {
+        if step == "enter" { _ = commandBar.enterScope() } else if step == "leave" { commandBar.leaveScope() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self else { return }
+            CraLog.note("command bar scope \(step): \(self.commandBar.scope?.name ?? "none"), fill \(self.commandHost.debugFill)")
         }
     }
 
@@ -3929,8 +3960,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Tab switcher
 
-    /// ⌃Tab / ⌃⇧Tab: Arc's switcher over the space's recent tabs.
-    func cycleRecentTabs(_ delta: Int, event: NSEvent?) {
+    /// ⌃Tab / ⌃⇧Tab: Arc's switcher over the space's recent tabs. ⌃⌥Tab (`allSpaces`, #467, not
+    /// in Arc): the same cards over every space's, each naming its space.
+    func cycleRecentTabs(_ delta: Int, event: NSEvent?, allSpaces: Bool = false) {
         let theme = focusedSpace.theme
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         if !tabSwitcher.isOpen {
@@ -3938,17 +3970,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
             tabSwitcher.palette = theme.palette
         }
-        tabSwitcher.cycle(delta, event: event) {
-            openRecentTabs(limit: TabSwitcherMetrics.maxItems).compactMap { id in
-                guard let it = store.item(id), let tab = it.tab else { return nil }
-                return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
-            }
-        }
+        tabSwitcher.cycle(delta, event: event) { tabSwitcherItems(allSpaces: allSpaces) }
         // The page on screen is the freshest thumbnail there is: retake it for its card.
         guard tabSwitcher.isOpen, let current = browsers.visibleTabID else { return }
         browsers.captureSnapshot(current) { [weak self] in
             guard let self else { return }
             self.tabSwitcher.updateSnapshot(current, self.browsers.runtime(for: current)?.snapshot)
+        }
+    }
+
+    private func tabSwitcherItems(allSpaces: Bool) -> [TabSwitcher.Item] {
+        openRecentTabs(limit: TabSwitcherMetrics.maxItems, allSpaces: allSpaces).compactMap { id in
+            guard let it = store.item(id), let tab = it.tab else { return nil }
+            let space = allSpaces ? store.spaceID(ofItem: id, window: windowID).flatMap(store.space) : nil
+            return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot,
+                                    space: space.map { TabSwitcher.SpaceLabel(title: $0.title, icon: SpaceMenuIcon.image(for: $0)) })
         }
     }
 
@@ -4879,12 +4915,17 @@ final class CraWindow: NSWindow {
         positionTrafficLights()
     }
 
-    private func positionTrafficLights() {
+    /// Also from the shell's layout while the sidebar is on the right, where the lights go with it.
+    func positionTrafficLights() {
         // Full screen is the system's to place, except lights still out of the window (#449).
         let fullScreen = styleMask.contains(.fullScreen)
         // The system's spacing between the buttons stays (20 pt on macOS 15, 23 on 26, #445).
         let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { standardWindowButton($0) }
-        let xs = TrafficLightLayout.originsX(system: buttons.map { Double($0.frame.minX) })
+        // In the sidebar's top row, wherever the sidebar docks (#464). Parked lights wait left of the
+        // window whatever the side (#449: 1000 pt left of a right-hand sidebar's would still be inside),
+        // and full screen's come back to the system's left-hand spot.
+        let offset = trafficLightsParked || fullScreen ? 0 : Double((contentView as? ShellView)?.trafficLightsOffset ?? 0)
+        let xs = TrafficLightLayout.originsX(system: buttons.map { Double($0.frame.minX) }, leading: TrafficLightLayout.leading + offset)
         for (b, x) in zip(buttons, xs) {
             guard let sv = b.superview else { continue }
             if fullScreen, trafficLightsParked || b.frame.minX > -Self.parkedShift / 2 { continue }

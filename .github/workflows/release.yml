@@ -127,7 +127,7 @@ jobs:
       - name: Checksums for both CPUs
         run: |
           cd dist
-          for f in Cra.dmg Cra.zip appcast.xml Cra-Intel.dmg Cra-Intel.zip appcast-intel.xml; do
+          for f in Cra.dmg Cra.zip appcast.xml appcast-stable.xml Cra-Intel.dmg Cra-Intel.zip appcast-intel.xml appcast-stable-intel.xml; do
             [ -f "$f" ] || { echo "Missing $f" >&2; exit 1; }
           done
           sha256sum Cra*.zip Cra*.dmg > SHA256SUMS.txt

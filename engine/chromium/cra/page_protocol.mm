@@ -3,6 +3,8 @@
 
 #include "cra/page_protocol.h"
 
+#include "cra/bridge.h"
+
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -17,6 +19,7 @@
 #include "base/pickle.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/supports_user_data.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "services/media_session/public/cpp/media_position.h"
@@ -34,6 +37,7 @@
 #include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
+#include "chrome/common/chrome_isolated_world_ids.h"
 #include "components/performance_manager/freezing/freezing_policy.h"
 #include "components/performance_manager/public/freezing/cannot_freeze_reason.h"
 #include "components/performance_manager/public/freezing/freezing.h"
@@ -310,6 +314,8 @@ class MediaSessionWatch : public content::WebContentsUserData<MediaSessionWatch>
     position_ = position;
   }
   const std::optional<media_session::MediaPosition>& position() const { return position_; }
+  // Something plays through the session (active, or ducked under another tab's sound).
+  bool Playing() const { return state_ == 1 || state_ == 2; }
 
  private:
   friend class content::WebContentsUserData<MediaSessionWatch>;
@@ -384,6 +390,128 @@ void MediaSessionMethod(content::WebContents* contents,
     content::MediaSession::Get(contents)->DidReceiveAction(found->action);
   }
   result->Set("handled", routed);
+}
+
+// What each frame runs for Cra.pauseMedia, in Chrome's internal isolated world, so the page's own versions of
+// pause() and paused don't count: pause every media element that plays, open shadow roots included, and say how
+// many paused and how many played on regardless.
+constexpr char16_t kPauseMediaScript[] = uR"JS((() => {
+  let paused = 0, resisted = 0;
+  const visit = root => {
+    for (const el of root.querySelectorAll('*')) {
+      if (el instanceof HTMLMediaElement && !el.paused && !el.ended) {
+        el.pause();
+        if (el.paused) paused++; else resisted++;
+      }
+      if (el.shadowRoot) visit(el.shadowRoot);
+    }
+  };
+  visit(document);
+  return [paused, resisted];
+})())JS";
+
+using MediaPauseDone = base::OnceCallback<void(base::DictValue result)>;
+
+// One Cra.pauseMedia: answers once, when every frame has answered or after kPauseMediaWait, whichever is first.
+class MediaPauseRun : public base::RefCounted<MediaPauseRun> {
+ public:
+  explicit MediaPauseRun(MediaPauseDone done) : done_(std::move(done)) {}
+
+  void Asked(int frames) { frames_ = frames; }
+  void Answered(const base::Value& value) {
+    ++answered_;
+    if (const base::ListValue* counts = value.GetIfList(); counts && counts->size() == 2) {
+      paused_ += (*counts)[0].GetIfInt().value_or(0);
+      resisted_ += (*counts)[1].GetIfInt().value_or(0);
+    }
+    if (answered_ >= frames_) {
+      Finish();
+    }
+  }
+  void Finish() {
+    if (!done_) {
+      return;
+    }
+    base::DictValue result;
+    result.Set("playing", true);
+    result.Set("session", session);
+    result.Set("frames", frames_);
+    result.Set("answered", answered_);
+    result.Set("paused", paused_);
+    result.Set("resisted", resisted_);
+    std::move(done_).Run(std::move(result));
+  }
+
+  bool session = false;
+
+ private:
+  friend class base::RefCounted<MediaPauseRun>;
+  ~MediaPauseRun() = default;
+
+  MediaPauseDone done_;
+  int frames_ = 0;
+  int answered_ = 0;
+  int paused_ = 0;
+  int resisted_ = 0;
+};
+
+// How long Cra.pauseMedia waits for frames (a hung renderer never answers), and how long a page's own pause
+// handler gets before the frames pause what still plays.
+constexpr base::TimeDelta kPauseMediaWait = base::Milliseconds(1500);
+constexpr base::TimeDelta kPauseHandlerTime = base::Milliseconds(300);
+
+// Cra.pauseMedia (GitHub #438, Pause All Media): pauses what plays in the page, in every frame, and never plays
+// anything. First the media session, as Chrome's media controls pause it: MediaSession::Suspend(kUI) runs the
+// page's own pause handler when it has one, which keeps YouTube's or Spotify's buttons in step, and pauses the
+// session's players itself otherwise, cross-site frames included. Then, once a handler has had its moment, every
+// frame pauses the media elements still playing: muted videos and players the session doesn't hold. A page that
+// plays nothing isn't touched (a frozen one wouldn't answer). Answers {"playing":false}, or {"playing":true,
+// "session","frames","answered","paused","resisted"}: whether the session was playing, the frames asked and the
+// ones that answered, the elements paused, and the ones that played on.
+void PauseMedia(content::WebContents* contents, MediaPauseDone done) {
+  MediaSessionWatch* watch = MediaSessionWatch::FromWebContents(contents);
+  const bool session = watch && watch->Playing();
+  if (!session && contents->GetCurrentlyPlayingVideoCount() == 0 && !contents->IsCurrentlyAudible()) {
+    base::DictValue result;
+    result.Set("playing", false);
+    std::move(done).Run(std::move(result));
+    return;
+  }
+  auto run = base::MakeRefCounted<MediaPauseRun>(std::move(done));
+  run->session = session;
+  const bool routed = session && watch->Routes(media_session::mojom::MediaSessionAction::kPause);
+  if (session) {
+    content::MediaSession::Get(contents)->Suspend(content::MediaSession::SuspendType::kUI);
+  }
+  auto pause_frames = [](base::WeakPtr<content::WebContents> contents, scoped_refptr<MediaPauseRun> run) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(&MediaPauseRun::Finish, run), kPauseMediaWait);
+    if (!contents) {
+      run->Finish();
+      return;
+    }
+    std::vector<content::RenderFrameHost*> frames;
+    contents->GetPrimaryMainFrame()->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+      if (frame->IsRenderFrameLive() &&
+          frame->GetLifecycleState() == content::RenderFrameHost::LifecycleState::kActive) {
+        frames.push_back(frame);
+      }
+    });
+    run->Asked(static_cast<int>(frames.size()));
+    if (frames.empty()) {
+      run->Finish();
+      return;
+    }
+    for (content::RenderFrameHost* frame : frames) {
+      frame->ExecuteJavaScriptInIsolatedWorld(
+          std::u16string(kPauseMediaScript),
+          base::BindOnce([](scoped_refptr<MediaPauseRun> run, base::Value value) { run->Answered(value); }, run),
+          ISOLATED_WORLD_ID_CHROME_INTERNAL);
+    }
+  };
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(pause_frames, contents->GetWeakPtr(), run),
+      routed ? kPauseHandlerTime : base::TimeDelta());
 }
 
 // The page that downloads the store's CRX, as WebstoreInstallWithPrompt has one: never shown. It lives until the
@@ -557,8 +685,8 @@ void HandleCraMethod(content::WebContents* contents,
   } else if (method == "Cra.extensionSidePanel") {
     // An extension's side panel page: like Chrome's, it has no tab (GitHub #265).
     extensions::SetViewType(contents, extensions::mojom::ViewType::kExtensionSidePanel);
-  } else {
-    // Cra.installFromWebStore is asynchronous (PageSession::Send).
+  } else if (!HandleDebugMethod(contents, method, params, result, error)) {
+    // Cra.installFromWebStore and Cra.pauseMedia are asynchronous (PageSession::Send).
     // need Cra's Chromium patches (scripts/cef-patches).
     *error = "not yet on Chrome's framework: " + method;
   }
@@ -623,6 +751,16 @@ void PageSession::Send(const std::string& method, const std::string& params_json
                               }
                             },
                             weak_factory_.GetWeakPtr(), id));
+    return;
+  }
+  if (method == "Cra.pauseMedia") {
+    PauseMedia(contents_, base::BindOnce(
+                              [](base::WeakPtr<PageSession> alive, int id, base::DictValue result) {
+                                if (alive) {
+                                  alive->Answer(id, JSON(base::Value(std::move(result))), nil);
+                                }
+                              },
+                              weak_factory_.GetWeakPtr(), id));
     return;
   }
   if (method.rfind("Cra.", 0) == 0) {

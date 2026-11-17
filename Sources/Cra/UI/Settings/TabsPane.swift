@@ -53,6 +53,12 @@ struct TabsPane: View {
                 SettingsSwitchRow("Space header with one space",
                                   detail: "Show the space’s name at the top and its icon at the bottom of the sidebar, even while you have only one space.",
                                   isOn: $store.settings.showSpaceHeaderOnSingleSpace) { SettingsArt.spaceHeader }
+                SettingsCardDivider()
+                // GitHub #464, not in Arc: the window's layout in a mirror (SidebarSide).
+                SettingsSwitchRow("Sidebar on the right",
+                                  detail: "The sidebar, with the window’s close, minimize and zoom buttons, sits on the right of the window. Hidden, it slides in from the right edge.",
+                                  isOn: Binding(get: { store.settings.sidebarSide == .right },
+                                                set: { store.settings.sidebarSide = $0 ? .right : .left })) { SettingsArt.sidebarOnRight }
             }
 
             SettingsHeader("Pages").padding(.top, 20)

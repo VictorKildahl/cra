@@ -90,6 +90,7 @@ enum StoreTests {
         openLinkInSplit()
         backToReferrer()
         recentTabsTakeBackgroundTabs()
+        recentTabsInAllSpacesGoBack()
         incognitoSpaceKeepsItsContext()
         print("Store: \(checks) checks passed")
     }
@@ -2974,6 +2975,30 @@ enum StoreTests {
         clock.advance(by: 1)
         store.selectTab(link.id)
         expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
+    }
+
+    /// ⌃⌥Tab (#467): every space's recent tabs, the window's own first. Picking another space's tab
+    /// goes to that space, and the next tap comes back to the tab it left.
+    @MainActor
+    private static func recentTabsInAllSpacesGoBack() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let work = store.createSpace(title: "Work", emoji: "💼").id
+        let workTab = store.createTab(url: "https://example.com/work", in: work)
+        clock.advance(by: 1)
+        let home = store.createSpace(title: "Home", emoji: "🏠").id
+        let homeOld = store.createTab(url: "https://example.com/home-old", in: home)
+        clock.advance(by: 1)
+        let homeTab = store.createTab(url: "https://example.com/home", in: home)
+        clock.advance(by: 1)
+        store.selectTab(homeTab.id)
+        expect(store.recentTabs(in: home, limit: .max) == [homeTab.id, homeOld.id], "⌃Tab stays in the space")
+        let all = store.recentTabsInAllSpaces(limit: .max)
+        expect(all.prefix(3) == [homeTab.id, homeOld.id, workTab.id][...], "⌃⌥Tab lists the other space's tabs too")
+        clock.advance(by: 1)
+        store.selectTab(workTab.id)
+        expect(store.focusedSpaceID == work, "picking another space's tab goes to its space")
+        expect(store.recentTabsInAllSpaces(limit: 2) == [workTab.id, homeTab.id], "and the next tap comes back")
     }
 
     /// Zen's favicons come from Firefox's favicons.sqlite, where the widest icon is often an SVG,

@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Capture pick</title>
+<!-- Capture's click (capture-pick.scenario, #451): a card with a title line, like a video on YouTube's
+     home page, and a post whose button is inside an open shadow root, like Reddit's. -->
+<style>
+  body { margin: 0; font: 16px/20px -apple-system, sans-serif; }
+  .card { position: absolute; left: 40px; top: 40px; width: 300px; height: 300px; background: #eee; }
+  .thumb { height: 170px; background: #c44; }
+  h3 { position: absolute; left: 0; top: 180px; width: 300px; margin: 0; font-size: 16px; line-height: 20px; }
+  x-post { position: absolute; left: 400px; top: 40px; width: 300px; height: 200px; display: block; background: #ddf; }
+</style>
+<div class="card"><div class="thumb"></div><h3><a href="#">A video's title</a></h3></div>
+<x-post></x-post>
+<script>
+  customElements.define('x-post', class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({mode: 'open'}).innerHTML =
+        '<style>button { position: absolute; left: 20px; top: 20px; width: 120px; height: 32px; }</style><button>Join</button>';
+    }
+  });
+</script>

@@ -1,0 +1,40 @@
+# promise: #472
+# In full screen too: switching between spaces on different profiles shows only Cra, not Chromium's
+# tab strip and toolbar over the page (#472, #486). In full screen Chromium moves them to an overlay
+# window of their own, which a profile's hidden window doesn't make see-through.
+# It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+requires screen
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+pace 0.5
+
+cra://open?url=${PAGE}?n=personal&space=A0000000-0000-0000-0000-000000000001
+expect-log loaded 127\.0\.0\.1
+wait 2
+cra://debug?fullscreen=1
+wait 3
+cra://debug?chromeWindows=full
+expect-log chrome windows full: seen=0
+
+cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?chromeWindows=random
+expect-log chrome windows random: seen=0
+
+cra://action/previousSpace
+wait 2
+cra://debug?chromeWindows=back
+expect-log chrome windows back: seen=0
+
+cra://action/nextSpace
+wait 2
+cra://debug?chromeWindows=again
+expect-log chrome windows again: seen=0
+
+cra://debug?fullscreen=0
+wait 3
+cra://debug?chromeWindows=windowed
+expect-log chrome windows windowed: seen=0
+
+reject-log chrome window [a-z]+: 

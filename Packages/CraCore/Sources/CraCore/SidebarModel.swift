@@ -685,6 +685,10 @@ public struct AppSettings: Codable, Equatable {
     /// GitHub #307, not in Arc: ⌘T searches and lists only the open tabs of the window's space
     /// (`TabSearchScope.commandBarTabs`). Off is Arc's bar, which finds a tab in any space.
     public var commandBarCurrentSpaceOnly: Bool = false
+    /// Settings ▸ Advanced ▸ Command bar ▸ "Fill the command bar with the site’s color" (not in Arc,
+    /// GitHub #457): while Tab's site search is on, the bar takes the site's colour
+    /// (`ScopedSearchFill`). Off, the bar stays Arc's: the site only in the pill and a one-second wash.
+    public var commandBarSiteColor: Bool = false
     /// GitHub #344, not in Arc: a click on the sidebar's URL field edits the address where it is
     /// (`SidebarAddressEdit`). Off is Arc's, which opens the command bar; ⌘L opens it either way.
     public var editAddressInPlace: Bool = false
@@ -697,6 +701,8 @@ public struct AppSettings: Codable, Equatable {
     /// GitHub #24, not in Arc: the page fills the window with no margin and no rounded
     /// card, like a traditional browser. Off by default.
     public var edgeToEdgeContent: Bool = false
+    /// GitHub #464, not in Arc: the sidebar docks on the window's right (SidebarSide). Left is Arc's.
+    public var sidebarSide: SidebarSide = .left
     /// GitHub #91, Settings ▸ Performance: Cra records its own performance on this Mac (stalls,
     /// CPU and memory per process, tab timings) for Help ▸ Export Diagnostics. On by default in
     /// early releases; nothing leaves the Mac. Changing the default needs no migration.
@@ -984,10 +990,12 @@ extension AppSettings {
         calendarMeetingLink = (try? c.decodeIfPresent(CalendarPreview.LinkTiming.self, forKey: .calendarMeetingLink)) ?? .twoMinutes
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         commandBarCurrentSpaceOnly = try c.decodeIfPresent(Bool.self, forKey: .commandBarCurrentSpaceOnly) ?? false
+        commandBarSiteColor = try c.decodeIfPresent(Bool.self, forKey: .commandBarSiteColor) ?? false
         editAddressInPlace = try c.decodeIfPresent(Bool.self, forKey: .editAddressInPlace) ?? false
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
         edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
+        sidebarSide = (try? c.decodeIfPresent(SidebarSide.self, forKey: .sidebarSide)) ?? .left
         perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault
         perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false
         tidyTabs = try c.decodeIfPresent(Bool.self, forKey: .tidyTabs) ?? true

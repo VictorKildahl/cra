@@ -47,6 +47,7 @@ if [ "${1:-}" != core ]; then
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
   suite "Policies" scripts/test-policies.sh
   suite "WebKit stores" scripts/test-webkit-stores.sh
+  suite "Update channels" scripts/test-update-channels.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Tidy title layout" scripts/test-tidy-title-layout.sh

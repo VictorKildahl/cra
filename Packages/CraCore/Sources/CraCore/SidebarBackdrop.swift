@@ -43,7 +43,16 @@ public struct SidebarBackdrop: Equatable, Sendable {
     }
 
     /// Solid themes: Arc's material is grey 66 passing 52 % of the backdrop, flat 212 while inactive.
+    /// That is its dark material, the one under View ▸ Appearance ▸ Dark (re-fitted 17 Nov 2026: 63 +
+    /// 0.529 · backdrop), and Cra's for a space on Dark.
     public static let solidActive = SidebarBackdrop(source: .blur, dim: 0.30, liftTop: 0.26, liftBottom: 0.26)
+    /// Arc's light material, under View ▸ Appearance ▸ Light: grey 166 passing 31.5 % of the backdrop
+    /// (offline Arc 1.172, 17 Nov 2026, navy, red and pastel over white and black, within 1/255), for a
+    /// space on Light (#455).
+    public static let solidActiveLight = SidebarBackdrop(source: .blur, dim: 0.10, liftTop: 0.65, liftBottom: 0.65)
+    /// Its inactive look, flat 252 (Light) where the dark one is 212 (same run: 252 over navy, red and
+    /// pastel, 207 under Dark).
+    public static let solidInactiveLight = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.99, liftBottom: 0.99)
     public static let solidInactive = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.83, liftBottom: 0.83)
     /// Solid themes with Reduce Transparency: Arc's flat grey under the space colour, active or not
     /// (GitHub #156: 160 in both of the reporter's solid spaces, windowed and fullscreen, and the
@@ -52,12 +61,12 @@ public struct SidebarBackdrop: Equatable, Sendable {
 
     public static func resolve(
         solid: Bool, active: Bool, fullscreen: Bool, reduceTransparency: Bool,
-        tintAvailable: Bool, vibrant: Vibrant
+        tintAvailable: Bool, vibrant: Vibrant, lightMaterial: Bool = false
     ) -> SidebarBackdrop {
         if solid {
             if reduceTransparency { return solidReduced }
-            guard active else { return solidInactive }
-            var b = solidActive
+            guard active else { return lightMaterial ? solidInactiveLight : solidInactive }
+            var b = lightMaterial ? solidActiveLight : solidActive
             if fullscreen && tintAvailable { b.source = .desktopTint }
             return b
         }

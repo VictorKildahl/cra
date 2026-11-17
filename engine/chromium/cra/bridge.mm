@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "base/no_destructor.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -66,6 +67,8 @@
 #include "chrome/browser/cra_permission_hook.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -75,6 +78,13 @@
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/unload_controller.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/types.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -370,7 +380,12 @@ class PageObserver : public content::WebContentsObserver,
       OpenedFrom()[new_contents] = web_contents()->GetWeakPtr();
     }
   }
-  void MediaPictureInPictureChanged(bool active) override { [owner_ pagePictureInPicture:active]; }
+  // Chromium calls this for a Document Picture in Picture window too (documentPictureInPicture.requestWindow): a
+  // page of the site's own, with its own player controls. Cra's Picture in Picture is the video's, as CEF reported
+  // it, so only a video counts; its controls over a document window doubled the site's (GitHub #460).
+  void MediaPictureInPictureChanged(bool) override {
+    [owner_ pagePictureInPicture:web_contents()->HasPictureInPictureVideo()];
+  }
 
   // "Aw, Snap!" and "Page Unresponsive", for Cra's performance recorder (GitHub #91).
   void PrimaryMainFrameRenderProcessGone(base::TerminationStatus status) override {
@@ -513,6 +528,19 @@ void JoinFullScreenSpace(NSWindow* window) {
   window.collectionBehavior = behavior;
 }
 
+// A Chrome window Cra keeps out of sight (a profile's, a page's DevTools) never goes full screen itself. Made while a
+// Cra window was full screen, macOS took it into full screen with it, and Chrome moved its tab strip and toolbar into
+// windows of their own at the top of the screen, which the window's alpha doesn't reach: Chrome's whole top bar over
+// the page (GitHub #472, #486). An auxiliary window still sits on Cra's full-screen Space, where Chrome anchors its
+// bubbles (an extension's popup) to it.
+void NeverFullScreen(NSWindow* window) {
+  NSWindowCollectionBehavior behavior = window.collectionBehavior;
+  behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary |
+                NSWindowCollectionBehaviorFullScreenAllowsTiling);
+  behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary;
+  window.collectionBehavior = behavior;
+}
+
 void PlaceChromeWindow(NSWindow* window) {
   if (!window) {
     return;
@@ -558,6 +586,7 @@ void MakeHostWindow(NSWindow* window) {
   window.alphaValue = 0;
   window.ignoresMouseEvents = YES;
   window.sharingType = NSWindowSharingNone;
+  NeverFullScreen(window);
   if (!g_host_windows) {
     g_host_windows = [NSHashTable weakObjectsHashTable];
     Class cls = [window class];
@@ -1199,14 +1228,33 @@ bool TranslateState(content::WebContents* contents, const std::string& state) {
   return true;
 }
 
+// A host Browser that is closing (Chrome closing its windows, an extension's windows.remove) takes no more pages.
+bool IsClosing(BrowserWindowInterface* browser) {
+  return !browser || browser->IsDeleteScheduled() || UnloadController::From(browser)->is_attempting_to_close_browser();
+}
+
+// The profile's host, or nullptr while Chrome shuts down. A page added to a host that was closing stayed in its tab
+// strip when Chrome deleted it, after its window's features had gone: ExclusiveAccessManager::OnTabClosing on a null
+// manager from ~Browser (0.1.44 crash reports). A closing host is left to close; a new one takes the page.
 PageHost* HostFor(Profile* profile) {
   auto it = Hosts().find(profile);
   if (it != Hosts().end()) {
-    return it->second;
+    if (!IsClosing(it->second->browser())) {
+      return it->second;
+    }
+    Hosts().erase(it);
+  }
+  if (browser_shutdown::IsTryingToQuit() || browser_shutdown::HasShutdownStarted()) {
+    return nullptr;
   }
   g_making_host = true;
   BrowserWindowInterface* browser = CreateBrowserWindow(BrowserWindowCreateParams(*profile, false));
   g_making_host = false;
+  // Its WebViews attach no page (cra_hosted_page.h): a page Chrome puts in front here (a link opened in a new
+  // tab) drew into this never-shown window from then on, and its Cra tab stayed blank (GitHub #469).
+  if (views::Widget* widget = views::Widget::GetWidgetForNativeWindow(browser->GetWindow()->GetNativeWindow())) {
+    widget->SetNativeWindowProperty(views::kCraPageHostWindow, widget);
+  }
   auto* host = new PageHost(browser);
   Hosts()[profile] = host;
   return host;
@@ -1273,6 +1321,7 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       // has put it in.
       window.alphaValue = 0;
       window.ignoresMouseEvents = YES;
+      NeverFullScreen(window);
       PlaceChromeWindow(window);
       NoteChromeWindowShown(window);
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
@@ -1729,6 +1778,73 @@ void RunReadyBlocks() {
   }
 }
 
+// Scenarios' way to what Chrome does to the bridge's hidden pieces (Tests/Scenarios/engine-*.scenario).
+bool HandleDebugMethod(content::WebContents* contents,
+                       const std::string& method,
+                       const base::DictValue* params,
+                       base::DictValue* result,
+                       std::string* error) {
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  if (method == "Cra.debugCloseHost") {
+    // Chrome closes the hidden Browser that holds the profile's pages, as it does its other windows. With
+    // addPage, a page goes to the profile's host the moment Chrome has closed that Browser and scheduled its
+    // deletion, as the bridge's next page would.
+    auto it = Hosts().find(profile);
+    if (it == Hosts().end() || !it->second->browser()) {
+      *error = "no host for this profile";
+      return true;
+    }
+    BrowserWindowInterface* browser = it->second->browser();
+    if (params && params->FindBool("addPage").value_or(false)) {
+      static base::NoDestructor<std::vector<base::CallbackListSubscription>> subscriptions;
+      subscriptions->push_back(browser->RegisterBrowserDidClose(base::BindRepeating(
+          [](Profile* profile, BrowserWindowInterface* closed) {
+            PageHost* host = HostFor(profile);
+            if (!host) {
+              LOG(WARNING) << "Cra: debug page after host closed: no host";
+              return;
+            }
+            LOG(WARNING) << "Cra: debug page after host closed: "
+                         << (host->browser() == closed ? "the closed host" : "a new host");
+            g_adding_own_page = true;
+            host->browser()->GetTabStripModel()->AppendWebContents(
+                content::WebContents::Create(content::WebContents::CreateParams(profile)), /*foreground=*/false);
+            g_adding_own_page = false;
+          },
+          profile)));
+    }
+    // On the next turn: closing takes the page this call came from with it, and its reply is still on the way.
+    Later(base::BindOnce(
+        [](base::WeakPtr<BrowserWindowInterface> browser) {
+          if (browser) {
+            chrome::CloseWindow(browser.get());
+          }
+        },
+        browser->GetWeakPtr()));
+    result->Set("closing", true);
+    return true;
+  }
+  if (method == "Cra.debugConnectClosedTabGroup") {
+    // Session restore asks to connect a restored window's tab group (ProcessSavedGroup), and the window is
+    // gone by then: Cra closes the Chrome windows it didn't make.
+    tab_groups::TabGroupSyncService* service = tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
+    if (!service) {
+      *error = "no tab group sync service";
+      return true;
+    }
+    tab_groups::SavedTabGroup group(u"Cra scenario", tab_groups::TabGroupColorId::kBlue, {});
+    group.AddTabLocally(tab_groups::SavedTabGroupTab(GURL("https://example.com/"), u"Example", group.saved_guid(),
+                                                     /*position=*/0));
+    base::Uuid sync_id = group.saved_guid();
+    service->AddGroup(std::move(group));
+    service->ConnectLocalTabGroup(sync_id, tab_groups::TabGroupId::GenerateNew(),
+                                  tab_groups::OpeningSource::kConnectOnSessionRestore);
+    result->Set("connected", true);
+    return true;
+  }
+  return false;
+}
+
 }  // namespace cra
 
 #pragma mark - Data classes
@@ -1902,6 +2018,9 @@ void RunReadyBlocks() {
 // loads: its saved history (GitHub #273), else its address.
 - (void)insertContents:(std::unique_ptr<content::WebContents>)made profile:(Profile*)profile {
   PageHost* host = HostFor(profile);
+  if (!host) {
+    return;  // Chrome is shutting down: the page goes with it.
+  }
   content::WebContents* contents = made.get();
   g_adding_own_page = true;
   host->browser()->GetTabStripModel()->AppendWebContents(std::move(made), /*foreground=*/false);
@@ -3064,7 +3183,11 @@ void RunReadyBlocks() {
       // encrypts with a "v11" key instead. Every cookie and password Cra on CEF saved is v10, and a cookie that
       // won't decrypt takes its whole site down with it: everyone signed out at the first engine launch. The
       // item is Cra's own ("Cra Safe Storage"), so there is no other app's data to protect from.
-      "KeychainKeyProviderUserDataDirProtection";
+      "KeychainKeyProviderUserDataDirProtection,"
+      // Chrome unloads a profile once its last Chrome window closes. Cra's pages and spares live outside Chrome's
+      // windows, so a profile whose hidden host closed went with pages still in it: ~WebContentsOfBrowserContext
+      // from ProfileDestroyer::Timeout (0.1.44 crash reports). Cra's profiles stay loaded until it quits.
+      "DestroyProfileOnBrowserClose";
   // CraEngineMain adds AperitifHelpers to this one.
   std::vector<std::string> enabled = {"ForceWebRequestProxyForTest", "WebContentsDiscard", "InfiniteTabsFreezing",
                                       "VideoPipForceTrustedForMediaPlaybackForTesting", "HideDelegatedFrameHostMac"};

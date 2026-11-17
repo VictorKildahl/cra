@@ -104,6 +104,17 @@ extension SettingsArt {
         }
     }
 
+    /// The sidebar, traffic lights and all, on the window's right (#464).
+    static var sidebarOnRight: some View {
+        let t = ArtTint.peach
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t, sidebarOnRight: true) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+        }
+    }
+
     /// The space's name at the top and its icon at the bottom of the sidebar.
     static var spaceHeader: some View {
         let t = ArtTint.mauve
@@ -127,5 +138,37 @@ extension SettingsArt {
             .at(18, 3)
         }
     }
+}
 
+// MARK: - Command bar
+
+extension SettingsArt {
+    /// The command bar after Tab on a site: filled with the site's colour, its pill before the field (#457).
+    static var commandBarSiteColor: some View {
+        let t = ArtTint.rose
+        let site = Color(hex: "#FF0000")
+        return ArtCanvas(tint: t) {
+            ZStack(alignment: .topLeading) {
+                Color(red: 75 / 255, green: 35 / 255, blue: 35 / 255)
+                HStack(spacing: 3) {
+                    Capsule().fill(site).frame(width: 15, height: 6)
+                    Capsule().fill(Color.white.opacity(0.45)).frame(width: 22, height: 2.4)
+                }
+                .at(5, 5)
+                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 60, height: 0.6).at(5, 15)
+                VStack(alignment: .leading, spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous).fill(site).frame(width: 60, height: 7)
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.9)).frame(width: 30, height: 2.2).padding(.leading, 4)
+                        }
+                    ArtLines(count: 2, width: 40, color: Color.white.opacity(0.35)).padding(.leading, 4)
+                }
+                .at(5, 19)
+            }
+            .frame(width: 70, height: 42, alignment: .topLeading)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .shadow(color: .black.opacity(0.25), radius: 2.5, y: 1)
+            .at(9, 7)
+        }
+    }
 }
