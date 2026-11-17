@@ -855,6 +855,8 @@
 #431   Tests/Scenarios/settings-fullscreen.scenario  a1a5c7267959
 #434   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseAtEverySize  732fadede9fa
 #434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeCase  c115e90bb609
+#434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeSilentCase  75be35fb6087
+#434   Tests/Scenarios/pip-minimize-muted.scenario  eb00e7ad9fa6
 #434   Tests/Scenarios/pip-minimize.scenario  303a5054c8ba
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::floatsOnlyOverAPageInTheWindowsOwnView  684578ecc041
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  e887bbd620e2

@@ -1,0 +1,29 @@
+# Minimize, then back out from the sidebar player: a muted video in Picture in Picture is
+# minimized, its card in the sidebar player has the Picture in Picture button, and that button
+# brings the window back (#475, Peter Nielsen; the window's Minimize is #434). Minimize makes the
+# card when the page has none (the card follows the media session, or the sound on CEF, #411);
+# here the engine's session has already made one, and the browser manager harness's
+# pictureInPictureMinimizeSilentCase covers a tab without one.
+# promise: #434
+cra://open?url=file://${FIXTURES}/Pages/video.html?n=video
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?pipButton=minimize
+expect-log minimizes Picture in Picture, keeps playing
+expect-log leaves Picture in Picture
+wait 1
+cra://debug?pip=minimized
+expect-log Cra pip minimized: windows=0
+cra://debug?nowPlaying=state&label=minimized
+expect-log Cra nowPlaying\[minimized\] .*video=1 pip=0
+# The card's button brings the video back out.
+cra://debug?nowPlaying=pip&label=back
+wait 2
+cra://debug?pip=back
+expect-log Cra pip back: windows=1
