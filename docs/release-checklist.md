@@ -183,6 +183,8 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
+- **#500:** with a page loaded in a browser window and another app in front, click a link in that app: the Little Window
+  grows in and stays in front of the browser window (it dropped behind it once the page took focus).
 - **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (it is off by default), hold ⌥ and ⌘ and
   click a link on a page with the pointer: the link opens in a Little Window and the page stays where it is, from
   a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);

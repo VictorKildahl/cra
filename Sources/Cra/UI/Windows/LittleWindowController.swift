@@ -486,6 +486,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             if let render = EmbeddedPages.renderView(in: b.containerView) { window.makeFirstResponder(render) }
         }
         b.setFocused(true)
+        // Focusing the page, Chromium re-parents one of its bubble panels to the browser window,
+        // and AppKit rebuilds that window's ordering group over this one: the Little Window opened
+        // behind the browser window. It comes back on top, with the page keeping the keys.
+        if !isPeek, let window, window.isVisible { window.orderFront(nil) }
     }
 
     /// Shows the window without making it key (a link opened in the background).
