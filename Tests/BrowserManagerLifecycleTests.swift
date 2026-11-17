@@ -210,6 +210,7 @@ enum BrowserManagerLifecycleTests {
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
+        syncedDocumentKeepsLivePagesCase()
         extensionPageRetryCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
@@ -2070,6 +2071,34 @@ enum BrowserManagerLifecycleTests {
         expect(woken.browser.backgroundProbes == 1, "a loaded page coming on screen is asked for its background")
         manager.show(a, focus: false)
         expect(woken.browser.backgroundProbes == 1, "one already on screen is not asked again")
+        manager.closeAll()
+    }
+
+    /// A synced sidebar from the other Mac replaced the document while this Mac's page stayed
+    /// where it was: the bar showed the other Mac's address over this page (seen once, 13 Nov
+    /// 2026). The page's own address and title go back into its tab. A tab asleep has no page:
+    /// the bundle's address is what it loads when it wakes.
+    @MainActor
+    private static func syncedDocumentKeepsLivePagesCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: ManualScheduler())
+        let id = store.createTab(url: "https://example.test/here").id
+        let rt = manager.ensureRuntime(for: id)!
+        rt.browser.currentURL = "https://example.test/here"
+        rt.browser.currentTitle = "Here"
+        manager.browser(rt.browser, didChangeURL: "https://example.test/here")
+        let asleep = store.createTab(url: "https://example.test/sleep").id
+        let sleeping = manager.ensureRuntime(for: asleep)!
+        sleeping.browser.currentURL = "https://example.test/sleep"
+        sleeping.discarded = true
+        // The other Mac's bundle has both tabs elsewhere.
+        store.items[id]?.tab?.url = "https://example.test/there"
+        store.items[id]?.tab?.savedTitle = "There"
+        store.items[asleep]?.tab?.url = "https://example.test/sleep-there"
+        NotificationCenter.default.post(name: SidebarStore.documentReplaced, object: store)
+        expect(store.item(id)?.tab?.url == "https://example.test/here", "a page on screen keeps its own address in the bar after a synced sidebar")
+        expect(store.item(id)?.tab?.savedTitle == "Here", "and its own title")
+        expect(store.item(asleep)?.tab?.url == "https://example.test/sleep-there", "a tab asleep takes the synced address: it loads that when it wakes")
         manager.closeAll()
     }
 

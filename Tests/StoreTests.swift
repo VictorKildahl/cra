@@ -2177,8 +2177,12 @@ enum StoreTests {
         doc.profiles = nil
         let gone = UUID()
         doc.spaces[0].profileID = gone
+        var replacedTold = 0
+        let replacedObserver = NotificationCenter.default.addObserver(forName: SidebarStore.documentReplaced, object: b, queue: nil) { _ in replacedTold += 1 }
         b.replace(document: doc)
+        NotificationCenter.default.removeObserver(replacedObserver)
         expect(b.orderedSpaces[0].profileID == nil && b.integrityProblems().isEmpty, "a space on a missing profile falls back to Default")
+        expect(replacedTold == 1, "a replaced document is told once, for the pages to put their own addresses back")
     
         // Stopped before the tests below: every service here saves the one sync.json, and this
         // one's debounced save must not land in the middle of theirs.

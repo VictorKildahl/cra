@@ -861,6 +861,10 @@ final class SidebarStore {
 
     func touchAfterImport() { touch() }
 
+    /// Posted with the store once `replace(document:)` has put a synced sidebar in: the browser
+    /// managers put each live page's own address back (BrowserManager.reassertLivePages).
+    static let documentReplaced = Notification.Name("CraSidebarDocumentReplaced")
+
     /// The sidebar another Mac wrote to the sync folder (SettingsSyncService), in place of this
     /// one's: spaces, items, profiles and profile favorites. Incognito and Blank Windows keep their
     /// spaces; they are this Mac's windows, never in a synced document (`SidebarDocument.forSync`).
@@ -895,6 +899,7 @@ final class SidebarStore {
         splitSharedFavorites(doc.favoritesContainerID)
         settings.sharedFavorites ? shareFavorites() : unshareFavorites()
         touch()
+        NotificationCenter.default.post(name: Self.documentReplaced, object: self)
     }
 
     /// What goes to disk: everything but incognito windows' spaces and tabs. Blank Windows'

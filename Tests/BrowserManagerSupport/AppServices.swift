@@ -44,6 +44,7 @@ struct TestItem {
 }
 enum TestRoot { case today }
 @MainActor final class SidebarStore {
+    static let documentReplaced = Notification.Name("CraSidebarDocumentReplaced")
     struct Settings {
         var autoPictureInPicture = false
         /// Hosts whose Site Control Center switch turned automatic Picture in Picture off.
