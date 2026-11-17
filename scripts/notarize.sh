@@ -43,7 +43,7 @@ json() { /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin).get('$
 
 if [ -s "$SUBMISSION" ]; then
   ID="$(tr -d '[:space:]' < "$SUBMISSION")"
-  echo "Waiting for $(basename "$FILE")'s earlier submission $ID…"
+  echo "Waiting for $(basename "$FILE")'s earlier submission ${ID}…"
 else
   echo "Notarizing $(basename "$FILE")…"
   ID="$(xcrun notarytool submit "$FILE" "${AUTH[@]}" --output-format json | json id)"
