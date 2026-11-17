@@ -163,6 +163,8 @@ built release app with a test profile. Note anything that fails in the release's
   two fingers over its page: Chromium's back arrow shows, and letting go closes the window, as ⌘[
   does. A page it went on to comes first; a Peek never closes this way. The
   `little-window-swipe-back` scenario asks the swipe's questions (`cra://debug?littleSwipeBack=`).
+  The same swipe over the window's address bar does the same, and a swipe to the left there goes
+  forward (`little-window-bar-swipe` feeds the bar trackpad events, `cra://debug?littleBarSwipe=`).
 - **#12:** a two-finger swipe in the hidden sidebar (⌘S) switches spaces, and the next space
   draws mid-swipe. There is one link bubble only, and the dashed ring shows only on a
   cross-space keyboard switch.
@@ -267,6 +269,10 @@ built release app with a test profile. Note anything that fails in the release's
   PiP and coming back closes it. The tab shows the recording dot and doesn't sleep.
 - **#134:** with another app in front, the PiP edges show resize cursors, and a click on play
   doesn't move the window.
+- **#516:** on a trackpad, swipe the PiP with two fingers hard into each edge of the screen, into
+  the menu bar and into the Dock, and keep pushing before you lift. The window stops with the hidden
+  pointer still on it, then flies into a corner on the lift, and the pointer shows again there.
+  The CraCore test covers where it stops; only real fingers show that the lift still reaches it.
 - **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the

@@ -63,3 +63,4 @@ ungoogled/disable-intranet-redirect-detector.patch
 ungoogled/disable-dial-repeating-discovery.patch
 cra-session-cookies.patch
 cra-page-compositor.patch
+secure-input-active-app.patch

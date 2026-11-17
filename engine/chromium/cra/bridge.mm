@@ -96,6 +96,7 @@
 #include "content/public/browser/media_player_id.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
+#include "ui/base/cocoa/secure_password_input.h"
 #include "ui/base/page_transition_types.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/global_routing_id.h"
@@ -3584,6 +3585,11 @@ bool HandleDebugMethod(content::WebContents* contents,
 }
 + (void)floatOverFullScreenSpaces:(NSWindow*)window {
   FloatOverFullScreenSpaces(window);
+}
+// A focused password field's lock on macOS Secure Input (secure-input-active-app.patch turns the
+// system's on only while Cra is the active app).
++ (BOOL)holdsSecureInput {
+  return ui::ScopedPasswordInputEnabler::IsPasswordInputEnabled();
 }
 + (NSString*)pageWindowsReadout {
   return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_page_windows_shown,

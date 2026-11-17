@@ -28,17 +28,29 @@ public struct PictureInPictureThrow: Sendable {
     /// The time between the last few moves (a trackpad sends about 120 a second, unevenly).
     private var gaps: [Double] = []
 
-    /// The fingers touched down on a window at `frame` at `time` (seconds, any clock).
-    public init(frame: CGRect, at time: Double) {
+    /// Where the pointer sits in the window, from its origin, while it rides along with it.
+    public let pointer: CGVector?
+    /// Where the pointer can ride along: the displays' visible frames. The menu bar and the Dock
+    /// lie above the window and would take the scroll events, as the desktop past the edge would.
+    public let displays: [CGRect]
+
+    /// The fingers touched down on a window at `frame` at `time` (seconds, any clock), with the
+    /// pointer at `pointer` from the window's origin and `displays` the visible frames.
+    public init(frame: CGRect, at time: Double, pointer: CGVector? = nil, displays: [CGRect] = []) {
         self.frame = frame
+        self.pointer = pointer
+        self.displays = displays
         start = time
         path = [(time, frame.origin)]
     }
 
-    /// The fingers moved the window by `dx, dy` at `time`; returns where it is now.
+    /// The fingers moved the window by `dx, dy` at `time`; returns where it is now. With a
+    /// `pointer`, the window goes only as far as the pointer can follow it (#516).
     public mutating func move(dx: CGFloat, dy: CGFloat, at time: Double) -> CGRect {
-        frame = frame.offsetBy(dx: dx, dy: dy)
         if dx != 0 || dy != 0 { hasMoved = true }
+        let next = reachable(frame.offsetBy(dx: dx, dy: dy))
+        let dx = next.minX - frame.minX, dy = next.minY - frame.minY
+        frame = next
         samples.append((time, dx, dy))
         samples.removeAll { $0.time < time - 2 * Self.sampleWindow }
 
@@ -55,6 +67,25 @@ public struct PictureInPictureThrow: Sendable {
         path.append((max(time, last.time), frame.origin))
         if path.count > 64 { path.removeFirst(path.count - 64) }
         return frame
+    }
+
+    /// `proposed`, held back where it would take the pointer out of `displays`. Scroll events go
+    /// to the window under the pointer, and the pointer can't leave the screens: a window that slid
+    /// out from under it (or under the menu bar or the Dock) lost the fingers' lift to whatever
+    /// was there, and stayed where it was, past the edge, with the pointer hidden (#516). Held
+    /// back, the window stops with the pointer still on it, and the lift throws it into a corner.
+    private func reachable(_ proposed: CGRect) -> CGRect {
+        guard let pointer, !displays.isEmpty else { return proposed }
+        let p = CGPoint(x: proposed.minX + pointer.dx, y: proposed.minY + pointer.dy)
+        if displays.contains(where: { $0.contains(p) }) { return proposed }
+        // Up to the edge of the display the pointer is on (or the nearest one), on its last row
+        // or column of points.
+        let was = CGPoint(x: frame.minX + pointer.dx, y: frame.minY + pointer.dy)
+        guard let d = displays.first(where: { $0.contains(was) })
+                ?? displays.min(by: { PictureInPictureLayout.distance(was, $0) < PictureInPictureLayout.distance(was, $1) }) else { return proposed }
+        let x = min(max(p.x, d.minX), d.maxX - 1), y = min(max(p.y, d.minY), d.maxY - 1)
+        return CGRect(x: x == p.x ? proposed.minX : x - pointer.dx, y: y == p.y ? proposed.minY : y - pointer.dy,
+                      width: proposed.width, height: proposed.height)
     }
 
     /// How far the window on screen runs behind the fingers: the longest of the last few gaps

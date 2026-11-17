@@ -1,0 +1,58 @@
+# promise: #511
+# A page's password field turns macOS Secure Input on while Cra is in front with the field focused, and
+# Cra lets go of it whenever another app is in front. Secure Input stops every other app's global
+# shortcuts (Hammerspoon, Raycast, a terminal's hotkey window), so a Cra left holding it behind another
+# app broke them until it quit. Secure Input is one switch for the whole Mac: nothing else may hold it
+# during the run (the baseline line), or the run can't tell.
+requires screen
+env CRA_TEST_BACKGROUND=0
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?secureInput=baseline
+expect-log secure input baseline: system=0 held=0
+cra://open?url=${ORIGIN}/password.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?activate=1
+wait 1
+cra://debug?secureInput=front
+expect-log secure input front: system=1 held=1 active=1
+
+# Another app in front: the field keeps the page's focus, the Mac's Secure Input goes off.
+cra://debug?deactivate=1
+wait 1
+cra://debug?secureInput=behind
+expect-log secure input behind: system=0 held=. active=0
+# The page puts the keys in its password field again while Cra is behind, as a sign-in page's script
+# or a password manager filling the form does.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{document.getElementById('user').focus();document.getElementById('password').focus();return 'refocused-'+document.activeElement.id})()"}
+expect-log Cra cdp Runtime\.evaluate .*"value":"refocused-password"
+wait 1
+cra://debug?secureInput=refocused-behind
+expect-log secure input refocused-behind: system=0 held=. active=0
+
+# Back in front with the field still focused: protected again.
+cra://debug?activate=1
+wait 1
+cra://debug?secureInput=back
+expect-log secure input back: system=1 held=1 active=1
+
+# Another tab takes the keys: the password tab, still open behind it, holds nothing, in front or behind.
+cra://open?url=${PAGE}
+wait 1
+cra://debug?secureInput=other-tab
+expect-log secure input other-tab: system=0 held=0 active=1
+cra://debug?deactivate=1
+wait 1
+cra://debug?secureInput=other-tab-behind
+expect-log secure input other-tab-behind: system=0 held=0 active=0
+
+# The password tab again, then closed: nothing left holding it.
+cra://debug?activate=1
+cra://action/previousTab
+wait 1
+cra://debug?secureInput=password-tab-again
+expect-log secure input password-tab-again: system=1 held=1 active=1
+cra://action/closeTab
+wait 1
+cra://debug?secureInput=closed
+expect-log secure input closed: system=0 held=0 active=1

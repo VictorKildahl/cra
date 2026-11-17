@@ -57,6 +57,8 @@ final class LittleWindowActions {
     var togglePopup: () -> Void = {}
     var closePopup: () -> Void = {}
     var showProfileMenu: (NSView) -> Void = { _ in }
+    /// A two-finger swipe over the address bar let go (#495).
+    var swipe: (LittleBarSwipe.Direction) -> Void = { _ in }
 }
 
 /// Arc's Little Arc chrome, measured at 2x (window 1688×1010, profile "default").
@@ -335,6 +337,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         actions.togglePopup = { [weak self] in self?.togglePopup() }
         actions.closePopup = { [weak self] in self?.closePopup() }
         actions.showProfileMenu = { [weak self] v in self?.showProfileMenu(from: v) }
+        // A swipe over the bar goes where Back (closing the window on its first page) and Forward go (#495).
+        actions.swipe = { [weak self] direction in
+            switch direction {
+            case .back: self?.goBack()
+            case .forward: self?.browser?.goForward()
+            }
+        }
 
         commandPanel = CommandBarPanel()
         commandHost = CommandBarView(controller: commandBar, favicons: app.favicons)
@@ -1279,6 +1288,34 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// on it does; logs the rows found (#316).
     /// For `cra://debug?littleShown`: the address pill's padlock and text (#330).
     var debugReadout: String { (shell.toolbarHost as? LittleToolbarView)?.debugReadout ?? "" }
+
+    /// `cra://debug?littleBarSwipe=<label>&fingers=right|left[&points=n]`: a two-finger swipe of `n`
+    /// points (default 120) made of the scroll events a trackpad sends, given to the address bar's
+    /// own scrollWheel (#495). Logs what the bar made of them; the window acts as for a real swipe.
+    func debugBarSwipe(_ label: String, fingersRight: Bool, points: CGFloat) {
+        guard let bar = shell.toolbarHost as? LittleToolbarView, let window else {
+            CraLog.note("little bar swipe \(label): no bar")
+            return
+        }
+        let at = shell.toolbarHost.convert(NSPoint(x: shell.toolbarHost.bounds.midX, y: shell.toolbarHost.bounds.midY), to: nil)
+        func event(_ phase: CGScrollPhase, dx: CGFloat) -> NSEvent? {
+            guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 0, wheel2: Int32(dx), wheel3: 0) else { return nil }
+            cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+            cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase.rawValue))
+            cg.location = CGPoint(x: window.frame.minX + at.x, y: (NSScreen.screens.first?.frame.height ?? 0) - window.frame.minY - at.y)
+            return NSEvent(cgEvent: cg)
+        }
+        // The fingers' direction: the deltas follow the device's scroll direction setting.
+        let inverted = event(.began, dx: 0)?.isDirectionInvertedFromDevice ?? true
+        let step: CGFloat = 10 * (fingersRight == inverted ? 1 : -1)
+        let events = [event(.began, dx: 0)] + (0..<Int(points / 10)).map { _ in event(.changed, dx: step) } + [event(.ended, dx: 0)]
+        var swiped: LittleBarSwipe.Direction?
+        let before = actions.swipe
+        actions.swipe = { direction in swiped = direction; before(direction) }
+        for e in events.compactMap({ $0 }) { bar.scrollWheel(with: e) }
+        actions.swipe = before
+        CraLog.note("little bar swipe \(label): \(swiped.map { "\($0)" } ?? "none") pages=\(NSEvent.isSwipeTrackingFromScrollEventsEnabled ? 1 : 0)")
+    }
 
     func debugCommit(_ typed: String) {
         let shown = isPeek ? nil : state.targetSpaceID
@@ -2728,6 +2765,35 @@ final class LittleToolbarView: NSView {
         // The URL stays centred, clear of the chip on both sides.
         let clear = max(80, chipW > 0 ? LittleMetrics.profileChipTrailing + chipW + 8 : 80)
         urlLabel.frame = NSRect(x: clear - SidebarText.inset, y: (ch - 16) / 2, width: max(0, pillW - 2 * clear) + 2 * SidebarText.inset, height: 16)
+    }
+
+    // MARK: Swipes
+
+    private var swipe = LittleBarSwipe()
+
+    /// Two fingers across the bar go back or forward, as over the page, where Chromium's history
+    /// swipe takes them (#495, bensk). It needs System Settings' "Swipe between pages" on two fingers,
+    /// as Chromium's does.
+    override func scrollWheel(with event: NSEvent) {
+        guard event.hasPreciseScrollingDeltas, NSEvent.isSwipeTrackingFromScrollEventsEnabled else {
+            super.scrollWheel(with: event)
+            return
+        }
+        switch event.phase {
+        case .mayBegin, .began:
+            swipe.begin()
+            if event.phase == .began, swipe.move(dx: event.scrollingDeltaX, dy: event.scrollingDeltaY,
+                                                 inverted: event.isDirectionInvertedFromDevice) { return }
+        case .changed:
+            if swipe.move(dx: event.scrollingDeltaX, dy: event.scrollingDeltaY, inverted: event.isDirectionInvertedFromDevice) { return }
+        case .ended, .cancelled:
+            if let direction = swipe.end(cancelled: event.phase == .cancelled) {
+                actions.swipe(direction)
+                return
+            }
+        default: break
+        }
+        super.scrollWheel(with: event)
     }
 
     // MARK: Clicks

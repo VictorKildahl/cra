@@ -555,6 +555,9 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 + (BOOL)isExtensionWindow:(NSWindow *)window;
 /// YES for the Chrome-style window hosting one of Cra's own browsers.
 + (BOOL)isPageWindow:(NSWindow *)window;
+/// YES while a page's focused password field holds macOS Secure Input for Cra (Chromium's lock; the
+/// system turns it on only while Cra is the active app), for cra://debug?secureInput= (GitHub #511).
+@property (class, nonatomic, readonly) BOOL holdsSecureInput;
 /// Lets one of Chromium's Picture in Picture windows show over another app's full-screen Space,
 /// as Arc's non-activating PiP panel does (GitHub #206). Chromium only makes it join every desktop Space.
 + (void)floatOverFullScreenSpaces:(NSWindow *)window;

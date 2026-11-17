@@ -1263,6 +1263,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // activate=1: Cra to the front with its window key, for a screen scenario that types (#424).
             if dict["activate"] == "1" { main.showWindow(nil); NSApp.activate(ignoringOtherApps: true); main.window?.makeKey(); return }
+            // deactivate=1: Cra goes behind as when the user picks another app (Finder), its windows still on
+            // screen (#511). NSApp.deactivate() alone sometimes left Cra the active app with no key window.
+            if dict["deactivate"] == "1" {
+                if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+                    NSApp.yieldActivation(to: finder)
+                    finder.activate(from: .current, options: [])
+                } else {
+                    NSApp.deactivate()
+                }
+                return
+            }
+            // secureInput=<label>: whether macOS Secure Input is on (it is for one app at a time, and it stops
+            // every other app's global shortcuts), whether Chromium holds it for a page's password field, and
+            // whether Cra is the app in front (#511).
+            if let label = dict["secureInput"] {
+                let held = CraCEFRuntime.responds(to: NSSelectorFromString("holdsSecureInput"))
+                    ? (CraCEFRuntime.holdsSecureInput ? "1" : "0") : "?"
+                CraLog.note("secure input \(label): system=\(IsSecureEventInputEnabled() ? 1 : 0) held=\(held) "
+                    + "active=\(NSApp.isActive ? 1 : 0)")
+                return
+            }
             // keys=<label>: which window has the keyboard and what in it takes typed keys (#424).
             if let label = dict["keys"] {
                 let key = NSApp.keyWindow
@@ -1535,6 +1556,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
             if let command = dict["littleToolbar"] { littleWindows.last?.debugToolbar(command); return }
+            // littleBarSwipe=<label>&fingers=right|left[&points=n]: a two-finger swipe over the newest
+            // Little Window's address bar (#495).
+            if let label = dict["littleBarSwipe"] {
+                littleWindows.last?.debugBarSwipe(label, fingersRight: dict["fingers"] != "left",
+                                                  points: dict["points"].flatMap { Double($0) }.map { CGFloat($0) } ?? 120)
+                return
+            }
             // littleSwipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the newest Little
             // Window's page before a swipe back starts, and with go=1 what it does at the end (#495).
             if let label = dict["littleSwipeBack"] {
@@ -2137,6 +2165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The n-th space icon's tip, without a pointer.
             if let n = dict["spaceTip"].flatMap({ Int($0) }), let content = main.window?.contentView {
                 ArcTooltipController.shared.debugShowSpaceTip(n, in: content)
+                return
+            }
+            // tooltipShown=<label>: whether a tip is on screen.
+            if let label = dict["tooltipShown"] {
+                CraLog.note("tooltip \(label): shown=\(ArcTooltipController.shared.debugShown ? 1 : 0)")
                 return
             }
             if let t = dict["tooltip"], let content = main.window?.contentView {

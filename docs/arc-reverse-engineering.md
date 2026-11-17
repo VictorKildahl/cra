@@ -4444,6 +4444,10 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   the window. `LittleWindowBack` (CraCore) decides for the swipe and for ⌘[; a Peek keeps its own history
   only (unverified in Arc). Readout `cra://debug?littleSwipeBack=<label>[&go=1]` (scenario
   `little-window-swipe-back`).
+- Cra (#495 follow-up, bensk): the address bar above a Little Window's page isn't the page, so Chromium's
+  swipe never reaches it; `LittleBarSwipe` (CraCore) reads two-finger swipes there and goes Back
+  (`LittleWindowBack`) or Forward at release, past 60 pt sideways. Arc's behaviour over its bar is
+  unverified. Scenario `little-window-bar-swipe`.
 
 ## Sidebar width and the narrow header (Arc 1.17x, 9 Nov 2026, GitHub #287)
 - [O disasm] `WindowLayoutController.handleSidebarResizePanGestureRecognizer:` (arm64, 0x100221030): the new
