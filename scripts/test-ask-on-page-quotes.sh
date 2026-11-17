@@ -36,4 +36,4 @@ xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   "$TEST_DIR/Export.swift" -o "$TEST_DIR/ask-quote-export"
 "$TEST_DIR/ask-quote-export" "$TEST_DIR/ask-quote-retire.js" > "$TEST_DIR/ask-quote.js"
 node Tests/AskOnPageQuoteDOMTests.js "$TEST_DIR/ask-quote.js" "$TEST_DIR/ask-quote-retire.js"
-[ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/ask-quote-evaluation-tests" "$TEST_DIR/ask-quote-export" "$TEST_DIR/ask-quote.js" "$TEST_DIR/ask-quote-retire.js" "$CRA_TEST_KEEP/"
+[ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/ask-quote-evaluation-tests" "$TEST_DIR/ask-quote-export" "$CRA_TEST_KEEP/"

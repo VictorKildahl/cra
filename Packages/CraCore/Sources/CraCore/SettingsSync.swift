@@ -17,13 +17,24 @@ public struct SyncManifest: Codable, Equatable {
     public var writtenAt: Date
     /// File name → hash of its bytes, for every file in the bundle.
     public var files: [String: String]
+    /// This bundle, and the bundles the writing Mac had written or applied when it wrote it, newest
+    /// first (its SyncHistory): the first is the one it was written from. A Mac that has one of
+    /// them merges this bundle with what changed there since the newest it has (SidebarMerge). The
+    /// whole list, not only the first: a Mac that writes twice before the other looks (iCloud
+    /// delivers the later bundle only) would otherwise name a parent the other Mac never saw.
+    /// Missing in a bundle from an older Cra, which is applied whole.
+    public var id: UUID?
+    public var parentIDs: [UUID]?
 
-    public init(version: Int = SyncManifest.currentVersion, device: String, deviceID: String, writtenAt: Date, files: [String: String]) {
+    public init(version: Int = SyncManifest.currentVersion, device: String, deviceID: String, writtenAt: Date, files: [String: String],
+                id: UUID? = nil, parentIDs: [UUID]? = nil) {
         self.version = version
         self.device = device
         self.deviceID = deviceID
         self.writtenAt = writtenAt
         self.files = files
+        self.id = id
+        self.parentIDs = parentIDs
     }
 }
 

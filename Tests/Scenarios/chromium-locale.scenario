@@ -1,0 +1,19 @@
+# Chromium's language follows macOS's, as in Chrome and Arc (#167): its own pages and dialogs, and the language
+# extensions show (chrome.i18n picks their _locales by it). On the Chrome engine Chromium took the language from
+# Cra's app bundle, which carries no translations, so it stayed English whatever macOS was set to (GitHub #484).
+# Here macOS's language is Chinese (Simplified) for Cra alone.
+# promise: #484
+budget rss=600
+arg -AppleLanguages
+arg (zh-Hans-CN)
+extension ${FIXTURES}/Extension
+expect-log chromium locale: zh-CN for zh-Hans-CN
+cra://open?url=chrome://extensions
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'chrome pages in '.concat(document.documentElement.lang)"}
+expect-log Cra cdp Runtime.evaluate .*chrome pages in [a-zA-Z-]+
+reject-log chrome pages in en
+cra://open?url=chrome-extension://${EXTENSION_ID}/options.html
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'extensions in '.concat(chrome.i18n.getUILanguage())"}
+expect-log Cra cdp Runtime.evaluate .*extensions in zh-CN

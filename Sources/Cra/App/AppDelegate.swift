@@ -1156,9 +1156,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // toolbar=out|in|sample|state: the floating toolbar (Settings ▸ Tabs), and where it is.
             if let command = dict["toolbar"] { CraLog.note(main.shell.debugToolbar(command)); return }
             if let label = dict["findBar"] { CraLog.note(main.debugFindBar(label)); return }
-            if dict["chromiumDialogs"] != nil { CraLog.note(ChromiumDialogs.readout()); return }
+            // chromiumDialogs=1: the Chromium dialogs showing and where (#349); chromiumDialogs=<button>: that
+            // read, then the button with that title pressed (#484).
+            if let button = dict["chromiumDialogs"] {
+                CraLog.note(ChromiumDialogs.readout())
+                if button != "1" { CraLog.note(ChromiumDialogs.press(button)) }
+                return
+            }
             if let label = dict["switcherWindows"] {
                 CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
+            }
+            if let label = dict["windowManagers"] {
+                CraLog.note(WindowManagers.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }
             if let g = dict["screenshotPick"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 CraLog.note(main.screenshotPickReadout(at: CGPoint(x: g[0], y: g[1]))); return
