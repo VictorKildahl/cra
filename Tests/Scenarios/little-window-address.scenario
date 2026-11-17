@@ -9,7 +9,7 @@ pace 0.5
 cra://debug?externalURL=${PAGE}?e=link1
 wait 2
 cra://debug?littleShown=loaded
-expect-log little shown loaded: windows=1 .* padlock=1 address=127\.0\.0\.1$
+expect-log little shown loaded: windows=1 .* padlock=1 address=127\.0\.0\.1 behind=0$
 
 cra://debug?externalURL=${STALL}
 wait 2

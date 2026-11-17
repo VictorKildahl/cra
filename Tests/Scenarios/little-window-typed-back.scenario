@@ -1,0 +1,25 @@
+# promise: #495
+# Back on the first page of a Little Window you opened yourself (⌥⌘N, then an address typed in
+# its card) closes it, as on one a link opened. The empty window's page is about:blank, so loading
+# the typed address on top of it left a blank entry behind: Back went to a black page and the
+# window stayed, and the swipe back did the same.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleCard=go:${PAGE}?n=typed
+wait 3
+cra://debug?littleShown=typed
+expect-log little shown typed: windows=1 .* card=0
+
+# Nothing is behind the typed page: the swipe back may start, and its end would close the window.
+cra://debug?littleSwipeBack=typed
+expect-log little swipe back typed: can=1$
+
+# Back closes it.
+cra://action/goBack
+wait 1.5
+cra://debug?littleShown=back
+expect-log little shown back: windows=0

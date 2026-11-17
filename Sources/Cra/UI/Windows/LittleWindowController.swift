@@ -1309,9 +1309,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     private func navigate(_ url: String) {
+        let empty = !hasPage && browser?.canGoBack == false
         expandCard()
         state.url = url
-        browser?.loadURL(url)
+        // An empty window's page is about:blank: loading over it left that entry behind the first
+        // page, so Back and the swipe back went to a blank page instead of closing the window
+        // (#495). A new page at the address starts its history there.
+        if empty { replacePage(at: url) } else { browser?.loadURL(url) }
         focusPage()
     }
 
