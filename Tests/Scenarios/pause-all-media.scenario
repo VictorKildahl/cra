@@ -1,0 +1,78 @@
+# promise: #438
+# Pause All Media (not in Arc): the command bar's command pauses what plays in every loaded page,
+# in a background tab, a WebKit tab and a Little Window: a track in a shadow root through the page's
+# own pause handler, a muted video, and a cross-site frame's video. It never plays anything again,
+# and the one page it can't silence (Web Audio) is reported as having kept playing, not as paused.
+# AppleScript's `pause media` leaves out the tabs it's told to and names an unknown profile.
+# A muted video in a hidden page is Chrome's to pause and play again when the page shows
+# (WebMediaPlayerImpl's background video optimization), so the frame plays in the Little Window.
+budget rss=1000 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+pace 0.5
+
+# One: a track in a shadow root, with the page's own pause handler, and a muted video.
+cra://open?url=${ORIGIN}/pause-media.html%3Ftab%3Done
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"start('')"}
+expect-log "value":"started song:playing loop:playing frame:- handler:false"
+
+# Two: a WebKit page (a DRM service's host) playing the same.
+cra://open?url=${WEBKIT}/pause-media.html%3Ftab%3Dtwo
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"start('')"}
+expect-log "value":"started song:playing loop:playing frame:- handler:false"
+
+# Three: Web Audio alone, which nothing outside the page can pause.
+cra://open?url=${ORIGIN}/pause-media.html%3Ftab%3Dthree
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"webAudio()"}
+expect-log "value":"webaudio:running"
+
+# Four: a Little Window playing the track, its muted video and a frame from another site
+# (localhost is another site than 127.0.0.1).
+cra://open?url=${ORIGIN}/pause-media.html%3Ftab%3Dfour&little=1
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"start('${WEBKIT}/pause-media.html?child=1')"}&target=little
+expect-log "value":"started song:playing loop:playing frame:playing handler:false"
+wait 2
+
+# The command bar offers it.
+cra://debug?suggest=pause%20all
+expect-log Cra suggest pause all → .*Pause All Media
+
+cra://action/pauseAllMedia
+wait 3
+expect-log pause all media: [0-9]+ pages, paused 3, kept playing \["Pause three"\]
+
+# Nothing comes back by itself.
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"report('four')"}&target=little
+expect-log "value":"four song:paused loop:paused frame:paused handler:true"
+cra://debug?selectTab=tab%3Done
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"report('one')"}
+expect-log "value":"one song:paused loop:[a-z]+ frame:- handler:true"
+cra://debug?selectTab=tab%3Dtwo
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"report('two')"}
+expect-log "value":"two song:paused loop:paused frame:- handler:false"
+
+# AppleScript: everything but tab one, whose track plays again first; the Little Window too.
+cra://debug?selectTab=tab%3Done
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"resume()"}
+expect-log "value":"resumed song:playing
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"resume()"}&target=little
+wait 2
+cra://debug?applescript=tell%20current%20application%0Aset%20t%20to%20first%20%C2%ABclass%20tAbB%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201%20whose%20%C2%ABproperty%20URL%20%C2%BB%20contains%20%22tab%3Done%22%0Aset%20r%20to%20%C2%ABevent%20CrSuPaMe%C2%BB%20given%20%C2%ABclass%20PaEx%C2%BB%3At%0Aset%20AppleScript%27s%20text%20item%20delimiters%20to%20%22%2C%22%0Areturn%20%22except%20one%3A%20paused%3D%22%20%26%20%28%C2%ABclass%20PaPd%C2%BB%20of%20r%29%20%26%20%22%20kept%3D%22%20%26%20%28%C2%ABclass%20PaKp%C2%BB%20of%20r%20as%20text%29%0Aend%20tell
+wait 3
+expect-log Cra applescript → except one: paused=1 kept=Pause three
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"report('excepted')"}
+expect-log "value":"excepted song:playing
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"report('little')"}&target=little
+expect-log "value":"little song:paused
+
+cra://debug?applescript=tell%20current%20application%0Areturn%20%22space%20profile%3D%22%20%26%20%C2%ABproperty%20prFl%C2%BB%20of%20%C2%ABclass%20acSp%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201%0Aend%20tell
+expect-log Cra applescript → space profile=Default
+cra://debug?applescript=tell%20current%20application%0A%C2%ABevent%20CrSuPaMe%C2%BB%20given%20%C2%ABclass%20prFl%C2%BB%3A%22Nope%22%0Aend%20tell
+expect-log Cra applescript → error -1728 Cra has no profile named "Nope".

@@ -348,6 +348,7 @@ enum ShortcutDescriptions {
         "duplicateTab": "Open a copy of the tab.",
         "resetTab": "Return a pinned tab to its original URL.",
         "muteTab": "Mute or unmute the tab.",
+        "pauseAllMedia": "Pause the audio and video playing in every window, space and profile. Sleeping tabs stay asleep, and nothing starts playing again by itself.",
         "goBack": "Go back a page.",
         "goForward": "Go forward a page.",
         "viewArchive": "Open the archive of closed tabs.",

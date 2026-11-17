@@ -48,6 +48,7 @@ source_set("core") {
     "//chrome/browser/picture_in_picture:picture_in_picture",
     "//chrome/browser/translate:translate",
     "//base/version_info",
+    "//chrome/common",
     "//chrome/common:constants",
     "//components/tabs:public",
     "//net",

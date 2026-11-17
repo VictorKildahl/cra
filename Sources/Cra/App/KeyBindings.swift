@@ -276,6 +276,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "duplicateTab", name: "Duplicate Tab", section: .tabs, shortcuts: [], triggers: ["duplicate"]),
             KeyAction(id: "resetTab", name: "Reset Pinned Tab", section: .tabs, shortcuts: [], triggers: ["reset", "home"]),
             KeyAction(id: "muteTab", name: "Mute / Unmute Tab", section: .tabs, shortcuts: [], triggers: ["mute"]),
+            // Not in Arc (#438): pauses what plays in every loaded page; also AppleScript's `pause media`.
+            KeyAction(id: "pauseAllMedia", name: "Pause All Media", section: .none, shortcuts: [],
+                      triggers: ["pause", "pause all", "stop music", "stop video", "media", "silence"], symbol: "pause.fill"),
             KeyAction(id: "resetSpaceTabs", name: "Reset all tabs in this Space", section: .tabs, shortcuts: [], triggers: ["reset all", "reset pinned"]),
             // Arc lists these in Settings ▸ Shortcuts and the command bar only.
             KeyAction(id: "collapseAllFolders", name: "Collapse All Folders", section: .none, shortcuts: [], triggers: ["collapse folders", "close folders"]),

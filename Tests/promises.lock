@@ -858,6 +858,12 @@
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  e887bbd620e2
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::theStripIsTheWindowsTopEdge  ae2f0c45ef73
 #435   Tests/Scenarios/little-window-toolbar-auto-hide.scenario  b685a0d571c8
+#438   Packages/CraCore/Tests/CraCoreTests/MediaPauseTests.swift::aProfileScope  022551a95704
+#438   Packages/CraCore/Tests/CraCoreTests/MediaPauseTests.swift::aWindowSpaceOrTabScopeAndExclusions  ec1a2e1b87d2
+#438   Packages/CraCore/Tests/CraCoreTests/MediaPauseTests.swift::everyLoadedPageEverywhereButNoSleepingTab  8b8e34ae4507
+#438   Packages/CraCore/Tests/CraCoreTests/MediaPauseTests.swift::outcomes  0d82ebb319b2
+#438   Packages/CraCore/Tests/CraCoreTests/MediaPauseTests.swift::theToastSaysWhatHappened  a184a244e333
+#438   Tests/Scenarios/pause-all-media.scenario  639889ae24f0
 #445   Packages/CraCore/Tests/CraCoreTests/TrafficLightLayoutTests.swift::sequoiaKeepsItsSpacing  1a3ab0387cff
 #445   Packages/CraCore/Tests/CraCoreTests/TrafficLightLayoutTests.swift::tahoeMatchesArc  9f568ad77ed8
 #446   Tests/Scenarios/sidebar-empty-double-click.scenario  b3449dbc21f4

@@ -2521,6 +2521,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let settings = settingsWindow, settings.attachedSheet == nil { settings.performClose(nil) }
             return
         }
+        // Every page in every window, whichever window is key (#438).
+        if id == "pauseAllMedia" { pauseAllMediaFromCommand(); return }
         // A key Little Window takes the page/window actions first (⌘W, ⌘L, ⌘R…).
         if let little = keyLittleWindow, little.handle(action: id) { return }
         if let entry = LiveFolderPluginStore.shared.entry(forCommand: id) {
