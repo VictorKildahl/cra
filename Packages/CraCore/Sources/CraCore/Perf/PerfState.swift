@@ -25,6 +25,10 @@ public struct PerfState: Sendable {
     public private(set) var idle = PerfReport.Idle()
     public private(set) var startup: [String: Double] = [:]
     public var processes: [PerfProcessGroup] = []
+    /// Each process at the last sample, and the sites with a frame in each renderer (by pid) when
+    /// the engine says: the history's largest and busiest process.
+    public var processUsage: [PerfProcessUsage] = []
+    public var processSites: [Int32: [String]] = [:]
     public var system: PerfSystemSample?
     public var tabs: PerfTabCounts?
     /// The host of the page Cra put on screen last (nil for none or incognito), for stalls.
@@ -67,12 +71,14 @@ public struct PerfState: Sendable {
 
     /// A counted fact; renderer trouble and failed loads are events as well.
     public mutating func count(_ counter: PerfCounter, key: String, at: Double, site: String? = nil) {
+        if counter == .rendererTerminated, !PerfCounter.pageCrashes.contains(key) { return }
         counters[counter, default: [:]][key, default: 0] += 1
         switch counter {
         case .rendererTerminated: events.append(PerfEvent(at: at, kind: "renderer", detail: key, site: site))
         case .rendererUnresponsive: events.append(PerfEvent(at: at, kind: "renderer", detail: "unresponsive", site: site))
         case .rendererResponsive: events.append(PerfEvent(at: at, kind: "renderer", detail: "responsive again", site: site))
         case .loadError: events.append(PerfEvent(at: at, kind: "load", detail: "error \(key)", site: site))
+        case .runawaySlept: events.append(PerfEvent(at: at, kind: "runaway", detail: key, site: site))
         case .tabSlept, .sleepRefusal, .sleepRetry, .sleepSkip, .fileSaved: break
         }
     }
@@ -107,7 +113,11 @@ public struct PerfState: Sendable {
                                   footprintBytes: processes.reduce(0) { $0 + $1.footprintBytes },
                                   stalls: freezeCount - historyBase.stalls, longStalls: longFreezeCount - historyBase.long,
                                   longTasks: longTasks - historyBase.longTasks, rendererCrashes: crashes - historyBase.crashes,
-                                  liveTabs: tabs?.live ?? 0)
+                                  liveTabs: tabs?.live ?? 0,
+                                  largest: processUsage.max { $0.footprintBytes < $1.footprintBytes }
+                                      .map { PerfHistoryProcess($0, sites: processSites[$0.pid] ?? []) },
+                                  busiest: processUsage.max { $0.cpuPct < $1.cpuPct }
+                                      .map { PerfHistoryProcess($0, sites: processSites[$0.pid] ?? []) })
         historyBase = (freezeCount, longFreezeCount, longTasks, crashes)
         return s
     }

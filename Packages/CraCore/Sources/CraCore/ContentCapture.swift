@@ -132,36 +132,122 @@ public enum ContentCapture {
         return nil
     }
 
-    /// Arc's click-to-capture picker (Arc 1.171, from the binary): of the elements under the
-    /// pointer, the best scored one. Images score up; small (under 100 px a side), full-width,
-    /// full-height, nearly-full-screen and inline elements score down; bigger ones score a little
-    /// higher. Nothing scoring 0 or more means there is nothing to click. Arc measures in the visual
-    /// viewport's units; Cra hands it device pixels and gets device pixels back, so page zoom and
-    /// pinch zoom both come out right. Runs in an isolated world: the page's own scripts can't see it.
+    // MARK: The element under the pointer
+
+    /// One element under the pointer, as the picker script lists them.
+    public struct PickerElement: Equatable, Sendable {
+        public var tag: String
+        public var isInline: Bool
+        /// Inside an open shadow root. Arc's score never looks there; ⌥ does (Reddit's posts).
+        public var inShadowRoot: Bool
+        /// In CSS pixels, which Arc's score measures.
+        public var size: CGSize
+        /// In device pixels, which `elementRect` takes.
+        public var rect: CGRect
+
+        public init(tag: String, isInline: Bool, inShadowRoot: Bool, size: CGSize, rect: CGRect) {
+            self.tag = tag
+            self.isInline = isInline
+            self.inShadowRoot = inShadowRoot
+            self.size = size
+            self.rect = rect
+        }
+    }
+
+    /// Everything under the pointer, topmost first, and the window's size in CSS pixels.
+    public struct PickerStack: Equatable, Sendable {
+        public var viewport: CGSize
+        public var elements: [PickerElement]
+
+        public init(viewport: CGSize, elements: [PickerElement]) {
+            self.viewport = viewport
+            self.elements = elements
+        }
+    }
+
+    /// The picker script's answer, or nil when it isn't one.
+    public static func pickerStack(from result: [String: Any]) -> PickerStack? {
+        guard let view = result["view"] as? [String: Any], let vw = number(view["w"]), let vh = number(view["h"]),
+              vw > 0, vh > 0, let rows = result["stack"] as? [[String: Any]] else { return nil }
+        let elements = rows.compactMap { row -> PickerElement? in
+            guard let w = number(row["w"]), let h = number(row["h"]), let x = number(row["x"]), let y = number(row["y"]),
+                  let width = number(row["width"]), let height = number(row["height"]) else { return nil }
+            return PickerElement(tag: row["tag"] as? String ?? "", isInline: row["inline"] as? Bool ?? false,
+                                 inShadowRoot: row["shadow"] as? Bool ?? false, size: CGSize(width: w, height: h),
+                                 rect: CGRect(x: x, y: y, width: width, height: height))
+        }
+        return PickerStack(viewport: CGSize(width: vw, height: vh), elements: elements)
+    }
+
+    /// Arc's score for an element (Arc 1.171, from the binary). Images score up; small (under 100 px
+    /// a side), full-width, full-height, nearly-full-screen and inline elements score down; bigger
+    /// ones score a little higher.
+    public static func arcScore(_ e: PickerElement, viewport: CGSize) -> Double {
+        let w = Double(e.size.width), h = Double(e.size.height)
+        var s = 0.0
+        if min(w, h) < 100 { s -= 5 }
+        if w >= Double(viewport.width) { s -= 5 }
+        if h >= Double(viewport.height) { s -= 5 }
+        if w * h > Double(viewport.width * viewport.height) * 0.7 { s -= 5 }
+        if ["IMG", "PICTURE", "OBJECT"].contains(e.tag) { s += 5 }
+        s += (w + h) / 2 / 500
+        if e.isInline { s -= 10 }
+        return s
+    }
+
+    /// With ⌥, the smallest element worth a click, in CSS pixels each way (a capture's own minimum).
+    public static let deeperMinimum: CGFloat = minimumSize
+
+    /// What a click captures. Arc's choice: the best scored element, the topmost of equals (its sort
+    /// is stable), none when nothing scores 0 or more; the page then only takes drags.
+    /// `deeper` (⌥ held, #451) is Cra's: the element right under the pointer, a title line or a
+    /// button, the way a page inspector picks.
+    public static func choose(in stack: PickerStack, deeper: Bool) -> PickerElement? {
+        if deeper {
+            // The topmost one big enough to capture that isn't the whole page.
+            return stack.elements.first { e in
+                e.size.width >= deeperMinimum && e.size.height >= deeperMinimum
+                    && !(e.size.width >= stack.viewport.width && e.size.height >= stack.viewport.height)
+            }
+        }
+        var best: (element: PickerElement, score: Double)?
+        for e in stack.elements where !e.inShadowRoot {
+            let s = arcScore(e, viewport: stack.viewport)
+            if s >= 0, s > best?.score ?? -.infinity { best = (e, s) }
+        }
+        return best?.element
+    }
+
+    /// The chosen element in points inside the page, or nil when it is off the page.
+    public static func elementRect(_ element: PickerElement?, scale: CGFloat, pageBounds: CGRect) -> CGRect? {
+        guard let r = element?.rect else { return nil }
+        return elementRect(fromPicker: ["x": r.minX, "y": r.minY, "width": r.width, "height": r.height], scale: scale, pageBounds: pageBounds)
+    }
+
+    /// The picker: every element under the point, topmost first, with what `choose` weighs. Arc's
+    /// script listed `document.elementsFromPoint` and scored it in the page; Cra lists the same and
+    /// scores in `choose`, so ⌥ can choose again without asking the page. Inside open shadow roots
+    /// the deepest come first, marked. Takes and returns device pixels, so page zoom and pinch zoom
+    /// both come out right. Runs in an isolated world: the page's own scripts can't see it.
     public static func pickerScript(x: CGFloat, y: CGFloat) -> String {
         """
         (() => {
           const vv = visualViewport, dpr = devicePixelRatio, k = vv.scale;
           const px = \(Double(x)) / dpr / k + vv.offsetLeft, py = \(Double(y)) / dpr / k + vv.offsetTop;
-          const screenArea = innerWidth * innerHeight;
-          const score = el => {
-            const size = el.getBoundingClientRect();
-            const avgDim = (size.width + size.height) / 2, minDim = Math.min(size.width, size.height);
-            let s = 0;
-            if (minDim < 100) s -= 5;
-            if (size.width >= innerWidth) s -= 5;
-            if (size.height >= innerHeight) s -= 5;
-            if (size.width * size.height > screenArea * 0.7) s -= 5;
-            if (el.tagName === 'IMG' || el.tagName === 'PICTURE' || el.tagName === 'OBJECT') s += 5;
-            s += avgDim / 500;
-            if (getComputedStyle(el).display === 'inline') s -= 10;
-            return s;
-          };
-          const scored = document.elementsFromPoint(px, py).map(el => ({el, s: score(el)})).filter(p => p.s >= 0);
-          scored.sort((a, b) => b.s - a.s);
-          if (!scored.length) return null;
-          const r = scored[0].el.getBoundingClientRect();
-          return {x: (r.left - vv.offsetLeft) * k * dpr, y: (r.top - vv.offsetTop) * k * dpr, width: r.width * k * dpr, height: r.height * k * dpr};
+          const levels = [];
+          let root = document;
+          for (let i = 0; root && i < 16; i++) {
+            const shadow = root !== document, here = root;
+            const els = root.elementsFromPoint(px, py).filter(e => !shadow || e.getRootNode() === here);
+            levels.unshift(els.map(el => [el, shadow]));
+            root = els[0] && els[0].shadowRoot;
+          }
+          const stack = levels.flat().slice(0, 96).map(([el, shadow]) => {
+            const r = el.getBoundingClientRect();
+            return {tag: el.tagName, inline: getComputedStyle(el).display === 'inline', shadow, w: r.width, h: r.height,
+                    x: (r.left - vv.offsetLeft) * k * dpr, y: (r.top - vv.offsetTop) * k * dpr, width: r.width * k * dpr, height: r.height * k * dpr};
+          });
+          return {view: {w: innerWidth, h: innerHeight}, stack};
         })()
         """
     }

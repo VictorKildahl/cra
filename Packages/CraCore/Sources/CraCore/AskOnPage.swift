@@ -84,7 +84,7 @@ public enum AskOnPage {
         }
         let tail = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         if tail.count > 12 { sentences.append(tail) }
-        if asked.contains("summar") || asked.contains("key points") {
+        if Form(question: question) == .summary {
             let points = sentences.prefix(fixtureSummaryPoints).map { "• " + $0 }
             return .init(excerpts: [], answer: "Here are the key points of the page:\n" + points.joined(separator: "\n"))
         }
@@ -106,6 +106,44 @@ public enum AskOnPage {
             self.question = question
             self.answer = answer
         }
+    }
+
+    /// What an answer is made of. Arc's prompt answers "summary" with a brief summary and no quote, and a
+    /// question with a quote and a short answer. The on-device model doesn't tell the two apart: asked to
+    /// list a release's features, it copied one paragraph as the quote and again as the answer (#417).
+    /// So a summary or a list gets no quotes unless the question asks for them.
+    public enum Form: Equatable, Sendable {
+        /// Page sentences as quotes, then a short answer: Arc's answer to a question.
+        case quoted
+        /// A short list of points in the model's own words, without quotes.
+        case summary
+
+        public init(question: String) {
+            let asked = question.lowercased()
+            let words = asked.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+            func has(_ phrase: String) -> Bool {
+                let phrase = phrase.split(separator: " ").map(String.init)
+                return words.indices.contains { start in
+                    start + phrase.count <= words.count && Array(words[start..<start + phrase.count]) == phrase
+                }
+            }
+            if Self.quoteWords.contains(where: has) || asked.contains("where does it say") {
+                self = .quoted
+            } else if Self.summaryWords.contains(where: has) || asked.contains("tl;dr") || words.first == "list" {
+                self = .summary
+            } else {
+                self = .quoted
+            }
+        }
+
+        /// A summary or list that names one of these still quotes the page: the reader asked for it.
+        static let quoteWords = ["quote", "quotes", "quoted", "quoting", "cite", "citing", "citation", "citations",
+                                 "excerpt", "excerpts", "references", "sources", "evidence"]
+        /// Asking for a summary or a list. "List" alone ("is it on the list?") only counts at the start.
+        static let summaryWords = ["summary", "summaries", "summarize", "summarise", "summarizing", "summarising", "sum up",
+                                   "tldr", "bullet", "bullets", "bulleted", "key points", "main points", "takeaways",
+                                   "highlights", "overview", "outline", "list out", "list all", "list the", "list every",
+                                   "a list"]
     }
 
     /// Only completed pairs enter history; eviction never leaves an answer without its question.
@@ -142,6 +180,14 @@ public enum AskOnPage {
     public struct Quote: Equatable, Sendable {
         public let text: String
         public let state: QuoteState
+        /// What Find looks for: the page's own characters for a verified quote (its en dash where the
+        /// answer typed a hyphen), the answer's text otherwise.
+        public let findText: String
+        public init(text: String, state: QuoteState, findText: String? = nil) {
+            self.text = text
+            self.state = state
+            self.findText = findText ?? text
+        }
     }
     public struct Answer: Equatable, Sendable {
         public let text: String
@@ -179,11 +225,30 @@ public enum AskOnPage {
               excerpts.count <= 4, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               excerpts.reduce(text.utf8.count + (draft.keyAnswer?.utf8.count ?? 0), { $0 + $1.utf8.count }) <= 65_536 else { return nil }
         let source = normalized(source)
+        let foldedSource = String(source.map(folded))
         let quotes = excerpts.map { text -> Quote in
-            let candidate = normalized(text)
-            return Quote(text: text, state: !candidate.isEmpty && source.contains(candidate) ? .verified : .notFound)
+            let candidate = String(normalized(text).map(folded))
+            guard !candidate.isEmpty, let range = foldedSource.range(of: candidate, options: .literal) else {
+                return Quote(text: text, state: .notFound)
+            }
+            // Folding swaps one character for one, so the span sits at the same characters in the source.
+            let start = source.index(source.startIndex, offsetBy: foldedSource.distance(from: foldedSource.startIndex, to: range.lowerBound))
+            let end = source.index(start, offsetBy: foldedSource.distance(from: range.lowerBound, to: range.upperBound))
+            return Quote(text: text, state: .verified, findText: String(source[start..<end]))
         }
         return Answer(text: text, keyAnswer: draft.keyAnswer, quotes: quotes, isComplete: true)
+    }
+
+    /// A summary's points as the card shows them, each on a line of its own after "• ". The model
+    /// writes them as a list of strings: asked for one point per line in a single answer, it wrote them
+    /// as one paragraph every time and ran on past its room on long pages (#417). A point it already
+    /// made is left out: with three fixes on the page it filled eight places by going round again.
+    public static func listed(points: [String]) -> String {
+        var seen = Set<String>()
+        return points.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { $0.hasPrefix("•") ? String($0.dropFirst()).trimmingCharacters(in: .whitespaces) : $0 }
+            .filter { !$0.isEmpty && seen.insert(normalized($0).lowercased()).inserted }
+            .map { "• " + $0 }.joined(separator: "\n")
     }
 
     /// A streaming answer's lines, each drawn on its own so only the last one is laid out again. An
@@ -195,6 +260,17 @@ public enum AskOnPage {
     /// Only canonical Unicode and whitespace fold. Case and punctuation remain evidence.
     public static func normalized(_ text: String) -> String {
         text.precomposedStringWithCanonicalMapping.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// Typographic forms of the same mark: the model types a hyphen and straight quotes where pages print
+    /// dashes, minus signs, curly quotes and primes. One character for one; other punctuation stays evidence.
+    static func folded(_ c: Character) -> Character {
+        switch c {
+        case "\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2015}", "\u{2212}", "\u{FE58}", "\u{FE63}", "\u{FF0D}": return "-"
+        case "\u{2018}", "\u{2019}", "\u{201A}", "\u{201B}", "\u{2032}", "\u{FF07}": return "'"
+        case "\u{201C}", "\u{201D}", "\u{201E}", "\u{201F}", "\u{2033}", "\u{FF02}": return "\""
+        default: return c
+        }
     }
 
     /// A byte limit that never cuts a composed character, shared by context and response bounds.

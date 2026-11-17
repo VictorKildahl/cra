@@ -137,8 +137,17 @@ to Markdown or `docs/` alone runs nothing.
   a failed run hiding Tidy like Arc's, undo. `scripts/test-tidy-tabs-model.sh` checks the
   on-device adapter's context fitting; `--real` also asks the Mac's own model (needs Apple
   Intelligence) and prints its groups.
+- `scripts/test-tidy-titles.sh`: Tidy Tab Titles' service on the real `SidebarStore` with a
+  scripted model and a manual clock: the pin's own window measures the name, a manual rename or a
+  new home wins over a late answer, and turning the setting or the model off cancels.
+  `scripts/test-tidy-title-layout.sh` checks the row's title width and font and the rename sweep's
+  cleanup. `scripts/test-tidy-titles-model.sh` checks Arc's answer schema; `--real` also asks the
+  Mac's own model (needs Apple Intelligence) for 18 sample titles and prints the names a 230 pt row
+  would pick.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-webkit-stores.sh`: `WebKitStores` in a process where nothing has started WebKit
+  yet, as at launch: a deleted profile's WebKit data goes without crashing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
   pixels: emblems follow the front panel's perspective, keep their colors and proportions, and
   update at 1x/Retina. No CEF or visible window; coverage uses the same harness as `scripts/test.sh`.
@@ -172,6 +181,9 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-emoji-label.sh`: a space's emoji label in the dock and the space header, drawn
   clipped to its frame and with the cell's text cut at the baseline, as macOS 27 draws it: `EmojiLabel`
   shows the emoji's whole picture, in the same place (#399).
+- `scripts/test-pip-corners.sh`: the Picture in Picture hover controls in a transparent window like the
+  overlay, read back through the window server: shown, the dark layer stays inside the window's 6 pt
+  corners at every size class (#463).
 - `scripts/test-theme-noise.sh`: the theme's grain over the main window (`ThemeNoiseView`) is a pattern
   Core Animation tiles, with no window-sized backing store, and shows the grain the drawn view did at 1x and 2x.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds

@@ -33,6 +33,11 @@ built release app with a test profile. Note anything that fails in the release's
 - **#6:** a new window's empty card has rounded corners.
 - **#24:** edge to edge, there is no margin and the card is square, with the sidebar shown and
   hidden.
+- **#464:** with Settings ▸ Tabs ▸ Sidebar on the right, the sidebar and its traffic lights sit on the
+  right, ⌘S slides it out to the right and back, and dragging its left edge resizes it (snap and
+  drag-to-hide too). Hidden, the right edge brings it out on Arc's spring with its shadow and the
+  window's rounded corners clipping it; folder, pinned-tab and favorite previews open to its left.
+  (The scenario checks where things are; this is how the motion looks.)
 - **#10:** neighbouring tab highlights keep a 5 pt gap.
 - **#11:** the Library glyph is centred in its hover square.
 - **#39:** the header chevron is about 12.5 pt and points right when the pinned tabs are
@@ -74,6 +79,10 @@ built release app with a test profile. Note anything that fails in the release's
   salvador succeed?"), then "Summarize the key points of this article in bullet points": the second answer
   is a summary, not the first answer again, and no answer starts with "BEGIN DIALOGUE", "Human:" or a made-up
   question. Then a factual follow-up gets its own quote. The model is on-device and varies, so ask a few times.
+  On a release-notes page (crabrowser.app's 0.1.43 notes), ask "summarize the top features", then "list out
+  all the features released today": each answer is a list of at most eight short points, one per line, with
+  no quotes and no Find on Page, naming more than the first feature and no point twice. "Summarize it with
+  quotes" still quotes the page.
 
 - **Ask on Page, long answers and unanswerable questions:** ask a long article something it doesn't say
   ("why did el salvador succeed?"): the answer never quotes a solar-power page or J.W. Peters. Known on
@@ -117,6 +126,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#196:** hover a Today tab and move onto its ✕ several times. The ✕ never vanishes before
   the click.
 - **#7:** click a tab while moving the pointer a few points on a trackpad. It opens.
+- **#429:** two windows on pages with a text field. Press ⌘L in the first, then click the second's
+  field without closing the bar, and type and paste. The text lands in the second window, never the
+  first. Do the same from a Little Window's bar.
 - **Row press:** next to Arc, hold the button on a pinned tab, a Today tab, a split, New Tab and a
   Favorites tile. Each pushes in slightly about its centre (a tile a little more) and springs back
   on release; a drag doesn't leave it pushed in, a double-click on a tab dips once, folders don't move.
@@ -171,6 +183,11 @@ built release app with a test profile. Note anything that fails in the release's
   a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
   with ⇧ or ⌃ down as well, it is another click. (`option-command-click-little-window` posts the click through
   the app's event queue; a click from the hardware, with the keys held on the keyboard, is this line.)
+- **#435:** with Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" on, open a Little Window
+  over another app and rest the pointer at its top edge: the bar and the traffic lights slide in over the page,
+  which doesn't move; move down past the bar and they go. Open "Open in"'s list and the command bar from the bar:
+  it stays out while they are open. (`little-window-toolbar-auto-hide` checks the layout, the strip and the keep
+  zone through `cra://debug`; the real pointer's events over the page's view are this line.)
 - **#381:** click a link to another site in a favorite, next to Arc doing the same: the peeked page's
   favicon springs onto the tile's top right corner on a white square (black in a dark space), 4 pt
   past the corner, with a soft shadow, and springs off when the Peek closes. Check a split favorite

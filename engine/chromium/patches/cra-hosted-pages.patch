@@ -2,7 +2,7 @@ diff --git a/ui/views/controls/webview/cra_hosted_page.h b/ui/views/controls/web
 new file mode 100644
 --- /dev/null
 +++ b/ui/views/controls/webview/cra_hosted_page.h
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,22 @@
 +// Copyright 2026 Cra. Use of this source code is governed by the MIT license (Cra's LICENSE).
 +#ifndef UI_VIEWS_CONTROLS_WEBVIEW_CRA_HOSTED_PAGE_H_
 +#define UI_VIEWS_CONTROLS_WEBVIEW_CRA_HOSTED_PAGE_H_
@@ -16,6 +16,11 @@ new file mode 100644
 +  static const int key = 0;
 +  return &key;
 +}
++
++// The (never shown) window that holds a profile's pages carries this native window property: its WebViews
++// attach no page at all, so a page that arrives in it (a link opened in a new tab, a pop-up) is never drawn
++// there before Cra takes it (GitHub #469).
++inline constexpr char kCraPageHostWindow[] = "cra-page-host";
 +
 +}  // namespace views
 +
@@ -42,12 +47,13 @@ diff --git a/ui/views/controls/webview/webview.cc b/ui/views/controls/webview/we
  #include "ui/views/controls/webview/web_contents_set_background_color.h"
  #include "ui/views/focus/focus_manager.h"
  #include "ui/views/views_delegate.h"
-@@ -602,6 +603,10 @@
+@@ -602,6 +603,11 @@
    if (!GetWidget() || !web_contents()) {
      return;
    }
-+  // Cra: its pages stay in Cra's windows (cra_hosted_page.h).
-+  if (web_contents()->GetUserData(CraHostedPageKey())) {
++  // Cra: its pages stay in Cra's windows, and its page-host windows attach none (cra_hosted_page.h).
++  if (web_contents()->GetUserData(CraHostedPageKey()) ||
++      GetWidget()->GetNativeWindowProperty(kCraPageHostWindow)) {
 +    return;
 +  }
  

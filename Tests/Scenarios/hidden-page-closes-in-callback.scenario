@@ -1,0 +1,10 @@
+# A hidden page (Outlook's and Calendar's previews) that lands on a sign-in page answers from inside its
+# own address change, and its owner closes it there. On 0.1.44 the engine deleted the page inside
+# Chromium's navigation callback and Chromium stopped Cra (10 of the first 16 0.1.44 crash reports:
+# ~WebContentsImpl from PageObserver::DidFinishNavigation, HiddenPage.close from OutlookClient.finish).
+budget rss=700
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?hiddenPageSignIn=${ORIGIN}/page.html%3Fn%3Dsign-in
+expect-log hidden page answered \{"status":401\}
+expect-log hidden page closed

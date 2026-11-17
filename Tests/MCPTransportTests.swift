@@ -61,5 +61,50 @@ enum MCPTransportTests {
         precondition(!MCPConnection.peerIsOpen(input))
         precondition(!MCPConnection.write(Data([1]), to: -1))
         print("MCP transport: fragmentation, batching, Unicode, limits and EOF passed")
+        try fullServerSaysWhy()
+    }
+
+    // promise: #459
+    /// Every agent session keeps its connection for as long as it runs, mostly idle, so eight
+    /// sessions filled Cra and the ninth was closed with no word: its agent showed only
+    /// "Connection closed". Room for many idle sessions, and past the limit the agent and the
+    /// bridge's stderr say why.
+    static func fullServerSaysWhy() throws {
+        precondition(MCPProtocol.clientLimit >= 32)
+        let folder = URL(fileURLWithPath: "/tmp").appendingPathComponent("cra-full-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let path = folder.appendingPathComponent("mcp.sock").path
+        let endpoint = try MCPListener(path: path)
+        let listener = try endpoint.bind()
+        defer { close(listener); endpoint.stop() }
+        _ = fcntl(listener, F_SETFL, fcntl(listener, F_GETFL) & ~O_NONBLOCK)
+
+        let bridge = Process()
+        bridge.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        bridge.arguments = ["--mcp", path]
+        let input = Pipe(), output = Pipe(), errors = Pipe()
+        bridge.standardInput = input; bridge.standardOutput = output; bridge.standardError = errors
+        try bridge.run()
+        let client = accept(listener, nil, nil)
+        precondition(client >= 0)
+        // One below the limit is let in and left alone; at the limit the connection is answered and closed.
+        precondition(MCPConnection.admit(client, open: MCPProtocol.clientLimit - 1))
+        precondition(!MCPConnection.admit(client, open: MCPProtocol.clientLimit))
+        let initialize = #"{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}"#
+        input.fileHandleForWriting.write(Data((initialize + "\n").utf8))
+        let stdout = output.fileHandleForReading.readDataToEndOfFile()
+        let stderr = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        try? input.fileHandleForWriting.close()
+        bridge.waitUntilExit()
+
+        let reply = (try? JSONSerialization.jsonObject(with: stdout.split(separator: 10).first.map { Data($0) } ?? Data())) as? [String: Any]
+        let error = reply?["error"] as? [String: Any]
+        precondition(reply?["id"] as? Int == 7, "the agent's initialize gets an answer: \(String(decoding: stdout, as: UTF8.self))")
+        precondition(error?["code"] as? Int == MCPProtocol.fullCode)
+        precondition((error?["message"] as? String)?.contains("\(MCPProtocol.clientLimit) agent connections") == true)
+        precondition(stderr.contains("\(MCPProtocol.clientLimit) agent connections"), "the bridge says why on stderr: \(stderr)")
+        precondition(bridge.terminationStatus != 0, "a turned-away bridge fails")
+        print("MCP full server: room for \(MCPProtocol.clientLimit) agents; past that the agent and stderr say why")
     }
 }

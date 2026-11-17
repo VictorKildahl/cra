@@ -76,6 +76,20 @@ final class SoftwareUpdater: NSObject {
         didSet { updater?.automaticallyDownloadsUpdates = automaticallyUpdates }
     }
     private(set) var isAvailable = false
+    /// New or Stable (GitHub #476), each Mac's own, kept beside Sparkle's settings. A change takes effect at the next
+    /// check, which Sparkle moves up to a moment from now.
+    var channel = UpdateChannel(stored: UserDefaults.standard.string(forKey: Keys.channel)) {
+        didSet {
+            guard channel != oldValue else { return }
+            UserDefaults.standard.set(channel.rawValue, forKey: Keys.channel)
+            CraLog.note("update channel \(channel.rawValue), feed \(feedURL ?? "none")")
+            updater?.resetUpdateCycleAfterShortDelay()
+            lookUpStable()
+        }
+    }
+    /// The Stable release while it is older than this build. Sparkle never installs an older version, so a Mac that
+    /// switched to Stable stays where it is until Stable passes it, and Settings offers Stable's disk image instead.
+    private(set) var olderStable: AppcastRelease?
     /// Settings ▸ Advanced, next to Check for Updates: when Sparkle last looked.
     var lastCheckSummary: String {
         guard isAvailable else { return "Development builds don’t update." }
@@ -105,10 +119,32 @@ final class SoftwareUpdater: NSObject {
     private enum Keys {
         static let pendingBuild = "updateSummaryPendingBuild"
         static let autoRelaunch = "automaticUpdateWillRelaunchApp"
+        static let channel = "updateChannel"
     }
 
     /// Arc's feed override: a feed URL for testing (e.g. a local appcast).
     private var feedOverride: String? { ProcessInfo.processInfo.environment["CRA_UPDATE_FEED"] }
+    /// The feed this Mac's channel reads: the build's own (or the test's), or Stable's beside it.
+    private var feedURL: String? {
+        (feedOverride ?? Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String).map(channel.feedURL(from:))
+    }
+
+    /// Reads the Stable feed for Settings while this Mac is on Stable.
+    func lookUpStable() {
+        guard channel == .stable, let feed = feedURL, let url = URL(string: feed) else {
+            olderStable = nil
+            return
+        }
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        Task { [weak self] in
+            guard let (data, response) = try? await URLSession.shared.data(from: url),
+                  (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+            let stable = AppcastRelease.parse(data).first
+            guard let self, self.channel == .stable else { return }
+            self.olderStable = stable.flatMap { $0.isOlder(than: build) ? $0 : nil }
+            CraLog.note("stable release \(stable?.version ?? "none"), older than this build: \(self.olderStable == nil ? "no" : "yes")")
+        }
+    }
     /// Shortens every wait of the automatic restart to this many seconds, for testing.
     private var quickRestart: TimeInterval? { ProcessInfo.processInfo.environment["CRA_UPDATE_IDLE_SECONDS"].flatMap(TimeInterval.init) }
 
@@ -297,7 +333,7 @@ final class SoftwareUpdater: NSObject {
 // MARK: - SPUUpdaterDelegate
 
 extension SoftwareUpdater: SPUUpdaterDelegate {
-    func feedURLString(for updater: SPUUpdater) -> String? { feedOverride }
+    func feedURLString(for updater: SPUUpdater) -> String? { feedURL }
 
     /// The update is downloaded and extracted. Keeping the block lets the banner and the
     /// automatic restart install it now; otherwise it installs when Cra quits.

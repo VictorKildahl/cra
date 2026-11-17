@@ -20,6 +20,7 @@
     {
       "focusedSpaceID" : "A0000000-0000-0000-0000-000000000001",
       "frame" : "{{100, 100}, {1400, 880}}",
+      "fullScreen" : true,
       "id" : "F0000000-0000-0000-0000-000000000001",
       "isIncognito" : false,
       "selectedTabPerSpace" : [
@@ -30,6 +31,7 @@
     },
     {
       "focusedSpaceID" : "A0000000-0000-0000-0000-000000000002",
+      "fullScreen" : false,
       "id" : "F0000000-0000-0000-0000-000000000002",
       "isIncognito" : false,
       "selectedTabPerSpace" : [

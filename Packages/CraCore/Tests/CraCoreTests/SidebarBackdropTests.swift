@@ -17,6 +17,56 @@ struct SidebarBackdropTests {
         #expect(resolve(solid: true, active: false) == SidebarBackdrop(source: .none, dim: 1, liftTop: 0.83, liftBottom: 0.83))
     }
 
+    /// What a solid sidebar shows under its colour over a plain backdrop (0–255): the capture through the
+    /// black dim, then the white lift.
+    func material(_ b: SidebarBackdrop, over backdrop: Double) -> Double {
+        backdrop * (1 - b.dim) * (1 - b.liftTop) + 255 * b.liftTop
+    }
+
+    /// A one-colour space on Light is drawn over Arc's light material, on Dark over its dark one, as Arc
+    /// draws it under View ▸ Appearance ▸ Light or Dark (offline Arc, 17 Nov 2026, navy, red and pastel
+    /// over white and black: light 166 + 0.315 · backdrop, dark 63 + 0.529 · backdrop, each within
+    /// 1/255; inactive flat 252 and 207). Cra drew every space over the dark one, so Light and Dark looked the same and a Light
+    /// space came out darker and less see-through than Arc's (#455).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/455"))
+    func solidThemesOnLightUseArcsLightMaterial() {
+        let light = SidebarBackdrop.resolve(solid: true, active: true, fullscreen: false, reduceTransparency: false,
+                                            tintAvailable: true, vibrant: vibrant, lightMaterial: true)
+        #expect(light.source == .blur)
+        #expect(abs(material(light, over: 0) - 166) < 3)
+        #expect(abs(material(light, over: 255) - (166 + 0.315 * 255)) < 3)
+        let dark = resolve(solid: true)
+        #expect(abs(material(dark, over: 0) - 63) < 4)
+        #expect(abs(material(dark, over: 255) - (63 + 0.529 * 255)) < 4)
+        // Inactive, both are flat: Arc's 252 on Light, 207–212 on Dark.
+        let inactive = SidebarBackdrop.resolve(solid: true, active: false, fullscreen: false, reduceTransparency: false,
+                                               tintAvailable: true, vibrant: vibrant, lightMaterial: true)
+        #expect(inactive.source == .none && abs(material(inactive, over: 128) - 252) < 3)
+        #expect(abs(material(resolve(solid: true, active: false), over: 128) - 210) < 4)
+        // Only solid themes take the light material; light vibrant themes keep their own calibration.
+        #expect(SidebarBackdrop.resolve(solid: false, active: true, fullscreen: false, reduceTransparency: false,
+                                        tintAvailable: true, vibrant: vibrant, lightMaterial: true) == resolve(solid: false))
+        // Full screen swaps the capture for the desktop tint on either material.
+        #expect(SidebarBackdrop.resolve(solid: true, active: true, fullscreen: true, reduceTransparency: false,
+                                        tintAvailable: true, vibrant: vibrant, lightMaterial: true).source == .desktopTint)
+    }
+
+    /// The material follows the space's Light or Dark, as Arc's follows its own appearance, and Auto
+    /// follows macOS, as Arc on Automatic does (#455).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/455"))
+    func materialFollowsTheSpacesAppearance() {
+        let light = SpaceThemeVariants.theme(key: ["#26456B"], intensity: 0.8, noise: 0, appearance: "light")
+        let dark = SpaceThemeVariants.theme(key: ["#26456B"], intensity: 0.8, noise: 0, appearance: "dark")
+        let auto = SpaceThemeVariants.theme(key: ["#26456B"], intensity: 0.8, noise: 0, appearance: "auto")
+        for systemDark in [false, true] {
+            #expect(light.usesLightMaterial(systemDark: systemDark))
+            #expect(!dark.usesLightMaterial(systemDark: systemDark))
+            #expect(auto.usesLightMaterial(systemDark: systemDark) == !systemDark)
+        }
+        // A navy space on Light keeps white text: the material changes, not the colour's own reading.
+        #expect(light.isDark && dark.isDark)
+    }
+
     /// In full screen the desktop tint takes the capture's place, which reads black there (#83, #132).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/83"), .bug("https://github.com/VictorKildahl/cra/issues/132"))
     func fullscreenSwapsTheBlurForTheDesktopTint() {

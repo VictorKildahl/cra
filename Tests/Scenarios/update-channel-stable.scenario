@@ -1,0 +1,17 @@
+# Update channels (GitHub #476): a Mac on Stable reads Stable's feed (appcast-stable.xml beside the build's own),
+# and while Stable is older than the Mac's build, Settings ▸ Advanced offers Stable's disk image, since Sparkle never
+# installs an older version. The feeds are scripts/appcast-feeds.py's from Tests/Fixtures/Appcast.
+# The channel comes as an argument, so the test never writes the real Cra's settings, and Sparkle doesn't check.
+budget rss=600 stalls50=10
+env CRA_UPDATE_FEED=${ORIGIN}/updates/appcast.xml
+arg -updateChannel
+arg stable
+arg -SUEnableAutomaticChecks
+arg NO
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/settings
+wait 1
+cra://debug?settingsPane=advanced
+wait 2
+expect-log stable release 0\.1\.43, older than this build: yes

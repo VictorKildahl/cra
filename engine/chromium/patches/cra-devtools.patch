@@ -10,14 +10,46 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
  
  #include <algorithm>
  #include <memory>
-@@ -1418,6 +1420,10 @@
+@@ -110,6 +112,7 @@
+ #include "ui/events/keycodes/dom/keycode_converter.h"
+ #include "ui/events/keycodes/keyboard_code_conversion.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
+ #include "url/origin.h"
+ 
+ #include "base/win/windows_h_disallowed.h"
+@@ -1402,6 +1405,8 @@
+   }
+ 
+   SessionID inspected_browser_session_id = SessionID::InvalidValue();
++  // Cra: the DevTools of a page of Cra's.
++  [[maybe_unused]] bool cra_page = false;
+ #if BUILDFLAG(IS_ANDROID)
+   // Docking is not supported yet.
+   can_dock = false;
+@@ -1421,6 +1426,11 @@
      if (!devtools_ui_controller || !devtools_ui_controller->CanDockDevtools()) {
        can_dock = false;
      }
 +    // Cra: its pages' DevTools open in a window of their own, which Cra docks in its card.
 +    if (cra::g_is_cra_page && cra::g_is_cra_page(inspected_web_contents)) {
 +      can_dock = false;
++      cra_page = true;
 +    }
    }
  #endif  // !BUILDFLAG(IS_ANDROID)
  
+@@ -1429,6 +1439,13 @@
+                           has_other_clients, browser_connection));
+   std::unique_ptr<WebContents> main_web_contents =
+       WebContents::Create(WebContents::CreateParams(profile));
++  // Cra: the frontend is a page Cra hosts (cra_hosted_page.h) from the start. Chrome's DevTools window, never
++  // shown, then never attaches it: attached, it drew into that window's compositor, and Cra's card, which takes
++  // its view, stayed white (GitHub #468).
++  if (cra_page) {
++    main_web_contents->SetUserData(views::CraHostedPageKey(),
++                                   std::make_unique<base::SupportsUserData::Data>());
++  }
+   main_web_contents->GetController().LoadURL(
+       DecorateFrontendURL(url), content::Referrer(),
+       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());

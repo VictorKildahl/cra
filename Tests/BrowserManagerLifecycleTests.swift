@@ -177,6 +177,7 @@ enum BrowserManagerLifecycleTests {
         await refusalBackoffCase()
         recentTabsCase()
         freezingVoteCase()
+        await keepActiveSitesCase()
         await sleepClockCase()
         await pressureSweepCase()
         await discardCase()
@@ -204,6 +205,7 @@ enum BrowserManagerLifecycleTests {
         await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
+        pictureInPictureMinimizeCase()
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
@@ -902,6 +904,48 @@ enum BrowserManagerLifecycleTests {
         manager.show(ids[0], focus: false)
         expect(!runtimes[0].freezeVoted && votes()[0] == 2 && runtimes[0].browser.lastParams.contains("false"),
                "showing a frozen tab drops its vote")
+        manager.closeAll()
+    }
+
+    // promise: #458
+    /// Settings ▸ Tabs ▸ "Always keep these sites active" (#458): a quiet page on a listed site
+    /// outlasts the clock and gets no freezing vote, while one on another site sleeps and is voted
+    /// to freeze. Under memory pressure it goes after the others. Taking the site off the list makes
+    /// it a candidate again on the next pass.
+    @MainActor
+    private static func keepActiveSitesCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        manager.protectedRecentTabs = 0
+        store.settings.keepActiveHosts = ["dashboard.example.test"]
+        let keptID = store.createTab(url: "https://dashboard.example.test/live").id
+        let otherID = store.createTab(url: "https://news.example.test/").id
+        let kept = manager.ensureRuntime(for: keptID)!, other = manager.ensureRuntime(for: otherID)!
+        kept.hiddenAt = clock.now
+        other.hiddenAt = clock.now.addingTimeInterval(10)
+        clock.advance(by: 9 * 3600)
+        func probed(_ rt: TabRuntime) -> Bool { rt.browser.replies.contains { $0.method == isolatedProbe } }
+        manager.sleepIdleTabs(.timer(.fifteenMinutes))
+        expect(!probed(kept) && probed(other), "past the idle time, the kept site's page isn't asked to sleep; the other site's is")
+        manager.freezeIdleTabs(hiddenLongerThan: 60)
+        expect(!kept.freezeVoted && other.freezeVoted, "the kept site's page gets no freezing vote; the other one does")
+        other.browser.reply(to: isolatedProbe, with: idleReply)
+        await drainMainQueue()
+        other.browser.reply(to: "Runtime.evaluate", with: idleReply)
+        await drainMainQueue()
+        await finishSleep(other.browser)
+        expect(asleep(manager, otherID) && !asleep(manager, keptID), "the other site's page sleeps; the kept one stays loaded")
+        manager.sleepIdleTabs(.memoryPressure(.critical))
+        expect(probed(kept), "under memory pressure, with no other page left to ask, the kept site's page is asked last")
+        kept.browser.reply(to: isolatedProbe, with: #"{"result":{"type":"string","value":"typed"}}"#)
+        await drainMainQueue()
+        kept.sleepProbeAfter = nil
+        store.settings.keepActiveHosts = []
+        manager.freezeIdleTabs(hiddenLongerThan: 60)
+        expect(kept.freezeVoted, "taken off the list, its page is voted to freeze on the next pass")
+        manager.sleepIdleTabs(.timer(.fifteenMinutes))
+        expect(probed(kept), "and the clock asks it to sleep again")
         manager.closeAll()
     }
 
@@ -1951,6 +1995,31 @@ enum BrowserManagerLifecycleTests {
         PictureInPictureChrome.shared.actions?.close()
         expect(ra.browser.pictureInPictureCloses == 1 && !ra.browser.isInPictureInPicture,
                "the window's close button pauses the video as it comes home (Arc)")
+        manager.closeAll()
+    }
+
+    // promise: #434
+    /// Arc's Minimize takes the video out of Picture in Picture without pausing it and without
+    /// going to its tab, and the sidebar player has the tab again (#434). Close pauses it.
+    @MainActor
+    private static func pictureInPictureMinimizeCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/video").id
+        let ra = manager.ensureRuntime(for: a)!
+        np.entries.append(.init(id: a, playing: true))
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        expect(np.shown.isEmpty, "a video in Picture in Picture has no card (Arc)")
+        let selected = store.selections.count
+        PictureInPictureChrome.shared.actions?.minimize()
+        expect(!ra.browser.isInPictureInPicture && ra.browser.pictureInPictureCloses == 0,
+               "Minimize leaves Picture in Picture without pausing the video")
+        expect(store.selections.count == selected, "Minimize doesn't go to the video's tab")
+        manager.browser(ra.browser, didChangePictureInPicture: false)
+        expect(np.shown.map(\.id) == [a], "the minimized video is in the sidebar player")
         manager.closeAll()
     }
 

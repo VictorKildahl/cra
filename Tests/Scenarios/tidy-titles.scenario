@@ -1,0 +1,64 @@
+# Exercise the real pin callback, native rename editor and saved custom titles. The fake
+# supplies deterministic two-field answers; model quality is a separate release check.
+home
+env CRA_TIDY_FAKE_MODEL=1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "tidyTabTitles": true}
+seed windows.json {"sidebarWidth": 300}
+budget rss=800 stalls50=30
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=alpha
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?pageJS=document.title='Synthetic Alpha - Test Host'
+wait 0.5
+cra://action/pinTab
+wait 1.3
+expect-log Tidy Tab Titles: renamed a pinned tab \(27 → 15 characters\)
+cra://open?url=${PAGE}?n=observer
+cra://debug?suggest=Synthetic%20Alpha
+expect-log Cra suggest Synthetic Alpha .*rows=.* Synthetic Alpha \S*n=alpha
+
+# Editing inside the minimum reveal interval wins over the pending generated answer.
+cra://debug?pageJS=document.title='Synthetic Manual - Test Host'
+wait 0.5
+# Row observation creates the editor, then focuses it asynchronously. Check the native
+# responder before typing; keep the three editing keys inside the one-second reveal hold.
+pace 0.2
+cra://action/pinTab
+cra://action/renameTab
+cra://debug?zoomLevel=1
+expect-log zoom level .*keys go to NSTextView
+pace 0.05
+cra://key?chars=a&cmd=1
+cra://key?chars=My%20Manual%20Name
+cra://key?chars=%0D
+pace 0.2
+wait 1.3
+cra://open?url=${PAGE}?n=third
+cra://debug?suggest=My%20Manual%20Name
+expect-log Cra suggest My Manual Name .*rows=.* My Manual Name \S*n=observer
+reject-log Tidy Tab Titles: renamed a pinned tab \(28 → 16 characters\)
+
+# The Library creates same-window Spaces-card lists. A second browser window changes
+# the active window before completion; neither may replace the captured sidebar role.
+cra://debug?pageJS=document.title='Synthetic Origin - Test Host'
+wait 0.5
+pace 0.05
+cra://action/pinTab
+cra://action/manageSpaces
+cra://action/newWindow
+cra://debug?windowSize=900x700
+pace 0.2
+wait 1.3
+expect-log Tidy Tab Titles: renamed a pinned tab \(28 → 16 characters\)
+cra://debug?browserWindows=after-pin
+expect-log browser windows after-pin: count=2
+cra://open?url=${PAGE}?n=last
+cra://debug?suggest=Synthetic%20Origin
+expect-log Cra suggest Synthetic Origin .*rows=.* Synthetic Origin \S*n=third
+
+# Restore the disposable session and check both normal windows survived. Saved title
+# values and visual effects are checked separately; suggest logs are not kept on relaunch.
+relaunch
+wait 1
+cra://debug?browserWindows=restored
+expect-log browser windows restored: count=2

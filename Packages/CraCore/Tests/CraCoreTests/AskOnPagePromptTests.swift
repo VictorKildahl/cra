@@ -35,6 +35,26 @@ struct AskOnPagePromptTests {
         for framing in ["BEGIN DIALOGUE", "Human:", "Assistant:", "Previous question", "Previous answer"] { #expect(!fitted.prompt.contains(framing)) }
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func aSummaryIsAskedForAListWithoutQuotes() async throws {
+        // Asked to list a release's features, the on-device model copied one paragraph as the quote and
+        // again as the answer, and did the same for the follow-up. Arc's own example answers "summary"
+        // with a brief summary and no quote.
+        let count: AskOnPagePrompt.TokenCount = { ($0.utf8.count + $1.utf8.count + 3) / 4 }
+        let summary = try #require(await AskOnPagePrompt.fit(page: page, question: "list out all the features released today",
+            language: "English", currentDate: "13 November 2026", countTokens: count))
+        #expect(summary.form == .summary)
+        #expect(summary.instructions.contains("at most eight short points in your own words"))
+        #expect(summary.instructions.contains("never copying whole page sentences"))
+        #expect(AskOnPagePrompt.summaryPoints == 8 && AskOnPagePrompt.summaryPointsGuide.contains("never a copied page sentence"))
+        for quoting in ["excerpt", "copy complete relevant source sentences", "keyAnswer"] { #expect(!summary.instructions.contains(quoting)) }
+        #expect(summary.instructions.contains("Respond in English.") && summary.instructions.contains("Answer only CURRENT QUESTION"))
+        #expect(summary.prompt.hasSuffix("CURRENT QUESTION:\n\"list out all the features released today\""))
+
+        let question = try #require(await AskOnPagePrompt.fit(page: page, question: "what is Instant Links?",
+            language: "English", currentDate: "13 November 2026", countTokens: count))
+        #expect(question.form == .quoted && question.instructions == AskOnPagePrompt.instructions(language: "English"))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/417")) func arcsExamplesAreLeftOut() {
         // On a question the page can't answer, the on-device model quoted Arc's solar example as the
         // page's: 9 of 20 answers with Arc's examples, 0 of 20 without.

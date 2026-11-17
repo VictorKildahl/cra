@@ -71,6 +71,45 @@ public enum SpaceColorWheel {
     /// Whether the pad's + is on with `count` colours on the pad.
     public static func canAdd(_ count: Int) -> Bool { count >= 1 && count < 3 }
 
+    /// Whether the pad's + is on for these colours: as `canAdd(_:)`, and off while the first is a
+    /// grey (Arc: `isGreyscale`), as Arc's is for its black and white swatches. A grey has no hue
+    /// to turn, so a second colour came out white beside black, a gradient no handle could fix (#455).
+    public static func canAdd(_ key: [String]) -> Bool {
+        canAdd(key.count) && !(key.first.map(isGreyscale) ?? false)
+    }
+
+    /// A grey, black or white: no hue (saturation below a byte's rounding).
+    public static func isGreyscale(_ hex: String) -> Bool { hsb(hex).saturation < 0.01 }
+
+    /// The pad's brightness for a first colour: 0.95, the pad's bright colours.
+    public static let padBrightness = 0.95
+
+    /// The darkest a dragged grey goes: black keeps a hue to show once it is dragged off the centre,
+    /// rather than staying black wherever it goes (Cra's choice; Arc's drag from black isn't measured).
+    static let darkestDrag = 0.2
+
+    /// The pad's colours with handle `handle` moved to `hue` (its own, offset included) and
+    /// `saturation`: the set turns together and every colour keeps the first one's brightness, as
+    /// Arc's pad does (a dark red dragged round Arc's pad stayed at HSB brightness ≈ 0.4 through navy and
+    /// teal, the reporter's recording on #455). Before, every drag went to brightness 0.95, so a
+    /// dark swatch jumped to a light colour at the first touch. An empty pad starts at `padBrightness`.
+    public static func placed(_ key: [String], handle: Int, hue: Double, saturation: Double) -> [String] {
+        let brightness = key.first.map { first in
+            let b = hsb(first).brightness
+            return isGreyscale(first) ? max(b, darkestDrag) : b
+        } ?? padBrightness
+        let first = hue - offset(handle)
+        return (0..<max(1, key.count)).map { hex(hue: first + offset($0), saturation: saturation, brightness: brightness) }
+    }
+
+    /// The pad's colours after +: the next one `offset` round from the first, at its saturation and
+    /// brightness (a dark colour gets a dark companion, #455). Unchanged when + is off.
+    public static func adding(to key: [String]) -> [String] {
+        guard canAdd(key), let first = key.first else { return key }
+        let w = hsb(first)
+        return key + [hex(hue: w.hue + offset(key.count), saturation: w.saturation, brightness: w.brightness)]
+    }
+
     public static func hsb(_ hex: String) -> (hue: Double, saturation: Double, brightness: Double) {
         let c = HexColor.components(hex) ?? (0.5, 0.5, 0.5)
         let mx = max(c.r, c.g, c.b), mn = min(c.r, c.g, c.b), d = mx - mn

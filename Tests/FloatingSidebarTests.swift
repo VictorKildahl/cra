@@ -102,6 +102,7 @@ enum FloatingSidebarTests {
         thePanelsStayInsideTheWindow(window: window, sidebar: sidebar, panel: panel)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
         staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
+        comesOutOnTheRight(window: window, sidebar: sidebar, shell: shell)
 
         // #136: the pointer is sampled only while Cra is the active app.
         sidebar.install()
@@ -126,6 +127,29 @@ enum FloatingSidebarTests {
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
         window.close()
         print("Floating sidebar: \(checks) checks passed")
+    }
+
+    /// GitHub #464: with the sidebar on the right, its panel stands on the window's right edge, the
+    /// sidebar rests Arc's 5 pt in from it, and its resize strip is the edge beside the page, its left.
+    // promise: #464
+    @MainActor
+    private static func comesOutOnTheRight(window: NSWindow, sidebar: FloatingSidebarController, shell: ShellView) {
+        shell.sidebarSide = .right
+        sidebar.show()
+        drainAnimations()
+        let panel = window.childWindows!.first { $0 is FloatingSidebarPanel }!
+        let w = window.frame
+        let body = panel.convertToScreen(shell.sidebarHost.convert(shell.sidebarHost.bounds, to: nil))
+        expect(abs(panel.frame.maxX - w.maxX) < 0.5 && panel.frame.minX > w.midX, "on the right the panel stands on the window's right edge")
+        expect(abs(w.maxX - body.maxX - FloatingSidebarGeometry.margin) < 0.5, "and the sidebar rests 5 pt in from it")
+        expect(sidebar.edgeReadout == "right 5", "the readout says so (\(sidebar.edgeReadout))")
+        let edge = shell.sidebarHost.superview?.subviews.compactMap { $0 as? ResizeHandleView }.first
+        expect(edge.map { abs($0.frame.minX - shell.sidebarHost.frame.minX) < 0.5 && $0.side == .right } == true,
+               "its resize strip is its left edge, and a drag leftward widens it")
+        sidebar.hide(animated: true)
+        drainAnimations()
+        expect(!sidebar.isShown && !shell.sidebarDetached, "it goes home from the right as from the left")
+        shell.sidebarSide = .left
     }
 
     /// GitHub #82: like Arc, only the key window's hidden sidebar comes out on hover, so a window
@@ -559,6 +583,7 @@ final class ResizeHandleView: NSView {
     var onBegin: (() -> Void)?
     var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
+    var side: SidebarSide = .left
 }
 
 final class ShellView: NSView {
@@ -572,6 +597,7 @@ final class ShellView: NSView {
     var fillsWindow: Bool { edgeToEdge }
     var sidebarDetached = false
     var floatingSidebar = false
+    var sidebarSide: SidebarSide = .left
     struct Frames { let sidebar: NSRect }
 
     override init(frame: NSRect) {
@@ -584,6 +610,7 @@ final class ShellView: NSView {
 
     func frames(sidebarVisible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat) -> Frames {
         let margin = FloatingSidebarGeometry.margin
-        return Frames(sidebar: NSRect(x: margin, y: margin, width: width, height: bounds.height - 2 * margin))
+        let left = NSRect(x: margin, y: margin, width: width, height: bounds.height - 2 * margin)
+        return Frames(sidebar: sidebarSide.place(left, in: bounds))
     }
 }

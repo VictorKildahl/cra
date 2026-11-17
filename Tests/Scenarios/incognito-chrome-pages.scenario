@@ -1,0 +1,34 @@
+# promise: #412
+# Chromium keeps chrome://extensions, settings, history and the password manager out of incognito
+# (IsURLAllowedInIncognito): Chrome opens them in a normal window. Cra built the incognito window's
+# page for chrome://extensions and quit (GitHub #412). From an incognito window they now open in the
+# normal window, which becomes the window in use, and the incognito window keeps only its own tabs.
+# Other chrome:// pages (chrome://version) still open in incognito, as in Chrome. A URL typed in the
+# bar for a new tab goes through the same SidebarStore.createTab (StoreTests chromePagesLeaveIncognito).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=normal
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# A chrome:// page Chrome allows in incognito stays there (a page's Open Link in Incognito Window).
+cra://debug?incognitoWindow=chrome://version
+wait 3
+cra://debug?browserWindows=version
+expect-log Cra browser windows version: kind=incognito .*tabs=\[chrome://version\] open=chrome://version .*active=1
+
+# Typed over that incognito tab (⌘L): a new tab in the normal window; the incognito tab keeps its page.
+cra://navigate?url=chrome://history
+wait 3
+cra://debug?browserWindows=history
+expect-log Cra browser windows history: kind=normal .*open=chrome://history .*active=1
+expect-log Cra browser windows history: kind=incognito .*tabs=\[chrome://version\] open=chrome://version .*active=0
+
+# The report: Extensions ▸ Manage Extensions… with an incognito window in front.
+cra://action/newIncognitoWindow
+wait 2
+cra://action/manageExtensions
+wait 3
+cra://debug?browserWindows=extensions
+expect-log Cra browser windows extensions: kind=normal .*tabs=\[[^]]*chrome://extensions[^]]*\] open=chrome://extensions .*active=1
+expect-log Cra browser windows extensions: kind=incognito .*tabs=\[\] open=- .*active=0

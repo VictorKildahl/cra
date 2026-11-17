@@ -14,6 +14,8 @@ struct SettingsActions {
     var resetTranslatedSitePrompts: () -> Void = {}
     /// Shortcuts ▸ Learn the Essential Shortcuts: the floating card of the basics (Help ▸ Essential Keyboard Shortcuts).
     var essentialShortcuts: () -> Void = {}
+    /// Advanced ▸ About: a click on the version copies it for a bug report (GitHub #461).
+    var copyVersion: () -> Void = {}
 }
 
 extension SettingsTab {
@@ -63,6 +65,15 @@ final class SettingsNavigation {
 @MainActor
 final class SettingsWindowController: NSWindowController {
     private let nav = SettingsNavigation()
+    private let toast = ShinyToast()
+
+    /// Cra's one toast, over the top right of the pane below the tabs, as a browser window shows it over the page.
+    func showToast(_ text: String, colors: ShinyToast.Colors) {
+        guard let window, let content = window.contentView else { return }
+        var pane = content.convert(content.bounds, to: nil)
+        pane.size.height -= SettingsMetrics.tabBarTop + SettingsMetrics.tabBarHeight + 1
+        toast.show(text, page: pane, in: window, colors: colors)
+    }
 
     func show(_ tab: SettingsTab) { nav.show(tab) }
     /// Shortcuts with `action` chosen.
@@ -85,6 +96,9 @@ final class SettingsWindowController: NSWindowController {
         window.titlebarSeparatorStyle = .none
         window.isReleasedWhenClosed = false
         window.backgroundColor = SettingsPalette.window
+        // Opened from a full-screen window, Settings comes over it on that window's Space, as Arc's and Safari's
+        // do, instead of macOS swiping back to a Desktop to show it; one shown before follows to the active Space (#431).
+        window.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
         let root = SettingsRoot(nav: nav, actions: actions) { [weak window] tab in window?.title = tab.title(fullName: NSFullUserName()) }
             .environment(store).environment(bindings).environment(sync)
         let host = NSHostingController(rootView: root)

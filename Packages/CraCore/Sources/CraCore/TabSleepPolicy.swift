@@ -5,7 +5,7 @@ import Foundation
 /// change the time, turn the clock off, or close pages while macOS reports memory pressure
 /// (GitHub #153). The probes in BrowserManager still decide whether a candidate may close.
 public struct TabSleepPolicy: Equatable, Sendable {
-    public enum Reason: String, Sendable { case timer, memoryPressure, splitCopy }
+    public enum Reason: String, Sendable { case timer, memoryPressure, splitCopy, runaway }
 
     /// A page this long out of sight, and silent as long, is a candidate.
     public var hiddenFor: TimeInterval
@@ -42,6 +42,8 @@ public struct TabSleepPolicy: Equatable, Sendable {
 
     /// A pinned tab that a split pane copied (Arc): its page sleeps at once, the copy shows it.
     public static let splitCopy = TabSleepPolicy(hiddenFor: 0, keepsRecentTabs: false, limit: 1, reason: .splitCopy)
+    /// A hidden page whose process ran away (PerfRunawaySleep).
+    public static let runaway = TabSleepPolicy(hiddenFor: 0, keepsRecentTabs: false, reason: .runaway)
 
     /// How often the app's pass runs (AppComposition.tabSleepInterval).
     public static let passInterval: TimeInterval = 60
@@ -104,7 +106,8 @@ public struct TabSleepPolicy: Equatable, Sendable {
         }
 
         private var closedLines: [String] {
-            let why = reason == .memoryPressure ? ", the Mac is short of memory" : reason == .splitCopy ? ", a split shows its copy" : ""
+            let why = reason == .memoryPressure ? ", the Mac is short of memory" : reason == .splitCopy ? ", a split shows its copy"
+                : reason == .runaway ? ", its process ran away" : ""
             return [(true, "discards"), (false, "unloads")].compactMap { discarded, verb in
                 let ps = pages.filter { $0.discarded == discarded }
                 guard !ps.isEmpty else { return nil }
@@ -148,25 +151,36 @@ public struct TabSleepPolicy: Equatable, Sendable {
         return "none of \(plural(hidden.count, "hidden page")) has been out of sight \(Int(hiddenFor / 60)) min (longest \(longest) min)"
     }
 
-    /// A page as tab sleeping sees it: when it went off screen (nil while shown) and when it last
-    /// played or stopped playing sound.
+    /// A page as tab sleeping sees it: when it went off screen (nil while shown), when it last
+    /// played or stopped playing sound, and whether its site is one the user keeps active (#458).
     public struct Page: Equatable, Sendable {
         public var id: UUID
         public var hiddenAt: Date?
         public var audibleAt: Date?
+        public var keptActive: Bool
 
-        public init(id: UUID, hiddenAt: Date?, audibleAt: Date? = nil) {
+        public init(id: UUID, hiddenAt: Date?, audibleAt: Date? = nil, keptActive: Bool = false) {
             self.id = id
             self.hiddenAt = hiddenAt
             self.audibleAt = audibleAt
+            self.keptActive = keptActive
         }
     }
 
-    /// The tabs on screen, then the ones hidden most recently, `count` in all.
+    /// The tabs on screen, then the ones hidden most recently, `count` in all. Pages the user keeps
+    /// active stay anyway, so they take none of the places: listing a site never makes another
+    /// tab sleep sooner (#458).
     public static func recentlyShown(_ pages: [Page], visible: [UUID], count: Int) -> Set<UUID> {
-        let hidden = pages.compactMap { p in p.hiddenAt.map { (p.id, $0) } }.sorted { $0.1 > $1.1 }.map(\.0)
-        return Set((visible + hidden).prefix(count))
+        let kept = Set(pages.filter(\.keptActive).map(\.id))
+        let hidden = pages.compactMap { p in p.keptActive ? nil : p.hiddenAt.map { (p.id, $0) } }.sorted { $0.1 > $1.1 }.map(\.0)
+        return Set((visible.filter { !kept.contains($0) } + hidden).prefix(count))
     }
+
+    /// Whether a page the user keeps active (#458) is left alone by this pass. Chrome's list at
+    /// arc://settings/performance: Memory Saver and freezing never take one; urgent discarding,
+    /// when the Mac is short of memory, takes them after every other page (`candidates`). A split's
+    /// copy and a page whose process ran away go whatever their site.
+    public var leavesKeptActivePages: Bool { reason == .timer }
 
     /// A candidate's page as BrowserManager sees it before asking it anything.
     public struct PageState: Equatable, Sendable {
@@ -234,16 +248,23 @@ public struct TabSleepPolicy: Equatable, Sendable {
     }
 
     /// The pages to ask, hidden longest first. The caller skips the ones its probes refuse
-    /// before it counts toward `limit`.
+    /// before it counts toward `limit`. Pages the user keeps active (#458) are never asked by the
+    /// clock, and under memory pressure only after every other page.
     public func candidates(_ pages: [Page], visible: [UUID], protectedRecent: Int = protectedRecentTabs, now: Date) -> [UUID] {
         let cutoff = now.addingTimeInterval(-hiddenFor)
         let kept = keepsRecentTabs ? Self.recentlyShown(pages, visible: visible, count: protectedRecent) : []
+        let lastResort = reason == .memoryPressure
         return pages
             .filter { p in
                 guard let hidden = p.hiddenAt, hidden < cutoff, !visible.contains(p.id), !kept.contains(p.id) else { return false }
+                if p.keptActive, leavesKeptActivePages { return false }
                 return p.audibleAt.map { $0 < cutoff } ?? true
             }
-            .sorted { ($0.hiddenAt!, $0.id.uuidString) < ($1.hiddenAt!, $1.id.uuidString) }
+            .sorted {
+                let a = lastResort && $0.keptActive, b = lastResort && $1.keptActive
+                if a != b { return b }
+                return ($0.hiddenAt!, $0.id.uuidString) < ($1.hiddenAt!, $1.id.uuidString)
+            }
             .map(\.id)
     }
 }

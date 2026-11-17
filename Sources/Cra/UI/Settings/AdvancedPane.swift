@@ -7,6 +7,7 @@ import SwiftUI
 /// looks, so each is a plain row (name, what it does, control); About closes the pane.
 struct AdvancedPane: View {
     let actions: SettingsActions
+    private static let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     @Environment(SidebarStore.self) private var store
 
     var body: some View {
@@ -57,6 +58,27 @@ struct AdvancedPane: View {
                     }
                 }
                 SettingsCardDivider()
+                // GitHub #476, not in Arc: a version that breaks something stays on New until it's fixed.
+                SettingsPlainRow("Update channel",
+                                 detail: "New gets each version of Cra the day it comes out. Stable gets a version once it has held up on New.",
+                                 trailing: {
+                                     Picker("Update channel", selection: $updater.channel) {
+                                         ForEach(UpdateChannel.allCases, id: \.self) { Text($0.title).tag($0) }
+                                     }
+                                     .labelsHidden().fixedSize()
+                                     .disabled(!updater.isAvailable)
+                                 }) {
+                    // Sparkle never installs an older version: going back to Stable now is a download.
+                    if let stable = updater.olderStable, let diskImage = stable.diskImageURL {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Stable is Cra \(stable.version). This Mac stays on Cra \(Self.version) until Stable passes it, or you can install Stable now.")
+                                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Button("Download Cra \(stable.version)") { actions.openURL(diskImage) }
+                        }
+                    }
+                }
+                .onAppear { updater.lookUpStable() }
+                SettingsCardDivider()
                 SettingsToggleRow("Chrome engine for pages",
                                   detail: "Pages run on Chromium, with Chrome extensions and Chrome DevTools. Takes effect when Cra restarts.",
                                   isOn: $store.settings.chromeEngine)
@@ -65,10 +87,16 @@ struct AdvancedPane: View {
             // The search engine and its suggestions are in Profiles, where Arc has them.
             SettingsHeader("Command bar").padding(.top, 20)
             SettingsFeatureCard {
+                // GitHub #457, not in Arc: Arc's bar stays neutral, with the site in the pill and a short wash.
+                SettingsSwitchRow("Fill the command bar with the site’s color",
+                                  detail: "When Tab starts a search on a site, like YouTube or GitHub, the command bar takes that site’s color until you leave the search.",
+                                  isOn: $store.settings.commandBarSiteColor) { SettingsArt.commandBarSiteColor }
+                SettingsCardDivider()
                 // GitHub #307, not in Arc: ⌘T finds tabs in the window's space only.
                 SettingsToggleRow("Only this space’s tabs",
                                   detail: "The command bar finds open tabs in the space you’re in, not in all your spaces.",
                                   isOn: $store.settings.commandBarCurrentSpaceOnly)
+                    .settingsTextColumn()
             }
 
             SettingsHeader("Opening and quitting").padding(.top, 20)
@@ -148,8 +176,14 @@ struct AdvancedPane: View {
                 HStack(spacing: 14) {
                     BrandMark(size: 48)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
-                            .font(.system(size: 14, weight: .semibold))
+                        // A click copies the version with its build and engine, for a bug report (GitHub #461).
+                        Button(action: actions.copyVersion) {
+                            Text("Cra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy the Cra version")
+                        .editorPointer(.link)
                         Text(EngineVersion.label(chromium: CraCEFRuntime.chromiumVersion(), cef: CraCEFRuntime.cefVersion()))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                         Text(AppPaths.supportDir.path).font(.system(size: 11)).foregroundStyle(.secondary)

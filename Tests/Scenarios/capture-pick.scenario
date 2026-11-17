@@ -1,0 +1,29 @@
+# promise: #451
+# Capture (⇧⌘2): a click takes Arc's choice, the card around a title line or a thumbnail; with ⌥
+# held it takes the element right under the pointer, inside an open shadow root too. Runs the real
+# picker script in the page's isolated world and CraCore's choice (ContentCapture.choose).
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x800
+cra://open?url=${ORIGIN}/capture-pick.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# The title line: Arc's score skips it (under 100 px, and the link is inline), ⌥ takes the link.
+cra://debug?capturePick=60,230
+expect-log capture pick: DIV 40,40 300x300
+cra://debug?capturePick=60,230&deeper=1
+expect-log capture pick: A 40,2[12][0-9] [0-9]+x(1[6-9]|2[0-4])
+# The thumbnail, a plain block: Arc's score still prefers the bigger card, ⌥ takes the thumbnail.
+cra://debug?capturePick=60,100
+expect-log capture pick: DIV 40,40 300x300
+cra://debug?capturePick=60,100&deeper=1
+expect-log capture pick: DIV 40,40 300x170
+# The button inside the post's shadow root: Arc's score sees only the post.
+cra://debug?capturePick=430,70
+expect-log capture pick: X-POST 400,40 300x200
+cra://debug?capturePick=430,70&deeper=1
+expect-log capture pick: BUTTON 420,60 120x32
+# The empty page: nothing to click either way, only drags.
+cra://debug?capturePick=900,600
+expect-log capture pick: nothing
+cra://debug?capturePick=900,600&deeper=1
+expect-log capture pick: nothing

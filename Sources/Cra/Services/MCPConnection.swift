@@ -65,6 +65,22 @@ enum MCPConnection {
         }
     }
 
+    /// Whether a new connection fits beside `open` others. One that doesn't is answered with why
+    /// (its agent shows the error, the bridge prints it) and closed on a thread of its own, so a
+    /// silent client can't hold the server (#459).
+    static func admit(_ client: Int32, open: Int) -> Bool {
+        guard open >= MCPProtocol.clientLimit else { return true }
+        Thread.detachNewThread {
+            var wait = timeval(tv_sec: 5, tv_usec: 0)
+            setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &wait, socklen_t(MemoryLayout<timeval>.size))
+            let first = Reader().next(client) ?? Data()
+            _ = write(MCPProtocol.fullReply(to: first) + Data([10]), to: client)
+            shutdown(client, SHUT_RDWR)
+            close(client)
+        }
+        return false
+    }
+
     /// Runs before AppKit/CEF initialization. The client launches this mode as its MCP server.
     static func bridge(path: String) -> Never {
         do {
@@ -85,8 +101,16 @@ enum MCPConnection {
             }
             DispatchQueue.global().async {
                 let reader = Reader()
+                var refusal: String?
+                var first = true
                 while let line = reader.next(fd) {
+                    if first { refusal = MCPProtocol.fullMessage(in: line); first = false }
                     guard write(line + Data([10]), to: STDOUT_FILENO) else { break }
+                }
+                // Turned away (Cra is full): the agent got the error, and its log gets the reason.
+                if let refusal {
+                    FileHandle.standardError.write(Data((refusal + "\n").utf8))
+                    exit(1)
                 }
                 exit(0)
             }

@@ -193,6 +193,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func runtime(for tabID: UUID) -> TabRuntime? { runtimes[tabID] }
+
+    /// A shown page that is not in its pane: show placed it before the window had made the
+    /// pane's card. A link opened in a new tab is shown from inside the page's pop-up request,
+    /// before the window lays out the tab, and its page waited outside the card for good: the
+    /// tab stayed blank (GitHub #469). The window shows its panes again until each page is in.
+    func waitsForItsPane(_ tabID: UUID) -> Bool {
+        guard let rt = runtimes[tabID], rt.browser.hostWindow == nil, let host = paneHost?(tabID) else { return false }
+        return rt.browser.containerView.superview !== host
+    }
     /// The tab whose page the download being reported came from (set only during that report).
     private(set) var downloadSourceTab: UUID?
     var visibleRuntime: TabRuntime? { visibleTabID.flatMap { runtimes[$0] } }
@@ -597,7 +606,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// asking before they close (their own onbeforeunload), in a call (even with the camera and
     /// microphone off) or using a device stay awake, and are asked again only after
     /// `refusalBackoff`; those don't count toward the policy's limit. The log says once why a page
-    /// stays awake.
+    /// stays awake. Pages on a site Settings keeps active are never asked by the clock and come
+    /// last under memory pressure (TabSleepPolicy.candidates, #458).
     func sleepIdleTabs(_ policy: TabSleepPolicy) {
         let now = clock.now
         let cutoff = now.addingTimeInterval(-policy.hiddenFor)
@@ -700,6 +710,18 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         }
     }
 
+    /// A hidden page whose process ran away (PerfCEF, past PerfRunawaySleep.bytes) sleeps at once,
+    /// without the probes a timer pass asks first, as Chrome's urgent discarding: a page holding
+    /// gigabytes costs the whole Mac more than what it would keep. Shown pages, Picture in Picture
+    /// and calls stay. Returns whether it was asked.
+    @discardableResult
+    func sleepRunaway(_ id: UUID) -> Bool {
+        guard let rt = runtimes[id], !rt.discarded, !visibleTabIDs.contains(id), !rt.browser.isInPictureInPicture,
+              !rt.browser.isCapturingMedia, rt.browser.isCreated, !rt.browser.isClosed else { return false }
+        discard(id, rt, rt.browser.currentURL, .runaway, SleepPass(reason: .runaway, done: sleepPassLogged))
+        return true
+    }
+
     /// An MCP client works in the page (MCPServer): that counts as use, so sleeping and freezing
     /// wait as they do after the user looks at a tab, and a discarded page loads again.
     func touchedByAgent(_ id: UUID) {
@@ -767,8 +789,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         let recent = recentlyShown
         for (id, rt) in runtimes {
             let b = rt.browser
+            // A site the user keeps active keeps running too, as in Chrome, whose freezing reads the
+            // same list (#458); one listed after its vote drops the vote on the next pass.
             let vote = !recent.contains(id) && !rt.discarded && rt.hiddenAt.map { $0 < cutoff } == true && b.isCreated && !b.isClosed
-                && !(nowPlaying?.entries.contains { $0.id == id } ?? false)
+                && !(nowPlaying?.entries.contains { $0.id == id } ?? false) && !keptActive(rt)
             if vote != rt.freezeVoted { setFreezingVote(rt, vote) }
         }
     }
@@ -806,8 +830,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     private var sleepPages: [TabSleepPolicy.Page] {
         // A discarded page has given its memory back, like a closed one: it holds none of the 10 places.
-        runtimes.values.filter { !$0.discarded }.map { TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt) }
+        runtimes.values.filter { !$0.discarded }.map {
+            TabSleepPolicy.Page(id: $0.tabID, hiddenAt: $0.hiddenAt, audibleAt: $0.audibleAt, keptActive: keptActive($0))
+        }
     }
+
+    /// Settings ▸ Tabs ▸ "Always keep these sites active" lists the page's site (#458). Incognito
+    /// pages too: the list names sites, not a profile's data.
+    private func keptActive(_ rt: TabRuntime) -> Bool { store.settings.keepsActive(url: rt.browser.currentURL) }
 
     /// The tabs on screen now, then the ones hidden most recently, up to `protectedRecentTabs`.
     private var recentlyShown: Set<UUID> {
@@ -1088,7 +1118,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 togglePlayback: { [weak browser] in browser?.togglePictureInPicturePlayback() },
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
                 seek: { [weak browser] s in browser?.seekPictureInPicture(to: s) },
-                close: { [weak browser] in browser?.closePictureInPicture() })
+                close: { [weak browser] in browser?.closePictureInPicture() },
+                minimize: { [weak self, weak browser] in
+                    self?.log(id, "minimizes Picture in Picture, keeps playing")
+                    browser?.exitPictureInPicture()
+                })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
             PictureInPictureChrome.shared.time = (0, 0)   // the page says where its video is right after
             PictureInPictureChrome.shared.address = PictureInPictureLayout.address(of: browser.currentURL)

@@ -1,6 +1,7 @@
 # Arc's AppleScript dictionary (Arc 1.172.1's Arc.sdef, same codes in resources/Cra.sdef): a window's
 # active tab is readable, `execute javascript` is refused until View ▸ Developer ▸ Allow JavaScript from
 # Apple Events is on (off by default, as in Arc), then runs in the tab. Scripts use raw codes, run inside Cra.
+# promise: #427
 budget rss=700 stalls50=10
 cra://open?url=${PAGE}?n=scripted
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
@@ -14,3 +15,16 @@ expect-log Cra applescript → error .*Allow JavaScript from Apple Events
 cra://action/allowAppleEventsJavaScript
 cra://debug?applescript=tell%20current%20application%20to%20%C2%ABevent%20CrSuExJa%C2%BB%20%C2%ABclass%20acTa%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201%20given%20%C2%ABclass%20JvSc%C2%BB%3A%226%2A7%22
 expect-log Cra applescript → 42
+# make new window (GitHub #427, what Raycast's Arc extension sends for New Window and New Incognito
+# Window): Arc opens one and returns it, incognito with {incognito:true}; Cra used to quit. A command
+# returning a window or tab (get window 1, active tab) failed too: no object specifier on the engine.
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20ID%20%20%C2%BB%20of%20%28make%20new%20%C2%ABclass%20WiND%C2%BB%29
+expect-log Cra applescript → [0-9A-F]{8}-[0-9A-F-]{27}$
+cra://debug?applescript=tell%20current%20application%20to%20%28%28count%20%C2%ABclass%20WiND%C2%BB%29%20as%20text%29%20%26%20%22%20windows%22
+expect-log Cra applescript → 2 windows$
+cra://debug?applescript=tell%20current%20application%20to%20get%20%C2%ABclass%20mode%C2%BB%20of%20%28make%20new%20%C2%ABclass%20WiND%C2%BB%20with%20properties%20%7B%C2%ABclass%20inco%C2%BB%3Atrue%7D%29
+expect-log Cra applescript → incognito$
+cra://debug?applescript=tell%20current%20application%20to%20%28%28count%20%C2%ABclass%20WiND%C2%BB%29%20as%20text%29%20%26%20%22%20windows%2C%20front%20one%20%22%20%26%20%C2%ABclass%20mode%C2%BB%20of%20%C2%ABclass%20WiND%C2%BB%201
+expect-log Cra applescript → 3 windows, front one incognito$
+cra://debug?applescript=tell%20current%20application%20to%20%22tab%20%22%20%26%20%C2%ABclass%20ID%20%20%C2%BB%20of%20%28get%20%C2%ABclass%20acTa%C2%BB%20of%20last%20%C2%ABclass%20WiND%C2%BB%29
+expect-log Cra applescript → tab [0-9A-F]{8}-[0-9A-F-]{27}$
