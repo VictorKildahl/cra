@@ -221,8 +221,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         tabSwitcher.direction = { [weak app] event in
             switch app?.bindings.action(for: event)?.id {
-            case "recentTab": return 1
-            case "recentTabBackward": return -1
+            case "recentTab", "recentTabAllSpaces": return 1
+            case "recentTabBackward", "recentTabAllSpacesBackward": return -1
             default: return nil
             }
         }
@@ -2581,10 +2581,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
     /// open: ⌃Tab doesn't list it.
-    private func openRecentTabs(limit: Int) -> [UUID] {
-        Array(store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
-            .filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
-            .prefix(limit))
+    private func openRecentTabs(limit: Int, allSpaces: Bool = false) -> [UUID] {
+        let recent = allSpaces ? store.recentTabsInAllSpaces(limit: .max, window: windowID)
+            : store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
+        return Array(recent.filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }.prefix(limit))
     }
 
     func resetPinnedTab(_ id: UUID) {
@@ -3490,16 +3490,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func debugSiteControls() { showToolbarExtensionsMenu() }
 
-    func debugTabSwitcher() {
+    /// `cra://debug?switcher` (`=all`: ⌃⌥Tab's, #467).
+    func debugTabSwitcher(allSpaces: Bool = false) {
         let theme = focusedSpace.theme
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         tabSwitcher.isDark = dark
         tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
         tabSwitcher.palette = theme.palette
-        tabSwitcher.debugOpen(openRecentTabs(limit: TabSwitcherMetrics.maxItems).compactMap { id in
-            guard let it = store.item(id), let tab = it.tab else { return nil }
-            return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
-        })
+        tabSwitcher.debugOpen(tabSwitcherItems(allSpaces: allSpaces))
     }
 
     /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
@@ -3940,8 +3938,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Tab switcher
 
-    /// ⌃Tab / ⌃⇧Tab: Arc's switcher over the space's recent tabs.
-    func cycleRecentTabs(_ delta: Int, event: NSEvent?) {
+    /// ⌃Tab / ⌃⇧Tab: Arc's switcher over the space's recent tabs. ⌃⌥Tab (`allSpaces`, #467, not
+    /// in Arc): the same cards over every space's, each naming its space.
+    func cycleRecentTabs(_ delta: Int, event: NSEvent?, allSpaces: Bool = false) {
         let theme = focusedSpace.theme
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         if !tabSwitcher.isOpen {
@@ -3949,17 +3948,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
             tabSwitcher.palette = theme.palette
         }
-        tabSwitcher.cycle(delta, event: event) {
-            openRecentTabs(limit: TabSwitcherMetrics.maxItems).compactMap { id in
-                guard let it = store.item(id), let tab = it.tab else { return nil }
-                return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot)
-            }
-        }
+        tabSwitcher.cycle(delta, event: event) { tabSwitcherItems(allSpaces: allSpaces) }
         // The page on screen is the freshest thumbnail there is: retake it for its card.
         guard tabSwitcher.isOpen, let current = browsers.visibleTabID else { return }
         browsers.captureSnapshot(current) { [weak self] in
             guard let self else { return }
             self.tabSwitcher.updateSnapshot(current, self.browsers.runtime(for: current)?.snapshot)
+        }
+    }
+
+    private func tabSwitcherItems(allSpaces: Bool) -> [TabSwitcher.Item] {
+        openRecentTabs(limit: TabSwitcherMetrics.maxItems, allSpaces: allSpaces).compactMap { id in
+            guard let it = store.item(id), let tab = it.tab else { return nil }
+            let space = allSpaces ? store.spaceID(ofItem: id, window: windowID).flatMap(store.space) : nil
+            return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot,
+                                    space: space.map { TabSwitcher.SpaceLabel(title: $0.title, icon: SpaceMenuIcon.image(for: $0)) })
         }
     }
 

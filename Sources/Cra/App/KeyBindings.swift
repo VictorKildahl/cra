@@ -266,6 +266,11 @@ final class KeyBindingRegistry {
             KeyAction(id: "revealTab", name: "Reveal Tab in Sidebar", section: .tabs, shortcuts: [Shortcut(Shortcut.space, .control)], triggers: ["reveal", "find tab"]),
             KeyAction(id: "recentTab", name: "Next Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, .control)], inCommandBar: false),
             KeyAction(id: "recentTabBackward", name: "Previous Recent Tab", section: .tabs, shortcuts: [Shortcut(Shortcut.tab, [.control, .shift])], inCommandBar: false),
+            // Not in Arc (#467): the same switcher over every space's tabs.
+            KeyAction(id: "recentTabAllSpaces", name: "Next Recent Tab in All Spaces", section: .tabs,
+                      shortcuts: [Shortcut(Shortcut.tab, [.control, .option])], inCommandBar: false),
+            KeyAction(id: "recentTabAllSpacesBackward", name: "Previous Recent Tab in All Spaces", section: .tabs,
+                      shortcuts: [Shortcut(Shortcut.tab, [.control, .option, .shift])], inCommandBar: false),
             KeyAction(id: "clearToday", name: "Clear Today", section: .tabs, shortcuts: [Shortcut("k", cmdShift)], triggers: ["clear", "tidy"]),
             KeyAction(id: "favoriteTab", name: "Add to Favorites", section: .tabs, shortcuts: [], triggers: ["favorite", "top app"]),
             // Arc's Join Meeting ⌃⌘J (Settings ▸ Shortcuts; the command bar's "Join next video conference"):
