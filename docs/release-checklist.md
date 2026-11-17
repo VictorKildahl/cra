@@ -23,7 +23,7 @@ built release app with a test profile. Note anything that fails in the release's
 - **Displays:** On a Mac with two displays of different scale (a 2x and a 1x), drag the window from one display to the other and
   back, several times, by the strip above the toolbar, by the toolbar's URL and by the sidebar's top next to the traffic lights:
   the window stays under the pointer the whole way, with no jump at the crossing and no flicker. AppKit's screen-layout adjustment
-  ran mid-drag for a window a window controller owns (16 Nov 2026); `CraWindow` skips it while the button is down. The
+  ran mid-drag for a window a window controller owns (16 Nov 2026); `CraWindow` skips it for moves the window server reports. The
   `window-frame-adjust` scenario only checks that answer is in place; a test copy never crosses a display.
 
 - **#155:** a space on Auto, with one colour or two, changes look when macOS switches between

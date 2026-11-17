@@ -4709,8 +4709,9 @@ screen on a click.
   offset: the jump Peter saw. A plain NSWindow (no controller) in the same process never enters that path; `isRestorable`,
   cascading, child windows, the shell, the delegate and the `NSScreenLayoutIgnoreHistoricalFrame` default change nothing. Chromium's
   `NativeWidgetMacNSWindow` skips the same two private callbacks while its move loop drags a tab across displays
-  (components/remote_cocoa/app_shim/native_widget_mac_nswindow.mm). `CraWindow` answers the adjustment and skips it while the
-  left button is down. Moving the window by hand on each event instead drew the window at both scales at the crossing and
+  (components/remote_cocoa/app_shim/native_widget_mac_nswindow.mm). `CraWindow` answers the adjustment and skips it when it
+  comes from `_setFrameAfterMove:` (a move the window server reports: a drag and its release); a display coming or going reaches
+  the adjustment another way and keeps it (checked 17 Nov 2026 with a 2x virtual display removed under a probe window). Moving the window by hand on each event instead drew the window at both scales at the crossing and
   flickered; Peter turned it down.
 
 ## The hidden sidebar from past the window's edge (Arc 1.172.2, 11 Nov 2026, GitHub #350, live Arc, real pointer at 120 fps)
