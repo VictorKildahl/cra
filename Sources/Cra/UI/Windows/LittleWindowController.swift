@@ -592,7 +592,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
     }
 
-    // MARK: Floating toolbar (GitHub #435)
+    // MARK: Floating toolbar (GitHub #435, a Peek's #493)
 
     /// Out or away, from the pointer's samples (ToolbarAutoHide, as the browser window's bar).
     private var barTracker = ToolbarAutoHideTracker()
@@ -606,18 +606,25 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         barLook = nil
     }
 
-    /// Settings ▸ Links' switch, followed while the window is open.
+    /// Settings ▸ Links' switch for this kind of window, followed while the window is open: the Little
+    /// Window's, or a Peek's own (#493).
     private func observeBarSetting() {
-        observeChanges(of: { [weak self] in self?.store.settings.autoHideLittleWindowToolbar ?? false }) { [weak self] _ in
+        let peek = isPeek
+        observeChanges(of: { [weak self] in
+            self.map { peek ? $0.store.settings.autoHidePeekToolbar : $0.store.settings.autoHideLittleWindowToolbar } ?? false
+        }) { [weak self] _ in
             self?.syncFloatingBar()
         }
     }
 
     /// Whether the bar floats over the page now: the switch is on and the page is this window's own view.
     func syncFloatingBar() {
-        let floats = ToolbarAutoHide.littleWindowFloats(enabled: store.settings.autoHideLittleWindowToolbar, card: isCard, peek: isPeek,
-                                                        pageFullscreen: pageFullscreen, devToolsOpen: devToolsView != nil,
-                                                        pageInOwnWindow: browser?.hostWindow != nil)
+        let devToolsOpen = devToolsView != nil, pageInOwnWindow = browser?.hostWindow != nil
+        let floats = isPeek
+            ? ToolbarAutoHide.peekFloats(enabled: store.settings.autoHidePeekToolbar, hasBar: !shell.hidesBar, pageFullscreen: pageFullscreen,
+                                         devToolsOpen: devToolsOpen, pageInOwnWindow: pageInOwnWindow)
+            : ToolbarAutoHide.littleWindowFloats(enabled: store.settings.autoHideLittleWindowToolbar, card: isCard, peek: false,
+                                                 pageFullscreen: pageFullscreen, devToolsOpen: devToolsOpen, pageInOwnWindow: pageInOwnWindow)
         guard shell.floatsBar != floats else { return }
         barTracker.reset()
         stopBarLook()
@@ -627,7 +634,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     /// The shell saw the pointer move over the window (nil: it left). The page is a view in the
     /// window, so the shell's tracking area sees the pointer over the page too, whether Cra is active
-    /// or not: a Little Window over another app brings its bar out as well.
+    /// or not: a Little Window over another app brings its bar out as well. A Peek's window is its card.
     private func barPointerMoved(to p: NSPoint?) {
         guard shell.floatsBar else { return }
         sampleBar(at: p ?? pointerInShell)
@@ -645,8 +652,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         return shell.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
     }
 
+    /// The bar's height: Little Arc's strip, or a Peek card's own 32 pt bar.
+    private var floatingBarHeight: CGFloat { isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight }
+
     private func sampleBar(at p: NSPoint) {
-        let where_ = ToolbarAutoHide.classify(p, card: shell.page.frame, container: shell.bounds, barHeight: LittleMetrics.barHeight,
+        let where_ = ToolbarAutoHide.classify(p, card: shell.page.frame, container: shell.bounds, barHeight: floatingBarHeight,
                                               shown: barTracker.shown)
         apply(barTracker.sample(where_, held: barHeld, at: ProcessInfo.processInfo.systemUptime))
     }
@@ -710,7 +720,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if command.hasPrefix("at:"), let window {
             let g = command.dropFirst(3).split(separator: ",").compactMap { Double($0) }
             let p = g.count == 2 ? shell.convert(NSPoint(x: g[0], y: window.frame.height - g[1]), from: nil) : .zero
-            let where_ = ToolbarAutoHide.classify(p, card: shell.page.frame, container: shell.bounds, barHeight: LittleMetrics.barHeight,
+            let where_ = ToolbarAutoHide.classify(p, card: shell.page.frame, container: shell.bounds, barHeight: floatingBarHeight,
                                                   shown: barTracker.shown)
             line = "littleToolbar \(command): \(where_) out=\(barTracker.shown ? 1 : 0)"
         } else {
@@ -830,6 +840,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             shell.hidesBar = true
             easel.usePeekLook()
         }
+        // The card's page under its own bar, or under one that floats (#493).
+        syncFloatingBar()
         var buttons: [PeekControlsPanel.Button] = [
             .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.attemptPeekClose(.closeButton) },
             .init(control: .expand, symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
@@ -2239,8 +2251,9 @@ final class LittleShellView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        guard !isPeek else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // A Peek's bar shows its own hovers; the floating bar still wants the pointer (#493).
+        guard !isPeek else { onPointer?(p); return }
         let inBar = !barAway && p.y > bounds.height - LittleMetrics.barHeight
         onHover?(inBar ? hoverTarget(x: p.x, y: bounds.height - p.y) : .none)
         onPointer?(p)

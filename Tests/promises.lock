@@ -943,3 +943,7 @@
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
 #484   Tests/Scenarios/extension-remove.scenario  ce468889560a
+#493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::floatsOverAPeeksPageUnderItsOwnSwitch  6e7279f4e6a7
+#493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  f0565ab13475
+#493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::theStripIsTheCardsTopEdge  17c35a231c12
+#493   Tests/Scenarios/peek-toolbar-auto-hide.scenario  9c5540af6a44

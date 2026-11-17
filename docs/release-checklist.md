@@ -193,6 +193,11 @@ built release app with a test profile. Note anything that fails in the release's
   which doesn't move; move down past the bar and they go. Open "Open in"'s list and the command bar from the bar:
   it stays out while they are open. (`little-window-toolbar-auto-hide` checks the layout, the strip and the keep
   zone through `cra://debug`; the real pointer's events over the page's view are this line.)
+- **#493:** with Settings ▸ Links ▸ "Hide the Peek toolbar until you need it" on, Shift-click a link: the Peek's
+  page fills the card. Rest the pointer at the card's top edge: its bar slides in over the page, which doesn't move;
+  move down past the bar and it goes. ⌘L opens the address with the bar away, and ✕, Expand and Add to Split beside
+  the card still work. (`peek-toolbar-auto-hide` checks the layout, the strip and the keep zone through
+  `cra://debug`; the real pointer's events over the card are this line.)
 - **#381:** click a link to another site in a favorite, next to Arc doing the same: the peeked page's
   favicon springs onto the tile's top right corner on a white square (black in a dark space), 4 pt
   past the corner, with a soft shadow, and springs off when the Peek closes. Check a split favorite

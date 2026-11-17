@@ -42,6 +42,14 @@ public enum ToolbarAutoHide {
         enabled && !card && !peek && !pageFullscreen && !devToolsOpen && !pageInOwnWindow
     }
 
+    /// Whether a Peek's bar floats over its page (`autoHidePeekToolbar`, GitHub #493): the Peek's own
+    /// switch, by the Little Window's rules. An easel's Peek has no bar to float, a page in full screen
+    /// shows nothing of Cra's, and DevTools or a page in a window of its own sit above the card.
+    public static func peekFloats(enabled: Bool, hasBar: Bool, pageFullscreen: Bool, devToolsOpen: Bool,
+                                  pageInOwnWindow: Bool) -> Bool {
+        enabled && hasBar && !pageFullscreen && !devToolsOpen && !pageInOwnWindow
+    }
+
     /// The strip that brings the toolbar out: the top of the card and everything above it, up to
     /// just outside the window (`container` is the view the card sits in).
     public static func inRevealStrip(_ point: CGPoint, card: CGRect, container: CGRect) -> Bool {
