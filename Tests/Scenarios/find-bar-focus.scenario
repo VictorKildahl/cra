@@ -1,7 +1,9 @@
-# The find bar's keys (reported by a user, 16 Nov 2026): ⌘F puts the keys in the field every time,
-# ⌘G and ⇧⌘G keep them there, Escape closes the bar and clears the page's matches, and ⌘F on an
-# open bar selects the last search so typing replaces it. The keys are typed as a user types them:
-# ⌘F to the page (which has the keyboard until the bar opens), the rest to the bar's panel.
+# The find bar's keys: ⌘F puts them in the field every time, ⌘G and ⇧⌘G keep them there, Escape
+# closes the bar and clears the page's matches, and ⌘F on an open bar selects the last search so
+# typing replaces it. The keys are typed as a user types them: ⌘F to the page (which has the keyboard
+# until the bar opens), the rest to the bar's panel. A copy in front, with real keys, keeps them the
+# same way on a page that focuses a field or calls window.focus() on ⌘F/⌘G, and with matches in links
+# and fields (17 Nov 2026, PR #473).
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
 cra://open?url=${PAGE}?n=find-focus
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
@@ -39,8 +41,7 @@ cra://debug?key=f,3,1048576&target=find
 wait 1
 cra://debug?findBar=again
 expect-log findBar again: visible=1 .*focused=1 selected=1 query=pag$
-# And from the page, after a click took the keys back there.
-cra://debug?cdp=Runtime.evaluate&params={"expression":"'focus:'+document.hasFocus()"}
+# And from the page, once it has the keys again.
 cra://debug?key=f,3,1048576&page=1
 wait 1
 cra://debug?findBar=fromPage

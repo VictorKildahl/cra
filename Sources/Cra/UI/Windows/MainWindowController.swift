@@ -58,10 +58,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var shownTheme: SpaceTheme?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
-    /// When the find bar's panel last took the keys (⌘F, ⌘G, ⇧⌘G): a page that asks for focus
-    /// right after must not take them back (windowDidResignKey).
-    private var findKeyedAt = Date.distantPast
-    private var findResignObserver: NSObjectProtocol?
     private var commandBarClosingClick = DismissingClick()
     /// Set while the bar closes because its panel lost the keys (#429).
     private var commandBarLostKeys = false
@@ -1307,9 +1303,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let panel = clearPanel()
         panel.ignoresMouseEvents = true
         let find = FindBarPanel()
-        findResignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: find, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.findPanelResignedKey() }
-        }
         shell.moveOverlays(to: panel.contentView!, findBar: find)
         let ask = askOnPage.view
         ask.frame = find.contentView!.bounds
@@ -4339,7 +4332,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if let window, let find = findPanel {
             if find.parent !== window { window.addChildWindow(find, ordered: .above) }
             refitFindPanel()
-            if focus { findKeyedAt = Date(); find.makeKeyAndOrderFront(nil) } else { find.orderFront(nil) }
+            if focus { find.makeKeyAndOrderFront(nil) } else { find.orderFront(nil) }
         }
     }
 
@@ -4392,9 +4385,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func findNext(forward: Bool) {
         if !overlay.findVisible { showFindBar(); return }
-        // The keys stay in the bar: a match that lands on a field or a link must not take them.
-        findKeyedAt = Date()
-        if let find = findPanel, !find.isKeyWindow { find.makeKeyAndOrderFront(nil) }
         find(overlay.findQuery, forward: forward)
     }
 
@@ -4443,26 +4433,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// from the focused page's top and trailing edges.
     func debugFindBar(_ label: String) -> String {
         guard let find = findPanel, overlay.findVisible, let page = lastFindPage else { return "findBar \(label): visible=0" }
-        // `focused`: the keys go to the bar's field; `selected`: all of its text is selected, so typing replaces it.
+        // `focused`: the bar's field is its panel's first responder, so it has the keys whenever the panel is key
+        // (a background copy never has a key window); `selected`: all of its text is selected, so typing replaces it.
         let editor = find.firstResponder as? NSTextView
         let focused = editor?.delegate is NSTextField
         let selected = editor.map { !$0.string.isEmpty && $0.selectedRange() == NSRange(location: 0, length: ($0.string as NSString).length) } ?? false
         return "findBar \(label): visible=1 top=\(Int(page.maxY - find.frame.maxY)) trailing=\(Int(page.maxX - find.frame.maxX)) "
             + "size=\(Int(find.frame.width))x\(Int(find.frame.height)) focused=\(focused ? 1 : 0) selected=\(selected ? 1 : 0) query=\(overlay.findQuery)"
-    }
-
-    /// The find bar's panel took the keys a moment ago (⌘F, ⌘G, ⇧⌘G): a page that asks for focus
-    /// as the key lands (Chromium makes the page's window key for it; a match on a field or a link
-    /// focuses it) must not take them back. A click elsewhere still does (reported by a user, 16 Nov
-    /// 2026: ⌘F did not always put the keys in the field, and ⌘G lost them).
-    private func findPanelResignedKey() {
-        guard overlay.findVisible, Date().timeIntervalSince(findKeyedAt) < 0.6,
-              NSApp.currentEvent.map({ ![.leftMouseDown, .rightMouseDown, .otherMouseDown].contains($0.type) }) ?? true else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.overlay.findVisible, let find = self.findPanel, !find.isKeyWindow else { return }
-            find.makeKeyAndOrderFront(nil)
-            self.overlay.findFocusToken += 1
-        }
     }
 
     /// For `cra://debug?key=…&target=find`: the find bar's panel, which has the keys while the bar is up.

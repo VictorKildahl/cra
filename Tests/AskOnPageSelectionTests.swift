@@ -113,8 +113,6 @@ final class SelectionWindow {
     let selectedTabID: UUID? = UUID()
     var findTabID: UUID?
     var findParked = false
-    /// When the find panel last took the keys (MainWindowController keeps them for 0.6 s after).
-    var findKeyedAt = Date.distantPast
     var savedFindSelection: String? { NSPasteboard.saved }
     func syncAskOnPage() { askOnPage.pageChanged(canAsk: true) }
     func refitFindPanel() {}
