@@ -13,9 +13,23 @@ enum DownloadDestinations {
         self.store = store
         CraCEFRuntime.setDownloadDestinationHandler { profilePath, name, completion in
             MainActor.assumeIsolated {
+                // A test copy can hold the answer, as a download that never gets a file name (#491).
+                if holdsAnswers { held.append { completion(nil) }; return }
                 destination(profilePath: profilePath, suggestedName: name) { completion($0?.path) }
             }
         }
+    }
+
+    /// CRA_TEST_HOLD_DOWNLOAD_DESTINATION=1: Chromium's question where a download goes waits
+    /// until `cra://debug?downloadDestination=cancel` answers it, with no window on screen.
+    private static let holdsAnswers = ProcessInfo.processInfo.environment["CRA_TEST_HOLD_DOWNLOAD_DESTINATION"] == "1"
+    private static var held: [() -> Void] = []
+
+    /// For `cra://debug?downloadDestination=cancel`: the held questions answered as Cancel is.
+    static func debugCancelHeld() {
+        let answers = held
+        held.removeAll()
+        answers.forEach { $0() }
     }
 
     static var downloadsFolder: URL { FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0] }

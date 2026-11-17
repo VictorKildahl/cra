@@ -71,6 +71,8 @@ final class DownloadHistory {
             (l.sampleBytes, l.sampleAt) = (received, now)
         }
         l.updated = now
+        // Paused or resumed: the wait for bytes starts again.
+        if received != l.received || (paused && !failed && !cancelled) != l.paused { l.moved = now }
         l.name = name
         if !path.isEmpty { l.path = path }
         l.received = received

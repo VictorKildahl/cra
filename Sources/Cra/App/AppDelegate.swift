@@ -1967,6 +1967,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Opens what normally needs a pointer or a held key, for screenshots.
             if let v = dict["downloads"] { main.sidebarUI.downloadsListOpen = v == "1"; return }
+            // downloadDestination=cancel: the downloads CRA_TEST_HOLD_DOWNLOAD_DESTINATION held answered as
+            // a save panel's Cancel is (#491).
+            if dict["downloadDestination"] == "cancel" { DownloadDestinations.debugCancelHeld(); return }
             // What a running download's menu does (pause, resume, cancel), to the newest one in
             // progress; `downloadState` logs how the rows read (#272).
             if let v = dict["download"] {
@@ -1986,7 +1989,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 // finished: downloads reported finished in this launch, across windows (an old one from the
                 // profile's history must not be one).
                 let finished = mainWindows.reduce(0) { $0 + $1.finishedDownloadCount }
-                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows) finished=\(finished)")
+                // bin: the file over the Library button, and what its edge takes (#491).
+                let bin = (main.sidebarUI.libraryAnchor as? LibraryButtonView)?.binReadout ?? "none"
+                CraLog.note("download state \(label): running=\(DownloadHistory.shared.hasRunningDownloads) progress=\(progress) rows=\(rows) bin=\(bin) finished=\(finished)")
                 return
             }
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:

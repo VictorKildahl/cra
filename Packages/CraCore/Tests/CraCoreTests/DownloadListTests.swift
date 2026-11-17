@@ -40,4 +40,29 @@ struct DownloadListTests {
                                      limit: 3, fileExists: { $0 != "/Downloads/c" })
         #expect(rows.map(\.name) == ["a", "b", "d"])
     }
+
+    /// A download that stopped receiving doesn't keep the bin over the sidebar's buttons: two sat
+    /// at "0 bytes" with no file name, and the bin stayed for good. Chromium reporting it again,
+    /// unchanged, doesn't count as moving.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/491"))
+    func stuckDownloadDoesNotHoldTheBin() {
+        var stuck = live(1, "", at: 0)
+        stuck.received = 0
+        #expect(DownloadList.holdsBin([stuck], now: t0.addingTimeInterval(29)))
+        stuck.updated = t0.addingTimeInterval(3599)
+        #expect(!DownloadList.holdsBin([stuck], now: t0.addingTimeInterval(30)))
+        #expect(!DownloadList.holdsBin([stuck], now: t0.addingTimeInterval(3600)))
+        // One still receiving holds it, next to the stuck one.
+        #expect(DownloadList.holdsBin([stuck, live(2, "big.dmg", at: 3590)], now: t0.addingTimeInterval(3600)))
+    }
+
+    /// A paused download hears nothing until it resumes, and still holds the bin (#272); one that
+    /// ended doesn't.
+    @Test func pausedHoldsTheBinEndedDoesNot() {
+        var paused = live(1, "big.dmg", at: 0)
+        paused.paused = true
+        #expect(DownloadList.holdsBin([paused], now: t0.addingTimeInterval(3600)))
+        #expect(!DownloadList.holdsBin([live(2, "broken.iso", at: 0, failed: true)], now: t0))
+        #expect(!DownloadList.holdsBin([], now: t0))
+    }
 }

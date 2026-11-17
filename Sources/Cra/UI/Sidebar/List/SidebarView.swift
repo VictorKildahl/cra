@@ -1652,10 +1652,25 @@ final class LibraryButtonView: NSView {
         badge.frame = NSRect(x: bin.bounds.maxX - b + 4, y: -4, width: b, height: b)
     }
 
+    /// The bin reveals its file when clicked. Until the download has one, the part hanging over the
+    /// sidebar's next button leaves that button its clicks (#491).
+    private var binHasFile: Bool { !bin.isHidden && ui.recentDownload?.path.isEmpty == false }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        if !bin.isHidden, bin.frame.contains(p) { return self }
+        if binHasFile, bin.frame.contains(p) { return self }
         return bounds.contains(p) ? self : nil
+    }
+
+    /// For `cra://debug?downloadState`: whether the bin is up, and what a press on its right edge
+    /// (outside the Library button) lands on, as the window's hit test finds it (#491).
+    var binReadout: String {
+        guard !bin.isHidden, let window, let root = window.contentView?.superview else { return "none" }
+        // Its right edge, over the next button in the bar.
+        let edge = convert(NSPoint(x: bin.frame.maxX - 2, y: bin.frame.midY), to: nil)
+        let hit = root.hitTest(root.superview?.convert(edge, from: nil) ?? edge)
+        let file = binHasFile ? "file" : "no file"
+        return "shown (\(file)), its edge hits \(hit === self ? "the bin" : hit.map { String(describing: type(of: $0)) } ?? "nothing")"
     }
 
     override func updateTrackingAreas() {
@@ -1668,7 +1683,7 @@ final class LibraryButtonView: NSView {
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if !bin.isHidden, bin.frame.contains(p), let path = ui.recentDownload?.path {
+        if binHasFile, bin.frame.contains(p), let path = ui.recentDownload?.path {
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
         } else if bounds.contains(p) {
             actions.toggleLibrary()

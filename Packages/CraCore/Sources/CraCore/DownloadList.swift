@@ -42,6 +42,8 @@ public enum DownloadList {
         public var paused = false
         /// When Chromium last reported on it.
         public var updated: Date
+        /// When it last received bytes (Chromium reports a stalled one again and again, unchanged).
+        public var moved: Date
 
         public init(id: UInt32, name: String, path: String, started: Date, received: Int64, total: Int64, percent: Int, updated: Date) {
             self.id = id
@@ -52,6 +54,7 @@ public enum DownloadList {
             self.total = total
             self.percent = percent
             self.updated = updated
+            moved = updated
         }
 
         /// Still in progress, paused or not.
@@ -71,6 +74,19 @@ public enum DownloadList {
         guard total > 0 else { return 0 }
         let received = running.reduce(Int64(0)) { $0 + ($1.total > 0 ? min($1.received, $1.total) : 0) }
         return min(1, Double(received) / Double(total))
+    }
+
+    /// How long a running download can go without receiving a byte before the bin stops waiting
+    /// for it.
+    public static let stuckAfter: TimeInterval = 30
+
+    /// Whether the bin over the Library button stays for these downloads: one still running whose
+    /// ring is worth watching (#272). A paused one stays until it resumes or is cancelled. A running
+    /// one that hasn't received a byte for `stuckAfter` doesn't hold it: two downloads that never got
+    /// a file name sat at "0 bytes", and their bin stayed over the sidebar's buttons for good (#491).
+    /// The row keeps showing it, with Cancel in its menu.
+    public static func holdsBin(_ live: [Live], now: Date) -> Bool {
+        live.contains { $0.running && ($0.paused || now.timeIntervalSince($0.moved) < stuckAfter) }
     }
 
     /// A row in either list.

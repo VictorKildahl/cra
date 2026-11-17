@@ -943,6 +943,8 @@
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
 #484   Tests/Scenarios/extension-remove.scenario  ce468889560a
+#491   Packages/CraCore/Tests/CraCoreTests/DownloadListTests.swift::stuckDownloadDoesNotHoldTheBin  8c802f518e5c
+#491   Tests/Scenarios/download-stuck-bin.scenario  5d0032f643fa
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::floatsOverAPeeksPageUnderItsOwnSwitch  6e7279f4e6a7
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  f0565ab13475
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::theStripIsTheCardsTopEdge  17c35a231c12

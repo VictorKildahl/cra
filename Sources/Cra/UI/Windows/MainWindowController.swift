@@ -1094,6 +1094,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             TidyDownloadsService.shared.noteSource(download.identifier, window: windowID, tabID: tab, tab: t,
                 referrer: t.referrerID.flatMap { store.item($0)?.tab })
         }
+        let known = DownloadHistory.shared.live.first { $0.id == download.identifier }
+        if download.state == .inProgress, known == nil || (known?.path.isEmpty == true && !download.fullPath.isEmpty) {
+            // Each step once, for a diagnostics report (#491). Ids and sizes only, never the file.
+            CraLog.note("Download \(download.identifier) \(known == nil ? "started" : "got its file name"): "
+                + "\(download.fullPath.isEmpty ? "no file name yet" : "has its file name"), \(download.receivedBytes) of \(download.totalBytes) bytes")
+        } else if download.state == .cancelled || download.state == .interrupted, known?.running == true {
+            CraLog.note("Download \(download.identifier) \(download.state == .cancelled ? "cancelled" : "failed"): \(download.receivedBytes) of \(download.totalBytes) bytes")
+        }
         if windowDownloads.insert(download.identifier).inserted {
             ChromeDownloadAnimation.suppress()
             showDownloadInSidebar(download, name: name)
@@ -1130,6 +1138,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private var downloadWatchdog: Timer?
+    /// Downloads logged as stuck, once each.
+    private var stuckDownloads: Set<UInt32> = []
 
     /// Chromium stops reporting a download once the tab that started it is gone (the
     /// download carries on, or ends, silently), which left its row "in progress" for
@@ -1142,6 +1152,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             downloadWatchdog?.invalidate()
             downloadWatchdog = nil
             return
+        }
+        // Where a download stopped, for a diagnostics report: a row that never got a file name sat
+        // at "0 bytes" for good (#491). Ids and sizes only, never the file.
+        for t in inProgress where !t.paused && Date().timeIntervalSince(t.moved) >= DownloadList.stuckAfter
+            && stuckDownloads.insert(t.id).inserted {
+            CraLog.note("Download \(t.id) stuck for \(Int(DownloadList.stuckAfter)) s: \(t.path.isEmpty ? "no file name yet" : "has its file name"), \(t.received) of \(t.total) bytes")
         }
         let fm = FileManager.default
         for t in inProgress where !t.paused && !t.path.isEmpty && Date().timeIntervalSince(t.updated) > 5 {
@@ -1182,11 +1198,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The bin leaves 30 s after it lands, but not while a download runs: its badge is how a
-    /// running download shows without hovering (#272). It goes 30 s after the last one ends.
+    /// running download shows without hovering (#272). It goes 30 s after the last one ends, or
+    /// once the ones left have stopped receiving (DownloadList.holdsBin, #491).
     private func putAwayBin(_ id: UInt32, after delay: TimeInterval) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.sidebarUI.recentDownload?.id == id else { return }
-            if DownloadHistory.shared.hasRunningDownloads { self.putAwayBin(id, after: 5); return }
+            // A download that stopped receiving doesn't hold it (#491).
+            if DownloadList.holdsBin(DownloadHistory.shared.live, now: Date()) { self.putAwayBin(id, after: 5); return }
             if let ended = DownloadHistory.shared.lastEnded, Date().timeIntervalSince(ended) < 30 {
                 self.putAwayBin(id, after: 30 - Date().timeIntervalSince(ended))
                 return
