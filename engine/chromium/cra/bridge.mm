@@ -528,6 +528,19 @@ void JoinFullScreenSpace(NSWindow* window) {
   window.collectionBehavior = behavior;
 }
 
+// A Chrome window Cra keeps out of sight (a profile's, a page's DevTools) never goes full screen itself. Made while a
+// Cra window was full screen, macOS took it into full screen with it, and Chrome moved its tab strip and toolbar into
+// windows of their own at the top of the screen, which the window's alpha doesn't reach: Chrome's whole top bar over
+// the page (GitHub #472, #486). An auxiliary window still sits on Cra's full-screen Space, where Chrome anchors its
+// bubbles (an extension's popup) to it.
+void NeverFullScreen(NSWindow* window) {
+  NSWindowCollectionBehavior behavior = window.collectionBehavior;
+  behavior &= ~(NSWindowCollectionBehaviorPrimary | NSWindowCollectionBehaviorFullScreenPrimary |
+                NSWindowCollectionBehaviorFullScreenAllowsTiling);
+  behavior |= NSWindowCollectionBehaviorFullScreenAuxiliary;
+  window.collectionBehavior = behavior;
+}
+
 void PlaceChromeWindow(NSWindow* window) {
   if (!window) {
     return;
@@ -573,6 +586,7 @@ void MakeHostWindow(NSWindow* window) {
   window.alphaValue = 0;
   window.ignoresMouseEvents = YES;
   window.sharingType = NSWindowSharingNone;
+  NeverFullScreen(window);
   if (!g_host_windows) {
     g_host_windows = [NSHashTable weakObjectsHashTable];
     Class cls = [window class];
@@ -1307,6 +1321,7 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       // has put it in.
       window.alphaValue = 0;
       window.ignoresMouseEvents = YES;
+      NeverFullScreen(window);
       PlaceChromeWindow(window);
       NoteChromeWindowShown(window);
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));

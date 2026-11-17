@@ -1670,6 +1670,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // pageWindows=<label>: the page windows Chromium has shown, how many it showed away from every
             // Cra window on screen, and how many macOS animates in and out (#354).
             if let label = dict["pageWindows"] { CraLog.note("page windows \(label): \(CraCEFRuntime.pageWindowsReadout)"); return }
+            // chromeWindows=<label>: Chromium's own windows (its tab strip and toolbar) a user could see,
+            // on screen and not see-through, each named (#472).
+            if let label = dict["chromeWindows"] {
+                let chrome: AnyClass? = NSClassFromString("NativeWidgetMacNSWindow")
+                let all = NSApp.windows.filter { w in chrome.map { w.isKind(of: $0) } == true }
+                let seen = all.filter { $0.isVisible && $0.alphaValue > 0 }
+                for w in seen {
+                    CraLog.note("chrome window \(label): \(NSStringFromClass(type(of: w))) '\(w.title)' alpha=\(w.alphaValue) frame=\(NSStringFromRect(w.frame)) child=\(w.parent != nil ? 1 : 0)")
+                }
+                CraLog.note("chrome windows \(label): seen=\(seen.count) of \(all.count) (\(all.map { "\(NSStringFromClass(type(of: $0))) \($0.isVisible ? "on" : "off") a\($0.alphaValue) \(Int($0.frame.width))x\(Int($0.frame.height)) parent=\($0.parent.map { NSStringFromClass(type(of: $0)) } ?? "-")" }.joined(separator: ", ")))")
+                return
+            }
             // pip=<label>: Chromium's Picture in Picture window as Cra keeps it; pipKey=space|force asks
             // it to become key the ways Chromium can leave it open to that (#262); pipDrop=left|right|top|bottom
             // lets it go half past that edge of the screen, as a mouse drag does (#332); pipClick=<n> clicks
