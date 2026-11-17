@@ -123,10 +123,11 @@ private struct DockArt: View {
                 .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(colors.dark ? 0.18 : 0.45), lineWidth: 1))
                 .frame(width: 420, height: 167)
                 .offset(x: 88, y: 205)
-            NeighbourTile(icon: system.defaultBrowserURL.map { NSWorkspace.shared.icon(forFile: $0.path) }, dark: colors.dark)
+            // Left: the default browser (never Cra itself); right: Arc, or Dia when Arc is on the left.
+            let neighbours = Self.neighbours(defaultBrowser: system.defaultBrowserURL)
+            NeighbourTile(icon: neighbours.left.flatMap(Self.icon(bundleID:)), dark: colors.dark)
                 .offset(x: 64, y: 235)
-            // Right neighbour: Arc (Dia when Arc is already the default on the left).
-            NeighbourTile(icon: neighbourIcon(excluding: system.defaultBrowserURL), dark: colors.dark)
+            NeighbourTile(icon: neighbours.right.flatMap(Self.icon(bundleID:)), dark: colors.dark)
                 .offset(x: 368, y: 235)
             // A macOS icon's artwork fills 824 of its 1024 pt canvas; Dia's tile is 144 pt.
             Image(nsImage: NSApp.applicationIconImage)
@@ -145,13 +146,18 @@ private struct DockArt: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.75), value: docked)
     }
 
-    private func neighbourIcon(excluding defaultBrowser: URL?) -> NSImage? {
-        for source in [ImportSource.arc, .dia] {
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: source.bundleID),
-                  url.standardizedFileURL != defaultBrowser?.standardizedFileURL else { continue }
-            return NSWorkspace.shared.icon(forFile: url.path)
-        }
-        return nil
+    /// ImportSourceList.dockNeighbours over the browsers installed here.
+    private static func neighbours(defaultBrowser: URL?) -> (left: String?, right: String?) {
+        let fallbacks = ImportSource.allCases.map(\.bundleID)  // Arc, Dia, then the rest
+        let defaultID = defaultBrowser.flatMap { Bundle(url: $0)?.bundleIdentifier }
+        let installed = Set((fallbacks + [defaultID].compactMap { $0 }).filter { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil })
+        let own = Bundle.main.bundleIdentifier ?? "dk.kildahl.cra"
+        return ImportSourceList.dockNeighbours(defaultBrowser: defaultID, installed: installed,
+                                               isCra: { $0 == own || $0.hasPrefix("dk.kildahl.cra") }, fallbacks: fallbacks)
+    }
+
+    private static func icon(bundleID: String) -> NSImage? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map { NSWorkspace.shared.icon(forFile: $0.path) }
     }
 }
 

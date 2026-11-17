@@ -1410,10 +1410,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Attaches the visible tabs' Chrome windows over their pane areas, hides the others.
-    func browserManagerPageWindowsChanged(focus: Bool) {
+    func browserManagerPageWindowsChanged(focus requested: Bool) {
         askOnPage.service.refresh()
         LinkSummaryPreviewController.shared.validate(windowID: windowID)
         guard let window else { return }
+        // A page that turns up after its tab was switched to (made on the press) leaves the keys
+        // with a field of Cra's own that took them meanwhile: a double-click's rename (#424).
+        let focus = requested && !ownFieldHasKeys
         syncInfoBars()
         frameReleaseAfterChange?.cancel()
         frameReleaseAfterChange = app.composition.clock.after(HiddenFrameRelease.afterPageChange) { [weak self] in
@@ -1714,12 +1717,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if !(focused + panel).contains(where: { responder.isDescendant(of: $0) }) { window.makeFirstResponder(nil) }
     }
 
+    /// One of Cra's own text fields in this window has the keys (the field editor is an NSText; a
+    /// page's view is not): a tab's rename in the sidebar, the address being edited in place.
+    private var ownFieldHasKeys: Bool { window?.firstResponder is NSText }
+
     /// The tab whose embedded page should take keyboard focus once it is in its card.
     private var embedFocusTab: UUID?
 
     private func focusEmbeddedPage(_ id: UUID) {
         guard let window, let rt = browsers.runtime(for: id), let view = rt.pageViews.last, view.window === window else { return }
         embedFocusTab = nil
+        // Embedded later than the switch: a field typed into since keeps the keys (#424).
+        if ownFieldHasKeys { return }
         // Never from a panel that has the keys (the command bar filling a split pane, the find bar).
         if let key = NSApp.keyWindow, key !== window, !EmbeddedPages.isHost(key), key.parent === window { return }
         window.makeKey()
