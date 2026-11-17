@@ -29,7 +29,7 @@ staple() {
   return 1
 }
 echo "Notarizing $(basename "$FILE")…"
-xcrun notarytool submit "$FILE" "${AUTH[@]}" --wait --timeout 30m
+xcrun notarytool submit "$FILE" "${AUTH[@]}" --wait --timeout 2h
 case "$FILE" in
   *.dmg) staple "$FILE" ;;
 esac
