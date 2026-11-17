@@ -970,5 +970,6 @@
 #498   Tests/StoreTests.swift::fullSplitTakesNoMorePanes  7b27b455e777
 #500   Tests/Scenarios/little-window-over-browser.scenario  95a396732422
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7
-#512   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::textTypedPastAGoToRowIsSearchedUnlessItIsAnAddress  5cf5fa75d3e3
 #508   Tests/Scenarios/devtools-link-hover.scenario  32f0a400e052
+#509   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aTapUnderThePageBringsTheBarBack  bdd673327a2a
+#512   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::textTypedPastAGoToRowIsSearchedUnlessItIsAnAddress  5cf5fa75d3e3

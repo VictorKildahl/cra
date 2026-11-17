@@ -19,6 +19,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let pageDim = UIView()
     var pagePushedBack = false
     let dismissArea = UIControl()
+    /// Over the home indicator's strip while scrolling has put the bar away: a tap there brings
+    /// it back (#509). A button, since a plain control there loses its tap to the page's gestures.
+    let barReveal = UIButton(type: .custom)
     let bar = BottomBar()
     let sheet = SearchSheet()
 
@@ -94,6 +97,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         browseToggle.alpha = 0
         browseToggle.onPick = { [weak self] side in self?.browseTogglePicked(side) }
         view.addSubview(browseToggle)
+        barReveal.addTarget(self, action: #selector(revealBar), for: .touchUpInside)
+        barReveal.isHidden = true
+        barReveal.accessibilityIdentifier = "bar-reveal"
+        barReveal.accessibilityLabel = "Show Bottom Bar"
+        view.addSubview(barReveal)
         view.addSubview(bar)
 
         sheet.delegate = self
@@ -224,6 +232,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
         bar.controlsVisibility = isSearching ? 0 : 1
+        barReveal.frame = MobileBottomBar.revealStrip(in: bounds.size, safeBottom: safeBottom)
+        barReveal.isHidden = !barHiddenByScroll || isSearching || switcher != nil || shownPage == nil
         placeBlockerNotices()
         placeCoachMark()
 
@@ -1022,6 +1032,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if atTop || !collapses { hide = false } else if scrollTravel > 24 { hide = true } else if scrollTravel < -24 { hide = false } else { return }
         guard hide != barHiddenByScroll else { return }
         barHiddenByScroll = hide
+        animateChrome(duration: 0.25, options: .curveEaseInOut)
+    }
+
+    /// A tap on the strip under the page brings the bar back, as scrolling up does.
+    @objc func revealBar() {
+        guard barHiddenByScroll else { return }
+        barHiddenByScroll = false
+        scrollTravel = 0
         animateChrome(duration: 0.25, options: .curveEaseInOut)
     }
 

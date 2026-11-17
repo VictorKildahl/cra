@@ -93,7 +93,7 @@ the real app on an iPhone has to be recorded before then.
 |---|---|---|
 | Full-height page, no address bar | done | |
 | Bottom bar: tab stack, pill, up arrow | done | Measured: 76 pt bar, 76 × 39 pill, 35 pt circle, stack of two leaning cards. |
-| Bar hides on scroll down, returns on scroll up | done | Follows the site's "Collapse Bottom Bar" switch. |
+| Bar hides on scroll down, returns on scroll up | done | Follows the site's "Collapse Bottom Bar" switch. A tap on the home indicator's strip also brings it back (`MobileBottomBar.revealStrip`, #509: a swipe up there can open the app switcher); no reference shows what Arc Search does there. UI test `testATapOnTheBottomEdgeBringsTheBarBack`. |
 | Swipe on the bar to cycle recent tabs | done | The neighbouring tab in the row slides in beside the page (`MobileSwipe.tabStep`). Arc Search's own motion was not seen. |
 | Swipe to navigate, from anywhere | partial | Back and forward from anywhere or from the edges, per site. The page slides off and the next one fades in; WebKit's own snapshot transition is not used, and Arc Search's was not seen. |
 | Swipe back on a tab's first page archives it; opposite reopens | done | `MobileSwipe.navigation`; UI test in `GestureTests`. |

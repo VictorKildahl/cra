@@ -39,6 +39,14 @@ struct MobileChromeTests {
         #expect(frames.bar.height == 42)
         #expect(frames.pill.midX == 187.5)
     }
+
+    /// With the bar scrolled away, a tap on the home indicator's strip brings it back (#509).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/509"))
+    func aTapUnderThePageBringsTheBarBack() {
+        let strip = MobileBottomBar.revealStrip(in: CGSize(width: 393, height: 852), safeBottom: 34)
+        #expect(strip == CGRect(x: 0, y: 818, width: 393, height: 34))
+        #expect(MobileBottomBar.revealStrip(in: CGSize(width: 375, height: 667), safeBottom: 0).isEmpty)
+    }
 }
 
 struct MobileSuggestionsTests {

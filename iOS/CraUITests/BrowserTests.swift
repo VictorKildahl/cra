@@ -414,6 +414,22 @@ final class GestureTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["bar-spaces"].exists)
     }
 
+    /// With the bar scrolled away, a tap on the bottom edge brings it back: a swipe up there can
+    /// open the app switcher instead.
+    func testATapOnTheBottomEdgeBringsTheBarBack() {
+        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        waitForPage("Tall")
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable)
+        app.webViews.firstMatch.swipeUp()
+        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
+        wait(for: [gone], timeout: 5)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995)).tap()
+        let back = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [back], timeout: 5)
+        keep("bar back")
+    }
+
     /// Dragging the search sheet down puts it away when there is a page behind it.
     func testDraggingTheSearchSheetDownClosesIt() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])

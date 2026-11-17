@@ -85,4 +85,12 @@ public enum MobileBottomBar {
         return Frames(bar: bar, tabs: circle(sideButtonCenterInset), pill: pill,
                       menu: circle(size.width - sideButtonCenterInset))
     }
+
+    /// Where a tap brings the bar back after scrolling put it away: the home indicator's strip
+    /// along the bottom edge, which pages leave empty. A swipe up from there is the system's
+    /// and can open the app switcher, so a tap is the sure way back (#509). A phone without a
+    /// home indicator has no such strip; its page runs to the edge and scrolling up is enough.
+    public static func revealStrip(in size: CGSize, safeBottom: CGFloat) -> CGRect {
+        CGRect(x: 0, y: size.height - safeBottom, width: size.width, height: safeBottom)
+    }
 }
