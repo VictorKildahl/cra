@@ -861,15 +861,15 @@ final class SidebarStore {
 
     func touchAfterImport() { touch() }
 
+    /// Posted with the store once `replace(document:)` has put a synced sidebar in: the browser
+    /// managers put each live page's own address back (BrowserManager.reassertLivePages).
+    static let documentReplaced = Notification.Name("CraSidebarDocumentReplaced")
+
     /// The sidebar another Mac wrote to the sync folder (SettingsSyncService), in place of this
     /// one's: spaces, items, profiles and profile favorites. Incognito and Blank Windows keep their
     /// spaces; they are this Mac's windows, never in a synced document (`SidebarDocument.forSync`).
     /// Repaired like a file at launch, so a profile the other Mac deleted leaves its spaces on
     /// Default, and a window whose space is gone shows the first.
-    /// Posted with the store once `replace(document:)` has put a synced sidebar in: the browser
-    /// managers put each live page's own address back (BrowserManager.reassertLivePages).
-    static let documentReplaced = Notification.Name("CraSidebarDocumentReplaced")
-
     func replace(document synced: SidebarDocument) {
         let previousAskProfiles = askProfileOwnership(of: allTabs().map(\.id))
         let previousSpaceProfiles = spaces.mapValues(\.profileID)
