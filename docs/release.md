@@ -57,11 +57,37 @@ Run the manual checks in [release-checklist.md](release-checklist.md) for every 
 release touched first.
 
 ```sh
-# 1. Add the release to the website's src/content/releases.ts and bump CRA_VERSION defaults if needed.
-# 2. Tag and push. The Release workflow builds, signs, notarizes, packages and publishes.
+# 1. Tag and push first. The Release workflow builds, signs, notarizes, packages and publishes.
 git tag v0.1.0
 git push origin v0.1.0
+# 2. While it runs (Apple's notary queue is the slow part): record the clips and write the
+#    release's entry in the website's src/content/releases.ts.
+# 3. Once the release is live: push the website, set the GitHub notes, close the issues.
 ```
+
+Clips come after the tag, not before: the build and Apple's check run while they're recorded. The
+clip hook checks the website push, not the tag (see "Clips in the release notes").
+
+### Notarization
+
+Each CPU is notarized once: `release.sh` packages the signed app into its DMG and
+`scripts/notarize.sh` submits the DMG, whose ticket covers the app inside, then staples the DMG
+and the app and zips the stapled app. Apple usually answers in minutes; on 17 Nov 2026 it took
+52, so the wait is 2 hours.
+
+A run that stops while Apple is still checking keeps its work. `notarize.sh` writes the
+submission id next to the DMG (`Cra.dmg.submission`) as soon as Apple has it; when a build job
+fails or is cancelled, the workflow uploads the signed app, the DMG and the id
+(`scripts/keep-pending.sh`, artifact `pending-<version>-<arch>`). Rerun the failed job
+(`gh run rerun <id> --failed`): it downloads them and only waits for that submission, then
+staples and publishes. Locally the same: `scripts/keep-pending.sh <dir>`, then
+`CRA_RESUME=<dir> scripts/release.sh`.
+
+Credentials, the first that is set: `NOTARY_KEYCHAIN_PROFILE`; an App Store Connect API key
+(`NOTARY_API_KEY_PATH`, `NOTARY_API_KEY_ID`, `NOTARY_API_ISSUER`; in CI the secrets
+`APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`); or the Apple ID with an
+app-specific password. Prefer the API key, with the Developer role only: an app-specific
+password can be revoked and an Apple ID locked, which stopped 0.1.47's rerun with HTTP 401.
 
 ### Sponsors in the release notes
 
@@ -108,8 +134,9 @@ density 2), the website build fails on them for releases after 0.1.37
 (`src/content/release-media-rules.ts`), and the hook below blocks the tag.
 
 A Claude Code hook (`.claude/settings.json` → `scripts/clips/check-release-media.sh`) blocks
-pushing a `v*` tag when `Sources/Cra/UI` changed since the previous tag and the release's
-entry has no `media`. If there is nothing to film, add `// no clip: <reason>` to the entry.
+pushing the website when its newest release changed `Sources/Cra/UI` since the previous tag and
+the release's entry has no `media`. If there is nothing to film, add `// no clip: <reason>` to
+the entry. The tag isn't held up: record the clips while the Release workflow runs.
 
 Every release ships both CPUs. The workflow builds Apple silicon and Intel in two parallel
 jobs on the same Apple silicon runner (Intel is cross-compiled) and a third job publishes:

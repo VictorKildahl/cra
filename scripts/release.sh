@@ -37,26 +37,36 @@ export CRA_STABLE_VERSION="${CRA_STABLE_VERSION:-$(tr -d '[:space:]' < scripts/s
 STABLE_DIR="$(mktemp -d /tmp/cra-stable.XXXXXX)"
 trap 'rm -rf "$STABLE_DIR"' EXIT
 
-rm -rf build/dist
+# CRA_RESUME=<dir> (the Release workflow's rerun, or by hand): a CPU whose signed app, DMG and
+# Apple submission id are in <dir> (scripts/keep-pending.sh wrote them when a run stopped while
+# Apple was still checking) is not built again: its notarization is picked up where it was.
+RESUME="${CRA_RESUME:-}"
+[ -n "$RESUME" ] || rm -rf build/dist
+mkdir -p build/dist
 for ARCH in $ARCHS; do
-  CRA_ARCH="$ARCH" scripts/build.sh release
   # build.sh's rule: the host CPU builds build/Cra.app, the other one build/<arch>/Cra.app.
   if [ "$ARCH" = "$(uname -m)" ]; then APP="build/Cra.app"; else APP="build/$ARCH/Cra.app"; fi
-  SUFFIX="$(scripts/asset-suffix.sh "$APP")"
-
-  if [ "$IDENTITY" != "-" ]; then
-    # Notarize the app first (as a zip), staple it, then package the stapled app.
-    TMPZIP="$(mktemp -d /tmp/cra-notarize.XXXXXX)/Cra.zip"
-    ditto -c -k --keepParent "$APP" "$TMPZIP"
-    scripts/notarize.sh "$TMPZIP" "$APP"
-    rm -rf "$(dirname "$TMPZIP")"
+  if [ -n "$RESUME" ] && [ -f "$RESUME/$ARCH/Cra.app.zip" ] && ls "$RESUME/$ARCH"/*.dmg.submission >/dev/null 2>&1; then
+    echo "Resuming $ARCH from $RESUME/$ARCH (submission $(cat "$RESUME/$ARCH"/*.dmg.submission))"
+    rm -rf "$APP" && mkdir -p "$(dirname "$APP")"
+    ditto -x -k "$RESUME/$ARCH/Cra.app.zip" "$(dirname "$APP")"
+    cp "$RESUME/$ARCH"/*.dmg "$RESUME/$ARCH"/*.dmg.submission build/dist/
+    scripts/fetch-sparkle.sh   # build.sh fetches it; the appcast below signs with it
+    SUFFIX="$(scripts/asset-suffix.sh "$APP")"
+  else
+    CRA_ARCH="$ARCH" scripts/build.sh release
+    SUFFIX="$(scripts/asset-suffix.sh "$APP")"
+    rm -f "build/dist/Cra$SUFFIX.dmg.submission"
+    # The DMG holds the app as signed; one notarization of the DMG covers both.
+    scripts/package.sh "$APP"
   fi
 
-  scripts/package.sh "$APP"
-
   if [ "$IDENTITY" != "-" ]; then
-    scripts/notarize.sh "build/dist/Cra$SUFFIX.dmg"
-    # Re-zip the stapled app so the zip download carries the ticket too.
+    # One submission per CPU: the DMG, whose ticket covers the app inside it. Stapled to the DMG
+    # and to the app (macOS checks the app inside the DMG online, as for most apps).
+    scripts/notarize.sh "build/dist/Cra$SUFFIX.dmg" "$APP"
+    rm -f "build/dist/Cra$SUFFIX.dmg.submission"
+    # Zip the stapled app: Sparkle updates and scripts/install.sh carry the ticket offline.
     ditto -c -k --keepParent "$APP" "build/dist/Cra$SUFFIX.zip"
     # On its own line so set -e fails the release when Gatekeeper rejects the app.
     spctl --assess --type execute --verbose=2 "$APP"

@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
-# Claude Code PreToolUse hook (Bash): before a release tag is pushed, checks that a release
-# which changes the UI shows it in the release notes. Blocks (exit 2) when Sources/Cra/UI
-# changed since the previous tag and the version's entry in cra-website's releases.ts has no
-# `media:` clip. A release whose UI changes have nothing to film opts out with a comment in
-# its entry: `// no clip: <reason>`. From 0.1.38 on, it also blocks a clip in an odd shape:
-# the release page shows clips on an 11:7 stage, so each must be landscape 1.5-1.65:1, at
-# least 1400 px wide and density 2 (cra-website's src/content/release-media-rules.ts).
+# Claude Code PreToolUse hook (Bash): before cra-website is pushed, checks that the newest release,
+# when it changes the UI, shows it in its release notes. Blocks (exit 2) when Sources/Cra/UI changed
+# since the previous tag and the version's entry in cra-website's releases.ts has no `media:` clip.
+# A release whose UI changes have nothing to film opts out with a comment in its entry:
+# `// no clip: <reason>`. From 0.1.38 on, it also blocks a clip in an odd shape: the release page
+# shows clips on an 11:7 stage, so each must be landscape 1.5-1.65:1, at least 1400 px wide and
+# density 2 (cra-website's src/content/release-media-rules.ts).
+#
+# Tagging is not held up by clips (Victor, 17 Nov 2026): the tag goes out first, so the Release
+# workflow builds and Apple notarizes while the clips are recorded; the notes go public with the
+# website push, which is where the clips have to be.
 set -euo pipefail
 
-command="$(jq -r '.tool_input.command // empty')"
+input="$(cat)"
+command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+cwd="$(jq -r '.cwd // empty' <<<"$input")"
 # Only an actual `git push` (at the start of a command, maybe after VAR=… prefixes),
 # not text that mentions one.
-grep -qE '(^|[;&|(]|\$\()[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=("[^"]*"|[^[:space:]]+)[[:space:]]+)*git[[:space:]]+push\b' <<<"$command" || exit 0
-version="$(grep -oE '\bv[0-9]+\.[0-9]+\.[0-9]+\b' <<<"$command" | head -1)" || exit 0
-[[ -n "$version" ]] || exit 0
+grep -qE '(^|[;&|(]|\$\()[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=("[^"]*"|[^[:space:]]+)[[:space:]]+)*git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+push\b' <<<"$command" || exit 0
+# A push of the website: run in cra-website, or `cd …cra-website` / `git -C …cra-website` in the command.
+[[ "$cwd" == *cra-website* ]] || grep -qE '(cd|-C)[[:space:]]+[^;&|]*cra-website' <<<"$command" || exit 0
 
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 releases="${CRA_WEBSITE:-$repo/../cra-website}/src/content/releases.ts"
 [[ -f "$releases" ]] || exit 0
+# The newest release in the notes, which this push publishes.
+version="v$(grep -m1 -oE '^    version: "[0-9]+\.[0-9]+\.[0-9]+"' "$releases" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+[[ "$version" != v ]] || exit 0
 
 # The tag right below this version, and the tag itself if it exists yet (else HEAD).
 previous="$(git -C "$repo" tag -l 'v*' | { cat; echo "$version"; } | sort -uV | grep -B1 -x "$version" | head -1)"

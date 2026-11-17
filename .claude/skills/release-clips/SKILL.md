@@ -1,14 +1,14 @@
 ---
 name: release-clips
-description: Record and attach short clips (or stills) of Cra's UI to the release notes on crabrowser.app. Use whenever a release, or an entry in cra-website's releases.ts, includes a UI change, animation, hover effect or drag interaction, before tagging the release, or when the release-tag hook blocks a push for missing clips.
+description: Record and attach short clips (or stills) of Cra's UI to the release notes on crabrowser.app. Use whenever a release, or an entry in cra-website's releases.ts, includes a UI change, animation, hover effect or drag interaction, right after tagging the release (while the Release workflow builds and Apple notarizes), or when the hook blocks a website push for missing clips.
 ---
 
 # Release clips
 
 Every release that changes something you can see gets a clip on its highlight in
 `../cra-website/src/content/releases.ts`, shown on crabrowser.app/release-notes. A PreToolUse
-hook (`scripts/clips/check-release-media.sh`) blocks pushing a `v*` tag when `Sources/Cra/UI`
-changed since the previous tag and the entry has no `media:`. If a UI change has nothing to
+hook (`scripts/clips/check-release-media.sh`) blocks pushing cra-website when its newest release changed `Sources/Cra/UI`
+since the previous tag and the entry has no `media:`. If a UI change has nothing to
 film, put `// no clip: <reason>` in the entry instead.
 
 ## Rules
@@ -19,7 +19,7 @@ film, put `// no clip: <reason>` in the entry instead.
   release page shows every clip on an 11:7 stage, the window's shape, so a full-window clip
   fills it and anything else shrinks to a sliver. `release-clip.sh` refuses other shapes
   (landscape 1.5-1.65:1, at least 1400 px wide, density 2), the website build fails on them
-  for releases after 0.1.37, and the tag hook blocks them. Frame a small change by where the
+  for releases after 0.1.37, and the website-push hook blocks them. Frame a small change by where the
   pointer goes and what moves, not by cropping.
 - Record at 120 fps and encode with `FPS=120`. Move the pointer with `glide` (eased, 240 Hz),
   never `cliclick m:`/`dm:`, which jump and look laggy. Victor wants clips as smooth as possible.
@@ -29,8 +29,10 @@ film, put `// no clip: <reason>` in the entry instead.
 
 ## Steps
 
-1. Build the release first (the clip copy is made from `/Applications/Cra.app`, so install the
-   new release there, or delete `build/clips/CraClip.app` to rebuild it from a newer copy).
+1. Tag and push the release first, so the Release workflow and Apple's notarization run while you
+   record. Record from a release build of the tagged commit (`scripts/build.sh`, then a CraClip copy
+   of `build/Cra.app`; the default copies `/Applications/Cra.app`, so delete `build/clips/CraClip.app`
+   to rebuild it from a newer copy).
 2. Drive and record:
 
    ```sh
