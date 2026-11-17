@@ -1,3 +1,4 @@
+# promise: #480
 # A page that cancels ⌘H cannot stop Cra from hiding its window.
 budget rss=700 stalls50=15
 home

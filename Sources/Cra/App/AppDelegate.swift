@@ -2565,10 +2565,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return true
     }
 
-    private var nativePageShortcuts: [(item: NSMenuItem, defaultKey: Shortcut)] = []
+    /// Quit, Hide, Hide Others, Minimize and Full Screen, as buildMenus makes them (`beforePage`).
+    private var nativePageShortcuts: [NSMenuItem] = []
 
+    /// A page can't keep the keys of the app and window commands macOS gives every app: Quit, Hide,
+    /// Hide Others and Minimize run before the page sees them, so a page that cancels every key
+    /// still lets Cra quit, hide and minimize (#480). Arc does the same with ⌘Q and ⌘M (measured
+    /// 17 Nov 2026, Arc 1.172.2). Full Screen's keys go first only to leave full screen: Arc lets a
+    /// page keep ⌃⌘F to enter it, and Chrome reserves it only in full screen
+    /// (BrowserCommandController::IsReservedCommandOrKey). Keys the user gave a Cra shortcut are
+    /// that shortcut's, with its own priority (Settings ▸ Shortcuts, #374).
     private func performNativePageShortcut(_ event: NSEvent) -> Bool {
-        guard event.type == .keyDown else { return false }
+        guard event.type == .keyDown, bindings.action(for: event) == nil else { return false }
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control, .function])
         guard !modifiers.isEmpty else { return false }
         let key = event.charactersIgnoringModifiers?.lowercased()
@@ -2582,19 +2590,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if equivalent != letter { mask.insert(.shift) }
             return mask == modifiers
         }
-        let shortcut = nativePageShortcuts.lazy.compactMap { native -> NSMenuItem? in
-            let item = native.item
+        let shortcut = nativePageShortcuts.lazy.compactMap { item -> NSMenuItem? in
             if matches(item) { return item.copy() as? NSMenuItem }
-            // A user-configurable command on the same chord can clear the native item's key
-            // in the main menu. The native command still takes precedence over a page.
-            if item.keyEquivalent.isEmpty, item.userKeyEquivalent.isEmpty, native.defaultKey.flags == modifiers,
-               native.defaultKey.key == key || native.defaultKey.key == typed,
-               self.bindings.action(for: event)?.shortcuts.contains(native.defaultKey) == true,
-               let copy = item.copy() as? NSMenuItem {
-                copy.keyEquivalent = native.defaultKey.key
-                copy.keyEquivalentModifierMask = native.defaultKey.flags
-                return copy
-            }
             // macOS also installs an alternate for Full Screen (Fn+F and Control-Command-F).
             guard item.action == #selector(NSWindow.toggleFullScreen(_:)) else { return nil }
             return item.menu?.items.first { $0.action == item.action && matches($0) }?.copy() as? NSMenuItem
@@ -2610,11 +2607,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 target = parent
             }
             guard let target else { return false }
+            if shortcut.action == #selector(NSWindow.toggleFullScreen(_:)), !target.styleMask.contains(.fullScreen) { return false }
             shortcut.target = target
         }
 
-        // Let AppKit validate and dispatch the native item without picking a configurable shortcut
-        // that uses the same keys. In particular, keep Cra's normal Quit and window availability rules.
+        // A menu of its own runs the native item alone, validated as the menu bar's is: Cra's quit
+        // rules (Keep in menu bar, Quit Cra?) and whether the window can minimize (a Peek can't).
         let menu = NSMenu()
         menu.addItem(shortcut)
         menu.update()
@@ -3034,7 +3032,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                      beforePage: Bool = false) -> NSMenuItem {
         let m = NSMenuItem(title: title, action: sel, keyEquivalent: key)
         m.keyEquivalentModifierMask = mods
-        if beforePage { nativePageShortcuts.append((m, Shortcut(key, mods))) }
+        if beforePage { nativePageShortcuts.append(m) }
         return m
     }
 
