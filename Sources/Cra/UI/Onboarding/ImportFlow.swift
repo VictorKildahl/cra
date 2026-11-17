@@ -67,7 +67,15 @@ struct PinCandidate: Identifiable, Hashable {
 @MainActor
 @Observable
 final class ImportFlowModel {
+    /// Browsers with something to bring over; only these can be picked.
     let sources = ImportSource.allCases.filter(\.isAvailable)
+    /// What the browser step shows: every browser Cra imports from, the available ones first
+    /// and the rest dimmed (ImportSourceList).
+    var listedSources: [ImportSource] {
+        let available = Set(sources.map(\.id))
+        let byID = Dictionary(uniqueKeysWithValues: ImportSource.allCases.map { ($0.id, $0) })
+        return ImportSourceList.ordered(ImportSource.allCases.map(\.id), available: available).compactMap { byID[$0] }
+    }
     var step: ImportStep
     /// Direction of the last step change, for the slide transition.
     var forward = true
@@ -228,7 +236,8 @@ final class ImportFlowModel {
     // MARK: Source
 
     func select(_ s: ImportSource) {
-        guard s != source else { return }
+        // Only a browser with something to bring over; the others are listed dimmed (ImportSourceList).
+        guard s != source, sources.contains(s) else { return }
         load(s)
     }
 

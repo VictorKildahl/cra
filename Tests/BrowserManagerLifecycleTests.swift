@@ -206,6 +206,7 @@ enum BrowserManagerLifecycleTests {
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
         pictureInPictureMinimizeCase()
+        pictureInPictureMinimizeSilentCase()
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
@@ -2021,6 +2022,29 @@ enum BrowserManagerLifecycleTests {
         expect(store.selections.count == selected, "Minimize doesn't go to the video's tab")
         manager.browser(ra.browser, didChangePictureInPicture: false)
         expect(np.shown.map(\.id) == [a], "the minimized video is in the sidebar player")
+        manager.closeAll()
+    }
+
+    // promise: #434
+    /// A video in Picture in Picture whose tab has no player card (on CEF the card follows sound, so
+    /// a muted one has none; the engine drops it after the media session ends): Minimize makes it,
+    /// with the Picture in Picture button, or the video would be left with no way back but its tab
+    /// (#475, Peter Nielsen).
+    @MainActor
+    private static func pictureInPictureMinimizeSilentCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/muted").id
+        let ra = manager.ensureRuntime(for: a)!
+        ra.browser.isInPictureInPicture = true
+        manager.browser(ra.browser, didChangePictureInPicture: true)
+        PictureInPictureChrome.shared.actions?.minimize()
+        expect(!ra.browser.isInPictureInPicture, "Minimize leaves Picture in Picture")
+        manager.browser(ra.browser, didChangePictureInPicture: false)
+        expect(np.shown.map(\.id) == [a], "a minimized video without a card gets one in the sidebar player")
+        expect(np.shown.first?.hasVideo == true, "its card has the Picture in Picture button to bring it back")
         manager.closeAll()
     }
 

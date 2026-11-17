@@ -1115,6 +1115,24 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// Chrome closes the window automatic Picture in Picture opened when its tab is in front
     /// again, and the page takes its content back as the window goes (Meet's call returns to the
     /// tab). A window the page was still opening (the user came straight back) is closed once it
+    /// Arc's Minimize on the Picture in Picture window: the video leaves the window and plays on
+    /// in its tab, without going to it, and the sidebar's player has the tab with its Picture in
+    /// Picture button, which brings the video back out (#434). A tab without a card (on CEF the
+    /// card follows sound, so a muted video has none; the engine takes it away 2.5 s after the media
+    /// session ends, #411) gets one here, or Minimize would leave it with no way back but its tab.
+    func minimizePictureInPicture(_ id: UUID) {
+        guard let rt = runtimes[id], rt.browser.isInPictureInPicture else { return }
+        log(id, "minimizes Picture in Picture, keeps playing")
+        if let np = nowPlaying {
+            if np.entries.contains(where: { $0.id == id }) {
+                np.update(id) { $0.hasVideo = true }
+            } else {
+                np.entries.append(.init(id: id, playing: rt.browser.isPictureInPicturePlaying, hasVideo: true))
+            }
+        }
+        rt.browser.exitPictureInPicture()
+    }
+
     /// is up, a second later, if the tab is still in front.
     private func closeAutomaticPictureInPicture(_ rt: TabRuntime, again: Bool) {
         rt.browser.sendDevToolsMethod("Cra.autoPictureInPicture", params: #"{"tab":"shown"}"#) { _, _ in }
@@ -1141,10 +1159,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 skip: { [weak browser] s in browser?.skipPictureInPicture(by: s) },
                 seek: { [weak browser] s in browser?.seekPictureInPicture(to: s) },
                 close: { [weak browser] in browser?.closePictureInPicture() },
-                minimize: { [weak self, weak browser] in
-                    self?.log(id, "minimizes Picture in Picture, keeps playing")
-                    browser?.exitPictureInPicture()
-                })
+                minimize: { [weak self] in self?.minimizePictureInPicture(id) })
             PictureInPictureChrome.shared.isPlaying = browser.isPictureInPicturePlaying
             PictureInPictureChrome.shared.time = (0, 0)   // the page says where its video is right after
             PictureInPictureChrome.shared.address = PictureInPictureLayout.address(of: browser.currentURL)

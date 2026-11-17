@@ -17,6 +17,9 @@ final class FloatingSidebarController {
     var sidebarHidden: () -> Bool = { false }
     /// Something beside the sidebar still belongs to it (a folder preview): the pointer may leave.
     var staysShown: () -> Bool = { false }
+    /// Out whatever the pointer does, for a scenario on screen (cra://debug?floatingSidebar=hold), where
+    /// the real pointer is somewhere else and the poll would send the sidebar away.
+    var heldOut = false
     var palette: () -> SpacePalette
     /// Whether the browser window is in macOS full screen; the tests stand one in.
     lazy var windowFullScreen: () -> Bool = { [unowned self] in self.window.styleMask.contains(.fullScreen) }
@@ -31,6 +34,8 @@ final class FloatingSidebarController {
     /// A completed hide must not take the panel away from a newer reveal or anchor.
     private var transitionGeneration: UInt64 = 0
     private var panel: FloatingSidebarPanel?
+    /// The panel the sidebar slides out in, for a scenario's clicks (cra://debug?clickAt=…&target=floating).
+    var panelWindow: NSWindow? { panel }
     /// The sidebar's shadow, in a panel of its own under the sidebar's that lets clicks through. The
     /// sidebar panel's window shadow drew a hard outline round it; Arc has only the soft shadow (#293).
     private var shadowPanel: NSPanel?
@@ -167,7 +172,7 @@ final class FloatingSidebarController {
             let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, side: side, at: t)
             let stripOver = dwell.sample(inStrip: inStrip, at: t)
             wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal)
-        } else if !staysShown(), FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
+        } else if !staysShown(), !heldOut, FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow,
                                                     side: side) {
             hide(animated: true)
@@ -179,7 +184,7 @@ final class FloatingSidebarController {
     /// the pointer 100 pt left of the window, another app activated, back in 85 ms later). Over the
     /// window it stays as it did.
     func resignedActive(pointerAt p: CGPoint) {
-        guard isShown, !staysShown(), !shell.bounds.contains(p) else { return }
+        guard isShown, !staysShown(), !heldOut, !shell.bounds.contains(p) else { return }
         hide(animated: true)
     }
 

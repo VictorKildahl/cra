@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var settingsController: SettingsWindowController?
     private var isRelaunching = false
     private lazy var extensionsMenu = ExtensionsMenu(app: self)
+    private lazy var spacesMenu = SpacesMenu(app: self)
     /// Arc's Little Arc windows: small, sidebar-less, disposable (see LittleWindowController).
     private(set) var littleWindows: [LittleWindowController] = []
     /// When each Little Window was last the key window, for Arc's "Archive Little Arcs after:".
@@ -1190,8 +1191,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // target=little as for menuAt. button=back|forward: that mouse button released there,
             // handed to what the window's otherMouseUp monitor runs (#233); AppKit can't make a
             // window's event with button 3 or 4.
+            // target=floating: the sidebar sliding out at the edge, in its own panel (#424).
             if let g = dict["clickAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
-               let w = dict["target"] == "little" ? littleWindows.last?.window : main.window {
+               let w = dict["target"] == "little" ? littleWindows.last?.window
+                    : dict["target"] == "floating" ? main.floatingSidebar?.panelWindow : main.window {
                 let point = NSPoint(x: g[0], y: w.frame.height - g[1])
                 if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
                     let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
@@ -1236,6 +1239,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     // The ⌘T bar, while it is open, has the keyboard.
                     TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: main.openCommandPanel ?? w)
                 }
+                return
+            }
+            // activate=1: Cra to the front with its window key, for a screen scenario that types (#424).
+            if dict["activate"] == "1" { main.showWindow(nil); NSApp.activate(ignoringOtherApps: true); main.window?.makeKey(); return }
+            // keys=<label>: which window has the keyboard and what in it takes typed keys (#424).
+            if let label = dict["keys"] {
+                let key = NSApp.keyWindow
+                let kind = key == nil ? "none" : key === main.window ? "window"
+                    : key === main.floatingSidebar?.panelWindow ? "floating sidebar" : "other"
+                let to = key?.firstResponder.map { NSStringFromClass(type(of: $0)) } ?? "nothing"
+                CraLog.note("keys \(label): \(kind), to \(to)\(NSApp.isActive ? "" : " (Cra inactive)")")
                 return
             }
             if dict["zoomLevel"] != nil {
@@ -1645,15 +1659,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // menuRows=<menu>[&label=<label>]: a menu bar menu's rows as it draws them once validated
             // (hidden rows left out), "|" between rows and "──" for a separator: Arc's File menu (#279).
-            // marks=1 also puts ✓ before a checked row and " (off)" after a dimmed one (#333).
+            // marks=1 also puts ✓ before a checked row and " (off)" after a dimmed one (#333);
+            // icons=1 puts [icon] before a row with an image; tips=1 puts [tip] before one whose
+            // full title is available as a tooltip (#471).
+            // spacesMenuChange=add|moveLastFirst|renameFirst|deleteFirst mutates the temporary scenario
+            // store, so reopening this lazy menu proves it follows live Space changes (#471).
+            if let change = dict["spacesMenuChange"] {
+                switch change {
+                case "add":
+                    store.createSpace(title: dict["title"] ?? "Added", emoji: dict["emoji"] ?? "", focus: false)
+                case "moveLastFirst":
+                    if let id = store.spaceOrder.last { store.moveSpace(id, to: 0) }
+                case "renameFirst":
+                    if let id = store.spaceOrder.first, var space = store.space(id), let title = dict["title"] {
+                        space.rename(to: title)
+                        store.updateSpace(space)
+                    }
+                case "removeFirstIcon":
+                    if let id = store.spaceOrder.first, var space = store.space(id) {
+                        space.icon = .none
+                        store.updateSpace(space)
+                    }
+                case "deleteFirst":
+                    if let id = store.spaceOrder.first { store.deleteSpace(id) }
+                default:
+                    CraLog.note("spaces menu change: unknown \(change)")
+                }
+                return
+            }
             if let title = dict["menuRows"] {
                 let menu = NSApp.mainMenu?.items.first { $0.title == title }?.submenu
+                if let menu { menu.delegate?.menuNeedsUpdate?(menu) }
                 menu?.update()
+                // A delegate may have inserted new rows after AppKit's validation pass. Validate
+                // their explicit targets too, as opening the menu normally does.
+                for item in menu?.items ?? [] {
+                    if let validator = item.target as? NSMenuItemValidation {
+                        item.isEnabled = validator.validateMenuItem(item)
+                    }
+                }
                 let marks = dict["marks"] == "1"
+                let icons = dict["icons"] == "1"
+                let tips = dict["tips"] == "1"
                 let rows: [String] = menu?.items.filter { !$0.isHidden }.map { item -> String in
                     if item.isSeparatorItem { return "──" }
-                    guard marks else { return item.title }
-                    return (item.state == .on ? "✓" : "") + item.title + (item.isEnabled ? "" : " (off)")
+                    let mark = marks && item.state == .on ? "✓" : ""
+                    let icon = icons && item.image != nil ? "[icon]" : ""
+                    let tip = tips && item.toolTip != nil ? "[tip]" : ""
+                    let disabled = marks && !item.isEnabled ? " (off)" : ""
+                    return mark + icon + tip + item.title + disabled
                 } ?? []
                 CraLog.note("menu rows \(dict["label"] ?? title): \(rows.joined(separator: "|"))")
                 return
@@ -1983,7 +2037,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 Diagnostics.export(windows: mainWindows, store: store, to: URL(fileURLWithPath: path))
                 return
             }
-            if let f = dict["floatingSidebar"] { if f == "1" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }; return }
+            // floatingSidebar=1 out, =0 away, =hold out and kept there whatever the pointer does (#424).
+            if let f = dict["floatingSidebar"] {
+                main.floatingSidebar?.heldOut = f == "hold"
+                if f == "1" || f == "hold" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }
+                return
+            }
             if let method = dict["bcdp"] {
                 // To cra.log: a scenario reads it after a relaunch too, when stdout isn't kept (#299).
                 CraCEFRuntime.sendBrowserDevToolsMethod(method, params: dict["params"] ?? "{}") { result, error in
@@ -2322,8 +2381,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let little = keyLittleWindow.flatMap { $0.hasPage ? $0 : nil }
             item.isHidden = !TabsMenu.showsOpenIn(littleWindowWithPage: little != nil)
             if let space = little?.openInSpace {
-                let title = TabsMenu.openInTitle(space: space.title)
-                if item.title != title { item.title = title }
+                let title = SpaceMenuTitle.named(space.title, prefix: "Open in ")
+                SpaceMenuTitle.apply(title, to: item)
                 item.image = SpaceMenuIcon.image(for: space)
             }
             return little != nil
@@ -3000,17 +3059,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(std("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]))
         menubar.addItem(submenu: view, title: "View")
 
-        let spaces = NSMenu(title: "Spaces")
-        // Arc: New Space… heads the Spaces menu (#279).
-        spaces.addItem(item("newSpace"))
-        spaces.addItem(item("nextSpace")); spaces.addItem(item("previousSpace"))
-        spaces.addItem(.separator())
-        for id in ["editSpace", "changeProfile", "deleteSpace", "manageSpaces"] { spaces.addItem(item(id)) }
-        spaces.addItem(.separator())
-        for n in 1...9 { spaces.addItem(item("space\(n)")) }
-        spaces.addItem(.separator())
-        for n in 1...9 { spaces.addItem(item("moveTabToSpace\(n)")) }
-        menubar.addItem(submenu: spaces, title: "Spaces")
+        menubar.addItem(submenu: spacesMenu.makeMenu(), title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")
         // Arc: New Tab…, Pin Tab, Open in <space> (only while a Little Window or Peek is in front), New Folder… (#279).
