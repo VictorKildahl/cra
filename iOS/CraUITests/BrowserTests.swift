@@ -33,6 +33,15 @@ class BrowserTestCase: XCTestCase {
     func waitForPage(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.webViews.staticTexts[title].waitForExistence(timeout: 20), "page \(title) never showed", file: file, line: line)
     }
+
+    /// The bottom bar is back on screen once the keyboard is gone (GitHub #505: a keyboard that
+    /// faded out was still counted, so the bar stayed below the screen).
+    func waitForBarOnScreen(file: StaticString = #filePath, line: UInt = #line) {
+        let pill = app.buttons["bar-search"]
+        let onScreen = NSPredicate { _, _ in pill.exists && pill.frame.maxY <= self.app.frame.maxY && pill.isHittable }
+        let found = expectation(for: onScreen, evaluatedWith: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [found], timeout: 5), .completed, "the bar stayed off screen", file: file, line: line)
+    }
 }
 
 final class SearchTests: BrowserTestCase {
@@ -59,6 +68,7 @@ final class SearchTests: BrowserTestCase {
         waitForPage("First")
         XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.keyboards.firstMatch.exists)
+        waitForBarOnScreen()
         keep("page")
     }
 
@@ -72,6 +82,7 @@ final class SearchTests: BrowserTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
         XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.keyboards.firstMatch.exists)
+        waitForBarOnScreen()
     }
 }
 

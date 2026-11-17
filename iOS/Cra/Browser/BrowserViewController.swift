@@ -53,6 +53,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var isSearching = false
     var incognitoSearch = false
     var keyboardHeight: CGFloat = 0
+    var keyboard = MobileKeyboard()
     var keyboardDroveLayout = false
     var barHiddenByScroll = false
     var scrollTravel: CGFloat = 0
@@ -104,7 +105,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         installGestures()
 
         let center = NotificationCenter.default
-        center.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillChangeFrameNotification,
+                     UIResponder.keyboardWillHideNotification, UIResponder.keyboardDidHideNotification] {
+            center.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: name, object: nil)
+        }
         center.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
         center.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         Self.saveFakeShareForTest()
@@ -266,8 +270,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         guard let info = note.userInfo, let end = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let duration = info[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0.25
         let curve = info[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
-        let local = view.convert(end, from: nil)
-        keyboardHeight = max(0, view.bounds.height - local.minY)
+        let event: MobileKeyboard.Event
+        switch note.name {
+        case UIResponder.keyboardWillShowNotification: event = .willShow
+        case UIResponder.keyboardWillHideNotification: event = .willHide
+        case UIResponder.keyboardDidHideNotification: event = .didHide
+        default: event = .willChangeFrame
+        }
+        keyboard.apply(event, endFrame: view.convert(end, from: nil))
+        let height = keyboard.height(in: view.bounds)
+        // The did-hide is only a backstop: nothing to move when the will-hide already counted it gone.
+        guard event != .didHide || height != keyboardHeight else { return }
+        keyboardHeight = height
         keyboardDroveLayout = true
         if duration > 0 {
             animateChrome(duration: duration, options: UIView.AnimationOptions(rawValue: curve << 16))
