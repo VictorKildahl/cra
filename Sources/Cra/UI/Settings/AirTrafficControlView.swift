@@ -139,7 +139,8 @@ struct AirTrafficControlView: View {
                 Section("Open in Space") {
                     Text("Most Recent Space").tag(LinkDestination.mostRecentSpace)
                     ForEach(spaces) { space in
-                        Text(space.labeled).tag(LinkDestination.space(space.id))
+                        let title = SpaceMenuTitle.plain(space.labeled)
+                        Text(title.title).help(title.fullTitle).tag(LinkDestination.space(space.id))
                     }
                 }
                 Divider()
@@ -152,7 +153,8 @@ struct AirTrafficControlView: View {
                     Section("Little Window in") {
                         Text("Most Recent Space").tag(UUID?.none)
                         ForEach(spaces) { space in
-                            Text(space.labeled).tag(UUID?.some(space.id))
+                            let title = SpaceMenuTitle.plain(space.labeled)
+                            Text(title.title).help(title.fullTitle).tag(UUID?.some(space.id))
                         }
                     }
                 }
