@@ -1241,11 +1241,13 @@ final class SidebarStore {
 
     /// Add an existing tab as a pane of a split (Arc: onDropSidebarItem). A
     /// pinned or favorite tab stays where it is; a Today copy becomes the pane.
+    /// A split already holding Arc's four panes takes nothing (#498).
     func addToSplit(_ splitID: UUID, tabID: UUID, at index: Int?) {
         guard var split = items[splitID], split.isSplit, var tab = items[tabID], tab.isTab, tab.parentID != splitID else {
             if let i = index, let sp = items[splitID], sp.children.firstIndex(of: tabID) != nil { moveWithinSplit(splitID, tabID: tabID, to: i) }
             return
         }
+        guard split.children.count < SplitDropProposal.maximumPanes else { return }
         let previousAskProfiles = askProfileOwnership(of: [tabID])
         defer { notifyAskProfileChanges(previousAskProfiles) }
         let from = tab.parentID

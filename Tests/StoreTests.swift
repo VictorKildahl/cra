@@ -89,6 +89,7 @@ enum StoreTests {
         revealInSidebar()
         oneWindowAtLaunch()
         openLinkInSplit()
+        fullSplitTakesNoMorePanes()
         backToReferrer()
         recentTabsTakeBackgroundTabs()
         recentTabsInAllSpacesGoBack()
@@ -2853,6 +2854,38 @@ enum StoreTests {
                && !store.isPinned(fromPinned.id) && store.paneTabIDs(for: fromPinned.id).count == 2,
                "a pinned tab stays where it is: the split goes in Today with a copy of its page, as Add Split View does")
         expect(store.openLinkInSplit("https://example.com/x", from: UUID(), window: main) == nil, "no tab, no pane")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #498
+    /// A split holds Arc's four panes on every path (#498): a tab let go on a full split's sidebar
+    /// row stays where it was, and a pinned tab leaves no copy behind; a split with room still
+    /// takes it.
+    @MainActor
+    private static func fullSplitTakesNoMorePanes() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Full Split", emoji: "🪟").id
+        let main = store.activeWindowID
+        let today = store.space(sid)!.todayContainerID
+        let tabs = (1...4).map { store.createTab(url: "https://example.com/pane-\($0)", in: sid, window: main) }
+        guard let split = store.createSplit(with: tabs.map(\.id)) else { return expect(false, "four tabs make a split") }
+        let panes = store.children(of: split.id).map(\.id)
+        expect(panes.count == SplitDropProposal.maximumPanes, "a split of four panes")
+
+        let fifth = store.createTab(url: "https://example.com/fifth", in: sid, window: main)
+        store.moveItem(fifth.id, to: split.id, index: nil)
+        expect(store.children(of: split.id).map(\.id) == panes, "a fifth tab dropped on the split's row adds no pane")
+        expect(store.item(fifth.id)?.parentID == today, "and stays in Today")
+
+        let pinned = store.createTab(url: "https://example.com/pinned", in: sid, pinned: true, window: main)
+        let count = store.children(of: split.id).count
+        store.addToSplit(split.id, tabID: pinned.id, at: 0)
+        expect(store.children(of: split.id).count == count && store.isPinned(pinned.id),
+               "a pinned tab adds no copy of itself to a full split")
+
+        store.archiveTab(panes[3], reason: .manual)
+        store.moveItem(fifth.id, to: split.id, index: nil)
+        expect(store.children(of: split.id).map(\.id) == Array(panes.prefix(3)) + [fifth.id], "with room again the split takes it")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

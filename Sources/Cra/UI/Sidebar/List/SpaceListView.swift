@@ -1180,7 +1180,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                 // target's place: on a pinned tab it is a pinned split (#180).
                 target = .split(with: rid, leading: p.x < r.frame.midX)
             } else if middle && isTab && item.isSplit {
-                target = .into(rid)
+                // A split of Arc's four panes takes no fifth (#498).
+                target = item.children.count < SplitDropProposal.maximumPanes ? .into(rid) : nil
             } else if middle && !combines {
                 // Arc 1.173.1 takes nothing on a tab's middle (measured: no line, no tab, the tab kept its page).
                 target = nil
