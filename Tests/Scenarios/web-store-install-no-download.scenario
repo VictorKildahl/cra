@@ -1,0 +1,17 @@
+# An imported extension's Web Store install downloads its CRX through Chrome's downloads, which Chrome's own UI
+# never shows. On the Chromium engine Cra showed it as a download of the profile's last page: a file named
+# <id>_<number>.crx flew into the sidebar and sat in the downloads list, again at every launch for an extension
+# the store can't install (reported 17 Nov 2026: "it downloads random files as it can't redownload some
+# extensions"). Here the store answers with a page instead of a CRX: the download finishes, the install fails.
+home
+budget rss=700
+extension ${FIXTURES}/WebStoreCopy/${WEB_STORE_COPY_ID}
+arg --apps-gallery-download-url=${ORIGIN}/page.html?crx=%s
+cra://open?url=${PAGE}?n=store
+expect-log extension ${WEB_STORE_COPY_ID}: installing from the Web Store in Default
+expect-log GET /page.html\?crx=
+expect-log Web Store install in Default failed
+wait 2
+reject-log Download finished
+cra://debug?downloadState=store
+expect-log download state store: running=false progress=none rows=\[\] finished=0$
