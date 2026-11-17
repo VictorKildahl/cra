@@ -486,6 +486,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             if let render = EmbeddedPages.renderView(in: b.containerView) { window.makeFirstResponder(render) }
         }
         b.setFocused(true)
+        // Focusing the page moves Chrome's hidden window over to this one (FollowWindow in the
+        // engine's bridge.mm), and AppKit rebuilds the ordering group of the browser window it left:
+        // the browser window rose over this one as it finished growing in (#500). It comes back on
+        // top, with the page keeping the keys.
+        if !isPeek, let window, window.isVisible { window.orderFront(nil) }
     }
 
     /// Shows the window without making it key (a link opened in the background).
