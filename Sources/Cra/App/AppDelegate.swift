@@ -1537,6 +1537,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 b?.showDevToolsInspectingPoint(NSPoint(x: g[0], y: g[1]))
                 return
             }
+            // front=<label>: the Little Window that takes actions now (keyLittleWindow), and the windows in front-to-back
+            // order (class, alpha, visible), for a test copy that has no key window.
+            if let label = dict["front"] {
+                let little = keyLittleWindow.flatMap { l in littleWindows.firstIndex { $0 === l } }.map { "little\($0)" } ?? "none"
+                let order = NSApp.orderedWindows.prefix(6).map { w in
+                    let name = littleWindows.contains { $0.window === w } ? "Little" : mainWindows.contains { $0.window === w } ? "Main"
+                        : String(describing: type(of: w))
+                    return "\(name)(a=\(w.alphaValue == 0 ? 0 : 1),v=\(w.isVisible ? 1 : 0))"
+                }
+                CraLog.note("front \(label): key=\(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none") little=\(little) order=\(order.joined(separator: ","))")
+                return
+            }
             // devtoolsClick=1: a click in the middle of the current tab's docked DevTools (EmbeddedDevTools.debugClick).
             if dict["devtoolsClick"] != nil {
                 if let holder = EmbeddedDevTools.holder(of: main.currentBrowser?.devToolsWindow), holder.superview != nil,
