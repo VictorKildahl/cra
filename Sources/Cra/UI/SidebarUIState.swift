@@ -28,6 +28,8 @@ final class SidebarUIState {
     var loadedTabIDs: Set<UUID> = []
     /// Tabs using the camera or microphone (Arc's recording indicator).
     var capturingTabIDs: Set<UUID> = []
+    /// Tabs an MCP agent works in (MCPServer, MCPAgentPresence.lingers after its last call): a face on the row.
+    var agentTabIDs: Set<UUID> = []
     /// Recently audible tabs, held for 2 s after sound stops so the speaker stays steady.
     var audibleTabIDs: Set<UUID> = []
     /// Immediate sound state for favorite music notes.

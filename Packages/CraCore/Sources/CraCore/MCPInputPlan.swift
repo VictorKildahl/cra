@@ -11,8 +11,12 @@ public enum MCPInputPlan {
     /// Short eased paths: pages that track the pointer (hover menus, drag thresholds) see real
     /// movement, without the second-long glides that made every click slow.
     public static func movement(from start: CGPoint, to end: CGPoint, variation: Double) -> [Move] {
+        movement(from: start, to: end, variation: variation, duration: min(0.24, 0.06 + hypot(end.x - start.x, end.y - start.y) / 4000))
+    }
+
+    /// The same eased, gently bent path over `duration` seconds, a step a frame.
+    public static func movement(from start: CGPoint, to end: CGPoint, variation: Double, duration: Double) -> [Move] {
         let distance = hypot(end.x - start.x, end.y - start.y)
-        let duration = min(0.24, 0.06 + distance / 4000)
         let steps = max(4, Int(duration / 0.016))
         let bend = (min(1, max(0, variation)) - 0.5) * min(40, distance * 0.1)
         let length = max(1, distance)

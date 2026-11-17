@@ -399,6 +399,9 @@ final class MCPPage {
     /// Role and name each ref had when last shown, so a stale ref can point at its redrawn self.
     private var refInfo: [String: (role: String, name: String)] = [:]
 
+    /// The accessible name a ref had when last shown (Cra's toast quotes it), nil if it had none.
+    func name(of ref: String) -> String? { refInfo[ref].flatMap { $0.name.isEmpty ? nil : $0.name } }
+
     /// The snapshot's rows and facts, unformatted (page_snapshot, and the changes after an action).
     func collect(_ cdp: MCPCDP, interactive: Bool = false, query: String? = nil) async throws -> [String: Any] {
         let needle = query?.lowercased().trimmingCharacters(in: .whitespaces)

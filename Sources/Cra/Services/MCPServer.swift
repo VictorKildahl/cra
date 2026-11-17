@@ -120,6 +120,7 @@ final class MCPServer {
         agentTabs.removeAll()
         for page in pages.values { page.detach() }
         pages.removeAll(); pointerPositions.removeAll(); ownedTabs.removeAll()
+        working.removeAll(); showWorking()
     }
 
     private func acceptClient(_ fd: Int32) {
@@ -210,6 +211,8 @@ final class MCPServer {
                 self?.clients.remove(client)
                 if self?.connections[owner] == client { self?.connections.removeValue(forKey: owner) }
                 self?.stoppedSessions.remove(owner)
+                self?.stopWorking(session: owner)
+                self?.agentNames.removeValue(forKey: owner)
                 if self?.lastPillSession == owner { self?.lastPillSession = nil }
                 self?.identities.removeValue(forKey: client)
                 self?.ownedTabs.removeValue(forKey: owner)
@@ -503,6 +506,7 @@ final class MCPServer {
                         server?.transfers[id]?.discard(paths)
                         if server?.transfers[id]?.isEmpty == true { server?.transfers.removeValue(forKey: id) }
                     }, canContinue: cdp.canContinue)
+                    if agentTabs[id] == nil { input.pointer = app.mainWindows.first { !$0.isIncognito && $0.browsers.runtime(for: id) != nil }?.agentPointer(for: id) }
                     let before = MCPProtocol.changeTools.contains(name) && arguments["changes"] as? Bool != false ? await page.before(cdp) : nil
                     result = await input.run(name: name, arguments: arguments)
                     pointerPositions[id] = input.position
@@ -548,25 +552,66 @@ final class MCPServer {
 
     // MARK: The pill
 
-    /// Cra's toast while an agent acts ("Claude Code is using Cra", Stop), in the window that
-    /// holds the tab it works in. Shown again at most every 3 s, so it stays up while the agent
-    /// works and goes ShinyToast.visibleFor after its last action. Reading never shows it.
-    @ObservationIgnored private var pillShown: [UUID: (session: UUID, at: ContinuousClock.Instant)] = [:]
-    private static let quietTools: Set<String> = ["site_notes", "tab_show", "tab_move", "tab_update", "folder_create", "page_dialog"]
+    /// The agent's pill while it acts (AgentPill), at the bottom of the window that holds the tab it
+    /// works in: its face, what it does ("Claude Code is clicking “Sign in”", MCPAgentPresence), and
+    /// Take Over (⌘.), which stops it. Each step changes the words; it stays up while the agent works
+    /// and goes AgentPill.visibleFor after its last action. Reading never shows it.
+    @ObservationIgnored private var pillShown: [UUID: UUID] = [:]
+    @ObservationIgnored private var lastPillText: [UUID: String] = [:]
+    /// page_batch says nothing itself: each of its steps does (batch()).
+    private static let quietTools: Set<String> = ["site_notes", "tab_show", "tab_move", "tab_update", "folder_create", "page_dialog", "page_batch"]
+    /// Each session's agent as the toast names it, for a batch's steps.
+    @ObservationIgnored private var agentNames: [UUID: String] = [:]
 
     private func noteActivity(agent: String, session: UUID, tool: String, arguments: [String: Any]) {
-        guard let app, !MCPProtocol.readTools.contains(tool), !Self.quietTools.contains(tool), tool != "page_snapshot" else { return }
+        guard let app else { return }
+        agentNames[session] = agent
         let id = (arguments["tabId"] as? String).flatMap(UUID.init(uuidString:))
+        if let id, agentTabs[id] == nil, app.store.mcpTab(id) != nil { noteWorking(id, session: session) }
+        guard !MCPProtocol.readTools.contains(tool), !Self.quietTools.contains(tool), tool != "page_snapshot" else { return }
         guard let window = id.flatMap({ tab in app.mainWindows.first { !$0.isIncognito && $0.browsers.runtime(for: tab) != nil } })
                 ?? app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else { return }
-        let now = ContinuousClock.now
-        // Another agent acting in the window shows its own pill at once, so Stop ends the one it names.
-        if let last = pillShown[window.windowID], last.session == session, now - last.at < .seconds(3) { return }
-        pillShown[window.windowID] = (session, now)
+        let url = id.flatMap { agentTabs[$0]?.browser.currentURL ?? app.runtime(for: $0)?.browser.currentURL ?? app.store.mcpTab($0)?.tab?.url }
+        let target = id.flatMap { tab in (arguments["ref"] as? String).flatMap { pages[tab]?.name(of: $0) } }
+        let text = MCPAgentPresence.activity(agent: agent, tool: tool, arguments: arguments, target: target, site: url.flatMap(MCPAgentPresence.site))
+        // Another agent acting in the window takes the pill at once, so Take Over stops the one it names.
+        if pillShown[window.windowID] != session || lastPillText[window.windowID] != text { CraLog.note("mcp pill: \(text)") }
+        pillShown[window.windowID] = session
+        lastPillText[window.windowID] = text
         lastPillSession = session
-        let text = "\(agent) is using Cra"
-        CraLog.note("mcp pill: \(text)")
-        window.showToast(text, action: ShinyToast.Action(title: "Stop") { [weak self] in self?.stopFromPill(session: session) })
+        window.showAgentPill(text) { [weak self] in self?.stopFromPill(session: session) }
+    }
+
+    // MARK: The face in the sidebar
+
+    /// Tabs an agent worked in lately, by the session and until when their row shows its face.
+    @ObservationIgnored private var working: [UUID: (session: UUID, until: Date)] = [:]
+    @ObservationIgnored private var workingSweep: DispatchWorkItem?
+
+    private func noteWorking(_ id: UUID, session: UUID) {
+        working[id] = (session, Date().addingTimeInterval(MCPAgentPresence.lingers))
+        showWorking()
+    }
+
+    /// The faces of `session`'s tabs go (it stopped or disconnected).
+    private func stopWorking(session: UUID) {
+        working = working.filter { $0.value.session != session }
+        showWorking()
+    }
+
+    /// Every window's sidebar shows the tabs still within their time, and looks again when the next one ends.
+    private func showWorking() {
+        let now = Date()
+        working = working.filter { $0.value.until > now }
+        let ids = Set(working.keys)
+        var changed = false
+        for window in app?.mainWindows ?? [] where window.sidebarUI.agentTabIDs != ids { window.sidebarUI.agentTabIDs = ids; changed = true }
+        if changed { CraLog.note("mcp faces: \(ids.count) tab\(ids.count == 1 ? "" : "s")") }
+        workingSweep?.cancel()
+        guard let next = working.values.map(\.until).min() else { workingSweep = nil; return }
+        let work = DispatchWorkItem { [weak self] in self?.showWorking() }
+        workingSweep = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0.1, next.timeIntervalSince(now)), execute: work)
     }
 
     /// Stop on the pill: the agent it names disconnects and its calls stop. MCP stays on, so other
@@ -575,6 +620,7 @@ final class MCPServer {
         guard let client = connections[session] else { return }
         CraLog.note("mcp: a session stopped from the pill")
         stoppedSessions.insert(session)
+        stopWorking(session: session)
         shutdown(client, SHUT_RDWR)
     }
 
@@ -732,6 +778,7 @@ final class MCPServer {
                 } else if let problem = MCPProtocol.problem(name: tool, arguments: stepArguments) {
                     result = MCPProtocol.content(problem, failed: true)
                 } else {
+                    if let agent = self.agentNames[owner] { self.noteActivity(agent: agent, session: owner, tool: tool, arguments: stepArguments) }
                     result = await withCheckedContinuation { continuation in
                         self.perform(tool, arguments: stepArguments, owner: owner, canContinue: canContinue) { continuation.resume(returning: $0) }
                     }

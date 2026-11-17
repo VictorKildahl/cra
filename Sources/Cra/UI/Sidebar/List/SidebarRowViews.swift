@@ -828,6 +828,8 @@ struct TabRowModel: Equatable {
     var selected: Bool
     var highlighted: Bool
     var capturing: Bool
+    /// An MCP agent works in the tab: its face sits where the close button shows on hover.
+    var agent: Bool = false
     var audible: Bool
     var muted: Bool
     var unread: Bool
@@ -1222,6 +1224,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private static let soundGlyphWidth: CGFloat = 17.5
     private var showsSound = false
     private lazy var peekBadge = SidebarFaviconView()
+    private lazy var agentFace = AgentFaceView()
     private lazy var unreadDot: NSView = {
         let dot = NSView(frame: NSRect(x: 0, y: 0, width: 6, height: 6))
         dot.wantsLayer = true
@@ -1251,6 +1254,10 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         }
         soundButton.isHidden = !sound
         if sound != showsSound { showsSound = sound; needsLayout = true }
+        if m.agent && !isHovered && !m.editing {
+            agentFace.show(fill: colors.textPrimary)
+            shown.append(agentFace)
+        }
         if let peek = m.peekIcon, !isHovered {
             peekBadge.show(peek, flip: false, colors: colors)
             shown.append(peekBadge)
@@ -1314,7 +1321,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         // The unread dot and a peek badge are centred where the close button shows on hover, which
         // is also under a live folder's refresh button (FolderRowView, Arc lines them up too).
         let trailing = TabRowTrailing.layout(rowWidth: bounds.width, textX: x, controls: accessories.map {
-            TabRowTrailing.Control(width: $0.frame.width, slot: $0 === unreadDot || $0 === peekBadge ? Self.closeSize : nil)
+            TabRowTrailing.Control(width: $0.frame.width, slot: $0 === unreadDot || $0 === peekBadge || $0 === agentFace ? Self.closeSize : nil)
         })
         for (v, vx) in zip(accessories, trailing.controlX) {
             let s = v.frame.size

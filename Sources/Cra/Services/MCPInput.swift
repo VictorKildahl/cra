@@ -1,6 +1,16 @@
 import AppKit
 import CraCEF
 
+/// The agent's cursor over its tab (AgentCursor): told where the pointer goes and when it presses.
+/// While the user is on the tab (isWatched), the pointer glides slowly enough to follow and rests
+/// on its target before pressing (MCPAgentPresence); unwatched, input runs at its own pace.
+@MainActor
+protocol MCPPointerWatcher: AnyObject {
+    var isWatched: Bool { get }
+    func moved(to point: CGPoint, duration: Double)
+    func pressed()
+}
+
 /// Performs input through Chromium. JavaScript in an isolated world only locates targets
 /// and observes delivered events; it never clicks, focuses, selects or edits the page.
 @MainActor
@@ -24,6 +34,9 @@ final class MCPInput {
     private var mouseDown = false
     private var heldKey: [String: Any]?
     private(set) var position: CGPoint
+    /// The cursor the user may be watching; `watching` is read once a call.
+    var pointer: MCPPointerWatcher?
+    private var watching = false
 
     /// Mouse button, click count and modifiers of a page_click.
     private var button = "left"
@@ -52,6 +65,7 @@ final class MCPInput {
         }
         defer { deadline.cancel() }
         humanize = arguments["humanize"] as? Bool == true
+        watching = pointer?.isWatched == true
         button = arguments["button"] as? String ?? "left"
         clickCount = arguments["clickCount"] as? Int ?? 1
         if name == "page_click" { mouseModifiers = (arguments["modifiers"] as? String).flatMap(MCPProtocol.modifierFlags) ?? 0 }
@@ -251,7 +265,7 @@ final class MCPInput {
             throw Failure(message: "That is a <select>. Use page_select with its ref (page_snapshot) so no native menu opens.")
         }
         for step in path(to: point) {
-            try await pace(step.delay)
+            try await self.step(step)
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": step.point.x, "y": step.point.y, "buttons": 0])
             position = step.point
@@ -399,10 +413,19 @@ final class MCPInput {
         if humanize { try await pause(seconds) } else { try check() }
     }
 
-    /// The pointer's way to `end`: a curved, eased path when humanized, else one move.
+    /// The pointer's way to `end`: a glide the user can follow while they watch the tab, a curved,
+    /// eased path when humanized, else one move.
     private func path(to end: CGPoint) -> [MCPInputPlan.Move] {
-        humanize ? MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1))
+        watching && !humanize ? MCPAgentPresence.watchedGlide(from: position, to: end, variation: Double.random(in: 0...1))
+            : humanize ? MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1))
             : Array(MCPInputPlan.movement(from: position, to: end, variation: 0.5).suffix(1))
+    }
+
+    /// A pointer step's pause: paced input takes it, and so does a pointer the user watches, whose
+    /// cursor is told first so it arrives as the event does.
+    private func step(_ move: MCPInputPlan.Move) async throws {
+        pointer?.moved(to: move.point, duration: move.delay)
+        if humanize || watching { try await pause(move.delay) } else { try check() }
     }
 
     private func pause(_ seconds: Double) async throws {
@@ -608,7 +631,7 @@ final class MCPInput {
         let target = try await inspect(editing: editing, hit: true)
         let end = CGPoint(x: target["x"] as? Double ?? 0, y: target["y"] as? Double ?? 0)
         for move in path(to: end) {
-            try await pace(move.delay)
+            try await step(move)
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": move.point.x, "y": move.point.y, "buttons": 0])
             position = move.point
@@ -640,6 +663,9 @@ final class MCPInput {
     private func pressMouse(at point: CGPoint, between: (() async throws -> Void)? = nil) async throws {
         let buttons = ["left": 1, "right": 2, "middle": 4][button] ?? 1
         if button == "right" { browser.suppressesContextMenu = true }
+        // The user sees what is about to be pressed before the page answers it.
+        if watching { try await pause(MCPAgentPresence.dwell) }
+        pointer?.pressed()
         for count in 1...clickCount {
             mouseDown = true
             dispatched = true
@@ -781,7 +807,7 @@ final class MCPInput {
         }
         let point = CGPoint(x: x, y: y)
         for step in path(to: point) {
-            try await pace(step.delay)
+            try await self.step(step)
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseMoved", "x": step.point.x, "y": step.point.y, "buttons": 0])
             position = step.point
         }
@@ -986,12 +1012,16 @@ final class MCPInput {
             browser.interceptedDragData = nil
             dragIntercepted = true
             _ = try await call("Input.setInterceptDrags", ["enabled": true])
+            if watching { try await pause(MCPAgentPresence.dwell) }
+            pointer?.pressed()
             mouseDown = true; dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mousePressed", "x": position.x, "y": position.y, "button": "left", "buttons": 1, "clickCount": 1])
             try await pace(MCPInputPlan.clickHold(Double.random(in: 0...1)))
             var dragData: [String: Any]?
-            for step in MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1)) {
-                try await pace(step.delay)
+            let way = watching ? MCPAgentPresence.watchedGlide(from: position, to: end, variation: Double.random(in: 0...1))
+                : MCPInputPlan.movement(from: position, to: end, variation: Double.random(in: 0...1))
+            for step in way {
+                try await self.step(step)
                 let current = try await target.inspect(hit: true)
                 guard abs((current["x"] as? Double ?? -100) - end.x) < 2, abs((current["y"] as? Double ?? -100) - end.y) < 2 else {
                     throw Failure(message: "Drop target moved. Drag aborted; cleanup sends Escape and releases the button.")

@@ -40,11 +40,18 @@ agent (its name and the code-signing team of the program that started it, so an 
 ask again) in `mcp.json` in the data folder. Settings ▸ Advanced lists the agents you answered;
 **Forget** asks again next time and closes the agent's open connections.
 
-While an agent acts in a page, Cra's toast says so in the window it works in ("Claude Code is
-using Cra"), with **Stop**: that agent's session disconnects and its calls stop. MCP stays on,
-so other agents keep working and the stopped one can connect again; only Settings turns it off.
-The toast stays while the agent works and goes a few seconds after its last action; reading,
-organizing tabs and notes never show it.
+While an agent acts in a page, a dark pill at the bottom of the window it works in shows the
+agent's face and what it does ("Claude Code is clicking “Sign in”"; each new step slides in), with
+**Take Over** (or ⌘.): that agent's session disconnects and its calls stop. MCP stays on, so other
+agents keep working and the stopped one can connect again; only Settings turns it off. The pill
+stays while the agent works and goes a few seconds after its last action; reading, organizing tabs
+and notes never show it.
+
+The same face sits at the end of the sidebar row of every tab an agent works in, reading too, and
+goes eight seconds after its last call there. When you are looking at the tab the agent acts in,
+the face is its cursor: it glides to what the agent points at, slowly enough to follow, rests on it
+for a moment and squishes when it clicks, so a page never changes without you seeing what was
+clicked. On a tab you aren't looking at there is no cursor and the agent works at full speed.
 
 ## How an agent works in Cra
 

@@ -1408,7 +1408,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // The command bar ⌘T opened from a Peek stays above the Peek (#379).
         let bar: [NSWindow] = commandBar.isOpen && commandPanel.parent === window ? [commandPanel] : []
         let wanted = panels.compactMap { $0 } + peeks.flatMap(\.peekWindows) + (floatingSidebar?.attachedPanels ?? [])
-            + ChromiumDialogs.dialogs(over: window) + PermissionPopover.panels(over: window) + bar
+            + AgentCursor.panels(over: window) + AgentPill.panels(over: window) + ChromiumDialogs.dialogs(over: window) + PermissionPopover.panels(over: window) + bar
         // Already the last children, in order, and showing: re-adding each one rebuilt the
         // window's ordering group, a window server round trip, on every tab switch.
         let children = window.childWindows ?? []
@@ -4357,6 +4357,43 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         toast.show(text, keyCap: keyCap, action: action, page: page, in: window, theme: focusedSpace.theme)
     }
 
+    /// An MCP agent's pill at the bottom of the page (AgentPill): its face, what it does, Take Over (⌘.).
+    private lazy var agentPill = AgentPill()
+
+    /// ⌘. (Stop Loading) while an agent's pill is up here stops the agent instead of the page.
+    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() }
+
+    func showAgentPill(_ text: String, takeOver: @escaping () -> Void) {
+        guard let window else { return }
+        agentPill.show(text, page: { [weak self] in
+            guard let self else { return nil }
+            return self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
+        }, in: window, takeOver: takeOver)
+    }
+
+    // MARK: An agent's cursor
+
+    /// The agent's cursor over each tab it acts in (AgentCursor), made on its first move.
+    private var agentCursors: [UUID: AgentCursor] = [:]
+
+    /// The pointer an MCP agent moves in tab `id`, for its cursor; nil for a tab not in this window.
+    func agentPointer(for id: UUID) -> MCPPointerWatcher? {
+        guard let runtime = browsers.runtime(for: id) else { return nil }
+        for gone in agentCursors.keys where browsers.runtime(for: gone) == nil { agentCursors.removeValue(forKey: gone)?.hide() }
+        let cursor = agentCursors[id] ?? AgentCursor(pageFrame: { [weak self] in self?.browsers.runtime(for: id)?.pageScreenFrame },
+                                                     isWatched: { [weak self] in self?.agentTabIsWatched(id) ?? false })
+        agentCursors[id] = cursor
+        return AgentPointer(cursor: cursor, browser: runtime.browser, window: self)
+    }
+
+    /// The user can see tab `id`'s page: it is shown in this window, and the window is on screen
+    /// and not covered. Only then does the agent's cursor show and its pointer slow down to be followed.
+    func agentTabIsWatched(_ id: UUID) -> Bool {
+        guard let window, window.isVisible, !window.isMiniaturized, window.occlusionState.contains(.visible),
+              browsers.visibleTabIDs.contains(id), browsers.runtime(for: id)?.pageScreenFrame != nil else { return false }
+        return true
+    }
+
     /// The update banner's news while this window's sidebar (which carries the banner) is hidden:
     /// Cra's toast with the banner's action, staying until its ✕ so it isn't missed.
     func showUpdateToast(_ notice: UpdateNotice) {
@@ -4983,6 +5020,11 @@ final class CraWindow: NSWindow {
     }
 
     override func sendEvent(_ event: NSEvent) {
+        // ⌘. while an agent's pill is up here: Take Over (AgentPill). Here, because a key for the
+        // page goes from Chrome's application straight to this window: no local key monitor
+        // sees it, and the page would make it Escape before the menu's Stop Loading.
+        if event.type == .keyDown, AgentPill.isTakeOverKey(event),
+           (windowController as? MainWindowController)?.takeOverFromAgent() == true { return }
         if event.type == .leftMouseDown, WindowDragRegion.allows(event, in: self),
            let content = contentView, event.locationInWindow.y >= content.bounds.height - titleStripHeight,
            isTitleStrip(content.hitTest(content.convert(event.locationInWindow, from: nil))) {

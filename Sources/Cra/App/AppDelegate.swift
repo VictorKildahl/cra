@@ -2976,7 +2976,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "hardReload": main.currentBrowser?.reloadIgnoringCache()
         case "clearCache": main.currentBrowser?.clearSiteDataAndReload(cookies: false)
         case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(cookies: true)
-        case "stop": main.currentBrowser?.stopLoading()
+        // View ▸ Stop Loading while an agent's pill is up in the window: its Take Over (AgentPill).
+        case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
         case "zoomIn": main.zoom(by: 0.5)
         case "zoomOut": main.zoom(by: -0.5)
         case "resetZoom": main.currentBrowser?.setZoomLevel(0)
