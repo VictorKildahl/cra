@@ -138,7 +138,66 @@ enum ExtensionStoreMigrationTests {
         }
     }
 
+    /// Remove in chrome://extensions deletes only Chromium's record of an extension it loaded with
+    /// --load-extension; Cra's folder stays and loaded it again at the next launch, so an imported
+    /// extension could be turned off but not removed.
+    static func removedCopiesStayRemoved() throws {
+        func loaded(_ install: Install) -> [String: Any] { [install.id: ["location": 8, "path": install.copy.path]] }
+
+        try run("copy-removed-in-chrome-extensions") { install in
+            try install.liveSettings(loaded(install))
+            let store = ExtensionStore()
+            try install.liveSettings([:])
+            store.reload()
+            check(!FileManager.default.fileExists(atPath: install.copy.path), "a removed imported extension's copy goes")
+            check(ExtensionStore.loadList().paths.isEmpty, "a removed imported extension does not come back at the next launch")
+            check(store.entries.isEmpty, "the removed extension leaves Cra's list at once")
+        }
+
+        try run("copy-removed-in-one-profile") { install in
+            try FileManager.default.createDirectory(at: AppPaths.chromiumCache.appendingPathComponent("Profile 1", isDirectory: true),
+                                                    withIntermediateDirectories: true)
+            try install.liveSettings(loaded(install))
+            try install.liveSettings(loaded(install), profile: "Profile 1")
+            let store = ExtensionStore()
+            try install.liveSettings([:])
+            store.reload()
+            check(FileManager.default.fileExists(atPath: install.copy.appendingPathComponent("payload.txt").path),
+                  "a copy another profile still loads stays")
+            check(ExtensionStore.loadProfiles().profiles(ofFolder: install.id) == ["Profile 1"],
+                  "only the profile it was removed from stops loading it")
+        }
+
+        try run("copy-turned-off-not-removed") { install in
+            try install.liveSettings(loaded(install))
+            let store = ExtensionStore()
+            try install.liveSettings([install.id: ["location": 8, "path": install.copy.path, "disable_reasons": [1]]])
+            store.reload()
+            check(ExtensionStore.loadList().paths == [install.copy.path], "a turned-off extension keeps loading (off)")
+        }
+
+        try run("copy-live-settings-gone") { install in
+            try install.liveSettings(loaded(install))
+            let store = ExtensionStore()
+            CraCEFRuntime.settingsByProfile = [:]
+            store.reload()
+            check(ExtensionStore.loadList().paths == [install.copy.path], "a profile shutting down removed nothing")
+        }
+
+        try unpackedCopy("added-unpacked-removed") { copy, _, _ in
+            CraCEFRuntime.settingsByProfile["Default"] = String(decoding: try JSONSerialization.data(withJSONObject:
+                [ExtensionStore.chromiumID(key: nil, folder: copy): ["location": 8, "path": copy.path]]), as: UTF8.self)
+            let store = ExtensionStore()
+            CraCEFRuntime.settingsByProfile["Default"] = "{}"
+            store.reload()
+            check(!FileManager.default.fileExists(atPath: copy.path), "Add Unpacked Extension…'s copy goes when it is removed")
+            check(ExtensionStore.loadList().paths.isEmpty, "and stays removed")
+        }
+    }
+
     static func main() throws {
+        try removedCopiesStayRemoved()
+
         try run("live-reload") { install in
             try install.installStoreCopy()
             try install.writeSettings(install.settings())
