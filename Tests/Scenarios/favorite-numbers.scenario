@@ -1,0 +1,35 @@
+# ⌘1…⌘9 go to sidebar items, not tabs, as Arc's "Go to Sidebar Item N" (X, 17 Nov 2026): a split
+# favorite takes one number and opens on the pane focused last, so ⌘3 is the favorite after it,
+# not the split's other pane.
+pace 0.5
+
+cra://open?url=${PAGE}?n=x
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/favoriteTab
+cra://open?url=${PAGE}?n=fb
+cra://action/addSplitView
+cra://navigate?url=${PAGE}?n=tg
+wait 1
+cra://action/favoriteTab
+cra://open?url=${PAGE}?n=yt
+cra://action/favoriteTab
+wait 1
+
+cra://debug?key=1,18,1048576
+cra://debug?selectedTab=one
+expect-log selected tab one: \S+\?n=x$
+# Item 2 as the menu runs it: a ⌘2 posted to a background copy goes nowhere on a Danish layout.
+cra://action/item2
+cra://debug?selectedTab=two
+expect-log selected tab two: \S+\?n=tg$
+cra://debug?key=3,20,1048576
+cra://debug?selectedTab=three
+expect-log selected tab three: \S+\?n=yt$
+# Three items, so ⌘4 has nothing to go to.
+cra://debug?key=1,18,1048576
+cra://debug?key=4,21,1048576
+cra://debug?selectedTab=four
+expect-log selected tab four: \S+\?n=x$
+cra://debug?key=9,25,1048576
+cra://debug?selectedTab=last
+expect-log selected tab last: \S+\?n=yt$

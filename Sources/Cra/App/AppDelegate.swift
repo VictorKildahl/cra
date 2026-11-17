@@ -1889,6 +1889,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["relaunch"] != nil { relaunch(); return }
             // quit=1 quits for real, as the menu bar item's Quit; quit=menu is ⌘Q (#231).
             if let q = dict["quit"] { q == "menu" ? NSApp.terminate(nil) : quitFromMenuBar(); return }
+            // selectedTab=<label>: the front window's open tab, by address (⌘1…⌘9 scenarios).
+            if let label = dict["selectedTab"] {
+                CraLog.note("selected tab \(label): \(store.selectedTabID(window: main.windowID).flatMap { store.item($0)?.tab?.url } ?? "none")")
+                return
+            }
             // selectTab=<tab id, or text in the tab's address>: that tab selected in the front window.
             if let v = dict["selectTab"] {
                 let t = UUID(uuidString: v) ?? store.allTabs().first { $0.tab?.url.contains(v) == true }?.id
@@ -2891,9 +2896,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             normal.showWindow(nil)
         default:
             if id.hasPrefix("item"), let n = Int(id.dropFirst(4)) {
-                let tabs = store.visibleTabs(in: store.focusedSpaceID)
+                let tabs = store.numberedTabs(in: store.focusedSpaceID)
                 // ⌘9 is the last one (Arc's "Go to last Sidebar Item").
-                if n == 9, let last = tabs.last { store.selectTab(last.id) } else if n - 1 < tabs.count { store.selectTab(tabs[n - 1].id) }
+                if n == 9, let last = tabs.last { store.selectTab(last) } else if n - 1 < tabs.count { store.selectTab(tabs[n - 1]) }
             } else if id.hasPrefix("splitPane"), let n = Int(id.dropFirst(9)) {
                 main.selectSplitPane(n)
             } else if id.hasPrefix("space"), let n = Int(id.dropFirst(5)) {

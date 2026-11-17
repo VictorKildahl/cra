@@ -284,7 +284,7 @@ enum ShortcutDescriptions {
     static func text(for a: KeyAction) -> String {
         if let description = LiveFolderPluginStore.shared.entry(forCommand: a.id)?.package.manifest.command?.description { return description }
         if let t = table[a.id] { return t }
-        if a.id.hasPrefix("item"), let n = a.id.dropFirst(4).first { return "Switch to the \(n). tab in the sidebar." }
+        if a.id.hasPrefix("item"), let n = a.id.dropFirst(4).first { return "Switch to the \(n). item in the sidebar. A split counts as one." }
         if a.id.hasPrefix("space"), let n = a.id.dropFirst(5).first { return "Switch to the \(n). space." }
         if a.id.hasPrefix("moveTabToSpace"), let n = a.id.dropFirst(14).first { return "Move the current tab, or a Little Window's page, to the \(n). space and switch to it." }
         return a.name + "."

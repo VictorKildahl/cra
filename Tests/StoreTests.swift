@@ -82,6 +82,7 @@ enum StoreTests {
         tornOffTabMovesToABlankWindow()
         tornOffTabKeepsItsProfile()
         archiveTabsBelow()
+        numberedSidebarItems()
         clearTodayKeepsSelectedAndPlaying()
         allFoldersExpanded()
         dropIntoFolderGoesOnTop()
@@ -2900,6 +2901,28 @@ enum StoreTests {
         expect(store.isPinned(pinned.id) && store.backStep(pinned.id, canGoBack: false) == .none,
                "a link's tab once pinned stays: closing a pinned tab would reset its page")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// ⌘1…⌘9 go to sidebar items, not tabs (Arc: "Go to Sidebar Item N", X 17 Nov): a split
+    /// favorite is one number and opens on the pane focused last, as a click on it does.
+    @MainActor
+    private static func numberedSidebarItems() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Numbers", emoji: "🔢").id
+        let space = store.space(sid)!
+        let x = store.createTab(url: "https://x.example/", in: sid, pinned: true, select: false, parent: space.favoritesContainerID, index: 0)
+        let fb = store.createTab(url: "https://fb.example/", in: sid, pinned: true, select: false, parent: space.favoritesContainerID, index: 1)
+        let tg = store.createTab(url: "https://tg.example/", in: sid, pinned: true, select: false, parent: space.favoritesContainerID, index: 2)
+        let yt = store.createTab(url: "https://yt.example/", in: sid, pinned: true, select: false, parent: space.favoritesContainerID, index: 3)
+        let favSplit = store.createSplit(with: [fb.id, tg.id], inPlace: true)!
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false, parent: space.todayContainerID, index: 0)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false, parent: space.todayContainerID, index: 1)
+        let c = store.createTab(url: "https://c.example/", in: sid, select: false, parent: space.todayContainerID, index: 2)
+        _ = store.createSplit(with: [a.id, b.id])
+        expect(store.children(of: space.favoritesContainerID).map(\.id) == [x.id, favSplit.id, yt.id], "set up: X, a split favorite, YouTube")
+        expect(store.numberedTabs(in: sid) == [x.id, fb.id, yt.id, a.id, c.id], "a split takes one number, opening its first pane")
+        store.selectTab(tg.id)
+        expect(store.numberedTabs(in: sid) == [x.id, tg.id, yt.id, a.id, c.id], "and then the pane focused last")
     }
 
     /// Arc's Today tab menu: "Archive Tabs Below" archives every Today row under the one clicked.

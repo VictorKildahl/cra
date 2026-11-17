@@ -537,11 +537,31 @@ final class SidebarStore {
         return PinnedPeek.listed(open: open, peek: peek, pinnedRows: pinnedRows(in: space)).compactMap { items[$0] }
     }
 
-    /// Favorites + pinned + today for a space, in sidebar order. This is what
-    /// ⌘1…⌘9 index into (Arc: "Go to Sidebar Item N").
+    /// Every tab of a space, favorites + pinned + today, in sidebar order, each pane of a split
+    /// on its own (⌘1…⌘9 count a split once: `numberedTabs`).
     func visibleTabs(in spaceID: UUID) -> [SidebarItem] {
         guard let space = spaces[spaceID] else { return [] }
         return tabs(under: space.favoritesContainerID) + tabs(under: space.pinnedContainerID) + tabs(under: space.todayContainerID)
+    }
+
+    /// What ⌘1…⌘9 go to, one entry per sidebar item (Arc: "Go to Sidebar Item N"): a split is
+    /// one item, opened on the pane focused last as a click on its row does, so a split favorite
+    /// takes one number. Folders open or closed list their tabs, as before.
+    func numberedTabs(in spaceID: UUID) -> [UUID] {
+        guard let space = spaces[spaceID] else { return [] }
+        func walk(_ id: UUID) -> [UUID] {
+            children(of: id).flatMap { c -> [UUID] in
+                if c.isTab { return [c.id] }
+                if c.isSplit { return [focusedPane(of: c)].compactMap { $0 } }
+                return c.isFolder ? walk(c.id) : []
+            }
+        }
+        return [space.favoritesContainerID, space.pinnedContainerID, space.todayContainerID].flatMap(walk)
+    }
+
+    /// The pane a split opens on: the one focused last, else its first.
+    private func focusedPane(of split: SidebarItem) -> UUID? {
+        split.split?.focusTabID.flatMap { split.children.contains($0) ? $0 : nil } ?? split.children.first
     }
 
     /// Which container an item ultimately lives in.
@@ -1682,7 +1702,7 @@ final class SidebarStore {
     func shownTabs(under id: UUID) -> [UUID] {
         children(of: id).flatMap { c -> [UUID] in
             if c.isTab { return [c.id] }
-            if let s = c.split { return [s.focusTabID.flatMap { c.children.contains($0) ? $0 : nil } ?? c.children.first].compactMap { $0 } }
+            if c.isSplit { return [focusedPane(of: c)].compactMap { $0 } }
             guard c.isFolder else { return [] }
             return c.isTabGroup || _prefs.expandedFolders.contains(c.id) ? shownTabs(under: c.id) : peekedTabs(in: c.id).map(\.id)
         }
