@@ -862,13 +862,18 @@ std::map<content::BrowserContext*, CraBrowser* __weak>& LastPages() {
 }
 
 // The page a download belongs to: the one that started it, else the profile's last page. None for a Web Store
-// install's own CRX download, which is Chrome's (WebstoreInstaller sets its path, #203).
+// install's own CRX download, which is Chrome's (WebstoreInstaller sets its path, #203) and which Chrome's
+// downloads never show: an imported extension's install, or the store page's Add to Chrome. Its source says so
+// from the start; WebstoreInstaller attaches its approval only after Chrome has reported the item, so the
+// approval alone let the first report through, and a failed install (an extension the store no longer has)
+// stayed in Cra's downloads as a file named <id>_<number>.crx at every launch.
 CraBrowser* DownloadPage(download::DownloadItem* item) {
+  if (item->GetDownloadSource() == download::DownloadSource::EXTENSION_INSTALLER ||
+      extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {
+    return nil;
+  }
   if (CraBrowser* page = BrowserFor(content::DownloadItemUtils::GetWebContents(item))) {
     return page;
-  }
-  if (extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {
-    return nil;
   }
   auto it = LastPages().find(content::DownloadItemUtils::GetBrowserContext(item));
   return it == LastPages().end() ? nil : it->second;
