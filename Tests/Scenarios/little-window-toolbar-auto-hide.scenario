@@ -1,0 +1,47 @@
+# promise: #435
+# Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" (not in Arc, #435): the page
+# takes the toolbar's room, 1 pt inside the window's rim at the top as on the other sides, with the
+# traffic lights gone with the bar. The pointer resting at the window's top brings the bar out over
+# the page, which keeps its size; the bar goes once the pointer is 16 pt below it. DevTools sit above
+# anything the window draws, so while they are open the bar sits above the page again.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}, "autoHideLittleWindowToolbar": true}
+pace 0.5
+
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleToolbar=start
+expect-log littleToolbar start: floats=1 out=0 pageTop=1 page=([0-9]+)/[0-9]+ barHidden=1 lights=0
+
+# The rim and the page's first 6 pt bring the bar out; the page under that doesn't.
+cra://debug?littleToolbar=at:300,0
+expect-log littleToolbar at:300,0: strip out=0
+cra://debug?littleToolbar=at:300,7
+expect-log littleToolbar at:300,7: strip out=0
+cra://debug?littleToolbar=at:300,20
+expect-log littleToolbar at:300,20: away out=0
+
+# Out: over the page, which keeps its size, with the traffic lights.
+cra://debug?littleToolbar=out
+wait 0.5
+expect-log littleToolbar out: floats=1 out=1 pageTop=1 .* barHidden=0 lights=1
+# On the bar (1…47 pt) and up to 16 pt under it the pointer keeps it; further down it lets go.
+cra://debug?littleToolbar=at:300,30
+expect-log littleToolbar at:300,30: bar out=1
+cra://debug?littleToolbar=at:300,62
+expect-log littleToolbar at:300,62: bar out=1
+cra://debug?littleToolbar=at:300,70
+expect-log littleToolbar at:300,70: away out=1
+cra://debug?littleToolbar=in
+wait 0.5
+expect-log littleToolbar in: floats=1 out=0 pageTop=1 .* barHidden=1 lights=0
+
+# DevTools: the bar sits above the page while they are open, and floats again once they close.
+cra://debug?target=little&inspectAt=40,40
+wait 5
+cra://debug?littleToolbar=devtools
+expect-log littleToolbar devtools: floats=0 out=0 pageTop=46 .* barHidden=0 lights=1
+cra://action/devTools
+wait 3
+cra://debug?littleToolbar=closed
+expect-log littleToolbar closed: floats=1 out=0 pageTop=1 .* barHidden=1 lights=0

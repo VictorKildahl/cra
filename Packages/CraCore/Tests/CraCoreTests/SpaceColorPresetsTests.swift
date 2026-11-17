@@ -74,6 +74,54 @@ struct SpaceColorPresetsTests {
         #expect((0...3).map(SpaceColorWheel.canAdd) == [false, true, true, false])
     }
 
+    /// Dragging a dark colour round the pad keeps it dark, as Arc's pad does (its dark red stayed at
+    /// HSB brightness ≈ 0.4 through navy and teal); before, the first touch jumped to brightness
+    /// 0.95, a light colour (#455). The set turns together at the first colour's brightness; an
+    /// empty pad starts bright; a grey dragged off the centre shows a dark hue, not black.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/455"), arguments: SpaceColorPresets.drab)
+    func dragKeepsTheColoursBrightness(hex: String) {
+        let b = SpaceColorWheel.hsb(hex).brightness
+        for hue in stride(from: 0.0, to: 360, by: 45) {
+            let moved = SpaceColorWheel.placed([hex], handle: 0, hue: hue, saturation: 0.7)
+            #expect(moved.count == 1)
+            #expect(abs(SpaceColorWheel.hsb(moved[0]).brightness - b) < 0.01)
+            #expect(abs(SpaceColorWheel.hsb(moved[0]).hue - hue) < 2 || abs(SpaceColorWheel.hsb(moved[0]).hue - hue) > 358)
+        }
+        let pair = SpaceColorWheel.adding(to: [hex])
+        let set = SpaceColorWheel.placed(pair, handle: 1, hue: 200, saturation: 0.5)
+        #expect(set.count == 2 && set.allSatisfy { abs(SpaceColorWheel.hsb($0).brightness - b) < 0.01 })
+        #expect(abs(SpaceColorWheel.hsb(set[1]).hue - 200) < 2 && abs(SpaceColorWheel.hsb(set[0]).hue - 160) < 2)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/455"))
+    func emptyPadAndGreysOnTheDrag() {
+        let first = SpaceColorWheel.placed([], handle: 0, hue: 120, saturation: 1)
+        #expect(first.count == 1 && abs(SpaceColorWheel.hsb(first[0]).brightness - SpaceColorWheel.padBrightness) < 0.01)
+        let fromBlack = SpaceColorWheel.placed(["#000000"], handle: 0, hue: 220, saturation: 0.8)[0]
+        #expect(fromBlack != "#000000" && !SpaceColorWheel.isGreyscale(fromBlack))
+        #expect(SpaceColorWheel.hsb(fromBlack).brightness < 0.25)
+        let fromGrey = SpaceColorWheel.placed(["#808080"], handle: 0, hue: 220, saturation: 0.8)[0]
+        #expect(abs(SpaceColorWheel.hsb(fromGrey).brightness - SpaceColorWheel.hsb("#808080").brightness) < 0.01)
+    }
+
+    /// + is off while the first colour is a grey, as Arc's is on its black and white swatches; on
+    /// black it added white, a gradient no handle could fix (#455). A coloured one gets a companion
+    /// at its own brightness, so a dark colour's is dark too.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/455"))
+    func plusIsOffOnGreys() {
+        for grey in SpaceColorPresets.greyscale {
+            #expect(!SpaceColorWheel.canAdd([grey]))
+            #expect(SpaceColorWheel.adding(to: [grey]) == [grey])
+        }
+        for hex in SpaceColorPresets.brand + SpaceColorPresets.drab where !SpaceColorWheel.isGreyscale(hex) {
+            #expect(SpaceColorWheel.canAdd([hex]))
+            let pair = SpaceColorWheel.adding(to: [hex])
+            #expect(pair.count == 2 && pair[0] == hex)
+            #expect(abs(SpaceColorWheel.hsb(pair[1]).brightness - SpaceColorWheel.hsb(hex).brightness) < 0.01)
+        }
+        #expect(!SpaceColorWheel.canAdd([]) && !SpaceColorWheel.canAdd(["#F25E6B", "#EAAF5A", "#A6729D"]))
+    }
+
     /// hsb and hex are inverse to the byte.
     @Test(arguments: SpaceColorPresets.brand + SpaceColorPresets.pastel + SpaceColorPresets.greyscale)
     func wheelRoundTrips(hex: String) {

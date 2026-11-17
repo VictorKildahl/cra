@@ -162,6 +162,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var permissionCards: [PermissionPopover] = []
     private var favicon: NSImage?
     private var promoted = false
+    /// The app the window was opened over (a link from it, the shortcut pressed in it), which gets
+    /// the keyboard back as the window closes (#430). AppDelegate keeps it up to date.
+    var focusReturn = LittleWindowReturn(app: nil)
+    /// The page moved into a tab of the browser window (Open in): that's where the keyboard goes.
+    private var movedToTab = false
+    private var handedBack = false
     /// Hosts a page's window.open (a sign-in popup); its URL arrives after it shows.
     private let isPopupHost: Bool
     /// Arc's Peek: this Little Window sits over a browser window, which a dimming panel
@@ -173,9 +179,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The tab the Peek came from: links that leave the Peek open as tabs placed from it, and
     /// the Peek waits on it while another tab is on screen (#242).
     let peekSourceTab: UUID?
+    /// Names this window's page for Pause All Media (#438), as a tab's id names a tab's.
+    let pageID = UUID()
+    /// The page's sound as it starts or stops (the speaker's audible state holds 2 s), for Pause
+    /// All Media's check that the page went quiet.
+    private(set) var soundPlaying = false
     /// Another tab is on screen: the Peek is out of sight, its page alive, until its tab is back.
     private(set) var isParked = false
     private var dim: PeekDimPanel?
+    /// The Peek's Close is the red Confirm pill, waiting for a second close (#425).
+    private var closeHold: PeekCloseHold?
+    private var closeHoldReset: DispatchWorkItem?
     /// The click catcher's frame (screen coordinates), for cra://debug?peekCatcher.
     var dimFrame: NSRect? { dim?.frame }
     private var controls: PeekControlsPanel?
@@ -190,6 +204,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
+    /// Set while the bar closes because its panel lost the keys (#429).
+    private var commandBarLostKeys = false
     private var commandObserving = false
     private var popup: LittlePopupPanel?
     private var tooltip: LittleTooltipPanel?
@@ -290,6 +306,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             self.state.hover = h
             self.scheduleTooltip(for: h)
         }
+        shell.onPointer = { [weak self] p in self?.barPointerMoved(to: p) }
         shell.openButtonWidth = { [weak self] in self?.state.openButtonWidth ?? 160 }
         shell.profileChipWidth = { [weak self] in self?.state.profileChipWidth ?? 0 }
         shell.showsChevron = { [weak self] in self?.state.showsChevron ?? true }
@@ -346,6 +363,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                                         incognito: false, profilePath: app.store.profilePath(profile: state.profileID), opener: opener)
         attach(b)
         state.url = (url == "about:blank" ? "" : url) ?? ""
+        observeBarSetting()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -386,6 +404,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if openingPeek || isParked || isCard { w.contentView?.isHidden = true }
         w.ignoresMouseEvents = isParked || isCard
         window.addChildWindow(w, ordered: .above)
+        syncFloatingBar()
         ChromiumChildFocus.attach(w)
         layoutPageWindows()
         w.orderFront(nil)
@@ -556,6 +575,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
         // A bar still open (the page navigated on its own) goes back to the browser window's look.
         if commandBar.isOpen { commandBar.close() }
+        syncFloatingBar()
     }
 
     /// Esc, the ✕, focus elsewhere, or a row that opens no page (a tab in the browser window, a
@@ -570,6 +590,137 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             guard let self else { return }
             self.closeWindow()
         }
+    }
+
+    // MARK: Floating toolbar (GitHub #435)
+
+    /// Out or away, from the pointer's samples (ToolbarAutoHide, as the browser window's bar).
+    private var barTracker = ToolbarAutoHideTracker()
+    /// The tracker's next look without the pointer moving: when the pointer's wait in the strip, or
+    /// away from the bar, is over. Nothing else runs on a timer: the window's own pointer events are
+    /// the samples.
+    private var barLook: Timer?
+
+    private func stopBarLook() {
+        barLook?.invalidate()
+        barLook = nil
+    }
+
+    /// Settings ▸ Links' switch, followed while the window is open.
+    private func observeBarSetting() {
+        observeChanges(of: { [weak self] in self?.store.settings.autoHideLittleWindowToolbar ?? false }) { [weak self] _ in
+            self?.syncFloatingBar()
+        }
+    }
+
+    /// Whether the bar floats over the page now: the switch is on and the page is this window's own view.
+    func syncFloatingBar() {
+        let floats = ToolbarAutoHide.littleWindowFloats(enabled: store.settings.autoHideLittleWindowToolbar, card: isCard, peek: isPeek,
+                                                        pageFullscreen: pageFullscreen, devToolsOpen: devToolsView != nil,
+                                                        pageInOwnWindow: browser?.hostWindow != nil)
+        guard shell.floatsBar != floats else { return }
+        barTracker.reset()
+        stopBarLook()
+        shell.floatsBar = floats
+        syncTrafficLights(animated: false)
+    }
+
+    /// The shell saw the pointer move over the window (nil: it left). The page is a view in the
+    /// window, so the shell's tracking area sees the pointer over the page too, whether Cra is active
+    /// or not: a Little Window over another app brings its bar out as well.
+    private func barPointerMoved(to p: NSPoint?) {
+        guard shell.floatsBar else { return }
+        sampleBar(at: p ?? pointerInShell)
+    }
+
+    /// Something that held the bar out closed (the "Open in" list, the command bar): one more look,
+    /// since the pointer may be away by now without moving again.
+    private func barHoldEnded() {
+        guard shell.floatsBar, barTracker.shown else { return }
+        sampleBar(at: pointerInShell)
+    }
+
+    private var pointerInShell: NSPoint {
+        guard let window else { return .zero }
+        return shell.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+    }
+
+    private func sampleBar(at p: NSPoint) {
+        let where_ = ToolbarAutoHide.classify(p, card: shell.page.frame, container: shell.bounds, barHeight: LittleMetrics.barHeight,
+                                              shown: barTracker.shown)
+        apply(barTracker.sample(where_, held: barHeld, at: ProcessInfo.processInfo.systemUptime))
+    }
+
+    /// A button held down (a drag begun on the bar), the "Open in" list or the command bar keeps the bar out.
+    private var barHeld: Bool {
+        barTracker.shown && (NSEvent.pressedMouseButtons != 0 || state.popupOpen || commandBar.isOpen)
+    }
+
+    /// The bar shows what the tracker says; `due` is when the tracker wants another look.
+    private func apply(_ due: TimeInterval?, animated: Bool = true) {
+        let wasOut = shell.barRevealed
+        shell.setBarRevealed(barTracker.shown, animated: animated)
+        if wasOut != shell.barRevealed { syncTrafficLights(animated: animated) }
+        stopBarLook()
+        guard let due else { return }
+        barLook = Timer.scheduledTimer(withTimeInterval: max(0, due - ProcessInfo.processInfo.systemUptime), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.shell.floatsBar else { return }
+                self.apply(self.barTracker.tick(held: self.barHeld, at: ProcessInfo.processInfo.systemUptime))
+            }
+        }
+    }
+
+    /// The traffic lights sit in the bar: they go with it and come back with it.
+    private func syncTrafficLights(animated: Bool) {
+        guard let window, !isPeek, !isCard else { return }
+        let shown = !shell.barAway
+        let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { window.standardWindowButton($0) }
+        guard animated else {
+            for b in buttons { b.isHidden = !shown; b.alphaValue = 1 }
+            return
+        }
+        if shown { for b in buttons { b.alphaValue = 0; b.isHidden = false } }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = shown ? ToolbarAutoHide.revealDuration : ToolbarAutoHide.hideDuration
+            for b in buttons { b.animator().alphaValue = shown ? 1 : 0 }
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.shell.barAway == !shown else { return }
+                for b in buttons { b.isHidden = !shown; b.alphaValue = 1 }
+            }
+        })
+    }
+
+    /// For `cra://debug?littleToolbar=…`: `out` and `in` put the floating bar there, `at:x,y` (from the
+    /// window's top left) says what a pointer there is to the bar; anything else is a label. Each logs
+    /// the command and where the bar and the page are.
+    func debugToolbar(_ command: String) {
+        switch command {
+        case "out":
+            barTracker.bringOut()
+            apply(nil, animated: false)
+        case "in":
+            barTracker.reset()
+            apply(nil, animated: false)
+        default: break
+        }
+        shell.layoutSubtreeIfNeeded()
+        let line: String
+        if command.hasPrefix("at:"), let window {
+            let g = command.dropFirst(3).split(separator: ",").compactMap { Double($0) }
+            let p = g.count == 2 ? shell.convert(NSPoint(x: g[0], y: window.frame.height - g[1]), from: nil) : .zero
+            let where_ = ToolbarAutoHide.classify(p, card: shell.page.frame, container: shell.bounds, barHeight: LittleMetrics.barHeight,
+                                                  shown: barTracker.shown)
+            line = "littleToolbar \(command): \(where_) out=\(barTracker.shown ? 1 : 0)"
+        } else {
+            let page = shell.page.frame
+            line = "littleToolbar \(command): floats=\(shell.floatsBar ? 1 : 0) out=\(barTracker.shown ? 1 : 0) "
+                + "pageTop=\(Int(shell.bounds.maxY - page.maxY)) page=\(Int(page.height))/\(Int(shell.bounds.height)) "
+                + "barHidden=\(shell.toolbarHost.isHidden ? 1 : 0) "
+                + "lights=\(window?.standardWindowButton(.closeButton)?.isHidden == false ? 1 : 0)"
+        }
+        CraLog.note(line)
     }
 
     /// For cra://debug?littleShown: whether the window is the card, its size, and how far its
@@ -668,7 +819,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// lands.
     func showAsPeek(fromTab tabID: UUID?) {
         guard let window, let parent = peekParent, let pw = parent.window else { return }
-        let dim = PeekDimPanel(covering: parent.peekDismissArea(), of: pw) { [weak self] in self?.closeWindow() }
+        let dim = PeekDimPanel(covering: parent.peekDismissArea(), of: pw) { [weak self] in self?.attemptPeekClose(.background) }
         self.dim = dim
         pw.addChildWindow(dim, ordered: .above)
         dim.orderFront(nil)
@@ -680,7 +831,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             easel.usePeekLook()
         }
         var buttons: [PeekControlsPanel.Button] = [
-            .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.closeWindow() },
+            .init(control: .close, symbol: "xmark", help: "Close (⌘W)") { [weak self] in self?.attemptPeekClose(.closeButton) },
             .init(control: .expand, symbol: "arrow.up.left.and.arrow.down.right", help: "Expand (⌘O)") { [weak self] in
                 self?.expandPeek(commandClick: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
             },
@@ -1031,6 +1182,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             if !bar.isOpen { panel.orderOut(nil) }
         }
         guard window?.isVisible == true else { return }
+        // Once the bar has closed, the toolbar it held out may go (#435).
+        DispatchQueue.main.async { [weak self] in self?.barHoldEnded() }
         if isCard {
             // The bar closes before its row runs: a row that opens a page expands the card by then.
             DispatchQueue.main.async { [weak self] in
@@ -1039,8 +1192,18 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
-        window?.makeKeyAndOrderFront(nil)
-        focusPage()
+        // Lost to another window, the keys stay there (#429).
+        guard commandBarLostKeys else { window?.makeKeyAndOrderFront(nil); focusPage(); return }
+        commandBarLostKeys = false
+        panel.keysWent(owns: { [weak self] w in
+            guard let self else { return false }
+            return w === self.window || w === self.popup || self.peekWindows.contains { $0 === w }
+        }, finish: { [weak self] holder in
+            guard let self, !self.commandBar.isOpen, self.window?.isVisible == true,
+                  CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
+            self.window?.makeKeyAndOrderFront(nil)
+            self.focusPage()
+        })
     }
 
     private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
@@ -1207,6 +1370,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window?.removeChildWindow(panel)
         panel.orderOut(nil)
         window?.makeKeyAndOrderFront(nil)
+        barHoldEnded()
     }
 
     // MARK: Promote / close
@@ -1240,6 +1404,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let tab = store.createTab(url: b.currentURL, title: b.currentTitle, in: sid, select: true, window: target.windowID)
         if let favicon, let key = FaviconKey.key(for: b.currentURL) { app.favicons.store(favicon, forKey: key) }
         promoted = true
+        movedToTab = true
         endDevTools(of: b)
         browser = nil
         target.browsers.adopt(b, for: tab.id)
@@ -1337,7 +1502,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if isPeek, !closingPeek, let control = PeekControl.pressed(byAction: id) { controls?.pressFromKey(control) }
         switch id {
         // ⌘W on the card fades it out, as Esc does (#337).
-        case "closeTab", "closeWindow": if isCard, !cardFading, window?.isVisible == true { dismissCard() } else { closeWindow() }
+        case "closeTab", "closeWindow":
+            if isCard, !cardFading, window?.isVisible == true { dismissCard() } else if isPeek { attemptPeekClose(.closeShortcut) } else { closeWindow() }
         case "newTab", "editURL":
             // ⌘T in a Peek is the browser window's New Tab bar, with its tabs; ⌘L edits the Peek (#379).
             let opening = CommandBarOpening.of(id == "newTab" ? .newTab : .editURL, in: isPeek ? .peek : .littleWindow, hasPage: hasPage)
@@ -1386,6 +1552,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // No find bar, sidebar or split in little windows; keep them off the main window.
         case "find", "findNext", "findPrevious", "useSelectionForFind", "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
+             "recentTabAllSpaces", "recentTabAllSpacesBackward",
              "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
              "addSplitView", "closeSplitPane", "separateFromSplit", "expandSplitPane", "flipSplitOrientation", "nextSplitPane", "previousSplitPane":
             break
@@ -1421,6 +1588,34 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         toast.show(text, action: action, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)
     }
 
+    /// The Peek's user closes (its Close button, ⌘W, Esc, a click outside) go through here. A Peek on
+    /// a call holds the first one: Close becomes Arc's red Confirm pill and the next close goes through
+    /// (PeekCloseHold, GitHub #425). Everything else closes as before.
+    func attemptPeekClose(_ attempt: PeekCloseAttempt) {
+        guard isPeek, !closingPeek else { closeWindow(); return }
+        let next = PeekCloseHold.after(attempt, holding: closeHold, capturingMedia: browser?.isCapturingMedia == true)
+        closeHoldReset?.cancel()
+        closeHoldReset = nil
+        closeHold = next
+        controls?.showHold(next)
+        guard let next else { closeWindow(); return }
+        // Arc gives up waiting after a while, and Close is round again.
+        let reset = DispatchWorkItem { [weak self] in
+            guard let self, self.closeHold != nil else { return }
+            self.closeHold = nil
+            self.controls?.showHold(nil)
+        }
+        closeHoldReset = reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + next.timeout, execute: reset)
+    }
+
+    /// `cra://debug?peekClose`: open or closing, capturing, and the Close button's state.
+    func peekCloseReadout() -> String {
+        let hold = closeHold.map { "\($0)" } ?? "none"
+        let capturing = browser?.isCapturingMedia == true ? 1 : 0
+        return "open=\(closingPeek ? 0 : 1) capturing=\(capturing) hold=\(hold) close=\(controls?.closeReadout() ?? "-")"
+    }
+
     /// ⌘W / Close Window: the same path as the close button. (performClose is
     /// skipped: it refuses to act while the standard buttons are dimmed.)
     func closeWindow() {
@@ -1445,6 +1640,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === window else { return true }
+        // Before the page and its windows go: one of them may have the keyboard.
+        handBackFocus()
         tooltipTimer?.invalidate(); hideTooltip()
         closePopup()
         commandBar.close()
@@ -1460,8 +1657,25 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        handBackFocus()  // closes that skip windowShouldClose: the page's own window.close()
+        stopBarLook()
         endPeek()
         if browser == nil { app.removeLittleWindow(self) }
+    }
+
+    /// Arc's Little Arc closes back to the app it was opened over (#430). Left to AppKit, the
+    /// keyboard goes to Cra's next window, which brings the browser window (and its Space) forward.
+    /// The app comes forward before the window goes, so Cra is no longer in front by then.
+    private func handBackFocus() {
+        guard !handedBack, let window else { return }
+        handedBack = true
+        var key = NSApp.keyWindow
+        while let parent = key?.parent { key = parent }
+        let hadKeyboard = key === window || key === commandPanel || key === popup
+        guard let pid = focusReturn.target(closingKeyWindow: hadKeyboard, craActive: NSApp.isActive, movedToTab: movedToTab),
+              let other = NSRunningApplication(processIdentifier: pid), !other.isTerminated else { return }
+        CraLog.note("Little Window closed: the app it was opened over comes forward (#430)")
+        other.activate(from: .current, options: [])
     }
 
     /// Left with the green button or ⌃⌘F while a video was fullscreen: the page leaves too.
@@ -1470,6 +1684,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if !isPeek { window.collectionBehavior.remove(.fullScreenPrimary) }
         guard pageFullscreen else { return }
         pageFullscreen = false
+        syncFloatingBar()
         browser?.exitFullscreen()
     }
 
@@ -1537,6 +1752,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
+        commandBarLostKeys = true
         commandBar.close()
     }
 
@@ -1545,6 +1761,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeTitle title: String) {
         state.title = title
         window?.title = title.isEmpty ? "Little Window" : title
+    }
+
+    func browser(_ browser: CraBrowser, didChangeSoundPlaying playing: Bool) {
+        if browser === self.browser { soundPlaying = playing }
     }
 
     func browser(_ browser: CraBrowser, didChangeURL url: String) {
@@ -1628,6 +1848,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
         pageFullscreen = fullscreen
+        syncFloatingBar()
         // Only a full-screen-primary window gets a full-screen Space of its own (#277: not while it opens).
         if fullscreen, !isPeek { window.collectionBehavior.insert(.fullScreenPrimary) }
         if fullscreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
@@ -1729,6 +1950,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         devToolsDocked = true
         devToolsPlaceholder = nil
         devTools.didOpen()
+        syncFloatingBar()
         syncDevToolsWindow()
     }
 
@@ -1812,6 +2034,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     private func clearDevTools() {
+        defer { syncFloatingBar() }
         devToolsView = nil
         devToolsPlaceholder = nil
         devToolsDocked = true
@@ -1845,7 +2068,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, handleUnhandledKeyEvent event: NSEvent) -> Bool {
         // Arc's "Exit the current context": Escape the page didn't use closes a Peek.
         if isPeek, event.type == .keyDown, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
-            closeWindow()
+            attemptPeekClose(.escape(prefersConfirmation: false))
             return true
         }
         return app.handleUnhandledKey(event)
@@ -1893,6 +2116,8 @@ final class LittleShellView: NSView {
     /// Reports the page area (window coordinates) so a Chrome-style page window can follow it.
     var onPageFrame: ((NSRect) -> Void)?
     var onHover: ((LittleHover) -> Void)?
+    /// Where the pointer moved over the window, or nil once it left (for the floating bar).
+    var onPointer: ((NSPoint?) -> Void)?
     var openButtonWidth: () -> CGFloat = { 160 }
     /// The profile chip's width in the pill, 0 while it is hidden.
     var profileChipWidth: () -> CGFloat = { 0 }
@@ -1910,7 +2135,47 @@ final class LittleShellView: NSView {
     }
     private var barHeight: CGFloat { hidesBar ? 0 : (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) }
     /// A page with no toolbar over it (an easel in Peek).
-    var hidesBar = false { didSet { toolbarHost.isHidden = hidesBar; needsLayout = true } }
+    var hidesBar = false { didSet { syncBarVisibility(); needsLayout = true } }
+    /// Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" (GitHub #435,
+    /// `ToolbarAutoHide.littleWindowFloats`): the page takes the bar's room, inside the window's rim on
+    /// every side, and the bar floats over its top, slid up out of the window until `barRevealed`. The
+    /// page is a view in this one with the Chromium engine, so the bar can lie over it.
+    var floatsBar = false {
+        didSet {
+            guard floatsBar != oldValue else { return }
+            barRevealed = false
+            // Over the page while it floats, under it otherwise (the window's open animation grows
+            // the page from under the strip).
+            addSubview(toolbarHost, positioned: floatsBar ? .above : .below, relativeTo: page)
+            syncBarVisibility()
+            needsLayout = true
+        }
+    }
+    private(set) var barRevealed = false
+    /// Whether the bar floats and is put away.
+    var barAway: Bool { floatsBar && !barRevealed }
+
+    private func syncBarVisibility() { toolbarHost.isHidden = hidesBar || barAway }
+
+    /// Slides the floating bar down over the page's top, or back up out of the window.
+    func setBarRevealed(_ revealed: Bool, animated: Bool) {
+        guard floatsBar, barRevealed != revealed else { return }
+        barRevealed = revealed
+        guard animated, window != nil else { syncBarVisibility(); needsLayout = true; layoutSubtreeIfNeeded(); return }
+        if revealed { toolbarHost.isHidden = false }
+        let target = barFrame(in: layoutBounds)
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = revealed ? ToolbarAutoHide.revealDuration : ToolbarAutoHide.hideDuration
+            ctx.timingFunction = CAMediaTimingFunction(name: revealed ? .easeOut : .easeIn)
+            toolbarHost.animator().frame = target
+        }, completionHandler: { [weak self] in
+            // A bar that is up out of the window is hidden too, so nothing in it takes a click.
+            MainActor.assumeIsolated {
+                self?.syncBarVisibility()
+                self?.needsLayout = true
+            }
+        })
+    }
     /// ⌥⌘N's card (#337): no page, Little Arc's own background where the bar doesn't reach.
     var isCard = false {
         didSet {
@@ -1976,8 +2241,9 @@ final class LittleShellView: NSView {
         super.mouseMoved(with: event)
         guard !isPeek else { return }
         let p = convert(event.locationInWindow, from: nil)
-        let inBar = p.y > bounds.height - LittleMetrics.barHeight
+        let inBar = !barAway && p.y > bounds.height - LittleMetrics.barHeight
         onHover?(inBar ? hoverTarget(x: p.x, y: bounds.height - p.y) : .none)
+        onPointer?(p)
     }
 
     /// Mirrors LittleToolbarView's layout (pill from x 83, 10pt gap, button, 7pt margin).
@@ -2003,12 +2269,24 @@ final class LittleShellView: NSView {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         onHover?(.none)
+        onPointer?(nil)
+    }
+
+    /// The area laid out: the final size while the window grows open, anchored top left.
+    private var layoutBounds: NSRect {
+        let size = frozenSize ?? bounds.size
+        return NSRect(x: 0, y: bounds.height - size.height, width: size.width, height: size.height)
+    }
+
+    /// The strip's frame: across the top, or just above the window while a floating bar is away.
+    private func barFrame(in b: NSRect) -> NSRect {
+        let barH = barHeight
+        return NSRect(x: 0, y: barAway ? b.maxY + 1 : b.maxY - barH, width: b.width, height: barH)
     }
 
     override func layout() {
         super.layout()
-        let size = frozenSize ?? bounds.size
-        let b = NSRect(x: 0, y: bounds.height - size.height, width: size.width, height: size.height)
+        let b = layoutBounds
         let fullscreen = window?.styleMask.contains(.fullScreen) ?? false
         if isCard {
             CATransaction.begin()
@@ -2016,11 +2294,15 @@ final class LittleShellView: NSView {
             cardBackground.frame = bounds
             CATransaction.commit()
         }
-        let barH = barHeight
-        toolbarHost.frame = NSRect(x: 0, y: b.maxY - barH, width: b.width, height: barH)
+        toolbarHost.frame = barFrame(in: b)
         let inset = fullscreen || isPeek ? 0 : LittleMetrics.edgeInset
-        page.frame = NSRect(x: inset, y: b.minY + inset, width: max(0, b.width - 2 * inset), height: max(0, b.height - barH - inset))
+        // A floating bar takes no room: the page reaches the rim at the top as on the other sides.
+        let top = floatsBar ? inset : barHeight
+        page.frame = NSRect(x: inset, y: b.minY + inset, width: max(0, b.width - 2 * inset), height: max(0, b.height - top - inset))
         page.layer?.cornerRadius = pageCornerRadius
+        let corners: CACornerMask = floatsBar ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+            : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        if page.layer?.maskedCorners != corners { page.layer?.maskedCorners = corners }
         for sub in page.subviews where sub.frame != page.bounds { sub.frame = page.bounds }
         onPageFrame?(convert(page.frame, to: nil))
     }

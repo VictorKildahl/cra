@@ -23,6 +23,17 @@ public struct PinnedExtensions: Codable, Equatable, Sendable {
 
     public func isPinned(_ id: String, inProfile profile: String) -> Bool { ids(inProfile: profile).contains(id) }
 
+    /// The extensions menu's order (Arc): the pinned ones in toolbar order, then the rest by name.
+    /// Each ID once: two installs of one extension (two folders with the same manifest key) or a
+    /// pin saved twice listed it twice, and the menu's icon map trapped on the repeat (0.1.43).
+    public func menuOrder<E>(_ entries: [E], inProfile profile: String, id: (E) -> String, name: (E) -> String) -> [E] {
+        var seen = Set<String>()
+        let pinned = ids(inProfile: profile).compactMap { pin in seen.insert(pin).inserted ? entries.first { id($0) == pin } : nil }
+        let rest = entries.filter { !isPinned(id($0), inProfile: profile) && seen.insert(id($0)).inserted }
+            .sorted { name($0).localizedStandardCompare(name($1)) == .orderedAscending }
+        return pinned + rest
+    }
+
     /// Pins or unpins in one profile only; the others keep what they show.
     public mutating func setPinned(_ id: String, _ pinned: Bool, inProfile profile: String) {
         guard pinned != isPinned(id, inProfile: profile) else { return }

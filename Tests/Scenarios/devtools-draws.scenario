@@ -1,0 +1,22 @@
+# promise: #468
+# View > Developer > Developer Tools opens DevTools beside the page, and they draw there. On
+# 0.1.44 (the first engine release) the panel stayed blank white: Chrome put the frontend in its
+# own DevTools window first, which is never shown, and it went on drawing there after Cra moved
+# its view into the card. `drawn` is read from the layers of Cra's DevTools window.
+budget rss=900 stalls50=40
+cra://open?url=${PAGE}?n=dev
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/devTools
+wait 6
+cra://debug?devToolsShown=open
+expect-log tab devtools open: windows=0 open=1 drawn=1
+
+# Closed and opened again: a new frontend, drawn too.
+cra://action/devTools
+wait 3
+cra://debug?devToolsShown=closed
+expect-log tab devtools closed: windows=0 open=0
+cra://action/devTools
+wait 6
+cra://debug?devToolsShown=again
+expect-log tab devtools again: windows=0 open=1 drawn=1

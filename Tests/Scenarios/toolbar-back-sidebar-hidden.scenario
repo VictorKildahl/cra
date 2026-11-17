@@ -1,0 +1,37 @@
+# promise: #449
+# The toolbar's toggle and ← with the sidebar hidden sit where the window's traffic lights are, and
+# on macOS 27.2 a click on ← there did nothing or zoomed the window (GitHub #449). The hidden lights
+# wait outside the window, spaced as they were; the bar's buttons are what a press there finds. ⌘M
+# still minimizes with them out there, and showing the sidebar puts them back in their place.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 1.5
+cra://debug?windowState=hidden
+expect-log window state hidden: main0 \S+ \S+ \S+ \S+ \S+ lightsHidden=1 lights=hidden,hidden,hidden \S+ \S+ lightsIn=-987,
+# Where close, minimize and zoom were, and the middle of ←: the toolbar's toggle and ←.
+cra://debug?hitAt=20,24
+expect-log hit at 20,24: ToolbarGlyphButton < PaneToolbarView
+cra://debug?hitAt=44,24
+expect-log hit at 44,24: ToolbarGlyphButton < PaneToolbarView
+cra://debug?hitAt=68,24
+expect-log hit at 68,24: ToolbarGlyphButton < PaneToolbarView
+
+# Shown again: back in the title row, in colour.
+cra://action/toggleSidebar
+wait 1.5
+cra://debug?windowState=shown
+expect-log window state shown: main0 \S+ \S+ \S+ \S+ \S+ lightsHidden=0 lights=1\.0,1\.0,1\.0 \S+ \S+ lightsIn=13,
+
+# Hidden again, ⌘M still minimizes (AppKit refuses with a minimize button it can't use).
+cra://action/toggleSidebar
+wait 1.5
+cra://debug?minimize=1
+wait 1.5
+cra://debug?windowState=minimized
+expect-log window state minimized: main0 fullscreen=0 visible=0

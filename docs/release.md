@@ -297,6 +297,29 @@ are the controls. Details and Arc's original are in `docs/arc-reverse-engineerin
   the automatic restart) against a local appcast made with `CRA_UPDATE_URL=… scripts/appcast.sh`.
 - Copies from before the updater (0.1.0, 0.1.1) update once by hand: rerun the install line.
 
+### Channels: New and Stable
+
+Since GitHub #476 (17 Nov 2026) a release reaches New the day it ships and Stable once Victor promotes it, so a
+release that breaks something can be left behind. Settings ▸ Advanced ▸ "Update channel" picks one per Mac (user
+default `updateChannel`, CraCore `UpdateChannel`); a Mac starts on New. Stable is `scripts/stable-version`.
+
+- **Feeds.** Every release carries, per CPU, `appcast.xml` (what every Cra reads, and New: the newest release, then
+  the Stable one) and `appcast-stable.xml` (Stable alone; `-intel` names for Intel). `scripts/appcast-feeds.py` writes
+  both; `scripts/release.sh` fetches the Stable release's own appcast so its signed item is copied unchanged.
+- **CEF and the engine.** The newest release in `appcast.xml` carries
+  `<sparkle:minimumUpdateVersion>202611161309</…>` (Cra 0.1.44, the first on Chrome's engine). Every Cra since 0.1.2
+  ships Sparkle 2.10, which skips such an item below that build, so a Cra on CEF updates only to Stable, and 0.1.44
+  and 0.1.45, which have no channel switch, still update to the newest.
+- **Promote** with `scripts/promote.sh <version>` (`--dry-run` first): it rewrites both feeds on the latest release
+  from the two releases' own appcasts and sets `scripts/stable-version`, which you commit. The site's download links
+  and the Homebrew tap still follow the latest release.
+- **Going back.** Sparkle never installs an older version: a Mac switched to Stable stays where it is until Stable
+  passes it, and Settings offers Stable's disk image (`Cra.dmg` beside its `Cra.zip`) to install it now. An engine
+  profile opens on Cra 0.1.43 (CEF) with its cookies and tab history (Migration scenarios run in reverse, 17 Nov).
+  An update a Mac already downloaded from New still installs when it quits.
+- **Tests.** `scripts/test-update-channels.sh` (in `scripts/test.sh`) serves the fixture feeds and asks the vendored
+  Sparkle what each build is offered; scenario `update-channel-stable` covers Settings.
+
 ## The Chromium engine
 
 Cra runs on Chrome's own framework with Cra's layer, patches and branding built in: the engine

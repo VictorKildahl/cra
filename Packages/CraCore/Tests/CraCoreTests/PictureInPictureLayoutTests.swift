@@ -19,13 +19,14 @@ struct PictureInPictureLayoutTests {
         #expect(bar.back == CGRect(x: 13, y: 13, width: 26, height: 26))
         #expect(bar.close == CGRect(x: 184, y: 13, width: 26, height: 26))
         let a = try! #require(bar.address)
-        #expect(a.midX == 111.5 && a.midY == 26 && a.width == 85)
-        #expect(a.minX >= bar.back.maxX + 8 && a.maxX <= bar.close.minX - 8)
+        // Minimize beside Close at every size (#462) leaves 65 pt of the 85 for the address here.
+        #expect(a.midX == 111.5 && a.midY == 26 && a.width == 65)
+        #expect(a.minX >= bar.back.maxX + 8 && a.maxX <= bar.minimize.minX - 8)
     }
 
     @Test func longAddressIsCutToTheRoomAndDroppedWithoutRoom() {
         let bar = PictureInPictureLayout.topBar(width: 223, buttonSize: 26, addressWidth: 400)
-        #expect(bar.address?.width == 2 * (111.5 - 39 - 8))
+        #expect(bar.address?.width == 2 * (152 - 111.5 - 8))
         #expect(PictureInPictureLayout.topBar(width: 110, buttonSize: 26, addressWidth: 85).address == nil)
         #expect(PictureInPictureLayout.topBar(width: 223, buttonSize: 26, addressWidth: 0).address == nil)
     }
@@ -39,6 +40,25 @@ struct PictureInPictureLayoutTests {
         #expect(bar.back == CGRect(x: 19, y: 19, width: 110, height: 26))
         #expect(bar.close == CGRect(x: 756, y: 19, width: 26, height: 26))
         #expect(bar.address?.midX == 400.5)
+    }
+
+    /// Arc's Minimize sits left of Close, 6 pt from it, and the address keeps clear of it (#434).
+    /// Arc leaves it out below 280 pt wide; Cra shows it at every size, down to the smallest
+    /// window (224 pt), where the three buttons still have room and don't touch (#462).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/434"), .bug("https://github.com/VictorKildahl/cra/issues/462"))
+    func minimizeSitsBeforeCloseAtEverySize() {
+        let tiny = PictureInPictureLayout.topBar(width: 224, buttonSize: 26, addressWidth: 85)
+        #expect(tiny.close == CGRect(x: 185, y: 13, width: 26, height: 26))
+        #expect(tiny.minimize == CGRect(x: 153, y: 13, width: 26, height: 26))
+        #expect(tiny.back.maxX < tiny.minimize.minX)
+        let ta = try! #require(tiny.address)
+        #expect(ta.minX >= tiny.back.maxX + 8 && ta.maxX <= tiny.minimize.minX - 8)
+        #expect(PictureInPictureLayout.topBar(width: 277, buttonSize: 26, addressWidth: 85).minimize == CGRect(x: 206, y: 13, width: 26, height: 26))
+        let bar = PictureInPictureLayout.topBar(width: 396, buttonSize: 26, addressWidth: 400)
+        #expect(bar.close == CGRect(x: 353, y: 17, width: 26, height: 26))
+        #expect(bar.minimize == CGRect(x: 321, y: 17, width: 26, height: 26))
+        let a = try! #require(bar.address)
+        #expect(a.midX == 198 && a.maxX <= 321 - 8)
     }
 
     let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)

@@ -1,0 +1,22 @@
+# A process that runs away is named in cra.log, with every live page: a 0.1.44 report showed
+# 14-17 GB and 440-500 % CPU with four tabs, and nothing said which process or page it was.
+# Here one page holds 2.25 GB of buffers, then keeps three cores busy with workers.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}?n=quiet
+expect-log loaded 127\.0\.0\.1
+cra://open?url=${PAGE}?n=hog
+expect-log loaded 127\.0\.0\.1
+cra://debug?cdp=Runtime.evaluate&params={"returnByValue":true,"expression":"(()=>{window.keep=[];for(let i=0;i<9;i++){const b=new Uint8Array(256*1024*1024);b.fill(1);window.keep.push(b)}return 'held:'+window.keep.length})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"held:9"
+wait 8
+expect-log perf: renderer pid [0-9]+ passed 2 GB \([0-9.]+ GB
+expect-log perf: page 127\.0\.0\.1 shown: .*JS heap
+expect-log perf: page 127\.0\.0\.1 hidden: .*JS heap
+cra://debug?cdp=Runtime.evaluate&params={"returnByValue":true,"expression":"(()=>{window.keep=null;const src=URL.createObjectURL(new Blob(['for(;;){}']));window.spin=[0,1,2].map(()=>new Worker(src));return 'spinning'})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"spinning"
+wait 40
+expect-log perf: renderer pid [0-9]+ over 200 % of a core for 30 s
+cra://action/closeTab
+wait 2

@@ -1,5 +1,7 @@
 # Fullscreen, an extension popup and its options page over it, and back: window and Space
-# transitions. It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+# transitions. A window quit in full screen opens in full screen again, and one that left it
+# opens windowed (#426). It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+# promise: #426
 requires screen
 budget rss=600 stalls50=5
 cra://debug?installExtension=${FIXTURES}/Extension
@@ -14,5 +16,17 @@ cra://dismiss
 cra://open?url=chrome-extension://${EXTENSION_ID}/options.html
 wait 3
 cra://action/closeTab
+cra://debug?fullscreen=state&label=before
+expect-log fullscreen before: window=1 saved=1
+relaunch
+wait 4
+cra://debug?fullscreen=state&label=relaunched
+expect-log fullscreen relaunched: window=1 saved=1
 cra://debug?fullscreen=0
 wait 3
+cra://debug?fullscreen=state&label=left
+expect-log fullscreen left: window=0 saved=0
+relaunch
+wait 3
+cra://debug?fullscreen=state&label=windowed
+expect-log fullscreen windowed: window=0 saved=0

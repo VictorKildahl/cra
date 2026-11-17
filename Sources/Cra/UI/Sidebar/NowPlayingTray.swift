@@ -340,7 +340,9 @@ final class NowPlayingCardView: NSView {
         func button(_ symbol: String, _ iconSize: CGFloat, _ help: String, _ action: NowPlaying.Action) -> SidebarGlyphButton {
             SidebarGlyphButton(symbol: symbol, size: 24, height: 23, iconSize: iconSize, help: help, colors: colors.buttonColors) { perform(action) }
         }
-        pip = button("rectangle.on.rectangle", 13, "Open Picture in Picture", .pictureInPicture)
+        // Arc's own glyph, `pip` at 12 pt (Arc 1.173 binary); Cra's two overlapping squares didn't
+        // read as Picture in Picture (#434).
+        pip = button("pip", 12, "Open Picture in Picture", .pictureInPicture)
         close = button("xmark", 14, "Close Mini Player", .dismiss)
         previous = button("backward.end.fill", 13.5, "Previous Track", .previous)
         playPause = button("pause.fill", 13.5, "Pause", .togglePlayback)

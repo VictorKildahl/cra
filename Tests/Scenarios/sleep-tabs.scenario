@@ -1,5 +1,7 @@
 # Thirty background pages put to sleep: the timed pass no unit test reaches with a real page,
 # run here with a one-second threshold (cra://debug?sleepTabs) instead of waiting an hour.
+# Each discard ends its renderer; the perf.json check every scenario runs fails if one counts as
+# a page crash ("Aw, Snap!"), as all thirty did in 0.1.44.
 budget rss=800 stalls50=70   # each new tab stalls ~100 ms today (Nov 2026)
 cra://open?url=${PAGE}?n=first
 wait 3

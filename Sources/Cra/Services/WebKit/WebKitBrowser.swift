@@ -875,6 +875,24 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 }
                 web.go(to: item)
                 reply(completion, "{}", nil)
+            case "Cra.pauseMedia":
+                // Pause All Media (#438), answered as Chromium's engine does: WebKit pauses every
+                // player in the page, its frames included (pauseAllMediaPlayback, harmless on a quiet
+                // page). Not gated on requestMediaPlaybackState, which answered both ways wrongly for
+                // a hidden tab (not playing while its track played, playing once all was paused), so
+                // "paused" counts the top frame's players that played; sound from a frame counts on
+                // the app's side (MediaPause.outcome).
+                let count = """
+                (() => { let n = 0; const visit = r => { for (const e of r.querySelectorAll('*')) {
+                  if (e instanceof HTMLMediaElement && !e.paused && !e.ended) n++; if (e.shadowRoot) visit(e.shadowRoot); } };
+                  visit(document); return n; })()
+                """
+                web.evaluateJavaScript(count, in: nil, in: Self.world) { [weak self] r in
+                    let playing = (try? r.get()) as? Int ?? 0
+                    web.pauseAllMediaPlayback {
+                        self?.reply(completion, #"{"playing":\#(playing > 0),"session":false,"paused":\#(playing),"resisted":0}"#, nil)
+                    }
+                }
             case "Cra.setFreezingVote", "Cra.load":
                 // WebKit decides when a hidden page sleeps; tab sleeping closes the page instead.
                 reply(completion, "{}", nil)

@@ -2,6 +2,7 @@ import AppKit
 
 /// Arc's floating sidebar: with the sidebar hidden, touching the window's left
 /// edge slides the sidebar in over the page; it leaves when the pointer does.
+/// With the sidebar on the right (#464) all of it happens at the right edge instead.
 ///
 /// Pages are separate Chromium child windows stacked above the shell, so a
 /// sidebar drawn inside the shell would be covered and the shell never sees the
@@ -161,13 +162,14 @@ final class FloatingSidebarController {
                 wait(atEdge: false, over: dwell.sample(inStrip: false, at: t))
                 return
             }
-            let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow)
+            let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow, side: side)
             // Thrown past the edge, out of the window: it comes out there as well (#350).
-            let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, at: t)
+            let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, side: side, at: t)
             let stripOver = dwell.sample(inStrip: inStrip, at: t)
             wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal)
         } else if !staysShown(), FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
-                                                    pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow) {
+                                                    pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow,
+                                                    side: side) {
             hide(animated: true)
         }
     }
@@ -223,6 +225,8 @@ final class FloatingSidebarController {
         return w != nil
     }
 
+    private var side: SidebarSide { shell.sidebarSide }
+
     /// The sidebar's floating frame on screen, from the shell's layout.
     private var targetFrame: NSRect {
         let f = shell.frames(sidebarVisible: false, floating: true, fullscreen: false, width: shell.sidebarWidth).sidebar
@@ -232,22 +236,27 @@ final class FloatingSidebarController {
     /// The panel reaches from the window's left edge to the sidebar's right edge, so the
     /// sidebar slides in from the window edge and is clipped there (Arc draws it inside
     /// its window), instead of sliding across whatever lies left of the window. Its
-    /// corners are cut to the window's rounded ones too (`clipToWindow`).
+    /// corners are cut to the window's rounded ones too (`clipToWindow`). On the right it reaches
+    /// from the sidebar's left edge to the window's right one (#464).
     private var panelFrame: NSRect {
-        let t = targetFrame
-        return NSRect(x: window.frame.minX, y: t.minY, width: t.maxX - window.frame.minX + revealRoom, height: t.height)
-            .intersection(window.frame)
+        let t = targetFrame, w = window.frame
+        let f = side == .right
+            ? NSRect(x: t.minX - revealRoom, y: t.minY, width: w.maxX - t.minX + revealRoom, height: t.height)
+            : NSRect(x: w.minX, y: t.minY, width: t.maxX - w.minX + revealRoom, height: t.height)
+        return f.intersection(w)
     }
 
-    /// Room right of the sidebar's resting edge while the reveal's spring runs: it swings ~4 pt past
+    /// Room past the sidebar's resting edge (right of it, left on the right) while the reveal's spring runs: it swings ~4 pt past
     /// (Arc: 274 for 270). A panel that ended at the resting edge cut the sidebar off there while its
     /// shadow swung on (#350). Only for the spring: the panel takes clicks, and this strip is the page's.
     private var revealRoom: CGFloat = 0
 
     /// The sidebar inside the panel: in place, or tucked out past the window edge.
     private func slideFrame(shown: Bool) -> NSRect {
-        let t = targetFrame
-        return NSRect(x: shown ? t.minX - window.frame.minX : -t.width, y: 0, width: t.width, height: t.height)
+        // Where the panel is now: a hide drops the reveal's room without resizing it.
+        let t = targetFrame, p = panel.map { $0.parent === window ? $0.frame : panelFrame } ?? panelFrame
+        let tucked = side == .right ? p.width : -t.width
+        return NSRect(x: shown ? t.minX - p.minX : tucked, y: 0, width: t.width, height: t.height)
     }
 
     /// The shadow panel: the sidebar panel with room for the shadow right, above and below. It
@@ -258,7 +267,7 @@ final class FloatingSidebarController {
     /// shadow and dark outline along its top edge for as long as the sidebar was out (#350).
     private var shadowPanelFrame: NSRect {
         let f = panelFrame, pad = Metrics.shadowPad
-        return NSRect(x: f.minX, y: f.minY - pad, width: f.width + pad, height: f.height + 2 * pad)
+        return NSRect(x: side == .right ? f.minX - pad : f.minX, y: f.minY - pad, width: f.width + pad, height: f.height + 2 * pad)
             .intersection(window.frame)
     }
 
@@ -302,11 +311,13 @@ final class FloatingSidebarController {
     /// The shadow follows the sidebar's frame, inside the shadow panel.
     private func placeShadow() {
         let s = slider.frame, pad = Metrics.shadowPad
-        // The shadow panel starts lower than the sidebar's by its room below, as far as the window lets it.
+        // The shadow panel starts lower than the sidebar's by its room below, as far as the window lets it,
+        // and on the right further left by its room there.
         let below = panelFrame.minY - shadowPanelFrame.minY
+        let beside = panelFrame.minX - shadowPanelFrame.minX
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        shadowView.frame = NSRect(x: s.minX, y: s.minY + below, width: s.width, height: s.height)
+        shadowView.frame = NSRect(x: s.minX + beside, y: s.minY + below, width: s.width, height: s.height)
         if let l = shadowView.layer {
             l.shadowColor = NSColor.black.cgColor
             l.shadowOpacity = Metrics.shadowOpacity
@@ -491,6 +502,13 @@ final class FloatingSidebarController {
         p.setFrame(panelFrame, display: false)
         shadowPanel?.setFrame(shadowPanelFrame, display: false)
         clipToWindow()
+        // On the right the room is on the panel's leading side, so the sidebar's place in it moves.
+        guard side == .right, slider.layer?.animation(forKey: Self.slideKey) == nil else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        slider.frame = slideFrame(shown: isShown)
+        CATransaction.commit()
+        placeShadow()
     }
 
     /// The sidebar into its panels, tucked out past the window's edge and drawn, the panels on the
@@ -525,12 +543,15 @@ final class FloatingSidebarController {
         // same spot in the sidebar's top row. Full screen has none: Arc's floating sidebar there
         // starts with the toggle, as the docked one does (#315).
         if let lights = trafficLights {
-            lights.setFrameOrigin(NSPoint(x: 13, y: slider.bounds.height - CraMetrics.titleRowCenter - lights.frame.height / 2))
+            lights.setFrameOrigin(NSPoint(x: TrafficLightLayout.leading, y: slider.bounds.height - CraMetrics.titleRowCenter - lights.frame.height / 2))
             lights.isHidden = windowFullScreen()
             slider.addSubview(lights, positioned: .above, relativeTo: host)
         }
+        // The resize edge is the one beside the page: the right one, or the left on the right (#464).
         let w = Metrics.resizeHandleWidth
-        resizeHandle.frame = NSRect(x: slider.bounds.width - w, y: 0, width: w, height: slider.bounds.height)
+        resizeHandle.side = side
+        resizeHandle.autoresizingMask = side == .right ? [.maxXMargin, .height] : [.minXMargin, .height]
+        resizeHandle.frame = NSRect(x: side == .right ? 0 : slider.bounds.width - w, y: 0, width: w, height: slider.bounds.height)
         resizeHandle.isHidden = !shell.sidebarResizable
         slider.addSubview(resizeHandle, positioned: .above, relativeTo: nil)
         shell.sidebarDetached = true
@@ -602,6 +623,17 @@ final class FloatingSidebarController {
         shell.layoutSubtreeIfNeeded()
     }
 
+    /// For `cra://debug?windowState`: the window edge the floating sidebar comes out at and how far in
+    /// it rests, e.g. `right 5` (#464); `none` while it is in.
+    var edgeReadout: String {
+        guard isShown, let p = panel, p.parent === window else { return "none" }
+        let w = window.frame, f = p.frame
+        let s = p.convertToScreen(slider.convert(slider.bounds, to: nil))
+        if abs(f.minX - w.minX) < 0.5 { return "left \(Int((s.minX - w.minX).rounded()))" }
+        if abs(f.maxX - w.maxX) < 0.5 { return "right \(Int((w.maxX - s.maxX).rounded()))" }
+        return "none"
+    }
+
     /// Window moved or resized while floating.
     func reposition() {
         guard isShown, let p = panel else { return }
@@ -641,9 +673,13 @@ final class FloatingTrafficLights: NSView {
         super.init(frame: .zero)
         let actions = [#selector(closeWindow), #selector(minimizeWindow), #selector(zoomWindow)]
         var height: CGFloat = 0
-        for (i, type) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
+        // Spaced like the window's own buttons, which keep the system's gaps (#445).
+        let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let system = types.compactMap { browserWindow.standardWindowButton($0).map { Double($0.frame.minX) } }
+        let xs = system.count == types.count ? TrafficLightLayout.originsX(system: system, leading: 0) : [0, 20, 40]
+        for (i, type) in types.enumerated() {
             guard let b = NSWindow.standardWindowButton(type, for: browserWindow.styleMask) else { continue }
-            b.setFrameOrigin(NSPoint(x: CGFloat(i) * 24, y: 0))
+            b.setFrameOrigin(NSPoint(x: CGFloat(xs[i]), y: 0))
             b.target = self
             b.action = actions[i]
             addSubview(b)

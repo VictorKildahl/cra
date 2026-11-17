@@ -1,0 +1,38 @@
+# promise: #464
+# Settings ▸ Sidebar on the right (#464, not in Arc): the window's layout in a mirror. The sidebar
+# stands on the window's right edge with the traffic lights in its top row (13 pt in, as on the left),
+# and the page card keeps Arc's 10 pt inset on the other three sides. Hidden, the card takes the whole
+# window and its traffic lights wait left of it (#449); brought out over the page it comes from the
+# right edge and rests 5 pt in. Switched back to the left at once, everything is where Arc has it.
+# Card readout: insets from the window's left, bottom, right and top, then the radius.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "sidebarSide": "right"}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?windowState=docked
+expect-log window state docked: main0 .* card=10,10,[1-9][0-9]{2},10 r[1-9][0-9]* fills=0 sidebar=right edge=right w=[1-9][0-9]{2} lights=\+13 floating=none
+
+cra://action/toggleSidebar
+wait 1
+cra://debug?windowState=hidden
+expect-log window state hidden: main0 .* card=10,10,10,10 r[1-9][0-9]* fills=0 sidebar=right edge=none
+# Hidden lights wait left of the window as on the left (#449), not 1000 pt left of the right-hand spot.
+expect-log window state hidden: main0 .* lightsHidden=1 lights=hidden,hidden,hidden .* lightsIn=-987,
+
+cra://debug?floatingSidebar=1
+wait 1
+cra://debug?windowState=floating
+expect-log window state floating: main0 .* sidebar=right edge=floating .* floating=right 5
+cra://debug?floatingSidebar=0
+wait 1
+
+cra://action/toggleSidebar
+wait 1
+cra://debug?windowState=back
+expect-log window state back: main0 .* lightsHidden=0 .* sidebar=right edge=right w=[1-9][0-9]{2} lights=\+13
+cra://debug?sidebarSide=left
+wait 1
+cra://debug?windowState=left
+expect-log window state left: main0 .* card=[1-9][0-9]{2},10,10,10 r[1-9][0-9]* fills=0 sidebar=left edge=left w=[1-9][0-9]{2} lights=\+13 floating=none
+expect-log sidebar on the left
