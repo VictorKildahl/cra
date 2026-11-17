@@ -3863,6 +3863,9 @@ Shift-click on a lab page's link, then HID clicks and drags; Peek open or closed
 - Cra (CaptureOverlay, ContentCapture in CraCore): the same mode over a Page.captureScreenshot picture in a panel over
   the page; picker run in Cra's isolated world; Copy / Save… / Send via iMessage… / Retake (no Easels, Library Media or
   Edit in Cra); Copy shows "Screenshot Copied to Clipboard"; the macOS screenshot sound plays when a capture is taken.
+  Cra's own (#451, 16 Nov 2026): the page lists everything under the pointer and CraCore chooses, Arc's score
+  by default and, with ⌥ held, the topmost element at least 8 px each way that isn't the whole page (a YouTube title
+  line instead of its card; a button inside Reddit's shadow roots, which Arc's score never sees).
 
 ## Pinned extensions with the toolbar hidden, and in a narrow toolbar (Arc 1.171, 4 Nov 2026, X report, offline Arc)
 
