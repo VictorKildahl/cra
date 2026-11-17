@@ -1,0 +1,22 @@
+# promise: #471
+# The Spaces menu builds its rows when it opens, and Move Tab to Space N is no longer one of them
+# (Arc's menu has neither). Go to Space N (⌃N) and Move Tab to Space N (⌃⌘N) still work from the
+# window and from a page, before the menu has ever opened.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=keys
+wait 2
+cra://debug?browserWindows=start
+expect-log Cra browser windows start: kind=\S+ space=Home .*n=keys
+cra://debug?key=2,19,262144
+wait 1
+cra://debug?browserWindows=go-work
+expect-log Cra browser windows go-work: kind=\S+ space=Work 
+cra://debug?key=1,18,262144
+wait 1
+cra://debug?browserWindows=go-home
+expect-log Cra browser windows go-home: kind=\S+ space=Home .*open=\S*n=keys
+cra://debug?key=2,19,1310720&page=1
+wait 1
+cra://debug?browserWindows=moved
+expect-log Cra browser windows moved: kind=\S+ space=Work listed=\d+ tabs=\[[^]]*n=keys\] open=\S*n=keys

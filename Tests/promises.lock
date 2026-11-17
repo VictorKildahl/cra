@@ -831,6 +831,8 @@
 #419   Tests/Scenarios/split-drop.scenario  3bd2c37b3cb1
 #421   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::typedURLFollowsSpaceRoutes  cfbe95a599dd
 #421   Tests/Scenarios/command-bar-route.scenario  e9c6c3f45f79
+#424   Tests/Scenarios/floating-sidebar-rename.scenario  08db592c6da8
+#424   Tests/Scenarios/rename-waking-tab.scenario  d17e983e5dc1
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::aPeekOnACallHoldsItsFirstClose  bba8b358c791
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::aSecondCloseGoesThrough  5d87f80b126d
 #425   Packages/CraCore/Tests/CraCoreTests/PeekCloseConfirmTests.swift::thePillGrowsRightFromTheButton  7c49ec85af44
@@ -853,6 +855,8 @@
 #431   Tests/Scenarios/settings-fullscreen.scenario  a1a5c7267959
 #434   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseAtEverySize  732fadede9fa
 #434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeCase  c115e90bb609
+#434   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureMinimizeSilentCase  75be35fb6087
+#434   Tests/Scenarios/pip-minimize-muted.scenario  eb00e7ad9fa6
 #434   Tests/Scenarios/pip-minimize.scenario  303a5054c8ba
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::floatsOnlyOverAPageInTheWindowsOwnView  684578ecc041
 #435   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  e887bbd620e2
@@ -926,5 +930,10 @@
 #467   Tests/Scenarios/tab-switcher-all-spaces.scenario  b5befa94ecac
 #468   Tests/Scenarios/devtools-draws.scenario  97ee7dc162fd
 #469   Tests/Scenarios/new-tab-link-shows.scenario  97ea83e9c9b1
+#471   Packages/CraCore/Tests/CraCoreTests/SpaceTitleTests.swift::creationAndEveryRenameShareAUnicodeSafeLimit  85aae0eea9be
+#471   Packages/CraCore/Tests/CraCoreTests/SpacesMenuCompositionTests.swift::navigationContainsEveryRealSpaceInOrder  8685c1bac8c8
+#471   Tests/Scenarios/spaces-menu-keys.scenario  e64b4304c942
+#471   Tests/Scenarios/spaces-menu-long-name.scenario  ed10d7719926
+#471   Tests/Scenarios/spaces-menu-rows.scenario  2f97a92f3d0c
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
