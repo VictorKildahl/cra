@@ -1,0 +1,131 @@
+diff --git a/ui/base/cocoa/secure_password_input.mm b/ui/base/cocoa/secure_password_input.mm
+--- a/ui/base/cocoa/secure_password_input.mm
++++ b/ui/base/cocoa/secure_password_input.mm
+@@ -4,6 +4,7 @@
+ 
+ #import "ui/base/cocoa/secure_password_input.h"
+ 
++#import <AppKit/AppKit.h>
+ #import <Carbon/Carbon.h>
+ 
+ #include "base/apple/scoped_cftyperef.h"
+@@ -14,6 +15,13 @@ namespace {
+ // Used to protect from out-of-order calls to enabling/disabling functions.
+ int g_password_input_counter = 0;
+ 
++// Cra: whether this process has Secure Input on. It is on while a password
++// field holds the lock and the app is active. TN2150 says to turn it off when
++// the app is deactivated: keys go to another app then, and Secure Input left
++// on by a background app stops every other app's global shortcuts (GitHub
++// VictorKildahl/cra#511).
++bool g_password_input_on = false;
++
+ // SetPasswordInputEnabled() is derived from WebKit's WebHTMLView.mm:
+ // https://github.com/WebKit/WebKit/blob/3f1b9104fd22eccdab649da2e331f1f1cfcbe873/Source/WebKitLegacy/mac/WebView/WebHTMLView.mm#L6762-L6777
+ //
+@@ -42,23 +50,54 @@ void SetPasswordInputEnabled(bool enabled) {
+   }
+ }
+ 
++// Without an NSApp (unit tests), the lock alone decides, as before.
++bool AppIsActive() {
++  return !NSApp || NSApp.active;
++}
++
++void UpdatePasswordInput() {
++  bool on = g_password_input_counter > 0 && AppIsActive();
++  if (on == g_password_input_on) {
++    return;
++  }
++  g_password_input_on = on;
++  SetPasswordInputEnabled(on);
++}
++
++void ObserveAppActivation() {
++  static bool observing = false;
++  if (observing || !NSApp) {
++    return;
++  }
++  observing = true;
++  for (NSNotificationName name in @[
++         NSApplicationDidBecomeActiveNotification,
++         NSApplicationDidResignActiveNotification
++       ]) {
++    [NSNotificationCenter.defaultCenter
++        addObserverForName:name
++                    object:nil
++                     queue:nil
++                usingBlock:^(NSNotification*) {
++                  UpdatePasswordInput();
++                }];
++  }
++}
++
+ }  // namespace
+ 
+ namespace ui {
+ 
+ ScopedPasswordInputEnabler::ScopedPasswordInputEnabler() {
+-  if (!g_password_input_counter) {
+-    SetPasswordInputEnabled(true);
+-  }
++  ObserveAppActivation();
+   ++g_password_input_counter;
++  UpdatePasswordInput();
+ }
+ 
+ ScopedPasswordInputEnabler::~ScopedPasswordInputEnabler() {
+   --g_password_input_counter;
+   DCHECK_LE(0, g_password_input_counter);
+-  if (!g_password_input_counter) {
+-    SetPasswordInputEnabled(false);
+-  }
++  UpdatePasswordInput();
+ }
+ 
+ // static
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.mm b/content/browser/renderer_host/render_widget_host_view_mac.mm
+--- a/content/browser/renderer_host/render_widget_host_view_mac.mm
++++ b/content/browser/renderer_host/render_widget_host_view_mac.mm
+@@ -1834,7 +1834,9 @@ void RenderWidgetHostViewMac::SetActive(bool active) {
+       host()->LostFocus();
+     }
+   }
+-  if (HasFocus())
++  // Cra: an inactive view never keeps the password lock, focused or not
++  // (VictorKildahl/cra#511).
++  if (HasFocus() || !active)
+     SetTextInputActive(active);
+   if (!active)
+     UnlockPointer();
+@@ -1924,6 +1926,13 @@ void RenderWidgetHostViewMac::SetTextInputActive(bool active) {
+       return false;
+     }
+ 
++    // Cra: only a field in the key window takes the keys, so only it holds
++    // Secure Input. A page that focused its password field while its window
++    // wasn't key kept the lock (VictorKildahl/cra#511).
++    if (!this->is_window_key_ && !this->IsHeadless()) {
++      return false;
++    }
++
+     const ui::mojom::TextInputState* state =
+         this->text_input_manager_->GetTextInputState();
+     if (state->type == ui::TEXT_INPUT_TYPE_PASSWORD ||
+@@ -2041,12 +2050,15 @@ void RenderWidgetHostViewMac::OnFirstResponderChanged(bool is_first_responder) {
+       SetTextInputActive(true);
+     }
+   } else {
++    // Cra: the password lock goes with first responder even when the page's
++    // widget had already lost focus; it stayed with a background tab
++    // (VictorKildahl/cra#511).
++    SetTextInputActive(false);
+     bool has_focused_widget =
+         host()->delegate() &&
+         host()->delegate()->GetRenderWidgetHostWithPageFocus() &&
+         host()->delegate()->GetRenderWidgetHostWithPageFocus()->is_focused();
+     if (IsHeadless() || has_focused_widget) {
+-      SetTextInputActive(false);
+       host()->LostFocus();
+     }
+   }

@@ -976,4 +976,5 @@
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7
 #508   Tests/Scenarios/devtools-link-hover.scenario  32f0a400e052
 #509   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aTapUnderThePageBringsTheBarBack  bdd673327a2a
+#511   Tests/Scenarios/secure-input-behind.scenario  50b428e998c7
 #512   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::textTypedPastAGoToRowIsSearchedUnlessItIsAnAddress  5cf5fa75d3e3

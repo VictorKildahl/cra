@@ -3726,6 +3726,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 
 + (void)floatOverFullScreenSpaces:(NSWindow*)window { FloatOverFullScreenSpaces(window); }
+// CEF doesn't expose Chromium's password-field lock; cra://debug?secureInput= reads the system's on its own.
++ (BOOL)holdsSecureInput { return NO; }
 + (NSString*)pageWindowsReadout {
     return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_pageWindowsShown, (long)g_pageWindowsShownAway,
                                       (long)g_pageWindowsShownAnimated];
