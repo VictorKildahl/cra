@@ -971,6 +971,10 @@
 #495   Tests/Scenarios/little-window-typed-back.scenario  56bca9fe43e8
 #497   Tests/Scenarios/command-bar-close-shortcut.scenario  37c8d8eb9aa6
 #498   Tests/StoreTests.swift::fullSplitTakesNoMorePanes  7b27b455e777
+#499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::edges  541bacddf659
+#499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::leavingTheEdgeStartsOver  e93abb2a1742
+#499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::pagesAfterTheDelayAndAgainWhileHeld  a917017eb9bf
+#499   Tests/Scenarios/sidebar-edge-drag.scenario  78006ab4e6ca
 #500   Tests/Scenarios/little-window-over-browser.scenario  95a396732422
 #503   Tests/Scenarios/extension-window-focus.scenario  93c9f59c585d
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7

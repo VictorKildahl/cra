@@ -2402,6 +2402,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testDragEnded(tab.id, at: point)
                 return
             }
+            // edgeDrag=next|previous[&hold=<seconds>]: a row's drag held just past the sidebar's right or
+            // left edge, which pages to the space on that side every SidebarEdgeDrag.delay (#499).
+            if let edge = dict["edgeDrag"] {
+                main.testEdgeDrag(edge == "previous" ? .previous : .next, hold: dict["hold"].flatMap(Double.init) ?? 0.8)
+                return
+            }
             // dropLink=<url>[&name=<link text>][&before=<text>|&onto=<text>]: a link let go on the focused
             // space's list, below the last row, or on the top or the middle of the row whose tab's URL
             // holds the text (#419).

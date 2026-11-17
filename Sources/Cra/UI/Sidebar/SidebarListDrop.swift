@@ -91,6 +91,52 @@ final class DragAutoscroller {
     }
 }
 
+/// While a row is dragged, holding it at the sidebar's left or right edge pages to the space on
+/// that side, once every SidebarEdgeDrag.delay it stays there (Arc's TablistEdgeDragController,
+/// #499). It goes by the pointer, wherever it is: over the list, the page beside it or past the
+/// window's edge.
+@MainActor
+final class SidebarEdgePager {
+    weak var anchor: NSView?
+    /// Called with the direction to page in.
+    var onPage: (SidebarEdgeDrag.Direction) -> Void = { _ in }
+    /// `cra://debug?edgeDrag`: a pointer in window coordinates in place of the real one.
+    var testPoint: CGPoint?
+    private var timer: Timer?
+    private var state = SidebarEdgeDrag()
+
+    func start() {
+        guard timer == nil else { return }
+        state = SidebarEdgeDrag()
+        let t = Timer(timeInterval: 1 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        // A drag keeps the run loop in event-tracking mode.
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        testPoint = nil
+    }
+
+    /// The frame the spaces page in, in window coordinates.
+    var pagerFrame: CGRect? {
+        guard let anchor, let pager = sequence(first: anchor, next: \.superview).first(where: { $0 is SpacePagerView }),
+              pager.window != nil, !pager.isHiddenOrHasHiddenAncestor else { return nil }
+        return pager.convert(pager.bounds, to: nil)
+    }
+
+    private func tick() {
+        guard testPoint != nil || NSEvent.pressedMouseButtons != 0 else { stop(); return }
+        let point = testPoint ?? anchor?.window?.mouseLocationOutsideOfEventStream
+        let edge = point.flatMap { p in pagerFrame.flatMap { SidebarEdgeDrag.direction(at: p, sidebar: $0) } }
+        if let d = state.update(edge, at: CACurrentMediaTime()) { onPage(d) }
+    }
+}
+
 /// A tab row while another tab hovers over its middle, drawn as the split the drop makes:
 /// the row splits open and the dragged tab slides into a dashed pane on the side it will take
 /// (the split row's own layout), moving across when the pointer crosses the row's middle.

@@ -664,6 +664,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         l.dragEnded(id, at: screenPoint, operation: [])
     }
 
+    /// `cra://debug?edgeDrag`: the focused space's list held at the sidebar's edge for `hold`
+    /// seconds as a row's drag would be; logs the space before and after (#499).
+    func testEdgeDrag(_ direction: SidebarEdgeDrag.Direction, hold: TimeInterval) {
+        func list(in v: NSView) -> SpaceListView? {
+            if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
+            return v.subviews.lazy.compactMap { list(in: $0) }.first
+        }
+        guard let l = window?.contentView.flatMap(list(in:)) else { CraLog.note("edgeDrag: no list"); return }
+        let from = focusedSpace.title
+        l.testEdgeDrag(direction, hold: hold) { [weak self] in
+            guard let self else { return }
+            CraLog.note("edgeDrag: \(direction) \(String(format: "%.1f", hold))s from=\(from) to=\(self.focusedSpace.title)")
+        }
+    }
+
     /// `cra://debug?dropLink`: a link from a page or another app let go on the focused space's list
     /// (#419), from a pasteboard holding what Mail or a page's link drag holds: its address and,
     /// with `name`, its text. It goes through the drop's own pasteboard read, placement and tab.

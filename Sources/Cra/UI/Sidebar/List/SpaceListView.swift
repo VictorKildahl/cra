@@ -90,6 +90,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// The active row at the last build: a change scrolls the new one into view.
     private var lastActive: RowKey?
     let autoscroller = DragAutoscroller()
+    let edgePager = SidebarEdgePager()
     private static let all = NSHashTable<SpaceListView>.weakObjects()
 
     /// A swipe slides the lists under a resting pointer: their hover ends until it settles.
@@ -166,6 +167,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         // A link from a page or another app opens as a tab where it is let go (#419).
         document.registerForDraggedTypes([.craSidebarItem, .URL, .string])
         autoscroller.anchor = document
+        edgePager.anchor = self
+        edgePager.onPage = { [weak self] in self?.pageSpace($0) }
         Self.all.add(self)
         sync()
     }
@@ -966,6 +969,29 @@ final class SpaceListView: NSView, NSDraggingSource {
         let item = NSDraggingItem(pasteboardWriter: pb)
         item.setDraggingFrame(row.bounds, contents: dragImage(of: row))
         row.beginDraggingSession(with: [item], event: event, source: self)
+        edgePager.start()
+    }
+
+    /// A row held at the sidebar's edge pages to the space on that side (#499); the drag goes on
+    /// in that space's list.
+    func pageSpace(_ direction: SidebarEdgeDrag.Direction) {
+        guard ui.spaceSwipe == 0, ui.libraryPage == nil else { return }
+        let ids = store.pagedSpaces(window: ui.windowID).map(\.id)
+        guard let i = ids.firstIndex(of: store.focusedSpaceID(window: ui.windowID)),
+              let j = SidebarEdgeDrag.target(from: i, count: ids.count, direction) else { return }
+        store.focusSpace(ids[j], window: ui.windowID)
+    }
+
+    /// `cra://debug?edgeDrag`: a drag held `hold` seconds just past the sidebar's left or right
+    /// edge, without the pointer (#499); `done` once it lets go.
+    func testEdgeDrag(_ direction: SidebarEdgeDrag.Direction, hold: TimeInterval, done: @escaping () -> Void) {
+        guard let f = edgePager.pagerFrame else { CraLog.note("edgeDrag: no pager"); done(); return }
+        edgePager.testPoint = CGPoint(x: direction == .next ? f.maxX + 10 : f.minX - 10, y: f.midY)
+        edgePager.start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + hold) { [weak self] in
+            self?.edgePager.stop()
+            done()
+        }
     }
 
     /// The row as it looks at rest, on a rounded card.
@@ -1005,6 +1031,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// A row's drag is over (`cra://debug?dragEnd` ends one the same way).
     func dragEnded(_ dragged: UUID?, at screenPoint: NSPoint, operation: NSDragOperation) {
         autoscroller.stop()
+        edgePager.stop()
         // Let go outside every Cra window where nothing took it: Arc opens the tab in a Blank Window there.
         if let id = dragged, TabTearOff.tearsOff(isTab: store.item(id)?.isTab == true, incognito: store.isIncognito(item: id),
                                                        dropAccepted: !operation.isEmpty, overAppWindow: Self.isOverAppWindow(screenPoint)) {

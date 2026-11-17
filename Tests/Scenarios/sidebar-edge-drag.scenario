@@ -1,0 +1,26 @@
+# promise: #499
+# A tab held at the sidebar's edge pages to the space on that side, as in Arc
+# (TablistEdgeDragController): the right edge toward the next space, the left toward the previous,
+# once every SidebarEdgeDrag.delay (0.5 s) it stays there, stopping at the first and last space.
+# The drag is held without the pointer (cra://debug?edgeDrag); the timing and the edges are pinned
+# in SidebarEdgeDragTests.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002","A0000000-0000-0000-0000-000000000003"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-17T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-17T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000003","title":"Play","emoji":"🎲","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000031","pinnedContainerID":"C0000000-0000-0000-0000-000000000032","todayContainerID":"C0000000-0000-0000-0000-000000000033","createdAt":"2026-11-17T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000031","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000003"}}}}},{"id":"C0000000-0000-0000-0000-000000000032","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000003"}}}}},{"id":"C0000000-0000-0000-0000-000000000033","children":[],"isUnread":false,"createdAt":"2026-11-17T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000003"}}}}}]}
+cra://open?url=${PAGE}?n=home-a
+wait 2
+cra://debug?edgeDrag=previous&hold=0.8
+wait 1.5
+expect-log edgeDrag: previous 0.8s from=Home to=Home
+cra://debug?edgeDrag=next&hold=0.3
+wait 1
+expect-log edgeDrag: next 0.3s from=Home to=Home
+cra://debug?edgeDrag=next&hold=0.8
+wait 1.5
+expect-log edgeDrag: next 0.8s from=Home to=Work
+cra://debug?edgeDrag=next&hold=1.3
+wait 2
+expect-log edgeDrag: next 1.3s from=Work to=Play
+cra://debug?edgeDrag=previous&hold=1.3
+wait 2
+expect-log edgeDrag: previous 1.3s from=Play to=Home

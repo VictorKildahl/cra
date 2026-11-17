@@ -525,6 +525,13 @@ No decompiler, so property names and types are observed; the algorithms are infe
   - A page's link dragged over the page: nothing anywhere (the page keeps it).
   - Not measured: a replace drop's result (the scripted release never landed in a split), the exact edge depth.
 
+- [O] Holding a dragged tab at the sidebar's edge changes space (#499): `TablistEdgeDragController { containerView:
+  NSView?, timer: NSTimer?, proposedDirection: Direction?, lastDragPosition: CGPoint?, updateHander: (Direction) -> (),
+  switchThreshold: Double }`, `Direction = next | previous` (Swift field metadata, Arc 1.17x arm64, 17 Nov 2026).
+  `SidebarDragRegionWindow` (an NSDraggingDestination window with `dragPositionUpdateHandler` and `dragExitedHandler`)
+  feeds it while the pointer is off the sidebar. [U] The threshold's value, the edge band and wrapping are not measured;
+  Cra's `SidebarEdgeDrag` uses 0.5 s, 6 pt in and 30 pt out, and stops at the ends.
+
 ### Commands, menus, entry points
 - [O] `WindowAction.SplitViewAction`: `addPanel(index: InsertionLocation, showCommandBar: Bool)`,
   `movePanel(from:to:)`, `onDropSidebarItem`, `onDropURL`, `onDidBeginWindowContentsSplitViewPaneResize`,
