@@ -1529,6 +1529,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
             if let command = dict["littleToolbar"] { littleWindows.last?.debugToolbar(command); return }
+            // littleSwipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the newest Little
+            // Window's page before a swipe back starts, and with go=1 what it does at the end (#495).
+            if let label = dict["littleSwipeBack"] {
+                let b = littleWindows.last?.browser
+                let root = b?.hostWindow.flatMap { EmbeddedPages.pageViews(of: $0)?.last ?? $0.contentView } ?? b?.containerView
+                CraLog.note("little swipe back \(label): \(root.map { ChromiumHistorySwipe.debugSwipeBack(in: $0, perform: dict["go"] == "1") } ?? "no window")")
+                return
+            }
             // inspectAt=x,y: Inspect in the page's right-click menu at that point of the page (the
             // newest Little Window's or Peek's with target=little); devToolsShown=<label>: where each
             // Little Window's and Peek's DevTools are, and whether the front tab has any (#348).

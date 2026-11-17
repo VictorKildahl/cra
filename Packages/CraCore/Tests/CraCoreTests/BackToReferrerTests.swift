@@ -50,3 +50,22 @@ struct SwipeBackTests {
         #expect(BackToReferrer.swipeBack(pageCanGoBack: false, tab: tab, referrer: nil, inSplit: false, pinned: false) == .none)
     }
 }
+
+/// Back in a Little Window (GitHub #495): Arc closes a Little Arc window when a swipe back (or
+/// Back) finds nothing behind its page, as a link's tab closes to the one it came from.
+struct LittleWindowBackTests {
+    /// The reporter's case: a Little Window on its first page; swiping back closes it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/495"))
+    func backOnALittleWindowsFirstPageClosesIt() {
+        #expect(LittleWindowBack.step(pageCanGoBack: false, hasPage: true, peek: false) == .close)
+    }
+
+    /// Pages the window went on to come first; no page yet (the bar only) or a Peek: nothing closes.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/495"))
+    func historyComesFirstAndNothingElseCloses() {
+        #expect(LittleWindowBack.step(pageCanGoBack: true, hasPage: true, peek: false) == .history)
+        #expect(LittleWindowBack.step(pageCanGoBack: true, hasPage: true, peek: true) == .history)
+        #expect(LittleWindowBack.step(pageCanGoBack: false, hasPage: false, peek: false) == .none)
+        #expect(LittleWindowBack.step(pageCanGoBack: false, hasPage: true, peek: true) == .none)
+    }
+}
