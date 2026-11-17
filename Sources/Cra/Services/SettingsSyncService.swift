@@ -80,6 +80,11 @@ final class SettingsSyncService {
     private let clock: Scheduler
     private let stateFile = JSONStore<State>("sync.json")
     private var state: State
+    /// The last few bundles written or applied here, so a bundle the other Mac wrote from one of
+    /// them is merged with what changed here since, not applied whole (SidebarMerge).
+    /// Loaded on first use, not at launch: eight sidebars to decode.
+    private let historyFile = JSONStore<SyncHistory>("sync-history.json")
+    @ObservationIgnored private lazy var history: SyncHistory = historyFile.load(or: { SyncHistory() })
     private var iCloudContainer: URL?
     private var poller: ScheduledWork?
     private var watcher: DispatchSourceFileSystemObject?
@@ -198,6 +203,8 @@ final class SettingsSyncService {
         state.location = newLocation
         state.lastApplied = nil
         state.lastWritten = nil
+        history = SyncHistory()
+        historyFile.saveNow(history)
         error = nil
         pendingChoice = nil
         awaitingDownload = false
@@ -234,7 +241,7 @@ final class SettingsSyncService {
         pendingChoice = nil
         guard let folder else { return }
         switch look(at: folder) {
-        case .bundle(let manifest, let bundle): apply(manifest, bundle)
+        case .bundle(let manifest, let bundle): apply(manifest, bundle, merge: false)
         case .newer: error = Self.newerCraError
         default: writeBundle()
         }
@@ -258,6 +265,8 @@ final class SettingsSyncService {
         error = nil
         state = State(devices: state.devices)
         stateFile.saveNow(state)
+        history = SyncHistory()
+        historyFile.saveNow(history)
     }
 
     /// One look: a newer bundle from another Mac is applied, then what changed here is written.
@@ -330,7 +339,7 @@ final class SettingsSyncService {
 
     func importBundle(from picked: URL) -> Bool {
         guard case .bundle(let manifest, let bundle) = look(at: Self.bundleFolder(in: picked)) else { return false }
-        apply(manifest, bundle, remember: false)
+        apply(manifest, bundle, merge: false, remember: false)
         return true
     }
 
@@ -396,11 +405,16 @@ final class SettingsSyncService {
     private func writeBundle() {
         guard let folder else { return }
         do {
-            let manifest = try write(localBundle(), to: folder)
+            let bundle = localBundle()
+            let manifest = try write(bundle, to: folder, parentIDs: history.ids)
             state.lastWritten = manifest
             lastSync = manifest.writtenAt
             error = nil
             stateFile.save(state)
+            if let id = manifest.id {
+                history.remember(id, bundle.document)
+                historyFile.save(history)
+            }
         } catch {
             self.error = "The sync folder could not be written: \(error.localizedDescription)"
             CraLog.fault("sync bundle not written: \(error)")
@@ -409,11 +423,12 @@ final class SettingsSyncService {
 
     /// The files first, the manifest last: a reader with a manifest whose hashes match has it all.
     /// Through a file coordinator, so iCloud sees whole files (a plain folder does not mind).
-    private func write(_ bundle: Bundle, to folder: URL) throws -> SyncManifest {
+    private func write(_ bundle: Bundle, to folder: URL, parentIDs: [UUID] = []) throws -> SyncManifest {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let files = try files(of: bundle)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
-        let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash))
+        let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
+                                    id: UUID(), parentIDs: parentIDs)
         try coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
         return manifest
     }
@@ -496,16 +511,29 @@ final class SettingsSyncService {
             + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-")"
     }
 
-    private func apply(_ manifest: SyncManifest, _ bundle: Bundle, remember: Bool = true) {
-        store.replace(document: bundle.document)
+    /// `merge`: the bundle was written from one this Mac still has (SyncHistory.base), so what changed
+    /// here since is kept (SidebarMerge); the user's "Use That Sidebar" and an import take it whole.
+    private func apply(_ manifest: SyncManifest, _ bundle: Bundle, merge: Bool = true, remember: Bool = true) {
+        var document = bundle.document
+        if merge, let base = history.base(for: manifest) {
+            document = SidebarMerge.merge(base: base, local: localBundle().document, remote: bundle.document)
+            CraLog.note("sync: \(manifest.device)'s bundle merged with what changed here since the one it was written from")
+        }
+        store.replace(document: document)
         store.settings = store.settings.applyingSynced(bundle.settings)
         try? bundle.keybindings.write(to: AppPaths.file(SettingsSync.keybindingsName), options: .atomic)
         keybindingsChanged()
         guard remember else { return }
         state.lastApplied = manifest
+        if let id = manifest.id {
+            history.remember(id, bundle.document)
+            historyFile.save(history)
+        }
         // What is here now is what the folder holds: nothing to write back until something changes
         // here. This Mac's own hashes, since a repaired sidebar need not encode to the same bytes.
-        state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: localHashes() ?? manifest.files)
+        // A merge that kept something changed here differs from the folder's: it goes up on this look.
+        let hashes = document == bundle.document ? localHashes() ?? manifest.files : manifest.files
+        state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: hashes)
         if manifest.deviceID != deviceID, !state.devices.contains(manifest.device) { state.devices.append(manifest.device) }
         otherDevices = state.devices
         lastSync = manifest.writtenAt
