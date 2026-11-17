@@ -370,7 +370,12 @@ class PageObserver : public content::WebContentsObserver,
       OpenedFrom()[new_contents] = web_contents()->GetWeakPtr();
     }
   }
-  void MediaPictureInPictureChanged(bool active) override { [owner_ pagePictureInPicture:active]; }
+  // Chromium calls this for a Document Picture in Picture window too (documentPictureInPicture.requestWindow): a
+  // page of the site's own, with its own player controls. Cra's Picture in Picture is the video's, as CEF reported
+  // it, so only a video counts; its controls over a document window doubled the site's (GitHub #460).
+  void MediaPictureInPictureChanged(bool) override {
+    [owner_ pagePictureInPicture:web_contents()->HasPictureInPictureVideo()];
+  }
 
   // "Aw, Snap!" and "Page Unresponsive", for Cra's performance recorder (GitHub #91).
   void PrimaryMainFrameRenderProcessGone(base::TerminationStatus status) override {

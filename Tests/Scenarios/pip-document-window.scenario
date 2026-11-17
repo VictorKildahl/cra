@@ -1,0 +1,15 @@
+# Document Picture in Picture (documentPictureInPicture.requestWindow) is a page of the site's own in
+# a floating window: its player draws its own controls there, under Chrome's title bar. Arc's video
+# controls don't belong on it. Chromium tells a page's observers about it the same way as a video
+# going into Picture in Picture (WebContentsObserver::MediaPictureInPictureChanged), and the engine
+# passed that on as a video: Cra laid its hover controls (address, ±15 s, play/pause, close) over the
+# site's, two sets at once (GitHub #460). CEF only ever told Cra about videos.
+# promise: #460
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"documentPictureInPicture.requestWindow({width:400,height:240}).then(w=>{w.document.body.append(document.getElementById('v'));return 'docpip:open'})","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"docpip:open"
+wait 3
+cra://debug?pip=document
+expect-log Cra pip document: windows=0
