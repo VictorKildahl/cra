@@ -925,6 +925,7 @@
 #464   Packages/CraCore/Tests/CraCoreTests/SidebarSideTests.swift::theToolbarToggleEndsTheBar  51c4ecdcfbb2
 #464   Tests/FloatingSidebarTests.swift::comesOutOnTheRight  6dc3f93807f4
 #464   Tests/Scenarios/sidebar-right.scenario  95d3b89abc54
+#465   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theMacsSavedSidebarReads  b95aa727ca6e
 #466   Tests/Scenarios/page-menu-shows.scenario  c85711765757
 #467   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::aSecondTapAcrossSpacesGoesBack  e155ddc97ee6
 #467   Tests/Scenarios/tab-switcher-all-spaces.scenario  b5befa94ecac
