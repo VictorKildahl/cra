@@ -1,0 +1,28 @@
+# promise: #471
+# The Spaces menu lists one navigation row for every real Space, in the same order, and does not
+# add Cra's separate Move Tab commands to Arc's menu. Incognito keeps navigation available.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=normal
+wait 2
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=normal
+expect-log menu rows normal: New Space…\|Edit Space…\|Change Profile\|Delete Space…\|──\|Next Space\|Previous Space\|──\|✓\[icon\]Home\|\[icon\]Work\|──\|Manage Spaces…$
+cra://debug?spacesMenuChange=add&title=Play&emoji=%F0%9F%8E%AE
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=added
+expect-log menu rows added: .*\|✓\[icon\]Home\|\[icon\]Work\|\[icon\]Play\|──\|Manage Spaces…$
+cra://debug?spacesMenuChange=moveLastFirst
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=reordered
+expect-log menu rows reordered: .*\|\[icon\]Play\|✓\[icon\]Home\|\[icon\]Work\|──\|Manage Spaces…$
+cra://debug?spacesMenuChange=renameFirst&title=Personal
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=renamed
+expect-log menu rows renamed: .*\|\[icon\]Personal\|✓\[icon\]Home\|\[icon\]Work\|──\|Manage Spaces…$
+cra://debug?spacesMenuChange=removeFirstIcon
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=icon-removed
+expect-log menu rows icon-removed: .*\|Personal\|✓\[icon\]Home\|\[icon\]Work\|──\|Manage Spaces…$
+cra://debug?spacesMenuChange=deleteFirst
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=deleted
+expect-log menu rows deleted: .*\|✓\[icon\]Home\|\[icon\]Work\|──\|Manage Spaces…$
+cra://action/newIncognitoWindow
+wait 2
+cra://debug?menuRows=Spaces&marks=1&icons=1&label=incognito
+expect-log menu rows incognito: New Space…\|Edit Space… \(off\)\|Change Profile \(off\)\|Delete Space… \(off\)\|──\|Next Space \(off\)\|Previous Space \(off\)\|──\|\[icon\]Home\|\[icon\]Work\|──\|Manage Spaces… \(off\)$
