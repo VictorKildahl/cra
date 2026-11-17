@@ -938,3 +938,5 @@
 #471   Tests/Scenarios/spaces-menu-rows.scenario  2f97a92f3d0c
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
+#480   Tests/Scenarios/native-window-hide.scenario  a18926843adf
+#480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae

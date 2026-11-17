@@ -1914,6 +1914,12 @@ from the binary (static strings, metadata and its key table; nothing run), marke
   or the chosen action's name and description, "Reset Shortcut to Default" and a "…" menu (Remove Shortcut, Reset All Shortcuts,
   Extension Shortcuts…). An action that has a shortcut also has a pop-up Prefer Websites / Use Both / Prefer Arc ("When shortcuts
   conflict, Arc wins.") [binary] `priority` = `low` / `promptAfterConsumedByWebView` / `overrideWebView` (GitHub #374).
+- [O] **App and window keys a page can't keep** (17 Nov 2026, Arc 1.172.2, a localhost page in Little Arc whose capture-phase keydown
+  listener cancels ⌘M, ⌘H, ⌘Q and ⌃⌘F and writes what it saw into its title; keys posted to Arc's pid with CGEvent): ⌘M never reached the
+  page and minimized the Little Arc window, not the main window; ⌘Q never reached it and Arc quit. ⌃⌘F reached the page, which kept it:
+  nothing went full screen. ⌘H wasn't measured. Chrome reserves Quit always and Full Screen only in full screen
+  (`BrowserCommandController::IsReservedCommandOrKey`). Cra runs Quit, Hide, Hide Others and Minimize before the page, and Full Screen
+  only to leave it, unless the user gave the keys a shortcut of Cra's (GitHub #480, PR #485).
 - [O] **Icon**: a radio list of the alternate icons (64 pt picture, 14 pt name, "CURRENT ICON" under the chosen one, rows 81 pt): The
   Original Arc, Candy Arc by Dmitry Novikov, Hologram, Neon, Fluted Glass, Schoolbook, Colorful. [binary] They unlock by inviting
   friends ("Refer %d friend(s) to unlock"); a remote flag opens them all.
