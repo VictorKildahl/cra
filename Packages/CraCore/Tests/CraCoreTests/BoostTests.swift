@@ -18,6 +18,15 @@ struct BoostTests {
         #expect(Boost.applying(to: "https://other.org/", from: [off]).isEmpty, "a disabled boost does nothing")
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
+    func theSiteControlCenterListsTheSitesBoostsOnOrOff() {
+        let b = Boost(host: "example.com")
+        var off = Boost(host: "docs.example.com"); off.enabled = false
+        let other = Boost(host: "other.org")
+        #expect(Boost.onSite(of: "https://docs.example.com/a", from: [b, off, other]).map(\.id) == [b.id, off.id])
+        #expect(Boost.onSite(of: "cra://settings", from: [b]).isEmpty)
+    }
+
     @Test func eachControlWritesItsRule() {
         var b = Boost(host: "example.com")
         b.invert = true

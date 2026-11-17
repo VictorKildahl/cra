@@ -14,9 +14,12 @@ final class BoostStore {
     func boost(_ id: UUID) -> Boost? { boosts.first { $0.id == id } }
     func boost(forHost host: String) -> Boost? { boosts.first { $0.host == Boost.siteHost(host) } }
 
+    /// Whether a page can have a boost: a website.
+    static func canBoost(_ url: String) -> Bool { URL(string: url)?.host != nil && url.hasPrefix("http") }
+
     /// The site's boost, made when it has none (Arc's New Boost opens the one a site has).
     func boostForSite(of url: String) -> Boost? {
-        guard let host = URL(string: url)?.host, url.hasPrefix("http") else { return nil }
+        guard Self.canBoost(url), let host = URL(string: url)?.host else { return nil }
         if let b = boost(forHost: host) { return b }
         let b = Boost(host: host)
         boosts.append(b)

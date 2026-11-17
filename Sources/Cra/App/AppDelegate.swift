@@ -1352,6 +1352,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // boostPick=1|0|copyThis|copyRelated|zapRelated: the code panel's eyedropper on (the
             // menu answered with that action) or off.
             if let p = dict["boostPick"] { main.debugPick(p); return }
+            // boostType=<text>: the Code panel's editor clicked and typed into (#478).
+            if let t = dict["boostType"] { BoostEditorController.shared.debugType(t); return }
+            // boostAdvanced=1|0 (dark=1: in Dark Mode): the editor's Advanced color controls popover (#478).
+            if let a = dict["boostAdvanced"] { BoostEditorController.shared.debugAdvanced(a == "1", dark: dict["dark"] == "1"); return }
+            // boostFonts=1: how far each font cell's "Aa" sits from the cell's middle (#478).
+            if dict["boostFonts"] != nil { BoostFontCell.debugMeasure(); return }
             // capturePick=x,y (deeper=1: ⌥ held): what Capture's click would take there (#451).
             if let g = dict["capturePick"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 main.debugCapturePick(at: NSPoint(x: g[0], y: g[1]), deeper: dict["deeper"] == "1"); return
@@ -2067,6 +2073,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if dict["siteControls"] != nil { main.debugSiteControls(); return }
+            // siteControlsRead=1, siteControlsPress=<label>[&accessory=1]: the open Site Control
+            // Center's action buttons and Boost rows, read or pressed (#478).
+            if dict["siteControlsRead"] != nil { main.debugSiteControlsRead(); return }
+            if let label = dict["siteControlsPress"] { main.debugSiteControlsPress(label, accessory: dict["accessory"] == "1"); return }
             // The sidebar's URL field (toolbar hidden): hovered, and a press on one of its buttons (#226).
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }

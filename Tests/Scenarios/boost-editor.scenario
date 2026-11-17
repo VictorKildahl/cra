@@ -1,0 +1,40 @@
+# promise: #478
+# The Boost editor's Code panel takes typing: a click in the editor gives it the keyboard and what is
+# typed goes into the boost's CSS. On 0.1.45 the editor was a borderless panel, which can't become
+# key, so nothing typed reached it.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=boost-editor
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/newBoost
+wait 1
+cra://debug?boostType=hello
+expect-log boost type: key=true first=true css=hello$
+# The font card's "Aa"s sit in the middle of their cells: on 0.1.45 the bottom row's (Snell
+# Roundhand, Marker Felt and the others with tall line boxes) sat off-centre.
+cra://debug?boostFonts=1
+expect-log boost fonts: worst dx=-?0\.\d dy=-?0\.\d
+# Advanced color controls hang under their button in a light popover, as Arc's do. On 0.1.45 the
+# popover took Dark Mode's background under the editor's light controls.
+cra://debug?boostAdvanced=1&dark=1
+expect-log boost advanced: NSAppearanceNameAqua below=true
+cra://debug?boostAdvanced=0
+# The Site Control Center has Arc's New Boost (Arc 1.172.2: Share, New Boost, Capture, Capture
+# Full Page) and, for a site with boosts, a Boosts section before Settings: a row's click turns
+# the boost on or off, its chevron opens it in the editor. 0.1.45 had Copy URL there and no
+# section, so the sidebar's address had no way to Boosts.
+cra://debug?urlFieldHover=1
+cra://debug?urlFieldPress=siteControls
+expect-log url field press siteControls: pressed true, site control center shown
+cra://debug?siteControlsRead=1
+expect-log site controls: actions=Share\|New Boost\|Capture this page\|Capture the full page boosts=My Boost, Enabled$
+cra://debug?siteControlsPress=My Boost, Enabled
+expect-log site controls pressed My Boost, Enabled
+wait 1
+cra://debug?siteControlsRead=1
+expect-log site controls: actions=.* boosts=My Boost, Disabled$
+cra://debug?siteControlsPress=My Boost, Disabled&accessory=1
+expect-log site controls pressed My Boost, Disabled
+wait 1
+cra://debug?boostType=x
+expect-log boost type: key=true first=true css=[hel]*x[lo]*$

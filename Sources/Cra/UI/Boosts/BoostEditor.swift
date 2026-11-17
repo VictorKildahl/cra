@@ -33,7 +33,7 @@ final class BoostEditorController {
         m.devToolsOpen = page.devToolsOpen()
         m.onClose = { [weak self] in self?.close() }
         m.onWidth = { [weak self] w in self?.resize(width: w) }
-        let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let p = BoostEditorPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isFloatingPanel = true
         p.level = .floating
         p.backgroundColor = .clear
@@ -101,6 +101,52 @@ final class BoostEditorController {
 
     var isOpen: Bool { panel != nil }
 
+    /// cra://debug?boostType=<text>: the Code panel's editor clicked and typed into the way a person
+    /// does it: a click, then text sent to whatever has the keyboard (#478: the panel never took it, so
+    /// nothing typed reached the CSS). Logs "boost type: key=… css=…".
+    func debugType(_ text: String) {
+        guard let model else { return CraLog.note("boost type: no editor") }
+        if !model.showingCode { model.setCode(true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self, let panel = self.panel, let model = self.model,
+                  let tv = panel.contentView.flatMap(Self.textView(in:)) else { return CraLog.note("boost type: no code editor") }
+            let p = tv.convert(NSPoint(x: 30, y: 20), to: nil), n = panel.windowNumber
+            func mouse(_ type: NSEvent.EventType) -> NSEvent? {
+                NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                   windowNumber: n, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+            }
+            // The text view tracks the click until the button comes up: queue the up first.
+            if let up = mouse(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+            if let down = mouse(.leftMouseDown) { NSApp.sendEvent(down) }
+            // Typing goes to the key window's first responder. (Posted key events would also need the
+            // app's input context, which a scenario's background copy doesn't have.)
+            for c in text.map(String.init) { NSApp.sendAction(#selector(NSResponder.insertText(_:)), to: nil, from: c) }
+            CraLog.note("boost type: key=\(panel.isKeyWindow) first=\(panel.firstResponder === tv) css=\(model.boost.css)")
+        }
+    }
+
+    /// cra://debug?boostAdvanced=1|0: the Advanced color controls popover open or shut (#478).
+    /// With `dark`, the app is in Dark Mode meanwhile. Logs "boost advanced: <appearance> below=<bool>".
+    func debugAdvanced(_ on: Bool, dark: Bool) {
+        let before = NSApp.appearance
+        if dark { NSApp.appearance = NSAppearance(named: .darkAqua) }
+        if model?.showingCode == true { model?.setCode(false) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.model?.showingColors = on }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
+            let pop = NSApp.windows.first { String(describing: type(of: $0)).contains("Popover") && $0.isVisible }
+            let look = pop?.contentView?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])?.rawValue ?? "none"
+            let below = pop.map { p in self?.panel.map { p.frame.maxY < $0.frame.maxY - 200 } ?? false } ?? false
+            CraLog.note("boost advanced: \(look) below=\(below)")
+            if dark { NSApp.appearance = before }
+        }
+    }
+
+    private static func textView(in view: NSView) -> NSTextView? {
+        if let tv = view as? NSTextView { return tv }
+        for v in view.subviews { if let tv = textView(in: v) { return tv } }
+        return nil
+    }
+
     /// The boost being edited, for the Zap shelf.
     var editing: BoostEditorModel? { model }
 
@@ -148,6 +194,8 @@ final class BoostEditorModel {
     var hoveredZap: Int? { didSet { if (hoveredZap == nil) != (oldValue == nil) { page.dim(hoveredZap != nil) } } }
     var picking = false
     var devToolsOpen = false
+    /// The Advanced color controls popover.
+    var showingColors = false
     @ObservationIgnored var page = BoostEditorController.PageActions(zap: { _ in }, dim: { _ in }, pick: { _ in }, toggleDevTools: {}, devToolsOpen: { false }, reload: {})
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored var onWidth: (CGFloat) -> Void = { _ in }
@@ -223,7 +271,6 @@ private enum BoostStyle {
 
 private struct BoostEditorView: View {
     @Bindable var model: BoostEditorModel
-    @State private var showColors = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -307,8 +354,8 @@ private struct BoostEditorView: View {
             .padding(.top, 18)
             HStack(spacing: 10) {
                 square("lightbulb", on: model.boost.invert, help: "Invert lightness") { model.change { $0.invert.toggle() } }
-                square("slider.horizontal.3", on: showColors, help: "Advanced color controls") { showColors.toggle() }
-                    .popover(isPresented: $showColors, arrowEdge: .leading) { advanced }
+                square("slider.horizontal.3", on: model.showingColors, help: "Advanced color controls") { model.showingColors.toggle() }
+                    .popover(isPresented: $model.showingColors, arrowEdge: .bottom) { advanced }
                 square("nosign", on: false, help: "Reset to original colors") {
                     model.change { $0.hue = 0; $0.strength = 0; $0.invert = false; $0.contrast = 50; $0.brightness = 50; $0.saturation = 50 }
                 }
@@ -340,14 +387,19 @@ private struct BoostEditorView: View {
         .frame(width: 183)
     }
 
+    /// Arc's popover hangs under the button and is light like the editor, in Dark Mode too: the
+    /// system's dark popover left the editor's light controls on a dark grey (#478).
     private var advanced: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
             slider("Contrast", \.contrast)
             slider("Brightness", \.brightness)
             slider("Original Saturation", \.saturation)
         }
-        .padding(18)
-        .frame(width: 250)
+        .padding(.horizontal, 19).padding(.vertical, 20)
+        .frame(width: 224)
+        .environment(\.colorScheme, .light)
+        .preferredColorScheme(.light)
+        .presentationBackground(.regularMaterial)
     }
 
     private func slider(_ title: String, _ key: WritableKeyPath<Boost, Double>) -> some View {
@@ -362,9 +414,7 @@ private struct BoostEditorView: View {
         return LazyVGrid(columns: columns, spacing: 0) {
             ForEach(Boost.fonts.indices, id: \.self) { i in
                 Button { model.change { $0.font = $0.font == i ? nil : i } } label: {
-                    Text("Aa").font(.custom(Boost.fonts[i] == "-apple-system" ? "Helvetica Neue" : Boost.fonts[i], size: 13))
-                        .foregroundStyle(model.boost.font == i ? Color.accentColor : BoostStyle.secondary)
-                        .frame(width: 26, height: 26)
+                    BoostFontCell(index: i, selected: model.boost.font == i)
                 }
                 .buttonStyle(.plain)
             }
@@ -444,25 +494,106 @@ private struct BoostEditorView: View {
     }
 }
 
-/// Arc's colour wheel: a rounded square in a grey gradient frame, dotted inside; the big handle is
-/// the tint (hue round the middle, strength out from it), the small one sits at the middle.
+/// One of the font card's 26 pt cells: "Aa" in that font.
+struct BoostFontCell: View {
+    let index: Int
+    var selected = false
+
+    var body: some View {
+        // The glyphs' own outline is centred, not the font's line box: Rockwell, Snell Roundhand
+        // and the others with tall ascenders or deep descenders sat up to 2 pt off (#478).
+        Image(nsImage: Self.glyphs[index]).renderingMode(.template)
+            .foregroundStyle(selected ? Color.accentColor : BoostStyle.secondary)
+            .frame(width: 26, height: 26)
+    }
+
+    /// "Aa" in each of the editor's fonts, cropped to its ink.
+    private static let glyphs: [NSImage] = Boost.fonts.map { image(font(css: $0)) }
+
+    /// The page's CSS family as a Mac font: the system's own designs for the ui-* names.
+    static func font(css name: String, size: CGFloat = 13) -> NSFont {
+        let system = NSFont.systemFont(ofSize: size)
+        func design(_ d: NSFontDescriptor.SystemDesign) -> NSFont {
+            system.fontDescriptor.withDesign(d).flatMap { NSFont(descriptor: $0, size: size) } ?? system
+        }
+        switch name {
+        case "-apple-system": return system
+        case "ui-rounded": return design(.rounded)
+        case "ui-serif": return design(.serif)
+        case "ui-monospace": return design(.monospaced)
+        default: return NSFontManager.shared.font(withFamily: name, traits: [], weight: 5, size: size) ?? NSFont(name: name, size: size) ?? system
+        }
+    }
+
+    private static func image(_ font: NSFont) -> NSImage {
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Aa", attributes: [.font: font]))
+        let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).integral
+        let img = NSImage(size: ink.size, flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.textPosition = CGPoint(x: -ink.minX, y: -ink.minY)
+            CTLineDraw(line, ctx)
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
+
+    /// cra://debug?boostFonts=1 (#478): each cell drawn on its own, and how far its ink sits from
+    /// the cell's middle. Logs "boost fonts: worst dx=… dy=… (<font>)".
+    @MainActor static func debugMeasure() {
+        var worst = (dx: 0.0, dy: 0.0, font: "")
+        for i in Boost.fonts.indices {
+            let r = ImageRenderer(content: BoostFontCell(index: i).environment(\.colorScheme, .light))
+            r.scale = 2
+            guard let cg = r.cgImage, let ink = inkBounds(cg) else { continue }
+            let dx = (ink.midX - CGFloat(cg.width) / 2) / 2, dy = (ink.midY - CGFloat(cg.height) / 2) / 2
+            if max(abs(dx), abs(dy)) > max(abs(worst.dx), abs(worst.dy)) { worst = (dx, dy, Boost.fonts[i]) }
+        }
+        CraLog.note("boost fonts: worst dx=\(String(format: "%.1f", worst.dx)) dy=\(String(format: "%.1f", worst.dy)) (\(worst.font))")
+    }
+
+    /// The box round the pixels that aren't see-through, in pixels from the top left.
+    private static func inkBounds(_ image: CGImage) -> CGRect? {
+        let w = image.width, h = image.height
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h { for x in 0..<w where px[(y * w + x) * 4 + 3] > 40 {
+            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+        } }
+        return maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+    }
+}
+
+/// Arc's colour wheel (BoostWheel, measured 17 Nov 2026, #478): a rounded square in a frame, dotted
+/// inside. The big handle is the tint (hue clockwise from 3 o'clock, strength out from the middle);
+/// the small one trails it an eighth of a turn on the same circle, joined to it by a line. Untinted,
+/// the frame is brushed grey; tinted, it is a ring of every hue in the wheel's order.
 private struct ColorWheel: View {
     let hue: Double
     let strength: Double
     let set: (Double, Double) -> Void
 
+    private func color(_ c: BoostWheel.HSB) -> Color { Color(hue: c.hue, saturation: c.saturation, brightness: c.brightness) }
+
     var body: some View {
         GeometryReader { geo in
-            let size = geo.size.width, inner = size - 14, c = size / 2
-            let angle = hue * 2 * .pi, r = strength * (inner / 2 - 18)
-            let handle = CGPoint(x: c + cos(angle) * r, y: c - sin(angle) * r)
+            let c = geo.size.width / 2
+            let h = BoostWheel.handles(hue: hue, strength: strength)
+            let big = CGPoint(x: c + h.big.x, y: c + h.big.y), small = CGPoint(x: c + h.small.x, y: c + h.small.y)
+            let accent = color(BoostWheel.accent(hue: hue, strength: strength))
             ZStack {
-                // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
-                                                   Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)))
-                    .overlay(strength > 0 ? RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(Color(hue: hue, saturation: 0.5, brightness: 0.8).opacity(0.35)) : nil)
+                if strength > 0 {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .fill(AngularGradient(stops: BoostWheel.ringStops.map { .init(color: color(BoostWheel.ring($0.hue)), location: $0.hue) }, center: .center))
+                } else {
+                    // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .fill(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
+                                                       Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)))
+                }
                 RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white).padding(7)
                 Canvas { ctx, s in
                     for x in stride(from: 12.0, to: s.width - 12, by: 6) {
@@ -470,20 +601,24 @@ private struct ColorWheel: View {
                             ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.12)))
                         }
                     }
+                    // The orbit both handles are on, and the line between them.
+                    let r = hypot(h.big.x, h.big.y)
+                    ctx.stroke(Path(ellipseIn: CGRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r)), with: .color(Color(white: 0.92)), lineWidth: 1.5)
+                    var line = Path()
+                    line.move(to: small)
+                    line.addLine(to: big)
+                    ctx.stroke(line, with: .color(accent), lineWidth: 2)
                 }
-                // Arc's second, smaller handle: the darker end of the tint, between the middle and the big one.
-                Circle().fill(Color(white: 0.17)).frame(width: 22, height: 22).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 1.5)
-                    .position(x: c + (handle.x - c) * 0.55 - 8, y: c + (handle.y - c) * 0.55 + 22)
-                Circle().fill(strength > 0 ? Color(hue: hue, saturation: 0.6, brightness: 0.8) : Color(white: 0.45))
+                Circle().fill(accent).frame(width: 22, height: 22).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 1.5)
+                    .position(small)
+                Circle().fill(color(BoostWheel.tint(hue: hue, strength: strength)))
                     .frame(width: 32, height: 32).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 2)
-                    .position(handle)
+                    .position(big)
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0).onChanged { g in
-                let dx = g.location.x - c, dy = c - g.location.y
-                var a = atan2(dy, dx) / (2 * .pi)
-                if a < 0 { a += 1 }
-                set(a, min(1, hypot(dx, dy) / (inner / 2 - 18)))
+                let picked = BoostWheel.pick(CGPoint(x: g.location.x - c, y: g.location.y - c))
+                set(picked.hue, picked.strength)
             })
         }
     }
@@ -494,8 +629,16 @@ private struct CodeEditor: NSViewRepresentable {
     @Binding var text: String
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        let tv = scroll.documentView as! NSTextView
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        let tv = FirstClickTextView(frame: .zero)
+        tv.minSize = .zero
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.isVerticallyResizable = true
+        tv.autoresizingMask = [.width]
+        tv.textContainer?.widthTracksTextView = true
+        scroll.documentView = tv
         tv.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.isAutomaticDashSubstitutionEnabled = false
@@ -522,6 +665,19 @@ private struct CodeEditor: NSViewRepresentable {
         init(text: Binding<String>) { self.text = text }
         func textDidChange(_ n: Notification) { if let tv = n.object as? NSTextView { text.wrappedValue = tv.string } }
     }
+}
+
+/// The panel isn't key while the page has the keyboard, and a text view ignores the click that makes
+/// its window key, so the code took a second click before it could be typed in (#478).
+private final class FirstClickTextView: NSTextView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// The editor beside the page. A borderless window can't become key on its own, so the code editor
+/// never got the keyboard (#478); with `becomesKeyOnlyIfNeeded` only a click in the text takes it,
+/// and the page keeps it for everything else.
+private final class BoostEditorPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }
 
 /// The editor sits beside the page, which keeps the keyboard: its first click acts, as Arc's does.

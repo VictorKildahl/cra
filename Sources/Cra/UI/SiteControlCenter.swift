@@ -5,7 +5,10 @@ import AppKit
 /// were read from Arc's accessibility tree and captures of the open popover (26 Oct 2026):
 /// a 236 pt column, a row of four 48×32 action buttons, "Extensions" with a 4-column grid of
 /// 48×32 tiles (pinned first, then by name, then "+"), "Settings" rows of 208×33 and a footer
-/// with the connection state and a More menu. A tile's 14 pt badge pins it to the toolbar:
+/// with the connection state and a More menu. Arc 1.172.2 (17 Nov 2026, #478): the actions are
+/// Share, New Boost, Capture and Capture Full Page; a site with boosts gets a "Boosts" section
+/// before Settings, one row each (a click turns it on or off, the chevron edits it); the More
+/// menu has Manage Boosts… and New Boost…. A tile's 14 pt badge pins it to the toolbar:
 /// filled for pinned extensions, grey on hover for the others.
 struct SiteControlCenterActions {
     /// Gets the Share button, to hang the share list from.
@@ -25,6 +28,15 @@ struct SiteControlCenterActions {
     var learnAboutProtectedMedia: () -> Void = {}
     /// The Safari's Engine switch: true plays the site in WebKit from now on, false in Chromium.
     var chooseSafariEngine: (Bool) -> Void = { _ in }
+    /// Arc's New Boost, in the second action slot and the More menu; nil where a page can't be
+    /// boosted (not a website, or Boosts off in Settings), and Copy URL takes the slot.
+    var newBoost: (() -> Void)?
+    /// A row's chevron: that boost in the editor.
+    var editBoost: (UUID) -> Void = { _ in }
+    /// A row's click: the boost on or off.
+    var toggleBoost: (UUID) -> Void = { _ in }
+    /// The Boosts header's Manage and the More menu's Manage Boosts…: Library ▸ Boosts.
+    var manageBoosts: () -> Void = {}
 }
 
 enum SiteControlCenterMetrics {
@@ -96,6 +108,7 @@ final class SiteControlCenterView: NSView {
             _ = extensions.entries
             _ = extensions.pinned
             _ = store.settings
+            _ = BoostStore.shared.boosts
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
@@ -119,7 +132,8 @@ final class SiteControlCenterView: NSView {
         var y: CGFloat = 9
         // The four raised action buttons.
         let share = actions.share
-        for (i, (symbol, help, run)) in [("square.and.arrow.up", "Share", {}), ("link", "Copy URL", actions.copyURL),
+        let second: (String, String, () -> Void) = actions.newBoost.map { (BoostGlyph.symbol, "New Boost", $0) } ?? ("link", "Copy URL", actions.copyURL)
+        for (i, (symbol, help, run)) in [("square.and.arrow.up", "Share", {}), second,
                                          ("camera", "Capture this page", actions.capture),
                                          ("text.viewfinder", "Capture the full page", actions.captureFullPage)].enumerated() {
             let b = SiteActionButton(symbol: symbol, help: help, colors: colors, action: run)
@@ -162,6 +176,22 @@ final class SiteControlCenterView: NSView {
             ext.frame = NSRect(x: x, y: y, width: w, height: extH)
             addSubview(ext)
             y += extH + 15
+        }
+        // Boosts: the site's own, on or off.
+        let boosts = Boost.onSite(of: url, from: BoostStore.shared.boosts)
+        if !boosts.isEmpty, actions.newBoost != nil {
+            let section = SiteSectionView(title: "Boosts", hoverText: "Manage", colors: colors, onHeaderClick: actions.manageBoosts)
+            for (i, b) in boosts.enumerated() {
+                let row = SiteSettingRow(symbol: BoostGlyph.symbol, title: b.name, subtitle: b.enabled ? "Enabled" : "Disabled", active: b.enabled,
+                                         colors: colors, action: { [actions] in actions.toggleBoost(b.id) },
+                                         accessory: { [actions] in actions.editBoost(b.id) })
+                row.frame = NSRect(x: 0, y: 27 + CGFloat(i) * 43, width: 208, height: 33)
+                section.addSubview(row)
+            }
+            let h = 27 + boosts.count * 33 + (boosts.count - 1) * 10
+            section.frame = NSRect(x: x, y: y, width: w, height: CGFloat(h))
+            addSubview(section)
+            y += CGFloat(h) + 15
         }
         // Settings: three switch rows.
         let settings = SiteSectionView(title: "Settings", hoverText: nil, colors: colors, onHeaderClick: {})
@@ -463,7 +493,7 @@ private final class SiteActionButton: SiteHoverView {
         outline.strokeColor = colors.actionOutline.cgColor
         outline.lineWidth = 0.5
         layer?.addSublayer(outline)
-        glyph.image = SidebarSymbols.image(symbol, size: 15)
+        glyph.image = symbol == BoostGlyph.symbol ? BoostGlyph.image(size: 15) : SidebarSymbols.image(symbol, size: 15)
         glyph.contentTintColor = colors.text
         glyph.imageScaling = .scaleNone
         addSubview(glyph)
@@ -502,7 +532,21 @@ private final class SiteActionButton: SiteHoverView {
 }
 
 private final class SiteSettingRow: SiteHoverView {
-    init(symbol: String, title: String, subtitle: String, active: Bool, colors: SiteControlCenterColors, action: @escaping () -> Void) {
+    /// Arc's boost rows: a chevron at the right end on hover, which edits instead of switching.
+    private let chevron: NSImageView?
+    private let accessory: (() -> Void)?
+
+    init(symbol: String, title: String, subtitle: String, active: Bool, colors: SiteControlCenterColors, action: @escaping () -> Void,
+         accessory: (() -> Void)? = nil) {
+        self.accessory = accessory
+        chevron = accessory.map { _ in
+            let v = NSImageView(frame: NSRect(x: 208 - 22, y: 8.5, width: 16, height: 16))
+            v.image = SidebarSymbols.image("chevron.right", size: 13, weight: .semibold)
+            v.contentTintColor = colors.secondary
+            v.imageScaling = .scaleNone
+            v.isHidden = true
+            return v
+        }
         super.init(frame: .zero)
         onClick = action
         wantsLayer = true
@@ -511,7 +555,7 @@ private final class SiteSettingRow: SiteHoverView {
         circle.layer?.cornerRadius = 16
         circle.layer?.backgroundColor = (active ? colors.accent : colors.inactive).cgColor
         let glyph = NSImageView(frame: circle.bounds)
-        glyph.image = SidebarSymbols.image(symbol, size: 13, weight: .semibold)
+        glyph.image = symbol == BoostGlyph.symbol ? BoostGlyph.image(size: 13, filled: true) : SidebarSymbols.image(symbol, size: 13, weight: .semibold)
         glyph.contentTintColor = active ? colors.glyphOnAccent : colors.glyphOnInactive
         glyph.imageScaling = .scaleNone
         circle.addSubview(glyph)
@@ -531,11 +575,46 @@ private final class SiteSettingRow: SiteHoverView {
         setAccessibilityElement(true)
         setAccessibilityLabel("\(title), \(subtitle)")
         setAccessibilityRole(.button)
+        if let chevron { addSubview(chevron) }
+        if let accessory {
+            setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Edit") { accessory(); return true }])
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override func refresh() { alphaValue = hovered ? 0.85 : 1 }
+    override func refresh() {
+        alphaValue = hovered ? 0.85 : 1
+        chevron?.isHidden = !hovered
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        if let accessory, bounds.contains(p), p.x >= bounds.width - 36 { accessory(); return }
+        super.mouseUp(with: event)
+    }
+
+    /// The chevron's press, for scenarios.
+    func pressAccessory() { accessory?() }
+}
+
+/// Arc's Boost glyph (boost.sparkle.fill): a flat brush with a sparkle at its top left.
+enum BoostGlyph {
+    /// What callers pass for it where a symbol name goes.
+    static let symbol = "cra.boost"
+
+    static func image(size: CGFloat, filled: Bool = false) -> NSImage? {
+        guard let brush = SidebarSymbols.image(filled ? "paintbrush.fill" : "paintbrush", size: size * 0.92, weight: filled ? .semibold : .regular),
+              let spark = SidebarSymbols.image("sparkle", size: size * 0.5, weight: .semibold) else { return nil }
+        let w = brush.size.width + spark.size.width * 0.45, h = brush.size.height + spark.size.height * 0.45
+        let img = NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
+            brush.draw(in: NSRect(x: w - brush.size.width, y: 0, width: brush.size.width, height: brush.size.height))
+            spark.draw(in: NSRect(x: 0, y: h - spark.size.height, width: spark.size.width, height: spark.size.height))
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
 }
 
 /// A WebKit page's place for the extensions: which engine plays it, and what that means here
@@ -685,8 +764,15 @@ private final class SiteMoreButton: SiteHoverView {
             add("Clear Cache", actions.clearCache)
             add("Clear Cookies", actions.clearCookies)
             menu.addItem(.separator())
-            add("Manage Extensions", actions.manageExtensions)
-            add("Add Extension", actions.addExtension)
+            // Arc 1.172.2's order.
+            add("Manage Boosts…", actions.manageBoosts)
+            let newBoost = BlockMenuItem(title: "New Boost…", action: { actions.newBoost?() })
+            newBoost.isEnabled = actions.newBoost != nil
+            menu.autoenablesItems = false
+            menu.addItem(newBoost)
+            menu.addItem(.separator())
+            add("Manage Extensions…", actions.manageExtensions)
+            add("Add Extension…", actions.addExtension)
             menu.addItem(.separator())
             add("All Site Settings", actions.siteSettings)
             menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
@@ -767,6 +853,9 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.learnAboutProtectedMedia = closing(actions.learnAboutProtectedMedia)
         // The page opens again in the other engine: the popover's content would be the old page's.
         acts.chooseSafariEngine = { [weak p] on in p?.performClose(nil); actions.chooseSafariEngine(on) }
+        acts.newBoost = actions.newBoost.map(closing)
+        acts.editBoost = { [weak p] id in p?.performClose(nil); actions.editBoost(id) }
+        acts.manageBoosts = closing(actions.manageBoosts)
         let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, tab: tab, protectedMedia: protectedMedia,
                                             safariEngine: safariEngine, actions: acts, store: store)
         let host = NSViewController()
@@ -779,6 +868,33 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
     }
 
     func close() { popover?.performClose(nil) }
+
+    /// cra://debug?siteControlsRead=1 (#478): "site controls: actions=Share|New Boost|… boosts=My Boost, Enabled|…".
+    func debugRead() {
+        guard let root = popover?.contentViewController?.view, popover?.isShown == true else { return CraLog.note("site controls: closed") }
+        var actions: [String] = [], rows: [String] = []
+        func walk(_ v: NSView) {
+            if v is SiteActionButton { actions.append(v.accessibilityLabel() ?? "") }
+            if v is SiteSettingRow, v.accessibilityCustomActions()?.isEmpty == false { rows.append(v.accessibilityLabel() ?? "") }
+            v.subviews.forEach(walk)
+        }
+        walk(root)
+        CraLog.note("site controls: actions=\(actions.joined(separator: "|")) boosts=\(rows.joined(separator: "|"))")
+    }
+
+    /// cra://debug?siteControlsPress=<label>[&accessory=1] (#478): the button or row with that
+    /// accessibility label (a row's chevron with `accessory`) pressed as a click would.
+    func debugPress(_ label: String, accessory: Bool) {
+        guard let root = popover?.contentViewController?.view else { return CraLog.note("site controls press: closed") }
+        func find(_ v: NSView) -> NSView? {
+            if (v is SiteActionButton || v is SiteSettingRow), v.accessibilityLabel() == label { return v }
+            for s in v.subviews { if let f = find(s) { return f } }
+            return nil
+        }
+        guard let v = find(root) else { return CraLog.note("site controls press: no \(label)") }
+        if accessory, let row = v as? SiteSettingRow { row.pressAccessory() } else { _ = v.accessibilityPerformPress() }
+        CraLog.note("site controls pressed \(label)")
+    }
 
     /// While the share list is up the popover only closes when Cra closes it: a transient one
     /// can go when a menu opens over it.

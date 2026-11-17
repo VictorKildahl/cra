@@ -257,6 +257,28 @@ fails on a kind it doesn't know, and would show the easel empty); each item carr
   Hide Developer Tools", and an arrow.clockwise "Refresh this Page" (Cra shows it for JS, which runs on load). Delete asks "Delete this Boost?" in Arc's
   dialog. Reference captures: docs/screenshots/arc-boost-*.png.
 
+## Boosts, measured again (Arc 1.172.2, Victor's Arc on iana.org, 17 Nov 2026, #478)
+
+- The colour wheel (BoostsEditor.ColorPicker: HueRingBackdrop, DraggablePuck, ComplementaryColorControl;
+  CraCore BoostWheel): the big handle goes where it is dragged, up to 56 pt from the middle of the 133 pt
+  dotted square. Its direction is the hue, clockwise from 3 o'clock (red; yellow at 6, cyan at 9, purple
+  at 12), its distance the strength (236/248/236 a few points out, 193/163/81 at 56 pt toward half past 4).
+  The small handle trails it by an eighth of a turn at the same distance in a dark shade of that hue
+  (71/88/46 against the colour above), a 2 pt line joins them, and a faint circle through both shows
+  the orbit. Untinted, both are grey (130 and 68) and rest 40 pt out at 3 o'clock, in the brushed grey
+  frame; once tinted, the frame is a ring of every hue in the same order, not one saturation all round
+  (226/104/81 red, 168/244/243 cyan, 141/90/239 purple, read every 15°).
+- Advanced color controls: a light popover under its button, arrow up, about 224 pt wide.
+- The Site Control Center's actions are Share, New Boost (a flat brush with a sparkle; tooltip "New
+  Boost"), Capture and Capture Full Page. A site with boosts gets a "Boosts" section between Extensions and
+  Settings ("Manage" on hover, like Extensions): one row per boost in the settings rows' style (glyph in a
+  circle, name, "Enabled" or "Disabled"; grey when off). A click on the row turns it on or off and keeps
+  the popover open; on hover a chevron shows at the right end, which opens that boost in the editor. The
+  More menu: Clear Cache, Clear Cookies, ─, Manage Boosts…, New Boost…, ─, Manage Extensions…, Add
+  Extension…. Cra keeps Copy URL in the second slot where a page can't be boosted (Arc not measured there).
+- Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once), and
+  the faint colour wash in the middle of Arc's wheel.
+
 ## Zap, measured (Arc 1.172.2, Victor's Arc on example.com, 12 Nov 2026)
 
 - Zap on (the editor's Zap button, dark while on): the page card gets a 58 pt shelf under the page, which

@@ -939,6 +939,11 @@
 #471   Tests/Scenarios/spaces-menu-rows.scenario  2f97a92f3d0c
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
+#478   Packages/CraCore/Tests/CraCoreTests/BoostTests.swift::theSiteControlCenterListsTheSitesBoostsOnOrOff  7a97aab12e6b
+#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::colorsMatchArcs  501e393ad819
+#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::dragsPickHueClockwiseAndStrengthByDistance  9fda21ba2d34
+#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::untintedHandlesRestAtThreeOClock  1372e31c2305
+#478   Tests/Scenarios/boost-editor.scenario  0c037f9b7e45
 #480   Tests/Scenarios/native-window-hide.scenario  a18926843adf
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba

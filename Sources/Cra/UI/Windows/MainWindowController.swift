@@ -3655,6 +3655,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         actions.learnAboutProtectedMedia = { [weak self] in self?.openTab(Self.protectedMediaHelp) }
         actions.chooseSafariEngine = { [weak self] on in self?.chooseSafariEngine(on, for: url) }
+        // Arc's New Boost and the site's boosts (#478), where the page is a website and Boosts are on.
+        if store.settings.boostsEnabled, BoostStore.canBoost(url) {
+            actions.newBoost = { [weak self] in self?.openBoostEditor() }
+            actions.editBoost = { [weak self] id in self?.openBoostEditor(id) }
+            actions.toggleBoost = { id in
+                guard var b = BoostStore.shared.boost(id) else { return }
+                b.enabled.toggle()
+                BoostStore.shared.update(b)
+            }
+            actions.manageBoosts = { [weak self] in self?.showLibrary(.boosts) }
+        }
         siteControlCenterSpaceID = focusedSpaceID
         let show = { [weak self] (safariEngine: Bool?) in
             guard let self, let window = self.window, window.isVisible else { return }
@@ -3695,6 +3706,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
     }
+
+    func debugSiteControlsRead() { siteControlCenter.debugRead() }
+    func debugSiteControlsPress(_ label: String, accessory: Bool) { siteControlCenter.debugPress(label, accessory: accessory) }
 
     /// Cra's privacy page, where the command bar's search-suggestions banner says "Learn more".
     static let privacyPage = SiteLinks.tagged("https://crabrowser.app/privacy", from: .commandBarNotice)
@@ -3828,10 +3842,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     // MARK: Boosts
 
-    /// Arc's New Boost: the open site's boost (made if it has none) in the editor beside the page.
-    func openBoostEditor() {
+    /// Arc's New Boost: the open site's boost (made if it has none) in the editor beside the page;
+    /// with an id, that boost (a Site Control Center row's chevron).
+    func openBoostEditor(_ id: UUID? = nil) {
         guard let window, let url = selectedTabID.flatMap({ store.item($0)?.tab?.url }),
-              let boost = BoostStore.shared.boostForSite(of: url) else { showToast("Boosts Work on Websites"); return }
+              let boost = id.flatMap(BoostStore.shared.boost) ?? BoostStore.shared.boostForSite(of: url) else { showToast("Boosts Work on Websites"); return }
         BoostEditorController.shared.open(boost, over: window, page: .init(
             zap: { [weak self] on in self?.setZapping(on) },
             dim: { [weak self] on in self?.zapBrowser?.executeJavaScript(BoostZap.dimExpression(on)) },

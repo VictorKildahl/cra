@@ -67,8 +67,13 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
 
     /// The boost for a page, if one applies: same host, or a subdomain of it.
     public static func applying(to url: String, from boosts: [Boost]) -> [Boost] {
+        onSite(of: url, from: boosts).filter(\.enabled)
+    }
+
+    /// Every boost on a page's site, on or off: the Site Control Center's Boosts section (#478).
+    public static func onSite(of url: String, from boosts: [Boost]) -> [Boost] {
         guard let host = URL(string: url)?.host.map(siteHost) else { return [] }
-        return boosts.filter { $0.enabled && (host == $0.host || host.hasSuffix("." + $0.host)) }
+        return boosts.filter { host == $0.host || host.hasSuffix("." + $0.host) }
     }
 
     /// Whether the editor's colour controls are at the site's own colours.
