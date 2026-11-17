@@ -631,6 +631,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     @objc func showSpaces() {
         let model = SpacesModel()
         model.favicon = { [weak self] in self?.favicons.icon(for: $0) }
+        model.fetchFavicon = { [weak self] in self?.favicons.fetchFromHomePage(for: $0) }
         model.close = { [weak self] in self?.dismiss(animated: true) }
         model.open = { [weak self] address in
             guard let self else { return }
@@ -638,9 +639,29 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             self.incognitoSearch = false
             self.open(address)
         }
+        model.sharePromptSeen = { [weak self] in self?.settings.value.hasSeenSharePrompt ?? true }
+        model.markSharePromptSeen = { [weak self] in self?.settings.update { $0.hasSeenSharePrompt = true } }
+        model.showShareGuide = { [weak self] closed in self?.showShareGuide(closed: closed) }
         let sheet = UIHostingController(rootView: SpacesView(model: model))
-        sheet.sheetPresentationController?.detents = [.large()]
-        topPresenter.present(sheet, animated: true)
+        sheet.view.backgroundColor = .clear
+        CardSheet.present(sheet, from: topPresenter)
+    }
+
+    /// Arc Search's "Save to Arc from any app" how-to, over the Spaces sheet; its button opens a
+    /// share menu to find Cra in.
+    func showShareGuide(closed: @escaping () -> Void) {
+        weak var guide: UIViewController?
+        let view = ShareGuideView(
+            close: { guide?.dismiss(animated: true) },
+            showShareMenu: {
+                guard let guide, let url = URL(string: "https://crabrowser.app") else { return }
+                let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                share.popoverPresentationController?.sourceView = guide.view
+                guide.present(share, animated: true)
+            })
+        let controller = UIHostingController(rootView: view)
+        guide = controller
+        CardSheet.present(controller, from: topPresenter, style: .stacked, onDismiss: closed)
     }
 
     // MARK: Settings and archive

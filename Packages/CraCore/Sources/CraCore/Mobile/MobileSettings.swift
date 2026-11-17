@@ -133,6 +133,8 @@ public struct MobileSettings: Codable, Equatable {
     public var hasSeenBlockTip = false
     /// The tab row's "Every tab, anywhere." card was closed.
     public var hasDismissedSyncCard = false
+    /// "Save links to Cra from other apps!" was answered (it asks once).
+    public var hasSeenSharePrompt = false
 
     public init() {}
 
@@ -154,7 +156,7 @@ public struct MobileSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip, hasDismissedSyncCard
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip, hasDismissedSyncCard, hasSeenSharePrompt
     }
 
     public init(from decoder: Decoder) throws {
@@ -172,6 +174,7 @@ public struct MobileSettings: Codable, Equatable {
         hasSearched = (try? c.decodeIfPresent(Bool.self, forKey: .hasSearched)) ?? false
         hasSeenBlockTip = (try? c.decodeIfPresent(Bool.self, forKey: .hasSeenBlockTip)) ?? false
         hasDismissedSyncCard = (try? c.decodeIfPresent(Bool.self, forKey: .hasDismissedSyncCard)) ?? false
+        hasSeenSharePrompt = (try? c.decodeIfPresent(Bool.self, forKey: .hasSeenSharePrompt)) ?? false
         answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 

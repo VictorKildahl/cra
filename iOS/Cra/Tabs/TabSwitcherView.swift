@@ -46,7 +46,8 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         let dark = traitCollection.userInterfaceStyle == .dark
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        background.colors = dark ? [Palette.rgb(0x1f1e2b).cgColor, Palette.rgb(0x241d26).cgColor]
+        // Dark: Victor's screenshots IMG_1896 and IMG_1905 (13 Nov), #1C1B2F at the top, #1F1F30 low down.
+        background.colors = dark ? [Palette.rgb(0x1c1b2f).cgColor, Palette.rgb(0x1f1f30).cgColor]
                                  : [Palette.rgb(0xefeefd).cgColor, Palette.rgb(0xf8eefb).cgColor]
         CATransaction.commit()
     }

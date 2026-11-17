@@ -612,18 +612,28 @@ struct MobileSpacesTests {
         return (document, folder.id)
     }
 
+    /// Arc Search's Spaces sheet (Victor's screenshots, 13 Nov): the pinned tabs and folders,
+    /// folders shut until tapped, a line, then Today. Favorites stay out, as Arc Search leaves out
+    /// the desktop's favorites.
     @Test func aSpaceListsItsPinsFoldersAndTodayTabs() {
-        let (document, folder) = Self.sidebar()
+        var (document, folder) = Self.sidebar()
+        let space = document.spaces[0]
+        let favorite = SidebarItem.tab("https://fav.example/", title: "Favorite", parent: space.favoritesContainerID)
+        document.items.append(favorite)
+        let favorites = document.items.firstIndex { $0.id == space.favoritesContainerID }!
+        document.items[favorites].children = [favorite.id]
         let spaces = MobileSpaces.spaces(in: document)
         #expect(spaces.map(\.title) == ["Personal", "Play"])
-        #expect(spaces[0].rows.map(\.title) == ["Inbox", "Work", "Docs", "Today", "news.example"])
-        #expect(spaces[0].rows.map(\.depth) == [0, 0, 1, 0, 0])
+        #expect(spaces[0].rows.map(\.title) == ["Inbox", "Work", "Today", "news.example"])
         #expect(spaces[0].rows[0].kind == .tab(url: "https://mail.example/inbox"))
-        #expect(spaces[0].rows[3].kind == .todayHeader)
+        #expect(spaces[0].rows[1].kind == .folder(open: false))
+        #expect(spaces[0].rows[2].kind == .todayHeader)
         #expect(spaces[1].rows.isEmpty)
         #expect(spaces[0].colors == SpaceTheme.presets[0].colors)
-        let closed = MobileSpaces.spaces(in: document, closedFolders: [folder])
-        #expect(closed[0].rows.map(\.title) == ["Inbox", "Work", "Today", "news.example"])
+        let opened = MobileSpaces.spaces(in: document, openFolders: [folder])
+        #expect(opened[0].rows.map(\.title) == ["Inbox", "Work", "Docs", "Today", "news.example"])
+        #expect(opened[0].rows.map(\.depth) == [0, 0, 1, 0, 0])
+        #expect(opened[0].rows[1].kind == .folder(open: true))
     }
 
     @Test func theSyncedFileReadsBack() throws {
@@ -1011,6 +1021,62 @@ struct MobileSpacesSheetTests {
         #expect(MobileSpaces.sheetStyle(colors: ["#C7CAFF", "#FFE5E5"])?.lightText == false)
         #expect(MobileSpaces.sheetStyle(colors: []) == nil)
     }
+
+    /// In dark mode Arc Search draws a Space's sheet in shades of its colour at fixed perceived
+    /// lightness (OKLCH), the hue the Space's own.
+    @Test func darkModeShadesTheSpacesColour() throws {
+        let cream = try #require(MobileSpaces.darkSheetStyle(colors: ["#F4F1EA", "#E6DCC8"]))
+        // Arc's, measured in Victor's IMG_1900–1902: #3A341B to #433013, bar #5F4307, name #F8E8A0,
+        // rows #FDF7DF, close disc #756843; folder front #6F5600, back #E9B300, edge #FCEDBC.
+        #expect([cream.top, cream.bottom, cream.bar, cream.title, cream.text, cream.closeDisc] ==
+                ["#39331C", "#422F14", "#5F4307", "#F8E8A0", "#FAF5E4", "#726747"])
+        #expect([cream.folderFront, cream.folderBack, cream.folderEdge] == ["#705700", "#E9B303", "#FDEEBD"])
+        // A muted purple Space gets the same perceived lightness as Arc's blue one (IMG_1904: top
+        // #313044, close disc #64637D, folder front #1F2AFF, rows #F2F3FF) in its own hue.
+        let purple = try #require(MobileSpaces.darkSheetStyle(colors: ["#6F5F7F", "#646172"]))
+        #expect(purple.top == "#3C2D40")
+        #expect(purple.closeDisc == "#71607B")
+        #expect(purple.folderFront == "#8500B7")
+        #expect(purple.text == "#FCF1FF")
+        // A grey Space has no hue to keep: neutral shades, not a made-up colour.
+        let grey = try #require(MobileSpaces.darkSheetStyle(colors: ["#808080"]))
+        #expect(grey.top == "#333333")
+        #expect(MobileSpaces.darkSheetStyle(colors: []) == nil)
+    }
+}
+
+/// Site icons for rows the phone never visited: the icons a site's home page names, best first.
+struct MobileFaviconLinkTests {
+    /// A dark, colourless icon with see-through parts (GitHub's mark) would vanish on a dark
+    /// sheet; Arc Search draws it in the text's colour. Coloured or filled-in icons stay as they are.
+    @Test func darkMarksAreDrawnInTheTextsColourOnDark() {
+        #expect(MobileFavicons.drawsAsMark(coverage: 0.55, luminance: 0.08, chroma: 0.02, lightShare: 0))
+        // GitHub's octocat is #1F2328: a ratio-based saturation calls that 22 % saturated.
+        #expect(MobileFavicons.drawsAsMark(coverage: 0.62, luminance: 0.13, chroma: 0.035, lightShare: 0), "a dark slate mark")
+        #expect(!MobileFavicons.drawsAsMark(coverage: 0.55, luminance: 0.4, chroma: 0.5, lightShare: 0.1), "a coloured icon")
+        #expect(!MobileFavicons.drawsAsMark(coverage: 1, luminance: 0.08, chroma: 0.02, lightShare: 0), "a filled square keeps its shape")
+        #expect(!MobileFavicons.drawsAsMark(coverage: 0.55, luminance: 0.7, chroma: 0.02, lightShare: 0.9), "a light mark shows already")
+        #expect(!MobileFavicons.drawsAsMark(coverage: 0.78, luminance: 0.15, chroma: 0, lightShare: 0.14), "Vercel: a white triangle on a black disc")
+    }
+
+    @Test func theHomePagesIconsComeBestFirst() {
+        let html = """
+        <html><head>
+        <link rel="icon" href="/favicon-16.png" sizes="16x16">
+        <LINK REL="shortcut icon" href='/favicon.ico'>
+        <link rel="apple-touch-icon" href="https://cdn.example/touch.png">
+        <link rel="icon" type="image/svg+xml" href="/icon.svg">
+        <link rel="icon" href="/favicon-32.png" sizes="32x32">
+        <link rel="stylesheet" href="/site.css">
+        </head><body><link rel="icon" href="/late.png"></body></html>
+        """
+        let links = MobileFavicons.iconLinks(inHTML: html, page: URL(string: "https://app.example/dashboard")!)
+        // Sized icons largest first (an unsized one, often an .ico holding several, between 32
+        // and 16), then the touch icon, which is drawn as an app icon; SVG and the body are skipped.
+        #expect(links == ["https://app.example/favicon-32.png", "https://app.example/favicon.ico", "https://app.example/favicon-16.png",
+                          "https://cdn.example/touch.png"])
+        #expect(MobileFavicons.iconLinks(inHTML: "<p>none</p>", page: URL(string: "https://x.example/")!) == ["https://x.example/favicon.ico"])
+    }
 }
 
 /// The query capsule on a Browse for Me page edits the question.
@@ -1100,6 +1166,20 @@ struct MobileSyncIntroTests {
         #expect(MobileSyncIntro.showsCard(hasSpaces: false, dismissed: false))
         #expect(!MobileSyncIntro.showsCard(hasSpaces: true, dismissed: false))
         #expect(!MobileSyncIntro.showsCard(hasSpaces: false, dismissed: true))
+    }
+
+    /// Arc Search asks to set up the share extension once, after the desktop's Spaces arrive.
+    @Test func theSharePromptAsksOnceTheSpacesAreHere() throws {
+        #expect(MobileSyncIntro.showsSharePrompt(hasSpaces: true, seen: false))
+        #expect(!MobileSyncIntro.showsSharePrompt(hasSpaces: false, seen: false))
+        #expect(!MobileSyncIntro.showsSharePrompt(hasSpaces: true, seen: true))
+        let old = try JSONDecoder().decode(MobileSettings.self, from: Data("{}".utf8))
+        #expect(!old.hasSeenSharePrompt)
+        var settings = MobileSettings()
+        settings.hasSeenSharePrompt = true
+        let back = try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(settings))
+        #expect(back.hasSeenSharePrompt)
+        #expect(MobileSyncIntro.guideSteps.filter { $0.text.contains("{icon}") }.allSatisfy { $0.symbol != nil })
     }
 
     @Test func theWayToSyncMentionsICloudOnlyWhenItIsOff() {

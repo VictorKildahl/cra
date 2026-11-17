@@ -601,18 +601,25 @@ final class IncognitoTests: BrowserTestCase {
 }
 
 final class SpacesTests: BrowserTestCase {
-    /// The tab row's left button shows the Mac's Spaces: the pinned tabs and folders of each, a
-    /// folder that folds shut, and a tap on a tab that opens it here.
+    /// The tab row's left button shows the Mac's Spaces: the pinned tabs and folders of each,
+    /// folders shut until a tap opens them (Arc Search), and a tap on a tab that opens it here.
     func testTheMacsSpacesOpenFromTheTabRow() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo"])
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
         XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
         app.buttons["bar-spaces"].tap()
+        // The first time the Spaces arrive, Arc Search asks about its share extension.
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["spaces-close"].exists, "the prompt has no close button")
+        noThanks.tap()
         XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["space-title"].firstMatch.label, "Personal")
-        XCTAssertTrue(app.buttons["space-tab-Docs"].exists)
+        XCTAssertFalse(app.buttons["space-tab-Docs"].exists, "a folder starts shut")
         XCTAssertTrue(app.buttons["space-tab-A Story"].exists)
+        app.buttons["space-folder-Work"].tap()
+        XCTAssertTrue(app.buttons["space-tab-Docs"].waitForExistence(timeout: 2))
         sleep(1)
         keep("spaces")
         app.buttons["space-folder-Work"].tap()
@@ -622,6 +629,29 @@ final class SpacesTests: BrowserTestCase {
         app.buttons["space-icon-Personal"].tap()
         app.buttons["space-tab-Inbox"].tap()
         waitForPage("Inbox")
+    }
+
+    /// "Set up" on the share prompt opens the how-to sheet; closed, the Spaces are there and the
+    /// prompt doesn't come back.
+    func testTheSharePromptLeadsToTheHowTo() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let setUp = app.buttons["share-prompt-set-up"]
+        XCTAssertTrue(setUp.waitForExistence(timeout: 5))
+        setUp.tap()
+        XCTAssertTrue(app.staticTexts["share-guide-title"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["share-guide-title"].label, "Save to Cra from any app")
+        XCTAssertTrue(app.buttons["share-guide-show"].exists)
+        app.buttons["share-guide-close"].tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
+        app.buttons["spaces-close"].tap()
+        XCTAssertFalse(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 2))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["share-prompt-set-up"].exists, "the prompt asks once")
     }
 
     /// Without iCloud the Spaces view says where Spaces come from.

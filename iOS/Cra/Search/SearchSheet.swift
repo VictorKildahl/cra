@@ -345,9 +345,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private func applyIncognito() {
         overrideUserInterfaceStyle = isIncognito ? .dark : .unspecified
         incognitoButton.setImage(Self.incognitoImage(on: isIncognito), for: .normal)
-        incognitoButton.setAttributedTitle(isIncognito ? NSAttributedString(string: "Incognito    ", attributes: [
-            .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: Palette.rgb(0xd0d0d4),
-        ]) : nil, for: .normal)
+        incognitoButton.setAttributedTitle(isIncognito ? Self.incognitoTitle : nil, for: .normal)
         incognitoButton.accessibilityValue = isIncognito ? "On" : "Off"
         let appearance: UIKeyboardAppearance = isIncognito ? .dark : .default
         if field.keyboardAppearance != appearance {
@@ -439,16 +437,29 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
 
     /// The incognito mask: two leaning ovals.
+    /// "Incognito" beside the mask while it is on: 13 pt grey, 8.7 pt from the mask (Victor's
+    /// screenshot IMG_1905: the word 51.6 pt wide in #9C9B9D, the mask starting 8.7 pt after it).
+    /// The gap is kerning after the last letter: a button drops trailing spaces from its title.
+    private static let incognitoTitle: NSAttributedString = {
+        let title = NSMutableAttributedString(string: "Incognito", attributes: [
+            .font: UIFont.systemFont(ofSize: 13), .foregroundColor: Palette.rgb(0x9f9fa4),
+        ])
+        title.addAttribute(.kern, value: 8.7, range: NSRange(location: title.length - 1, length: 1))
+        return title
+    }()
+
+    /// The mask: two eggs leaning in. On, IMG_1905 has them 10.3 × 13 pt each in #9E9FA4,
+    /// 1.7 pt apart.
     private static func incognitoImage(on: Bool) -> UIImage {
-        let size = CGSize(width: 22, height: 14)
+        let size = CGSize(width: 23, height: 14)
         return UIGraphicsImageRenderer(size: size).image { context in
             let cg = context.cgContext
-            (on ? Palette.rgb(0xd8d8dc) : Palette.incognitoOff).setFill()
-            for (x, angle) in [(CGFloat(5.5), CGFloat(0.16)), (16.5, -0.16)] {
+            (on ? Palette.rgb(0x9e9fa4) : Palette.incognitoOff).setFill()
+            for (x, angle) in [(CGFloat(5.3), CGFloat(0.16)), (17.6, -0.16)] {
                 cg.saveGState()
                 cg.translateBy(x: x, y: 7)
                 cg.rotate(by: angle)
-                cg.fillEllipse(in: CGRect(x: -4.2, y: -6, width: 8.4, height: 12))
+                cg.fillEllipse(in: CGRect(x: -5.15, y: -6.5, width: 10.3, height: 13))
                 cg.restoreGState()
             }
         }.withRenderingMode(.alwaysOriginal)

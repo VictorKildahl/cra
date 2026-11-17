@@ -94,6 +94,8 @@ enum LaunchOptions {
 
     static var fakeVoice: String? { LaunchOptions.value("CraFakeVoice") }
     static var showsVoiceOverlay: Bool { LaunchOptions.value("CraShowVoice") == "YES" }
+    /// `-CraHoldConnecting YES` keeps the Spaces sheet on "Connecting", for a screenshot.
+    static var holdsConnecting: Bool { LaunchOptions.value("CraHoldConnecting") == "YES" }
     static var summarizesFirstPage: Bool { LaunchOptions.value("CraSummarize") == "YES" }
     /// `-CraAIState off|preparing|unsupported` stands in for Apple Intelligence's state in tests.
     static var aiState: MobileAIState? {

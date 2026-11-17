@@ -52,6 +52,7 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraFakeModel YES` | Canned answers in place of the on-device model |
 | `-CraSummarize YES` | Summarizes the first page once it has loaded |
 | `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
+| `-CraHoldConnecting YES` | Keeps the Spaces sheet on "Connecting", for a screenshot |
 | `-CraFakeVoice <text>` | What voice search hears instead of the microphone |
 | `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
 | `-CraOnboarding YES` | Shows onboarding on a test's data folder |
