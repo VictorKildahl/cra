@@ -986,3 +986,5 @@
 #516   Packages/CraCore/Tests/CraCoreTests/PictureInPictureThrowTests.swift::theWindowStopsAtTheDock  9e7d182c430c
 #516   Packages/CraCore/Tests/CraCoreTests/PictureInPictureThrowTests.swift::theWindowStopsWhereThePointerMeetsTheScreenEdge  01c10490aba2
 #519   Tests/Scenarios/download-history-file-gone.scenario  74f0ce7bc265
+#525   Packages/CraCore/Tests/CraCoreTests/SidebarVisibilityTests.swift::sidebarAlwaysShownWhenNoTabSelected  0fd15f83ec9f
+#525   Packages/CraCore/Tests/CraCoreTests/SidebarVisibilityTests.swift::sidebarShownWhenTabSelectedFollowsUserVisible  ed68dc3ecaad

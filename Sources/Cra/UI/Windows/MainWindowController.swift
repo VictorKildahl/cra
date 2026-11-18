@@ -96,11 +96,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// A sidebar tab or a link dragged over the panes (#419).
     private(set) lazy var splitDrop = PageSplitDrop(owner: self)
     /// The sidebar holds the content area's edge on its side: shown and docked, not floating over the page.
-    var sidebarDocked: Bool { sidebarVisible && !shell.floatingSidebar }
+    var sidebarDocked: Bool { effectiveSidebarVisible && !shell.floatingSidebar }
     var selectedTab: SidebarItem? { store.selectedTab(window: windowID) }
     var sidebarVisible: Bool {
         get { store.window(windowID).sidebarVisible }
         set { store.updateWindow(windowID) { $0.sidebarVisible = newValue } }
+    }
+    /// Parity with Arc: when no tab is selected (all tabs closed or new tab command bar), the sidebar stays visible and docked
+    /// so the first tab can be selected, and automatically hides once a tab is selected if sidebarVisible is false.
+    var effectiveSidebarVisible: Bool {
+        SidebarVisibility.isShown(userVisible: sidebarVisible, hasSelectedTab: selectedTabID != nil)
     }
 
     init(app: AppDelegate, session: WindowSession) {
@@ -147,13 +152,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                             },
                                             onClose: { [weak self] in self?.hideFindBar() }))
         shell.sidebarWidth = CGFloat(store.prefs.sidebarWidth)
-        shell.sidebarVisible = sidebarVisible
+        shell.sidebarVisible = effectiveSidebarVisible
         shell.showToolbar = store.settings.showsBar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.autoHideToolbar = store.settings.hidesToolbar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.edgeToEdge = store.settings.edgeToEdgeContent
         shell.sidebarSide = store.settings.sidebarSide
-        lastSidebarVisible = sidebarVisible
-        window.trafficLightsHidden = !sidebarVisible
+        lastSidebarVisible = effectiveSidebarVisible
+        window.trafficLightsHidden = !effectiveSidebarVisible
         lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
         window.contentView = shell
         window.backgroundColor = NSColor(palette.gradientColors.first ?? .gray)
@@ -636,8 +641,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         syncSidebarUI()
         window?.title = selectedTab?.displayTitle ?? space.title
 
-        if sidebarVisible != lastSidebarVisible {
-            lastSidebarVisible = sidebarVisible
+        if effectiveSidebarVisible != lastSidebarVisible {
+            lastSidebarVisible = effectiveSidebarVisible
             (window as? CraWindow)?.trafficLightsHidden = !lastSidebarVisible
             // Anchoring while the sidebar floats: bring it home first so it slides from there.
             if lastSidebarVisible { floatingSidebar?.prepareForAnchoring() }
@@ -1263,7 +1268,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func browserManager(fullscreen: Bool, tabID: UUID) {
         guard let window else { return }
         // A sidebar that came out over the page's full screen goes home when the shown one comes back (#315).
-        if !fullscreen, sidebarVisible { floatingSidebar?.hide(animated: false) }
+        if !fullscreen, effectiveSidebarVisible { floatingSidebar?.hide(animated: false) }
         shell.contentFullscreen = fullscreen
         floatingSidebar?.sidebarVisibilityChanged()
         contentFullscreenTab = fullscreen ? tabID : nil
@@ -2968,7 +2973,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         })
         // Also over a page in full screen, where the sidebar is out of sight (#315).
         f.sidebarHidden = { [weak self] in
-            self.map { FloatingSidebarGeometry.mayReveal(sidebarShown: $0.sidebarVisible, pageFullscreen: $0.shell.contentFullscreen) } ?? false
+            self.map { FloatingSidebarGeometry.mayReveal(sidebarShown: $0.effectiveSidebarVisible, pageFullscreen: $0.shell.contentFullscreen) } ?? false
         }
         f.staysShown = { FolderPreviewController.shared.isOpen }
         f.didAttachPanel = { [weak self] in
@@ -4271,7 +4276,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         commandBarOpenedAt = Date()
         browsers.ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
         // With the sidebar out the new row shows there; hidden, Arc says so in a toast.
-        if !sidebarVisible { showToast("New Tab Created") }
+        if !effectiveSidebarVisible { showToast("New Tab Created") }
         return true
     }
 
