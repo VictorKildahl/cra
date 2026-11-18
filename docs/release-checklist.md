@@ -51,6 +51,10 @@ built release app with a test profile. Note anything that fails in the release's
   collapsed.
 - **#31, #48:** the tab-list scroller shows a 4 pt knob 3 pt from the edge with "When
   scrolling", and a 5 pt knob with "Always".
+- **#544:** with "When scrolling", flick a long tab list up and down on the trackpad, touching down
+  again while it still glides: the knob stays up the whole time, without blinking at each touch, and a
+  two-finger swipe between spaces from a list at rest shows no knob. (`ListKnobGate` decides; no test
+  can post a trackpad gesture's phases.)
 - **#189:** colour swatches grow on hover and shrink when pressed; "Back to Pinned URL" slides
   in over 0.16 s.
 - **#88:** importing from Arc copies its Show Full URL setting.

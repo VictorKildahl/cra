@@ -1116,6 +1116,10 @@
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::sidebarOutShowsTheRowInstead  bafff498f7e3
 #543   Tests/BrowserManagerLifecycleTests.swift::backgroundTabToastCase  9cde0b455475
 #543   Tests/Scenarios/background-tab-toast.scenario  2c50b42bceca
+#544   Packages/CraCore/Tests/CraCoreTests/FolderPreviewRowsTests.swift::aScrollMovesTheHoverToTheRowNowUnderThePointer  8e1dd4220c09
+#544   Packages/CraCore/Tests/CraCoreTests/ListKnobGateTests.swift::aTouchAfterTheKnobFadedHidesIt  337dd9ba81dc
+#544   Packages/CraCore/Tests/CraCoreTests/ListKnobGateTests.swift::aTouchWhileTheListScrollsKeepsTheKnob  dbc9c61c51b4
+#544   Tests/Scenarios/folder-preview-scroll-hover.scenario  45f757584b42
 #545   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::aTopLevelDomainHasALetter  d5572618b724
 #545   Tests/Scenarios/command-bar-number-search.scenario  f614af1a96f8
 #547   Tests/Scenarios/sidebar-empty-window-drag.scenario  2f87c32f3bbe

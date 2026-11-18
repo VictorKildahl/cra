@@ -2292,8 +2292,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if dict["themeEditor"] != nil { main.showSpaceStyleEditor(space: store.focusedSpace); return }
             if dict["jumpPill"] != nil { SpaceListView.jumpToSelected(for: main.sidebarUI, space: store.focusedSpaceID); return }
+            // The open folder preview: the pointer resting on a row, the list scrolled under it, and
+            // "Cra folderPreview <label>: lit=<rows> top=<pt>", the rows with the pointer's highlight and how far
+            // the list is scrolled (#544).
+            if let n = dict["folderPreviewPointer"].flatMap(Int.init) { FolderPreviewController.shared.preview?.debugPointer(onRow: n); return }
+            if let n = dict["folderPreviewScroll"].flatMap(Int.init) { FolderPreviewController.shared.preview?.debugScroll(rows: n); return }
+            if let label = dict["folderPreviewLit"] {
+                guard let preview = FolderPreviewController.shared.preview else { NSLog("Cra folderPreview %@: closed", label); return }
+                NSLog("Cra folderPreview %@: lit=%@ top=%.0f", label, preview.debugLit.map(String.init).joined(separator: ","), preview.debugTop)
+                return
+            }
             if let f = dict["folderPreview"] {
-                if let id = UUID(uuidString: f) { SpaceListView.debugFolderPreview(id, ui: main.sidebarUI) } else { FolderPreviewController.shared.close() }
+                if let id = UUID(uuidString: f) { SpaceListView.debugFolderPreview(id, ui: main.sidebarUI) } else {
+                    FolderPreviewController.shared.preview?.debugPointer(onRow: -1)
+                    FolderPreviewController.shared.close()
+                }
                 return
             }
             if let t = dict["expandFolder"] {
