@@ -69,11 +69,66 @@ public enum MobileSpaces {
     }
 
     /// Reads a synced `sidebar.json`, with the Mac's dates as it writes them (ISO 8601 text,
-    /// `JSONStore` and `SettingsSyncService`).
+    /// `JSONStore` and `SettingsSyncService`). The Mac that wrote it can be newer than the phone
+    /// (#465): an item or Space this build can't read is left out, never the whole file. A folder
+    /// or split with a value it doesn't know (a symbol, a layout) stays, with its tabs.
     public static func document(from data: Data) -> SidebarDocument? {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(SidebarDocument.self, from: data)
+        return (try? decoder.decode(SyncedDocument.self, from: data))?.document
+    }
+
+    /// `SidebarDocument` read one item and one Space at a time. Phone only: the Mac keeps reading
+    /// its own file strictly, so it never saves a sidebar with parts dropped.
+    private struct SyncedDocument: Decodable {
+        var document: SidebarDocument
+
+        private enum Keys: String, CodingKey { case version, spaceOrder, spaces, favoritesContainerID, items, profiles, profileFavorites }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            let spaces = try c.decode([Skippable<Space>].self, forKey: .spaces).compactMap(\.value)
+            let items = try c.decode([SyncedItem].self, forKey: .items).compactMap(\.item)
+            document = SidebarDocument(
+                version: (try? c.decodeIfPresent(Int.self, forKey: .version)) ?? 1,
+                spaceOrder: (try? c.decodeIfPresent([Skippable<UUID>].self, forKey: .spaceOrder))?.compactMap(\.value) ?? spaces.map(\.id),
+                spaces: spaces,
+                favoritesContainerID: (try? c.decodeIfPresent(UUID.self, forKey: .favoritesContainerID)) ?? nil,
+                items: items,
+                profiles: (try? c.decodeIfPresent([Skippable<BrowserProfile>].self, forKey: .profiles))?.compactMap(\.value),
+                profileFavorites: (try? c.decodeIfPresent([Skippable<ProfileFavorites>].self, forKey: .profileFavorites))?.compactMap(\.value))
+        }
+    }
+
+    private struct Skippable<Value: Decodable>: Decodable {
+        var value: Value?
+        init(from decoder: Decoder) throws { value = try? Value(from: decoder) }
+    }
+
+    /// One sidebar item: whole when it reads, else a folder or split of a newer Cra with only
+    /// what the phone shows (id, title, children). Any other kind it doesn't know is skipped.
+    private struct SyncedItem: Decodable {
+        var item: SidebarItem?
+
+        private enum Keys: String, CodingKey { case id, parentID, title, children, isUnread, createdAt, data }
+        private enum Kinds: String, CodingKey { case folder, split }
+
+        init(from decoder: Decoder) throws {
+            if let whole = try? SidebarItem(from: decoder) {
+                item = whole
+                return
+            }
+            guard let c = try? decoder.container(keyedBy: Keys.self), let id = try? c.decode(UUID.self, forKey: .id),
+                  let kinds = try? c.nestedContainer(keyedBy: Kinds.self, forKey: .data), kinds.allKeys.count == 1 else { return }
+            let data: ItemData = kinds.contains(.folder) ? .folder : .split(SplitData())
+            item = SidebarItem(id: id,
+                               parentID: (try? c.decodeIfPresent(UUID.self, forKey: .parentID)) ?? nil,
+                               title: (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil,
+                               children: (try? c.decodeIfPresent([Skippable<UUID>].self, forKey: .children))?.compactMap(\.value) ?? [],
+                               isUnread: (try? c.decodeIfPresent(Bool.self, forKey: .isUnread)) ?? false,
+                               createdAt: (try? c.decodeIfPresent(Date.self, forKey: .createdAt)) ?? Date(timeIntervalSince1970: 0),
+                               data: data)
+        }
     }
 }
 

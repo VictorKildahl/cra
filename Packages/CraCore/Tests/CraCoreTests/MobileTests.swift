@@ -661,6 +661,104 @@ struct MobileSpacesTests {
         #expect(!document.spaces.isEmpty)
         #expect(!MobileSpaces.spaces(in: document).isEmpty)
     }
+
+    /// The phone's build can be older than the Mac that wrote the file. An item kind, a folder
+    /// symbol, a split layout or a whole Space shape the phone doesn't know yet leaves that one
+    /// thing out; the rest of the Mac's Spaces still show, never "nothing synced".
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/465")) func aNewerMacsSidebarStillReads() throws {
+        let document = try #require(MobileSpaces.document(from: Data(Self.newerMacSidebar.utf8)))
+        let spaces = MobileSpaces.spaces(in: document)
+        #expect(spaces.map(\.title) == ["Work"])
+        #expect(spaces[0].symbol == "briefcase")
+        #expect(spaces[0].rows.map(\.title) == ["Inbox", "Odd", "Linear", "Left", "Right", "Notes", "Today", "Story"])
+        #expect(spaces[0].rows[1].kind == .folder(open: false))
+        let opened = MobileSpaces.spaces(in: document, openFolders: [UUID(uuidString: "00000000-0000-0000-0000-0000000000B2")!])
+        #expect(opened[0].rows.map(\.title).prefix(3) == ["Inbox", "Odd", "Docs"])
+        #expect(MobileSpaces.document(from: Data(#"{"spaces": "soon"}"#.utf8)) == nil)
+    }
+
+    /// A Mac sidebar.json from a later Cra than this one: today's newest fields (folder symbols,
+    /// live folders, splits, tab groups, theme variants, per-Space engines) plus keys, item kinds
+    /// ("easel", "note"), a container kind, a split orientation, a folder symbol and a Space
+    /// shape that no Cra writes yet.
+    static let newerMacSidebar = #"""
+    {
+      "version": 3,
+      "boosts": [{"host": "example.com"}],
+      "spaceOrder": ["00000000-0000-0000-0000-00000000000A", "00000000-0000-0000-0000-00000000000B"],
+      "spaces": [
+        {"id": "00000000-0000-0000-0000-00000000000A", "title": "Work", "emoji": "", "symbol": "briefcase",
+         "searchEngine": "ddg", "createdAt": "2026-11-17T09:00:00Z", "wallpaper": {"kind": "gradient"},
+         "theme": {"colors": ["#A687C8", "#3A3660"], "intensity": 0.8, "noise": 0.1, "appearance": "auto", "vibrant": true,
+                   "accent": "#FF00AA", "solid": false, "key": ["#A687C8"], "grain": 0.3,
+                   "dark": {"colors": ["#221133"], "intensity": 0.6, "noise": 0.1}},
+         "favoritesContainerID": "00000000-0000-0000-0000-0000000000F1",
+         "pinnedContainerID": "00000000-0000-0000-0000-0000000000F2",
+         "todayContainerID": "00000000-0000-0000-0000-0000000000F3"},
+        {"id": "00000000-0000-0000-0000-00000000000B", "title": "Later", "theme": "aurora", "layout": {"rows": 2},
+         "createdAt": "2026-11-17T09:00:00Z"}
+      ],
+      "items": [
+        {"id": "00000000-0000-0000-0000-0000000000F1", "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"container": {"_0": {"favorites": {"spaceID": "00000000-0000-0000-0000-00000000000A"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000F2", "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "children": ["00000000-0000-0000-0000-0000000000B1", "00000000-0000-0000-0000-0000000000B2", "00000000-0000-0000-0000-0000000000B4",
+                      "00000000-0000-0000-0000-0000000000E1", "00000000-0000-0000-0000-0000000000C1", "00000000-0000-0000-0000-0000000000B6"],
+         "data": {"container": {"_0": {"pinned": {"spaceID": "00000000-0000-0000-0000-00000000000A"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000F3", "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "children": ["00000000-0000-0000-0000-0000000000D1", "00000000-0000-0000-0000-0000000000E2"],
+         "data": {"container": {"_0": {"today": {"spaceID": "00000000-0000-0000-0000-00000000000A"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000F4", "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"container": {"_0": {"standalone": {"windowID": "00000000-0000-0000-0000-0000000000F9"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000B1", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Inbox",
+         "children": [], "isUnread": true, "createdAt": "2026-11-17T09:00:00Z", "pinnedAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://mail.example/inbox", "savedURL": "https://mail.example/", "savedTitle": "Mail",
+                  "muted": false, "timeLastActiveAt": "2026-11-17T10:00:00Z", "referrerID": "00000000-0000-0000-0000-0000000000B6",
+                  "faviconKey": "mail.example", "customIconKey": "pick-1", "tileColor": "#112233", "themeColor": "#445566",
+                  "homeTitle": "Mail", "liveItemURL": "https://github.com/a/b/pull/1", "liveSubtitle": "octocat",
+                  "liveGoneAt": "2026-11-17T11:00:00Z", "readingProgress": 0.4}}}},
+        {"id": "00000000-0000-0000-0000-0000000000B2", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Odd",
+         "children": ["00000000-0000-0000-0000-0000000000B3"], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "folderIcon": "tinted", "folderSymbol": "rocket", "tabGroup": false, "data": {"folder": {}}},
+        {"id": "00000000-0000-0000-0000-0000000000B3", "parentID": "00000000-0000-0000-0000-0000000000B2",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://docs.example", "savedURL": "https://docs.example", "savedTitle": "Docs", "muted": false}}}},
+        {"id": "00000000-0000-0000-0000-0000000000B4", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Linear",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z", "folderSymbol": "code",
+         "pluginFolder": {"source": "linear", "plugin": {"id": "linear", "settings": {"team": "CRA"}}, "hiddenItems": [],
+                          "lastFetch": "2026-11-17T09:30:00Z", "lastError": "quotaExceeded"},
+         "data": {"folder": {}}},
+        {"id": "00000000-0000-0000-0000-0000000000E1", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Sketches",
+         "children": ["00000000-0000-0000-0000-0000000000E3"], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"easel": {"_0": {"canvasID": "00000000-0000-0000-0000-0000000000E9"}}}},
+        {"id": "00000000-0000-0000-0000-0000000000E3", "parentID": "00000000-0000-0000-0000-0000000000E1",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://sketch.example", "savedURL": "https://sketch.example", "savedTitle": "Sketch", "muted": false}}}},
+        {"id": "00000000-0000-0000-0000-0000000000C1", "parentID": "00000000-0000-0000-0000-0000000000F2",
+         "children": ["00000000-0000-0000-0000-0000000000C2", "00000000-0000-0000-0000-0000000000C3"], "isUnread": false,
+         "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"split": {"_0": {"orientation": "grid", "focusTabID": "00000000-0000-0000-0000-0000000000C2",
+                  "widthFactors": {"00000000-0000-0000-0000-0000000000C2": 1, "00000000-0000-0000-0000-0000000000C3": 1}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000C2", "parentID": "00000000-0000-0000-0000-0000000000C1",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://left.example", "savedURL": "https://left.example", "savedTitle": "Left", "muted": false}}}},
+        {"id": "00000000-0000-0000-0000-0000000000C3", "parentID": "00000000-0000-0000-0000-0000000000C1",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://right.example", "savedURL": "https://right.example", "savedTitle": "Right", "muted": true}}}},
+        {"id": "00000000-0000-0000-0000-0000000000B6", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Notes",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://notes.example", "savedURL": "https://notes.example", "savedTitle": "", "muted": false,
+                  "sleep": {"after": "never"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000D1", "parentID": "00000000-0000-0000-0000-0000000000F3",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://news.example/story", "savedURL": "https://news.example/story", "savedTitle": "Story", "muted": false}}}},
+        {"id": "00000000-0000-0000-0000-0000000000E2", "parentID": "00000000-0000-0000-0000-0000000000F3", "title": "Scratch",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z", "data": {"note": {"text": "hi"}}}
+      ],
+      "profiles": [{"id": "00000000-0000-0000-0000-0000000000AA", "name": "Work", "color": "#00FF00"}],
+      "profileFavorites": [{"containerID": "00000000-0000-0000-0000-0000000000F1", "pinned": true}]
+    }
+    """#
 }
 
 struct MobileFavoritesTests {
