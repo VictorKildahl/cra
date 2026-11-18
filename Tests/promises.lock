@@ -928,6 +928,7 @@
 #464   Tests/Scenarios/sidebar-right.scenario  95d3b89abc54
 #465   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aNewerMacsSidebarStillReads  725af8cb73f4
 #465   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theMacsSavedSidebarReads  b95aa727ca6e
+#465   iOS/CraUITests/BrowserTests.swift::testTheMacsSyncedFileShowsItsSpaces  d0b7ab023210
 #466   Tests/Scenarios/page-menu-shows.scenario  c85711765757
 #467   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::aSecondTapAcrossSpacesGoesBack  e155ddc97ee6
 #467   Tests/Scenarios/tab-switcher-all-spaces.scenario  b5befa94ecac
@@ -983,6 +984,9 @@
 #505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::aSiteWithTheSwitchOffShowsTheBarItArrivesWithout  f83a1077e558
 #505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::withTheSwitchOffTheBarNeverCollapses  64abe6c45e72
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7
+#505   iOS/CraUITests/BrowserTests.swift::testThePillOpensSearchAndATapAboveClosesIt  d33d503d7991
+#505   iOS/CraUITests/BrowserTests.swift::testTypingAnAddressAndGoOpensThePage  5cc32d9e2a78
+#505   iOS/CraUITests/BrowserTests.swift::testWithCollapseBottomBarOffScrollingKeepsTheBar  5de0f62552f3
 #507   Packages/CraCore/Tests/CraCoreTests/CustomBlocklistTests.swift::adblockListGivesItsWholeDomainRules  665f5f53751a
 #507   Packages/CraCore/Tests/CraCoreTests/CustomBlocklistTests.swift::blockerGetsCrasListThenEachAddedOneOnce  84586a014662
 #507   Packages/CraCore/Tests/CraCoreTests/CustomBlocklistTests.swift::cacheFileNameIsStablePerAddress  20c191a35fde
@@ -997,6 +1001,7 @@
 #507   Tests/Scenarios/custom-blocklist.scenario  ec3668caaded
 #508   Tests/Scenarios/devtools-link-hover.scenario  32f0a400e052
 #509   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aTapUnderThePageBringsTheBarBack  bdd673327a2a
+#509   iOS/CraUITests/BrowserTests.swift::testATapOnTheBottomEdgeBringsTheBarBack  b83f7bf51c39
 #511   Tests/Scenarios/secure-input-behind.scenario  50b428e998c7
 #512   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::textTypedPastAGoToRowIsSearchedUnlessItIsAnAddress  5cf5fa75d3e3
 #516   Packages/CraCore/Tests/CraCoreTests/PictureInPictureThrowTests.swift::theWindowCrossesOntoAnotherDisplay  17e204eca94f

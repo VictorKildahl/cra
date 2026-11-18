@@ -48,8 +48,8 @@ run the classes a change touches, and the whole suite in halves.
 6. **Every bug fix comes with a test that fails without it.** That applies whether the bug
    came from an issue, an X DM, a crash report, a nightly failure or your own testing. Write the
    test first, see it fail on the unfixed code, then fix. When the bug has an issue, tag the test
-   `.bug(".../issues/<n>")` (`// promise: #<n>` above a harness func, `# promise: #<n>` in a
-   scenario) and run `scripts/promises.py --update`, so it's locked in `Tests/promises.lock`.
+   `.bug(".../issues/<n>")` (`// promise: #<n>` above a harness func or an iPhone UI test,
+   `# promise: #<n>` in a scenario) and run `scripts/promises.py --update`, so it's locked in `Tests/promises.lock`.
    When the decision can't be reached by a test, move it into CraCore (rule 1) or add the
    `cra://debug` readout a scenario needs as part of the fix. Only what needs a real site, the
    GPU or a human eye becomes a line in docs/release-checklist.md, and the commit says so.
@@ -59,8 +59,8 @@ run the classes a change touches, and the whole suite in halves.
 7. **Everything built and everything reported gets a test.** A feature, on the Mac or the
    iPhone, reported or not, ships with tests that pin what it does: CraCore for the decision, a
    harness, UI test or scenario for the wiring. A report whose code turns out to be right still
-   gets the test that proves it, tagged with its issue. `scripts/promises.py` doesn't lock
-   iOS UI tests yet, so put the iPhone decision in CraCore `Mobile/` with a tagged test as well.
+   gets the test that proves it, tagged with its issue. On the iPhone that is both: the decision
+   in CraCore `Mobile/` with a `.bug` test, and the UI test with `// promise: #<n>` above it.
    Nothing is done, or pushed, without its tests; the reply on the issue names the test.
 
 ## Known exceptions

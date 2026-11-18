@@ -29,7 +29,8 @@ Commands for each piece are in [development.md](development.md#tests).
    recorded a call" tests the fake.
 7. **A flaky test is rewritten on the clock or deleted**, never retried or given a sleep.
 8. **What a closed issue shipped is pinned.** The test that proves an issue's fix carries
-   `.bug("https://github.com/VictorKildahl/cra/issues/<n>")`, and `Tests/promises.lock` holds a
+   `.bug("https://github.com/VictorKildahl/cra/issues/<n>")` (`// promise: #<n>` above a harness
+   func or an iPhone UI test in iOS/CraUITests), and `Tests/promises.lock` holds a
    hash of each such test (`scripts/promises.py`, run by `scripts/test.sh` and by a hook before
    every `git push`). Changing, renaming or deleting one fails until `scripts/promises.py --update`;
    do that only when the issue's behaviour is meant to change, say why in the commit and tell the

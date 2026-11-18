@@ -7,6 +7,8 @@ A test that pins a shipped issue's behaviour is marked with the issue:
     // promise: #155 #171                                     a harness func (Tests/*.swift), the
     private static func themePreview() { ... }               line right above it (or its attributes)
     # promise: #155                                           a scenario (Tests/Scenarios): the file
+    // promise: #509                                          an iPhone UI test (iOS/CraUITests): the
+    func testATapOnTheBottomEdgeBringsTheBarBack() { ... }    line right above it or its doc comment
 
 Tests/promises.lock records each such test with its issue and a hash of its code (comments and
 whitespace left out). A tagged test that changes, is renamed or is deleted fails this check, and so
@@ -29,7 +31,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LOCK = ROOT / "Tests" / "promises.lock"
-SOURCES = ["Packages/CraCore/Tests", "Tests"]
+SOURCES = ["Packages/CraCore/Tests", "Tests", "iOS/CraUITests"]
 ISSUE = re.compile(r"github\.com/VictorKildahl/cra/issues/(\d+)")
 HEADER = """\
 # Tests that pin what a closed issue shipped (scripts/promises.py). Each line: issue, test, hash
@@ -117,6 +119,11 @@ def digest(code: str) -> str:
     return hashlib.sha256(normalise(code).encode()).hexdigest()[:12]
 
 
+def xctest(rel: str, s: str, fn) -> bool:
+    """Whether fn is a method XCTest finds and runs on its own: `func test…()` in an iPhone UI test."""
+    return rel.startswith("iOS/") and fn.group(1).startswith("test") and re.match(r"\s*\(\s*\)", s[fn.end():]) is not None
+
+
 def git(*args):
     return subprocess.run(["git", "-C", str(ROOT), *args], check=True, capture_output=True, text=True).stdout
 
@@ -137,8 +144,12 @@ def promises(rev=None):
             if not fn:
                 sys.exit(f"promises: {rel}: a `// promise:` line with no func right below it")
             body_end = balanced(s, s.index("{", fn.end()), "{", "}")
+            if xctest(rel, s, fn):
+                # XCTest runs every `func test…()` itself; a skipped one proves nothing.
+                if "XCTSkip" in s[fn.end():body_end]:
+                    sys.exit(f"promises: {rel}::{fn.group(1)} is a promise that skips itself")
             # A harness runs only what its main() calls: a promise nobody calls proves nothing.
-            if len(re.findall(r"\b%s\s*\(" % fn.group(1), re.sub(r"//[^\n]*", "", s))) < 2:
+            elif len(re.findall(r"\b%s\s*\(" % fn.group(1), re.sub(r"//[^\n]*", "", s))) < 2:
                 sys.exit(f"promises: {rel}::{fn.group(1)} is a promise that nothing calls")
             for issue in sorted({int(n) for n in re.findall(r"\d+", m.group(1))}):
                 found.append((issue, f"{rel}::{fn.group(1)}", digest(s[fn.start():body_end])))

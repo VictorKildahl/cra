@@ -55,6 +55,7 @@ final class SearchTests: BrowserTestCase {
         keep("launch")
     }
 
+    // promise: #505
     /// Typing shows the typed text as the first row, and Go opens it in a new tab.
     func testTypingAnAddressAndGoOpensThePage() {
         launch()
@@ -72,6 +73,7 @@ final class SearchTests: BrowserTestCase {
         keep("page")
     }
 
+    // promise: #505
     /// The pill opens search over a page, and a tap above the sheet puts it away again.
     func testThePillOpensSearchAndATapAboveClosesIt() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
@@ -454,6 +456,7 @@ final class GestureTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["bar-spaces"].exists)
     }
 
+    // promise: #509
     /// With the bar scrolled away, a tap on the bottom edge brings it back: a swipe up there can
     /// open the app switcher instead.
     func testATapOnTheBottomEdgeBringsTheBarBack() {
@@ -485,6 +488,7 @@ final class GestureTests: BrowserTestCase {
 }
 
 final class CollapseBottomBarTests: BrowserTestCase {
+    // promise: #505
     /// With Collapse Bottom Bar switched off (GitHub #505) scrolling down leaves the bar where it
     /// is. First a swipe puts it away with the switch on, so the swipe is known to scroll.
     func testWithCollapseBottomBarOffScrollingKeepsTheBar() {
@@ -756,6 +760,81 @@ final class SpacesTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["share-prompt-set-up"].exists, "the prompt asks once")
     }
+
+    // promise: #465
+    /// A sidebar.json as the Mac writes it into the sync folder shows its Spaces: dates as ISO 8601
+    /// text (build 616 read them as numbers and showed "Sync with Cra for Mac"), and an item kind
+    /// this build doesn't know (here an easel, from a newer Mac) leaves out only that item.
+    /// `-CraSyncDir demo` builds its Spaces in memory, so it never reads a file.
+    func testTheMacsSyncedFileShowsItsSpaces() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data(Self.macSidebar.utf8).write(to: folder.appendingPathComponent("sidebar.json"))
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", folder.path])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 5), "the Mac's file read as nothing synced")
+        noThanks.tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["space-title"].firstMatch.label, "Work")
+        XCTAssertTrue(app.buttons["space-folder-Projects"].exists)
+        XCTAssertTrue(app.buttons["space-tab-Story"].exists)
+        XCTAssertFalse(app.buttons["space-tab-Sketch"].exists, "the unknown easel and its tab are left out")
+        keep("synced-file")
+        app.buttons["space-tab-Inbox"].tap()
+        waitForPage("Inbox")
+    }
+
+    /// The Mac's sidebar.json, cut down: one Space with a pinned tab, a folder, an easel (an item
+    /// kind newer than this build) and a Today tab, dates written the Mac's way.
+    static let macSidebar = #"""
+    {
+      "version": 3,
+      "spaceOrder": ["00000000-0000-0000-0000-00000000000A"],
+      "spaces": [
+        {"id": "00000000-0000-0000-0000-00000000000A", "title": "Work", "emoji": "", "symbol": "briefcase",
+         "createdAt": "2026-11-17T09:00:00Z",
+         "theme": {"colors": ["#A687C8", "#3A3660"], "intensity": 0.8, "noise": 0.1, "appearance": "auto"},
+         "favoritesContainerID": "00000000-0000-0000-0000-0000000000F1",
+         "pinnedContainerID": "00000000-0000-0000-0000-0000000000F2",
+         "todayContainerID": "00000000-0000-0000-0000-0000000000F3"}
+      ],
+      "items": [
+        {"id": "00000000-0000-0000-0000-0000000000F1", "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"container": {"_0": {"favorites": {"spaceID": "00000000-0000-0000-0000-00000000000A"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000F2", "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "children": ["00000000-0000-0000-0000-0000000000B1", "00000000-0000-0000-0000-0000000000B2", "00000000-0000-0000-0000-0000000000E1"],
+         "data": {"container": {"_0": {"pinned": {"spaceID": "00000000-0000-0000-0000-00000000000A"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000F3", "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "children": ["00000000-0000-0000-0000-0000000000D1"],
+         "data": {"container": {"_0": {"today": {"spaceID": "00000000-0000-0000-0000-00000000000A"}}}}},
+        {"id": "00000000-0000-0000-0000-0000000000B1", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Inbox",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z", "pinnedAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "data:text/html,<title>Inbox</title><h1>Inbox</h1>",
+                  "savedURL": "data:text/html,<title>Inbox</title><h1>Inbox</h1>", "savedTitle": "Inbox", "muted": false,
+                  "timeLastActiveAt": "2026-11-17T10:00:00Z"}}}},
+        {"id": "00000000-0000-0000-0000-0000000000B2", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Projects",
+         "children": ["00000000-0000-0000-0000-0000000000B3"], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"folder": {}}},
+        {"id": "00000000-0000-0000-0000-0000000000B3", "parentID": "00000000-0000-0000-0000-0000000000B2",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://docs.example", "savedURL": "https://docs.example", "savedTitle": "Docs", "muted": false}}}},
+        {"id": "00000000-0000-0000-0000-0000000000E1", "parentID": "00000000-0000-0000-0000-0000000000F2", "title": "Sketches",
+         "children": ["00000000-0000-0000-0000-0000000000E3"], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"easel": {"_0": {"canvasID": "00000000-0000-0000-0000-0000000000E9"}}}},
+        {"id": "00000000-0000-0000-0000-0000000000E3", "parentID": "00000000-0000-0000-0000-0000000000E1",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://sketch.example", "savedURL": "https://sketch.example", "savedTitle": "Sketch", "muted": false}}}},
+        {"id": "00000000-0000-0000-0000-0000000000D1", "parentID": "00000000-0000-0000-0000-0000000000F3",
+         "children": [], "isUnread": false, "createdAt": "2026-11-17T09:00:00Z",
+         "data": {"tab": {"_0": {"url": "https://news.example/story", "savedURL": "https://news.example/story", "savedTitle": "Story", "muted": false}}}}
+      ]
+    }
+    """#
 
     /// Without iCloud the Spaces view says where Spaces come from.
     func testWithoutSyncTheSpacesViewExplains() {
