@@ -1137,6 +1137,8 @@
 #556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aReopenedSheetShowsTheLastReadAtOnce  cafb3f7eae67
 #556   iOS/CraUITests/BrowserTests.swift::testAReopenedSpacesSheetShowsItsSpacesAtOnce  6b396824ee16
 #556   iOS/CraUITests/BrowserTests.swift::testTheFirstSpacesOpeningAfterTheTabRowIsInstant  c2e03398873d
+#557   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingAFolderOnItsTabKeepsTheTabAfterAnotherIsPicked  3ad20a437ad4
+#557   Tests/StoreTests.swift::folderPeekAfterClosing  8a03d5d820bc
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
 crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01
