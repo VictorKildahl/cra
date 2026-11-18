@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sound video fixture</title>
+<style>body { margin: 0; background: #111; } video { width: 100%; height: 100vh; object-fit: contain; display: block; }</style>
+<!-- A video that plays sound, with no media file and no network: a canvas drawn 30 times a second
+     and a quiet tone (gain 0.003, about -50 dBFS: above Chromium's -72 dBFS "audible" line, too quiet
+     to hear), streamed into the element. video.html has no sound and media.html's track is silent,
+     and a covered window sends only a page playing sound to Picture in Picture (#533). Muted until a
+     scenario calls unmute() with a user gesture. -->
+<video id="v" muted autoplay playsinline></video>
+<script>
+  const c = Object.assign(document.createElement('canvas'), { width: 640, height: 360 });
+  const g = c.getContext('2d');
+  let n = 0;
+  setInterval(() => {
+    g.fillStyle = `hsl(${(n += 3) % 360} 60% 40%)`;
+    g.fillRect(0, 0, 640, 360);
+    g.fillStyle = '#fff';
+    g.font = '64px system-ui';
+    g.fillText(String(n / 3), 40, 100);
+  }, 33);
+  const ctx = new AudioContext(), tone = ctx.createOscillator(), gain = ctx.createGain(), out = ctx.createMediaStreamDestination();
+  gain.gain.value = 0.003;
+  tone.connect(gain).connect(out);
+  tone.start();
+  const v = document.getElementById('v');
+  v.srcObject = new MediaStream([...c.captureStream(30).getVideoTracks(), ...out.stream.getAudioTracks()]);
+  v.play();
+  window.unmute = () => ctx.resume().then(() => { v.muted = false; v.volume = 1; return v.play(); }).then(() => 'unmuted');
+</script>

@@ -147,6 +147,10 @@ which half each window draws (`cra://debug?themeShown=<label>`): an Auto space m
 window content and sidebar both ways, and a Light one must not (#155).
 
 `fullscreen` takes over a Space and runs only with `CRA_SCENARIO_SCREEN=1` (CI does).
+So do `pip-window-covered` and `pip-window-minimised`: a background copy reports every window
+visible, so automatic Picture in Picture of a window out of sight only runs on screen. They cover
+the window with `cra://debug?coverWindow=` and play `sound-video.html`, the fixture that makes sound
+(#117, #533).
 `CRA_FLAGS=backdrop=material` runs any scenario on the sidebar's `NSVisualEffectView` path
 instead of the private `CABackdropLayer` one (`FeatureFlags`); nightly runs both, so a macOS
 that breaks the private path fails a run instead of shipping.

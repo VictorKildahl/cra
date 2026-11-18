@@ -6,8 +6,8 @@ import Foundation
 /// with nothing in front of it, sent its video to Picture in Picture as soon as another app became
 /// active on the first display (#533); on 26 its occlusion state stayed visible. So the windows in front
 /// decide: other windows that are drawn (alpha above 0) must cover all of it between them. The window's
-/// own parts never count: its child windows and Chrome's page host windows, which sit over it with its
-/// own frame (EmbeddedPages). A window that isn't on screen (minimised, the app hidden, another desktop)
+/// own parts never count: its child windows and Chrome's page host windows, which lay over all of it
+/// with alpha 0 in 0.1.48 and are a 1 pt strip along its top since #346. A window that isn't on screen (minimised, the app hidden, another desktop)
 /// is out of sight. Frames are in one coordinate space (CGWindowList's).
 public enum WindowCoverage {
     public struct Above: Sendable, Equatable {

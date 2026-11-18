@@ -4866,8 +4866,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// display not visible when another app became active on the first, with nothing in front of it
     /// (#533): the windows in front decide (WindowCoverage).
     private func leaveIfCovered() {
-        guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked,
-              Self.coverage(of: window).covered else { return }
+        guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked else { return }
+        let coverage = Self.coverage(of: window)
+        guard coverage.covered else {
+            // Said in the log: the case the reporter's macOS made (#533), and what the scenarios watch for.
+            CraLog.note("window not visible to macOS, nothing in front covers it: \(coverage.summary)")
+            return
+        }
         browsers.windowVisibilityChanged(covered: true)
     }
 
@@ -4889,6 +4894,49 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func windowCoverageReadout() -> String {
         guard let window else { return "window coverage: no window" }
         return "window coverage: \(Self.coverage(of: window).summary)"
+    }
+
+    /// `cra://debug?coverWindow=<mode>`: what takes this window out of sight, or doesn't, for the
+    /// window-covered scenarios (#117, #533), with no other app to drive. A window that can be key takes
+    /// key from this one: `other` lies opaque over all of it, `child` does too as its child window (a
+    /// part of it: macOS calls the window not visible, the window server shows only its own part),
+    /// `aside` is small and beside it. `minimise` puts it in the Dock. `off` takes the cover away and
+    /// brings this window back as key.
+    func debugCoverWindow(_ mode: String) {
+        guard let window else { return }
+        debugCover?.parent?.removeChildWindow(debugCover!)
+        debugCover?.orderOut(nil)
+        debugCover = nil
+        switch mode {
+        case "other", "child", "aside":
+            var frame = window.frame
+            if mode == "aside", let screen = window.screen?.visibleFrame {
+                let size = CGSize(width: 80, height: 80)
+                let corners = [CGPoint(x: screen.minX, y: screen.minY), CGPoint(x: screen.maxX - size.width, y: screen.minY),
+                               CGPoint(x: screen.minX, y: screen.maxY - size.height), CGPoint(x: screen.maxX - size.width, y: screen.maxY - size.height)]
+                frame = corners.map { CGRect(origin: $0, size: size) }.first { !$0.intersects(window.frame) }
+                    ?? CGRect(origin: corners[0], size: size)
+            }
+            let cover = DebugCoverWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            cover.isReleasedWhenClosed = false
+            cover.isOpaque = true
+            cover.backgroundColor = .systemTeal
+            cover.setFrame(frame, display: true)
+            if mode == "child" { window.addChildWindow(cover, ordered: .above) }
+            cover.makeKeyAndOrderFront(nil)
+            debugCover = cover
+        case "minimise":
+            window.miniaturize(nil)
+        default:
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        }
+        CraLog.note("cover window: \(mode), this window \(window.isKeyWindow ? "key" : "not key")")
+    }
+    private var debugCover: NSWindow?
+
+    private final class DebugCoverWindow: NSWindow {
+        override var canBecomeKey: Bool { true }
     }
 
     /// Asked once, then kept by the system's lock and unlock notifications: the session query is a

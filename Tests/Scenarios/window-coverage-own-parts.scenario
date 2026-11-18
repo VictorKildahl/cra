@@ -1,6 +1,7 @@
 # Automatic Picture in Picture of a window out of sight asks the window server what is in front of
 # the window once macOS calls it not visible. Chrome's page host window sits in front of the main
-# window with its frame and alpha 0, and must count as the window's own part: on macOS 27.2.1 a
+# window with alpha 0 (over all of it in 0.1.48, a 1 pt strip along its top since #346), and must
+# count as the window's own part: on macOS 27.2.1 a
 # window alone on a second display sent its video to Picture in Picture when another app became
 # active on the first (GitHub #533). The readout reads the real list: the shown page's host window
 # is in front, and it is the window's own.

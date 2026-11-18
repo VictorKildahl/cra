@@ -1,0 +1,20 @@
+# A window minimised while its video plays sound sends the video to Picture in Picture, and the video
+# comes home when the window is back and key (#117). The window server says it isn't on screen, which
+# the check for what is in front of a window (#533) takes as out of sight.
+# Needs the screen: a background test copy reports every window visible, so nothing here would run.
+# promise: #533
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${ORIGIN}/sound-video.html
+expect-log loaded 127\.0\.0\.1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"unmute()","userGesture":true,"awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"unmuted"
+wait 3
+cra://debug?coverWindow=minimise
+expect-log enters Picture in Picture
+cra://debug?coverWindow=off
+expect-log leaves Picture in Picture
