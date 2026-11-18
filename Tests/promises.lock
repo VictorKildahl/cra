@@ -573,6 +573,7 @@
 #322   Tests/Scenarios/copy-picked-links.scenario  6e69f3272cbf
 #326   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::automaticPictureInPictureIsPerSite  5dc70ea0af0b
 #326   Tests/BrowserManagerLifecycleTests.swift::pictureInPicturePerSiteCase  1260bcff5f0e
+#329   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::theStripIsArcsGradientWhateverTheSpaceTheme  249428d34570
 #331   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::hangsFromTheWindowsTopRightCorner  befc647f4f56
 #331   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::longListsScroll  e26a1474f24e
 #331   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::noResults  433eb120d5e7
@@ -1137,6 +1138,10 @@
 #556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aReopenedSheetShowsTheLastReadAtOnce  cafb3f7eae67
 #556   iOS/CraUITests/BrowserTests.swift::testAReopenedSpacesSheetShowsItsSpacesAtOnce  6b396824ee16
 #556   iOS/CraUITests/BrowserTests.swift::testTheFirstSpacesOpeningAfterTheTabRowIsInstant  c2e03398873d
+#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::anAutoThemesNameFollowsMacOSButItsStripDoesnt  8f73c859196b
+#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::onlyTheSpaceNameTakesTheSpacesColour  efd6d2934c10
+#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::theStripIsArcsGradientWhateverTheSpaceTheme  249428d34570
+#549   Tests/Scenarios/little-window-strip-theme.scenario  e7fdc52d6742
 #557   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingAFolderOnItsTabKeepsTheTabAfterAnotherIsPicked  3ad20a437ad4
 #557   Tests/StoreTests.swift::folderPeekAfterClosing  8a03d5d820bc
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
