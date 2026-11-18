@@ -6,6 +6,7 @@
 # (the newest release for engine builds, then Stable) and appcast-stable.xml (Stable alone), each per CPU.
 # Promoting rewrites both from the two releases' own appcasts, so the signatures stay the ones the releases
 # were signed with. Commit scripts/stable-version afterwards: the next release carries Stable forward from it.
+# Uploading over the feeds starts their download counts over, so their counts go to scripts/feed-counts.tsv first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="${1:?usage: scripts/promote.sh <version> [--dry-run]}"
@@ -33,10 +34,15 @@ for SUFFIX in "" "-intel"; do
     "$WORK/stable/appcast$SUFFIX.xml" "$VERSION"
 done
 
+# Replacing a feed starts its download count over, and those counts are the update checks the daily-users
+# estimate reads: keep them in scripts/feed-counts.tsv before the upload.
+COUNTS="$(CRA_REPO="$REPO" scripts/feed-counts.sh "$LATEST")"
 if [ "$DRY" = "--dry-run" ]; then
-  echo "Dry run: feeds in $OUT, nothing uploaded."
+  printf '%s\n' "$COUNTS"
+  echo "Dry run: feeds in $OUT, nothing uploaded, counts above not kept."
   exit 0
 fi
+printf '%s\n' "$COUNTS" >> scripts/feed-counts.tsv
 gh release upload -R "$REPO" "$LATEST" --clobber "$OUT"/appcast*.xml
 printf '%s\n' "$VERSION" > scripts/stable-version
-echo "Stable is Cra $VERSION (feeds on $LATEST). Commit scripts/stable-version."
+echo "Stable is Cra $VERSION (feeds on $LATEST). Commit scripts/stable-version and scripts/feed-counts.tsv."

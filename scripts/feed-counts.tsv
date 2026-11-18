@@ -1,0 +1,3 @@
+# Update-feed download counts kept by scripts/promote.sh just before it uploads over the feeds, which starts
+# GitHub's counts over (docs/release.md, "Channels"). Columns: recorded at (UTC), release, asset, download count.
+# Not kept (promoted before this file): v0.1.45 on 2026-11-17 and v0.1.49 on 2026-11-18.

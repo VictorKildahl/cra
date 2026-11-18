@@ -341,12 +341,17 @@ default `updateChannel`, CraCore `UpdateChannel`); a Mac starts on New. Stable i
 - **Promote** with `scripts/promote.sh <version>` (`--dry-run` first): it rewrites both feeds on the latest release
   from the two releases' own appcasts and sets `scripts/stable-version`, which you commit. The site's download links
   and the Homebrew tap still follow the latest release.
+- **Feed counts.** Each download of a feed is one update check, which is how daily users are estimated. Uploading over
+  a feed starts its GitHub download count over, so `scripts/promote.sh` first appends the latest release's feed counts
+  to `scripts/feed-counts.tsv` (`scripts/feed-counts.sh <tag>`; commit it with `stable-version`). The promotions of
+  17 Nov (onto 0.1.45) and 18 Nov (onto 0.1.49) ran before this and lost theirs.
 - **Going back.** Sparkle never installs an older version: a Mac switched to Stable stays where it is until Stable
   passes it, and Settings offers Stable's disk image (`Cra.dmg` beside its `Cra.zip`) to install it now. An engine
   profile opens on Cra 0.1.43 (CEF) with its cookies and tab history (Migration scenarios run in reverse, 17 Nov).
   An update a Mac already downloaded from New still installs when it quits.
 - **Tests.** `scripts/test-update-channels.sh` (in `scripts/test.sh`) serves the fixture feeds and asks the vendored
-  Sparkle what each build is offered; scenario `update-channel-stable` covers Settings.
+  Sparkle what each build is offered; scenario `update-channel-stable` covers Settings. `scripts/test-feed-counts.sh` runs
+  `promote.sh` with a stand-in `gh` and checks the counts are kept before the upload.
 
 ## The Chromium engine
 
