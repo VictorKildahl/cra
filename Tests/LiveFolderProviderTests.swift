@@ -11,6 +11,8 @@ enum LiveFolderProviderTests {
         let gitlab = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/gitlab"))
         try gitHub(github, executable: executable)
         try gitHubOpenOnly(github, executable: executable)
+        try gitHubOpenOnlyEdges(github, executable: executable)
+        try gitHubMergedSinceLastRefresh(github, executable: executable)
         try gitLab(gitlab, executable: executable)
         print("Bundled providers: GitHub and GitLab cases passed")
     }
@@ -230,6 +232,55 @@ enum LiveFolderProviderTests {
             + row(15, "octicon-git-pull-request-draft", "Row draft") + row(16, "octicon-git-merge", "Row merged")
             + row(17, "octicon-git-pull-request-closed", "Row closed")
         check(try titles(classic) == ["Row open", "Row draft"], "the classic list leaves out merged and closed rows")
+    }
+
+    // promise: #523
+    /// What still counts as open: a pull request in the merge queue (its icon starts like the merged one),
+    /// open ones that spell out closedAt or merged as null or false; and what doesn't: GitHub's REST shape
+    /// (state closed with merged_at), a closedAt alone, a lowercase "merged".
+    private static func gitHubOpenOnlyEdges(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func titles(_ body: String) throws -> [String] {
+            try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get().items.map(\.title)
+        }
+        func row(_ number: Int, _ icon: String, _ title: String) -> String {
+            #"<div class="js-issue-row"><svg class="octicon \#(icon)"></svg><a href="/team/app/pull/\#(number)" class="markdown-title">\#(title)</a></div>"#
+        }
+        let queue = #"<meta name="user-login" content="alice">"# + row(1, "octicon-git-merge-queue", "Queued")
+            + row(2, "octicon-git-merge", "Merged")
+        check(try titles(queue) == ["Queued"], "a pull request in the merge queue is still open")
+
+        let shapes = #"{"results":["#
+            + #"{"number":3,"title":"Spelled-out open","repoNameWithOwner":"team/app","state":"OPEN","isDraft":false,"merged":false,"closed":false,"mergedAt":null,"closedAt":null,"createdAt":"2026-11-06T12:00:00Z"},"#
+            + #"{"number":4,"title":"REST merged","html_url":"https://github.com/team/app/pull/4","state":"closed","merged_at":"2026-11-05T12:00:00Z","pull_request":{},"created_at":"2026-11-05T10:00:00Z"},"#
+            + #"{"number":5,"title":"REST closed","html_url":"https://github.com/team/app/pull/5","state":"closed","closed_at":"2026-11-04T12:00:00Z","pull_request":{},"created_at":"2026-11-04T10:00:00Z"},"#
+            + #"{"number":6,"title":"REST open","html_url":"https://github.com/team/app/pull/6","state":"open","merged_at":null,"closed_at":null,"pull_request":{},"created_at":"2026-11-03T10:00:00Z"},"#
+            + #"{"number":7,"title":"Closed at only","repoNameWithOwner":"team/app","isDraft":false,"closedAt":"2026-11-02T12:00:00Z","createdAt":"2026-11-02T10:00:00Z"},"#
+            + #"{"number":8,"title":"Lowercase merged","repoNameWithOwner":"team/app","isDraft":false,"state":"merged","createdAt":"2026-11-01T10:00:00Z"}"#
+            + #"]}"#
+        check(try titles(shapes) == ["Spelled-out open", "REST open"], "every shape of merged or closed is left out, open ones stay")
+    }
+
+    // promise: #523
+    /// The reporter's case over time: a pull request in the folder is merged on GitHub, and the next
+    /// refresh no longer lists it while its open neighbour stays.
+    private static func gitHubMergedSinceLastRefresh(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func pulls(secondState: String, mergedAt: String) -> String {
+            #"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":["#
+                + #"{"number":1,"title":"Stays","repoNameWithOwner":"team/app","state":"OPEN","isDraft":false,"mergedAt":null,"createdAt":"2026-11-06T12:00:00Z"},"#
+                + #"{"number":2,"title":"Gets merged","repoNameWithOwner":"team/app","state":"\#(secondState)","isDraft":false,"mergedAt":\#(mergedAt),"createdAt":"2026-11-05T12:00:00Z"}"#
+                + #"],"pageInfo":{},"error":null}}}"#
+        }
+        func urls(_ body: String) throws -> [String] {
+            try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored", "review", "teamReview"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get().items.map(\.url)
+        }
+        check(try urls(pulls(secondState: "OPEN", mergedAt: "null")) == ["https://github.com/team/app/pull/1", "https://github.com/team/app/pull/2"],
+              "both are in the folder while open")
+        check(try urls(pulls(secondState: "MERGED", mergedAt: #""2026-11-07T09:00:00Z""#)) == ["https://github.com/team/app/pull/1"],
+              "after the merge, every filter's answer leaves it out")
     }
 
     // MARK: GitLab
