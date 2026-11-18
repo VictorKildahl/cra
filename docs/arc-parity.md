@@ -283,6 +283,51 @@ key presses on the canvas (CraCore `EaselToolbarLayout`, `Easel.Tool.key`; the a
 - Not measured: whether ⇧ with a letter picks the tool (Cra takes either case), and Arc's own cursors
   per tool (its bundle has Pencil, Shape, Text and Arrow cursor pictures; Cra uses the system's).
 
+## New Space past the last space (Arc 1.173.1, 18 Nov 2026)
+
+From Arc's code (arm64, read with objdump: `ARCUI.EdgeFeedbackView` at 0x1009dc240, its driver at
+0x100215f1c and the lift at 0x10021d960) and a 120 Hz, 2x screen recording of four pulls on a dark
+space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView`).
+
+- A swipe left on the last space overscrolls the tab list on its rubber band, and that overscroll
+  drives the feedback at the sidebar's right edge. From the code: shown = overscroll / 15 pt and
+  ring = overscroll / 22.5 pt, each held to 0…1. In the recording the ring read 0.64 to 0.70 with
+  the list 14.5 pt out (0.64 by the code).
+- The feedback rides a spring toward "shown" (response 0.4 s, damping 0.8), not the overscroll
+  itself, so it swings a little past and settles. On every step of it: the disc's left edge is at
+  width + 5 − 47 × shown (30 pt disc, half way down, resting 12 pt inside the strip's edge; 10.75 pt
+  inside the sidebar's visible edge in the recording), its alpha is shown / 0.2, and the bulge's
+  opacity is 2 × shown.
+- The bulge is a radial gradient layer twice the strip's width and as tall, from the sidebar's ink
+  at 22 % at its centre to nothing at its rim. It slides from 10 pt inside the strip's right edge
+  until its centre is on that edge, and the strip clips it, so what shows is the left half of an
+  ellipse: widest at the disc, gone at the sidebar's top and bottom. In the recording it is 81 to
+  84 pt deep half way down and 33 levels strong at the edge, fading evenly to nothing 620 pt above
+  and below; the strip's own width isn't in the code read, so Cra takes 82 pt.
+- With the ring full the disc turns over within 0.2 s, growing to 1.14 and back (recording), and
+  Arc plays a generic haptic tick (`performFeedbackPattern: 0`), as it does when the ring stops
+  being full. Lifting the fingers starts a new space only if the ring has been full for more than
+  0.1 s; otherwise the feedback springs back out and nothing happens.
+- The ring is 2.5 pt (code) and runs from the top, counter-clockwise; the plus is 12 pt across
+  (recording). Colours on the dark space: ring white 93 %, plus white 80 %, the disc's inside darker
+  than the sidebar (black 22 % fits), turned over a plus of black 68 %, and 3 pt of shade under the
+  disc. Arc's asset catalog names them `AddSpacePlusProgressColor`, `…IconTintColor`,
+  `…BackgroundColor` and `…IconActivatedTintColor`: white or black in dark, and #2702C2 (Display P3)
+  with white in light. The same disc is the Add Space card in
+  Library ▸ Spaces (`SpaceManagementAddSpaceView`, 30 × 30 at 0x10039fcb0).
+- It works with the sidebar docked and with it hidden and out over the page.
+- Arc then opens its Create a Space form inside the sidebar. Cra opens its New Space sheet for now.
+- Past the last space the list gives on Arc's own rubber band, which upstream measured past the
+  Library (docs/arc-reverse-engineering.md, "Swipe into the Library": 300 px of fingers for 20.5 pt,
+  D(1 − 1/(0.15 x / D + 1)) with x half the fingers' travel). It is about a quarter as giving as the
+  band Cra's space swipe has past its other end, so the ring fills slowly: about 330 pt of fingers
+  in a 254 pt sidebar. Cra uses it past the last space (`NewSpaceSwipe.overscroll`).
+- The disc's colours follow the app's appearance, not the space's: in macOS Dark Mode it is white
+  on every space (the recording's dark space, and other spaces by the report of the Arc user this
+  was built with). The catalog's light variant wasn't seen.
+- Not known: the strip's width in Arc's layout, and whether that band's D is the page's width (the
+  fit gave 215 pt; over this range it hardly matters).
+
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 
 - The command bar's "New Boost" opens the editor for the open site: a 183 × 588 pt floating panel 10 pt in

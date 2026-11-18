@@ -3121,9 +3121,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     self.swipeX += event.scrollingDeltaX
                     self.swipeY += event.scrollingDeltaY
                     guard max(abs(self.swipeX), abs(self.swipeY)) > 6 else { return event }
-                    // One space still swipes into the Library.
+                    // One space still swipes, in a floating sidebar too.
                     guard abs(self.swipeX) > abs(self.swipeY) * 1.2, !self.isStandalone,
-                          self.store.spaceOrder.count > 1 || !self.shell.floatingSidebar,
                           // At the Spaces page's end a swipe back along the cards scrolls them.
                           !(self.sidebarUI.libraryPage == .spaces && self.swipeX > 0) else {
                         self.swipeAxis = .vertical
@@ -3435,12 +3434,71 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         func band(_ x: CGFloat) -> CGFloat { 1 - 1 / (x * 0.55 + 1) }
         if pages < first { pages = first - band(first - pages) * 0.5 }
         if pages > last { pages = last + band(pages - last) * 0.5 }
+        // Past the last space the list gives as Arc's does, and that overscroll brings Arc's "+" out
+        // (NewSpaceSwipe). Only for a swipe that began there: one that came from the space before
+        // stops on the last space, as any swipe goes one page. The fingers' travel isn't held to a page.
+        var overscroll: CGFloat = 0
+        if last == 0, swipeTravel < 0, NewSpaceSwipe.isOffered(standalone: isStandalone) {
+            overscroll = NewSpaceSwipe.overscroll(travel: -swipeTravel, page: width)
+            pages = overscroll / width
+        }
+        setNewSpacePull(overscroll)
         sidebarUI.spaceSwipe = pages
         // Arc's performsPageDetentHaptics: a tick each time the nearest page changes.
         if swipeHaptics.track(position: pages, pages: Int(first)...Int(last)) { performSwipeHaptic() }
     }
 
+    /// When the "+"'s ring became full, while it is.
+    private var newSpaceFullSince: CFTimeInterval?
+
+    /// The list is `overscroll` points past the last space: Arc's tick as the ring fills, and as it
+    /// empties again.
+    private func setNewSpacePull(_ overscroll: CGFloat) {
+        let was = NewSpaceSwipe.isActivated(overscroll: sidebarUI.newSpacePull)
+        let full = NewSpaceSwipe.isActivated(overscroll: overscroll)
+        sidebarUI.newSpacePull = overscroll
+        if full != was { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
+        if !full { newSpaceFullSince = nil } else if newSpaceFullSince == nil { newSpaceFullSince = CACurrentMediaTime() }
+    }
+
+    /// The fingers lift: the "+" goes back out, and if its ring had been full long enough New Space
+    /// opens (Arc opens its form in the sidebar; Cra's is a sheet).
+    private func liftNewSpacePull() {
+        let overscroll = sidebarUI.newSpacePull
+        guard overscroll > 0 else { return }
+        let fullFor = newSpaceFullSince.map { CACurrentMediaTime() - $0 }
+        newSpaceFullSince = nil
+        sidebarUI.newSpacePull = 0
+        let creates = NewSpaceSwipe.createsOnLift(fullFor: fullFor)
+        let outcome = creates ? "New Space opens" : fullFor != nil ? "the ring was full too briefly" : "nothing"
+        CraLog.note("new space pull: lifted \(String(format: "%.1f", Double(overscroll))) pt out, \(outcome)")
+        // The "+" and the column spring back first: the sheet's own opening work would hold them
+        // where the fingers left them.
+        if creates {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.showSpaceEditor(space: nil) }
+        }
+    }
+
+    /// Scenario hook: the "+" as the list `overscroll` points past the last space leaves it, and
+    /// what it shows; `lift` lets go, at once when `overscroll` came with it.
+    func debugNewSpacePull(_ overscroll: CGFloat?, lift: Bool) {
+        if let overscroll {
+            let onLast = store.spaceOrder.last == focusedSpaceID
+            setNewSpacePull(onLast && NewSpaceSwipe.isOffered(standalone: isStandalone) ? overscroll : 0)
+            // The space's column is that far out with it, as under the fingers.
+            sidebarUI.spaceSwipe = sidebarUI.newSpacePull / max(1, shell.sidebarWidth)
+            let line = (shell.sidebarHost as? SidebarView)?.debugNewSpacePlus ?? "none"
+            let column = (shell.sidebarHost as? SidebarView)?.debugSpaceColumnShift ?? 0
+            CraLog.note("new space plus: \(String(format: "%.1f", Double(sidebarUI.newSpacePull))) pt out, column=\(String(format: "%.1f", abs(Double(column)))) \(line)")
+        }
+        if lift {
+            liftNewSpacePull()
+            sidebarUI.spaceSwipe = 0
+        }
+    }
+
     private func endSpaceSwipe() {
+        liftNewSpacePull()
         HitchMonitor.mark("swipe-lift")
         swipeTracking = false
         if let r = sidebarUI.libraryReveal, librarySwipeFrom != nil { return endLibrarySwipe(r) }
@@ -4754,6 +4812,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         })
         panel.contentView = NSHostingView(rootView: view)
         spaceEditor = panel
+        CraLog.note("space editor opens: \(space == nil ? "a new space" : "an existing space")")
         window.beginSheet(panel) { [weak self] _ in
             // Closed without Save (Cancel, Escape, cra://dismiss): the stored theme comes back.
             // Save already wrote it, so this does nothing then.

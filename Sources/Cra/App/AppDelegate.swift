@@ -2353,6 +2353,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 ArcTooltipController.shared.debugShow(t, in: content, at: NSRect(x: 380, y: content.bounds.height - 120, width: 28, height: 28))
                 return
             }
+            // newSpacePull=<pt>: Arc's "+" with the list overscrolled that far past the last space, and
+            // what it shows; newSpacePull=lift lets go, and &lift=1 lets go in the same breath.
+            if let pull = dict["newSpacePull"] {
+                main.debugNewSpacePull(Double(pull).map { CGFloat($0) }, lift: pull == "lift" || dict["lift"] != nil)
+                return
+            }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
                 return

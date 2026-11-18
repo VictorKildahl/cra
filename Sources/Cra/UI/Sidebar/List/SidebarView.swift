@@ -35,6 +35,15 @@ final class SidebarView: NSView {
     private let trayMask = CAGradientLayer()
     private let bannerHost = UpdateBannerView()
     private let dock: SpaceDockView
+    /// Arc's "+" past the last space, over the column (NewSpaceSwipe).
+    private let newSpacePlus = NewSpacePlusView()
+    /// How far left of its page the shown space's column stands, for a scenario's reading.
+    var debugSpaceColumnShift: CGFloat { pager.debugShift }
+    /// The "+" as it rests for what it was last asked to show, for a scenario's reading.
+    var debugNewSpacePlus: String {
+        newSpacePlus.settleNow()
+        return newSpacePlus.debugLine
+    }
     private var libraryHost: LibraryView?
     /// The palette drawn now; the theme-shown scenario hook reads it (#155).
     private(set) var palette: SpacePalette
@@ -58,8 +67,15 @@ final class SidebarView: NSView {
         pager.wantsLayer = true
         trayMask.startPoint = CGPoint(x: 0.5, y: 0)
         trayMask.endPoint = CGPoint(x: 0.5, y: 1)
-        for v in [topBar, pager, player, trayHost, bannerHost, dock] as [NSView] { tabs.addSubview(v) }
+        for v in [topBar, pager, player, trayHost, bannerHost, dock, newSpacePlus] as [NSView] { tabs.addSubview(v) }
         addSubview(tabs)
+        newSpacePlus.ink = SidebarColors(palette).textPrimary
+        ui.observeNewSpacePull { [weak self] in
+            guard let self else { return }
+            // Arc's disc takes the app's appearance, not the space's (NewSpaceSwipe.look).
+            self.newSpacePlus.isDark = SystemAppearance.shared.isDark
+            self.newSpacePlus.show(overscroll: self.ui.newSpacePull)
+        }
         player.onCountChange = { [weak self] in self?.needsLayout = true }
         ui.observeLibraryReveal { [weak self] in self?.applyLibraryReveal() }
         observe()
@@ -148,6 +164,7 @@ final class SidebarView: NSView {
             bannerHost.themeColor = shown.accent ?? shown.colors.first
             player.setTheme(shown.accent ?? shown.colors.first, dark: palette.isDark)
             libraryHost?.palette = palette
+            newSpacePlus.ink = colors.textPrimary
         }
         self.bannerHeight = bannerHeight
         updateTrayMask(open: trayOpen, rows: recentCount)
@@ -303,6 +320,8 @@ final class SidebarView: NSView {
         let rows = DownloadHistory.shared.recent.count
         let trayH = DownloadsTrayMetrics.listHeight(rows: rows) + 4
         trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH)
+        // A strip at the column's right edge, as tall as the column.
+        newSpacePlus.frame = NSRect(x: b.width - NewSpaceSwipe.stripWidth, y: 0, width: NewSpaceSwipe.stripWidth, height: b.height)
         updateTrayMask(open: ui.downloadsListOpen, rows: rows)
         if renameCard?.layer?.animationKeys()?.isEmpty ?? true { layoutRenameCard() }
     }
