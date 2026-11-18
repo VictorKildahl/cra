@@ -4369,7 +4369,8 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   #161C2F ring with no clearance, the capture menu 10 pt right of the ring, top level with it; its own place stays
   grey. On a 1688 × 963 pt page a 160 × 100 pt image's ring ran 623.5…791.5 pt, the 273 pt menu 801.5…1074.5.
 - Cra: Chromium 156 shows the same menu once cef-patches/context-menu-embedded-view.patch lets it show in Cra's
-  window. CraCEF's MakeArcMenu drops the QR code and video-frame search items, joins Translate to Save As…'s group,
+  window. CraCEF's MakeArcMenu drops the QR code and video-frame search items (the engine's BuildArcMenu also
+  Chrome's "Open in reading mode" and "Listen to this page", which Arc lacks, #563), joins Translate to Save As…'s group,
   puts Search first for a selection, turns Lens's "Search Image with Google" into "Search Google for Image", adds
   Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
   Inspect in Cra's own windows and DevTools. Items Chromium has words for read in Chromium's language, as Arc's do
