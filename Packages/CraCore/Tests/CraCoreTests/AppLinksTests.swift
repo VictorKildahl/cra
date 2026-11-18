@@ -36,4 +36,21 @@ struct AppLinksTests {
     func kind(url: String, kind: AppLinks.Kind) {
         #expect(AppLinks.kind(of: url) == kind)
     }
+
+    // Slack's "Launching…" page after a browser sign-in redirects to slack: with no click; a
+    // Chromium page dropped it, and there is no button to click instead.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/560")) func aPagesOwnRedirectAsksOncePerPage() {
+        var guarded = AppLinks.RedirectGuard()
+        let slack = "https://acme.slack.com/ssb/redirect"
+        let spotify = "https://open.spotify.com/album/1"
+        let asked = [
+            (false, slack),   // the page's first redirect asks
+            (false, slack),   // a second gets nothing
+            (true, slack),    // a click always asks
+            (false, slack),   // and doesn't renew the redirect's question
+            (false, spotify), // the next page asks again
+            (false, slack),   // and so does coming back
+        ].map { guarded.mayAsk(userGesture: $0.0, page: $0.1) }
+        #expect(asked == [true, false, true, false, true, true])
+    }
 }

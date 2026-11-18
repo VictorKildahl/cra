@@ -30,6 +30,25 @@ public enum AppLinks {
     /// Chrome's kAllowedSchemes.
     static let openedSchemes: Set<String> = ["mailto", "news", "snews"]
 
+    /// Chrome's flood guard for a page's own redirect to another app (Slack's "Launching…" page
+    /// after a sign-in, Spotify's "open in the app" on a first visit): a click asks every time;
+    /// without one, a page asks once, then gets nothing until another page loads. One per tab.
+    /// WebKit pages keep their own (`askedForAppOnThisPage`) and always arrive here as clicked.
+    public struct RedirectGuard: Sendable {
+        /// The page that has had its one question without a click.
+        private var askedOn: String?
+
+        public init() {}
+
+        /// Whether a request from `page` (its address) may ask "Open <app>?".
+        public mutating func mayAsk(userGesture: Bool, page: String) -> Bool {
+            if userGesture { return true }
+            if askedOn == page { return false }
+            askedOn = page
+            return true
+        }
+    }
+
     /// What `url` is for a link or window.open that wants a new tab, or a WebKit page's own
     /// navigation to a scheme WebKit doesn't load.
     public static func kind(of url: String) -> Kind {

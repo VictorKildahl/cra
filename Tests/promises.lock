@@ -1116,6 +1116,8 @@
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::sidebarOutShowsTheRowInstead  bafff498f7e3
 #543   Tests/BrowserManagerLifecycleTests.swift::backgroundTabToastCase  9cde0b455475
 #543   Tests/Scenarios/background-tab-toast.scenario  2c50b42bceca
+#560   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aPagesOwnRedirectAsksOncePerPage  a3759f023df9
+#560   Tests/Scenarios/external-app-links.scenario  09dd94da4e1e
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
 crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01

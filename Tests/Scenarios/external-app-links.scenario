@@ -1,3 +1,4 @@
+# promise: #560
 # A link or window.open to another app's scheme (spotify:, zoommtg:) opens no tab: the page that
 # asked shows "Open <app>?" and macOS opens the app, as in Arc (GitHub #207, Spotify's "Open in
 # Desktop app"). macappstore: has an app on every Mac and is asked about (Chrome opens mailto:
@@ -34,6 +35,13 @@ expect-log page 127\.0\.0\.1 asks to open .* for macappstore:
 cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(a=>(a.href='macappstore://apps.apple.com/app/id1?n=cblank',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
 expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
 expect-log page 127\.0\.0\.1 asks for .* again, already asking
+# The page's own redirect (no click) asks once per page it loads, as in WebKit: Slack's
+# "Launching…" page after a browser sign-in has no button to click instead. The first reaches the
+# question (still up, so "already asking"); a second gets nothing.
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(location.href='x-apple.systempreferences:com.apple.preference?n=credirect1')"}
+expect-log page 127\.0\.0\.1 asks for System Settings again, already asking
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(location.href='x-apple.systempreferences:com.apple.preference?n=credirect2')"}
+expect-log page 127\.0\.0\.1 can't open x-apple\.systempreferences: \(no click\)
 wait 1
 cra://debug?checkStore=1
 reject-log opens a page for macappstore:

@@ -8,11 +8,29 @@ import CraCEF
 /// dialog (CraCEF's OnProtocolExecution).
 @MainActor
 enum AppLinkPrompt {
-    /// Chromium's new tabs and windows (CraCEF's OnBeforePopup) come here first.
+    /// Chromium's new tabs and windows (CraCEF's OnBeforePopup) and a page's own navigation to
+    /// another app (the engine's HandleExternalProtocol) come here first. The page's own redirect
+    /// gets Chrome's flood guard, as WebKit pages do: asked once per page it loads. Slack's
+    /// "Launching…" page after a browser sign-in has no button to click, so it was dropped.
     static func install() {
         CraCEFRuntime.setAppLinkHandler { browser, url, userGesture in
-            MainActor.assumeIsolated { handle(url, from: browser, userGesture: userGesture) }
+            MainActor.assumeIsolated {
+                // Only another app's address asks; a boost still needs a click.
+                let asks = userGesture || (AppLinks.kind(of: url) == .asksFirst && !BoostInstall.isBoostLink(url)
+                    && redirectGuard(for: browser).value.mayAsk(userGesture: false, page: browser.currentURL))
+                return handle(url, from: browser, userGesture: asks)
+            }
         }
+    }
+
+    /// Each Chromium page's `AppLinks.RedirectGuard`, gone with its page.
+    private static let redirectGuards = NSMapTable<CraBrowser, GuardBox>.weakToStrongObjects()
+    private final class GuardBox { var value = AppLinks.RedirectGuard() }
+    private static func redirectGuard(for browser: CraBrowser) -> GuardBox {
+        if let box = redirectGuards.object(forKey: browser) { return box }
+        let box = GuardBox()
+        redirectGuards.setObject(box, forKey: browser)
+        return box
     }
 
     /// Whether `url` is another app's. Then it is dealt with here (asked about, opened or
