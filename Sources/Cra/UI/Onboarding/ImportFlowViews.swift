@@ -250,7 +250,12 @@ private struct SpacesStep: View {
                         SelectableRow(c: c, checked: model.selectedSpaces.contains(i),
                                       onHover: { if $0 { model.previewSpace = i } },
                                       toggle: { model.toggleSpace(i) }) {
-                            Text(sp.emoji).font(.system(size: 18)).frame(width: 24)
+                            // An Icon-tab glyph (Arc, Ardia, Yab) shows as its symbol, else the emoji.
+                            Group {
+                                if let symbol = sp.symbol { Image(systemName: symbol).font(.system(size: 15)).foregroundStyle(c.body) }
+                                else { Text(sp.emoji).font(.system(size: 18)) }
+                            }
+                            .frame(width: 24)
                             RowTitle(title: sp.title, caption: "\(sp.itemCount) tab\(sp.itemCount == 1 ? "" : "s")", c: c)
                         }
                     }

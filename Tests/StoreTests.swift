@@ -19,9 +19,13 @@ enum StoreTests {
         setenv("CRA_DATA_DIR", data.path, 1)
         setenv("CRA_ARC_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc").path, 1)
         setenv("CRA_DIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Dia").path, 1)
+        setenv("CRA_ARDIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Ardia").path, 1)
+        setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
 
         try arcImport()
         try diaImport()
+        try ardiaImport()
+        try yabImport()
         chromiumProfile()
         deletedBrowserStillImports()
         protectedBrowserAsksForFullDiskAccess()
@@ -258,6 +262,100 @@ enum StoreTests {
         let open = homeSpace.map { composition.store.tabs(under: $0.todayContainerID) } ?? []
         expect(open.count == 3 && open.allSatisfy { $0.tab?.timeLastActiveAt == clock.now },
                "open tabs count as active at the import, so auto-archive doesn't take weeks-old Dia tabs at once")
+        expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+    }
+
+    /// Ardia (X request, 18 Nov): its profiles are its spaces (Tests/Fixtures/Ardia/session.json).
+    /// Top Apps become favorites, pinned rows and pinned groups the pinned section with nested
+    /// folders, the rest Today; pins mirrored into a second window come over once, and a profile
+    /// with no window brings the pins Ardia parked for it. Spaces on their own Chromium profile
+    /// land on a Cra profile, so their sign-ins follow.
+    @MainActor
+    private static func ardiaImport() throws {
+        expect(ArdiaImporter.isAvailable, "a session.json counts as Ardia data")
+        let plan = try ArdiaImporter.plan()
+        expect(plan.source == "Ardia" && plan.spaces.map(\.title) == ["Personal", "Work", "Side"], "Ardia's profiles come over as spaces, in its order")
+        let personal = plan.spaces[0], work = plan.spaces[1], side = plan.spaces[2]
+        expect(personal.favorites.compactMap(\.url) == ["https://mail.example.com/"],
+               "a Top App comes over once, at the page it was pinned with, though every window holds a copy")
+        expect(personal.pinned.count == 1 && personal.pinned[0].isFolder && personal.pinned[0].pageTitle == "Dev", "a pinned group is a pinned folder")
+        let dev = personal.pinned[0].children
+        expect(dev.count == 2 && dev[0].url == "https://code.example.com/" && dev[0].customTitle == "Code"
+               && dev[1].isFolder && dev[1].pageTitle == "Reading" && dev[1].children.compactMap(\.url) == ["https://docs.example.com/"],
+               "folders nest, each tab in its deepest group, renamed tabs keep their name")
+        expect(personal.today.compactMap(\.url) == ["https://news.example.com/", "https://other.example.com/"],
+               "unpinned tabs of every window come over, an empty new tab left out, an unpinned group flattened")
+        expect(personal.profile == nil && personal.emoji == "" && personal.theme?.accent == "#C07A98",
+               "the first profile stays on Default; no icon is a dot; its swatch becomes the theme")
+        expect(work.favorites.compactMap(\.url) == ["https://tasks.example.com/"] && work.today.compactMap(\.url) == ["https://design.example.com/"],
+               "a Top Apps folder's tiles come over as favorites")
+        expect(work.profile == ImportedProfile(folder: "Profile p-work", name: "Work") && work.emoji == "💼",
+               "a profile signs in on Chromium's \"Profile <id>\" folder")
+        expect(side.pinned.count == 1 && side.pinned[0].pageTitle == "Talk" && side.pinned[0].children.compactMap(\.url) == ["https://chat.example.com/"],
+               "a profile with no window open brings its parked pins")
+        expect(side.profile == work.profile, "a profile sharing another's sign-ins goes on that profile")
+        expect(side.symbol == "star" && side.theme?.colors == ["#FF8000", "#0000FF"] && side.theme?.appearance == "dark",
+               "an SF Symbol icon and a custom gradient come over")
+
+        let composition = AppComposition(clock: ManualScheduler())
+        let store = composition.store
+        let result = store.apply(plan, includeArchive: false, includeSettings: false)
+        expect(result.spaces == 3 && result.folders == 3, "applying adds the spaces and their folders")
+        let ids = result.spaceIDs.compactMap { store.space($0) }
+        expect(ids[0].profileID == nil && ids[1].profileID != nil && ids[1].profileID == ids[2].profileID
+               && store.profile(ids[1].profileID)?.name == "Work", "Work and Side share one Cra profile, Personal stays on Default")
+        expect(result.profiles.craFolder(forSource: "Profile p-work") != "Default", "Work's cookies go to that profile")
+        expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        for id in result.spaceIDs { store.deleteSpace(id) }
+    }
+
+    /// Yab (X request, 18 Nov): spaces.json plus one session file per space
+    /// (Tests/Fixtures/Yab). Tiles are favorites, kept tabs the pinned section in their folders,
+    /// the rest Today; a space without tiles of its own shows the shared ones. A space with
+    /// sign-ins of its own is on the Chromium folder its receipt names.
+    @MainActor
+    private static func yabImport() throws {
+        expect(YabImporter.isAvailable, "spaces.json counts as Yab data")
+        let plan = try YabImporter.plan()
+        expect(plan.source == "Yab" && plan.spaces.map(\.title) == ["Personal", "Work"], "Yab's spaces come over in its order")
+        let personal = plan.spaces[0], work = plan.spaces[1]
+        expect(personal.favorites.compactMap(\.url) == ["https://mail.example.com/"] && personal.favorites[0].pageTitle == "Inbox",
+               "a tile is a favorite, at the page it was pinned with")
+        expect(personal.pinned.map(\.pageTitle) == ["Clients", "Code"] && personal.pinned[0].isFolder,
+               "kept tabs are pinned, a folder where its first tab is")
+        let clients = personal.pinned[0].children
+        expect(clients.count == 1 && clients[0].pageTitle == "Work" && clients[0].children.first?.url == "https://tasks.example.com/"
+               && clients[0].children.first?.customTitle == "Tasks", "folders nest through folderPath, renamed tabs keep their name")
+        expect(personal.today.compactMap(\.url) == ["https://news.example.com/"], "today's tabs come over, about:blank left out")
+        expect(personal.emoji == "🏠" && personal.profile == nil && personal.theme?.accent == "#8DB6E6",
+               "an emoji icon, the shared sign-ins on Default, a swatch as the theme")
+        expect(work.favorites.compactMap(\.url) == ["https://calendar.example.com/"], "a space without tiles of its own gets the shared ones")
+        expect(work.pinned.compactMap(\.url) == ["https://wiki.example.com/"] && work.today.compactMap(\.url) == ["https://design.example.com/"],
+               "each space reads its own session file")
+        expect(work.profile == ImportedProfile(folder: "space-9C6B1E52-3D1F-4C2B-8E37-5A0F1D2C3B4A", name: "Work"),
+               "own sign-ins: the Chromium folder the receipt names, not the space id")
+        expect(work.symbol == "briefcase" && work.theme?.accent == "#7FB8A3" && work.theme?.noise == 0.4,
+               "an Icon-tab symbol and a colour of its own with grain")
+        let shared = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: true)
+        expect(shared.spaces[0].favorites.compactMap(\.url) == ["https://calendar.example.com/"],
+               "with pins in every space on, every space shows the shared tiles")
+
+        let yab = ImportSource.allCases.first { $0.id == "yab" }, ardia = ImportSource.allCases.first { $0.id == "ardia" }
+        expect(yab?.isAvailable == true && ardia?.isAvailable == true, "both are listed in the picker from their data alone")
+        expect(yab?.keychainService == "Yab Safe Storage" && ardia?.keychainService == "Ardia Safe Storage",
+               "cookies and passwords open with each browser's own Keychain item")
+        let profiles = yab?.credentialProfiles ?? []
+        expect(Set(profiles.map(\.name)) == ["Shared", "Work"] && !profiles.contains { $0.id == "Default" },
+               "Yab's space-<id> profiles are found and shown by space; its unused Default is left out")
+        expect(ardia?.credentialProfiles.map(\.id) == ["Default", "Profile p-work"]
+               && ardia?.credentialProfiles.map(\.name) == ["Personal", "Work"], "Ardia's \"Profile <id>\" folders are found, shown by space")
+
+        let composition = AppComposition(clock: ManualScheduler())
+        let result = composition.store.apply(plan, includeArchive: false, includeSettings: false)
+        expect(result.spaces == 2 && result.folders == 2, "applying adds the spaces and their folders")
+        expect(result.profiles.craFolder(forSource: "space-9C6B1E52-3D1F-4C2B-8E37-5A0F1D2C3B4A") != "Default"
+               && result.profiles.craFolder(forSource: "space-00000000-0000-0000-0000-000000000001") == "Default",
+               "the Work space's cookies go to its Cra profile, the shared ones to Default")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
     }
 

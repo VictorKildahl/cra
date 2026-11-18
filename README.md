@@ -89,6 +89,8 @@ On first launch, or later from Cra ▸ Import from Arc or Dia…, Cra brings ove
 
 - **Arc:** spaces, pinned tabs, folders, favorites and the archive, plus passwords and
   sign-ins.
+- **Yab and Ardia:** spaces, pinned tabs, folders and favorites, plus sign-ins and
+  extensions, and Ardia's passwords. A space with sign-ins of its own lands on a Cra profile.
 - **Dia, Chrome, Brave, Edge, Opera, Vivaldi, Chromium, Helium:** tabs, bookmarks, history,
   passwords, sign-ins and extensions.
 - **Zen and Firefox:** open tabs, bookmarks and history, and Zen's spaces, Essentials and

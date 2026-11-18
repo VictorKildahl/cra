@@ -1,0 +1,8 @@
+{"tabs":[
+ {"id":"a","url":"https://mail.example.com/inbox/42","title":"Message","pin":"M","home":"https://mail.example.com/","homeTitle":"Inbox","engine":"chromium"},
+ {"id":"b","url":"https://tasks.example.com/board","title":"Board","kept":true,"name":"Tasks","home":"https://tasks.example.com/",
+  "folder":"F2","folderName":"Work","folderOpen":true,"folderPath":[{"id":"F1","name":"Clients","open":true}]},
+ {"id":"c","url":"https://code.example.com/","title":"Code","kept":true},
+ {"id":"d","url":"https://news.example.com/","title":"News","seen":1763400000},
+ {"id":"e","url":"about:blank","title":""}],
+ "active":3,"pairs":[{"first":2,"second":3,"share":0.5}]}

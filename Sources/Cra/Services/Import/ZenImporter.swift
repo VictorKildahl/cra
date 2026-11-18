@@ -42,7 +42,7 @@ enum ZenImporter {
 
         var essentials: [ImportedItem] = []
         // Per space: pinned and Today trees, built in the session's tab order.
-        let trees = spaces.map { _ in (pinned: Tree(), today: Tree()) }
+        let trees = spaces.map { _ in (pinned: ImportTree(), today: ImportTree()) }
         for t in sidebar.tabs {
             guard let item = tabItem(t) else { continue }
             if flag(t["zenEssential"]) {
@@ -69,26 +69,8 @@ enum ZenImporter {
             spaces[0].pinned.append(ImportedItem(customTitle: "Bookmarks", pageTitle: "Bookmarks", url: nil, isFolder: true, children: bookmarks))
         }
 
-        // Favicons from favicons.sqlite, written where the plan's copy step can pick them up.
-        func hosts(_ items: [ImportedItem]) -> [String] { items.flatMap { $0.isFolder ? hosts($0.children) : [$0.url.flatMap(host)].compactMap { $0 } } }
-        let allHosts = Set(spaces.flatMap { hosts($0.favorites) + hosts($0.pinned) + hosts($0.today) })
-        let icons = FirefoxImporter.favicons(root: root, hosts: Array(allHosts))
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-zen-favicons", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var files: [String: String] = [:]
-        for (host, img) in icons {
-            guard let png = faviconPNG(img) else { continue }
-            let file = dir.appendingPathComponent("\(files.count).png")
-            if (try? png.write(to: file, options: .atomic)) != nil { files[host] = file.path }
-        }
-        func withIcons(_ items: [ImportedItem]) -> [ImportedItem] {
-            items.map { var it = $0; it.children = withIcons(it.children); it.faviconPath = it.url.flatMap(host).flatMap { files[$0] }; return it }
-        }
-        for i in spaces.indices {
-            spaces[i].favorites = withIcons(spaces[i].favorites)
-            spaces[i].pinned = withIcons(spaces[i].pinned)
-            spaces[i].today = withIcons(spaces[i].today)
-        }
+        // Favicons from favicons.sqlite.
+        ImportFavicons.attach(to: &spaces, folder: "cra-zen-favicons") { FirefoxImporter.favicons(root: root, hosts: $0) }
 
         plan.spaces = spaces.filter { !$0.favorites.isEmpty || !$0.pinned.isEmpty || !$0.today.isEmpty }
         return plan
@@ -143,11 +125,6 @@ enum ZenImporter {
         return (spaces, tabs, windows.first?["folders"] as? [[String: Any]] ?? [])
     }
 
-    /// FaviconCache's key: the lowercased host.
-    private static func host(_ url: String) -> String? {
-        URL(string: url)?.host.flatMap { $0.isEmpty ? nil : $0.lowercased() }
-    }
-
     private static func json(_ url: URL) -> [String: Any]? {
         guard let data = try? Data(contentsOf: url), let raw = FirefoxImporter.mozLz4(data) else { return nil }
         return try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
@@ -184,31 +161,5 @@ enum ZenImporter {
         let opacity = t["opacity"] as? Double ?? 0.5
         return SpaceTheme(colors: Array((colors + [first]).prefix(2)), intensity: max(0.3, min(1, opacity)),
                           noise: max(0, min(1, t["texture"] as? Double ?? 0)), appearance: "auto", accent: first)
-    }
-
-    /// Sidebar items in arrival order, with folders created where their first tab appears.
-    private final class Tree {
-        private final class Node {
-            var item: ImportedItem
-            var kids: [Node] = []
-            var folders: [String: Node] = [:]
-            init(_ item: ImportedItem) { self.item = item }
-            var built: ImportedItem { var it = item; if it.isFolder { it.children = kids.map(\.built) }; return it }
-        }
-        private let root = Node(ImportedItem(url: nil, isFolder: true))
-
-        func insert(_ item: ImportedItem, path: [(id: String, name: String)]) {
-            var n = root
-            for (id, name) in path {
-                if let f = n.folders[id] { n = f; continue }
-                let f = Node(ImportedItem(customTitle: name, pageTitle: name, url: nil, isFolder: true))
-                n.kids.append(f)
-                n.folders[id] = f
-                n = f
-            }
-            if !n.kids.contains(where: { !$0.item.isFolder && $0.item.url == item.url }) { n.kids.append(Node(item)) }
-        }
-
-        var items: [ImportedItem] { root.kids.map(\.built) }
     }
 }

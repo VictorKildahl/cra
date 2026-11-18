@@ -1,0 +1,33 @@
+{"profiles":{
+  "default":{"id":"default","name":"Personal","color":"plum","icon":null,"createdAt":0},
+  "p-work":{"id":"p-work","name":"Work","color":"blue","icon":"💼","createdAt":1731900000000},
+  "p-side":{"id":"p-side","name":"Side","color":"green","icon":"symbol:star","createdAt":1731900000000,"dataId":"p-work",
+            "theme":{"stops":[{"color":{"r":1,"g":0.5,"b":0,"a":1},"x":0,"y":0},{"color":{"r":0,"g":0,"b":1,"a":1},"x":1,"y":1}],
+                     "intensity":0.6,"grain":0.2,"texture":"grain","translucency":0,"mode":"dark"}}},
+ "profileOrder":["default","p-work","p-side"],
+ "settings":{"shareTabsAcrossWindows":false},
+ "windows":[
+  {"id":"w-2","profileId":"default","tabIds":["t-1b","t-8"],"activeTabIds":{},"frame":[0,0,900,700],"createdAt":0},
+  {"id":"w-1","profileId":"default","tabIds":["t-1","t-2","t-3","t-4","t-7","t-5","t-6"],"activeTabIds":{"default":"t-4"},"frame":[0,0,1440,900],"createdAt":0}],
+ "windowOrder":["w-2","w-1"],"focusedWindowId":"w-1",
+ "tabs":[
+  {"id":"t-1","pinKey":"k-mail","windowId":"w-1","profileId":"default","url":"https://mail.example.com/inbox/42","title":"Message","pin":{"as":"tile"},"pinnedUrl":"https://mail.example.com/","customTitle":null,"customIcon":null,"page":{"kind":"asleep"},"createdAt":1731900000000,"lastActiveAt":0},
+  {"id":"t-1b","pinKey":"k-mail","windowId":"w-2","profileId":"default","url":"https://mail.example.com/","title":"Inbox","pin":{"as":"tile"},"pinnedUrl":"https://mail.example.com/","page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-2","windowId":"w-1","profileId":"default","url":"https://code.example.com/","title":"Code home","pin":null,"pinnedUrl":"https://code.example.com/","customTitle":"Code","page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-3","windowId":"w-1","profileId":"default","url":"https://docs.example.com/page","title":"Docs","pin":{"as":"row"},"pinnedUrl":"https://docs.example.com/","page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-4","windowId":"w-1","profileId":"default","url":"https://news.example.com/","title":"News","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-7","windowId":"w-1","profileId":"default","url":"","title":"","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-8","windowId":"w-2","profileId":"default","url":"https://other.example.com/","title":"Other window","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-5","windowId":"w-1","profileId":"p-work","url":"https://tasks.example.com/","title":"Tasks","pin":{"as":"tile","folder":{"id":"f-1","name":"Apps"}},"pinnedUrl":"https://tasks.example.com/","page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-6","windowId":"w-1","profileId":"p-work","url":"https://design.example.com/","title":"Design","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0}],
+ "groups":[
+  {"id":"g-1","windowId":"w-1","profileId":"default","name":"Dev","icon":null,"color":"blue","collapsed":false,"pinned":true,"tabIds":["t-2","t-3"]},
+  {"id":"g-2","windowId":"w-1","profileId":"default","name":"Reading","icon":null,"color":null,"collapsed":true,"pinned":true,"tabIds":["t-3"],"parentId":"g-1"},
+  {"id":"g-3","windowId":"w-1","profileId":"default","name":"Loose","icon":null,"color":"red","collapsed":false,"pinned":false,"tabIds":["t-4"]}],
+ "splits":[],
+ "parkedPins":{"p-side":{"tabs":[
+    {"id":"k-chat","groupId":"pg-1","url":"https://chat.example.com/room","title":"Chat","pin":{"as":"row"},"pinnedUrl":"https://chat.example.com/","profileId":"p-side"}],
+   "groups":[{"id":"pg-1","name":"Talk","icon":null,"color":null,"collapsed":false}]}},
+ "pinChoices":{},"pinSync":{},"topAppsMerged":"",
+ "closedTabs":[],"closedWindows":[],"closedGroups":[],"deletedGroups":[],"cleanedTabs":[],
+ "version":11}

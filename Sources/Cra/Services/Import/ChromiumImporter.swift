@@ -20,7 +20,7 @@ enum ChromiumImporter {
         // Local State's profile list names every folder the browser uses, as Ardia's
         // discovery reads it; the folder scan catches a profile it no longer lists.
         let listed = Set(names.keys).subtracting(["System Profile", "Guest Profile"])
-        let found = ((try? fm.contentsOfDirectory(atPath: userData.path)) ?? []).filter { $0 == "Default" || $0.hasPrefix("Profile ") }
+        let found = ((try? fm.contentsOfDirectory(atPath: userData.path)) ?? []).filter(isProfileFolder)
         let dirs = listed.union(found).filter { !$0.isEmpty && !$0.contains("/") && $0 != "." && $0 != ".." }
             .sorted { $0 == "Default" ? true : ($1 == "Default" ? false : $0.localizedStandardCompare($1) == .orderedAscending) }
         var out = dirs.compactMap { d -> ChromiumProfile? in
@@ -30,6 +30,11 @@ enum ChromiumImporter {
         }
         if out.isEmpty && hasData(userData) { out = [ChromiumProfile(id: "Default", name: "Default", dir: userData)] }
         return out
+    }
+
+    /// Chrome's "Default" and "Profile <n>" (Ardia's "Profile <id>"), and Yab's "space-<id>".
+    static func isProfileFolder(_ name: String) -> Bool {
+        name == "Default" || name.hasPrefix("Profile ") || name.hasPrefix("space-")
     }
 
     /// Local State's profile.info_cache: the name the browser shows for each profile folder.

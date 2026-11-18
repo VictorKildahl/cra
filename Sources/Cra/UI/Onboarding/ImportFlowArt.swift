@@ -352,7 +352,11 @@ private struct SidebarPreview: View {
                     }
                 }
                 HStack(spacing: 6) {
-                    Text(space.emoji).font(.system(size: 12))
+                    if let symbol = space.symbol {
+                        Image(systemName: symbol).font(.system(size: 11)).foregroundStyle(p.textSecondary)
+                    } else {
+                        Text(space.emoji).font(.system(size: 12))
+                    }
                     Text(space.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(p.textSecondary)
                 }
                 .padding(.leading, 4)
