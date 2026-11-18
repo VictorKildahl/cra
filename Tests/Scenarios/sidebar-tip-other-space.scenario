@@ -1,0 +1,30 @@
+# promise: #527
+# The rest of #527's fix, beside sidebar-hover-other-space (the tab rows): the next space's favorite
+# tiles lie under the page too, beside a shown sidebar and with it hidden, and took the pointer there
+# (a hover, a Previews card, a name by the pointer). And the tip controller itself counts the pointer as
+# on a control only where the control is on screen, so a tip waiting for the pointer to rest never shows
+# for a row or tile it can't be on (tip=0). The shown space's row and tile still take the pointer.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"\ud83c\udfe0","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"\ud83d\udcbc","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":["E0000000-0000-0000-0000-000000000011"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":["E0000000-0000-0000-0000-000000000021"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"E0000000-0000-0000-0000-000000000011","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:9/?n=homefav","savedTitle":"Homefav"}}}},{"id":"E0000000-0000-0000-0000-000000000021","parentID":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:9/?n=workfav","savedTitle":"Workfav"}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=home-a
+cra://open?url=${PAGE}?n=work-a&space=A0000000-0000-0000-0000-000000000002&background=1
+wait 2
+# The shown space's row and tile take the pointer, and their tips may show.
+cra://debug?pointerOn=home-a&label=docked-home-row
+expect-log pointer on docked-home-row: in window=1 hovered=.*home-a tip=1
+cra://debug?pointerOn=Homefav&tile=1&label=docked-home-tile
+expect-log pointer on docked-home-tile: in window=1 hovered=Homefav tip=1
+# The next space's lie under the page beside the shown sidebar.
+cra://debug?pointerOn=work-a&label=docked-work-row
+expect-log pointer on docked-work-row: in window=1 hovered=none tip=0
+cra://debug?pointerOn=Workfav&tile=1&label=docked-work-tile
+expect-log pointer on docked-work-tile: in window=1 hovered=none tip=0
+cra://action/toggleSidebar
+wait 1
+# And with the sidebar hidden.
+cra://debug?pointerOn=work-a&label=hidden-work-row
+expect-log pointer on hidden-work-row: in window=1 hovered=none tip=0
+cra://debug?pointerOn=Workfav&tile=1&label=hidden-work-tile
+expect-log pointer on hidden-work-tile: in window=1 hovered=none tip=0

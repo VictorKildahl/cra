@@ -4836,10 +4836,33 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Picture, checked when it resigns key and when what covers it changes; the video comes home
     /// when the window is key again (windowDidBecomeKey). Arc 1.171, 2 Nov 2026: hiding an Arc that
     /// had not been active opened nothing; losing focus with its window on another desktop did.
-    /// A locked screen covers every window and leaves nothing.
+    /// A locked screen covers every window and leaves nothing. macOS 27.2.1 called a window on a second
+    /// display not visible when another app became active on the first, with nothing in front of it
+    /// (#533): the windows in front decide (WindowCoverage).
     private func leaveIfCovered() {
-        guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked else { return }
+        guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked,
+              Self.coverage(of: window).covered else { return }
         browsers.windowVisibilityChanged(covered: true)
+    }
+
+    /// What the window server has in front of `window`, its own parts (its child windows, Chrome's page
+    /// host windows) told apart. Asked only after macOS said the window isn't visible, and by
+    /// `cra://debug?windowCoverage=1`.
+    private static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
+        let number = CGWindowID(window.windowNumber)
+        let own = number > 0 ? (CGWindowListCopyWindowInfo(.optionIncludingWindow, number) as? [[String: Any]])?.first : nil
+        let inFront = number > 0 ? CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, number) as? [[String: Any]] ?? [] : []
+        return WindowCoverage.read(window: own, inFront: inFront, pid: ProcessInfo.processInfo.processIdentifier) { n in
+            guard let w = NSApp.window(withWindowNumber: n) else { return false }
+            return EmbeddedPages.isHost(w) || sequence(first: w, next: \.parent).contains { $0 === window }
+        }
+    }
+
+    /// `cra://debug?windowCoverage=1`: what automatic Picture in Picture would read for this window if
+    /// macOS called it not visible (#533).
+    func windowCoverageReadout() -> String {
+        guard let window else { return "window coverage: no window" }
+        return "window coverage: \(Self.coverage(of: window).summary)"
     }
 
     /// Asked once, then kept by the system's lock and unlock notifications: the session query is a

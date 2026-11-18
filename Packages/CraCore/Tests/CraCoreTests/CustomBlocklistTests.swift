@@ -97,6 +97,66 @@ struct CustomBlocklistTests {
         #expect(a == "26e90077f39e9473.txt")
     }
 
+    /// The Mac scenario's kept copy (Tests/Fixtures/BlocklistProfile) and the iPhone UI test's are
+    /// named for these addresses; a new name would leave both reading nothing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func keptCopiesInTestsMatchTheirAddresses() {
+        #expect(CustomBlocklist.cacheFileName(for: "http://127.0.0.1:9/kept-list.txt") == "7eeafa63f8f68fab.txt")
+        #expect(CustomBlocklist.cacheFileName(for: "https://lists.invalid/kept.txt") == "dac256c30d0d3b6d.txt")
+    }
+
+    /// Add List on each app: https:// assumed, a list added twice stays once, typed file:// refused,
+    /// and http:// only on the Mac (the iPhone has no App Transport Security exception).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func addListOnEachApp() {
+        let one = ["https://big.oisd.nl"]
+        #expect(CustomBlocklist.adding("small.oisd.nl", to: one, httpsOnly: true) == .added(["https://big.oisd.nl", "https://small.oisd.nl"]))
+        #expect(CustomBlocklist.adding("https://big.oisd.nl", to: one, httpsOnly: true) == .alreadyAdded)
+        #expect(CustomBlocklist.adding(" big.oisd.nl ", to: one, httpsOnly: false) == .alreadyAdded)
+        #expect(CustomBlocklist.adding("http://lists.example/hosts", to: [], httpsOnly: false) == .added(["http://lists.example/hosts"]))
+        #expect(CustomBlocklist.adding("http://lists.example/hosts", to: [], httpsOnly: true) == .invalid)
+        #expect(CustomBlocklist.adding("file:///etc/hosts", to: [], httpsOnly: false) == .invalid)
+        #expect(CustomBlocklist.adding("not a list", to: [], httpsOnly: false) == .invalid)
+        let file = URL(fileURLWithPath: "/Users/me/blocklist.txt")
+        #expect(CustomBlocklist.adding(file, to: one) == .added(["https://big.oisd.nl", "file:///Users/me/blocklist.txt"]))
+        #expect(CustomBlocklist.adding(file, to: ["file:///Users/me/blocklist.txt"]) == .alreadyAdded)
+    }
+
+    /// A change to the setting: removed lists lose their copy, new ones are fetched in the order
+    /// added, and a reorder or an unchanged list fetches nothing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func settingChangesFetchAndForgetOnlyWhatChanged() {
+        let a = "https://a.example/list", b = "https://b.example/list", c = "https://c.example/list"
+        let change = CustomBlocklist.changes(from: [a, b], to: [b, c])
+        #expect(change.removed == [a])
+        #expect(change.added == [c])
+        let reorder = CustomBlocklist.changes(from: [a, b], to: [b, a])
+        #expect(reorder.removed.isEmpty && reorder.added.isEmpty)
+        #expect(CustomBlocklist.changes(from: [], to: [a, b]).added == [a, b])
+        #expect(CustomBlocklist.changes(from: [a], to: []).removed == [a])
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func onlyListsWithoutAFreshCopyAreFetched() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let fresh = "https://fresh.example/list", old = "https://old.example/list", new = "https://new.example/list"
+        let fetched = [fresh: now.addingTimeInterval(-3600), old: now.addingTimeInterval(-2 * 24 * 3600)]
+        #expect(CustomBlocklist.due([fresh, old, new], fetched: fetched, now: now, atLaunch: true) == [old, new])
+        #expect(CustomBlocklist.due([fresh, old, new], fetched: fetched, now: now, atLaunch: false) == [new])
+    }
+
+    /// The Mac engine keeps every set it's handed until Cra quits: only a new list, a removed one or a
+    /// new fetch gives it another.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func blockerGetsANewSetOnlyWhenTheListsChanged() {
+        let a = "https://a.example/list", b = "https://b.example/list"
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        let key = CustomBlocklist.engineKey([a, b], fetched: [a: day])
+        #expect(CustomBlocklist.engineKey([a, b], fetched: [a: day]) == key)
+        #expect(CustomBlocklist.engineKey([a, b], fetched: [a: day, b: day]) != key, "b's first copy arrived")
+        #expect(CustomBlocklist.engineKey([a, b], fetched: [a: day.addingTimeInterval(86400)]) != key, "a was fetched again")
+        #expect(CustomBlocklist.engineKey([a], fetched: [a: day, b: day]) != CustomBlocklist.engineKey([a, b], fetched: [a: day, b: day]),
+                "b, which had a copy, was removed")
+        #expect(CustomBlocklist.engineKey([a, b], fetched: [a: day, b: day]) != CustomBlocklist.engineKey([b, a], fetched: [a: day, b: day]),
+                "the lists' order is the set's order")
+        #expect(CustomBlocklist.engineKey([], fetched: [:]) == CustomBlocklist.engineKey([a], fetched: [:]), "a list without a copy adds nothing yet")
+    }
+
     /// A day at launch; a week while Cra runs, since each list handed to the engine stays in memory.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func listsAreFetchedAgainWhenOld() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)

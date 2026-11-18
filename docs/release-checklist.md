@@ -58,6 +58,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#400 (macOS 27 only):** a white page with DevTools docked right and set to dark, toolbar shown,
   Edge to edge on and off: no white shows at any corner of the page or DevTools. This Mac runs
   macOS 26, where the test stands in for 27 with AppKit's own window radius; ask the reporter to confirm.
+- **#533 (macOS 27 only):** Cra alone on a second display playing a YouTube video with sound; click
+  another app on the first display: the video keeps playing in its tab. Cover Cra's window with
+  another app, or minimise it: the video goes to Picture in Picture. macOS 26 never called the window
+  not visible here, so WindowCoverageTests and `window-coverage-own-parts` stand in; ask the reporter.
 
 ### Sidebar, tabs and the command bar
 
@@ -204,6 +208,10 @@ built release app with a test profile. Note anything that fails in the release's
   move down past the bar and it goes. ⌘L opens the address with the bar away, and ✕, Expand and Add to Split beside
   the card still work. (`peek-toolbar-auto-hide` checks the layout, the strip and the keep zone through
   `cra://debug`; the real pointer's events over the card are this line.)
+- **#520:** open Gmail in a Peek (Shift-click a mail.google.com link, signed in) and press Escape: Close turns
+  into the red Confirm pill, and a second Escape closes the Peek. A quick double Escape closes it at once. Then a
+  plain site (github.com) in a Peek: one Escape closes it. (`peek-escape-closes` and `peek-escape-page-uses-it`
+  stand in for Gmail with a page that cancels Escape; Gmail's own key handling, which can change, is this line.)
 - **#381:** click a link to another site in a favorite, next to Arc doing the same: the peeked page's
   favicon springs onto the tile's top right corner on a white square (black in a dark space), 4 pt
   past the corner, with a soft shadow, and springs off when the Peek closes. Check a split favorite

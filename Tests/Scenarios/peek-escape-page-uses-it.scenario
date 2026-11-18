@@ -1,0 +1,54 @@
+# promise: #520
+# Escape in a Peek stays the page's when the page uses it, and only a plain Escape is the Peek's (GitHub #520).
+# ⇧Esc and ⌥Esc leave the Peek and its Close button alone. A page with its own dialog open closes the dialog
+# on the first Escape and the Peek stays (Close asks, as for any Escape the page keeps); with the dialog
+# gone, the page leaves the next Escape alone and it closes the Peek at once, without Cra taking it first.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true}
+
+cra://open?url=${PAGE}?n=hub
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/pinTab
+wait 0.5
+
+# ⇧Esc and ⌥Esc: not the Peek's.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=modified'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?key=%1B,53,131072&page=1&target=little
+cra://debug?key=%1B,53,524288&page=1&target=little
+wait 1.2
+cra://debug?peekClose=modified
+expect-log peek close modified: open=1 capturing=0 hold=none close=34x33
+cra://debug?peeks=modified
+expect-log Cra peeks modified: shown .*n=modified
+reject-log peek: the page kept Esc
+reject-log peek: Esc closes before the page
+# A plain Escape still closes it.
+cra://debug?key=%1B,53,0&page=1&target=little
+wait 1.5
+cra://debug?peeks=plain
+expect-log Cra peeks plain: none$
+
+# A page whose own dialog takes Escape.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=own-dialog'))","userGesture":true}
+wait 1.5
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"window.__dialog=true;window.__closed=0;addEventListener('keydown',e=>{if(e.key==='Escape')if(window.__dialog){e.preventDefault();window.__dialog=false;window.__closed=1}},true);'dialog-open'","returnByValue":true}
+wait 0.5
+cra://debug?key=%1B,53,0&page=1&target=little
+wait 0.8
+# The page got it and closed its dialog; the Peek stays, and Close asks.
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"['dialog-closed',window.__closed].join('-')","returnByValue":true}
+expect-log Cra cdp Runtime\.evaluate → .*dialog-closed-1
+cra://debug?peekClose=dialog
+expect-log peek close dialog: open=1 capturing=0 hold=escape
+cra://debug?peeks=dialog
+expect-log Cra peeks dialog: shown .*n=own-dialog
+# Close gives up asking; the next Escape is the page's, which leaves it alone now: the Peek closes.
+wait 1.5
+cra://debug?key=%1B,53,0&page=1&target=little
+wait 1.5
+cra://debug?peeks=dialogDone
+expect-log Cra peeks dialogDone: none$
+reject-log peek: Esc closes before the page

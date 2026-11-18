@@ -1,0 +1,18 @@
+diff --git a/chrome/app/chrome_main_mac.mm b/chrome/app/chrome_main_mac.mm
+--- a/chrome/app/chrome_main_mac.mm
++++ b/chrome/app/chrome_main_mac.mm
+@@ -47,8 +47,13 @@
+   }
+ 
+   // Check if our executable name matches the helper app for notifications.
++  // Cra: with AperitifHelpers on (cra/engine_main.mm) the notifications come
++  // from "<name> Helper (Aperitif Alerts)", which macOS launches the same way.
++  // Missing it stopped that helper on "Helper application requires --type"
++  // (a 0.1.46 crash report).
+   std::string helper_name = path.BaseName().value();
+-  return base::EndsWith(helper_name, chrome::kMacHelperSuffixAlerts);
++  return base::EndsWith(helper_name, chrome::kMacHelperSuffixAlerts) ||
++         base::EndsWith(helper_name, " (Aperitif Alerts)");
+ }
+ 
+ // Safe Exam Browser has been observed launching helper processes directly,

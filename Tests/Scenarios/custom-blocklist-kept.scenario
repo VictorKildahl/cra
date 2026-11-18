@@ -1,0 +1,20 @@
+# promise: #507
+# An added block list keeps working when it can't be fetched: Cra launches with the copy it kept
+# in the data folder (Tests/Fixtures/BlocklistProfile, fetched long ago, so it's due), the fetch
+# fails (port 9 on this Mac refuses), the failure is logged by host only, and the kept copy's
+# domain is still blocked from the first page on.
+# No & in a script: it ends the cra:// query.
+budget rss=800 stalls50=30
+profile ${FIXTURES}/BlocklistProfile
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "customBlocklists": ["http://127.0.0.1:9/kept-list.txt"]}
+arg --host-resolver-rules=MAP kept-ads.example 127.0.0.1, MAP *.kept-ads.example 127.0.0.1
+pace 0.5
+
+expect-log block lists: [0-9]+ domains, 1 added list
+expect-log block list 127\.0\.0\.1 not fetched: Couldn’t reach the list
+
+cra://open?url=${PAGE}?n=kept
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://cdn.kept-ads.example:'+location.port+'/page.html?probe=kept-copy',{mode:'no-cors'}).then(()=>'kept:sent',e=>'kept:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"kept:TypeError"
+reject-log probe=kept-copy

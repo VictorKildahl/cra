@@ -1380,6 +1380,8 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         // Its Previews card comes as for the pointer (#376).
         if let url = previewURL, let store = grid?.store { FavoritePreviewCard.shared.hover(self, target: previewTarget(url, store: store)) }
     }
+    /// Scenarios (cra://debug?pointerOn=…&tile=1): whether the tile has the pointer (#527).
+    var debugHovering: Bool { hovering }
     /// Scenarios (cra://debug?favoriteBadges=): the Peek badge's frame in the tile, nil without one (#381).
     var peekBadgeReadout: String? {
         guard let b = peekBadge else { return nil }

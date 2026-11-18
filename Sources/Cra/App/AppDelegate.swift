@@ -1136,6 +1136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
             // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
             // never-shown window drew there instead, and the tab stayed blank (GitHub #469).
@@ -1518,17 +1519,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
-            // pointerOn=<text>&label=<l>: the pointer brought to the middle of the first sidebar tab row whose
-            // title has that text, in any space, as AppKit brings it: entered and moved for every sidebar tracking area
-            // whose rect holds it, wherever the row is. Logs whether that spot is in the window and what
-            // the row's list hovered. A row of a space beside the shown one lies under the page; it
-            // took the hover and showed its tip there by the pointer (#527).
+            // pointerOn=<text>&label=<l>: the pointer brought to the middle of the first sidebar tab row (or,
+            // with tile=1, favorite tile) whose title has that text, in any space, as AppKit brings it: entered
+            // and moved for every sidebar tracking area whose rect holds it, wherever the row is. Logs whether
+            // that spot is in the window, what the row's list (or the tile) hovered, and whether the tip
+            // controller counts the pointer as on it (tip=1). A row or tile of a space beside the shown one
+            // lies under the page; it took the hover and showed its tip there by the pointer (#527).
             if let title = dict["pointerOn"], let window = main.window {
                 let label = dict["label"] ?? title
                 func all(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(all) }
                 let host = main.shell.sidebarHost
-                guard let row = all(host).compactMap({ $0 as? TabRowView }).first(where: { $0.text.contains(title) }) else {
-                    CraLog.note("pointer on \(label): no row \(title)")
+                let found: (any ArcTooltipTarget & NSView)? = dict["tile"] == "1"
+                    ? all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
+                    : all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                guard let row = found else {
+                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(title)")
                     return
                 }
                 let p = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
@@ -1552,8 +1557,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         }
                     }
                 }
-                let hovered = row.list?.debugHoveredTitle ?? "none"
-                CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered)")
+                let hovered: String
+                switch row {
+                case let r as TabRowView: hovered = r.list?.debugHoveredTitle ?? "none"
+                case let t as FavoriteTileView: hovered = t.debugHovering ? t.text : "none"
+                default: hovered = "none"
+                }
+                let tip = ArcTooltipController.pointerArea(of: row).contains(window.convertPoint(toScreen: p))
+                CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered) tip=\(tip ? 1 : 0)")
                 return
             }
             // musicNotes=<label>: report visible note overlays and their offsets from tile centers.
@@ -2190,6 +2201,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Settings ▸ Privacy ▸ Fingerprinting protection on or off, as its switch sets it.
             if let v = dict["fingerprinting"] { store.settings.fingerprintingProtection = v == "on"; return }
+            // Settings ▸ Privacy without the pointer (#507): blockLists=<address,…>|none sets the added
+            // block lists, blockAds=on|off the switch they sit under.
+            if let v = dict["blockLists"] { store.settings.customBlocklists = v == "none" ? [] : v.split(separator: ",").map(String.init); return }
+            if let v = dict["blockAds"] {
+                store.settings.blockAdsAndTrackers = v == "on"
+                CraLog.note("block ads and trackers: \(v == "on" ? "on" : "off")")
+                return
+            }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if let mode = dict["switcher"] { main.debugTabSwitcher(allSpaces: mode == "all"); return }

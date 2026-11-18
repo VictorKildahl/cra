@@ -1,0 +1,6 @@
+# Cra block list (added in Settings). One domain per line; a domain also blocks its subdomains.
+# url: http://127.0.0.1:9/kept-list.txt
+# title: Kept list
+# fetched: 2026-01-01T00:00:00Z
+# skipped: 0
+kept-ads.example

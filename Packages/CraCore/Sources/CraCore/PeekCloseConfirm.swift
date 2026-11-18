@@ -87,6 +87,12 @@ public struct PeekEscapePresses: Equatable, Sendable {
 
     public init() {}
 
+    /// The key a Peek acts on: Esc (key code 53) with none of ⇧⌃⌥⌘ held (`modifiers` are NSEvent's
+    /// flag bits; Caps Lock and fn don't count). ⇧Esc and the rest are the page's or another shortcut's.
+    public static func isEscape(keyCode: UInt16, modifiers: UInt) -> Bool {
+        keyCode == 53 && KeyChord.Modifiers(rawValue: modifiers).isDisjoint(with: [.shift, .control, .option, .command])
+    }
+
     /// An Esc before the page sees it, at `time` (the event's timestamp): true when Cra takes it and
     /// the Peek closes. A pill is up (Esc closes any pill, Arc), or the last Esc hasn't come back from
     /// the page: a double Esc closes without waiting for the pill. A held Esc's repeats go where the
@@ -104,10 +110,11 @@ public struct PeekEscapePresses: Equatable, Sendable {
     /// The page left the Esc alone (it closes the Peek): nothing to ask.
     public mutating func pageLeft() { waiting = nil }
 
-    /// `answerTime` after the Esc at `pressedAt`: true when the page kept it, and Close asks.
-    public mutating func pageKept(pressedAt: TimeInterval) -> Bool {
+    /// `answerTime` after the Esc at `pressedAt`: true when the page kept it, and Close asks. A pill
+    /// that came up meanwhile (`holding`, a call's after ⌘W) stays as it is, and the Esc is forgotten.
+    public mutating func pageKept(pressedAt: TimeInterval, holding: PeekCloseHold?) -> Bool {
         guard waiting == pressedAt else { return false }
         waiting = nil
-        return true
+        return holding == nil
     }
 }

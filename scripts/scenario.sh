@@ -46,8 +46,10 @@
 #   home                        a throwaway home folder, so downloads stay out of ~/Downloads
 #   crash-report <file>         copied into the throwaway home's Library/Logs/DiagnosticReports
 #                               before launch, as macOS leaves one (needs home)
+#   bare-helper <suffix>        runs the engine's "Cra Helper (<suffix>)" with no arguments, as macOS launches the
+#                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   requires screen
-#   port <n>                    serve ${PAGE} on a fixed port (snapshots show the address)
+#   port <n>                   serve ${PAGE} on a fixed port (snapshots show the address)
 # The fixture server answers an address with ?delay=<s> (or &delay=<s>) that many seconds late.
 # ${FIXTURES}, ${ORIGIN} (that server's http://127.0.0.1:<port>, which also answers a POST with 204,
 # logs it to server.log and keeps its body in posts/), ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
@@ -378,6 +380,20 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       else
         [ -x "$OUT/compare-png" ] || xcrun swiftc -O "$ROOT/scripts/compare-png.swift" -o "$OUT/compare-png" 2>"$OUT/compare-png.log"
         verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1) || budget_problem "snapshot $3: $verdict"
+      fi ;;
+    bare-helper)
+      helper="Cra Helper (${line#bare-helper })"
+      exe="$APP/Contents/Frameworks/Cra Framework.framework/Versions/Current/Helpers/$helper.app/Contents/MacOS/$helper"
+      if [ ! -x "$exe" ]; then problem "no $helper in the engine"
+      else
+        "$exe" >"$OUT/bare-helper.log" 2>&1 & hp=$!
+        for _ in $(seq 1 50); do kill -0 "$hp" 2>/dev/null || break; sleep 0.2; done
+        if kill -0 "$hp" 2>/dev/null; then kill -9 "$hp" 2>/dev/null; wait "$hp" 2>/dev/null; problem "$helper launched bare still runs after 10 s"
+        else
+          wait "$hp"; hs=$?
+          echo "  $helper launched bare: exit $hs"
+          [ "$hs" -eq 0 ] || problem "$helper launched bare exited $hs$([ "$hs" -gt 128 ] && echo " (signal $((hs - 128)))")"
+        fi
       fi ;;
     fresh|requires|port|seed|env|arg|extension|profile|home|crash-report) ;;
     *) problem "unknown scenario line: $line" ;;

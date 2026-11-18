@@ -504,9 +504,11 @@ struct BlockListsView: View {
 
     private func add() {
         // The app has no App Transport Security exception: an http:// list would never load.
-        guard let url = CustomBlocklist.listURL(from: address), url.scheme?.lowercased() == "https" else { invalid = true; return }
-        guard !model.settings.customBlocklists.contains(url.absoluteString) else { return }
-        save(model.settings.customBlocklists + [url.absoluteString])
+        switch CustomBlocklist.adding(address, to: model.settings.customBlocklists, httpsOnly: true) {
+        case .added(let next): save(next)
+        case .alreadyAdded: break
+        case .invalid: invalid = true
+        }
     }
 
     private func save(_ addresses: [String]) {

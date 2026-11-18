@@ -132,11 +132,7 @@ private struct BlockListRows: View {
     }
 
     private func addTyped() {
-        guard let url = CustomBlocklist.listURL(from: text), !url.isFileURL else {
-            error = "Enter the list’s web address, like https://example.com/list.txt."
-            return
-        }
-        add(url)
+        apply(CustomBlocklist.adding(text, to: addresses, httpsOnly: false))
     }
 
     private func chooseFile() {
@@ -145,14 +141,21 @@ private struct BlockListRows: View {
         panel.allowsMultipleSelection = false
         panel.message = "Choose a block list: a hosts file, a list of domains or an Adblock Plus list."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        add(url)
+        apply(CustomBlocklist.adding(url, to: addresses))
     }
 
-    private func add(_ url: URL) {
-        let address = url.absoluteString
+    private func apply(_ addition: CustomBlocklist.Addition) {
+        switch addition {
+        case .invalid:
+            error = "Enter the list’s web address, like https://example.com/list.txt."
+            return
+        case .added(let next):
+            addresses = next
+        case .alreadyAdded:
+            break
+        }
         error = nil
         adding = false
-        if !addresses.contains(address) { addresses.append(address) }
     }
 
     private func remove(_ address: String) {
