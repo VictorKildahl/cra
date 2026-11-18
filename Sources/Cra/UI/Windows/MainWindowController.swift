@@ -2775,17 +2775,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func captureSource(_ b: CraBrowser, rect: CGRect, page: CGSize, done: @escaping (Easel.Capture?) -> Void) {
         let url = b.currentURL, title = b.currentTitle
         guard Easel.webAddress(url) != nil else { done(nil); return }
+        // Without the page's answer the capture keeps its address and title, and can't go live.
+        let plain = Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date())
+        var answered = false
+        let finish: (Easel.Capture) -> Void = { capture in
+            guard !answered else { return }
+            answered = true
+            done(capture)
+        }
+        // Chromium holds a page's answers back while its next address hasn't responded ("Still
+        // waiting for … to respond"), so the capture waited for ever and no easel was made. The
+        // picture is already taken: after the deadline it goes on without the page's scroll.
+        DispatchQueue.main.asyncAfter(deadline: .now() + ContentCapture.sourceAnswerWait) {
+            if !answered { CraLog.note("capture: the page didn't say where it is scrolled, sent without") }
+            finish(plain)
+        }
         let script = "[scrollX, scrollY, innerWidth, innerHeight]"
         let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true])).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         b.sendDevToolsMethod("Runtime.evaluate", params: params) { result, _ in
             let v = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 .flatMap { ($0["result"] as? [String: Any])?["value"] as? [Double] }
             DispatchQueue.main.async {
-                guard let v, v.count == 4, page.width > 0 else { done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date())); return }
+                guard let v, v.count == 4, page.width > 0 else { finish(plain); return }
                 let k = v[2] / page.width  // CSS pixels per point (the page's zoom)
-                done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date(),
-                                   viewport: .init(v[2], v[3]), scroll: .init(v[0], v[1]),
-                                   area: .init(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k)))
+                finish(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date(),
+                                     viewport: .init(v[2], v[3]), scroll: .init(v[0], v[1]),
+                                     area: .init(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k)))
             }
         }
     }

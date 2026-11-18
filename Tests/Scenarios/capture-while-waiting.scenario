@@ -1,0 +1,16 @@
+# A page that is showing while its next address hasn't answered yet (a link clicked on a slow
+# site: "Still waiting for … to respond") can still be captured, and the capture sent to an
+# easel: the capture menu's New Easel opens the easel instead of never coming back.
+# ${STALL} accepts connections and never answers one.
+budget rss=800 stalls50=20
+
+cra://open?url=${PAGE}?n=shown
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://navigate?url=${STALL}/next
+wait 2
+cra://debug?captureToEasel=1
+expect-log capture: the page didn't say where it is scrolled, sent without
+wait 2
+cra://debug?browserWindows=captured
+expect-log browser windows captured: kind=normal listed=1 tabs=2 open=1
