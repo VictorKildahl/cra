@@ -65,6 +65,7 @@ if [ "${1:-}" != core ]; then
   suite "MCP transport" scripts/test-mcp-transport.sh
   suite "CEF download" python3 Tests/test_cef_download.py
   suite "CEF update check" python3 Tests/test_cef_update_check.py
+  suite "Sponsors" python3 Tests/test_sponsors.py
   suite "Lint" scripts/lint.py
 fi
 

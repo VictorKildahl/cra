@@ -93,7 +93,7 @@ password can be revoked and an Apple ID locked, which stopped 0.1.47's rerun wit
 
 Before writing the notes, run `scripts/sponsors.py`. It reads the GitHub Sponsors tiers and
 lists who the tiers promise a name in these notes (one-time $50 and up since the last tag,
-monthly $5 and up once a year), which Backers to ask first about the next big feature, and
+monthly $5 and up once a year, and again after a sponsor raises their monthly amount), which Backers to ask first about the next big feature, and
 which companies need their logo on /support. Private sponsors are counted, never named. It
 needs the VictorKildahl `gh` login with the `user` scope.
 
