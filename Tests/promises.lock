@@ -1023,6 +1023,7 @@
 #524   Tests/LiveFolderPluginProcessTests.swift::jiraCloud  cf79a26f91cc
 #524   Tests/LiveFolderPluginProcessTests.swift::jiraCloudSignIn  5b161fa57e0e
 #527   Tests/Scenarios/sidebar-hover-other-space.scenario  2e7eb540d842
+#527   Tests/Scenarios/sidebar-tip-other-space.scenario  15183000bad3
 #531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::aPopupElsewhereDoesNot  3d9f95ebc3c9
 #531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::aPopupHangingFromItKeepsIt  a2befdc3113d
 #531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::folderPreviewAndSiteControlsKeepIt  c15ce686df3d

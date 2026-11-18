@@ -87,7 +87,7 @@ final class ArcTooltipController {
     /// it that can be on screen. A tracking area covers a visible rect that its superviews don't cut
     /// (`NSView.shownRect`): another space's tab beside the sidebar, under the page, had its name
     /// come up by a pointer resting on the page (#527).
-    private static func pointerArea(of view: any ArcTooltipTarget) -> NSRect {
+    static func pointerArea(of view: any ArcTooltipTarget) -> NSRect {
         guard let v = view as? NSView, let w = v.window else { return view.screenFrame }
         return view.screenFrame.intersection(w.convertToScreen(v.convert(v.shownRect, to: nil)))
     }
