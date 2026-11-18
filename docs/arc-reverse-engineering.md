@@ -3498,9 +3498,21 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   until the new page commits, as Chromium treats it as a new navigation.
 - Cra: LoadingIndicator (CraCore) has the numbers and the phase rule. CraBrowser.hasCommittedLoad is NO from each
   main-frame navigation (OnBeforeBrowse, not redirects) until OnLoadStart. LoadingIndicatorView draws it with Core
-  Animation; a tab coming to the front shows its own state at once, without the widening or the finish. With no
-  margin (edge to edge, fullscreen) there is no bar; on light themes it is black at the same opacities. It slides
-  with the card when the sidebar hides or shows.
+  Animation; a tab coming to the front shows its own state at once, without the widening or the finish. On light
+  themes it is black at the same opacities. It slides with the card when the sidebar hides or shows.
+- [O] Where the card fills the screen (Arc 1.172.2, 18 Nov 2026, GitHub #548): live Arc, a Blank Window over AX,
+  a reload of a local page that answers after 3 s and holds an image for 5 s, 2x window captures at 1–7 s. The bar
+  is in the same rows in every layout, 6–13 px (3–7 pt) below the window's top edge, 256 px wide, centred over the
+  card: in a window with the sidebar shown or hidden and in full screen with the sidebar shown it is in the 10 pt
+  margin; in full screen with the sidebar hidden (card fills the screen) it lies over the card's top, on the
+  toolbar, white at the same opacities over Arc's dark blue bar. Arc keeps the toolbar while the sidebar is hidden
+  (View ▸ Hide Toolbar left it there), so its bar is never over the page itself.
+- Cra (#548): CraCore `LoadingIndicator.frame(window:card:)` keeps it in the top 10 pt of the window over the
+  card's middle whatever the card does, and hides it only for a page in element full screen (not measured in
+  Arc). Cra can hide or float the toolbar with the card filling the window (edge to edge, full screen), so the bar
+  can lie on the page: `LoadingIndicator.lightInk(on:)` takes the ink from what is under it (margin: the theme;
+  toolbar or page: dark ink over a colour above 0.6 luminance, the toolbar's own rule). `cra://debug?windowState`
+  reports `loading=x,y,WxH ink= shown= phase=`; the `loading-bar-edge-to-edge` and `loading-bar-full-screen` scenarios check it.
 
 ## A long wait for the first response (Arc 1.172.1, 8 Nov 2026, issue #256, offline copy)
 Offline Arc (fake home, network limited to localhost), a new tab opened over AppleScript (`make new tab with

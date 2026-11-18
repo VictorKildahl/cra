@@ -1124,6 +1124,11 @@
 #545   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::aTopLevelDomainHasALetter  d5572618b724
 #545   Tests/Scenarios/command-bar-number-search.scenario  f614af1a96f8
 #547   Tests/Scenarios/sidebar-empty-window-drag.scenario  2f87c32f3bbe
+#548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::barSitsInTheMarginAboveACardInItsInset  5c2a40bc258e
+#548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::barStaysAtTheTopOverACardThatFillsTheWindow  ea16076c58d6
+#548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::inkFollowsWhatIsUnderTheBar  c1270445b16c
+#548   Tests/Scenarios/loading-bar-edge-to-edge.scenario  ec60a4518d95
+#548   Tests/Scenarios/loading-bar-full-screen.scenario  9f4ff50f7b0b
 #550   Tests/FloatingSidebarTests.swift::theShadowStaysUnderTheSidebar  831fdb6d0b6c
 #550   Tests/Scenarios/floating-sidebar-shadow.scenario  a59106d5ba21
 #551   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::leavingCraKeepsTheBarOpen  d0842a6daad8

@@ -83,7 +83,8 @@ final class ShellView: NSView {
     private var animatingFrames = false
     /// Set while panes animate open/closed; layout() keeps their frames.
     private var animatingPanes = false
-    /// Arc's loading bar in the margin above the card, for the front tab.
+    /// Arc's loading bar at the window's top middle (in the margin above the card, or on the card's
+    /// top), for the front tab.
     let loadingIndicator = LoadingIndicatorView()
     private var loadingTabID: UUID?
     let statusHost: NSView
@@ -108,18 +109,24 @@ final class ShellView: NSView {
     var isDarkTheme = false {
         didSet {
             for c in paneCards { c.isDark = isDarkTheme }
-            loadingIndicator.isDark = isDarkTheme
+            refreshLoadingInk()
         }
     }
     /// The ring around the focused split pane: the space's shadedDark (PaneCardView.focusRing).
     var focusRingColor: NSColor? { didSet { if focusRingColor != oldValue { updateFocusRings() } } }
     /// Each tab's page background ("#RRGGBB"), painted under its page window (PaneCardView.pageColor).
     var pageColors: [UUID: String] = [:] {
-        didSet { for c in paneCards where c.pageColor != pageColors[c.tabID] { c.pageColor = pageColors[c.tabID] } }
+        didSet {
+            for c in paneCards where c.pageColor != pageColors[c.tabID] { c.pageColor = pageColors[c.tabID] }
+            refreshLoadingInk()
+        }
     }
     /// Each tab's toolbar colour ("#RRGGBB"), painted behind its toolbar (PaneCardView.toolbarColor).
     var toolbarColors: [UUID: String] = [:] {
-        didSet { for c in paneCards where c.toolbarColor != toolbarColors[c.tabID] { c.toolbarColor = toolbarColors[c.tabID] } }
+        didSet {
+            for c in paneCards where c.toolbarColor != toolbarColors[c.tabID] { c.toolbarColor = toolbarColors[c.tabID] }
+            refreshLoadingInk()
+        }
     }
 
     var sidebarWidth: CGFloat = CraMetrics.sidebarDefaultWidth { didSet { needsLayout = true } }
@@ -823,6 +830,7 @@ final class ShellView: NSView {
     private func reveal(_ card: PaneCardView, _ shown: Bool, animated: Bool) {
         guard card.toolbarRevealed != shown else { return }
         card.setToolbarRevealed(shown, animated: animated)
+        refreshLoadingInk()
         onFloatingToolbarChange?(animated)
     }
 
@@ -1079,17 +1087,44 @@ final class ShellView: NSView {
         layoutContentChildren()
     }
 
-    /// Centred over the card, in the margin above it; hidden where there is none (edge to
-    /// edge, fullscreen).
+    /// At the window's top middle, centred over the card: in the margin above it, or over the
+    /// card's top where it fills the window (edge to edge, full screen), as in Arc (#548). A page
+    /// in full screen has none.
     private func placeLoadingIndicator(over content: NSRect) {
-        let margin = bounds.maxY - content.maxY
-        loadingIndicator.isHidden = margin < CGFloat(LoadingIndicator.height) + 2
+        loadingIndicator.isHidden = contentFullscreen
         loadingIndicator.frame = loadingIndicatorFrame(over: content)
+        refreshLoadingInk()
     }
 
     private func loadingIndicatorFrame(over content: NSRect) -> NSRect {
-        let w = CGFloat(LoadingIndicator.trackWidth) + 2
-        return NSRect(x: (content.midX - w / 2).rounded(), y: content.maxY, width: w, height: bounds.maxY - content.maxY)
+        LoadingIndicator.frame(window: bounds, card: content)
+    }
+
+    /// What lies under the loading bar: the margin, or the top of the card under it (its toolbar,
+    /// or its page while the bar is hidden or floated away).
+    private var loadingGround: LoadingIndicator.Ground {
+        guard LoadingIndicator.overCard(window: bounds, card: contentContainer.frame) else { return .margin }
+        let x = contentContainer.convert(NSPoint(x: loadingIndicator.frame.midX, y: 0), from: self).x
+        guard let card = paneCards.first(where: { !$0.isHidden && $0.frame.minX <= x && x < $0.frame.maxX }) ?? focusedCard,
+              card.hasPage else { return .margin }
+        let barOnTop = card.showToolbar && (!card.toolbarIsFloating || card.toolbarRevealed)
+        guard barOnTop else { return .page(card.pageColor) }
+        return card.developerBar != nil ? .developerBar : .toolbar(card.toolbarColor)
+    }
+
+    private func refreshLoadingInk() {
+        let canvasDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        loadingIndicator.isDark = LoadingIndicator.lightInk(on: loadingGround, themeDark: isDarkTheme, canvasDark: canvasDark)
+    }
+
+    /// For `cra://debug?windowState`: the loading bar's frame from the window's top middle and its
+    /// ink, whether it can show and the front tab's phase, e.g. `loading=0,0,132x10 ink=light shown=1
+    /// phase=waiting` (#548). x is its centre less the card's, y how far its top is below the window's.
+    var loadingReadout: String {
+        let f = loadingIndicator.frame
+        return String(format: "loading=%.0f,%.0f,%.0fx%.0f ink=%@ shown=%d phase=%@", f.midX - contentContainer.frame.midX,
+                      bounds.maxY - f.maxY, f.width, f.height, loadingIndicator.isDark ? "light" : "dark",
+                      loadingIndicator.isHidden ? 0 : 1, String(describing: loadingIndicator.phase))
     }
 
     /// The front tab's loading state. Another tab coming to the front shows its state at once.
@@ -1102,6 +1137,7 @@ final class ShellView: NSView {
     func layoutContentChildren(animated: Bool = false) {
         let cb = contentContainer.bounds
         updateFocusRings()
+        defer { refreshLoadingInk() }
         let toolbarVisible = panesShowBars
         let floating = toolbarFloats
         let layout = paneLayout(in: cb)

@@ -1,0 +1,29 @@
+# promise: #548
+# Full screen with the sidebar hidden the card fills the screen (#315), and the loading bar stays
+# where Arc keeps it: 3–7 pt below the window's top, over the card's middle, now on the card's top
+# instead of in a margin. It hid there before. The same readout with the sidebar shown and in a
+# window, where it is in the 10 pt margin. Readout: the bar's centre less the card's, its top below
+# the window's, its size, ink, shown, phase. ${STALL} keeps the tab waiting.
+# It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+requires screen
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${STALL}
+wait 3
+cra://debug?fullscreen=1
+wait 3
+cra://debug?windowState=full-sidebar
+expect-log window state full-sidebar: main0 fullscreen=1 .* card=[0-9]+,10,10,10 r[1-9][0-9]* fills=0 .* loading=0,0,132x10 ink=[a-z]+ shown=1 phase=waiting
+
+cra://action/toggleSidebar
+wait 2
+cra://debug?windowState=full-hidden
+expect-log window state full-hidden: main0 fullscreen=1 .* card=0,0,0,0 r0 fills=1 .* loading=0,0,132x10 ink=[a-z]+ shown=1 phase=waiting
+
+cra://debug?fullscreen=0
+wait 3
+cra://debug?windowState=windowed-hidden
+expect-log window state windowed-hidden: main0 fullscreen=0 .* card=10,10,10,10 r[1-9][0-9]* fills=0 .* loading=0,0,132x10 ink=[a-z]+ shown=1 phase=waiting
+
+cra://action/toggleSidebar
+wait 2
