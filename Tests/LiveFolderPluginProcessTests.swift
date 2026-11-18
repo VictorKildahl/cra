@@ -91,6 +91,7 @@ struct LiveFolderPluginProcessTests {
         }
         try jira(executable: executable)
         try jiraCloud(executable: executable)
+        try jiraCloudSignIn(executable: executable)
         try LiveFolderProviderTests.run(executable: executable)
         try sandboxed(executable: executable)
         print("Plugin transport, permissions, timeout, bundled provider checks passed")
@@ -275,6 +276,44 @@ struct LiveFolderPluginProcessTests {
                 _ = try refresh { request in LiveFolderPluginResponse(status: status, url: request.url, body: body) }
                 fatalError("Signed-out Jira Cloud succeeded")
             } catch LiveFolderPluginError.pluginFailed(let message, _) { precondition(message.contains("notSignedIn")) }
+        }
+    }
+
+    /// The way back from "Sign back in to Jira." on a Cloud folder (#524): the warning's link opens the
+    /// site's login (Cloud sends it on to id.atlassian.com), and coming back to the site refreshes the
+    /// folder, also when its address was pasted with a page's path. Only the site is cut down: a Data
+    /// Center path, or a host that merely contains "atlassian.net", stays as entered.
+    // promise: #524
+    private static func jiraCloudSignIn(executable: URL) throws {
+        let package = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/jira"))
+        func invoke(_ method: String, address: String, extra: [String: Any] = [:]) throws -> [String: Any] {
+            var input: [String: Any] = ["settings": ["server": address], "filters": ["assigned", "todo", "inProgress"], "state": [:]]
+            input.merge(extra) { _, new in new }
+            let origin = try LiveFolderSessionOrigin(URLComponents(string: address)!.scheme! + "://" + URLComponents(string: address)!.host!)
+            return try JSONSerialization.jsonObject(with: LiveFolderPluginProcess.invoke(executable: executable, script: package.script,
+                method: method, input: JSONSerialization.data(withJSONObject: input), origins: [origin]) { _ in
+                    fatalError("signIn and pageChanged don't fetch")
+                }) as! [String: Any]
+        }
+        let site = "https://example.atlassian.net"
+        for address in [site, site + "/jira/your-work", site + "/jira/software/projects/APP/boards/1"] {
+            let signIn = try invoke("signIn", address: address)
+            precondition(signIn["url"] as? String == site + "/login.jsp", "the warning opens the site's login, not a page's")
+            precondition(signIn["warning"] as? String == "Sign back in to Jira.")
+            precondition(signIn["failureURL"] as? String == site + "/issues/")
+            precondition(signIn["instanceLabel"] as? String == "Jira (example.atlassian.net)")
+            for (url, refreshes) in [(site + "/jira/your-work", true), (site + "/browse/APP-1", true),
+                                     (site + "/login.jsp", false), (site + "/login.jsp?os_destination=%2F", false),
+                                     ("https://id.atlassian.com/login?continue=https%3A%2F%2Fexample.atlassian.net%2Fjira", false),
+                                     ("https://other.atlassian.net/jira/your-work", false)] {
+                let result = try invoke("pageChanged", address: address, extra: ["url": url])
+                precondition((result["refreshAfter"] as! [Double]).isEmpty != refreshes, "pageChanged " + url + " from " + address)
+                precondition(result["checkSignIn"] as? Bool == refreshes)
+            }
+        }
+        for address in ["https://jira.example.com/atlassian.net", "https://example.atlassian.net.example.com/jira"] {
+            let signIn = try invoke("signIn", address: address)
+            precondition(signIn["url"] as? String == address + "/login.jsp", "only an atlassian.net site is cut down: " + address)
         }
     }
 
