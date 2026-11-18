@@ -148,6 +148,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#429:** two windows on pages with a text field. Press ⌘L in the first, then click the second's
   field without closing the bar, and type and paste. The text lands in the second window, never the
   first. Do the same from a Little Window's bar.
+- **#551:** ⌘T, type part of an address, ⌘Tab to another app and back. The bar is still open with
+  what was typed and takes typing at once; while the other app was in front it stayed behind that
+  app's windows. Leave again and come back by clicking the page: the bar closes. Same with ⌘L in a
+  Little Window.
 - **Row press:** next to Arc, hold the button on a pinned tab, a Today tab, a split, New Tab and a
   Favorites tile. Each pushes in slightly about its centre (a tile a little more) and springs back
   on release; a drag doesn't leave it pushed in, a double-click on a tab dips once, folders don't move.

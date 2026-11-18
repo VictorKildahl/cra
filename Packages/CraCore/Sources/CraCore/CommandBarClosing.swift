@@ -15,6 +15,13 @@ public enum CommandBarClosing: Equatable, Sendable {
         case otherWindow
     }
 
+    /// Whether the bar closes when its panel loses the keys to `holder`. A click on its window or on
+    /// another Cra window closes it. Leaving Cra for another app doesn't (GitHub #551): Arc keeps the
+    /// bar open with what was typed and gives it the keys again when Cra comes back.
+    public static func closesBar(lostKeysTo holder: KeyHolder) -> Bool {
+        holder != .none
+    }
+
     /// True when the bar's window takes the keys back and focuses its page. Never from another
     /// window that took them (GitHub #429): Arc leaves them where the click put them.
     public var barsWindowTakesKeys: Bool {

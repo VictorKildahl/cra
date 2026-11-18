@@ -60,8 +60,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
-    /// Set while the bar closes because its panel lost the keys (#429).
-    private var commandBarLostKeys = false
+    /// The window that took the keys from the bar and closed it (#429); nil when the bar closed itself.
+    private var commandBarLostKeysTo: CommandBarClosing.KeyHolder?
     private let toast = ShinyToast()
     /// Each live tab's wait for its first response (GitHub #256), the tab whose notice the toast
     /// shows (nil once another toast took its place), and the check when the next one is due.
@@ -320,6 +320,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A Peek keeps to the page area while the sidebar slides in or out under it (#402).
         shell.onSidebarSlideFrame = { [weak self] in self?.peeks.filter { !$0.isParked }.forEach { $0.repositionPeek() } }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.commandBarCraCameBack() }
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = true }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -4240,16 +4241,49 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let panel = commandPanel!
         // Let CommandBarView's fade-out (0.08 s) play before the panel goes away.
         panel.orderOut(nil)
+        panel.level = .floating
         // Lost to another window (a click in window 2 while ⌘L was open in window 1), the keys stay
         // there: taking them back went on sending typing to this window's page (#429).
-        guard commandBarLostKeys else { focusAfterCommandBar(); return }
-        commandBarLostKeys = false
-        panel.keysWent(owns: { [weak self] w in
+        let lostTo = commandBarLostKeysTo
+        commandBarLostKeysTo = nil
+        let closing: CommandBarClosing = lostTo.map { .lostKeys(to: $0) } ?? .byBar
+        if closing.barsWindowTakesKeys { focusAfterCommandBar() }
+    }
+
+    /// Another app came to the front with the bar open: it stays with what was typed (#551, as in Arc),
+    /// below the other app's windows rather than floating over them.
+    private func commandBarWaitsForCra() {
+        if NSApp.isActive { commandPanel.makeKeyAndOrderFront(nil); return }
+        commandPanel.level = .normal
+    }
+
+    /// Cra is in front again: the bar that waited takes the keys back. A click that brought Cra back
+    /// closes it, as any click outside the bar does; the clicked window takes the keys before the
+    /// panel could lose them, so it never hears of that click otherwise.
+    private func commandBarCraCameBack() {
+        guard commandBar.isOpen, let panel = commandPanel else { return }
+        panel.level = .floating
+        if let e = NSApp.currentEvent, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(e.type), e.window !== panel {
+            commandBarLostTheKeys()
+            return
+        }
+        if !panel.isKeyWindow { panel.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The bar's panel lost the keys, or a click went past it: a click in Cra closes the bar, another
+    /// app coming to the front doesn't (CommandBarClosing).
+    private func commandBarLostTheKeys() {
+        let event = NSApp.currentEvent
+        let clickAt = event?.type == .leftMouseDown ? event?.timestamp : nil
+        commandPanel.keysWent(owns: { [weak self] w in
             guard let self else { return false }
             return w === self.window || self.peeks.contains { $0.peekWindows.contains { $0 === w } }
         }, finish: { [weak self] holder in
-            guard let self, !self.commandBar.isOpen, CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
-            self.focusAfterCommandBar()
+            guard let self, self.commandBar.isOpen, !self.commandPanel.isKeyWindow else { return }
+            guard CommandBarClosing.closesBar(lostKeysTo: holder) else { self.commandBarWaitsForCra(); return }
+            self.commandBarClosingClick.panelClosed(byMouseDownAt: clickAt)
+            self.commandBarLostKeysTo = holder
+            self.commandBar.close()
         })
     }
 
@@ -4819,10 +4853,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
             return
         }
-        let event = NSApp.currentEvent
-        commandBarClosingClick.panelClosed(byMouseDownAt: event?.type == .leftMouseDown ? event?.timestamp : nil)
-        commandBarLostKeys = true
-        commandBar.close()
+        commandBarLostTheKeys()
     }
 
     // The sidebar header's toggle moves into the traffic lights' place while they are gone (Arc).

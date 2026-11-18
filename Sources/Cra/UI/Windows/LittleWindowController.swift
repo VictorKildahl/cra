@@ -208,8 +208,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
-    /// Set while the bar closes because its panel lost the keys (#429).
-    private var commandBarLostKeys = false
+    /// The window that took the keys from the bar and closed it (#429); nil when the bar closed itself.
+    private var commandBarLostKeysTo: CommandBarClosing.KeyHolder?
     private var commandObserving = false
     private var popup: LittlePopupPanel?
     /// The "Open in" menu last closed because Cra lost the keyboard to another app (cra://debug?littleMenu).
@@ -357,6 +357,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandPanel.delegate = self
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.commandBarCraCameBack() }
+        }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
         commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .profiles) }
         commandBar.onNoticeLearnMore = { [weak self] in self?.app.openInNormalWindow(MainWindowController.privacyPage) }
@@ -1259,7 +1262,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let bar = commandBar
         // Not tied to self: the window may be closing (promotion), and the panel must still go.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
-            if !bar.isOpen { panel.orderOut(nil) }
+            if !bar.isOpen { panel.orderOut(nil); panel.level = .floating }
         }
         guard window?.isVisible == true else { return }
         // Once the bar has closed, the toolbar it held out may go (#435).
@@ -1273,16 +1276,44 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             return
         }
         // Lost to another window, the keys stay there (#429).
-        guard commandBarLostKeys else { window?.makeKeyAndOrderFront(nil); focusPage(); return }
-        commandBarLostKeys = false
-        panel.keysWent(owns: { [weak self] w in
+        let lostTo = commandBarLostKeysTo
+        commandBarLostKeysTo = nil
+        let closing: CommandBarClosing = lostTo.map { .lostKeys(to: $0) } ?? .byBar
+        guard closing.barsWindowTakesKeys else { return }
+        window?.makeKeyAndOrderFront(nil)
+        focusPage()
+    }
+
+    /// Another app came to the front with the bar open: it stays with what was typed (#551, as in Arc),
+    /// below the other app's windows rather than floating over them.
+    private func commandBarWaitsForCra() {
+        if NSApp.isActive { commandPanel.makeKeyAndOrderFront(nil); return }
+        commandPanel.level = .normal
+    }
+
+    /// Cra is in front again: the bar that waited takes the keys back. A click that brought Cra back
+    /// closes it, as any click outside the bar does (MainWindowController.commandBarCraCameBack).
+    private func commandBarCraCameBack() {
+        guard commandBar.isOpen, !isCard, window?.isVisible == true, let panel = commandPanel else { return }
+        panel.level = .floating
+        if let e = NSApp.currentEvent, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(e.type), e.window !== panel {
+            commandBarLostTheKeys()
+            return
+        }
+        if !panel.isKeyWindow { panel.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The bar's panel lost the keys, or a click went past it: a click in Cra closes the bar, another
+    /// app coming to the front doesn't (CommandBarClosing).
+    private func commandBarLostTheKeys() {
+        commandPanel.keysWent(owns: { [weak self] w in
             guard let self else { return false }
             return w === self.window || w === self.popup || self.peekWindows.contains { $0 === w }
         }, finish: { [weak self] holder in
-            guard let self, !self.commandBar.isOpen, self.window?.isVisible == true,
-                  CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
-            self.window?.makeKeyAndOrderFront(nil)
-            self.focusPage()
+            guard let self, self.commandBar.isOpen, !self.commandPanel.isKeyWindow else { return }
+            guard CommandBarClosing.closesBar(lostKeysTo: holder) else { self.commandBarWaitsForCra(); return }
+            self.commandBarLostKeysTo = holder
+            self.commandBar.close()
         })
     }
 
@@ -1901,8 +1932,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
-        commandBarLostKeys = true
-        commandBar.close()
+        commandBarLostTheKeys()
     }
 
     // MARK: CraBrowserDelegate
