@@ -444,6 +444,42 @@ final class GestureTests: BrowserTestCase {
     }
 }
 
+final class CollapseBottomBarTests: BrowserTestCase {
+    /// With Collapse Bottom Bar switched off (GitHub #505) scrolling down leaves the bar where it
+    /// is. First a swipe puts it away with the switch on, so the swipe is known to scroll.
+    func testWithCollapseBottomBarOffScrollingKeepsTheBar() {
+        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:20000px></div>", "-CraSearch", "NO"])
+        waitForPage("Tall")
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable)
+        app.webViews.firstMatch.swipeUp()
+        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
+        wait(for: [gone], timeout: 5)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995)).tap()
+        waitForBarOnScreen()
+
+        // A data: page has no site, so its Site Settings are the global ones.
+        app.buttons["bar-menu"].tap()
+        app.buttons["menu-row-siteSettings"].tap()
+        let collapse = app.switches["setting-collapse-bottom-bar"]
+        XCTAssertTrue(collapse.waitForExistence(timeout: 5))
+        XCTAssertEqual(collapse.value as? String, "1")
+        collapse.switches.firstMatch.tap()
+        XCTAssertEqual(collapse.value as? String, "0")
+        app.buttons["Done"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+
+        for _ in 0..<3 {
+            app.webViews.firstMatch.swipeUp()
+            sleep(1)
+            XCTAssertTrue(pill.isHittable, "the bar collapsed with Collapse Bottom Bar off")
+        }
+        waitForBarOnScreen()
+        keep("collapse-off")
+    }
+}
+
 final class ReadingTests: BrowserTestCase {
     static let article: String = {
         let paragraphs = [

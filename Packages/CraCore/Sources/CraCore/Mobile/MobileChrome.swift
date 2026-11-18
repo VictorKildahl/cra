@@ -94,3 +94,45 @@ public enum MobileBottomBar {
         CGRect(x: 0, y: size.height - safeBottom, width: size.width, height: safeBottom)
     }
 }
+
+/// Whether scrolling has put the bottom bar away. Site Settings ▸ Collapse Bottom Bar decides
+/// per site whether it ever does: with it off the bar stays, however far the page scrolls.
+public struct MobileBarCollapse: Equatable {
+    /// The bar leaves after this much scrolling down and returns after as much back up.
+    public static let travel: CGFloat = 24
+
+    public private(set) var isHidden = false
+    /// Scrolled since the direction last changed: down is positive.
+    private var travelled: CGFloat = 0
+
+    public init() {}
+
+    /// The page scrolled by `delta` points (down is positive) on a site whose Collapse Bottom
+    /// Bar is `collapses`. Says whether the bar moves.
+    @discardableResult
+    public mutating func scrolled(by delta: CGFloat, atTop: Bool, collapses: Bool) -> Bool {
+        travelled = delta * travelled < 0 ? delta : travelled + delta
+        let hide: Bool
+        if atTop || !collapses { hide = false } else if travelled > Self.travel { hide = true } else if travelled < -Self.travel { hide = false } else { return false }
+        guard hide != isHidden else { return false }
+        isHidden = hide
+        return true
+    }
+
+    /// The bar is back: a tap under the page, another tab, the tab row. Says whether it moves.
+    @discardableResult
+    public mutating func reveal() -> Bool {
+        travelled = 0
+        guard isHidden else { return false }
+        isHidden = false
+        return true
+    }
+
+    /// The page went to another address, on a site whose Collapse Bottom Bar is `collapses`.
+    /// Says whether the bar moves.
+    @discardableResult
+    public mutating func pageChanged(collapses: Bool) -> Bool {
+        guard !collapses else { return false }
+        return reveal()
+    }
+}
