@@ -47,8 +47,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let velocity = pan.velocity(in: view)
         switch pan.name {
         case Name.bar:
-            // Sideways for the neighbouring tab, upwards for the tab row (from the tab button,
-            // the previous tab).
+            // Sideways for the neighbouring tab, upwards for the tab row (from the bar's left
+            // end, the previous tab: `MobileSwipe.barDrag`).
             return !isSearching && switcher == nil && shownPage != nil && (abs(velocity.x) > abs(velocity.y) || velocity.y < 0)
         case Name.page:
             guard !isSearching, switcher == nil, menuHost == nil, let page = shownPage, abs(velocity.x) > 1.5 * abs(velocity.y) else { return false }
@@ -178,12 +178,14 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
 
     @objc func barSwiped(_ pan: UIPanGestureRecognizer) {
         if pan.state == .began {
-            let velocity = pan.velocity(in: view)
-            barSwipeOpensRow = abs(velocity.y) > abs(velocity.x)
             let at = pan.location(in: bar), moved = pan.translation(in: bar)
             let startedAt = CGPoint(x: at.x - moved.x, y: at.y - moved.y)
-            barSwipeTarget = barSwipeOpensRow && bar.tabsButton.frame.contains(startedAt) ? store.previousTab : nil
-            if barSwipeTarget != nil { barSwipeOpensRow = false }
+            let zone = MobileBottomBar.previousTabZone(in: bar.bounds.size, safeBottom: bar.bounds.height - MobileBottomBar.height)
+            let previous = store.previousTab
+            let drag = MobileSwipe.barDrag(velocity: pan.velocity(in: view), startsInPreviousTabZone: zone.contains(startedAt),
+                                           hasPreviousTab: previous != nil)
+            barSwipeOpensRow = drag == .tabRow
+            barSwipeTarget = drag == .previousTab ? previous : nil
         }
         if let target = barSwipeTarget { return barFlickedUp(pan, to: target) }
         if barSwipeOpensRow { return barDraggedUp(pan) }

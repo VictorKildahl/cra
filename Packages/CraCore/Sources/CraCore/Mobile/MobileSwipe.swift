@@ -28,6 +28,27 @@ public enum MobileSwipe {
         }
     }
 
+    /// What a drag on the bottom bar does, decided as it starts.
+    public enum BarDrag: Equatable {
+        /// Along the bar: the neighbouring tab in the row.
+        case neighbour
+        /// Upwards: the tab row.
+        case tabRow
+        /// Upwards from the tab button's zone (`MobileBottomBar.previousTabZone`): the tab
+        /// looked at before this one (#537).
+        case previousTab
+    }
+
+    /// Sideways goes to the neighbouring tab and upwards opens the tab row. From the tab
+    /// button's zone, upwards brings the previous tab, and a thumb's flick that leans towards
+    /// the middle of the screen still counts as upwards: anything steeper than a third of the
+    /// way up from flat, since a swipe along the bar is close to flat.
+    public static func barDrag(velocity: CGPoint, startsInPreviousTabZone: Bool, hasPreviousTab: Bool) -> BarDrag {
+        let up = -velocity.y
+        if startsInPreviousTabZone, hasPreviousTab, up > 0, abs(velocity.x) <= 1.5 * up { return .previousTab }
+        return abs(velocity.y) > abs(velocity.x) ? .tabRow : .neighbour
+    }
+
     /// A drag up that starts on the tab button brings the previous tab (`MobileTabsDocument.previousTab`)
     /// out of the button under the finger (#537). Its card is the whole page at this share of
     /// the way: a 500 pt drag would get there, so mid-screen it is about half grown, as in Arc Search.

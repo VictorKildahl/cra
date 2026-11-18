@@ -530,6 +530,24 @@ final class GestureTests: BrowserTestCase {
         keep("flicked back")
     }
 
+    // promise: #537
+    /// The flick works from beside the tab button too, towards the pill, leaning the way a
+    /// thumb does: the reporter's follow-up found the row opening when it missed the button.
+    func testFlickingUpBesideTheTabButtonStillSwitches() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        let button = app.buttons["bar-tabs"]
+        // 40 pt right of the button's centre and a little lower: outside its 47 pt circle.
+        let start = button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 40, dy: 6))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.65)),
+                    withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+        XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
+        XCTAssertEqual(shownTabTitle(), "First")
+        keep("flicked from beside the button")
+    }
+
     // promise: #509
     /// With the bar scrolled away, a tap on the bottom edge brings it back: a swipe up there can
     /// open the app switcher instead.

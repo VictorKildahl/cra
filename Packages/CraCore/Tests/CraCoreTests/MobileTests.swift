@@ -524,6 +524,34 @@ struct MobileSwipeTests {
         #expect(MobileSwipe.previousTabProgress(dragUp: -40) == 0)
     }
 
+    /// The flick for the previous tab starts anywhere on the bar's left end, not only on the
+    /// 47 pt button: a thumb that came down beside it opened the tab row (#537, reporter's
+    /// follow-up). A flick leaning towards the middle still counts as up.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/537")) func theFlickStartsAnywhereOnTheBarsLeftEnd() {
+        let size = CGSize(width: 393, height: 852)
+        let zone = MobileBottomBar.previousTabZone(in: size, safeBottom: 34)
+        let frames = MobileBottomBar.frames(in: size, safeBottom: 34)
+        #expect(zone.contains(frames.tabs.insetBy(dx: -6, dy: -6)), "the button and its slop")
+        #expect(zone.contains(CGPoint(x: 85, y: frames.tabs.midY)), "beside the button, towards the pill")
+        #expect(zone.contains(CGPoint(x: 4, y: 850)), "the screen's corner")
+        #expect(zone.contains(CGPoint(x: 30, y: frames.bar.minY + 1)), "the bar's top edge")
+        #expect(!zone.intersects(frames.pill), "the pill keeps its drag up to the tab row")
+        #expect(!zone.contains(CGPoint(x: 30, y: frames.bar.minY - 1)), "the page above the bar")
+        #expect(abs(zone.maxX - 108.5) < 0.01, "halfway between the button and the pill")
+
+        func drag(_ vx: CGFloat, _ vy: CGFloat, inZone: Bool = true, previous: Bool = true) -> MobileSwipe.BarDrag {
+            MobileSwipe.barDrag(velocity: CGPoint(x: vx, y: vy), startsInPreviousTabZone: inZone, hasPreviousTab: previous)
+        }
+        #expect(drag(0, -900) == .previousTab)
+        #expect(drag(700, -600) == .previousTab, "a thumb's flick leaning towards the middle")
+        #expect(drag(-500, -400) == .previousTab)
+        #expect(drag(900, -300) == .neighbour, "close to flat is a swipe along the bar")
+        #expect(drag(900, 0) == .neighbour)
+        #expect(drag(0, -900, inZone: false) == .tabRow)
+        #expect(drag(700, -600, inZone: false) == .neighbour)
+        #expect(drag(0, -900, previous: false) == .tabRow, "one tab: nothing to flick to, so the row opens")
+    }
+
     @Test func pullToRefreshActsOnRelease() {
         #expect(MobileSwipe.refreshes(pullAtRelease: 100))
         #expect(!MobileSwipe.refreshes(pullAtRelease: 60))

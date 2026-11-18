@@ -86,6 +86,15 @@ public enum MobileBottomBar {
                       menu: circle(size.width - sideButtonCenterInset))
     }
 
+    /// Where a drag up brings back the previous tab rather than opening the tab row (#537): the
+    /// tab button and the bar round it, from the screen's edge to halfway to the pill, the bar's
+    /// whole height. The button's own 47 pt circle let a thumb that came down beside it open
+    /// the tab row instead.
+    public static func previousTabZone(in size: CGSize, safeBottom: CGFloat) -> CGRect {
+        let frames = frames(in: size, safeBottom: safeBottom)
+        return CGRect(x: 0, y: frames.bar.minY, width: (frames.tabs.maxX + frames.pill.minX) / 2, height: frames.bar.height)
+    }
+
     /// Where a tap brings the bar back after scrolling put it away: the home indicator's strip
     /// along the bottom edge, which pages leave empty. A swipe up from there is the system's
     /// and can open the app switcher, so a tap is the sure way back (#509). A phone without a

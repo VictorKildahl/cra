@@ -1103,7 +1103,9 @@
 #536   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
 #536   iOS/CraUITests/PasskeyTests.swift::testASitesPasskeyRequestBringsUpTheSystemPasskeySheet  a58d934f1192
 #537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickGoesToTheTabLookedAtLast  0c1aadf12ada
+#537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickStartsAnywhereOnTheBarsLeftEnd  d1f9c085a9d4
 #537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickUpSwitchesByDistanceOrSpeed  e760a83f8970
+#537   iOS/CraUITests/BrowserTests.swift::testFlickingUpBesideTheTabButtonStillSwitches  31ecdee14f56
 #537   iOS/CraUITests/BrowserTests.swift::testFlickingUpFromTheTabButtonTogglesTheTwoLatestTabs  15227fb71e75
 #538   Packages/CraCore/Tests/CraCoreTests/AppleIntelligenceStatusTests.swift::appleSiliconMacWithoutTheModelIsNotToldItNeedsAppleSilicon  bb6a933de6bf
 #539   Tests/Scenarios/little-window-screenshot-pick.scenario  a4df2e9bd27b
