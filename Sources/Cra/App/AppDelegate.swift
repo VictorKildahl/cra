@@ -2374,6 +2374,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
                 return
             }
+            // hiddenLibraryReveal=<0…1>: the Library held that far in from a hidden sidebar, and where
+            // it, the page and the floating sidebar are; hiddenLibraryReveal=lift lets go.
+            if let r = dict["hiddenLibraryReveal"] {
+                main.debugHiddenLibraryReveal(CGFloat(Double(r) ?? 0), lift: r == "lift")
+                return
+            }
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }
             // What the side panel's close button does (scripts/scenario.sh).
             if dict["sidePanel"] == "close" { main.sidePanel.hide(); return }

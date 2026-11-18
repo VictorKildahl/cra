@@ -454,5 +454,30 @@ space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView
   the pointer a rounded card and a 36 × 22 pt switch; off = the tile struck through; right-click
   Rename (in place), Delete.
 
+## Library from a hidden sidebar, measured (Arc 1.173.1, 18 Nov 2026)
+
+Read frame by frame from a 120 Hz, 2x screen recording: a 250 pt sidebar hidden and out over the
+page, 6 pt inside the window, and a 405 pt Library (CraCore `LibrarySwipe`, "From a hidden
+sidebar"; the app's `MainWindowController`, `FloatingSidebarController.retreat`).
+
+- With the sidebar hidden and out over the page, a swipe right on the first space brings the
+  Library in docked, as from a docked sidebar. It slides in from the window's edge, under the
+  floating sidebar, and pushes the page before it at the page's full width (the Google logo moved
+  802 px for an 810 px Library).
+- The floating sidebar goes back out toward the window's edge as the Library comes, two points for
+  every three the page moves: the page's shift over the sidebar's was 1.43 to 1.53 in twelve frames
+  (322 px for 211, 144 for 97). Its rows don't fade. The Library shows in the gap between the two
+  from about 0.4 of the way.
+- Swiping back before lifting brings the floating sidebar and the page back the same way.
+- Landed, the Library is docked with the window's buttons, and the floating sidebar is gone.
+- Leaving the Library by a swipe slides it out to the left with the page following, and ends on the
+  hidden sidebar; the floating sidebar doesn't show on the way. It comes out again under the pointer
+  as it always does.
+- A window with one space swipes into the Library the same way.
+- Not measured: another sidebar width (the two-for-three could be a share of the Library's width,
+  as taken here, or the sidebar's own width and margin, which is 256 against 270 pt here), a
+  sidebar on the right, and a mouse's back button over the floating sidebar (Cra takes it the same
+  way in).
+
 ## Left for later, and why
 

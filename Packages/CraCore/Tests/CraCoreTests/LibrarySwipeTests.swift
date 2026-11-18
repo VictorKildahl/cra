@@ -87,4 +87,39 @@ struct LibrarySwipeTests {
             #expect(abs(LibrarySwipe.settleVelocity(from: 0, velocity: 0, to: 1, at: t) - slope) < 0.001)
         }
     }
+
+    // MARK: From a hidden sidebar (Arc 1.173.1, 18 Nov 2026)
+
+    @Test func aFloatingSidebarOnTheFirstSpaceSwipesIntoTheLibrary() {
+        #expect(LibrarySwipe.startsFromHiddenSidebar(floatingShown: true, onFirstSpace: true))
+        #expect(!LibrarySwipe.startsFromHiddenSidebar(floatingShown: true, onFirstSpace: false))
+        #expect(!LibrarySwipe.startsFromHiddenSidebar(floatingShown: false, onFirstSpace: true))
+    }
+
+    /// Arc's page had moved 322 px when its floating sidebar had gone back 211 px, and 144 px for 97.
+    @Test func theFloatingSidebarGoesBackTwoPointsForThePagesThree() {
+        let library: CGFloat = 405
+        for r: CGFloat in [0.178, 0.4] {
+            let page = LibrarySwipe.pageEdgeFromHidden(reveal: r, library: library, inset: 0)
+            let retreat = LibrarySwipe.floatingRetreat(reveal: r, library: library)
+            #expect(abs(page / retreat - 1.5) < 0.001)
+        }
+        #expect(abs(LibrarySwipe.floatingRetreat(reveal: 0.4, library: library) - 108) < 0.001)
+        #expect(LibrarySwipe.floatingRetreat(reveal: 0, library: library) == 0)
+        #expect(LibrarySwipe.floatingRetreat(reveal: -0.1, library: library) == 0)
+        // With the Library in, a 250 pt sidebar 6 pt inside the window is out of sight.
+        #expect(LibrarySwipe.floatingRetreat(reveal: 1, library: library) >= 256)
+    }
+
+    @Test func thePageStaysAgainstTheLibraryFromItsHiddenPlace() {
+        let library: CGFloat = 417
+        let rest: CGFloat = 10
+        #expect(LibrarySwipe.pageEdgeFromHidden(reveal: 0, library: library, inset: rest) == rest)
+        #expect(LibrarySwipe.pageEdgeFromHidden(reveal: 0.01, library: library, inset: rest) == rest)
+        let half: CGFloat = 208.5
+        #expect(LibrarySwipe.pageEdgeFromHidden(reveal: 0.5, library: library, inset: rest) == half)
+        #expect(LibrarySwipe.pageEdgeFromHidden(reveal: 1, library: library, inset: rest) == library)
+        // The Library under it: its right edge is the page's left one.
+        #expect(LibrarySwipe.libraryX(reveal: 0.5, base: 0, library: library) + library == half)
+    }
 }

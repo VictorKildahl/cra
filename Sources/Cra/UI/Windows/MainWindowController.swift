@@ -2910,6 +2910,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc's Library button and ⇧⌘L: open the Library on the page last shown, or leave it. In a
     /// docked sidebar it slides in and out like the swipe into it (LibrarySwipe).
     func toggleLibrary() {
+        // One on its way in from a hidden sidebar lands first.
+        guard hiddenLibrary == nil else { return }
         let opening = librarySettleSpring.map { $0.target < 1 } ?? (sidebarUI.libraryPage == nil)
         if librarySwipeFrom == nil, !shell.floatingSidebar, shell.sidebarVisible, !libraryShowedSidebar {
             slideLibrary(to: opening ? 1 : 0)
@@ -2922,6 +2924,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The Library takes over the sidebar, which widens for its page rail (LibraryView).
     func showLibrary(_ page: LibraryPage) {
+        guard hiddenLibrary == nil else { return }
         sidebarUI.lastLibraryPage = page
         let opening = sidebarUI.libraryPage == nil
         let resize = !opening && sidebarUI.libraryPage.map(libraryWidth) != libraryWidth(page)
@@ -3015,7 +3018,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                               popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
                                               popupAwaitedUntil: self?.floatingSidebarPopupHold)
             if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
-            return keep.staysOut(now: Date()) || self?.sidebarPresentation.mayRetract == false
+            // And while a swipe is bringing the Library in under it.
+            return keep.staysOut(now: Date()) || self?.sidebarPresentation.mayRetract == false || self?.hiddenLibrary != nil
         }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.
@@ -3195,9 +3199,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A swipe during a Library settle picks it up where it shows.
         librarySwipeToward = librarySettleSpring?.target
         stopLibrarySettle()
-        let shown = sidebarUI.libraryReveal
+        let shown = liveLibraryReveal
         librarySwipeFrom = nil
-        guard !shell.floatingSidebar, shell.sidebarVisible || sidebarUI.libraryPage != nil else { return }
+        swipeSpent = false
+        if shell.floatingSidebar || hiddenLibrary != nil {
+            // Hidden and out over the page: from the first space the Library comes in docked (Arc).
+            if hiddenLibrary != nil || LibrarySwipe.startsFromHiddenSidebar(floatingShown: floatingSidebar?.isShown == true,
+                                                                            onFirstSpace: store.spaceOrder.first == focusedSpaceID) {
+                // Its view is made once the fingers head that way (trackLibrarySwipe), not for every swipe.
+                if hiddenLibrary == nil {
+                    sidebarUI.libraryRevealPage = sidebarUI.lastLibraryPage
+                    sidebarUI.libraryRevealWidth = libraryWidth(sidebarUI.lastLibraryPage)
+                    sidebarUI.libraryRevealBase = 0
+                }
+                librarySwipeFrom = shown ?? 0
+            }
+            swipeHaptics = PageDetentHaptics(page: -Int((librarySwipeFrom ?? 0).rounded()))
+            return
+        }
+        guard shell.sidebarVisible || sidebarUI.libraryPage != nil else { return }
         if let page = sidebarUI.libraryPage {
             prepareLibraryReveal(page)
             librarySwipeFrom = shown ?? 1
@@ -3220,12 +3240,107 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private func prepareLibraryReveal(_ page: LibraryPage) {
         sidebarUI.libraryRevealPage = page
         sidebarUI.libraryRevealWidth = libraryWidth(page)
-        sidebarUI.libraryRevealBase = CGFloat(store.prefs.sidebarWidth)
+        // A Library that brought out a hidden sidebar has no tab list beside it to slide back to.
+        sidebarUI.libraryRevealBase = libraryShowedSidebar ? 0 : CGFloat(store.prefs.sidebarWidth)
+    }
+
+    // MARK: Into the Library from a hidden sidebar (LibrarySwipe, "From a hidden sidebar")
+
+    /// The Library on its way in under a floating sidebar: a view of its own in the window until it
+    /// lands, when the sidebar takes it over, docked.
+    private var hiddenLibrary: (view: LibraryView, page: LibraryPage, width: CGFloat, reveal: CGFloat)?
+    /// The reveal a swipe or a settle shows, whichever sidebar it started from.
+    private var liveLibraryReveal: CGFloat? { hiddenLibrary?.reveal ?? sidebarUI.libraryReveal }
+    /// A swipe out of the Library that ended on a hidden sidebar: the rest of it pages nothing.
+    private var swipeSpent = false
+
+    private func prepareHiddenLibraryReveal(_ page: LibraryPage) {
+        guard hiddenLibrary == nil, let sidebar = shell.sidebarHost as? SidebarView else { return }
+        let width = libraryWidth(page)
+        let view = sidebar.makeDetachedLibrary(page)
+        shell.addSubview(view, positioned: .below, relativeTo: shell.resizeHandle)
+        hiddenLibrary = (view, page, width, 0)
+        sidebarUI.libraryRevealPage = page
+        sidebarUI.libraryRevealWidth = width
+        sidebarUI.libraryRevealBase = 0
+        if EmbeddedPages.isEnabled { shell.freezePages() }
+        setLibraryReveal(0)
+    }
+
+    /// Landed from a hidden sidebar: the floating sidebar is out of sight by now, so the sidebar goes
+    /// home and docks with the Library in it, where the swipe left it. Leaving it hides the sidebar again.
+    private func landLibraryFromHidden(_ view: LibraryView, page: LibraryPage, width: CGFloat) {
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        floatingSidebar?.hide(animated: false)
+        libraryShowedSidebar = true
+        sidebarUI.lastLibraryPage = page
+        sidebarUI.downloadsListOpen = false
+        commandBar.close()
+        shell.sidebarResizable = false
+        (shell.sidebarHost as? SidebarView)?.adoptLibrary(view, page: page)
+        withTransaction(instant) { sidebarUI.libraryPage = page }
+        shell.sidebarWidth = width
+        setSidebarVisibleInPlace(true)
+        window?.makeKey()
+        CraLog.note("library swipe from the hidden sidebar: lands docked \(Int(width)) pt wide")
+    }
+
+    /// The sidebar docked or hidden with no slide of its own: a Library swipe has already moved the
+    /// Library and the page to where that leaves them.
+    private func setSidebarVisibleInPlace(_ visible: Bool) {
+        lastSidebarVisible = visible
+        sidebarVisible = visible
+        shell.sidebarVisible = visible
+        shell.floatingSidebar = false
+        (window as? CraWindow)?.trafficLightsHidden = !visible
+        floatingSidebar?.sidebarVisibilityChanged()
+        shell.needsLayout = true
+        shell.layoutSubtreeIfNeeded()
+    }
+
+    /// A mouse's back button over the floating sidebar: the same way in, from rest.
+    private func slideLibraryFromHidden() {
+        guard hiddenLibrary == nil else { return }
+        prepareHiddenLibraryReveal(sidebarUI.lastLibraryPage)
+        guard hiddenLibrary != nil else { return showLibrary(sidebarUI.lastLibraryPage) }
+        settleLibrary(from: 0, velocity: 0, to: 1)
+    }
+
+    /// Scenario hook: the Library held at reveal `r` on its way in from a hidden sidebar, and where
+    /// that puts it, the page and the floating sidebar; `lift` lets go.
+    func debugHiddenLibraryReveal(_ r: CGFloat, lift: Bool) {
+        if lift {
+            guard hiddenLibrary != nil else { return CraLog.note("hidden library reveal: none to let go") }
+            swipeSamples = []
+            endSpaceSwipe()
+            return
+        }
+        if hiddenLibrary == nil {
+            beginSpaceSwipe()
+            if librarySwipeFrom != nil, shell.floatingSidebar { prepareHiddenLibraryReveal(sidebarUI.lastLibraryPage) }
+        }
+        guard let h = hiddenLibrary else { swipeTracking = false; return CraLog.note("hidden library reveal: not offered") }
+        setLibraryReveal(r)
+        shell.layoutSubtreeIfNeeded()
+        let page = shell.frames(sidebarVisible: shell.sidebarVisible, floating: shell.floatingSidebar, fullscreen: shell.contentFullscreen,
+                                width: shell.sidebarWidth).content.minX
+        CraLog.note("hidden library reveal \(String(format: "%.2f", Double(r))): library x=\(Int(h.view.frame.minX.rounded())) w=\(Int(h.width))"
+            + " page x=\(Int(page.rounded())) floating back=\(floatingSidebar?.retreatReadout ?? 0)")
     }
 
     /// Shows reveal `r`, and like Arc the sidebar widens with it, from its own width to the
     /// Library's, so the Library lands at its width with nothing left to resize.
     private func setLibraryReveal(_ r: CGFloat) {
+        if var h = hiddenLibrary {
+            h.reveal = r
+            hiddenLibrary = h
+            let x = LibrarySwipe.libraryX(reveal: r, base: 0, library: h.width)
+            h.view.frame = shell.sidebarSide.place(NSRect(x: x, y: 0, width: h.width, height: shell.bounds.height), in: shell.bounds)
+            shell.libraryRevealFromHidden = (r, h.width)
+            floatingSidebar?.retreat(LibrarySwipe.floatingRetreat(reveal: r, library: h.width))
+            return
+        }
         // Embedded pages keep their size under their cards until the swipe lands.
         if sidebarUI.libraryReveal == nil, EmbeddedPages.isEnabled { shell.freezePages() }
         sidebarUI.libraryReveal = r
@@ -3244,6 +3359,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 swipeTravel = LibrarySwipe.travelPastSpace(from: from, travel: swipeTravel, width: width)
                 librarySwipeFrom = 0
                 librarySwipeToward = nil
+                // Out to a hidden sidebar there is no next space on show to go on to.
+                let toHidden = libraryShowedSidebar
+                finishLibrarySwipe(at: 0)
+                if toHidden {
+                    librarySwipeFrom = nil
+                    swipeSpent = true
+                    return true
+                }
+            } else if hiddenLibrary != nil {
                 finishLibrarySwipe(at: 0)
             } else if sidebarUI.libraryReveal != nil {
                 setLibraryReveal(0)
@@ -3253,6 +3377,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             return false
         }
         if sidebarUI.spaceSwipe != 0 { sidebarUI.spaceSwipe = 0 }
+        // Back toward the Library after heading for the next space, in a floating sidebar.
+        if shell.floatingSidebar, hiddenLibrary == nil {
+            prepareHiddenLibraryReveal(sidebarUI.lastLibraryPage)
+            guard hiddenLibrary != nil else { return false }
+        }
         setLibraryReveal(r)
         if swipeHaptics.track(position: -r, pages: -1...0) { performSwipeHaptic() }
         return true
@@ -3311,6 +3440,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Landed: the window is in the Library or on the space, at the width the swipe ends on.
     private func finishLibrarySwipe(at target: CGFloat) {
+        if let h = hiddenLibrary {
+            hiddenLibrary = nil
+            shell.libraryRevealFromHidden = nil
+            if target >= 1 {
+                landLibraryFromHidden(h.view, page: h.page, width: h.width)
+            } else {
+                h.view.removeFromSuperview()
+                floatingSidebar?.retreat(0)
+                CraLog.note("library swipe from the hidden sidebar: back to the space")
+            }
+            shell.thawPages()
+            return
+        }
         var instant = Transaction()
         instant.disablesAnimations = true
         let width: CGFloat
@@ -3335,6 +3477,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         sidebarUI.libraryReveal = nil
         shell.sidebarWidth = width
+        if target < 1, libraryShowedSidebar {
+            // It came out of a hidden sidebar, and that is where leaving it goes back to (Arc).
+            libraryShowedSidebar = false
+            setSidebarVisibleInPlace(false)
+            CraLog.note("library left by a swipe: the sidebar hides again")
+        }
         shell.thawPages()
     }
 
@@ -3376,8 +3524,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Where the Library is headed, if it is sliding.
         let inLibrary = librarySettleSpring.map { $0.target >= 1 } ?? (sidebarUI.libraryPage != nil)
         switch WheelSpaceSwitch.target(step: step, index: order.firstIndex(of: focusedSpaceID) ?? 0, count: order.count,
-                                       inLibrary: inLibrary, libraryAllowed: !shell.floatingSidebar && shell.sidebarVisible) {
+                                       inLibrary: inLibrary,
+                                       libraryAllowed: shell.floatingSidebar ? floatingSidebar?.isShown == true : shell.sidebarVisible) {
         case .space(let i): store.focusSpace(order[i], window: windowID)
+        case .openLibrary where shell.floatingSidebar: slideLibraryFromHidden()
         case .openLibrary, .closeLibrary: toggleLibrary()
         case nil: break
         }
@@ -3434,7 +3584,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         swipeTravel += dx
         swipeSamples.append((time, dx))
         swipeSamples.removeAll { time - $0.time > 0.08 }
-        if trackLibrarySwipe() { return }
+        if swipeSpent || trackLibrarySwipe() { return }
         let index = CGFloat(store.spaceOrder.firstIndex(of: focusedSpaceID) ?? 0)
         let first = -index, last = CGFloat(store.spaceOrder.count - 1) - index
         // Content follows the fingers (natural scrolling: fingers left = next space).
@@ -3510,7 +3660,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         liftNewSpacePull()
         HitchMonitor.mark("swipe-lift")
         swipeTracking = false
-        if let r = sidebarUI.libraryReveal, librarySwipeFrom != nil { return endLibrarySwipe(r) }
+        if let r = liveLibraryReveal, librarySwipeFrom != nil { return endLibrarySwipe(r) }
+        if swipeSpent {
+            swipeSpent = false
+            librarySwipeFrom = nil
+            return
+        }
         librarySwipeFrom = nil
         let width = max(1, shell.sidebarWidth)
         let pages = sidebarUI.spaceSwipe
