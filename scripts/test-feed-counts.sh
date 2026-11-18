@@ -1,8 +1,8 @@
 #!/bin/bash
 # scripts/promote.sh keeps the latest release's feed download counts in scripts/feed-counts.tsv before it uploads
-# over the feeds, which starts GitHub's counts over (docs/release.md, "Channels"). Runs promote.sh in a copy of the
-# scripts with a stand-in gh, so nothing reaches GitHub and the real stable-version and feed-counts.tsv stay as
-# they are.
+# over the feeds, which starts GitHub's counts over, and commits them with scripts/stable-version (docs/release.md,
+# "Channels"). Runs promote.sh in a git copy of the scripts with a stand-in gh, so nothing reaches GitHub and the
+# real repository is never touched.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -12,7 +12,15 @@ trap 'rm -rf "$DIR"' EXIT
 REPO_COPY="$DIR/repo"
 mkdir -p "$REPO_COPY/scripts" "$DIR/bin"
 cp scripts/promote.sh scripts/feed-counts.sh scripts/appcast-feeds.py "$REPO_COPY/scripts/"
-echo 0.1.43 > "$REPO_COPY/scripts/stable-version"
+echo 0.1.40 > "$REPO_COPY/scripts/stable-version"
+grep '^#' scripts/feed-counts.tsv > "$REPO_COPY/scripts/feed-counts.tsv"
+export GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.com GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.com
+git -C "$REPO_COPY" init -q
+git -C "$REPO_COPY" add -A
+git -C "$REPO_COPY" commit -q -m "Before promoting"
+# Someone else's work in the same checkout, staged but not theirs to commit yet.
+echo "half done" > "$REPO_COPY/other.txt"
+git -C "$REPO_COPY" add other.txt
 LOG="$DIR/gh.log"
 
 # The stand-in gh: v0.1.46 is the latest release, v0.1.43 the one promoted; feeds come from Tests/Fixtures/Appcast.
@@ -27,7 +35,7 @@ case "\$1 \$2" in
     if [ "\$tag" = v0.1.46 ]; then cp "$ROOT/Tests/Fixtures/Appcast/newest.xml" "\$dest/\$pattern"
     else cp "$ROOT/Tests/Fixtures/Appcast/stable.xml" "\$dest/\$pattern"; fi ;;
   "release upload")
-    echo "kept before upload: \$(cat "$REPO_COPY/scripts/feed-counts.tsv" 2>/dev/null | wc -l | tr -d ' ')" >> "$LOG" ;;
+    echo "kept before upload: \$(grep -vc '^#' "$REPO_COPY/scripts/feed-counts.tsv")" >> "$LOG" ;;
   "api repos/VictorKildahl/cra/releases/tags/v0.1.46")
     cat <<'JSON'
 {"assets": [
@@ -50,7 +58,8 @@ FAILED=0
 check() {
   if [ "$2" = "$3" ]; then echo "ok: $1"; else echo "FAILED: $1: expected '$3', got '$2'"; FAILED=1; fi
 }
-counts() { cut -f2- "$REPO_COPY/scripts/feed-counts.tsv" 2>/dev/null | tr '\t\n' ' |'; }
+counts() { grep -v '^#' "$REPO_COPY/scripts/feed-counts.tsv" | cut -f2- | tr '\t\n' ' |'; }
+commits() { git -C "$REPO_COPY" rev-list --count HEAD; }
 EXPECTED='v0.1.46 appcast-intel.xml 35|v0.1.46 appcast-stable-intel.xml 0|v0.1.46 appcast-stable.xml 31|v0.1.46 appcast.xml 1243|'
 
 check "feed-counts.sh lists the feeds' counts, not the archives'" \
@@ -61,7 +70,8 @@ check "feed-counts.sh stamps each line with the UTC time" \
 : > "$LOG"
 "$REPO_COPY/scripts/promote.sh" 0.1.43 --dry-run > "$DIR/dry.out"
 check "a dry run shows the counts" "$(grep -c $'\tv0.1.46\tappcast' "$DIR/dry.out")" 4
-check "a dry run keeps nothing" "$([ -e "$REPO_COPY/scripts/feed-counts.tsv" ] && echo kept || echo none)" none
+check "a dry run keeps nothing" "$(counts)" ""
+check "a dry run commits nothing" "$(commits)" 1
 check "a dry run uploads nothing" "$(grep -c '^release upload' "$LOG" || true)" 0
 
 : > "$LOG"
@@ -71,7 +81,12 @@ check "the counts are kept before the upload starts them over" "$(grep '^kept be
   "kept before upload: 4"
 check "promoting still uploads the feeds" "$(grep -c '^release upload -R VictorKildahl/cra v0.1.46 --clobber' "$LOG")" 1
 check "promoting still sets stable-version" "$(cat "$REPO_COPY/scripts/stable-version")" 0.1.43
+check "promoting commits" "$(git -C "$REPO_COPY" log -1 --format=%s)" "Stable is Cra 0.1.43"
+check "the commit holds stable-version and the counts, nothing else" \
+  "$(git -C "$REPO_COPY" show --name-only --format= HEAD | tr '\n' ' ')" "scripts/feed-counts.tsv scripts/stable-version "
+check "other work in the checkout stays staged and uncommitted" "$(git -C "$REPO_COPY" diff --cached --name-only)" other.txt
 
 "$REPO_COPY/scripts/promote.sh" 0.1.43 > /dev/null
 check "a second promotion adds to the earlier counts" "$(counts)" "$EXPECTED$EXPECTED"
+check "and commits them too" "$(commits)" 3
 exit $FAILED

@@ -395,6 +395,10 @@ built release app with a test profile. Note anything that fails in the release's
   allstate.com show their pages. They stayed white while a blocked request was cancelled instead of
   failed: Adobe Target hides the page until its request ends. (The scenario checks the failure and
   that the blocked host is never asked; this needs the real sites.)
+- **Install count:** within an hour of the release going live, Phantom's "Cra installs" site
+  (phantom.kildahl.dk) shows check-ins from the new version under Version, and from Intel too under
+  Chip once Intel Macs have updated. None means released copies aren't checking in (docs/sharing.md,
+  "Install count"); the `install-checkin` scenario only proves a test copy does.
 
 ### Sync
 
