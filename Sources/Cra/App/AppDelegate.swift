@@ -2301,6 +2301,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // glyphs=<View[,n]>: the sidebar glyph buttons in that view (as `snapshot` finds it), each as
+            // its symbol and tip: a live folder's key or warning (#521).
+            if let spec = dict["glyphs"] {
+                var buttons: [SidebarGlyphButton] = []
+                func walk(_ v: NSView) {
+                    if let b = v as? SidebarGlyphButton, !b.isHidden { buttons.append(b) }
+                    v.subviews.forEach(walk)
+                }
+                if let view = ViewSnapshot.find(spec, in: main.window) { walk(view) }
+                CraLog.note("Cra glyphs \(spec): \(buttons.map(\.debugReadout).joined(separator: " | "))")
+                return
+            }
             // What the command bar would list for the text (rows, the Tab scope, the search), without opening it.
             if let text = dict["suggest"] {
                 let engine = main.commandBar.engine

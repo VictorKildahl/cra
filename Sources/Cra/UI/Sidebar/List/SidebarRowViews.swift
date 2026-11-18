@@ -298,6 +298,9 @@ final class SidebarGlyphButton: NSView {
         setHelp(help)
     }
 
+    /// cra://debug?glyphs=: the symbol it shows and its tip, as `symbol "tip"`.
+    var debugReadout: String { "\(shownSymbol ?? "none") \"\(tip?.text ?? "")\"" }
+
     func setHelp(_ help: String) {
         if let tip { (tip.text, tip.keys) = ArcTooltipLabel.split(help) } else if !help.isEmpty { tip = ArcTooltipAnchorView.attach(to: self, help: help) }
     }
