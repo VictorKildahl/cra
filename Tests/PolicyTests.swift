@@ -75,13 +75,14 @@ enum PolicyTests {
         expect(types.contains("public.xhtml"), "Cra views XHTML files, so the system's default browser picker lists it")
     }
 
-    // promise: #504
+    // promise: #504 #536
     /// #504: iOS lists an app under Settings ▸ Apps ▸ Default Apps ▸ Browser App, and gives the
     /// app's own Settings page its "Default Browser App" row, only when the app is signed with
     /// Apple's managed `com.apple.developer.web-browser` entitlement (granted to the team 18 Nov
     /// 2026, request 2557T8YX24). Without it "Set Cra as Default Browser" led to a page with nothing
     /// to pick. Apple also asks for http and https in the Info.plist, and the entitlement rules out
-    /// Universal Links (associated domains).
+    /// Universal Links (associated domains). #536: the same entitlement is what lets WebKit pass a
+    /// site's passkey request to iOS; without it every passkey sign-in failed (PasskeyTests).
     private static func iPhoneDefaultBrowser() throws {
         let entitlementsData = try Data(contentsOf: URL(fileURLWithPath: "iOS/Support/Cra.entitlements"))
         let entitlements = try PropertyListSerialization.propertyList(from: entitlementsData, format: nil) as? [String: Any]

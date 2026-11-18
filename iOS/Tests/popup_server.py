@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Local synthetic POST/opener fixture for CraUITests/PopupTests. No external requests."""
+"""Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests) and a passkey page
+(PasskeyTests). No external requests."""
 import argparse
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +49,27 @@ function openBlank() {{
   child.document.close();
 }}
 </script>''', cookie=f'sourceSession={mode}; Path=/' if private else 'normalSession=normal; Path=/')
+        elif url.path == '/passkey':
+            # WebAuthn needs a secure context and a domain as its relying party: the test opens this
+            # page as http://localhost:<port>, which is both (127.0.0.1 isn't a valid RP ID).
+            self.page('''<title>Passkey Fixture</title><h1>Passkey Fixture</h1>
+<button onclick="createPasskey()">Create passkey</button><p id="answer">No passkey answer</p>
+<script>
+// Without the browser entitlement WebKit refuses at once; with it the request waits on iOS's
+// passkey sheet, which the page can't see, so it says so once the request has stayed open.
+function createPasskey() {
+  const answer = document.getElementById('answer');
+  let answered = false;
+  setTimeout(() => { if (!answered) answer.textContent = 'Passkey request still open'; }, 3000);
+  navigator.credentials.create({publicKey: {
+    rp: {name: 'Cra fixture', id: location.hostname},
+    user: {id: new Uint8Array(16), name: 'fixture@cra.test', displayName: 'Fixture'},
+    challenge: new Uint8Array(32), pubKeyCredParams: [{type: 'public-key', alg: -7}],
+    authenticatorSelection: {residentKey: 'required'}, timeout: 60000}})
+    .then(() => { answered = true; answer.textContent = 'Passkey created'; },
+          error => { answered = true; answer.textContent = 'Passkey refused: ' + error.name; });
+}
+</script>''')
         elif url.path == '/checkout':
             self.page('<title>POST lost</title><h1>POST lost</h1><p>Unexpected GET</p>')
         else:
