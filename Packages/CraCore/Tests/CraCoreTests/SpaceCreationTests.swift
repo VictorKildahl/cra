@@ -18,9 +18,9 @@ struct SpaceCreationTests {
         #expect(!d.canCreate)
         d.title = "   "
         #expect(!d.canCreate)
-        // Neither an icon nor a theme is needed.
+        // Neither an icon nor a theme is needed, and the search engine follows Settings unless picked.
         d.title = "Work"
-        #expect(d.icon == .none && !d.themeChosen && d.canCreate)
+        #expect(d.icon == .none && !d.themeChosen && d.searchEngine == nil && d.canCreate)
     }
 
     @Test func theNameIsTrimmedAndHeldToASpacesLength() {
@@ -54,6 +54,9 @@ struct SpaceCreationTests {
         #expect(f.profile == profile)
         let theme = CGRect(x: 13.5, y: 273, width: 223, height: 36)
         #expect(f.theme == theme)
+        // Cra's Search Engine row comes after Arc's two, like them.
+        let search = CGRect(x: 13.5, y: 316, width: 223, height: 36)
+        #expect(f.search == search)
         // The dashed "+" is 18 pt, centred in the field's height, 21 pt from the sidebar's edge.
         let icon = CGRect(x: 21, y: 197.5, width: 18, height: 18)
         #expect(f.icon == icon)
@@ -71,7 +74,7 @@ struct SpaceCreationTests {
         #expect(f.field.width == 301 && f.create.width == 301)
         #expect(f.picture.midX == 164)
         #expect(f.create.maxY == 656)
-        #expect(SpaceCreationLayout.minimumHeight < 420)
+        #expect(SpaceCreationLayout.minimumHeight < 460)
     }
 
     @Test func theDockDrawsCloserWithOneMoreItem() {

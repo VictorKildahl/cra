@@ -3,8 +3,9 @@ import SwiftUI
 
 /// Arc's "Create a Space" page in the sidebar (CraCore's SpaceCreationDraft, SpaceCreationLayout and
 /// SpaceCreationAnimation; docs/arc-parity.md, "Create a Space"): a picture, a title, the name
-/// field with its icon button, the Profile and Choose a Theme rows, and Create Space and Cancel
-/// at the bottom. It edits the window's draft and makes nothing itself.
+/// field with its icon button, the Profile and Choose a Theme rows, Cra's own Search Engine row
+/// (#306), and Create Space and Cancel at the bottom. It edits the window's draft and makes
+/// nothing itself.
 @MainActor
 final class SpaceCreationView: NSView, NSTextFieldDelegate {
     private let store: SidebarStore
@@ -20,6 +21,9 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
     private let pill = SpaceCreationPill()
     private let info = NSImageView()
     private let themeRow = SpaceCreationRow(symbol: "paintbrush.fill", label: "Choose a Theme")
+    /// Cra's own row (#306): the command bar's search engine in this space.
+    private let searchRow = SpaceCreationRow(symbol: "magnifyingglass", label: "Search Engine")
+    private let enginePill = SpaceCreationPill()
     private let create = SpaceCreationButton()
     private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
     private let card = NSView()
@@ -67,6 +71,10 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
             guard let self, let window = self.window else { return }
             self.actions.chooseCreationTheme(window.convertToScreen(self.themeRow.convert(self.themeRow.bounds, to: nil)))
         }
+        enginePill.onClick = { [weak self] in self?.showEngineMenu() }
+        searchRow.addSubview(enginePill)
+        searchRow.onClick = { [weak self] in self?.showEngineMenu() }
+        searchRow.toolTip = "Searches from the command bar in this space go here. Default follows Settings."
         create.title = "Create Space"
         create.onClick = { [weak self] in self?.actions.commitSpaceCreation() }
         cancel.isBordered = false
@@ -88,7 +96,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         glow.endPoint = CGPoint(x: 1, y: 1)
         glow.opacity = 0
         layer?.addSublayer(glow)
-        for v in [picture, title, subtitle, fieldBox, profileRow, themeRow, create, cancel, card] as [NSView] { addSubview(v) }
+        for v in [picture, title, subtitle, fieldBox, profileRow, themeRow, searchRow, create, cancel, card] as [NSView] { addSubview(v) }
         applyColors()
         observe()
     }
@@ -111,6 +119,8 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         iconButton.icon = draft.icon
         create.isOn = draft.canCreate
         pill.title = draft.profile.flatMap { id in store.profiles.first { $0.id == id }?.name } ?? "Default"
+        let engines = engineChoices(for: draft)
+        enginePill.title = draft.searchEngine.flatMap { k in engines.choices.first { $0.keyword == k }?.name } ?? "Default (\(engines.defaultName))"
         needsLayout = true
     }
 
@@ -127,8 +137,9 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         name.placeholderAttributedString = NSAttributedString(string: "Space name...", attributes: [
             .foregroundColor: placeholder, .font: NSFont.systemFont(ofSize: SpaceCreationLayout.textFont, weight: .semibold)])
         iconButton.ink = placeholder
-        for row in [profileRow, themeRow] { row.apply(colors: c, dark: dark) }
+        for row in [profileRow, themeRow, searchRow] { row.apply(colors: c, dark: dark) }
         pill.apply(colors: c, dark: dark)
+        enginePill.apply(colors: c, dark: dark)
         info.contentTintColor = c.textPrimary.withAlphaComponent(0.85)
         cancel.contentTintColor = c.textPrimary.withAlphaComponent(0.6)
         cancel.attributedTitle = NSAttributedString(string: "Cancel", attributes: [
@@ -164,6 +175,9 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         pill.frame = NSRect(x: 78, y: (f.profile.height - SpaceCreationLayout.pillHeight) / 2, width: pillWidth, height: SpaceCreationLayout.pillHeight)
         let side = SpaceCreationLayout.infoSide + 4
         info.frame = NSRect(x: f.profile.width - SpaceCreationLayout.infoInset - side + 2, y: (f.profile.height - side) / 2, width: side, height: side)
+        searchRow.frame = f.search
+        let engineWidth = min(enginePill.fittingWidth, f.search.width - 124 - 8)
+        enginePill.frame = NSRect(x: 124, y: (f.search.height - SpaceCreationLayout.pillHeight) / 2, width: engineWidth, height: SpaceCreationLayout.pillHeight)
         create.frame = f.create
         cancel.frame = f.cancel
         if !creating {
@@ -261,6 +275,38 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
 
     @objc private func newProfile() { actions.newProfileForCreation() }
 
+    // MARK: The search engine (Cra's own, #306)
+
+    /// The engines the draft's profile knows, and the name of the one Settings uses.
+    private func engineChoices(for draft: SpaceCreationDraft) -> (choices: [ChromiumSearchEngine], defaultName: String) {
+        let path = store.profilePath(profile: draft.profile)
+        let name = SearchEngines.shared.defaultEngine(profilePath: path, legacy: store.settings.searchEngine).name
+        return (ChromiumSearchEngine.spaceChoices(among: SearchEngines.shared.keywords(profilePath: path)), name)
+    }
+
+    /// The rows of the sheet's picker: Default (the one Settings uses), a line, the engines.
+    private func showEngineMenu() {
+        guard let draft = ui.spaceCreation else { return }
+        actions.closeCreationPanels()
+        let engines = engineChoices(for: draft)
+        let menu = NSMenu()
+        func item(_ title: String, _ keyword: String?) -> NSMenuItem {
+            let i = NSMenuItem(title: title, action: #selector(pickEngine(_:)), keyEquivalent: "")
+            i.target = self
+            i.representedObject = keyword
+            i.state = keyword == draft.searchEngine ? .on : .off
+            return i
+        }
+        menu.addItem(item("Default (\(engines.defaultName))", nil))
+        menu.addItem(.separator())
+        for e in engines.choices { menu.addItem(item(e.name, e.keyword)) }
+        menu.popUp(positioning: nil, at: NSPoint(x: enginePill.frame.minX, y: enginePill.frame.maxY + 4), in: searchRow)
+    }
+
+    @objc private func pickEngine(_ sender: NSMenuItem) {
+        ui.spaceCreation?.searchEngine = sender.representedObject as? String
+    }
+
     // MARK: Creating
 
     /// Arc's animation from Create Space to the space: the controls fade out from the bottom up, the
@@ -285,7 +331,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         }
         for v in subviews { v.wantsLayer = true }
         fade([create, cancel], A.buttonsFade)
-        fade([themeRow, profileRow, fieldBox], A.rowsFade)
+        fade([searchRow, themeRow, profileRow, fieldBox], A.rowsFade)
         fade([title, subtitle], A.headingFade)
         // The picture moves down as it tips, edge-on at the end.
         let rest = SpaceCreationAnimation.cardFrame(in: bounds.size)
@@ -361,7 +407,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
     /// What the page shows, for a scenario.
     var debugLine: String {
         func r(_ f: NSRect) -> String { "\(Int(f.minX.rounded())),\(Int(f.minY.rounded())),\(Int(f.width.rounded()))x\(Int(f.height.rounded()))" }
-        return "name=\"\(name.stringValue)\" keys=\(nameHasKeys ? 1 : 0) icon=\(iconButton.label) profile=\(pill.title)"
+        return "name=\"\(name.stringValue)\" keys=\(nameHasKeys ? 1 : 0) icon=\(iconButton.label) profile=\(pill.title) engine=\(enginePill.title)"
             + " create=\(create.isOn ? "on" : "off") field=\(r(fieldBox.frame)) rows=\(r(profileRow.frame)),\(r(themeRow.frame)) button=\(r(create.frame))"
     }
 

@@ -3588,15 +3588,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let id = store.createSpace(title: draft.createdTitle, emoji: draft.icon.emoji, symbol: draft.icon.symbol,
                                    iconImage: draft.icon.image, theme: draft.theme, focus: false).id
         if let profile = draft.profile { store.setProfile(profile, forSpace: id) }
+        store.setSearchEngine(draft.searchEngine, forSpace: id)
         // In this window, whichever one is active.
         store.focusSpace(id, window: windowID)
         sidebarUI.spaceCreation = nil
-        CraLog.note("space creation made \"\(draft.createdTitle)\" on \(draft.profile == nil ? "Default" : "a profile"), theme \(draft.themeChosen ? "chosen" : "as opened")")
+        CraLog.note("space creation made \"\(draft.createdTitle)\" on \(draft.profile == nil ? "Default" : "a profile"), theme \(draft.themeChosen ? "chosen" : "as opened"), search \(store.space(id)?.searchEngine ?? "default")")
         done?(id)
     }
 
     /// Scenario hook: the page's state, or one step on it (`type:<name>`, `icon:<emoji>`, `theme:<n>`,
-    /// `profile:<n>`, `create`, `cancel`).
+    /// `profile:<n>`, `engine:<keyword>`, `create`, `cancel`).
     func debugSpaceCreation(_ step: String) {
         let sidebar = shell.sidebarHost as? SidebarView
         let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
@@ -3613,6 +3614,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case "profile":
             let n = Int(parts.count > 1 ? parts[1] : "") ?? -1
             sidebarUI.spaceCreation?.profile = store.profiles.indices.contains(n) ? store.profiles[n].id : nil
+        case "engine": sidebarUI.spaceCreation?.searchEngine = parts.count > 1 && !parts[1].isEmpty ? parts[1] : nil
         case "create": commitSpaceCreation()
         case "cancel": cancelSpaceCreation()
         default: break

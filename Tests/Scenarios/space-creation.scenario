@@ -12,7 +12,7 @@ cra://action/newSpace
 expect-log space creation opens
 reject-log space editor opens
 cra://debug?spaceCreation=state
-expect-log space creation state: name="" keys=1 icon=plus profile=Default create=off field=14,189,301x35 rows=14,230,301x36,14,273,301x36 button=14,681,301x36 dock=🏠@28 💼@28 dot8@28 buttons=00 space=Home spaces=2
+expect-log space creation state: name="" keys=1 icon=plus profile=Default engine=Default \(Google\) create=off field=14,189,301x35 rows=14,230,301x36,14,273,301x36 button=14,681,301x36 dock=🏠@28 💼@28 dot8@28 buttons=00 space=Home spaces=2
 # A name turns Create Space on, and an empty one off again.
 cra://debug?spaceCreation=type:H
 expect-log space creation type:H: name="H" .* create=on
@@ -30,9 +30,12 @@ cra://debug?spaceCreation=icon:🧳
 expect-log space creation icon:🧳: name="Travel" keys=1 icon=🧳 .* dock=🏠@28 💼@28 dot8@28 buttons=00
 cra://debug?spaceCreation=theme:3
 expect-log space creation theme:3: .* dock=🏠@28 💼@28 🧳@28 buttons=00
+# Cra's own row: the space's search engine, which Arc's page doesn't have (#306).
+cra://debug?spaceCreation=engine:duckduckgo.com
+expect-log space creation engine:duckduckgo.com: .* engine=DuckDuckGo create=on
 cra://debug?spaceCreation=create
 wait 3
-expect-log space creation made "Travel" on Default, theme chosen
+expect-log space creation made "Travel" on Default, theme chosen, search duckduckgo\.com
 cra://debug?spaceCreation=state
 expect-log space creation state: none dock=🏠@34 💼@34 🧳@34 buttons=11 space=Travel spaces=3
 # Another space brought to the front leaves the page too.

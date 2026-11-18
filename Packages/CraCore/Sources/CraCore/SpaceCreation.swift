@@ -14,6 +14,9 @@ public struct SpaceCreationDraft: Equatable {
     public var themeChosen = false
     /// nil is the Default profile.
     public var profile: UUID?
+    /// The search engine's keyword for the command bar in this space; nil follows Settings. Cra's
+    /// own (#306): Arc's page has no such row.
+    public var searchEngine: String?
 
     public init(theme: SpaceTheme, profile: UUID?) {
         self.theme = theme
@@ -81,7 +84,7 @@ public enum SpaceCreationLayout {
     public static let cancelCentre: CGFloat = 23
 
     public struct Frames: Equatable, Sendable {
-        public let picture, title, subtitle, field, icon, profile, theme, create, cancel: CGRect
+        public let picture, title, subtitle, field, icon, profile, theme, search, create, cancel: CGRect
     }
 
     /// Every frame for a page of that size, origin top left.
@@ -90,6 +93,8 @@ public enum SpaceCreationLayout {
         let field = CGRect(x: inset, y: fieldTop, width: wide, height: fieldHeight)
         let profile = CGRect(x: inset, y: field.maxY + fieldGap, width: wide, height: rowHeight)
         let theme = CGRect(x: inset, y: profile.maxY + rowGap, width: wide, height: rowHeight)
+        // Cra's Search Engine row follows Arc's two, the same size and gap.
+        let search = CGRect(x: inset, y: theme.maxY + rowGap, width: wide, height: rowHeight)
         let create = CGRect(x: inset, y: size.height - buttonBottom - buttonHeight, width: wide, height: buttonHeight)
         return Frames(
             picture: CGRect(x: ((size.width - pictureSize.width) / 2).rounded(), y: pictureTop, width: pictureSize.width, height: pictureSize.height),
@@ -97,12 +102,12 @@ public enum SpaceCreationLayout {
             subtitle: CGRect(x: inset, y: subtitleTop, width: wide, height: 2 * subtitleLine),
             field: field,
             icon: CGRect(x: field.minX + iconInset, y: field.midY - iconSide / 2, width: iconSide, height: iconSide),
-            profile: profile, theme: theme, create: create,
+            profile: profile, theme: theme, search: search, create: create,
             cancel: CGRect(x: inset, y: size.height - cancelCentre - 10, width: wide, height: 20))
     }
 
-    /// The page needs this much height for the button not to reach the Choose a Theme row.
-    public static let minimumHeight: CGFloat = fieldTop + fieldHeight + fieldGap + 2 * rowHeight + rowGap + 12 + buttonHeight + buttonBottom
+    /// The page needs this much height for the button not to reach the last row.
+    public static let minimumHeight: CGFloat = fieldTop + fieldHeight + fieldGap + 3 * rowHeight + 2 * rowGap + 12 + buttonHeight + buttonBottom
 }
 
 /// Arc's animation from Create Space to the new space, about 2.5 s (the recording at 20 and 60 fps):

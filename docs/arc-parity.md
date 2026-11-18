@@ -366,7 +366,7 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   the theme pulses behind it at 1.3 to 1.5 s; the card fades at 1.8 to 2.0 s; the space shows at
   about 2.5 s. A form opened after that is empty.
 - Cra's own: a new space starts on one random brand colour (#155, #170) where Arc starts on a
-  dark navy; the search engine choice (#306) stays in Edit Space; the picture is Cra's drawing;
+  dark navy; the page has a Search Engine row under Choose a Theme, which Arc's has not (#306, so nothing the sheet offered is lost); the picture is Cra's drawing;
   and while the page is up the page area keeps showing the space it was opened on, in the new
   theme, where Arc shows the new space's empty page.
 - Not seen: Escape, Return and Tab on the page (Cra: Escape cancels, Return creates); a click on
