@@ -40,3 +40,16 @@ wait 2
 cra://debug?easelDraw=1
 cra://debug?easelPick=0
 expect-log easel pick: picker=shown color=lightGreen menu=Bring to Front\|Send to Back\|Delete\|—\|Cut\|Copy\|Paste\|—\|Duplicate$
+# Arc 1.173.1's tool keys and the toolbar under the pointer: R picks the rectangle and its
+# letter shows in the button's corner; the pointer over another tool shows that one's too; Escape
+# goes back to the pointer, whose button has no letter; Duplicate shows none either.
+cra://debug?easelTool=r
+expect-log easel toolbar: picked=rectangle hover=none letters=r$
+cra://debug?easelTool=-&hover=freehand
+expect-log easel toolbar: picked=rectangle hover=freehand letters=r,p$
+cra://debug?easelTool=esc&hover=duplicate
+expect-log easel toolbar: picked=pointer hover=duplicate letters=$
+cra://debug?easelTool=o&hover=none
+expect-log easel toolbar: picked=ellipse hover=none letters=o$
+cra://debug?easelTool=v
+expect-log easel toolbar: picked=pointer hover=none letters=$

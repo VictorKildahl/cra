@@ -243,6 +243,26 @@ The easel file: items Cra 0.1.40 can read stay in `items`; link cards and captur
 fails on a kind it doesn't know, and would show the easel empty); each item carries `z`, its place in the stack
 (fixtures `easel-0140.json` and `easel.json` in CraCore's Fixtures/Model).
 
+## Easel toolbar, measured (Arc 1.173.1, 17 Nov 2026)
+
+Read from 2x captures of a purple space's easel with the pointer over each button in turn, and from
+key presses on the canvas (CraCore `EaselToolbarLayout`, `Easel.Tool.key`; the app's `EaselToolbar`).
+
+- The bar is 44 pt tall, its 36 pt buttons 38 pt apart and 4 pt in. After Freehand comes a 5 pt gap
+  with a 1 pt line in its middle (#20212A on the bar's #080913), then Duplicate, 4 pt from the end:
+  313 pt in all.
+- The picked tool sits on #4E4F7F. A button under the pointer gets a darker fill, #393A58, Duplicate
+  too; the picked tool's fill doesn't change under the pointer. Cra's bar keeps its own fixed colours,
+  so the two fills are the same steps over it (white at 22 % and 14.5 %).
+- A tool under the pointer, and the picked tool, show their key in the button's bottom right corner:
+  a bold lowercase letter of about 10 pt, its right edge 5.5 pt in and its baseline 4.2 pt up. Image
+  i, Text t, Ellipse o, Rectangle r, Arrow a, Freehand p. The Pointer's button and Duplicate show none.
+- With the canvas holding the keyboard, R picked the rectangle, O the ellipse and V the pointer, and
+  Escape went from Freehand back to the pointer. I, T, A and P are taken from the letters drawn; they
+  weren't each pressed. Nothing happens until the canvas has been clicked.
+- Not measured: whether ⇧ with a letter picks the tool (Cra takes either case), and Arc's own cursors
+  per tool (its bundle has Pencil, Shape, Text and Arrow cursor pictures; Cra uses the system's).
+
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 
 - The command bar's "New Boost" opens the editor for the open site: a 183 × 588 pt floating panel 10 pt in

@@ -1408,6 +1408,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let n = dict["easelPick"].flatMap(Int.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugPick(n); return
             }
+            // easelTool=<key>&hover=<tool>: a tool's key pressed on the open easel and the pointer over a
+            // toolbar button; cra.log says which tool is picked and which letters show.
+            if let key = dict["easelTool"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugTool(key: key, hover: dict["hover"]); return
+            }
             // easelLink=<url>: the open easel gets a link card for <url>, as a paste does; cra.log says what it read.
             if let url = dict["easelLink"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugLink(url); return
