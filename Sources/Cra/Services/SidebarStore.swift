@@ -1700,6 +1700,7 @@ final class SidebarStore {
         for c in children(of: id) where c.isSplit { items[c.id] = nil }
         detach(id)
         items[id] = nil
+        forgetClosedPinnedTab(id)
         touch()
     }
 
@@ -1950,6 +1951,7 @@ final class SidebarStore {
         for child in items[id]?.children ?? [] { removeLiveTree(child) }
         detach(id)
         items[id] = nil
+        forgetClosedPinnedTab(id)
         prefs.expandedFolders.remove(id)
         prefs.peekedFolders.removeValue(forKey: id)
     }
@@ -2102,6 +2104,7 @@ final class SidebarStore {
         }
         detach(id)
         items[id] = nil
+        forgetClosedPinnedTab(id)
         // Empty panes never had a page and incognito pages leave no trace: nothing for the Library.
         if !it.isEmptyTab, !isIncognito(space: sid) {
             archive.insert(ArchivedItem(archivedAt: clock.now, reason: reason, sourceSpaceID: sid, wasPinned: pinned, item: it,
@@ -2174,6 +2177,68 @@ final class SidebarStore {
     func reopenLastArchived() -> SidebarItem? {
         guard let last = archive.first else { return nil }
         return restoreArchived(last.id)
+    }
+
+    // MARK: Closed pinned tabs (⌘W "Close and Keep Pinned")
+
+    /// Pinned tabs (or favorites) closed while open, kept in the sidebar and unloaded.
+    /// ⇧⌘T and ⌘Z reopen them, in reverse chronological order with archived tabs and Peek.
+    private(set) var closedPinnedTabs: [ReopenClosedTab.ClosedPinnedTab] = []
+
+    func recordClosedPinnedTab(
+        _ id: UUID,
+        url: String? = nil,
+        title: String? = nil,
+        paneStates: [ReopenClosedTab.PaneState] = [],
+        at date: Date? = nil
+    ) {
+        lastTidy = nil
+        closedPinnedTabs.removeAll { $0.id == id }
+        closedPinnedTabs.insert(
+            ReopenClosedTab.ClosedPinnedTab(id: id, url: url, title: title, paneStates: paneStates, closedAt: date ?? clock.now),
+            at: 0
+        )
+        if closedPinnedTabs.count > 50 { closedPinnedTabs.removeLast(closedPinnedTabs.count - 50) }
+    }
+
+    func forgetClosedPinnedTab(_ id: UUID) {
+        closedPinnedTabs.removeAll { $0.id == id }
+    }
+
+    @discardableResult
+    func reopenLastClosed(in windowID: UUID? = nil, peek: ReopenClosedTab.ClosedPeek? = nil) -> ReopenClosedTab.Restoration? {
+        let w = self.window(windowID).id
+        let currentSelected = selectedTabID(window: w)
+        guard let decision = ReopenClosedTab.next(
+            closedPinned: closedPinnedTabs,
+            closedPeek: peek,
+            archived: archive.map { ReopenClosedTab.ArchivedTab(id: $0.id, archivedAt: $0.archivedAt) },
+            isPinnedTabAvailable: { [weak self] id in
+                guard let self else { return false }
+                return items[id] != nil && isPinned(id)
+            },
+            isTabSelected: { id in id == currentSelected }
+        ) else { return nil }
+
+        closedPinnedTabs = decision.remainingPinned
+
+        switch decision.restoration {
+        case .pinned(let id, let url, let title, let paneStates):
+            for p in paneStates {
+                if let u = p.url, !u.isEmpty, u != "about:blank" {
+                    updateTab(p.id, url: u, title: p.title)
+                }
+            }
+            if let url, !url.isEmpty, url != "about:blank" {
+                updateTab(id, url: url, title: title)
+            }
+            selectTab(id, window: w)
+        case .archived(let id):
+            restoreArchived(id)
+        case .peek:
+            break
+        }
+        return decision.restoration
     }
 
     func removeFromArchive(_ id: UUID) {

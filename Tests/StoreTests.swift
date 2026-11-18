@@ -80,6 +80,7 @@ enum StoreTests {
         pinHook()
         dropOnPinnedTabSplits()
         reopenClosedTabs()
+        reopenClosedPinnedTabs()
         windowsShareTheSidebar()
         settingsSync()
         syncLeavesBlankWindowsOnTheirMac()
@@ -2233,6 +2234,37 @@ enum StoreTests {
         expect(store.reopenLastArchived()?.id == first.id && store.selectedTabID == first.id, "again: the one closed before it")
         expect(store.reopenLastArchived()?.id == pinned.id && store.isPinned(pinned.id)
                && store.children(of: space.pinnedContainerID).map(\.id) == [pinned.id], "a pinned tab comes back pinned")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    /// ⇧⌘T brings back a closed pinned tab (⌘W "Close and Keep Pinned"), in reverse order with archived tabs.
+    @MainActor
+    private static func reopenClosedPinnedTabs() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Pinned Undo", emoji: "📌").id
+        let pinned = store.createTab(url: "https://example.com/pinned", in: sid, pinned: true, select: false)
+        let today = store.createTab(url: "https://example.com/today", in: sid)
+
+        // Close today tab (archived)
+        store.archiveTab(today.id, reason: .manual)
+
+        // Select and close pinned tab while navigated to a specific page
+        store.selectTab(pinned.id)
+        _ = store.resetPinnedTab(pinned.id)
+        store.recordClosedPinnedTab(pinned.id, url: "https://example.com/pinned/video", title: "Video")
+        store.selectTab(nil)
+
+        // Reopening closed tab restores the pinned tab first at its navigated URL
+        let firstRestore = store.reopenLastClosed()
+        expect(firstRestore == .pinned(id: pinned.id, url: "https://example.com/pinned/video", title: "Video", paneStates: [])
+               && store.selectedTabID == pinned.id
+               && store.item(pinned.id)?.tab?.url == "https://example.com/pinned/video",
+               "⇧⌘T brings back the pinned tab closed last at its exact page URL")
+
+        // Reopening again restores the archived today tab
+        let secondRestore = store.reopenLastClosed()
+        expect(secondRestore == .archived(today.id) && store.selectedTabID == today.id,
+               "⇧⌘T again brings back the archived tab closed before the pinned tab")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

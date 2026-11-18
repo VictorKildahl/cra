@@ -2690,6 +2690,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // A pinned split closes as one: every pane unloads and goes back to its page.
             let panes = store.paneTabIDs(for: id)
             let wasSelected = selectedTabID.map(panes.contains) ?? false
+
+            var paneStates: [ReopenClosedTab.PaneState] = []
+            for p in panes {
+                let rt = app.runtime(for: p)
+                let pItem = store.item(p)
+                let liveURL = rt?.browser.currentURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                let pURL = (liveURL?.isEmpty == false && liveURL != "about:blank") ? liveURL : pItem?.tab?.url
+                let liveTitle = rt?.browser.currentTitle
+                let pTitle = (liveTitle?.isEmpty == false) ? liveTitle : pItem?.tab?.savedTitle
+                paneStates.append(ReopenClosedTab.PaneState(id: p, url: pURL, title: pTitle))
+            }
+            let activeState = paneStates.first(where: { $0.id == id }) ?? paneStates.first
+            let closingURL = activeState?.url
+            let closingTitle = activeState?.title
+
             for p in panes {
                 _ = store.resetPinnedTab(p)
                 for w in app.mainWindows { w.browsers.unload(p); w.dropPeeks(from: p) }
@@ -2697,8 +2712,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Arc goes back to the tab shown before this one if its page is still loaded, and
             // otherwise shows nothing (CloseSuccessor). The panes were just unloaded, so they
             // don't count.
-            if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+            if wasSelected {
+                store.recordClosedPinnedTab(id, url: closingURL, title: closingTitle, paneStates: paneStates)
+                store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID)
+            }
         } else {
+            if let rt = app.runtime(for: id) {
+                let liveURL = rt.browser.currentURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !liveURL.isEmpty, liveURL != "about:blank" {
+                    store.updateTab(id, url: liveURL, title: rt.browser.currentTitle.isEmpty ? nil : rt.browser.currentTitle)
+                }
+            }
             store.archiveTab(id, reason: .manual)
         }
     }
