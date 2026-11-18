@@ -10,7 +10,12 @@ public enum TypedURL {
         if t.hasPrefix("localhost") || t.hasPrefix("about:") || t.hasPrefix("view-source:") || t.hasPrefix("data:") || t.hasPrefix("file:") { return true }
         if t.range(of: #"^(\d{1,3}\.){3}\d{1,3}(:\d+)?(/.*)?$"#, options: .regularExpression) != nil { return true }
         // host.tld[:port][/path]
-        return t.range(of: #"^[\w\-]+(\.[\w\-]+)+(:\d+)?(/\S*)?$"#, options: .regularExpression) != nil
+        guard t.range(of: #"^[\w\-]+(\.[\w\-]+)+(:\d+)?(/\S*)?$"#, options: .regularExpression) != nil else { return false }
+        // A top-level domain is never all digits: "3.14" or "chapter-2.16" is a search, as in Chrome (#545).
+        // IPv4 addresses matched above.
+        let host = t.prefix { $0 != "/" && $0 != ":" }
+        let tld = host.split(separator: ".").last ?? ""
+        return tld.contains { $0.isLetter }
     }
 
     public static func fromInput(_ s: String) -> String {
