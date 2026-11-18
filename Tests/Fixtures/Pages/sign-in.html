@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sign in</title>
+<!-- A sign-in form that goes to another page when sent, as a site's does: Chrome offers to save a password
+     typed into it (page-save-password). -->
+<form id="form" action="page.html" method="get">
+  <input type="hidden" name="signed" value="1">
+  <input id="user" name="user" autocomplete="username">
+  <input id="password" name="password" type="password" autocomplete="current-password">
+  <button>Sign in</button>
+</form>

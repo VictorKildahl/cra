@@ -1183,6 +1183,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if button != "1" { CraLog.note(ChromiumDialogs.press(button)) }
                 return
             }
+            // pageDialogs=<label>[&target=little][&fill=<a,b>][&press=<button>]: the windows Chromium shows for pages
+            // (dialogs, bubbles, popups), where they sit against the page and what they say (PageDialogs).
+            if let label = dict["pageDialogs"] {
+                let little = dict["target"] == "little" ? littleWindows.last : nil
+                let browser = little?.browser ?? main.currentBrowser
+                CraLog.note(PageDialogs.readout(label, page: browser?.containerView, window: little?.window ?? main.window,
+                                                press: dict["press"], fill: dict["fill"].map { $0.components(separatedBy: ",") }))
+                return
+            }
             if let label = dict["switcherWindows"] {
                 CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }

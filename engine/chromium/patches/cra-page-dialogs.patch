@@ -1,0 +1,161 @@
+diff --git a/chrome/browser/ui/tabs/tab_dialog_manager.cc b/chrome/browser/ui/tabs/tab_dialog_manager.cc
+index b771331..3947c0a 100644
+--- a/chrome/browser/ui/tabs/tab_dialog_manager.cc
++++ b/chrome/browser/ui/tabs/tab_dialog_manager.cc
+@@ -124,8 +124,11 @@ gfx::Rect GetModalDialogBounds(views::Widget* widget,
+     const gfx::Rect host_screen_bounds = host_widget->GetWindowBoundsInScreen();
+ 
+     // The requested dialog bounds should never fall outside the bounds of the
+-    // transient parent.
+-    CHECK(dialog_screen_bounds.Intersects(host_screen_bounds),
++    // transient parent. Cra: except over a page Cra shows in its own window,
++    // whose Browser's window is a never-seen strip along that window's top
++    // ("cra-page-host", ui/views/controls/webview/cra_hosted_page.h).
++    CHECK(dialog_screen_bounds.Intersects(host_screen_bounds) ||
++              host_widget->GetNativeWindowProperty("cra-page-host"),
+           base::NotFatalUntil::M162);
+ 
+     // Adjust the dialog bound to ensure it remains visible on the display.
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index 764e295..46f7a52 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -31,6 +31,7 @@
+ #include "base/metrics/histogram_macros.h"
+ #include "base/metrics/user_metrics.h"
+ #include "base/notreached.h"
++#include "base/observer_list.h"
+ #include "base/scoped_observation.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
+@@ -306,6 +307,7 @@
+ #include "content/public/browser/render_widget_host.h"
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/common/content_switches.h"
+ #include "content/public/common/drop_data.h"
+@@ -356,6 +358,7 @@
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/controls/button/menu_button.h"
+ #include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
+ #include "ui/views/controls/webview/webview.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/interaction/view_subregion_anchor.h"
+@@ -429,6 +432,103 @@ using web_modal::WebContentsModalDialogHost;
+ 
+ namespace {
+ 
++// Cra (docs/chromium-engine.md in the Cra repository): the tab-modal dialogs of a page Cra shows in its own
++// window (cra_hosted_page.h) go over that page, where Cra shows it: alert, confirm and prompt, the HTTP sign-in
++// prompt, the screen-share picker, passkeys, certificates. Chrome's host for them is its Browser's contents
++// area, and that Browser's window is never seen: a 1 pt strip along the top of Cra's window since Cra 0.1.49
++// (#346). Chrome centred each dialog on that strip, so on the whole window, over whichever page was there: the
++// alert of a split's right pane came up over the left pane (#574). The dialogs stay children of the Browser's
++// window (it rides on Cra's window, so they move with it); only where they go changes.
++class CraPageDialogHost : public WebContentsModalDialogHost,
++                          public content::WebContentsObserver,
++                          public base::SupportsUserData::Data {
++ public:
++  static CraPageDialogHost* For(content::WebContents* contents,
++                                views::Widget* widget) {
++    auto* host =
++        static_cast<CraPageDialogHost*>(contents->GetUserData(UserDataKey()));
++    if (!host) {
++      auto owned = std::make_unique<CraPageDialogHost>(contents);
++      host = owned.get();
++      contents->SetUserData(UserDataKey(), std::move(owned));
++    }
++    if (widget && host->widget_.get() != widget) {
++      host->widget_ = widget->GetWeakPtr();
++      host->NotifyPositionRequiresUpdate();
++    }
++    return host;
++  }
++
++  explicit CraPageDialogHost(content::WebContents* contents)
++      : content::WebContentsObserver(contents) {}
++  CraPageDialogHost(const CraPageDialogHost&) = delete;
++  CraPageDialogHost& operator=(const CraPageDialogHost&) = delete;
++  ~CraPageDialogHost() override {
++    observers_.Notify(&web_modal::ModalDialogHostObserver::OnHostDestroying);
++  }
++
++  // web_modal::WebContentsModalDialogHost:
++  gfx::NativeView GetHostView() const override {
++    return widget_ ? widget_->GetNativeView() : gfx::NativeView();
++  }
++  // Centred on the page, its top at the page's top.
++  gfx::Point GetDialogPosition(const gfx::Size& size) override {
++    const gfx::Rect page = PageInHost();
++    return gfx::Point(page.x() + std::max(0, (page.width() - size.width()) / 2),
++                      page.y());
++  }
++  gfx::Size GetMaximumDialogSize() override {
++    const gfx::Rect page = PageInHost();
++    return page.IsEmpty() ? gfx::Size(640, 480) : page.size();
++  }
++  // Only a page in sight takes the keys for its dialog (Return, Escape).
++  bool ShouldActivateDialog() const override {
++    return web_contents() &&
++           web_contents()->GetVisibility() == content::Visibility::VISIBLE;
++  }
++  void AddObserver(web_modal::ModalDialogHostObserver* observer) override {
++    observers_.AddObserver(observer);
++  }
++  void RemoveObserver(web_modal::ModalDialogHostObserver* observer) override {
++    observers_.RemoveObserver(observer);
++  }
++  void NotifyPositionRequiresUpdate() override {
++    observers_.Notify(
++        &web_modal::ModalDialogHostObserver::OnPositionRequiresUpdate);
++  }
++
++  // content::WebContentsObserver: the page came into sight, or Cra resized it (a window resized, the sidebar
++  // shown or hidden, a split). A move of Cra's window moves the dialog with it, a child window of a child.
++  void OnVisibilityChanged(content::Visibility visibility) override {
++    if (visibility != content::Visibility::HIDDEN) {
++      NotifyPositionRequiresUpdate();
++    }
++  }
++  void PrimaryMainFrameWasResized(bool width_changed) override {
++    NotifyPositionRequiresUpdate();
++  }
++
++ private:
++  static const void* UserDataKey() {
++    static const int key = 0;
++    return &key;
++  }
++
++  // The page's area in Cra's window, in the coordinates of the Browser's window (where a dialog's position is
++  // read from).
++  gfx::Rect PageInHost() const {
++    gfx::Rect page =
++        web_contents() ? web_contents()->GetContainerBounds() : gfx::Rect();
++    if (widget_) {
++      page.Offset(-widget_->GetClientAreaBoundsInScreen().OffsetFromOrigin());
++    }
++    return page;
++  }
++
++  base::WeakPtr<views::Widget> widget_;
++  base::ObserverList<web_modal::ModalDialogHostObserver> observers_;
++};
++
+ // The visible height of the shadow above the tabs. Clicks in this area are
+ // treated as clicks to the frame, rather than clicks to the tab.
+ const int kTabShadowSize = 2;
+@@ -3473,6 +3573,10 @@ WebContentsModalDialogHost* BrowserView::GetWebContentsModalDialogHost() {
+ 
+ WebContentsModalDialogHost* BrowserView::GetWebContentsModalDialogHostFor(
+     content::WebContents* web_contents) {
++  // Cra: a page Cra shows in its own window has its dialogs over it there (CraPageDialogHost).
++  if (web_contents && web_contents->GetUserData(views::CraHostedPageKey())) {
++    return CraPageDialogHost::For(web_contents, GetWidget());
++  }
+   ContentsContainerView* const contents_container_view =
+       multi_contents_view_->GetContentsContainerViewFor(web_contents);
+   // `contents_container_view` can be null in cases where a modal dialog is

@@ -1,0 +1,21 @@
+# promise: #574
+# A page's own Print button (window.print(): a boarding pass, an invoice, a recipe) opens Chrome's print
+# preview over the page, big enough to use, and the page waits on it. Print preview sized itself to its
+# Browser's window, which on the engine is a never-seen 1 pt strip since 0.1.49 (#346): it came out
+# 1000 × 3 pt, the button seemed to do nothing and the page waited on a dialog no one could see.
+# cra-page-dialogs.patch sizes and places it against the page. Its buttons are a web page's, which the
+# readout can't press: the quit at the end closes it. (Cra's File ▸ Print… opens the system panel instead.)
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/dialogs.html?n=print
+expect-log GET /dialogs.html\?n=print
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(setTimeout(()=>{print();said.push('printed')},0),'print asked')","userGesture":true}
+expect-log "value":"print asked"
+wait 4
+cra://debug?pageDialogs=print
+expect-log page dialog print: chrome [0-9]{3,}x[0-9]{3,} at=page front=1
+reject-log page dialog print: .* at=sliver
+reject-log fault:

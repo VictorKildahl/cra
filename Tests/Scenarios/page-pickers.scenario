@@ -1,0 +1,36 @@
+# promise: #574
+# A page's own pickers open where the page asks for them: a <select>'s menu, the date picker of an
+# <input type=date> and the colour picker of an <input type=color>. They don't hang on Chrome's hidden
+# Browser window (the menu is AppKit's, the date and colour pickers popups of the page's view), so the
+# 1 pt strip of 0.1.49 (#346) never reached them (#574): this keeps it that way.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/dialogs.html?n=pickers
+expect-log GET /dialogs.html\?n=pickers
+wait 2
+
+# The <select>'s menu: its three options.
+cra://debug?menuShown=next
+expect-log Cra menu shown: waiting
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(setTimeout(()=>pick.showPicker(),0),'select asked')","userGesture":true}
+expect-log "value":"select asked"
+expect-log Cra menu shown: one\|two\|three
+
+# The date picker: a popup over the page.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(day.showPicker(),'date asked')","userGesture":true}
+expect-log "value":"date asked"
+wait 2
+cra://debug?pageDialogs=date
+expect-log page dialog date: popup [0-9]+x[0-9]+ at=page front=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(day.blur(),document.body.click(),'date closed')","userGesture":true}
+wait 1
+
+# The colour picker: a popup over the page too.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(colour.showPicker(),'colour asked')","userGesture":true}
+expect-log "value":"colour asked"
+wait 2
+cra://debug?pageDialogs=colour
+expect-log page dialog colour: popup [0-9]+x[0-9]+ at=page front=1
+reject-log fault:

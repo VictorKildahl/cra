@@ -375,6 +375,11 @@ built release app with a test profile. Note anything that fails in the release's
   `secure dns: secure via dns.google` and chrome://settings/security shows the same choice.
 - **#190:** with Ask Where to Save Each File on, the save panel is a sheet on Cra's window, and
   Cancel cancels the download.
+- **#574:** what a page shows over itself needs a real site or macOS's own prompts, so the
+  scenarios (`page-dialogs`, `page-dialog-sign-in`, …) can't reach these: on meet.google.com,
+  Present now shows Chrome's picker over the page (after macOS's Screen Recording prompt the first
+  time), and Cancel ends it; on webauthn.io, Register shows Chrome's passkey dialog over the page,
+  then Touch ID; a site that asks for a client certificate shows the certificate picker over the page.
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
   downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
   Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
