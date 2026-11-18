@@ -10,6 +10,13 @@ A test that pins a shipped issue's behaviour is marked with the issue:
     // promise: #509                                          an iPhone UI test (iOS/CraUITests): the
     func testATapOnTheBottomEdgeBringsTheBarBack() { ... }    line right above it or its doc comment
 
+A fix for a crash report that has no issue is pinned the same way under a crash ID, `crash-` and a
+few lowercase words naming the crash (Cra's crash reports have no number a reader could look up):
+
+    @Test(.bug(id: "crash-perf-counter-overflow")) ...        Swift Testing
+    // promise: crash-zen-favicon-size                       a harness func or an iPhone UI test
+    # promise: crash-fedcm-dialog                            a scenario
+
 Tests/promises.lock records each such test with its issue and a hash of its code (comments and
 whitespace left out). A tagged test that changes, is renamed or is deleted fails this check, and so
 does a new one, until the lock is updated:
@@ -21,7 +28,8 @@ does a new one, until the lock is updated:
 Update the lock only when the promise itself changes: say in the commit which issue's behaviour
 changes and why, and tell the issue's reporter. Why: 0.1.30 (#170, #171) changed the theme editor
 so a space set to Auto stopped following macOS, rewrote the #155 test to match, and every suite
-stayed green until the reporter wrote back.
+stayed green until the reporter wrote back. Crash IDs came after #111's crash came back in 0.1.45:
+the fixes for crash reports without an issue had tests, but nothing kept those tests as they were.
 """
 import hashlib
 import pathlib
@@ -33,11 +41,21 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 LOCK = ROOT / "Tests" / "promises.lock"
 SOURCES = ["Packages/CraCore/Tests", "Tests", "iOS/CraUITests"]
 ISSUE = re.compile(r"github\.com/VictorKildahl/cra/issues/(\d+)")
+CRASH = r"crash-[a-z0-9]+(?:-[a-z0-9]+)*"
+# A promise's ID: an issue ("#155") or a crash report's fix ("crash-fedcm-dialog").
+TAG = re.compile(r"#\d+|" + CRASH)
+CRASH_BUG = re.compile(r'\.bug\(\s*id:\s*"(' + CRASH + r')"')
 HEADER = """\
-# Tests that pin what a closed issue shipped (scripts/promises.py). Each line: issue, test, hash
-# of its code. Change a test here only when the promise changes on purpose: name the issue and why
-# in the commit, and tell its reporter. Regenerate with scripts/promises.py --update.
+# Tests that pin what a closed issue or a crash fix shipped (scripts/promises.py). Each line: issue
+# or crash ID, test, hash of its code. Change a test here only when the promise changes on purpose:
+# name the issue or crash and why in the commit, and tell the issue's reporter. Regenerate with
+# scripts/promises.py --update.
 """
+
+
+def order(promise: str):
+    """Issues by number, then crash IDs by name."""
+    return (0, int(promise[1:]), "") if promise.startswith("#") else (1, 0, promise)
 
 
 def skip_string(s: str, i: int) -> int:
@@ -112,7 +130,9 @@ def files(rev, suffixes=(".swift", ".scenario")):
             yield name, git("show", f"{rev}:{name}")
 
 
-MARK = re.compile(r"^[ \t]*(?://|#)[ \t]*promise:[ \t]*((?:#\d+[ \t,]*)+)$", re.M)
+MARK = re.compile(r"^[ \t]*(?://|#)[ \t]*promise:[ \t]*((?:(?:#\d+|" + CRASH + r")[ \t,]*)+)$", re.M)
+# A `promise:` line that MARK doesn't read (a crash ID in capitals, a typo) would leave its test unpinned.
+LOOSE = re.compile(r"^[ \t]*(?://|#)[ \t]*promise:.*$", re.M)
 
 
 def digest(code: str) -> str:
@@ -133,10 +153,13 @@ def promises(rev=None):
     found = []
     for rel, s in files(rev):
         marks = list(MARK.finditer(s))
+        for loose in LOOSE.finditer(s):
+            if not MARK.fullmatch(loose.group(0)):
+                sys.exit(f"promises: {rel}: `{loose.group(0).strip()}` names no issue (#n) or crash ID (crash-a-b)")
         if rel.endswith(".scenario"):
             # The whole journey is the promise; `#` lines are comments.
             body = re.sub(r"^\s*#.*$", "", s, flags=re.M)
-            for issue in sorted({int(n) for m in marks for n in re.findall(r"\d+", m.group(1))}):
+            for issue in sorted({t for m in marks for t in TAG.findall(m.group(1))}, key=order):
                 found.append((issue, rel, digest(body)))
             continue
         for m in marks:
@@ -151,11 +174,12 @@ def promises(rev=None):
             # A harness runs only what its main() calls: a promise nobody calls proves nothing.
             elif len(re.findall(r"\b%s\s*\(" % fn.group(1), re.sub(r"//[^\n]*", "", s))) < 2:
                 sys.exit(f"promises: {rel}::{fn.group(1)} is a promise that nothing calls")
-            for issue in sorted({int(n) for n in re.findall(r"\d+", m.group(1))}):
+            for issue in sorted(set(TAG.findall(m.group(1))), key=order):
                 found.append((issue, f"{rel}::{fn.group(1)}", digest(s[fn.start():body_end])))
         for m in re.finditer(r"@Test\s*\(", s):
             attr_end = balanced(s, m.end() - 1, "(", ")")
-            issues = sorted({int(n) for n in ISSUE.findall(s[m.start():attr_end])})
+            attr = s[m.start():attr_end]
+            issues = sorted({f"#{n}" for n in ISSUE.findall(attr)} | set(CRASH_BUG.findall(attr)), key=order)
             if ".bug(" not in s[m.start():attr_end] or not issues:
                 continue
             if re.search(r"\.disabled\b", s[m.start():attr_end]):
@@ -167,6 +191,11 @@ def promises(rev=None):
             for issue in issues:
                 found.append((issue, f"{rel}::{fn.group(1)}", digest(s[m.start():body_end])))
     return found
+
+
+def pinned(ids) -> str:
+    issues = sum(1 for i in ids if i.startswith("#"))
+    return f"{issues} issues and {len(ids) - issues} crash fixes"
 
 
 def read_lock(rev=None):
@@ -181,7 +210,7 @@ def read_lock(rev=None):
     for line in text.splitlines():
         if line.strip() and not line.startswith("# "):
             issue, test, digest = line.split()
-            entries[(int(issue.lstrip("#")), test)] = digest
+            entries[(issue, test)] = digest
     return entries
 
 
@@ -190,28 +219,28 @@ def main():
     rev = args[args.index("--rev") + 1] if "--rev" in args else None
     current = promises(rev)
     if "--update" in args:
-        lines = [f"#{issue:<5} {test}  {value}" for issue, test, value in sorted(current)]
+        lines = [f"{issue:<6} {test}  {value}" for issue, test, value in sorted(current, key=lambda p: (order(p[0]), p[1]))]
         LOCK.write_text(HEADER + "\n".join(lines) + "\n")
-        print(f"promises: {len(current)} tests pinned for {len({i for i, _, _ in current})} issues")
+        print(f"promises: {len(current)} tests pinned for {pinned({i for i, _, _ in current})}")
         return 0
     locked = read_lock(rev)
     now = {(issue, test): value for issue, test, value in current}
     problems = []
-    for key, value in sorted(now.items()):
+    for key, value in sorted(now.items(), key=lambda kv: (order(kv[0][0]), kv[0][1])):
         if key not in locked:
-            problems.append(f"#{key[0]} {key[1]} is new: lock it with scripts/promises.py --update")
+            problems.append(f"{key[0]} {key[1]} is new: lock it with scripts/promises.py --update")
         elif locked[key] != value:
-            problems.append(f"#{key[0]} {key[1]} changed")
-    for key in sorted(set(locked) - set(now)):
-        problems.append(f"#{key[0]} {key[1]} is gone (deleted, renamed or untagged)")
+            problems.append(f"{key[0]} {key[1]} changed")
+    for key in sorted(set(locked) - set(now), key=lambda k: (order(k[0]), k[1])):
+        problems.append(f"{key[0]} {key[1]} is gone (deleted, renamed or untagged)")
     if problems:
-        print("promises: tests that pin a shipped issue's behaviour differ from Tests/promises.lock:")
+        print("promises: tests that pin a shipped issue's or crash fix's behaviour differ from Tests/promises.lock:")
         for p in problems:
             print(f"  {p}")
-        print("If the issue's behaviour is meant to change: scripts/promises.py --update, say in the commit")
-        print("which issue changes and why, and tell its reporter. Otherwise put the test back.")
+        print("If the behaviour is meant to change: scripts/promises.py --update, say in the commit which issue")
+        print("or crash changes and why, and tell the issue's reporter. Otherwise put the test back.")
         return 1
-    print(f"promises: {len(now)} tests pinned for {len({i for i, _ in now})} issues, unchanged")
+    print(f"promises: {len(now)} tests pinned for {pinned({i for i, _ in now})}, unchanged")
     return 0
 
 

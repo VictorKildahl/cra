@@ -1,3 +1,4 @@
+# promise: crash-web-store-install-after-tab-closes
 # An imported extension's Web Store install ends (here: the store's download fails) after the tab that
 # asked for it has closed. On 0.1.44 the answer went to the closed tab's protocol session and Chromium's
 # dangling-pointer check stopped Cra (6 of the first 16 0.1.44 crash reports:

@@ -1,3 +1,4 @@
+# promise: crash-tab-group-closed-window
 # Session restore asks to connect a restored window's tab group, and the tab group service does it once it has
 # loaded. Cra closes the Chrome windows it didn't make, so by then no window held the group, and Chrome's CHECK in
 # GetTabStripModelForLocalGroup stopped Cra, at every launch on one Mac (four 0.1.44 crash reports). The saved

@@ -1,6 +1,7 @@
-# Tests that pin what a closed issue shipped (scripts/promises.py). Each line: issue, test, hash
-# of its code. Change a test here only when the promise changes on purpose: name the issue and why
-# in the commit, and tell its reporter. Regenerate with scripts/promises.py --update.
+# Tests that pin what a closed issue or a crash fix shipped (scripts/promises.py). Each line: issue
+# or crash ID, test, hash of its code. Change a test here only when the promise changes on purpose:
+# name the issue or crash and why in the commit, and tell the issue's reporter. Regenerate with
+# scripts/promises.py --update.
 #2     Tests/BrowserManagerLifecycleTests.swift::embeddedPageHandoffCase  81c5bd4fc4f4
 #2     Tests/StoreTests.swift::windowsShareTheSidebar  9d351f248862
 #4     Tests/BrowserManagerLifecycleTests.swift::embeddedPageHandoffCase  81c5bd4fc4f4
@@ -1057,3 +1058,17 @@
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::covered  5dce52db57cb
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::pageHostWindowInFrontIsTheWindowsOwn  28fe34a47445
 #533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5
+crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
+crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
+crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01
+crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::aPinSavedTwiceShowsOnce  1b99e50cdb2f
+crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::twoInstallsOfOneExtensionShowOnce  dd39be24ac7f
+crash-duplicate-extension-ids Tests/Scenarios/extensions-menu-one-each.scenario  46498caea716
+crash-fedcm-dialog Tests/Scenarios/fedcm-sign-in-dialog.scenario  d1ccf325b5a7
+crash-hidden-page-closed-in-callback Tests/Scenarios/hidden-page-closes-in-callback.scenario  3e9967b994ed
+crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfSessionTests.swift::hugeCountersSaturateInsteadOfOverflowing  03ac411a6675
+crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfStateTests.swift::historyFootprintSaturatesInsteadOfOverflowing  2a8c526e26ad
+crash-tab-group-closed-window Tests/Scenarios/engine-tab-group-closed-window.scenario  14b438f2b3b0
+crash-tooltip-over-sheet Tests/Scenarios/tooltip-over-sheet.scenario  c4535ba50b5b
+crash-web-store-install-after-tab-closes Tests/Scenarios/web-store-install-after-tab-closes.scenario  a5324abc50b7
+crash-zen-favicon-size Tests/StoreTests.swift::zenFaviconSize  ede0eb368f2a

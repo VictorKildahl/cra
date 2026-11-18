@@ -1,3 +1,4 @@
+# promise: crash-fedcm-dialog
 # A site's "Sign in with" button that uses FedCM's active mode: Chrome opens its loading dialog at once, as a
 # tab-modal dialog over the page's window. A page of Cra's sits in Cra's own window, which no Chrome widget owns,
 # and parenting the dialog to that missing widget stopped Cra (two 0.1.45 crash reports, in

@@ -1,3 +1,4 @@
+# promise: crash-hidden-page-closed-in-callback
 # A hidden page (Outlook's and Calendar's previews) that lands on a sign-in page answers from inside its
 # own address change, and its owner closes it there. On 0.1.44 the engine deleted the page inside
 # Chromium's navigation callback and Chromium stopped Cra (10 of the first 16 0.1.44 crash reports:

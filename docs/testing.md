@@ -18,8 +18,8 @@ Commands for each piece are in [development.md](development.md#tests).
    profile in that browser's own format under `Tests/Fixtures/<Browser>` (no real browsing
    data). Parsers are tested on those files, and the fuzzer mutates them.
 5. **A bug fix comes with the test that would have caught it**, written first and seen failing
-   on the unfixed code. That holds for every bug, with or without an issue; one with an issue is
-   also locked (rule 8). If no test can reach it, the fix moves the decision into CraCore or adds
+   on the unfixed code. That holds for every bug, with or without an issue; one with an issue, or
+   from a crash report, is also locked (rule 8). If no test can reach it, the fix moves the decision into CraCore or adds
    the debug readout a scenario needs; only what takes a real site, the GPU or a person's eye
    becomes a line in [release-checklist.md](release-checklist.md).
    The same goes for everything built and everything reported: a new feature (Mac or iPhone,
@@ -42,6 +42,11 @@ Commands for each piece are in [development.md](development.md#tests).
    do that only when the issue's behaviour is meant to change, say why in the commit and tell the
    reporter. 0.1.30 rewrote the #155 test together with the change that broke it, and nothing
    failed until the reporter wrote back.
+   A fix for a crash report with no issue is pinned the same way under a crash ID, `crash-` and a
+   few lowercase words naming the crash: `.bug(id: "crash-perf-counter-overflow")`,
+   `// promise: crash-zen-favicon-size` or `# promise: crash-fedcm-dialog` at the top of a scenario.
+   #111's crash came back with the engine switch; the crash fixes after it had tests, but nothing
+   kept those tests as they were. `Tests/test_promises.py` tests the lock itself.
    What no test can pin yet is a manual check in [release-checklist.md](release-checklist.md).
 
 ## Layers

@@ -123,7 +123,7 @@ struct PerfProcessTableTests {
 
     /// A 0.1.45 crash report: the sampler clamps rusage's UInt64 counters to Int64, so one process can read
     /// Int64.max disk bytes, and adding a second process's to it trapped on overflow in the perf queue.
-    @Test func hugeCountersSaturateInsteadOfOverflowing() throws {
+    @Test(.bug(id: "crash-perf-counter-overflow")) func hugeCountersSaturateInsteadOfOverflowing() throws {
         var t = PerfProcessTable()
         let huge = PerfProcessReading(pid: 1, kind: .renderer, cpuNs: 1, footprintBytes: .max, diskReadBytes: .max,
                                       diskWriteBytes: .max, wakeups: .max)

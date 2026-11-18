@@ -50,6 +50,8 @@ run the classes a change touches, and the whole suite in halves.
    test first, see it fail on the unfixed code, then fix. When the bug has an issue, tag the test
    `.bug(".../issues/<n>")` (`// promise: #<n>` above a harness func or an iPhone UI test,
    `# promise: #<n>` in a scenario) and run `scripts/promises.py --update`, so it's locked in `Tests/promises.lock`.
+   A crash report without an issue is locked the same way under a crash ID:
+   `.bug(id: "crash-<what-crashed>")`, `// promise: crash-<what-crashed>` or `# promise: crash-<what-crashed>`.
    When the decision can't be reached by a test, move it into CraCore (rule 1) or add the
    `cra://debug` readout a scenario needs as part of the fix. Only what needs a real site, the
    GPU or a human eye becomes a line in docs/release-checklist.md, and the commit says so.

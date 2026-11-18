@@ -1,3 +1,4 @@
+# promise: crash-alerts-helper-bare-launch
 # Someone clicks a Cra notification after its Alerts helper quit: macOS launches the helper app with no arguments.
 # Chrome's helper sees that and exits quietly (chrome_main_mac.mm); Cra's notifications come from the Aperitif
 # Alerts helper (AperitifHelpers), which Chrome's check missed, so it stopped on "Helper application requires

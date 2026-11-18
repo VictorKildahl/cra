@@ -1,3 +1,4 @@
+# promise: crash-closing-host-gets-page
 # Chrome closes the hidden Browser that holds a profile's pages, and the bridge's next page arrives after Chrome
 # has scheduled that Browser's deletion. The page went into the closing Browser's tab strip, which was no longer
 # empty when Chrome deleted it, after the window's features had gone: ExclusiveAccessManager::OnTabClosing on a

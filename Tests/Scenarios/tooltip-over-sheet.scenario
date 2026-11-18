@@ -1,3 +1,4 @@
+# promise: crash-tooltip-over-sheet
 # No tip shows over a window that has a sheet open. Showing one adds it to the window's group of
 # windows, and AppKit orders the group again, the sheet included. On macOS 27.0 the Save panel's
 # remote view threw from that, and the uncaught exception quit Cra (0.1.45 crash report, 17 Nov 2026).

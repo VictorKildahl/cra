@@ -1,3 +1,4 @@
+# promise: crash-duplicate-extension-ids
 # The Site Control Center lists each extension once. A pin saved twice (or two installs of one extension, two
 # folders with the same manifest key) listed it twice, and the menu's icon map trapped on the repeated ID as it
 # opened (four crash reports, 0.1.42 and 0.1.43, in SiteControlCenterView.liveIcons). PinnedExtensions.menuOrder

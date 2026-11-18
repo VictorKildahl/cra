@@ -3248,6 +3248,7 @@ enum StoreTests {
         store.saveAll()
     }
 
+    // promise: crash-zen-favicon-size
     /// Zen's favicons come from Firefox's favicons.sqlite, where the widest icon is often an SVG,
     /// and an SVG can say it is any size. Drawn at that size it ran a 0.1.43 import out of memory
     /// (two crash reports in tiffRepresentation under ZenImporter.plan); each icon is written small.

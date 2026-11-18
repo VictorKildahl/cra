@@ -81,13 +81,13 @@ struct ExtensionsMenuOrderTests {
         #expect(order(entries, pins: PinnedExtensions(shared: ["c"])) == ["c", "a", "b"])
     }
 
-    @Test func twoInstallsOfOneExtensionShowOnce() {
+    @Test(.bug(id: "crash-duplicate-extension-ids")) func twoInstallsOfOneExtensionShowOnce() {
         let entries = [E(id: "a", name: "Alpha"), E(id: "b", name: "Bravo"), E(id: "a", name: "Alpha copy")]
         #expect(order(entries, pins: PinnedExtensions()) == ["a", "b"])
         #expect(order(entries, pins: PinnedExtensions(shared: ["a"])) == ["a", "b"])
     }
 
-    @Test func aPinSavedTwiceShowsOnce() {
+    @Test(.bug(id: "crash-duplicate-extension-ids")) func aPinSavedTwiceShowsOnce() {
         let entries = [E(id: "a", name: "Alpha"), E(id: "b", name: "Bravo")]
         #expect(order(entries, pins: PinnedExtensions(shared: ["b", "a", "b"])) == ["b", "a"])
     }

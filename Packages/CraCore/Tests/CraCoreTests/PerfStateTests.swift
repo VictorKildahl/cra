@@ -123,7 +123,7 @@ struct PerfStateTests {
     }
 
     /// PerfProcessTable saturates a group at Int64.max; the history's total adds the groups again.
-    @Test func historyFootprintSaturatesInsteadOfOverflowing() {
+    @Test(.bug(id: "crash-perf-counter-overflow")) func historyFootprintSaturatesInsteadOfOverflowing() {
         var s = PerfState()
         s.processes = [PerfProcessGroup(kind: .renderer, count: 1, footprintBytes: .max),
                        PerfProcessGroup(kind: .gpu, count: 1, footprintBytes: 1 << 20)]
