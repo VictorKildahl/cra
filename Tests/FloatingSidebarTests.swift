@@ -102,6 +102,7 @@ enum FloatingSidebarTests {
         thePanelsStayInsideTheWindow(window: window, sidebar: sidebar, panel: panel)
         noStandInLightsInFullScreen(sidebar: sidebar, panel: panel)
         staysInsideTheWindowsCorners(window: window, sidebar: sidebar, panel: panel)
+        theShadowStaysUnderTheSidebar(window: window, sidebar: sidebar, panel: panel)
         anEmptyWindowKeepsItOut(window: window, sidebar: sidebar)
         heldOpenComesOutInPlace(window: window, sidebar: sidebar, panel: panel)
         dockingFromHeldOpenHasOneOwner(window: window, sidebar: sidebar, panel: panel)
@@ -527,6 +528,44 @@ enum FloatingSidebarTests {
         expect(panel.contentView?.layer?.mask?.cornerRadius == 0, "full screen has square corners, so nothing is cut off there")
         sidebar.hide(animated: false)
         sidebar.windowFullScreen = { false }
+    }
+
+    // promise: #550
+    /// GitHub #550 (macOS 27.2, full screen): a translucent halo round the floating sidebar's top, the page's
+    /// colour. AppKit's constraint keeps a window clear of the menu bar: it moves a borderless panel 5 pt in
+    /// from the screen's bottom and 10 pt shorter than it (the sidebar's panel in full screen) down 5 pt,
+    /// while the shadow's full-height panel stays. The shadow then sat 5 pt above the sidebar and the page
+    /// showed between them. Both panels stay where they are put, and the shadow follows the sidebar's
+    /// panel wherever it is.
+    @MainActor
+    private static func theShadowStaysUnderTheSidebar(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+        sidebar.hide(animated: false)
+        sidebar.show()
+        drainAnimations()
+        let shadow = window.childWindows!.first { $0 !== panel && $0.ignoresMouseEvents }!
+        if let screen = NSScreen.screens.first {
+            let s = screen.frame
+            let fullScreenSidebar = NSRect(x: s.minX, y: s.minY + 5, width: 305, height: s.height - 10)
+            for (name, p) in [("sidebar", panel), ("shadow", shadow)] {
+                for r in [fullScreenSidebar, s, NSRect(x: s.minX, y: s.maxY - 300, width: 305, height: 600)] {
+                    expect(p.constrainFrameRect(r, to: screen) == r, "the \(name) panel stays where it is put, clear of the menu bar or not: \(r)")
+                }
+            }
+        }
+        let slider = shell_slider(panel)!, carrier = shadow.contentView!.subviews.first!
+        func under() -> Bool {
+            let body = panel.convertToScreen(slider.convert(slider.bounds, to: nil))
+            let cast = shadow.convertToScreen(carrier.convert(carrier.bounds, to: nil))
+            return abs(body.minX - cast.minX) < 0.01 && abs(body.minY - cast.minY) < 0.01 && body.size == cast.size
+        }
+        expect(under(), "out, the shadow lies under the sidebar")
+        panel.setFrame(panel.frame.offsetBy(dx: 0, dy: -5), display: false)
+        expect(under(), "the sidebar's panel moved 5 pt down by someone else: the shadow follows it")
+        shadow.setFrame(shadow.frame.offsetBy(dx: 0, dy: 5).insetBy(dx: 0, dy: 2), display: false)
+        expect(under(), "the shadow's panel moved or resized: the shadow still lies under the sidebar")
+        sidebar.reposition()
+        expect(under(), "and after the window puts both panels back")
+        sidebar.hide(animated: false)
     }
 
     // promise: #483

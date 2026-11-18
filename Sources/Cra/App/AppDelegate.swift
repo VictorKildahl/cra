@@ -1821,7 +1821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "lightsHidden=\(flag((w as? CraWindow)?.trafficLightsHidden ?? false)) lights=\(lights(w)) "
                         + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
                         + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout) sidebar=\(m.shell.sidebarReadout) "
-                        + "floating=\(m.floatingSidebar?.edgeReadout ?? "-") "
+                        + "floating=\(m.floatingSidebar?.edgeReadout ?? "-") shadow=\(m.floatingSidebar?.shadowReadout ?? "-") "
                         + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil)) frameAdjust=\(CraWindow.frameAdjustment)")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {

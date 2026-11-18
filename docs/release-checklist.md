@@ -64,6 +64,10 @@ built release app with a test profile. Note anything that fails in the release's
   another app on the first display: the video keeps playing in its tab. Cover Cra's window with
   another app, or minimise it: the video goes to Picture in Picture. macOS 26 never called the window
   not visible here, so WindowCoverageTests and `window-coverage-own-parts` stand in; ask the reporter.
+- **#550 (macOS 27 only):** in macOS full screen with the sidebar hidden, bring it out over a white
+  page and a pink one: its top rests 5 pt below the screen's edge and its shadow touches it all round,
+  with no strip of page colour above it. macOS 26 places the panels right without the fix, so
+  FloatingSidebarTests (AppKit's own constraint) and `floating-sidebar-shadow` stand in; ask the reporter.
 
 ### Sidebar, tabs and the command bar
 
