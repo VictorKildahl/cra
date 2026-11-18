@@ -167,8 +167,37 @@ final class PictureInPictureChrome {
         let shown = overlays.values.compactMap { o in o.parent.map { (o, $0) } }
         guard !shown.isEmpty else { return "windows=0" }
         return "windows=\(shown.count) " + shown.map { o, w in
-            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) width=\(Int(w.frame.width)) share=\(Self.share(of: w)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
+            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) chrome=\(Self.chromeButtonsShown(in: w)) width=\(Int(w.frame.width)) share=\(Self.share(of: w)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
         }.joined(separator: " | ")
+    }
+
+    /// How many of Chrome's own PiP buttons (Back to Tab, ±10 s, play/pause, close…) show in its
+    /// window: Chromium's accessibility tree leaves out the controls while they are hidden (#460).
+    static func chromeButtonsShown(in window: NSWindow) -> Int {
+        func count(_ element: Any, depth: Int) -> Int {
+            guard depth < 40, let node = element as? NSAccessibilityProtocol else { return 0 }
+            var n = node.accessibilityRole() == .button && !node.isAccessibilityHidden() ? 1 : 0
+            for child in node.accessibilityChildren() ?? [] { n += count(child, depth: depth + 1) }
+            return n
+        }
+        return window.contentView.map { count($0, depth: 0) } ?? 0
+    }
+
+    /// `cra://debug?pipPoke=key|focus`: Chromium's window handed what makes Chrome show its own
+    /// controls (VideoOverlayWindowViews: a key, or the window becoming key), the way a stray event
+    /// would reach it (#460).
+    func debugPoke(_ what: String) {
+        for o in overlays.values {
+            guard let w = o.parent else { continue }
+            if what == "focus" {
+                w.setValue(false, forKey: "preventKeyWindow")
+                w.makeKey()
+            } else if let e = NSEvent.keyEvent(with: .keyDown, location: NSPoint(x: w.frame.width / 2, y: w.frame.height / 2), modifierFlags: [],
+                                               timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: w.windowNumber, context: nil,
+                                               characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0) {
+                w.sendEvent(e)
+            }
+        }
     }
 
     /// `cra://debug?pipDrop=left|right|top|bottom`: the window moved half past that edge of the
@@ -282,6 +311,9 @@ final class PictureInPictureChrome {
         window.hasShadow = true
         window.titleVisibility = .hidden
         Self.keepFromKey(window)
+        // Whatever still reaches it is dropped, and it never becomes key: either shows Chrome's own
+        // controls under Arc's (#460).
+        ChromiumPictureInPictureSeal.seal(window)
         // Over another app's full-screen Space too, like Arc's (#206). The overlay copies this below.
         CraCEFRuntime.floatOverFullScreenSpaces(window)
         if let cv = window.contentView {

@@ -1978,6 +1978,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let name = dict["pipButton"] { PictureInPictureChrome.shared.debugPress(name); return }
             if dict["pipShow"] != nil { PictureInPictureChrome.shared.debugShow(); return }
             if let how = dict["pipKey"] { PictureInPictureChrome.shared.debugTakeKey(how); return }
+            if let what = dict["pipPoke"] { PictureInPictureChrome.shared.debugPoke(what); return }
             if let edge = dict["pipDrop"] { PictureInPictureChrome.shared.debugDrop(edge); return }
             if let share = dict["pipSize"].flatMap(Double.init) { PictureInPictureChrome.shared.debugSize(CGFloat(share)); return }
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).

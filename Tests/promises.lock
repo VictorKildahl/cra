@@ -909,6 +909,10 @@
 #458   Tests/Scenarios/keep-active-sites.scenario  880f87b22cb2
 #459   Packages/CraCore/Tests/CraCoreTests/MCPProtocolTests.swift::fullServerReplySaysWhy  c603156a09f1
 #459   Tests/MCPTransportTests.swift::fullServerSaysWhy  78c75dce7c78
+#460   Packages/CraCore/Tests/CraCoreTests/PictureInPictureInputTests.swift::chromiumWindowNeverBecomesKey  042491a47d87
+#460   Packages/CraCore/Tests/CraCoreTests/PictureInPictureInputTests.swift::chromiumWindowTakesNoInput  21799270ef4a
+#460   Packages/CraCore/Tests/CraCoreTests/PictureInPictureInputTests.swift::systemEventsStillReachIt  7365a3f91d06
+#460   Tests/Scenarios/pip-chromium-controls-hidden.scenario  e0d8c9c092de
 #460   Tests/Scenarios/pip-document-window.scenario  a6c85b8fca7c
 #461   Packages/CraCore/Tests/CraCoreTests/EngineVersionTests.swift::theCopiedVersionNamesBuildAndEngine  d1f809bc9266
 #462   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseAtEverySize  732fadede9fa

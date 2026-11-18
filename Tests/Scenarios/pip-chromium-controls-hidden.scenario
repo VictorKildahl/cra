@@ -1,0 +1,25 @@
+# Cra draws Arc's Picture in Picture controls over Chromium's video PiP window, and Chrome's own
+# (its origin strip, Back to Tab, ±10 s, play/pause, progress bar, captions) must never show
+# under them. VideoOverlayWindowViews shows its controls when its window gets a mouse move, a key
+# or becomes key. Cra kept the pointer and the key away from that window, yet on 0.1.48 a YouTube
+# PiP showed both sets at once (GitHub #460). Now Chromium's window takes no input at all and can't
+# become key, whatever reaches it. Here a key and the key status are handed to it directly; Chrome's
+# buttons must stay out of its accessibility tree (chrome=0), which they join while they show (a key
+# showed all 10 before the fix). A background test copy can't make a window key either way, so the
+# focus step only checks that nothing breaks; CraCore's PictureInPictureInputTests pin that rule.
+# promise: #460
+cra://open?url=${ORIGIN}/media.html
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"for(const a of ['seekbackward','seekforward']){navigator.mediaSession.setActionHandler(a,()=>{})};(()=>{const w=document.getElementById('v');w.muted=true;return w.play().then(()=>w.requestPictureInPicture())})().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 3
+cra://debug?pip=open
+expect-log Cra pip open: windows=1 key=0 appKey=0 mouse=0 preventKey=1 chrome=0
+cra://debug?pipPoke=key
+wait 0.5
+cra://debug?pip=keyed
+expect-log Cra pip keyed: windows=1 key=0 appKey=0 mouse=0 preventKey=1 chrome=0
+cra://debug?pipPoke=focus
+wait 0.5
+cra://debug?pip=focus
+expect-log Cra pip focus: windows=1 key=0 appKey=0 mouse=0 .*chrome=0
