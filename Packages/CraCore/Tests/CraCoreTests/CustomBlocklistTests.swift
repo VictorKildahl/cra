@@ -210,3 +210,42 @@ struct CustomBlocklistTests {
         #expect(MobileBlocklist.ruleLists(for: MobileSiteOptions()) == ["ads", "trackers", "cookie-banners"])
     }
 }
+
+/// The iPhone's first page after launch waits for every rule list it should get (#507).
+struct MobileBlockerReadinessTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func firstPageWaitsForAddedListsToo() {
+        var r = MobileBlockerReadiness()
+        r.launched(addresses: ["https://big.oisd.nl"], first: true)
+        #expect(!r.isReady)
+        r.ownListsCompiled()
+        #expect(!r.isReady, "Cra's own lists alone would let the added list's domains through")
+        r.addedListsCompiled()
+        #expect(r.isReady)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func addedListsMayFinishFirst() {
+        var r = MobileBlockerReadiness()
+        r.launched(addresses: ["https://big.oisd.nl"], first: true)
+        r.addedListsCompiled()
+        #expect(!r.isReady)
+        r.ownListsCompiled()
+        #expect(r.isReady)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func withoutAddedListsOnlyCrasOwnAreWaitedFor() {
+        var r = MobileBlockerReadiness()
+        r.launched(addresses: [], first: true)
+        #expect(!r.isReady)
+        r.ownListsCompiled()
+        #expect(r.isReady)
+    }
+
+    /// A list added while Cra runs applies from the next load; open pages never wait for it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/507")) func aListAddedLaterHoldsNothingBack() {
+        var r = MobileBlockerReadiness()
+        r.launched(addresses: [], first: true)
+        r.ownListsCompiled()
+        r.launched(addresses: ["https://big.oisd.nl"], first: false)
+        #expect(r.isReady)
+    }
+}

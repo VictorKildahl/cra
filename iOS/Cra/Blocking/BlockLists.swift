@@ -36,7 +36,7 @@ final class BlockLists: ObservableObject {
         if !started {
             started = true
             addresses = new
-            if !new.isEmpty { ContentBlocker.shared.holdForAdded() }
+            ContentBlocker.shared.launched(addresses: new, first: true)
             Task.detached(priority: .utility) {
                 let kept = new.compactMap { address in
                     (try? String(contentsOf: Self.cacheURL(address), encoding: .utf8)).flatMap(CachedBlocklist.init(text:))

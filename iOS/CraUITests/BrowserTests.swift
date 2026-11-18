@@ -295,19 +295,22 @@ final class BlockingTests: BrowserTestCase {
         XCTAssertNotEqual(card.label, "script-stopped")
     }
 
+    // promise: #507
     /// An added list blocks from the first page after launch (#507): its kept copy in the data
     /// folder is compiled before that page loads, even when the list can't be fetched again
     /// (`.invalid` never resolves), and what it stops is counted in the menu like Cra's own list.
     /// The copy is named for its address (CraCore's keptCopiesInTestsMatchTheirAddresses). The image
     /// is from www.google.com, which Cra's own list leaves alone: let through, it loads and nothing is
-    /// counted. (Its title isn't asked: script changes don't reach the tab card.)
+    /// counted. (Its title isn't asked: script changes don't reach the tab card.) The copy holds
+    /// 100,000 more domains, new each run, so it compiles afresh and well after Cra's own lists are
+    /// looked up: a first page that didn't wait for it (MobileBlockerReadiness) would load the image.
     func testAKeptBlockListStopsItsDomainsFromTheFirstPage() throws {
         let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
         let lists = data.appendingPathComponent("Blocklists", isDirectory: true)
         try FileManager.default.createDirectory(at: lists, withIntermediateDirectories: true)
         try #"{"hasSeenOnboarding": true, "hasSeenBlockTip": true, "customBlocklists": ["https://lists.invalid/kept.txt"]}"#
             .write(to: data.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
-        try """
+        let kept = """
         # Cra block list (added in Settings). One domain per line; a domain also blocks its subdomains.
         # url: https://lists.invalid/kept.txt
         # title: Kept list
@@ -315,7 +318,10 @@ final class BlockingTests: BrowserTestCase {
         # skipped: 0
         www.google.com
 
-        """.write(to: lists.appendingPathComponent("dac256c30d0d3b6d.txt"), atomically: true, encoding: .utf8)
+        """
+        let run = UUID().uuidString.prefix(8).lowercased()
+        let filler = (0..<100_000).map { "ad\($0).run-\(run).example" }.joined(separator: "\n")
+        try (kept + filler + "\n").write(to: lists.appendingPathComponent("dac256c30d0d3b6d.txt"), atomically: true, encoding: .utf8)
 
         let page = "data:text/html,<meta name=viewport content='width=device-width'><title>Kept list</title><h1>Kept list</h1>"
             + "<img src='https://www.google.com/favicon.ico?cra-test'>"
@@ -329,6 +335,7 @@ final class BlockingTests: BrowserTestCase {
         keep("kept-list-blocked")
     }
 
+    // promise: #507
     /// Default Site Settings ▸ Block Lists (#507): an http:// address is refused (the app can't
     /// load one), an https:// one becomes a row that says what became of its fetch, and a swipe
     /// removes it. `.invalid` never resolves, so the fetch fails without the network.

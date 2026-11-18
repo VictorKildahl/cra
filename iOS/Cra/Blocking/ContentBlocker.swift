@@ -16,10 +16,9 @@ final class ContentBlocker {
     private var addedKey: String?
     private var compiled: [String: WKContentRuleList] = [:]
     private var waiting: [() -> Void] = []
-    private var bundledReady = false
-    /// Added lists are being looked up at launch: the first page waits for them too.
-    private var addedPending = false
-    var isReady: Bool { bundledReady && !addedPending }
+    /// When pages may load: Cra's own lists, and at launch the added ones (MobileBlockerReadiness).
+    private var readiness = MobileBlockerReadiness()
+    var isReady: Bool { readiness.isReady }
 
     private init() {}
 
@@ -59,7 +58,7 @@ final class ContentBlocker {
         }
         group.notify(queue: .main) { [weak self] in
             guard let self else { return }
-            self.bundledReady = true
+            self.readiness.ownListsCompiled()
             self.releaseWaiting()
         }
     }
@@ -71,9 +70,10 @@ final class ContentBlocker {
         waiting.forEach { $0() }
     }
 
-    /// At launch, when lists were added: pages wait until `setAdded` has their rule lists.
-    func holdForAdded() {
-        addedPending = true
+    /// The setting's addresses at launch: with lists added, pages wait until `setAdded` has their
+    /// rule lists (MobileBlockerReadiness).
+    func launched(addresses: [String], first: Bool) {
+        readiness.launched(addresses: addresses, first: first)
     }
 
     /// Runs `work` once the lists exist: at once from the second launch on.
@@ -101,7 +101,7 @@ final class ContentBlocker {
     func setAdded(_ domains: [String]) {
         let key = "\(domains.count)-\(CustomBlocklist.cacheFileName(for: domains.joined(separator: "\n")).dropLast(4))"
         guard key != addedKey, let store = WKContentRuleListStore.default() else {
-            addedPending = false
+            readiness.addedListsCompiled()
             return releaseWaiting()
         }
         addedKey = key
@@ -134,7 +134,7 @@ final class ContentBlocker {
             self.compiled.merge(lists) { $1 }
             self.addedLists = chunks.count  // a chunk that failed to compile is skipped by apply
             self.added = MobileBlocklist(text: domains.joined(separator: "\n"))
-            self.addedPending = false
+            self.readiness.addedListsCompiled()
             self.releaseWaiting()
             store.getAvailableContentRuleListIdentifiers { names in
                 for name in names ?? [] where name.hasPrefix("cra-custom-") && !identifiers.contains(name) {
