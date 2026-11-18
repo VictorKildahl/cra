@@ -1,0 +1,28 @@
+# A video in full screen in a Little Window has the whole screen, with the "Hide the Little Window
+# toolbar until you need it" switch on as with it off: the bar neither floats over the page nor sits
+# above it. With the Chromium engine the page is a view under the bar, so the bar stayed on top of the
+# video (X post, 18 Nov 2026). Out of full screen, the bar floats again.
+# It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+requires screen
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}, "autoHideLittleWindowToolbar": true}
+pace 0.5
+
+cra://debug?externalURL=${PAGE}?n=video
+wait 3
+cra://debug?littleToolbar=windowed
+expect-log littleToolbar windowed: floats=1 out=0 pageTop=1 .* barHidden=1
+
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"document.documentElement.requestFullscreen().then(()=>'entered')","awaitPromise":true,"userGesture":true}
+wait 3
+cra://debug?windowState=video
+expect-log window state video: little0 fullscreen=1 primary=1
+cra://debug?littleToolbar=video
+expect-log littleToolbar video: floats=0 out=0 pageTop=0 .* barHidden=1
+
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"document.exitFullscreen().then(()=>'left')","awaitPromise":true}
+wait 3
+cra://debug?littleToolbar=left
+expect-log littleToolbar left: floats=1 out=0 pageTop=1 .* barHidden=1
+cra://action/closeLittleWindows
+wait 2

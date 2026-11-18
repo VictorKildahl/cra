@@ -157,8 +157,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     let actions = LittleWindowActions()
     let commandBar: CommandBarController
     private(set) var browser: CraBrowser?
-    /// The page (a video) is in element fullscreen.
-    private var pageFullscreen = false
+    /// The page (a video) is in element fullscreen; the shell drops the bar for it.
+    private var pageFullscreen = false { didSet { shell.pageFullscreen = pageFullscreen } }
     private let shell: LittleShellView
     /// The page's permission cards up (#371); each asks until it is answered or the window closes.
     private var permissionCards: [PermissionPopover] = []
@@ -2322,9 +2322,18 @@ final class LittleShellView: NSView {
             needsLayout = true
         }
     }
-    private var barHeight: CGFloat { hidesBar ? 0 : (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) }
+    private var hasBar: Bool { ToolbarAutoHide.littleWindowHasBar(barless: hidesBar, pageFullscreen: pageFullscreen) }
+    private var barHeight: CGFloat { hasBar ? (isPeek ? PeekLayout.barHeight : LittleMetrics.barHeight) : 0 }
     /// A page with no toolbar over it (an easel in Peek).
     var hidesBar = false { didSet { syncBarVisibility(); needsLayout = true } }
+    /// The page (a video) is in full screen: it has the whole window, with no bar above or over it.
+    var pageFullscreen = false {
+        didSet {
+            guard pageFullscreen != oldValue else { return }
+            syncBarVisibility()
+            needsLayout = true
+        }
+    }
     /// Settings ▸ Links ▸ "Hide the Little Window toolbar until you need it" (GitHub #435,
     /// `ToolbarAutoHide.littleWindowFloats`): the page takes the bar's room, inside the window's rim on
     /// every side, and the bar floats over its top, slid up out of the window until `barRevealed`. The
@@ -2347,7 +2356,8 @@ final class LittleShellView: NSView {
     /// A floating bar that is put away is up out of the window, where it can't be seen or clicked. It
     /// isn't hidden: Tab (with Full Keyboard Access) still reaches a Peek's buttons on it, and the
     /// controller brings it out for the one that gets the focus.
-    private func syncBarVisibility() { toolbarHost.isHidden = hidesBar }
+    /// A page in full screen has no bar at all (`ToolbarAutoHide.littleWindowHasBar`).
+    private func syncBarVisibility() { toolbarHost.isHidden = !hasBar }
     /// Whether the bar can be seen: shown, and inside the window (not put away above it).
     var barInSight: Bool { !toolbarHost.isHidden && bounds.intersects(toolbarHost.frame) }
 

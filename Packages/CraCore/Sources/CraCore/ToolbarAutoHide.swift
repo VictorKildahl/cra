@@ -50,6 +50,14 @@ public enum ToolbarAutoHide {
         enabled && hasBar && !pageFullscreen && !devToolsOpen && !pageInOwnWindow
     }
 
+    /// Whether a Little Window or a Peek shows its bar at all, floating or above the page. `barless`:
+    /// ⌥⌘N's card or an easel's Peek, which have none. A page in full screen (a video) has the whole
+    /// window, as the browser window's does: on the CEF engine the page was a window of its own over
+    /// the bar, but with the Chromium engine it is a view under it, so the bar has to go.
+    public static func littleWindowHasBar(barless: Bool, pageFullscreen: Bool) -> Bool {
+        !barless && !pageFullscreen
+    }
+
     /// The strip that brings the toolbar out: the top of the card and everything above it, up to
     /// just outside the window (`container` is the view the card sits in).
     public static func inRevealStrip(_ point: CGPoint, card: CGRect, container: CGRect) -> Bool {
