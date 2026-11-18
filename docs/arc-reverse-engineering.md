@@ -2371,6 +2371,13 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   a tab is created: tabs there carry it equal to `createdAt` to the microsecond. Cra stamps a tab opened with
   `select: false` when it opens and keeps the window's current tab first (`SidebarStore.recentTabs`), scenario
   `tab-switcher-background-tab`.
+- **A split is one card** ([O live] Arc 1.172, 18 Nov 2026, 2× capture of a Blank Window with Delta, Gamma and an
+  Alpha | Beta split; issue #554). The switcher lists sidebar items: StorableSidebar.json gives a split its own
+  `timeLastActiveAt`. The thumbnail's rectangle becomes a frame filled #161616 (selected or not), each pane's own
+  thumbnail inside it 4 pt from its edges and 4 pt apart, as wide as the pane's share (146 + 145 px for 50/50),
+  corners ≈ 4.5. The row under it has only each pane's favicon, centred under its pane: no titles. Cra:
+  `RecentTabOrder.cards`, `SwitcherSplitLayout`; a split pane's thumbnail is taken in its place's shape
+  (`BrowserManager.snapshotAspect`); scenario `tab-switcher-split`.
 - **Keys:** ⌃Tab opens on card 1 and moves on; ⇧Tab, ← and → move too. All of them wrap at both ends. Releasing ⌃
   switches, Esc cancels (the tab stays). A tap (⌃ up 0.13 s after Tab) switches with no panel; the panel appeared
   0.18–0.26 s after the key, so there is a short show delay.

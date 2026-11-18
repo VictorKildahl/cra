@@ -1126,6 +1126,13 @@
 #550   Tests/FloatingSidebarTests.swift::theShadowStaysUnderTheSidebar  831fdb6d0b6c
 #550   Tests/Scenarios/floating-sidebar-shadow.scenario  a59106d5ba21
 #551   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::leavingCraKeepsTheBarOpen  d0842a6daad8
+#554   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::aSplitIsOneCardWithItsPanes  66e2b892d639
+#554   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::theSplitOnScreenLeadsAndTakesItsNewestPanesTime  4c437f980621
+#554   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::unshownPanesFollowTheirSplit  6d787990b8f6
+#554   Packages/CraCore/Tests/CraCoreTests/SwitcherSplitLayoutTests.swift::anEvenSplitMatchesArc  3e1ceda7fbaf
+#554   Packages/CraCore/Tests/CraCoreTests/SwitcherSplitLayoutTests.swift::widthsFollowThePanesShares  5910512f0e2f
+#554   Tests/Scenarios/tab-switcher-split.scenario  5682663e4a74
+#554   Tests/StoreTests.swift::recentCardsKeepSplitsWhole  25829ca1142c
 #556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aQuickLookOnlyAddsSpaces  f7cc377147bf
 #556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aReopenedSheetShowsTheLastReadAtOnce  cafb3f7eae67
 #556   iOS/CraUITests/BrowserTests.swift::testAReopenedSpacesSheetShowsItsSpacesAtOnce  6b396824ee16

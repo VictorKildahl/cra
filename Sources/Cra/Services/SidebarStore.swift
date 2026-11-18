@@ -945,24 +945,36 @@ final class SidebarStore {
     }
 
     /// The tab switcher's list (⌃Tab): a space's most recently used tabs, newest first
-    /// (Arc shows five, the current tab first).
-    func recentTabs(in sid: UUID, limit: Int, window: UUID? = nil) -> [UUID] {
+    /// (Arc shows five, the current tab first), a split as one card (#554).
+    func recentCards(in sid: UUID, limit: Int, window: UUID? = nil) -> [RecentTabOrder.Card] {
         // A tab opened in the background since is newer than the current one, which still comes first.
-        Array(RecentTabOrder.ordered(recentEntries(in: sid), current: selectedTabID(in: sid, window: window)).prefix(limit))
+        Array(RecentTabOrder.cards(recentEntries(in: sid), current: selectedTabID(in: sid, window: window)).prefix(limit))
     }
 
     /// ⌃⌥Tab (#467, not in Arc): the recent tabs of every space the window can show, its own tab
     /// first. An incognito or Blank Window has only its own space.
-    func recentTabsInAllSpaces(limit: Int, window: UUID? = nil) -> [UUID] {
+    func recentCardsInAllSpaces(limit: Int, window: UUID? = nil) -> [RecentTabOrder.Card] {
         let w = self.window(window).id
         let focused = focusedSpaceID(window: w)
         let sids = isStandalone(window: w) ? [focused] : spaceOrder.filter { !isStandalone(space: $0) }
         let current = selectedTabID(in: focused, window: w)
-        return Array(RecentTabOrder.ordered(sids.flatMap(recentEntries(in:)), current: current).prefix(limit))
+        return Array(RecentTabOrder.cards(sids.flatMap(recentEntries(in:)), current: current).prefix(limit))
+    }
+
+    /// The tabs ⌃Tab's cards open, one per card.
+    func recentTabs(in sid: UUID, limit: Int, window: UUID? = nil) -> [UUID] {
+        recentCards(in: sid, limit: limit, window: window).map(\.opens)
+    }
+
+    func recentTabsInAllSpaces(limit: Int, window: UUID? = nil) -> [UUID] {
+        recentCardsInAllSpaces(limit: limit, window: window).map(\.opens)
     }
 
     private func recentEntries(in sid: UUID) -> [RecentTabOrder.Entry] {
-        visibleTabs(in: sid).map { RecentTabOrder.Entry(id: $0.id, lastActive: $0.tab?.timeLastActiveAt) }
+        visibleTabs(in: sid).map { t in
+            RecentTabOrder.Entry(id: t.id, lastActive: t.tab?.timeLastActiveAt,
+                                 split: t.parentID.flatMap { items[$0]?.isSplit == true ? $0 : nil })
+        }
     }
 
     // MARK: Tree moves

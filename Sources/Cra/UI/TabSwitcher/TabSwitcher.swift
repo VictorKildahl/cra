@@ -11,12 +11,24 @@ import SwiftUI
 @Observable
 final class TabSwitcher {
     struct Item: Identifiable {
+        /// The tab picking the card goes to (a split's pane on screen or used last).
         let id: UUID
         var title: String
         var iconKey: String?
         var snapshot: NSImage?
         /// The tab's space, shown on its card when the switcher spans every space (⌃⌥Tab, #467).
         var space: SpaceLabel? = nil
+        /// A split's panes, in pane order (#554); empty for a tab.
+        var panes: [Pane] = []
+    }
+
+    /// One pane of a split's card: its page and its share of the split's width.
+    struct Pane: Identifiable {
+        let id: UUID
+        var title: String
+        var iconKey: String?
+        var snapshot: NSImage?
+        var width: CGFloat
     }
 
     struct SpaceLabel {
@@ -106,8 +118,11 @@ final class TabSwitcher {
     }
 
     func updateSnapshot(_ id: UUID, _ image: NSImage?) {
-        guard let image, let i = items.firstIndex(where: { $0.id == id }) else { return }
-        items[i].snapshot = image
+        guard let image else { return }
+        for i in items.indices {
+            if items[i].id == id { items[i].snapshot = image }
+            for p in items[i].panes.indices where items[i].panes[p].id == id { items[i].panes[p].snapshot = image }
+        }
     }
 
     func commit() {

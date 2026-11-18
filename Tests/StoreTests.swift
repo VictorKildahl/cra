@@ -98,6 +98,7 @@ enum StoreTests {
         backToReferrer()
         recentTabsTakeBackgroundTabs()
         recentTabsInAllSpacesGoBack()
+        recentCardsKeepSplitsWhole()
         incognitoSpaceKeepsItsContext()
         print("Store: \(checks) checks passed")
     }
@@ -3295,6 +3296,34 @@ enum StoreTests {
         clock.advance(by: 1)
         store.selectTab(link.id)
         expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
+    }
+
+    // promise: #554
+    /// ⌃Tab with a split (#554): the split is one card with its panes in order, not a card per
+    /// pane, and picking it goes back to the pane used last.
+    @MainActor
+    private static func recentCardsKeepSplitsWhole() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let sid = store.createSpace(title: "Splits", emoji: "🪟").id
+        let left = store.createTab(url: "https://example.com/left", in: sid)
+        clock.advance(by: 1)
+        let right = store.createTab(url: "https://example.com/right", in: sid)
+        clock.advance(by: 1)
+        guard let split = store.createSplit(with: [left.id, right.id]) else { return expect(false, "two tabs make a split") }
+        clock.advance(by: 1)
+        store.selectTab(right.id)
+        clock.advance(by: 1)
+        let solo = store.createTab(url: "https://example.com/solo", in: sid)
+        clock.advance(by: 1)
+        store.selectTab(solo.id)
+        let cards = store.recentCards(in: sid, limit: .max)
+        expect(cards.map(\.id) == [solo.id, split.id], "the split is one card after the tab on screen")
+        expect(cards.last?.panes == [left.id, right.id] && cards.last?.isSplit == true, "holding both panes in pane order")
+        expect(store.recentTabs(in: sid, limit: .max) == [solo.id, right.id], "a tap goes to the pane used last")
+        clock.advance(by: 1)
+        store.selectTab(right.id)
+        expect(store.recentCards(in: sid, limit: .max).map(\.id) == [split.id, solo.id], "on the split, the next card is the tab it came from")
     }
 
     /// Every store in this process loads what earlier tests' stores saved to the one data folder, with

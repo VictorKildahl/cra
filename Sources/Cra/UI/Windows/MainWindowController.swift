@@ -175,6 +175,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // What extensions set for a tab (chrome.action.setIcon with tabId) went with its page.
         browsers.pageClosed = { ExtensionStore.shared.forgetActionTab($0) }
         browsers.delegate = self
+        // A split pane's thumbnail is taken in its place's shape on the split's switcher card (#554).
+        browsers.snapshotAspect = { [weak self] id in
+            guard let self, let split = self.store.item(id)?.parentID.flatMap(self.store.item), split.isSplit,
+                  let pane = split.children.firstIndex(of: id) else { return nil }
+            let factors = SplitPaneLayout.normalizedFactors(ids: split.children, stored: split.split?.widthFactors ?? [:])
+            return SwitcherSplitLayout.paneAspect(in: TabSwitcherMetrics.thumbnail, widths: split.children.map { factors[$0] ?? 0 }, pane: pane)
+        }
         overlay.onFindQueryChange = { [weak self] query in
             guard let self else { return }
             if self.overlay.findVisible, self.askOnPage.findsWhileTyping { self.find(query, forward: true) }
@@ -2696,12 +2703,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
-    /// open: ⌃Tab doesn't list it.
-    private func openRecentTabs(limit: Int, allSpaces: Bool = false) -> [UUID] {
-        let recent = allSpaces ? store.recentTabsInAllSpaces(limit: .max, window: windowID)
-            : store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
-        return Array(recent.filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }.prefix(limit))
+    /// The space's open tabs, the latest first, a split as one card (#554). A pinned tab that was
+    /// closed (unloaded) isn't open: ⌃Tab doesn't list it, nor a pinned split none of whose panes is open.
+    private func openRecentCards(limit: Int, allSpaces: Bool = false) -> [RecentTabOrder.Card] {
+        let recent = allSpaces ? store.recentCardsInAllSpaces(limit: .max, window: windowID)
+            : store.recentCards(in: focusedSpaceID, limit: .max, window: windowID)
+        return Array(recent.filter { card in
+            card.panes.contains { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
+        }.prefix(limit))
     }
 
     func resetPinnedTab(_ id: UUID) {
@@ -3666,7 +3675,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         tabSwitcher.isDark = dark
         tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
         tabSwitcher.palette = theme.palette
-        tabSwitcher.debugOpen(tabSwitcherItems(allSpaces: allSpaces))
+        let items = tabSwitcherItems(allSpaces: allSpaces)
+        // The cards, for a scenario: a tab by its title, a split as its panes' titles (#554).
+        let cards = items.map { $0.panes.isEmpty ? $0.title : "split(" + $0.panes.map(\.title).joined(separator: " | ") + ")" }
+        CraLog.note("tab switcher: \(items.count) cards: \(cards.joined(separator: ", "))")
+        tabSwitcher.debugOpen(items)
     }
 
     /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
@@ -4159,20 +4172,33 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             tabSwitcher.palette = theme.palette
         }
         tabSwitcher.cycle(delta, event: event) { tabSwitcherItems(allSpaces: allSpaces) }
-        // The page on screen is the freshest thumbnail there is: retake it for its card.
-        guard tabSwitcher.isOpen, let current = browsers.visibleTabID else { return }
-        browsers.captureSnapshot(current) { [weak self] in
-            guard let self else { return }
-            self.tabSwitcher.updateSnapshot(current, self.browsers.runtime(for: current)?.snapshot)
+        // The pages on screen are the freshest thumbnails there are: retake them for their card
+        // (every pane of a split on screen).
+        guard tabSwitcher.isOpen else { return }
+        for current in browsers.visibleTabIDs {
+            browsers.captureSnapshot(current) { [weak self] in
+                guard let self else { return }
+                self.tabSwitcher.updateSnapshot(current, self.browsers.runtime(for: current)?.snapshot)
+            }
         }
     }
 
     private func tabSwitcherItems(allSpaces: Bool) -> [TabSwitcher.Item] {
-        openRecentTabs(limit: TabSwitcherMetrics.maxItems, allSpaces: allSpaces).compactMap { id in
+        openRecentCards(limit: TabSwitcherMetrics.maxItems, allSpaces: allSpaces).compactMap { card in
+            let id = card.opens
             guard let it = store.item(id), let tab = it.tab else { return nil }
             let space = allSpaces ? store.spaceID(ofItem: id, window: windowID).flatMap(store.space) : nil
-            return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot,
-                                    space: space.map { TabSwitcher.SpaceLabel(title: $0.title, icon: SpaceMenuIcon.image(for: $0)) })
+            var item = TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot,
+                                        space: space.map { TabSwitcher.SpaceLabel(title: $0.title, icon: SpaceMenuIcon.image(for: $0)) })
+            if card.isSplit {
+                let factors = SplitPaneLayout.normalizedFactors(ids: card.panes, stored: store.item(card.id)?.split?.widthFactors ?? [:])
+                item.panes = card.panes.compactMap { pid in
+                    guard let p = store.item(pid), let t = p.tab else { return nil }
+                    return TabSwitcher.Pane(id: pid, title: p.displayTitle, iconKey: t.iconKey, snapshot: browsers.runtime(for: pid)?.snapshot,
+                                            width: factors[pid] ?? 1 / CGFloat(card.panes.count))
+                }
+            }
+            return item
         }
     }
 

@@ -17,6 +17,9 @@ enum TabSwitcherMetrics {
     static let cardCornerRadius: CGFloat = 8
     static let thumbnailCornerRadius: CGFloat = 6.5
     static let favicon: CGFloat = 16
+    /// A split's card (#554, Arc 1.172): its frame fills the thumbnail's place, the panes' own
+    /// thumbnails inside it (SwitcherSplitLayout) have these corners.
+    static let paneCornerRadius: CGFloat = 4.5
     /// Room around the panel for its shadow (the window is this much larger on each side).
     static let shadowMargin: CGFloat = 40
 
@@ -95,10 +98,14 @@ final class TabSwitcherView: NSView {
         }
         while cards.count > items.count { cards.removeLast().removeFromSuperview() }
         let fill = NSColor(highlight)
+        let showsIcons = switcher.palette != nil
+        let look: (String?) -> TabSwitcherCardView.Icon = { [favicons] key in
+            let icon = key.flatMap { favicons.image(forKey: $0) }
+            let flip = icon != nil && favicons.glyphIsDark(forKey: key) == dark
+            return TabSwitcherCardView.Icon(image: showsIcons ? icon : nil, flip: flip)
+        }
         for (i, (c, item)) in zip(cards, items).enumerated() {
-            let icon = item.iconKey.flatMap { favicons.image(forKey: $0) }
-            let flip = icon != nil && favicons.glyphIsDark(forKey: item.iconKey) == dark
-            c.show(item, icon: switcher.palette == nil ? nil : icon, flip: flip, selected: i == selected, highlight: fill, dark: dark)
+            c.show(item, icon: look(item.iconKey), paneIcons: item.panes.map { look($0.iconKey) }, selected: i == selected, highlight: fill, dark: dark)
         }
         needsLayout = true
     }
@@ -120,6 +127,11 @@ final class TabSwitcherView: NSView {
 
 private final class TabSwitcherCardView: NSView {
     private typealias M = TabSwitcherMetrics
+    struct Icon {
+        var image: NSImage?
+        /// A dark glyph on a dark switcher (or light on light): drawn as a template in the ink.
+        var flip: Bool
+    }
     var onHover: () -> Void = {}
     var onClick: () -> Void = {}
     private let lift = CALayer()
@@ -131,6 +143,10 @@ private final class TabSwitcherCardView: NSView {
     private let spacePill = NSView()
     private let spaceIcon = NSImageView()
     private let spaceTitle = NSTextField.sidebarLabel(size: 11, weight: .medium)
+    /// A split's panes (#554): a thumbnail each inside the frame, a favicon each under it.
+    private var paneThumbs: [CALayer] = []
+    private var paneIcons: [(icon: NSImageView, placeholder: NSView)] = []
+    private var paneWidths: [CGFloat] = []
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -148,15 +164,8 @@ private final class TabSwitcherCardView: NSView {
         thumb.contentsGravity = .resizeAspectFill
         lift.addSublayer(thumb)
         layer?.addSublayer(lift)
-        favicon.imageScaling = .scaleProportionallyUpOrDown
-        favicon.wantsLayer = true
-        favicon.layer?.cornerRadius = M.favicon * 0.22
-        favicon.layer?.cornerCurve = .continuous
-        favicon.layer?.masksToBounds = true
+        Self.styleIcon(favicon, placeholder: placeholder)
         addSubview(favicon)
-        placeholder.wantsLayer = true
-        placeholder.layer?.cornerRadius = 4.5
-        placeholder.layer?.cornerCurve = .continuous
         addSubview(placeholder)
         addSubview(title)
         spacePill.wantsLayer = true
@@ -171,37 +180,62 @@ private final class TabSwitcherCardView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func show(_ item: TabSwitcher.Item, icon: NSImage?, flip: Bool, selected: Bool, highlight: NSColor, dark: Bool) {
+    func show(_ item: TabSwitcher.Item, icon: Icon, paneIcons icons: [Icon], selected: Bool, highlight: NSColor, dark: Bool) {
+        let split = !item.panes.isEmpty
+        let scale = window?.backingScaleFactor ?? 2
+        // A tab never seen since launch: Arc shows an empty #1C1C1C card.
+        let empty = (dark ? NSColor(white: 28 / 255, alpha: 1) : NSColor(white: 0.9, alpha: 1)).cgColor
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         layer?.backgroundColor = selected ? highlight.cgColor : nil
         lift.shadowOpacity = dark ? 0.4 : 0.15
-        if let image = item.snapshot {
-            thumb.contents = image.layerContents(forContentsScale: window?.backingScaleFactor ?? 2)
+        if split {
+            // Arc's split frame measured #161616 on the dark switcher, selected or not.
+            thumb.contents = nil
+            thumb.backgroundColor = (dark ? NSColor(white: 22 / 255, alpha: 1) : NSColor(white: 0.82, alpha: 1)).cgColor
+        } else if let image = item.snapshot {
+            thumb.contents = image.layerContents(forContentsScale: scale)
             thumb.backgroundColor = nil
         } else {
-            // A tab never seen since launch: Arc shows an empty #1C1C1C card.
             thumb.contents = nil
-            thumb.backgroundColor = (dark ? NSColor(white: 28 / 255, alpha: 1) : NSColor(white: 0.9, alpha: 1)).cgColor
+            thumb.backgroundColor = empty
+        }
+        while paneThumbs.count < item.panes.count {
+            let l = CALayer()
+            l.cornerRadius = M.paneCornerRadius
+            l.cornerCurve = .continuous
+            l.masksToBounds = true
+            l.contentsGravity = .resizeAspectFill
+            thumb.addSublayer(l)
+            paneThumbs.append(l)
+        }
+        while paneThumbs.count > item.panes.count { paneThumbs.removeLast().removeFromSuperlayer() }
+        for (l, pane) in zip(paneThumbs, item.panes) {
+            l.contents = pane.snapshot?.layerContents(forContentsScale: scale)
+            l.backgroundColor = pane.snapshot == nil ? empty : nil
         }
         CATransaction.commit()
-        // Arc's switcher draws a missing favicon as a faint rounded square, not a globe.
-        if let icon {
-            favicon.isHidden = false
-            placeholder.isHidden = true
-            if flip {
-                let t = icon.copy() as! NSImage
-                t.isTemplate = true
-                favicon.image = t
-                favicon.contentTintColor = dark ? NSColor.white.withAlphaComponent(0.92) : NSColor.black.withAlphaComponent(0.85)
-            } else {
-                favicon.image = icon
-                favicon.contentTintColor = nil
-            }
-        } else {
+        paneWidths = item.panes.map(\.width)
+        while paneIcons.count < item.panes.count {
+            let (i, p) = (NSImageView(), NSView())
+            Self.styleIcon(i, placeholder: p)
+            addSubview(i)
+            addSubview(p)
+            paneIcons.append((i, p))
+        }
+        while paneIcons.count > item.panes.count {
+            let last = paneIcons.removeLast()
+            last.icon.removeFromSuperview()
+            last.placeholder.removeFromSuperview()
+        }
+        for (views, look) in zip(paneIcons, icons) { Self.apply(look, to: views.icon, placeholder: views.placeholder, dark: dark) }
+        // A split's row is only its panes' favicons, no title (Arc).
+        title.isHidden = split
+        if split {
             favicon.isHidden = true
-            placeholder.isHidden = false
-            placeholder.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.1)).cgColor
+            placeholder.isHidden = true
+        } else {
+            Self.apply(icon, to: favicon, placeholder: placeholder, dark: dark)
         }
         // Arc's titles measure as SF 14 medium (ink width and cap height match).
         title.stringValue = item.title
@@ -219,6 +253,38 @@ private final class TabSwitcherCardView: NSView {
         needsLayout = true
     }
 
+    private static func styleIcon(_ icon: NSImageView, placeholder: NSView) {
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.wantsLayer = true
+        icon.layer?.cornerRadius = M.favicon * 0.22
+        icon.layer?.cornerCurve = .continuous
+        icon.layer?.masksToBounds = true
+        placeholder.wantsLayer = true
+        placeholder.layer?.cornerRadius = 4.5
+        placeholder.layer?.cornerCurve = .continuous
+    }
+
+    /// Arc's switcher draws a missing favicon as a faint rounded square, not a globe.
+    private static func apply(_ look: Icon, to view: NSImageView, placeholder: NSView, dark: Bool) {
+        if let icon = look.image {
+            view.isHidden = false
+            placeholder.isHidden = true
+            if look.flip {
+                let t = icon.copy() as! NSImage
+                t.isTemplate = true
+                view.image = t
+                view.contentTintColor = dark ? NSColor.white.withAlphaComponent(0.92) : NSColor.black.withAlphaComponent(0.85)
+            } else {
+                view.image = icon
+                view.contentTintColor = nil
+            }
+        } else {
+            view.isHidden = true
+            placeholder.isHidden = false
+            placeholder.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.14) : NSColor.black.withAlphaComponent(0.1)).cgColor
+        }
+    }
+
     override func layout() {
         super.layout()
         let h = bounds.height
@@ -228,6 +294,10 @@ private final class TabSwitcherCardView: NSView {
                               width: M.thumbnail.width, height: M.thumbnail.height)
         lift.shadowPath = CGPath(roundedRect: lift.bounds, cornerWidth: M.thumbnailCornerRadius, cornerHeight: M.thumbnailCornerRadius, transform: nil)
         thumb.frame = lift.bounds
+        let panes = SwitcherSplitLayout.paneFrames(in: M.thumbnail, widths: paneWidths)
+        for (l, f) in zip(paneThumbs, panes) {
+            l.frame = CGRect(x: f.minX, y: M.thumbnail.height - f.maxY, width: f.width, height: f.height)
+        }
         CATransaction.commit()
         // The title row fills what is left under the thumbnail, centred.
         let rowTop = M.thumbnailOrigin.y + M.thumbnail.height
@@ -235,6 +305,12 @@ private final class TabSwitcherCardView: NSView {
         let f = NSRect(x: 13.5, y: mid - M.favicon / 2, width: M.favicon, height: M.favicon)
         favicon.frame = f
         placeholder.frame = f
+        // Under a split, each pane's favicon centred under its thumbnail.
+        for (views, p) in zip(paneIcons, panes) {
+            let r = NSRect(x: M.thumbnailOrigin.x + p.midX - M.favicon / 2, y: f.minY, width: M.favicon, height: M.favicon)
+            views.icon.frame = r
+            views.placeholder.frame = r
+        }
         let tx = 13.5 + M.favicon + 8
         title.frame = NSRect(x: tx - SidebarText.inset, y: mid - 17 / 2, width: bounds.width - tx - 10.5 + 2 * SidebarText.inset, height: 17)
         if !spacePill.isHidden {
