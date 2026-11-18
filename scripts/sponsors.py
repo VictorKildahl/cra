@@ -10,8 +10,8 @@ this report. A tier includes the perks of the cheaper tiers of its kind (monthly
 one-time), and a custom amount gets the highest tier at or below it, as GitHub does.
 
   - "release notes": one-time sponsors are named in the next release notes; monthly
-    sponsors as often as their tier says ("once a year", "twice a year", "every quarter",
-    "every release"; due when no release in that span lists them in its `sponsors` field
+    sponsors as often as their tier says ("when you join", "once a year", "twice a year",
+    "every quarter", "every release"; due when no release in that span lists them in its `sponsors` field
     in cra-website's releases.ts, CRA_WEBSITE to point elsewhere), and again after they
     raise their monthly amount: only releases from the day of the raise on count as
     thanking them for it.
@@ -39,6 +39,7 @@ EVERY = [  # how often a monthly tier's name is in the release notes, in days
     (r"every quarter", 91),
     (r"twice a year", 182),
     (r"once a year", 365),
+    (r"when you join", 36500),  # once: any release since they joined counts
 ]
 QUERY = """
 query($endCursor: String) { viewer {
