@@ -259,11 +259,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Third-party ad and tracker blocking (Settings > Privacy, Dia's onboarding
-    /// checkbox). The bundled list (resources/blocklist) is parsed off the main thread;
-    /// the switch follows the setting live, no restart.
+    /// checkbox). The bundled list (resources/blocklist) and the lists added in Settings (#507)
+    /// are read off the main thread; the switch and the lists follow the settings live, no restart.
     private func startContentBlocking() {
-        if let path = Bundle.main.path(forResource: "domains", ofType: "txt", inDirectory: "blocklist") {
-            CraCEFRuntime.loadBlockedDomains(fromFile: path, completion: nil)
+        observeChanges(of: { [store] in store.settings.customBlocklists }) { [composition] in
+            BlockLists.shared.set(addresses: $0, clock: composition.clock)
         }
         observeContentBlocking()
         observeHttpsOnly()

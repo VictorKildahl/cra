@@ -124,6 +124,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
 
         ContentBlocker.shared.prepare()
+        BlockLists.shared.set(addresses: settings.value.customBlocklists)
         DownloadManager.shared.load(from: LaunchOptions.dataDirectory)
         DownloadManager.shared.onFinish = { [weak self] item in self?.downloadFinished(item) }
         store.archiveStale(after: settings.value.archiveAfter)
@@ -304,6 +305,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     @objc func appDidBecomeActive() {
         takeSharedLinks()
+        BlockLists.shared.refreshDue()
     }
 
     @objc func appWillResignActive() {

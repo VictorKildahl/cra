@@ -135,6 +135,9 @@ public struct MobileSettings: Codable, Equatable {
     public var hasDismissedSyncCard = false
     /// "Save links to Cra from other apps!" was answered (it asks once).
     public var hasSeenSharePrompt = false
+    /// Default Site Settings ▸ Block Lists (#507, not in Arc Search): addresses of lists added on top
+    /// of Cra's own, blocked where Block Ads is on (CustomBlocklist).
+    public var customBlocklists: [String] = []
 
     public init() {}
 
@@ -156,7 +159,7 @@ public struct MobileSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip, hasDismissedSyncCard, hasSeenSharePrompt
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip, hasDismissedSyncCard, hasSeenSharePrompt, customBlocklists
     }
 
     public init(from decoder: Decoder) throws {
@@ -175,6 +178,7 @@ public struct MobileSettings: Codable, Equatable {
         hasSeenBlockTip = (try? c.decodeIfPresent(Bool.self, forKey: .hasSeenBlockTip)) ?? false
         hasDismissedSyncCard = (try? c.decodeIfPresent(Bool.self, forKey: .hasDismissedSyncCard)) ?? false
         hasSeenSharePrompt = (try? c.decodeIfPresent(Bool.self, forKey: .hasSeenSharePrompt)) ?? false
+        customBlocklists = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
         answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 

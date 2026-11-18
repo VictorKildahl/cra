@@ -293,6 +293,46 @@ final class BlockingTests: BrowserTestCase {
         XCTAssertNotEqual(card.label, "script-stopped")
     }
 
+    /// Default Site Settings ▸ Block Lists (#507): an http:// address is refused (the app can't
+    /// load one), an https:// one becomes a row that says what became of its fetch, and a swipe
+    /// removes it. `.invalid` never resolves, so the fetch fails without the network.
+    func testAnAddedBlockListShowsItsFetchAndCanBeRemoved() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
+        app.buttons["setting-global-site-settings"].tap()
+        let lists = app.buttons["setting-block-lists"]
+        XCTAssertTrue(lists.waitForExistence(timeout: 5))
+        lists.tap()
+        let add = app.buttons["block-lists-add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+
+        add.tap()
+        let field = app.alerts.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("http://lists.invalid/hosts")
+        app.alerts.buttons["Add"].tap()
+        XCTAssertTrue(app.alerts["That isn’t a list address"].waitForExistence(timeout: 5))
+        app.alerts.buttons["OK"].tap()
+
+        add.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("lists.invalid/abpindo.txt")
+        app.alerts.buttons["Add"].tap()
+        let row = app.descendants(matching: .any)["block-list-row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["lists.invalid"].exists)
+        XCTAssertTrue(app.staticTexts["Couldn’t reach the list. Cra tries again later."].waitForExistence(timeout: 30))
+        sleep(1)
+        keep("block-lists")
+
+        row.swipeLeft()
+        app.buttons["Delete"].tap()
+        XCTAssertFalse(app.staticTexts["lists.invalid"].waitForExistence(timeout: 2))
+    }
+
     /// Arc Search 1.49's tip (Victor's recording, 1:59): the first page that had something
     /// stopped says so over the bar, once; the × puts it away and it doesn't come back.
     func testTheFirstBlockedPageShowsTheTipOnce() {
