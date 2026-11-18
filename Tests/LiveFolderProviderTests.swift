@@ -10,6 +10,7 @@ enum LiveFolderProviderTests {
         let github = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/github"))
         let gitlab = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/gitlab"))
         try gitHub(github, executable: executable)
+        try gitHubOpenOnly(github, executable: executable)
         try gitLab(gitlab, executable: executable)
         print("Bundled providers: GitHub and GitLab cases passed")
     }
@@ -184,6 +185,51 @@ enum LiveFolderProviderTests {
         let arcDefault = json(try LiveFolderPluginProcess.invoke(executable: executable, script: github.script, method: "migrate",
             input: JSONEncoder().encode(LiveFolderData()), origins: [], fetch: { _ in fatalError() }))
         check(arcDefault["filters"] as? [String] == ["authored", "review", "teamReview"], "Arc's default mask is all three")
+    }
+
+    // promise: #523
+    /// The folder holds open pull requests only, whatever GitHub's answer carries besides them: a merged
+    /// or closed one in any of the shapes the reader accepts is left out, so it leaves the folder like a
+    /// pull request that dropped out of the search (GitHub #523: merged pull requests showed in the folder).
+    private static func gitHubOpenOnly(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func titles(_ body: String) throws -> [String] {
+            try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get().items.map(\.title)
+        }
+        // The signed-in pulls route: state OPEN, MERGED or CLOSED, and mergedAt.
+        let pulls = #"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":["#
+            + #"{"number":1,"title":"Open","repoNameWithOwner":"team/app","state":"OPEN","isDraft":false,"mergedAt":null,"createdAt":"2026-11-06T12:00:00Z"},"#
+            + #"{"number":2,"title":"Draft","repoNameWithOwner":"team/app","state":"OPEN","isDraft":true,"mergedAt":null,"createdAt":"2026-11-05T12:00:00Z"},"#
+            + #"{"number":3,"title":"Merged","repoNameWithOwner":"team/app","state":"MERGED","isDraft":false,"mergedAt":"2026-11-04T11:28:26+01:00","createdAt":"2026-11-04T10:00:00Z"},"#
+            + #"{"number":4,"title":"Closed","repoNameWithOwner":"team/app","state":"CLOSED","isDraft":false,"mergedAt":null,"createdAt":"2026-11-03T12:00:00Z"},"#
+            + #"{"number":5,"title":"Merged, no state","repoNameWithOwner":"team/app","isDraft":false,"mergedAt":"2026-11-02T12:00:00Z","createdAt":"2026-11-02T10:00:00Z"}"#
+            + #"],"pageInfo":{},"error":null}}}"#
+        check(try titles(pulls) == ["Open", "Draft"], "the pulls route keeps open and draft pull requests, not merged or closed ones")
+
+        // The search route: state open, draft or closed, and merged.
+        let search = #"{"payload":{"blackbirdSearchRoute":{"logged_in":true,"results":["#
+            + #"{"number":6,"hl_title":"Searched open","state":"open","merged":false,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-06T12:00:00Z"},"#
+            + #"{"number":7,"hl_title":"Searched draft","state":"draft","merged":false,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-05T12:00:00Z"},"#
+            + #"{"number":8,"hl_title":"Searched merged","state":"closed","merged":true,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-04T12:00:00Z"},"#
+            + #"{"number":9,"hl_title":"Searched closed","state":"closed","merged":false,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-03T12:00:00Z"}"#
+            + #"]}}}"#
+        check(try titles(search) == ["Searched open", "Searched draft"], "the search route keeps open and draft pull requests only")
+
+        // GitHub's embedded React data (GraphQL's PullRequestState) and the classic list's state icons.
+        let embedded = #"<meta name="user-login" content="alice"><script type="application/json" data-target="react-app.embeddedData">{"payload":{"results":["#
+            + #"{"__typename":"PullRequest","number":11,"title":"Embedded open","state":"OPEN","repository":{"nameWithOwner":"team/app"}},"#
+            + #"{"__typename":"PullRequest","number":12,"title":"Embedded merged","state":"MERGED","repository":{"nameWithOwner":"team/app"}},"#
+            + #"{"__typename":"PullRequest","number":13,"title":"Embedded closed","closed":true,"repository":{"nameWithOwner":"team/app"}}"#
+            + #"]}}</script>"#
+        check(try titles(embedded) == ["Embedded open"], "embedded data keeps open pull requests only")
+        func row(_ number: Int, _ icon: String, _ title: String) -> String {
+            #"<div class="js-issue-row"><svg class="octicon \#(icon) color-fg-done"></svg><a href="/team/app/pull/\#(number)" class="markdown-title">\#(title)</a></div>"#
+        }
+        let classic = #"<meta name="user-login" content="alice">"# + row(14, "octicon-git-pull-request", "Row open")
+            + row(15, "octicon-git-pull-request-draft", "Row draft") + row(16, "octicon-git-merge", "Row merged")
+            + row(17, "octicon-git-pull-request-closed", "Row closed")
+        check(try titles(classic) == ["Row open", "Row draft"], "the classic list leaves out merged and closed rows")
     }
 
     // MARK: GitLab

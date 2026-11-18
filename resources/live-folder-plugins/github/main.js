@@ -70,6 +70,12 @@ function parseItem(d) {
     return {id: url, url, title: plain(title), subtitle: login(d.author) ?? login(d.user) ?? d.author_name ?? d.authorLogin ?? null,
         group, createdAt: date(d.createdAt ?? d.created_at ?? d.created), updatedAt: date(d.updatedAt ?? d.updated_at ?? d.updated)};
 }
+// The folder holds open pull requests (drafts too), whatever else GitHub's answer carries (#523).
+function isOpen(d) {
+    const state = String(d.state ?? "").toLowerCase();
+    return state !== "merged" && state !== "closed" && d.merged !== true && d.closed !== true &&
+        !(d.mergedAt ?? d.merged_at ?? d.closedAt ?? d.closed_at);
+}
 function walk(root, visitor, limit, depth = 0) {
     if (!root || typeof root !== "object" || depth >= limit) return;
     if (visitor(root)) return;
@@ -77,7 +83,7 @@ function walk(root, visitor, limit, depth = 0) {
 }
 function parseJSON(root) {
     const items = [];
-    walk(root, value => { const item = parseItem(value); if (item) items.push(item); return !!item; }, 40);
+    walk(root, value => { const item = parseItem(value); if (item && isOpen(value)) items.push(item); return !!item; }, 40);
     let viewer = null;
     walk(root, value => {
         if (viewer) return true;
@@ -97,6 +103,7 @@ function meta(name, html) {
 function parseHTML(html) {
     const chunks = html.split("js-issue-row"), items = [];
     for (const chunk of chunks.length > 1 ? chunks.slice(1) : chunks) {
+        if (chunks.length > 1 && /octicon-git-(merge|pull-request-closed)(?![\w-])/.test(chunk)) continue;
         for (const m of matches(/<a\b([^>]*)>([\s\S]*?)<\/a>/g, chunk)) {
             const href = attribute("href", m[1]), path = href ? pullPath(href) : null;
             if (!path || !href.endsWith("/pull/" + path.number) ||
