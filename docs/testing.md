@@ -22,11 +22,15 @@ Commands for each piece are in [development.md](development.md#tests).
    also locked (rule 8). If no test can reach it, the fix moves the decision into CraCore or adds
    the debug readout a scenario needs; only what takes a real site, the GPU or a person's eye
    becomes a line in [release-checklist.md](release-checklist.md).
+   The same goes for everything built and everything reported: a new feature (Mac or iPhone,
+   asked for or not) ships with tests that pin it, and a report that turns out not to be a bug
+   still gets the test that proves the behaviour, tagged with its issue (CLAUDE.md rule 7).
 6. **Never assert on a fake's bookkeeping alone.** A test whose only check is "the fake
    recorded a call" tests the fake.
 7. **A flaky test is rewritten on the clock or deleted**, never retried or given a sleep.
 8. **What a closed issue shipped is pinned.** The test that proves an issue's fix carries
-   `.bug("https://github.com/VictorKildahl/cra/issues/<n>")`, and `Tests/promises.lock` holds a
+   `.bug("https://github.com/VictorKildahl/cra/issues/<n>")` (`// promise: #<n>` above a harness
+   func or an iPhone UI test in iOS/CraUITests), and `Tests/promises.lock` holds a
    hash of each such test (`scripts/promises.py`, run by `scripts/test.sh` and by a hook before
    every `git push`). Changing, renaming or deleting one fails until `scripts/promises.py --update`;
    do that only when the issue's behaviour is meant to change, say why in the commit and tell the

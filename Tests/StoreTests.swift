@@ -38,6 +38,7 @@ enum StoreTests {
         liveRepositoryFiltering()
         liveRepositoryMenus()
         liveFolderExpiryKeepsNavigatedPages()
+        mergedPullRequestsLeaveAnUpdatedFolder()
         gitLabHiddenItems()
         gitLabFolderExpiryAndDeletion()
         gitLabMultipleServers()
@@ -610,6 +611,52 @@ enum StoreTests {
                    "fresh results replace the saved-tab fallback")
             expect(store.liveRepositories(UUID()).isEmpty, "a deleted folder has no repository menu")
         }
+    }
+
+    // promise: #523
+    /// A folder that 0.1.47 filled with merged pull requests (GitHub #523) cleans itself up after the
+    /// update: the fixed plugin's first refresh leaves them out, they get the usual 120 s grace and go,
+    /// except one showing in a window, which goes once the window shows something else.
+    @MainActor
+    private static func mergedPullRequestsLeaveAnUpdatedFolder() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        guard let folder = store.createLiveFolder(.github, inSpace: store.focusedSpaceID) else { return expect(false, "a live folder is made") }
+        func pr(_ number: Int, _ title: String) -> LiveFolderPluginItem {
+            let url = "https://github.com/team/app/pull/\(number)"
+            return LiveFolderPluginItem(id: url, url: url, title: title, group: "team/app")
+        }
+        let open = pr(1, "Open"), merged = pr(2, "Merged"), shown = pr(3, "Merged and on screen")
+        store.applyPluginResults(.init(items: [open, merged, shown]), to: folder.id)
+        expect(store.children(of: folder.id).count == 3, "the folder as 0.1.47 left it, merged ones included")
+        guard let shownTab = store.children(of: folder.id).first(where: { $0.tab?.liveItemURL == shown.url }) else {
+            return expect(false, "the shown pull request has a tab")
+        }
+        store.prefs.windows[0].selectedTabPerSpace[store.focusedSpaceID] = shownTab.id
+
+        clock.advance(by: 600)
+        store.applyPluginResults(.init(items: [open]), to: folder.id)
+        expect(store.children(of: folder.id).filter { $0.tab?.liveGoneAt == clock.now }.compactMap(\.tab?.liveItemURL).sorted()
+               == [merged.url, shown.url], "the first refresh after the update marks both merged ones gone")
+        clock.advance(by: 119)
+        store.expireLiveItems(olderThan: 120)
+        expect(store.children(of: folder.id).count == 3, "they stay through the grace period")
+        clock.advance(by: 1)
+        store.expireLiveItems(olderThan: 120)
+        expect(store.children(of: folder.id).compactMap(\.tab?.liveItemURL).sorted() == [open.url, shown.url],
+               "then the merged one goes, the one on screen stays")
+        guard let openTab = store.children(of: folder.id).first(where: { $0.tab?.liveItemURL == open.url }) else {
+            return expect(false, "the open pull request has a tab")
+        }
+        store.prefs.windows[0].selectedTabPerSpace[store.focusedSpaceID] = openTab.id
+        store.expireLiveItems(olderThan: 120)
+        expect(store.children(of: folder.id).compactMap(\.tab?.liveItemURL) == [open.url],
+               "and it goes once the window shows another tab; only the open pull request is left")
+        clock.advance(by: 600)
+        store.applyPluginResults(.init(items: [open]), to: folder.id)
+        store.expireLiveItems(olderThan: 120)
+        expect(store.children(of: folder.id).compactMap(\.tab?.liveItemURL) == [open.url], "later refreshes don't bring them back")
+        expect(store.integrityProblems().isEmpty, "the cleanup keeps the sidebar sound")
     }
 
     @MainActor

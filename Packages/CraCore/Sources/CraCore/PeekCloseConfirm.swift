@@ -3,8 +3,8 @@ import Foundation
 
 /// What asked a Peek to close: Arc 1.173.1's `ModalControllerAction.DismissMechanism`.
 public enum PeekCloseAttempt: Equatable, Sendable {
-    /// Esc. Arc's sender decides whether it asks for a confirmation first; Cra's never does, as Arc's
-    /// rule for that wasn't found in its code.
+    /// Esc. Arc's sender decides whether it asks for a confirmation first (its rule wasn't found in
+    /// Arc's code); Cra's asks when the page kept the Esc (PeekEscapePresses, #520).
     case escape(prefersConfirmation: Bool)
     case closeButton
     /// A click on the page around the card.
@@ -69,5 +69,45 @@ public enum PeekCloseHold: Equatable, Sendable {
     /// Where the text starts, from the button's left edge.
     public static func textMinX(button: CGSize) -> CGFloat {
         button.width - padding + spacing
+    }
+}
+
+/// Esc in a Peek (GitHub #520). The page sees it first, and an Esc the page leaves alone closes the
+/// Peek. A page that keeps every Esc (Gmail cancels each one, with nothing of its own open) would hold
+/// the Peek open for good, so an Esc it hasn't handed back after `answerTime` turns Close into Arc's
+/// Confirm pill (`escape(prefersConfirmation: true)`). The next Esc, while the pill is up or before
+/// the page has handed the last one back, is Cra's before the page sees it and closes. A page that
+/// uses Esc for its own menu or dialog keeps that one.
+public struct PeekEscapePresses: Equatable, Sendable {
+    /// How long a page has to hand an Esc back before Cra counts it as the page's (as for Use Both).
+    public static let answerTime = UseBothPresses.answerTime
+
+    /// The press the page has and hasn't handed back yet (its event timestamp).
+    private(set) var waiting: TimeInterval?
+
+    public init() {}
+
+    /// An Esc before the page sees it, at `time` (the event's timestamp): true when Cra takes it and
+    /// the Peek closes. A pill is up (Esc closes any pill, Arc), or the last Esc hasn't come back from
+    /// the page: a double Esc closes without waiting for the pill. A held Esc's repeats go where the
+    /// first went.
+    public mutating func beforePage(at time: TimeInterval, holding: PeekCloseHold?, isRepeat: Bool) -> Bool {
+        if isRepeat { return false }
+        if holding != nil || waiting != nil {
+            waiting = nil
+            return true
+        }
+        waiting = time
+        return false
+    }
+
+    /// The page left the Esc alone (it closes the Peek): nothing to ask.
+    public mutating func pageLeft() { waiting = nil }
+
+    /// `answerTime` after the Esc at `pressedAt`: true when the page kept it, and Close asks.
+    public mutating func pageKept(pressedAt: TimeInterval) -> Bool {
+        guard waiting == pressedAt else { return false }
+        waiting = nil
+        return true
     }
 }

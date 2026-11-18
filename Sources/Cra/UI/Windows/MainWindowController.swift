@@ -2953,6 +2953,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc's floating sidebar lives in its own panel above the page windows (see FloatingSidebarController).
     private(set) var floatingSidebar: FloatingSidebarController?
 
+    /// Until when the floating sidebar stays out for an extension's popup it asked for: Chrome shows the
+    /// popup a moment after the click (up to the 3 s ExtensionActions waits), and the pointer, over the
+    /// Site Control Center that just closed, would send the sidebar away meanwhile (#531).
+    private var floatingSidebarPopupHold: Date?
+
+    private func holdFloatingSidebarForPopup() {
+        guard floatingSidebar?.isShown == true else { return }
+        floatingSidebarPopupHold = Date().addingTimeInterval(FloatingSidebarKeepOut.popupWait)
+    }
+
     /// Settings ▸ Sidebar on the right (#464): the window is laid out again at once, the traffic
     /// lights with the sidebar. A hidden sidebar that is out goes home first, from the old edge.
     private func moveSidebar(to side: SidebarSide) {
@@ -2978,7 +2988,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         f.sidebarHidden = { [weak self] in
             self.map { FloatingSidebarGeometry.mayReveal(sidebarShown: $0.sidebarVisible, pageFullscreen: $0.shell.contentFullscreen) } ?? false
         }
-        f.staysShown = { FolderPreviewController.shared.isOpen }
+        // Also while what it opened is up: its Site Control Center, and an extension's popup that hangs
+        // from it (or is on its way), which lie beside it, past where the pointer sends it away (#531).
+        f.staysShown = { [weak self, weak f] in
+            let keep = FloatingSidebarKeepOut(folderPreviewOpen: FolderPreviewController.shared.isOpen,
+                                              siteControlsOpen: self?.siteControlCenter.isShown == true,
+                                              popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
+                                              popupAwaitedUntil: self?.floatingSidebarPopupHold)
+            if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
+            return keep.staysOut(now: Date())
+        }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.
             self?.raiseOverlayPanels()
@@ -3662,7 +3681,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         actions.copyURL = { [weak self] in self?.app.perform("copyURL") }
         actions.capture = { [weak self] in self?.capturePage() }
         actions.captureFullPage = { [weak self] in self?.captureFullPage() }
-        actions.runExtension = { [weak self] id in self?.runExtensionAction(id) }
+        // Opened from the sidebar's URL field (toolbar hidden): the popup hangs under that field from the
+        // sliders, as a pin in the sidebar's grid hangs it from its own button. It hung at the page's top
+        // right, away from a floating sidebar, which then slid away under it (#531).
+        let fromSidebar = SiteControlsPopupAnchor.fromSidebar(
+            showToolbar: store.settings.showToolbar, openedInPaneBar: pressed != nil && shell.panesShowBars,
+            slidersFrame: (shell.sidebarHost as? SidebarView)?.siteControlsButtonFrameOnScreen, urlFieldBottom: y)
+        actions.runExtension = { [weak self] id in
+            guard let self else { return }
+            guard let anchor = fromSidebar else { return self.runExtensionAction(id) }
+            self.holdFloatingSidebarForPopup()
+            self.runExtensionAction(id, buttonRightX: anchor.x, buttonBottomY: anchor.y)
+        }
         actions.addExtension = { [weak self] in self?.openTab("https://chromewebstore.google.com/category/extensions") }
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }
         actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: false) }
@@ -3728,6 +3758,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     static let protectedMediaHelp = SiteLinks.tagged("https://crabrowser.app/help/protected-media", from: .protectedMedia)
 
     func debugSiteControlsShown() -> Bool { siteControlCenter.isShown
+    }
+
+    /// Scenario hook (#531): "extension popup <step>: closed", or "shown, hangs from <sidebar|page>": whether
+    /// the point it hangs from is over the sidebar (anchored or floating) or over the page.
+    func debugExtensionPopup(_ step: String) {
+        guard let anchor = ExtensionPopupWindow.shownAnchor else { return CraLog.note("extension popup \(step): closed") }
+        let host = shell.sidebarHost
+        let sidebar = host.window.map { $0.convertToScreen(host.convert(host.bounds, to: nil)) }
+        let inSidebar = sidebar.map { anchor.x >= $0.minX && anchor.x <= $0.maxX + 1 } ?? false
+        CraLog.note("extension popup \(step): shown, hangs from \(inSidebar ? "sidebar" : "page")")
+    }
+
+    /// Scenario hook (#531): "floating sidebar <step>: out" or "in".
+    func debugFloatingSidebarState(_ step: String) {
+        CraLog.note("floating sidebar \(step): \(floatingSidebar?.isShown == true ? "out" : "in")")
     }
 
     func debugSiteControlsRead() { siteControlCenter.debugRead() }

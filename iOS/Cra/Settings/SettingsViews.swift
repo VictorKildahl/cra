@@ -403,12 +403,115 @@ struct GlobalSiteSettingsView: View {
                     .accessibilityIdentifier("default-site-settings-caption")
             }
             .settingsRow()
+            // Not in Arc Search (#507): lists added on top of Cra's own, blocked with Block Ads.
+            Section {
+                NavigationLink { BlockListsView(model: model).toolbarRole(.editor) } label: {
+                    HStack {
+                        SettingLabel(title: "Block Lists", symbol: "list.bullet.rectangle.fill", color: Color(red: 1, green: 0.22, blue: 0.33))
+                        Spacer()
+                        if !model.settings.customBlocklists.isEmpty {
+                            Text("\(model.settings.customBlocklists.count)").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .accessibilityIdentifier("setting-block-lists")
+            }
+            .settingsRow()
             Section { rows.behaviour }.settingsRow()
         }
         .settingsListStyle()
         .navigationTitle("Default Site Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) } }
+    }
+}
+
+/// Block Lists (#507): lists added on top of Cra's own, each with what it blocks and when it was
+/// fetched; swipe to remove, Add List asks for the address. Blocked where Block Ads is on.
+struct BlockListsView: View {
+    @ObservedObject var model: SettingsModel
+    @ObservedObject private var lists = BlockLists.shared
+    @State private var adding = false
+    @State private var address = ""
+    @State private var invalid = false
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(model.settings.customBlocklists, id: \.self) { row($0) }
+                    .onDelete { offsets in
+                        var next = model.settings.customBlocklists
+                        next.remove(atOffsets: offsets)
+                        save(next)
+                    }
+                Button { address = ""; adding = true } label: {
+                    Label("Add List", systemImage: "plus")
+                }
+                .accessibilityIdentifier("block-lists-add")
+            } footer: {
+                Text("Add a list to block more, like ads in your country. Cra uses its domain rules (hosts files, domain lists and Adblock Plus “||domain^” rules) where Block Ads is on, and fetches it again each day.")
+            }
+            .settingsRow()
+        }
+        .settingsListStyle()
+        .navigationTitle("Block Lists")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.done() }.fontWeight(.semibold) } }
+        .alert("Add Block List", isPresented: $adding) {
+            TextField("https://example.com/list.txt", text: $address)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("block-lists-address")
+            Button("Cancel", role: .cancel) {}
+            Button("Add") { add() }
+        } message: {
+            Text("The address of a hosts file, a list of domains or an Adblock Plus list.")
+        }
+        .alert("That isn’t a list address", isPresented: $invalid) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enter the list’s https:// address, like https://example.com/list.txt.")
+        }
+    }
+
+    private func row(_ address: String) -> some View {
+        let list = lists.cached[address]
+        return HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(list?.name ?? URL(string: address)?.host ?? address).lineLimit(1)
+                Group {
+                    if let failure = lists.failures[address] {
+                        Text(failure).foregroundStyle(.red)
+                    } else if let list {
+                        Text(CustomBlocklist.summary(domains: list.domains.count, skippedRules: list.skippedRules)
+                             + " · Updated " + list.fetched.formatted(.relative(presentation: .named)))
+                    } else {
+                        Text("Fetching…")
+                    }
+                }
+                .font(.footnote).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if lists.fetching.contains(address) {
+                ProgressView()
+            } else if lists.failures[address] != nil {
+                Button("Try Again") { lists.fetch(address) }.buttonStyle(.borderless)
+            }
+        }
+        .accessibilityIdentifier("block-list-row")
+    }
+
+    private func add() {
+        // The app has no App Transport Security exception: an http:// list would never load.
+        guard let url = CustomBlocklist.listURL(from: address), url.scheme?.lowercased() == "https" else { invalid = true; return }
+        guard !model.settings.customBlocklists.contains(url.absoluteString) else { return }
+        save(model.settings.customBlocklists + [url.absoluteString])
+    }
+
+    private func save(_ addresses: [String]) {
+        model.update { $0.customBlocklists = addresses }
+        lists.set(addresses: addresses)
     }
 }
 

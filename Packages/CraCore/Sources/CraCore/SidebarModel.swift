@@ -619,6 +619,10 @@ public struct AppSettings: Codable, Equatable {
     /// Dia's onboarding privacy choice "Block third-party ads and trackers": requests
     /// to listed ad and tracker domains are cancelled unless they are first-party.
     public var blockAdsAndTrackers: Bool = true
+    /// Settings ▸ Privacy ▸ Block lists (#507, not in Arc or Dia): the addresses of lists added on top
+    /// of Cra's own, blocked under `blockAdsAndTrackers` (CustomBlocklist). Fetched copies live in
+    /// the data folder's Blocklists folder.
+    public var customBlocklists: [String] = []
     /// Dia's Tabs ▸ "Haptic feedback when reordering tabs" (tabReorderingHapticsEnabled).
     public var hapticFeedbackOnReorder: Bool = true
     /// Dia's Advanced ▸ "Warn before quitting" (shouldWarnBeforeQuitting, off by default).
@@ -956,6 +960,7 @@ extension AppSettings {
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
         autoPictureInPictureSites = (try? c.decodeIfPresent([String: Bool].self, forKey: .autoPictureInPictureSites)) ?? [:]
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
+        customBlocklists = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
         if let d = try? c.decodeIfPresent(LinkDestination.self, forKey: .defaultLinkDestination) {
             defaultLinkDestination = d
         } else {

@@ -53,7 +53,7 @@ final class ArcTooltipController {
         let mouse = NSEvent.mouseLocation
         hovered.removeAll { a in
             guard let v = a.view, v.hostWindow != nil else { return true }
-            return !v.screenFrame.contains(mouse)
+            return !Self.pointerArea(of: v).contains(mouse)
         }
         guard let target = hovered.compactMap(\.view).min(by: { $0.screenFrame.width * $0.screenFrame.height < $1.screenFrame.width * $1.screenFrame.height }),
               !target.text.isEmpty else {
@@ -76,9 +76,20 @@ final class ArcTooltipController {
         timer = Timer.scheduledTimer(withTimeInterval: view.idleDelay, repeats: false) { [weak self, weak view] _ in
             Task { @MainActor in
                 guard let self, let view, self.pendingFor === view, !self.paused else { return }
+                // Its control went from under a resting pointer without an exit: no tip by the pointer (#527).
+                guard Self.pointerArea(of: view).contains(NSEvent.mouseLocation) else { self.cancelPending(); return }
                 self.show(for: view)
             }
         }
+    }
+
+    /// Where the pointer is on `view`: its frame on screen, for an AppKit control only the part of
+    /// it that can be on screen. A tracking area covers a visible rect that its superviews don't cut
+    /// (`NSView.shownRect`): another space's tab beside the sidebar, under the page, had its name
+    /// come up by a pointer resting on the page (#527).
+    private static func pointerArea(of view: any ArcTooltipTarget) -> NSRect {
+        guard let v = view as? NSView, let w = v.window else { return view.screenFrame }
+        return view.screenFrame.intersection(w.convertToScreen(v.convert(v.shownRect, to: nil)))
     }
 
     func mouseExited(_ view: any ArcTooltipTarget) {

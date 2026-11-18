@@ -144,7 +144,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard unblockedSite == nil, let address = message.body as? String, let host = URL(string: address)?.host,
-              ContentBlocker.shared.list.stops(host: host, with: siteOptions(webView.url?.host)),
+              ContentBlocker.shared.stops(host: host, with: siteOptions(webView.url?.host)),
               countedHosts.insert(address).inserted else { return }
         blockedCount += 1
         changed()

@@ -99,6 +99,9 @@ session permissions and the provider API are documented in [Live folder plugins]
   space's profile, so it carries that profile's cookies. The GitHub plugin runs one search per enabled
   filter: `/pulls?q=…` with the JSON headers first, `/search?type=pullrequests` when that gives nothing it
   can read. The reader accepts GitHub's JSON routes, embedded React data and the classic list.
+  Whatever the answer carries, only open pull requests (drafts too) become items: a merged or closed
+  one (`state`, `merged`, `mergedAt`, `closed`, or the classic list's merge/closed icon) is left out, so a
+  pull request merged since the last refresh leaves after the 120 s grace (#523).
 - Folder: `SidebarItem.liveFolder` (LiveFolderData), tabs carry `liveItemURL` and `liveSubtitle`.
   SidebarStore.applyPluginResults adds and updates tabs, moves a Today tab already on a new pull request into
   the folder, and marks ones that left the results (`liveGoneAt`); `expireLiveItems` removes them 120 s later

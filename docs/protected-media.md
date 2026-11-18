@@ -4,6 +4,19 @@ Spotify, Netflix, Disney+ and the other big services open in a WebKit page insid
 Chromium one. WebKit plays their DRM with Apple's FairPlay, which macOS gives every app for free.
 Everything else stays in Chromium.
 
+## Confirmed playing
+
+- **Disney+**, signed in, on Cra 0.1.31: confirmed by a user in
+  [#66](https://github.com/VictorKildahl/cra/issues/66#issuecomment-6660281915) ("it works
+  perfectly"), the issue that reported Disney+'s error 83 in Chromium.
+- **Prime Video**, signed in, on Cra 0.1.31: confirmed by another user in
+  [#66](https://github.com/VictorKildahl/cra/issues/66#issuecomment-6666097911).
+- **EZDRM's public FairPlay stream**: plays end to end (certificate, licence, keys, 720p video).
+
+It isn't only a fixed list of sites. Any other site that asks for Widevine gets a **Safari's
+Engine** switch in its Site Control Center, and with it on the site plays in WebKit from then on
+(see [How it works](#how-it-works)).
+
 ## Why
 
 Chromium's Widevine CDM works in Cra: the component updater installs it, and sites whose licence

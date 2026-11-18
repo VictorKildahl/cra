@@ -260,11 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Third-party ad and tracker blocking (Settings > Privacy, Dia's onboarding
-    /// checkbox). The bundled list (resources/blocklist) is parsed off the main thread;
-    /// the switch follows the setting live, no restart.
+    /// checkbox). The bundled list (resources/blocklist) and the lists added in Settings (#507)
+    /// are read off the main thread; the switch and the lists follow the settings live, no restart.
     private func startContentBlocking() {
-        if let path = Bundle.main.path(forResource: "domains", ofType: "txt", inDirectory: "blocklist") {
-            CraCEFRuntime.loadBlockedDomains(fromFile: path, completion: nil)
+        observeChanges(of: { [store] in store.settings.customBlocklists }) { [composition] in
+            BlockLists.shared.set(addresses: $0, clock: composition.clock)
         }
         observeContentBlocking()
         observeHttpsOnly()
@@ -1518,6 +1518,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // pointerOn=<text>&label=<l>: the pointer brought to the middle of the first sidebar tab row whose
+            // title has that text, in any space, as AppKit brings it: entered and moved for every sidebar tracking area
+            // whose rect holds it, wherever the row is. Logs whether that spot is in the window and what
+            // the row's list hovered. A row of a space beside the shown one lies under the page; it
+            // took the hover and showed its tip there by the pointer (#527).
+            if let title = dict["pointerOn"], let window = main.window {
+                let label = dict["label"] ?? title
+                func all(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(all) }
+                let host = main.shell.sidebarHost
+                guard let row = all(host).compactMap({ $0 as? TabRowView }).first(where: { $0.text.contains(title) }) else {
+                    CraLog.note("pointer on \(label): no row \(title)")
+                    return
+                }
+                let p = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+                let inWindow = window.contentView.map { $0.bounds.contains($0.convert(p, from: nil)) } ?? false
+                let time = ProcessInfo.processInfo.systemUptime
+                for view in all(host) {
+                    for area in view.trackingAreas {
+                        let rect = area.options.contains(.inVisibleRect) ? view.visibleRect : area.rect
+                        guard view.convert(rect, to: nil).contains(p), let owner = area.owner as? NSResponder else { continue }
+                        if area.options.contains(.mouseEnteredAndExited),
+                           let e = NSEvent.enterExitEvent(with: .mouseEntered, location: p, modifierFlags: [], timestamp: time,
+                                                          windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                          trackingNumber: 0, userData: nil) {
+                            owner.mouseEntered(with: e)
+                        }
+                        if area.options.contains(.mouseMoved),
+                           let e = NSEvent.mouseEvent(with: .mouseMoved, location: p, modifierFlags: [], timestamp: time,
+                                                      windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                      clickCount: 0, pressure: 0) {
+                            owner.mouseMoved(with: e)
+                        }
+                    }
+                }
+                let hovered = row.list?.debugHoveredTitle ?? "none"
+                CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered)")
+                return
+            }
             // musicNotes=<label>: report visible note overlays and their offsets from tile centers.
             if let label = dict["musicNotes"] {
                 var tiles: [FavoriteTileView] = [], notes: [MusicNotesView] = []
@@ -2249,6 +2287,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // floatingSidebar=1 out, =0 away, =hold out and kept there whatever the pointer does (#424).
+            // =release lets the pointer decide again without sending it away; =state:<step> logs it (#531).
+            if let f = dict["floatingSidebar"], f.hasPrefix("state") { main.debugFloatingSidebarState(String(f.dropFirst(6))); return }
+            if dict["floatingSidebar"] == "release" { main.floatingSidebar?.heldOut = false; return }
+            // extensionPopup=<step>: whether an extension's popup is up and where it hangs (#531).
+            if let step = dict["extensionPopup"] { main.debugExtensionPopup(step); return }
             if let f = dict["floatingSidebar"] {
                 main.floatingSidebar?.heldOut = f == "hold"
                 if f == "1" || f == "hold" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }
@@ -2296,6 +2339,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraCEFRuntime.fetchPluginURL(url, headers: nil, profilePath: nil) { status, finalURL, _, body in
                     CraLog.note("plugin fetch status=\(status) body=\(body.isEmpty ? "empty" : "\(body.count) chars") url=\(finalURL)")
                 }
+                return
+            }
+            // glyphs=<View[,n]>: the sidebar glyph buttons in that view (as `snapshot` finds it), each as
+            // its symbol and tip: a live folder's key or warning (#521). press=1 then clicks the first.
+            if let spec = dict["glyphs"] {
+                var buttons: [SidebarGlyphButton] = []
+                func walk(_ v: NSView) {
+                    if let b = v as? SidebarGlyphButton, !b.isHidden { buttons.append(b) }
+                    v.subviews.forEach(walk)
+                }
+                if let view = ViewSnapshot.find(spec, in: main.window) { walk(view) }
+                CraLog.note("Cra glyphs \(spec): \(buttons.map(\.debugReadout).joined(separator: " | "))")
+                if dict["press"] == "1" { buttons.first?.action() }
                 return
             }
             // What the command bar would list for the text (rows, the Tab scope, the search), without opening it.

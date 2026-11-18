@@ -10,6 +10,10 @@ enum LiveFolderProviderTests {
         let github = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/github"))
         let gitlab = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/gitlab"))
         try gitHub(github, executable: executable)
+        try gitHubOpenOnly(github, executable: executable)
+        try gitHubOpenOnlyEdges(github, executable: executable)
+        try gitHubMergedSinceLastRefresh(github, executable: executable)
+        try gitHubSSOKey(github, executable: executable)
         try gitLab(gitlab, executable: executable)
         print("Bundled providers: GitHub and GitLab cases passed")
     }
@@ -184,6 +188,136 @@ enum LiveFolderProviderTests {
         let arcDefault = json(try LiveFolderPluginProcess.invoke(executable: executable, script: github.script, method: "migrate",
             input: JSONEncoder().encode(LiveFolderData()), origins: [], fetch: { _ in fatalError() }))
         check(arcDefault["filters"] as? [String] == ["authored", "review", "teamReview"], "Arc's default mask is all three")
+    }
+
+    // promise: #523
+    /// The folder holds open pull requests only, whatever GitHub's answer carries besides them: a merged
+    /// or closed one in any of the shapes the reader accepts is left out, so it leaves the folder like a
+    /// pull request that dropped out of the search (GitHub #523: merged pull requests showed in the folder).
+    private static func gitHubOpenOnly(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func titles(_ body: String) throws -> [String] {
+            try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get().items.map(\.title)
+        }
+        // The signed-in pulls route: state OPEN, MERGED or CLOSED, and mergedAt.
+        let pulls = #"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":["#
+            + #"{"number":1,"title":"Open","repoNameWithOwner":"team/app","state":"OPEN","isDraft":false,"mergedAt":null,"createdAt":"2026-11-06T12:00:00Z"},"#
+            + #"{"number":2,"title":"Draft","repoNameWithOwner":"team/app","state":"OPEN","isDraft":true,"mergedAt":null,"createdAt":"2026-11-05T12:00:00Z"},"#
+            + #"{"number":3,"title":"Merged","repoNameWithOwner":"team/app","state":"MERGED","isDraft":false,"mergedAt":"2026-11-04T11:28:26+01:00","createdAt":"2026-11-04T10:00:00Z"},"#
+            + #"{"number":4,"title":"Closed","repoNameWithOwner":"team/app","state":"CLOSED","isDraft":false,"mergedAt":null,"createdAt":"2026-11-03T12:00:00Z"},"#
+            + #"{"number":5,"title":"Merged, no state","repoNameWithOwner":"team/app","isDraft":false,"mergedAt":"2026-11-02T12:00:00Z","createdAt":"2026-11-02T10:00:00Z"}"#
+            + #"],"pageInfo":{},"error":null}}}"#
+        check(try titles(pulls) == ["Open", "Draft"], "the pulls route keeps open and draft pull requests, not merged or closed ones")
+
+        // The search route: state open, draft or closed, and merged.
+        let search = #"{"payload":{"blackbirdSearchRoute":{"logged_in":true,"results":["#
+            + #"{"number":6,"hl_title":"Searched open","state":"open","merged":false,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-06T12:00:00Z"},"#
+            + #"{"number":7,"hl_title":"Searched draft","state":"draft","merged":false,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-05T12:00:00Z"},"#
+            + #"{"number":8,"hl_title":"Searched merged","state":"closed","merged":true,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-04T12:00:00Z"},"#
+            + #"{"number":9,"hl_title":"Searched closed","state":"closed","merged":false,"repo":{"repository":{"owner_login":"team","name":"app"}},"created":"2026-11-03T12:00:00Z"}"#
+            + #"]}}}"#
+        check(try titles(search) == ["Searched open", "Searched draft"], "the search route keeps open and draft pull requests only")
+
+        // GitHub's embedded React data (GraphQL's PullRequestState) and the classic list's state icons.
+        let embedded = #"<meta name="user-login" content="alice"><script type="application/json" data-target="react-app.embeddedData">{"payload":{"results":["#
+            + #"{"__typename":"PullRequest","number":11,"title":"Embedded open","state":"OPEN","repository":{"nameWithOwner":"team/app"}},"#
+            + #"{"__typename":"PullRequest","number":12,"title":"Embedded merged","state":"MERGED","repository":{"nameWithOwner":"team/app"}},"#
+            + #"{"__typename":"PullRequest","number":13,"title":"Embedded closed","closed":true,"repository":{"nameWithOwner":"team/app"}}"#
+            + #"]}}</script>"#
+        check(try titles(embedded) == ["Embedded open"], "embedded data keeps open pull requests only")
+        func row(_ number: Int, _ icon: String, _ title: String) -> String {
+            #"<div class="js-issue-row"><svg class="octicon \#(icon) color-fg-done"></svg><a href="/team/app/pull/\#(number)" class="markdown-title">\#(title)</a></div>"#
+        }
+        let classic = #"<meta name="user-login" content="alice">"# + row(14, "octicon-git-pull-request", "Row open")
+            + row(15, "octicon-git-pull-request-draft", "Row draft") + row(16, "octicon-git-merge", "Row merged")
+            + row(17, "octicon-git-pull-request-closed", "Row closed")
+        check(try titles(classic) == ["Row open", "Row draft"], "the classic list leaves out merged and closed rows")
+    }
+
+    // promise: #523
+    /// What still counts as open: a pull request in the merge queue (its icon starts like the merged one),
+    /// open ones that spell out closedAt or merged as null or false; and what doesn't: GitHub's REST shape
+    /// (state closed with merged_at), a closedAt alone, a lowercase "merged".
+    private static func gitHubOpenOnlyEdges(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func titles(_ body: String) throws -> [String] {
+            try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get().items.map(\.title)
+        }
+        func row(_ number: Int, _ icon: String, _ title: String) -> String {
+            #"<div class="js-issue-row"><svg class="octicon \#(icon)"></svg><a href="/team/app/pull/\#(number)" class="markdown-title">\#(title)</a></div>"#
+        }
+        let queue = #"<meta name="user-login" content="alice">"# + row(1, "octicon-git-merge-queue", "Queued")
+            + row(2, "octicon-git-merge", "Merged")
+        check(try titles(queue) == ["Queued"], "a pull request in the merge queue is still open")
+
+        let shapes = #"{"results":["#
+            + #"{"number":3,"title":"Spelled-out open","repoNameWithOwner":"team/app","state":"OPEN","isDraft":false,"merged":false,"closed":false,"mergedAt":null,"closedAt":null,"createdAt":"2026-11-06T12:00:00Z"},"#
+            + #"{"number":4,"title":"REST merged","html_url":"https://github.com/team/app/pull/4","state":"closed","merged_at":"2026-11-05T12:00:00Z","pull_request":{},"created_at":"2026-11-05T10:00:00Z"},"#
+            + #"{"number":5,"title":"REST closed","html_url":"https://github.com/team/app/pull/5","state":"closed","closed_at":"2026-11-04T12:00:00Z","pull_request":{},"created_at":"2026-11-04T10:00:00Z"},"#
+            + #"{"number":6,"title":"REST open","html_url":"https://github.com/team/app/pull/6","state":"open","merged_at":null,"closed_at":null,"pull_request":{},"created_at":"2026-11-03T10:00:00Z"},"#
+            + #"{"number":7,"title":"Closed at only","repoNameWithOwner":"team/app","isDraft":false,"closedAt":"2026-11-02T12:00:00Z","createdAt":"2026-11-02T10:00:00Z"},"#
+            + #"{"number":8,"title":"Lowercase merged","repoNameWithOwner":"team/app","isDraft":false,"state":"merged","createdAt":"2026-11-01T10:00:00Z"}"#
+            + #"]}"#
+        check(try titles(shapes) == ["Spelled-out open", "REST open"], "every shape of merged or closed is left out, open ones stay")
+    }
+
+    // promise: #523
+    /// The reporter's case over time: a pull request in the folder is merged on GitHub, and the next
+    /// refresh no longer lists it while its open neighbour stays.
+    private static func gitHubMergedSinceLastRefresh(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func pulls(secondState: String, mergedAt: String) -> String {
+            #"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":["#
+                + #"{"number":1,"title":"Stays","repoNameWithOwner":"team/app","state":"OPEN","isDraft":false,"mergedAt":null,"createdAt":"2026-11-06T12:00:00Z"},"#
+                + #"{"number":2,"title":"Gets merged","repoNameWithOwner":"team/app","state":"\#(secondState)","isDraft":false,"mergedAt":\#(mergedAt),"createdAt":"2026-11-05T12:00:00Z"}"#
+                + #"],"pageInfo":{},"error":null}}}"#
+        }
+        func urls(_ body: String) throws -> [String] {
+            try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored", "review", "teamReview"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get().items.map(\.url)
+        }
+        check(try urls(pulls(secondState: "OPEN", mergedAt: "null")) == ["https://github.com/team/app/pull/1", "https://github.com/team/app/pull/2"],
+              "both are in the folder while open")
+        check(try urls(pulls(secondState: "MERGED", mergedAt: #""2026-11-07T09:00:00Z""#)) == ["https://github.com/team/app/pull/1"],
+              "after the merge, every filter's answer leaves it out")
+    }
+
+    // promise: #521
+    /// The GitHub plugin's answers carry what the folder row shows, as Arc words it: an organisation
+    /// behind SAML single sign-on gives the key, "Login with SSO to unlock this folder" and a click to
+    /// that organisation's SSO page; a healthy answer gives no warning at all (or every folder would
+    /// show a key); signed out gives the triangle and "Sign back in to GitHub." (GitHub #521).
+    private static func gitHubSSOKey(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func folder(_ body: String) throws -> LiveFolderData {
+            let snapshot = try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get()
+            var live = LiveFolderData()
+            var plugin = LiveFolderPluginConfiguration(id: "cra.github", settings: [:], filters: ["authored"], sessionOrigins: ["https://github.com"])
+            plugin.snapshot = snapshot
+            live.plugin = plugin
+            return live
+        }
+        let sso = try folder(#"{"protected_org_logins":["acme"],"results":[]}"#)
+        check(sso.plugin?.snapshot?.warning == "Login with SSO to unlock this folder", "Arc's SSO tip")
+        check(sso.plugin?.snapshot?.actionMessage == "SSO ensures all of your organizations’ PRs appear", "Arc's SSO menu note")
+        check(sso.plugin?.snapshot?.actions == [.init(title: "Sign In to acme with SSO…", url: "https://github.com/orgs/acme/sso")],
+              "the organisation's SSO sign-in")
+        check(sso.alert == .singleSignOn(help: "Login with SSO to unlock this folder", url: "https://github.com/orgs/acme/sso")
+              && sso.alert?.symbol == "key", "an organisation behind SSO puts the key on the folder, and a click goes to its SSO page")
+
+        let healthy = try folder(#"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":[],"pageInfo":{},"error":null}}}"#)
+        check(healthy.plugin?.snapshot?.warning == nil && healthy.alert == nil, "a folder nothing holds back shows no key")
+
+        var signedOut = sso
+        let signIn = json(try invoke(github, "signIn", input: ["settings": [:], "state": [:]], origins: [], executable: executable))
+        signedOut.plugin?.signIn = .init(title: signIn["title"] as? String ?? "", url: signIn["url"] as? String ?? "")
+        signedOut.plugin?.signInWarning = signIn["warning"] as? String
+        signedOut.lastError = .notSignedIn
+        check(signedOut.alert == .signIn(help: "Sign back in to GitHub.", url: "https://github.com/login?return_to=%2Fpulls")
+              && signedOut.alert?.symbol == "exclamationmark.triangle", "signed out shows the triangle, even with an organisation behind SSO")
     }
 
     // MARK: GitLab

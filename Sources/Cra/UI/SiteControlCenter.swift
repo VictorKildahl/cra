@@ -887,7 +887,8 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
     func debugPress(_ label: String, accessory: Bool) {
         guard let root = popover?.contentViewController?.view else { return CraLog.note("site controls press: closed") }
         func find(_ v: NSView) -> NSView? {
-            if (v is SiteActionButton || v is SiteSettingRow), v.accessibilityLabel() == label { return v }
+            // An extension's tile by its name too (#531).
+            if (v is SiteActionButton || v is SiteSettingRow || v is SiteExtensionTile), v.accessibilityLabel() == label { return v }
             for s in v.subviews { if let f = find(s) { return f } }
             return nil
         }
