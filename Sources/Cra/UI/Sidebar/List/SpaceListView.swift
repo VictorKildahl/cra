@@ -857,7 +857,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     fileprivate func refreshHover() {
         guard let w = window else { return }
         let p = w.mouseLocationOutsideOfEventStream
-        let inside = document.visibleRect.contains(document.convert(p, from: nil)) && w.isVisible
+        let inside = document.shownRect.contains(document.convert(p, from: nil)) && w.isVisible
         hoverAt(inside && document.isMouseInside ? p : nil)
     }
 
@@ -867,13 +867,19 @@ final class SpaceListView: NSView, NSDraggingSource {
         hoverAt(row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil))
     }
 
+    /// Scenarios (cra://debug?pointerOn=): the title of the hovered tab row, or "none" (#527).
+    var debugHoveredTitle: String {
+        guard let h = hovered else { return "none" }
+        return (h as? TabRowView)?.text ?? "\(type(of: h))"
+    }
+
     private func hoverAt(_ windowPoint: NSPoint?) {
         var target: SidebarRowView?
         var local = NSPoint.zero
         // A swipe slides the strip under the pointer: no hover until it settles.
         if let wp = windowPoint, ui.spaceSwipe == 0, ui.libraryPage == nil {
             let p = document.convert(wp, from: nil)
-            if document.visibleRect.contains(p), let row = rows.first(where: { placed($0).contains(p) }), let v = views[row.key] {
+            if document.shownRect.contains(p), let row = rows.first(where: { placed($0).contains(p) }), let v = views[row.key] {
                 target = v
                 local = v.convert(wp, from: nil)
             }
@@ -1369,10 +1375,10 @@ final class SpaceListDocument: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil))
     }
 
-    /// The pointer is on the list's visible part, and a click there would land in this window.
+    /// The pointer is on the list's shown part, and a click there would land in this window.
     private var pointerIsOver: Bool {
         guard let w = window, w.isVisible, !NSApp.isHidden,
-              visibleRect.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return false }
+              shownRect.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) else { return false }
         return Self.topWindowNumber(at: NSEvent.mouseLocation) == w.windowNumber
     }
 
@@ -1388,8 +1394,20 @@ final class SpaceListDocument: NSView {
         return number
     }
 
-    override func mouseEntered(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }
-    override func mouseMoved(with event: NSEvent) { isMouseInside = true; list?.pointerMoved(event) }
+    override func mouseEntered(with event: NSEvent) { pointerAt(event) }
+    override func mouseMoved(with event: NSEvent) { pointerAt(event) }
+
+    /// The tracking area covers the visible rect, which for another space's list on the strip lies
+    /// beside the sidebar, under the page: a pointer there is not on the list (#527).
+    private func pointerAt(_ event: NSEvent) {
+        guard shows(event) else {
+            if isMouseInside { isMouseInside = false; list?.pointerMoved(nil) }
+            return
+        }
+        isMouseInside = true
+        list?.pointerMoved(event)
+    }
+
     override func mouseExited(with event: NSEvent) {
         // AppKit sends stray exits while the pointer rests on the list, as a row's buttons show
         // under it. The row lost its hover and hid its ✕ just as the pointer reached it (#196).

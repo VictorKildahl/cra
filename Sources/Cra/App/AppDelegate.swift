@@ -1478,6 +1478,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // pointerOn=<text>&label=<l>: the pointer brought to the middle of the first sidebar tab row whose
+            // title has that text, in any space, as AppKit brings it: entered and moved for every sidebar tracking area
+            // whose rect holds it, wherever the row is. Logs whether that spot is in the window and what
+            // the row's list hovered. A row of a space beside the shown one lies under the page; it
+            // took the hover and showed its tip there by the pointer (#527).
+            if let title = dict["pointerOn"], let window = main.window {
+                let label = dict["label"] ?? title
+                func all(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(all) }
+                let host = main.shell.sidebarHost
+                guard let row = all(host).compactMap({ $0 as? TabRowView }).first(where: { $0.text.contains(title) }) else {
+                    CraLog.note("pointer on \(label): no row \(title)")
+                    return
+                }
+                let p = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+                let inWindow = window.contentView.map { $0.bounds.contains($0.convert(p, from: nil)) } ?? false
+                let time = ProcessInfo.processInfo.systemUptime
+                for view in all(host) {
+                    for area in view.trackingAreas {
+                        let rect = area.options.contains(.inVisibleRect) ? view.visibleRect : area.rect
+                        guard view.convert(rect, to: nil).contains(p), let owner = area.owner as? NSResponder else { continue }
+                        if area.options.contains(.mouseEnteredAndExited),
+                           let e = NSEvent.enterExitEvent(with: .mouseEntered, location: p, modifierFlags: [], timestamp: time,
+                                                          windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                          trackingNumber: 0, userData: nil) {
+                            owner.mouseEntered(with: e)
+                        }
+                        if area.options.contains(.mouseMoved),
+                           let e = NSEvent.mouseEvent(with: .mouseMoved, location: p, modifierFlags: [], timestamp: time,
+                                                      windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                      clickCount: 0, pressure: 0) {
+                            owner.mouseMoved(with: e)
+                        }
+                    }
+                }
+                let hovered = row.list?.debugHoveredTitle ?? "none"
+                CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered)")
+                return
+            }
             // musicNotes=<label>: report visible note overlays and their offsets from tile centers.
             if let label = dict["musicNotes"] {
                 var tiles: [FavoriteTileView] = [], notes: [MusicNotesView] = []

@@ -74,4 +74,25 @@ extension NSView {
         return FirstClick.takes(appActive: NSApp.isActive, focusInWindow: key === window || key.parent === window,
                                 closedPopup: ExtensionPopupWindow.closed(by: NSApp.currentEvent))
     }
+
+    /// The part of the view that can be on screen: its visible rect cut to every view it sits in.
+    /// Since macOS 14 a view doesn't clip what it holds unless it says so (`clipsToBounds`), and
+    /// AppKit's `visibleRect`, which a tracking area `.inVisibleRect` covers, isn't cut by such a
+    /// view. The sidebar's spaces sit side by side on a strip, so the next space's list and tiles lay
+    /// under the page with tracking areas there, and a pointer resting on the page hovered one of
+    /// its tabs and showed the tab's name (#527).
+    var shownRect: NSRect {
+        var r = visibleRect
+        var next = superview
+        while let s = next, !r.isEmpty {
+            r = r.intersection(convert(s.bounds, from: s))
+            next = s.superview
+        }
+        return r
+    }
+
+    /// Whether a pointer event's spot is on the shown part of the view (`shownRect`).
+    func shows(_ event: NSEvent) -> Bool {
+        event.window === window && shownRect.contains(convert(event.locationInWindow, from: nil))
+    }
 }

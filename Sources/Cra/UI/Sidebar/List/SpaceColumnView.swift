@@ -1607,14 +1607,24 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         ArcTooltipController.shared.mouseMoved(in: self)
     }
 
-    override func mouseEntered(with event: NSEvent) {
+    override func mouseEntered(with event: NSEvent) { pointerAt(event) }
+    override func mouseMoved(with event: NSEvent) { pointerAt(event) }
+
+    /// The tracking area covers the visible rect, which for another space's tile on the strip lies
+    /// beside the sidebar, under the page: a pointer there is not on the tile (#527).
+    private func pointerAt(_ event: NSEvent) {
+        guard shows(event) else {
+            if hovering { mouseExited(with: event) }
+            return
+        }
+        let entering = !hovering
         hovering = true
         trackPointer(event)
-        if let url = previewURL, let store = grid?.store {
+        if entering, let url = previewURL, let store = grid?.store {
             FavoritePreviewCard.shared.hover(self, target: previewTarget(url, store: store))
         }
     }
-    override func mouseMoved(with event: NSEvent) { trackPointer(event) }
+
     override func mouseExited(with event: NSEvent) {
         hovering = false
         hoveredCell = nil
