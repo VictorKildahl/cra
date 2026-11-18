@@ -609,6 +609,9 @@
 #345   Packages/CraCore/Tests/CraCoreTests/PinnedIconClickTests.swift::otherClicksAreTheRows  75f7631008a4
 #345   Tests/Scenarios/pinned-icon-double-click.scenario  e0383d787f7c
 #346   Packages/CraCore/Tests/CraCoreTests/ScreenshotPickTests.swift::aPickOverThePageTakesTheMainWindow  916c67b02ac1
+#346   Packages/CraCore/Tests/CraCoreTests/ScreenshotPickTests.swift::aWindowLeftOutOfCaptureIsStillTakenByScreenCaptureKitPickers  2b3881b5a948
+#346   Packages/CraCore/Tests/CraCoreTests/ScreenshotPickTests.swift::withTheHostAStripOnTheTopEdgeEveryPickerTakesTheMainWindow  cab0aae5d8e7
+#346   Tests/Scenarios/screenshot-window-pick-whole-window.scenario  683a653465b3
 #346   Tests/Scenarios/screenshot-window-pick.scenario  bf271139d3c5
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aHoleInTheMiddleKeepsItsMargins  e281cbd0aaee
 #348   Packages/CraCore/Tests/CraCoreTests/DevToolsPlaceholderTests.swift::aHoleOutsideTheAreaGivesThePageAllOfIt  3a0f4dda2441

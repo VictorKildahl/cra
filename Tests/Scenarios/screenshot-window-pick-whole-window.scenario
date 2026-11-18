@@ -1,0 +1,21 @@
+# Screenshot apps that list windows through ScreenCaptureKit (iShot on macOS 27) see no sharing
+# state or alpha, so on the engine they took the never-seen window holding the profile's pages,
+# laid over the whole Cra window, and the shot came out blank grey, the page's and the whole
+# window's (GitHub #346, 0.1.48). That window is now a 1 pt strip on the window's top edge: the
+# pick is the main window over the sidebar, the toolbar and the page alike. The readout reads the
+# window list the way such a picker does (cra://debug?screenshotPick).
+# promise: #346
+budget rss=700 stalls50=5
+cra://debug?windowSize=1200x800
+wait 1
+cra://open?url=${PAGE}?n=whole-window-pick
+wait 2
+cra://debug?screenshotPick=150,400
+expect-log screenshot pick at 150,400: main window
+cra://debug?screenshotPick=760,400
+expect-log screenshot pick at 760,400: main window
+cra://debug?screenshotPick=900,20
+expect-log screenshot pick at 900,20: main window
+cra://debug?screenshotPick=150,780
+expect-log screenshot pick at 150,780: main window
+reject-log fault:

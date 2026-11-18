@@ -12,6 +12,9 @@ enum EngineFramework {
             .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
+    /// Built on Chrome's own framework (the engine), not on CEF.
+    static let isChromiumEngine: Bool = bundleURL?.deletingPathExtension().lastPathComponent == names[0]
+
     /// The framework's binary.
     static var binaryURL: URL? {
         guard let bundle = bundleURL else { return nil }

@@ -55,3 +55,57 @@ struct ScreenshotPickTests {
         #expect(StatusBubbleStrip.frame(inPage: .zero) == .zero)
     }
 }
+
+/// GitHub #346 on the engine (0.1.48): pickers that list windows through ScreenCaptureKit see no
+/// sharing state and no alpha, so the window holding a profile's pages, laid over the whole Cra
+/// window, was the one they took, and its capture was blank (grey).
+struct ScreenshotPickScreenCaptureKitTests {
+    static let main = ScreenshotPickTests.main
+    /// A point in the sidebar, one on the toolbar and the page's centre: the whole window.
+    static let points = [CGPoint(x: 200, y: 450), CGPoint(x: 800, y: 70), ScreenshotPickTests.pageCentre]
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/346"))
+    func aWindowLeftOutOfCaptureIsStillTakenByScreenCaptureKitPickers() {
+        // 0.1.48: the hidden page host, alpha 0 and left out of capture, over the whole window.
+        let windows = [
+            ScreenshotPick.Window(number: 3, frame: ScreenshotPickTests.strip),
+            ScreenshotPick.Window(number: 2, frame: Self.main.frame, alpha: 0, shared: false),
+            Self.main,
+        ]
+        for p in Self.points {
+            #expect(ScreenshotPick.window(at: p, in: windows, readsSharing: false)?.number == 2)
+            // A window-list picker that reads the sharing state skips it, which is all 0.1.39 checked.
+            #expect(ScreenshotPick.window(at: p, in: windows, readsSharing: true) == Self.main)
+        }
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/346"))
+    func withTheHostAStripOnTheTopEdgeEveryPickerTakesTheMainWindow() {
+        // Screen coordinates from the top left, as the window list gives them: the strip is the
+        // window's top row (AppKit's maxY).
+        let appKitMain = CGRect(x: 100, y: 1117 - 850, width: 1200, height: 800)
+        let host = PageHostStrip.frame(over: appKitMain)
+        let topLeftHost = CGRect(x: host.minX, y: 1117 - host.maxY, width: host.width, height: host.height)
+        #expect(topLeftHost == CGRect(x: 100, y: 50, width: 1200, height: 1))
+        let windows = [
+            ScreenshotPick.Window(number: 3, frame: ScreenshotPickTests.strip),
+            ScreenshotPick.Window(number: 2, frame: topLeftHost, alpha: 0, shared: false),
+            Self.main,
+        ]
+        for p in Self.points {
+            #expect(ScreenshotPick.window(at: p, in: windows, readsSharing: false) == Self.main)
+            #expect(ScreenshotPick.window(at: p, in: windows, readsSharing: true) == Self.main)
+        }
+    }
+
+    @Test func theHostStripKeepsTheWindowsTopLeftAndWidth() {
+        #expect(PageHostStrip.frame(over: CGRect(x: 0, y: 33, width: 1728, height: 1084)) == CGRect(x: 0, y: 1116, width: 1728, height: 1))
+        #expect(PageHostStrip.frame(over: CGRect(x: -1920, y: 0, width: 800, height: 600)) == CGRect(x: -1920, y: 599, width: 800, height: 1))
+        #expect(PageHostStrip.frame(over: .zero) == .zero)
+    }
+
+    @Test func pickersStillSkipOtherLevels() {
+        let windows = [ScreenshotPick.Window(number: 5, frame: Self.main.frame, layer: 101), Self.main]
+        #expect(ScreenshotPick.window(at: ScreenshotPickTests.pageCentre, in: windows, readsSharing: false) == Self.main)
+    }
+}

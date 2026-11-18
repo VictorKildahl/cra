@@ -31,7 +31,35 @@ public enum ScreenshotPick {
     /// The first window, front to back, that a picker takes at `point`: an ordinary window
     /// that shows, can be captured and contains the point.
     public static func window(at point: CGPoint, in frontToBack: [Window]) -> Window? {
-        frontToBack.first { $0.layer == 0 && $0.alpha > 0 && $0.shared && $0.frame.contains(point) }
+        window(at: point, in: frontToBack, readsSharing: true)
+    }
+
+    /// The same for a picker that does or doesn't read sharing state and alpha. One that lists
+    /// windows through ScreenCaptureKit (`SCShareableContent`, iShot on macOS 27) gets neither:
+    /// an `SCWindow` has no sharing state and no alpha, so a window left out of capture or fully
+    /// transparent is an ordinary window there, and capturing it on its own gives a blank image.
+    /// On the engine that was the window holding a profile's pages, over the whole Cra window
+    /// (#346 again, 0.1.48), so Cra's own windows have to be first wherever they show.
+    public static func window(at point: CGPoint, in frontToBack: [Window], readsSharing: Bool) -> Window? {
+        frontToBack.first {
+            $0.layer == 0 && $0.frame.contains(point) && (!readsSharing || ($0.alpha > 0 && $0.shared))
+        }
+    }
+}
+
+/// Where the engine's window that holds a profile's pages goes over the Cra window it rides with
+/// (#346). That window of Chrome's is never seen, but stays on screen as a child of the Cra window
+/// in use: Chrome anchors bubbles (an extension's popup) to its toolbar, and only shows them over a
+/// window that is on screen. Laid over the whole Cra window, it was the window a screenshot app
+/// took there, captured blank. A strip along the Cra window's top edge keeps its top left, so
+/// Chrome's bubbles still open where they did, and leaves the rest of the window to Cra's own.
+public enum PageHostStrip {
+    public static let height: CGFloat = 1
+
+    /// The strip over `window`, both in AppKit's screen coordinates (y up).
+    public static func frame(over window: CGRect) -> CGRect {
+        let h = min(height, max(window.height, 0))
+        return CGRect(x: window.minX, y: window.maxY - h, width: window.width, height: h)
     }
 }
 
