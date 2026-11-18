@@ -73,7 +73,7 @@ final class PaneToolbarView: NSView {
     private let stripes = DeveloperStripesView()
     /// Arc lifts the whole developer bar ~9% toward white while its address field is edited.
     private let editVeil = NSView()
-    private var press = WindowDragGesture()
+    private var press = WindowDragGesture(source: "toolbar")
     /// Not store state: the tracking area sets it and syncs.
     private var hovered = false {
         didSet { if hovered != oldValue { sync() } }
@@ -831,7 +831,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     private var resignObserver: NSObjectProtocol?
     private var url = ""
     private var ink = NSColor.white
-    private var press = WindowDragGesture()
+    private var press = WindowDragGesture(source: "toolbar address")
     private var contextClick = false
     private let content = NSView()
     private let icon = NSImageView()

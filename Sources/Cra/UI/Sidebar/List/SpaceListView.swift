@@ -1426,12 +1426,20 @@ final class SpaceListDocument: NSView {
 
     /// A double click on empty list space opens the New Tab bar, as Arc's does
     /// (onDidDoubleClickSidebarBackground, command bar source sidebarEmptySpaceDoubleClick, #446).
-    /// Rows take their own clicks; a single press goes on to the sidebar, which moves the window.
+    /// A press there that moves 3 pt moves the window, as Arc's sidebar background does (#547), an
+    /// inactive window's too, as a title bar's press does. The press is this view's own, not AppKit's
+    /// background drag, which the floating sidebar's panel can't use (it would tear off the panel).
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    private var press = WindowDragGesture(source: "sidebar empty space")
     override func mouseDown(with event: NSEvent) {
-        guard event.clickCount == 2, let list else { return super.mouseDown(with: event) }
+        guard event.clickCount == 2, let list else { return press.begin(event) }
+        _ = press.finish()
         CraLog.note("sidebar empty space double-click: new tab")
         list.actions.openCommandBar(.newTab)
     }
+    override func mouseDragged(with event: NSEvent) { press.drag(event) }
+    override func mouseUp(with event: NSEvent) { _ = press.finish() }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { list?.dragUpdated(sender, entered: true) ?? [] }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { list?.dragUpdated(sender, entered: false) ?? [] }

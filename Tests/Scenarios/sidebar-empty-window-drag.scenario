@@ -1,0 +1,26 @@
+# promise: #547
+# A press on the sidebar's empty space under the tabs that moves past 3 pt moves the window, as
+# Arc's sidebar background does; a click there moves nothing. The drags go through the event
+# queue, as the pointer's would; the window drag itself is the window server's, so the scenario
+# reads where it started.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# A click on the empty space: no window drag.
+cra://debug?clickAt=120,520
+wait 1
+reject-log window drag from sidebar
+
+# A drag there: the window's.
+cra://debug?dragAt=120,520&by=40,30
+expect-log window drag from sidebar empty space
+wait 1
+
+# The press is the list's to handle: AppKit's own background drag stays out of the sidebar, so a
+# row's drag never moves the window as well.
+cra://debug?hitAt=120,520&move=1
+expect-log hit at 120,520: SpaceListDocument- <

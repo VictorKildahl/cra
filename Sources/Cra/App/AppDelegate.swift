@@ -1208,14 +1208,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // hitAt=x,y: the view a press there lands on, as the window's hit test finds it, and its superviews
-            // (the toolbar's ← over where the hidden traffic lights were, #449).
+            // (the toolbar's ← over where the hidden traffic lights were, #449). move=1: each says whether
+            // a press on it may move the window (mouseDownCanMoveWindow, "+" or "-", #547).
             if let g = dict["hitAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2, let w = main.window,
                let root = w.contentView?.superview {
                 var chain: [String] = []
                 var v = root.hitTest(root.superview?.convert(NSPoint(x: g[0], y: w.frame.height - g[1]), from: nil)
                     ?? NSPoint(x: g[0], y: w.frame.height - g[1]))
-                while let c = v, chain.count < 12 { chain.append(String(describing: type(of: c))); v = c.superview }
+                while let c = v, chain.count < 12 {
+                    chain.append(String(describing: type(of: c)) + (dict["move"] == "1" ? (c.mouseDownCanMoveWindow ? "+" : "-") : ""))
+                    v = c.superview
+                }
                 CraLog.note("hit at \(Int(g[0])),\(Int(g[1])): \(chain.isEmpty ? "nothing" : chain.joined(separator: " < "))")
+                return
+            }
+            // dragAt=x,y&by=dx,dy: a press there moved by dx,dy (down is +) and released, through the event
+            // queue as clickAt's click (#547); target=floating as for clickAt.
+            if let g = dict["dragAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
+               let d = dict["by"]?.split(separator: ",").compactMap({ Double($0) }), d.count == 2,
+               let w = dict["target"] == "floating" ? main.floatingSidebar?.panelWindow : main.window {
+                TestGesture.drag(from: NSPoint(x: g[0], y: w.frame.height - g[1]), by: NSPoint(x: d[0], y: -d[1]), in: w)
                 return
             }
             // clickAt=x,y: a click there through the event queue, as the pointer's would go (#195);
