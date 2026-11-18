@@ -1079,6 +1079,8 @@
 #533   Tests/Scenarios/pip-window-covered.scenario  34732af6a587
 #533   Tests/Scenarios/pip-window-minimised.scenario  21d21ee9e121
 #533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5
+#535   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::chromiumsHoverTrackingIsTakenAway  e21a9fad9e65
+#535   Tests/Scenarios/pip-chromium-hover.scenario  d1383dc3d418
 #536   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
 #536   iOS/CraUITests/PasskeyTests.swift::testASitesPasskeyRequestBringsUpTheSystemPasskeySheet  a58d934f1192
 #538   Packages/CraCore/Tests/CraCoreTests/AppleIntelligenceStatusTests.swift::appleSiliconMacWithoutTheModelIsNotToldItNeedsAppleSilicon  bb6a933de6bf

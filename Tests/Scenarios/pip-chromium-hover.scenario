@@ -1,0 +1,32 @@
+# Cra draws Arc's Picture in Picture controls over Chromium's PiP window. Chromium's own view
+# tracks the pointer over a floating window with an always-active tracking area, which neither
+# `ignoresMouseEvents` nor Cra's overlay in front takes away; its mouse-entered and -moved events
+# fade Chrome's controls in, and on hover they showed behind Arc's (GitHub #535, macOS 27.3).
+# Chromium's view must never hear the pointer (`heard`, its own account) and Chrome's buttons must
+# stay hidden (`chrome`): Cra takes its tracking areas away (`hover`), and the window's seal (#460)
+# drops pointer events addressed to it when Chromium has put an area back in between (as a level
+# change does).
+# promise: #535
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pip=open
+expect-log Cra pip open: windows=1 .* chrome=0 hover=0 heard=0 
+cra://debug?pipPointer=enter
+cra://debug?pipPointer=move
+wait 1
+cra://debug?pip=entered
+expect-log Cra pip entered: windows=1 .* chrome=0 hover=0 heard=0 
+cra://debug?pipPointer=readd
+cra://debug?pipPointer=enter
+cra://debug?pipPointer=move
+wait 1
+cra://debug?pip=readded
+expect-log Cra pip readded: windows=1 .* chrome=0 hover=1 heard=0 
+cra://debug?pipSize=0.3
+wait 1
+cra://debug?pip=resized
+expect-log Cra pip resized: windows=1 .* chrome=0 hover=0 heard=0 

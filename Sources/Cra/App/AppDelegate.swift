@@ -1974,12 +1974,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // the video, as the last of n quick clicks (2: a double click, back to the tab); pipSeek=<0…1>
             // presses the scrubber that far along; pipSize=<0…1> resizes it to that share of its
             // display's width; pipButton=back|minimize|close clicks that hover button (#434); pipShow=1
-            // shows the hover controls and keeps them up until the pointer comes and goes (#463).
+            // shows the hover controls and keeps them up until the pointer comes and goes (#463);
+            // pipPointer=readd|enter|move puts Chromium's tracking area back or sends its window the pointer (#535).
             if let label = dict["pip"] { NSLog("Cra pip %@: %@", label, PictureInPictureChrome.shared.readout()); return }
             if let count = dict["pipClick"].flatMap(Int.init) { PictureInPictureChrome.shared.debugClick(count); return }
             if let at = dict["pipSeek"].flatMap(Double.init) { PictureInPictureChrome.shared.debugSeek(at); return }
             if let name = dict["pipButton"] { PictureInPictureChrome.shared.debugPress(name); return }
             if dict["pipShow"] != nil { PictureInPictureChrome.shared.debugShow(); return }
+            if let what = dict["pipPointer"] { PictureInPictureChrome.shared.debugPointer(what); return }
             if let how = dict["pipKey"] { PictureInPictureChrome.shared.debugTakeKey(how); return }
             if let what = dict["pipPoke"] { PictureInPictureChrome.shared.debugPoke(what); return }
             if let edge = dict["pipDrop"] { PictureInPictureChrome.shared.debugDrop(edge); return }

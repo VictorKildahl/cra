@@ -115,6 +115,40 @@ final class PictureInPictureChrome {
         if window.responds(to: NSSelectorFromString("setPreventKeyWindow:")) {
             window.setValue(true, forKey: "preventKeyWindow")
         }
+        // Chromium's view tracks the pointer over a floating window whatever is in front of it
+        // (an always-active tracking area, crbug.com/1214013), and `ignoresMouseEvents` doesn't
+        // take the area away. Its mouse-entered and -moved events fade Chrome's own controls in,
+        // and on hover they showed behind Arc's (#535, macOS 27.3; on macOS 26 AppKit passes the
+        // window the events but not that area). Without the area that view can't hear the
+        // pointer at all. Chromium only adds it again when the window's level changes or its view
+        // moves to another window; in between, the seal (#460) drops what still reaches the window.
+        for area in hoverTracking(window) { area.view.removeTrackingArea(area.area) }
+    }
+
+    /// Chromium's tracking areas in its PiP window that hear the pointer come, move and go.
+    private static func hoverTracking(_ window: NSWindow) -> [(view: NSView, area: NSTrackingArea)] {
+        guard let content = window.contentView else { return [] }
+        var found: [(view: NSView, area: NSTrackingArea)] = []
+        var views = [content]
+        while let view = views.popLast() {
+            views += view.subviews
+            found += view.trackingAreas.filter { PictureInPictureLayout.hearsPointer(trackingOptions: $0.options.rawValue) }.map { (view, $0) }
+        }
+        return found
+    }
+
+    /// Whether Chromium's view has the pointer over it by its own account (BaseView's `_mouseInside`,
+    /// which its mouse-entered and -moved handlers set): 1 or 0, -1 when Chromium has no such field.
+    private static func chromiumHearsPointer(_ window: NSWindow) -> Int {
+        guard let view = window.contentView else { return -1 }
+        var cls: AnyClass? = type(of: view)
+        while let c = cls {
+            if let ivar = class_getInstanceVariable(c, "_mouseInside") {
+                return Unmanaged.passUnretained(view).toOpaque().load(fromByteOffset: ivar_getOffset(ivar), as: UInt8.self) == 0 ? 0 : 1
+            }
+            cls = class_getSuperclass(c)
+        }
+        return -1
     }
 
     private static func preventsKey(_ window: NSWindow) -> Bool {
@@ -167,7 +201,7 @@ final class PictureInPictureChrome {
         let shown = overlays.values.compactMap { o in o.parent.map { (o, $0) } }
         guard !shown.isEmpty else { return "windows=0" }
         return "windows=\(shown.count) " + shown.map { o, w in
-            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) chrome=\(Self.chromeButtonsShown(in: w)) width=\(Int(w.frame.width)) share=\(Self.share(of: w)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
+            "key=\(w.isKeyWindow ? 1 : 0) appKey=\(NSApp.keyWindow === w ? 1 : 0) mouse=\(w.ignoresMouseEvents ? 0 : 1) preventKey=\(Self.preventsKey(w) ? 1 : 0) chrome=\(Self.chromeButtonsShown(in: w)) hover=\(Self.hoverTracking(w).count) heard=\(Self.chromiumHearsPointer(w)) width=\(Int(w.frame.width)) share=\(Self.share(of: w)) \(o.controls.readout) frame=\(Int(w.frame.minX)),\(Int(w.frame.minY)),\(Int(w.frame.width)),\(Int(w.frame.height)) onScreen=\(PictureInPictureLayout.landing(afterDropping: w.frame, displays: NSScreen.screens.map(Self.display)) == nil ? 1 : 0)"
         }.joined(separator: " | ")
     }
 
@@ -249,6 +283,33 @@ final class PictureInPictureChrome {
     /// `cra://debug?pipButton=back|minimize|close`: that hover button clicked.
     func debugPress(_ name: String) {
         for o in overlays.values { o.controls.debugPress(name) }
+    }
+
+    /// `cra://debug?pipPointer=readd|enter|move`: what Chromium's own code and the window server can
+    /// do to its window (#535). `readd`: Chromium's view puts its tracking area back, as it does on a
+    /// level change; `enter`/`move`: the pointer comes onto the window's middle, as AppKit hands
+    /// those events to every window under it, to the view's tracking areas when it has any.
+    func debugPointer(_ what: String) {
+        for o in overlays.values {
+            guard let w = o.parent, let view = w.contentView else { continue }
+            if what == "readd" {
+                let update = NSSelectorFromString("updateCursorTrackingArea")
+                if view.responds(to: update) { view.perform(update) }
+                continue
+            }
+            let at = NSPoint(x: w.frame.width / 2, y: w.frame.height / 2)
+            let areas = Self.hoverTracking(w).map(\.area)
+            for area in areas.isEmpty ? [nil] : areas.map(Optional.some) {
+                let number = area.map { Int(bitPattern: Unmanaged.passUnretained($0).toOpaque()) } ?? 0
+                let event = what == "move"
+                    ? NSEvent.mouseEvent(with: .mouseMoved, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                         windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)
+                    : NSEvent.enterExitEvent(with: .mouseEntered, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: w.windowNumber, context: nil, eventNumber: 0, trackingNumber: number,
+                                             userData: area.map { Unmanaged.passUnretained($0).toOpaque() })
+                if let event { NSApp.postEvent(event, atStart: false) }
+            }
+        }
     }
 
     /// `cra://debug?pipShow=1`: the hover controls shown as the pointer shows them, and kept up.

@@ -11,6 +11,17 @@ public enum PictureInPictureLayout {
     public static let scrimAlpha: CGFloat = 0.33
     public static let fadeDuration: Double = 0.2
     public static let addressFontSize: CGFloat = 11
+
+    /// Whether a tracking area in Chromium's PiP window hears the pointer come, move or go
+    /// (`options`: `NSTrackingArea.Options`' raw value). Chromium's view keeps one on a floating
+    /// window whatever is in front of it, and its mouse-entered and -moved events fade Chrome's own
+    /// controls in, behind Arc's (#535); Cra takes every such area away. One that only sets the
+    /// cursor stays: the overlay in front sets it.
+    public static func hearsPointer(trackingOptions options: UInt) -> Bool {
+        options & (mouseEnteredAndExited | mouseMoved) != 0
+    }
+    static let mouseEnteredAndExited: UInt = 0x01
+    static let mouseMoved: UInt = 0x02
     /// The address keeps this far from a button, and isn't shown in less room than this.
     static let addressGap: CGFloat = 8
     static let addressMinWidth: CGFloat = 24

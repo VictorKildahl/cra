@@ -24,6 +24,19 @@ struct PictureInPictureLayoutTests {
         #expect(a.minX >= bar.back.maxX + 8 && a.maxX <= bar.minimize.minX - 8)
     }
 
+    /// Chromium's view never hears the pointer over its PiP window (#535): the area it adds on a
+    /// floating window (entered/exited, moved, cursor update, always active, in visible rect: 0x287,
+    /// read off Chrome 158) goes, and so does one hearing only entered/exited or only moves; an
+    /// area that only updates the cursor stays.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/535"))
+    func chromiumsHoverTrackingIsTakenAway() {
+        #expect(PictureInPictureLayout.hearsPointer(trackingOptions: 0x287))
+        #expect(PictureInPictureLayout.hearsPointer(trackingOptions: 0x81))
+        #expect(PictureInPictureLayout.hearsPointer(trackingOptions: 0x82))
+        #expect(!PictureInPictureLayout.hearsPointer(trackingOptions: 0x84))
+        #expect(!PictureInPictureLayout.hearsPointer(trackingOptions: 0x240))
+    }
+
     @Test func longAddressIsCutToTheRoomAndDroppedWithoutRoom() {
         let bar = PictureInPictureLayout.topBar(width: 223, buttonSize: 26, addressWidth: 400)
         #expect(bar.address?.width == 2 * (152 - 111.5 - 8))
