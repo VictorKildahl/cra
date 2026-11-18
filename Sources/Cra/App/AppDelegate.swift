@@ -2302,7 +2302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // glyphs=<View[,n]>: the sidebar glyph buttons in that view (as `snapshot` finds it), each as
-            // its symbol and tip: a live folder's key or warning (#521).
+            // its symbol and tip: a live folder's key or warning (#521). press=1 then clicks the first.
             if let spec = dict["glyphs"] {
                 var buttons: [SidebarGlyphButton] = []
                 func walk(_ v: NSView) {
@@ -2311,6 +2311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 if let view = ViewSnapshot.find(spec, in: main.window) { walk(view) }
                 CraLog.note("Cra glyphs \(spec): \(buttons.map(\.debugReadout).joined(separator: " | "))")
+                if dict["press"] == "1" { buttons.first?.action() }
                 return
             }
             // What the command bar would list for the text (rows, the Tab scope, the search), without opening it.

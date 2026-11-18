@@ -13,6 +13,7 @@ enum LiveFolderProviderTests {
         try gitHubOpenOnly(github, executable: executable)
         try gitHubOpenOnlyEdges(github, executable: executable)
         try gitHubMergedSinceLastRefresh(github, executable: executable)
+        try gitHubSSOKey(github, executable: executable)
         try gitLab(gitlab, executable: executable)
         print("Bundled providers: GitHub and GitLab cases passed")
     }
@@ -281,6 +282,42 @@ enum LiveFolderProviderTests {
               "both are in the folder while open")
         check(try urls(pulls(secondState: "MERGED", mergedAt: #""2026-11-07T09:00:00Z""#)) == ["https://github.com/team/app/pull/1"],
               "after the merge, every filter's answer leaves it out")
+    }
+
+    // promise: #521
+    /// The GitHub plugin's answers carry what the folder row shows, as Arc words it: an organisation
+    /// behind SAML single sign-on gives the key, "Login with SSO to unlock this folder" and a click to
+    /// that organisation's SSO page; a healthy answer gives no warning at all (or every folder would
+    /// show a key); signed out gives the triangle and "Sign back in to GitHub." (GitHub #521).
+    private static func gitHubSSOKey(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func folder(_ body: String) throws -> LiveFolderData {
+            let snapshot = try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"]) { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: body)
+            }.get()
+            var live = LiveFolderData()
+            var plugin = LiveFolderPluginConfiguration(id: "cra.github", settings: [:], filters: ["authored"], sessionOrigins: ["https://github.com"])
+            plugin.snapshot = snapshot
+            live.plugin = plugin
+            return live
+        }
+        let sso = try folder(#"{"protected_org_logins":["acme"],"results":[]}"#)
+        check(sso.plugin?.snapshot?.warning == "Login with SSO to unlock this folder", "Arc's SSO tip")
+        check(sso.plugin?.snapshot?.actionMessage == "SSO ensures all of your organizations’ PRs appear", "Arc's SSO menu note")
+        check(sso.plugin?.snapshot?.actions == [.init(title: "Sign In to acme with SSO…", url: "https://github.com/orgs/acme/sso")],
+              "the organisation's SSO sign-in")
+        check(sso.alert == .singleSignOn(help: "Login with SSO to unlock this folder", url: "https://github.com/orgs/acme/sso")
+              && sso.alert?.symbol == "key", "an organisation behind SSO puts the key on the folder, and a click goes to its SSO page")
+
+        let healthy = try folder(#"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":[],"pageInfo":{},"error":null}}}"#)
+        check(healthy.plugin?.snapshot?.warning == nil && healthy.alert == nil, "a folder nothing holds back shows no key")
+
+        var signedOut = sso
+        let signIn = json(try invoke(github, "signIn", input: ["settings": [:], "state": [:]], origins: [], executable: executable))
+        signedOut.plugin?.signIn = .init(title: signIn["title"] as? String ?? "", url: signIn["url"] as? String ?? "")
+        signedOut.plugin?.signInWarning = signIn["warning"] as? String
+        signedOut.lastError = .notSignedIn
+        check(signedOut.alert == .signIn(help: "Sign back in to GitHub.", url: "https://github.com/login?return_to=%2Fpulls")
+              && signedOut.alert?.symbol == "exclamationmark.triangle", "signed out shows the triangle, even with an organisation behind SSO")
     }
 
     // MARK: GitLab
