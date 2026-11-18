@@ -9,5 +9,5 @@ wait 1
 cra://action/newSpace
 expect-log space creation opens
 cra://debug?spaceCreation=state
-expect-log space creation state: name="" keys=1 icon=plus profile=Default engine=Default \(Google\) layout=narrow create=off field=14,206,138x35 rows=14,247,138x60,14,314,138x36
+expect-log space creation state: name="" keys=1 icon=plus profile=Default engine=Default \(Google\) layout=narrow searchGlyph=none create=off field=14,206,138x35 rows=14,247,138x60,14,314,138x36
 cra://debug?spaceCreation=cancel

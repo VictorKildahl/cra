@@ -432,7 +432,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
     var debugLine: String {
         func r(_ f: NSRect) -> String { "\(Int(f.minX.rounded())),\(Int(f.minY.rounded())),\(Int(f.width.rounded()))x\(Int(f.height.rounded()))" }
         return "name=\"\(name.stringValue)\" keys=\(nameHasKeys ? 1 : 0) icon=\(iconButton.label) profile=\(pill.title) engine=\(enginePill.title)"
-            + " layout=\(SpaceCreationLayout.Density(sidebarWidth: bounds.width)) create=\(create.isOn ? "on" : "off") field=\(r(fieldBox.frame)) rows=\(r(profileRow.frame)),\(r(themeRow.frame)) button=\(r(create.frame))"
+            + " layout=\(SpaceCreationLayout.Density(sidebarWidth: bounds.width)) searchGlyph=\(searchRow.debugGlyph) create=\(create.isOn ? "on" : "off") field=\(r(fieldBox.frame)) rows=\(r(profileRow.frame)),\(r(themeRow.frame)) button=\(r(create.frame))"
     }
 
     /// Typed into the name as the keyboard would.
@@ -547,6 +547,8 @@ final class SpaceCreationRow: NSView {
     var labelInset: CGFloat = SpaceCreationLayout.rowLabelInset { didSet { if labelInset != oldValue { needsLayout = true } } }
     /// The label's centre from the row's top when a pill stands under it; nil centres it in the row.
     var labelCentre: CGFloat? { didSet { if labelCentre != oldValue { needsLayout = true } } }
+    /// The glyph's centre from the row's top, or `none` when the row has none, for a scenario.
+    var debugGlyph: String { showsGlyph ? "\(Int(glyph.frame.midY.rounded()))" : "none" }
     /// Where the label ends, for what follows it, and how wide it is when nothing cuts it.
     var labelEnd: CGFloat { label.frame.maxX }
     var labelWidth: CGFloat { label.fittingSize.width }
@@ -588,7 +590,8 @@ final class SpaceCreationRow: NSView {
 
     override func layout() {
         super.layout()
-        glyph.frame = NSRect(x: SpaceCreationLayout.rowGlyphInset, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        // The glyph keeps to the label's line, also when a pill stands under it.
+        glyph.frame = NSRect(x: SpaceCreationLayout.rowGlyphInset, y: (labelCentre ?? bounds.height / 2) - 8, width: 16, height: 16)
         label.sizeToFit()
         let width = min(label.frame.width, max(0, bounds.width - labelInset - 6))
         label.frame = NSRect(x: labelInset, y: (labelCentre ?? bounds.height / 2) - label.frame.height / 2, width: width, height: label.frame.height)

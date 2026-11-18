@@ -3014,13 +3014,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // from it (or is on its way), which lie beside it, past where the pointer sends it away (#531);
         // and while the window has no tab, which holds a hidden sidebar open (SidebarPresentation, #483).
         f.staysShown = { [weak self, weak f] in
+            // While a space is being made in it (Arc's Create a Space page), it stays.
+            if self?.sidebarUI.spaceCreation != nil { return true }
             let keep = FloatingSidebarKeepOut(folderPreviewOpen: FolderPreviewController.shared.isOpen,
                                               siteControlsOpen: self?.siteControlCenter.isShown == true,
                                               popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
                                               popupAwaitedUntil: self?.floatingSidebarPopupHold)
             if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
-            // And while a space is being made in it.
-            return keep.staysOut(now: Date()) || self?.sidebarPresentation.mayRetract == false || self?.sidebarUI.spaceCreation != nil
+            return keep.staysOut(now: Date()) || self?.sidebarPresentation.mayRetract == false
         }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.
