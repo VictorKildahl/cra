@@ -65,13 +65,13 @@ final class BlockLists {
             refreshTimer = clock.every(6 * 3600) { [weak self] in self?.refreshDue(atLaunch: false) }
             return
         }
-        let removed = Set(addresses).subtracting(new)
-        let added = new.filter { !addresses.contains($0) }
+        let (removed, added) = CustomBlocklist.changes(from: addresses, to: new)
         addresses = new
         for address in removed {
             cached[address] = nil
             failures[address] = nil
             queue.async { try? FileManager.default.removeItem(at: Self.cacheURL(address)) }
+            CraLog.note("block list \(Self.logName(address)) removed")
         }
         publish()
         added.forEach { fetch($0) }
@@ -79,11 +79,7 @@ final class BlockLists {
 
     /// Fetches the lists that are old, or that have no copy yet.
     private func refreshDue(atLaunch: Bool) {
-        let now = clock.now
-        for address in addresses {
-            if let list = cached[address], !CustomBlocklist.isDue(fetched: list.fetched, now: now, atLaunch: atLaunch) { continue }
-            fetch(address)
-        }
+        CustomBlocklist.due(addresses, fetched: cached.mapValues(\.fetched), now: clock.now, atLaunch: atLaunch).forEach { fetch($0) }
     }
 
     /// Fetches (or reads) one list now. A failure keeps the copy it had.
@@ -116,13 +112,13 @@ final class BlockLists {
             publish()
         case .failure(let error):
             failures[address] = error.message
-            CraLog.note("block list \(URL(string: address).flatMap { $0.isFileURL ? "file" : $0.host } ?? "?") not fetched: \(error.message)")
+            CraLog.note("block list \(Self.logName(address)) not fetched: \(error.message)")
         }
     }
 
     /// Gives the engine Cra's list with every added one, when that changed.
     private func publish() {
-        let key = addresses.map { address in cached[address].map { "\(address) \($0.fetched.timeIntervalSince1970)" } ?? "" }
+        let key = CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
         guard key != publishedKey else { return }
         publishedKey = key
         let lists = addresses.compactMap { cached[$0]?.domains }
@@ -135,6 +131,11 @@ final class BlockLists {
             CraCEFRuntime.setBlockedDomains(domains)
             CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")")
         }
+    }
+
+    /// A list as cra.log names it: its host, never the whole address (CraLog).
+    private static func logName(_ address: String) -> String {
+        URL(string: address).flatMap { $0.isFileURL ? "file" : $0.host } ?? "?"
     }
 
     private static func load(_ url: URL) async -> Result<String, BlockListError> {

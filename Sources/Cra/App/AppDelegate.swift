@@ -2161,6 +2161,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // Settings ▸ Privacy ▸ Fingerprinting protection on or off, as its switch sets it.
             if let v = dict["fingerprinting"] { store.settings.fingerprintingProtection = v == "on"; return }
+            // Settings ▸ Privacy without the pointer (#507): blockLists=<address,…>|none sets the added
+            // block lists, blockAds=on|off the switch they sit under.
+            if let v = dict["blockLists"] { store.settings.customBlocklists = v == "none" ? [] : v.split(separator: ",").map(String.init); return }
+            if let v = dict["blockAds"] {
+                store.settings.blockAdsAndTrackers = v == "on"
+                CraLog.note("block ads and trackers: \(v == "on" ? "on" : "off")")
+                return
+            }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             if let mode = dict["switcher"] { main.debugTabSwitcher(allSpaces: mode == "all"); return }

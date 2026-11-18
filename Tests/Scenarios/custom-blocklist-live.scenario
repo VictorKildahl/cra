@@ -1,0 +1,48 @@
+# promise: #507
+# Block lists follow Settings ▸ Privacy while Cra runs, with no restart: a list added blocks its
+# domains from the next request, the Block ads and trackers switch turns it off and on with Cra's
+# own list, and a removed list stops blocking and loses its kept copy. Settings are changed with
+# cra://debug?blockLists= and ?blockAds=, as the Privacy pane writes them. The list is the
+# fixture server's Tests/Fixtures/Pages/blocklist-abp.txt; the names map to that server, so the run
+# needs no network.
+# No & in a script: it ends the cra:// query.
+budget rss=800 stalls50=30
+port 47132
+arg --host-resolver-rules=MAP judi-slot.example 127.0.0.1, MAP *.judi-slot.example 127.0.0.1
+pace 0.5
+
+cra://open?url=${PAGE}?n=live
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# No list yet: a domain only the added list names loads.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=none-yet',{mode:'no-cors'}).then(()=>'none-yet:sent',e=>'none-yet:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"none-yet:sent"
+expect-log GET /page\.html\?probe=none-yet
+
+# Added: fetched, handed to the engine, and the same request now fails without reaching the server.
+cra://debug?blockLists=http://127.0.0.1:47132/blocklist-abp.txt
+expect-log GET /blocklist-abp\.txt
+expect-log block lists: [0-9]+ domains, 1 added list
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=with-list',{mode:'no-cors'}).then(()=>'with-list:sent',e=>'with-list:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"with-list:TypeError"
+reject-log probe=with-list
+
+# The switch the lists sit under: off lets it through, on blocks it again.
+cra://debug?blockAds=off
+expect-log block ads and trackers: off
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=switch-off',{mode:'no-cors'}).then(()=>'switch-off:sent',e=>'switch-off:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"switch-off:sent"
+expect-log GET /page\.html\?probe=switch-off
+cra://debug?blockAds=on
+expect-log block ads and trackers: on
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=switch-on',{mode:'no-cors'}).then(()=>'switch-on:sent',e=>'switch-on:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"switch-on:TypeError"
+reject-log probe=switch-on
+
+# Removed: its domains load again (the engine's new set is built off the main thread, hence the wait).
+cra://debug?blockLists=none
+expect-log block list 127\.0\.0\.1 removed
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=list-removed',{mode:'no-cors'}).then(()=>'list-removed:sent',e=>'list-removed:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"list-removed:sent"
+expect-log GET /page\.html\?probe=list-removed

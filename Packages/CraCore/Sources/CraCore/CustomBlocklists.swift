@@ -48,6 +48,46 @@ public enum CustomBlocklist {
         return age < 0 || age >= refreshAge(atLaunch: atLaunch)
     }
 
+    /// What an Add List with `input` does to `addresses`. The iPhone takes only https:// (it has no
+    /// App Transport Security exception, so an http:// list would never load); the Mac takes http
+    /// too. A typed file:// address is refused on both: files come from Choose File.
+    public enum Addition: Equatable {
+        case added([String])
+        case alreadyAdded
+        case invalid
+    }
+
+    public static func adding(_ input: String, to addresses: [String], httpsOnly: Bool) -> Addition {
+        guard let url = listURL(from: input), !url.isFileURL,
+              !httpsOnly || url.scheme?.lowercased() == "https" else { return .invalid }
+        return adding(url, to: addresses)
+    }
+
+    /// A chosen file, or a checked address.
+    public static func adding(_ url: URL, to addresses: [String]) -> Addition {
+        let address = url.absoluteString
+        return addresses.contains(address) ? .alreadyAdded : .added(addresses + [address])
+    }
+
+    /// What a change to the setting means: copies to forget, and lists to fetch, in order.
+    public static func changes(from old: [String], to new: [String]) -> (removed: Set<String>, added: [String]) {
+        (Set(old).subtracting(new), new.filter { !old.contains($0) })
+    }
+
+    /// The lists to fetch now: those with no copy, and those whose copy is due.
+    public static func due(_ addresses: [String], fetched: [String: Date], now: Date, atLaunch: Bool) -> [String] {
+        addresses.filter { address in
+            fetched[address].map { isDue(fetched: $0, now: now, atLaunch: atLaunch) } ?? true
+        }
+    }
+
+    /// What the blocker was given, as a value: it gets a new set only when this changes. Each set
+    /// handed to the Mac engine stays in memory until Cra quits, so a write to settings or a
+    /// failed fetch must not hand it the same lists again, and nor must a list that has no copy yet.
+    public static func engineKey(_ addresses: [String], fetched: [String: Date]) -> [String] {
+        addresses.compactMap { address in fetched[address].map { "\(address) \($0.timeIntervalSince1970)" } }
+    }
+
     /// Every domain the blocker gets: Cra's own list, then each added one, each once.
     public static func merged(_ lists: [[String]]) -> [String] {
         var seen = Set<String>()

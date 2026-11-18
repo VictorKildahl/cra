@@ -49,8 +49,7 @@ final class BlockLists: ObservableObject {
             }
             return
         }
-        let removed = Set(addresses).subtracting(new)
-        let added = new.filter { !addresses.contains($0) }
+        let (removed, added) = CustomBlocklist.changes(from: addresses, to: new)
         addresses = new
         for address in removed {
             cached[address] = nil
@@ -64,10 +63,7 @@ final class BlockLists: ObservableObject {
     /// Fetches the lists that are a day old, or that have no copy yet (at launch and on coming back).
     func refreshDue() {
         guard started else { return }
-        for address in addresses {
-            if let list = cached[address], !CustomBlocklist.isDue(fetched: list.fetched, now: Date(), atLaunch: true) { continue }
-            fetch(address)
-        }
+        CustomBlocklist.due(addresses, fetched: cached.mapValues(\.fetched), now: Date(), atLaunch: true).forEach { fetch($0) }
     }
 
     func fetch(_ address: String) {

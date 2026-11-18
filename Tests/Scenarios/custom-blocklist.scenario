@@ -9,7 +9,7 @@
 budget rss=800 stalls50=30
 port 47131
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "customBlocklists": ["http://127.0.0.1:47131/blocklist-abp.txt"]}
-arg --host-resolver-rules=MAP judi-slot.example 127.0.0.1, MAP *.judi-slot.example 127.0.0.1, MAP allowed.example 127.0.0.1
+arg --host-resolver-rules=MAP judi-slot.example 127.0.0.1, MAP *.judi-slot.example 127.0.0.1, MAP allowed.example 127.0.0.1, MAP *.omtrdc.net 127.0.0.1
 pace 0.5
 
 # Cra's own list and the added one reach the engine.
@@ -28,3 +28,8 @@ expect-log GET /page\.html\?probe=allowed
 cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=added-list',{mode:'no-cors'}).then(()=>'added fetch:sent',e=>'added fetch:'+e.name)","awaitPromise":true}
 expect-log Cra cdp Runtime.evaluate .*"value":"added fetch:TypeError"
 reject-log probe=added-list
+
+# Cra's own list still blocks next to the added one: the two reach the engine as one set.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://nwfbr.tt.omtrdc.net:'+location.port+'/page.html?probe=own-list',{mode:'no-cors'}).then(()=>'own fetch:sent',e=>'own fetch:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"own fetch:TypeError"
+reject-log probe=own-list
