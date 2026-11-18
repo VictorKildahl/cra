@@ -296,7 +296,7 @@ Unset, or naming no connected display, windows open as usual.
 Tidy Tabs needs Apple Intelligence. `CRA_TIDY_FAKE_MODEL=1` stands in a model that groups by
 site (after a 1.6 s pause), so a test instance on any Mac shows the button, the squiggle and the
 groups, Tidy Tab Titles names a pinned tab after its title's first part and Tidy Downloads tidies a
-download's file name by hand; `CRA_TIDY_FAKE_MODEL=off` (or `preparing`, `ineligible`) shows Settings ▸ Max as a Mac
+download's file name by hand; `CRA_TIDY_FAKE_MODEL=off` (or `preparing`, `ineligible`, `not-offered`) shows Settings ▸ Max as a Mac
 without Apple Intelligence would. `cra://debug?tidy=1` runs Tidy on the window's space without
 hovering the divider, `cra://debug?undoTidy=1` is ⌘Z's undo and `cra://debug?settingsPane=max`
 opens Settings on a pane.

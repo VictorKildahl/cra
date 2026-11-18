@@ -1081,6 +1081,7 @@
 #533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5
 #536   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
 #536   iOS/CraUITests/PasskeyTests.swift::testASitesPasskeyRequestBringsUpTheSystemPasskeySheet  a58d934f1192
+#538   Packages/CraCore/Tests/CraCoreTests/AppleIntelligenceStatusTests.swift::appleSiliconMacWithoutTheModelIsNotToldItNeedsAppleSilicon  bb6a933de6bf
 #540   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::aPageInFullScreenHasNoBar  a35e4af16d57
 #540   Tests/Scenarios/little-window-fullscreen-bar.scenario  68c2b18c5237
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65

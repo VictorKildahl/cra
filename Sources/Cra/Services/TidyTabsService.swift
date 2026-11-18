@@ -19,34 +19,8 @@ final class TidyTabsService {
         return service
     }()
 
-    /// Where Apple Intelligence stands on this Mac, as Settings explains it.
-    enum Status: Equatable {
-        case available
-        /// Off in System Settings ▸ Apple Intelligence & Siri.
-        case off
-        /// On, with the model still downloading.
-        case preparing
-        /// An Intel Mac, or one Apple Intelligence doesn't support.
-        case ineligible
-        /// macOS 15 or earlier: no FoundationModels.
-        case needsNewerMacOS
-        case unavailable
-
-        /// What Settings ▸ Max says under its features.
-        var explanation: String {
-            switch self {
-            case .available: return "Max features run on Apple Intelligence on this Mac, so the model sends nothing anywhere."
-            case .off: return "Max features run on Apple Intelligence, which is off on this Mac."
-            case .preparing: return "Apple Intelligence is still downloading. Max features turn on once it’s ready."
-            case .ineligible: return "Max features run on Apple Intelligence, which needs a Mac with Apple silicon."
-            case .needsNewerMacOS: return "Max features run on Apple Intelligence, which needs macOS 26 or later."
-            case .unavailable: return "Apple Intelligence isn’t available right now."
-            }
-        }
-
-        /// Whether System Settings can fix it.
-        var canOpenSettings: Bool { self == .off || self == .preparing || self == .unavailable }
-    }
+    /// Where Apple Intelligence stands on this Mac, as Settings explains it (CraCore decides).
+    typealias Status = AppleIntelligenceStatus
 
     /// Read again when Cra comes to the front and while Settings shows it, so turning Apple
     /// Intelligence on in System Settings shows the button without a relaunch.
@@ -126,27 +100,46 @@ final class TidyTabsService {
 
     private static func currentStatus() -> Status {
         // A test copy can stand in a fixed model (CRA_TIDY_FAKE_MODEL=1) where Apple Intelligence is off,
-        // or show Settings as a Mac without it would (=off, =preparing, =ineligible).
+        // or show Settings as a Mac without it would (=off, =preparing, =ineligible for Intel, =not-offered for
+        // Apple silicon whose Apple Intelligence keeps the model from apps, as in China on macOS 27.3).
         switch ProcessInfo.processInfo.environment["CRA_TIDY_FAKE_MODEL"] {
         case "1": return .available
         case "off": return .off
         case "preparing": return .preparing
-        case "ineligible": return .ineligible
+        case "ineligible": return Status(reason: .deviceNotEligible, hardware: .intel)
+        case "not-offered": return Status(reason: .deviceNotEligible, hardware: .appleSilicon)
         default: break
         }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
+            let reason: Status.Reason?
             switch SystemLanguageModel.default.availability {
-            case .available: return .available
-            case .unavailable(.appleIntelligenceNotEnabled): return .off
-            case .unavailable(.modelNotReady): return .preparing
-            case .unavailable(.deviceNotEligible): return .ineligible
-            case .unavailable: return .unavailable
+            case .available: reason = nil
+            case .unavailable(.appleIntelligenceNotEnabled): reason = .appleIntelligenceNotEnabled
+            case .unavailable(.modelNotReady): reason = .modelNotReady
+            case .unavailable(.deviceNotEligible): reason = .deviceNotEligible
+            case .unavailable: reason = .other
             }
+            return Status(reason: reason, hardware: hardware)
         }
         #endif
         return .needsNewerMacOS
     }
+
+    /// Apple silicon, the Intel copy under Rosetta, or an Intel Mac: FoundationModels says only that
+    /// the device isn't eligible, which on Apple silicon means Apple doesn't offer apps the model (#538).
+    private static let hardware: Status.Hardware = {
+        func flag(_ name: String) -> Bool {
+            var value: Int32 = 0
+            var size = MemoryLayout<Int32>.size
+            return sysctlbyname(name, &value, &size, nil, 0) == 0 && value == 1
+        }
+        #if arch(arm64)
+        return .appleSilicon
+        #else
+        return flag("sysctl.proc_translated") ? .rosetta : .intel
+        #endif
+    }()
 
     /// System Settings ▸ Apple Intelligence & Siri (the Siri-Settings extension's pane).
     static let systemSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!
