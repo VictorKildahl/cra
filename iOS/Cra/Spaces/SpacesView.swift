@@ -38,19 +38,27 @@ final class SpacesModel: ObservableObject {
         return MobileSpaces.spaces(in: document, openFolders: openFolders)
     }
 
+    /// Before the sheet shows: what the last read found, so a reopened sheet has its Spaces at
+    /// once instead of "Connecting" (#556). `load()` then reads the Mac's sidebar again.
+    func showLastRead() {
+        if LaunchOptions.holdsConnecting { return }
+        if let read = SyncedSidebar.sheet.opening { show(read) }
+    }
+
     func load() {
         if LaunchOptions.holdsConnecting { return }
-        SyncedSidebar.load { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .spaces(let document):
-                self.asksToShare = MobileSyncIntro.showsSharePrompt(hasSpaces: true, seen: self.sharePromptSeen())
-                self.state = .spaces(document)
-                if self.selected == nil { self.selected = self.spaces.first?.id }
-                self.fetchIcons(MobileSpaces.spaces(in: document, openFolders: Set(document.items.map(\.id))))
-            case .nothingSynced: self.state = .nothingSynced
-            case .unavailable: self.state = .unavailable
-            }
+        SyncedSidebar.load { [weak self] in self?.show($0) }
+    }
+
+    private func show(_ read: SyncedSidebar.State) {
+        switch read {
+        case .spaces(let document):
+            asksToShare = MobileSyncIntro.showsSharePrompt(hasSpaces: true, seen: sharePromptSeen())
+            state = .spaces(document)
+            if selected == nil || !spaces.contains(where: { $0.id == selected }) { selected = spaces.first?.id }
+            fetchIcons(MobileSpaces.spaces(in: document, openFolders: Set(document.items.map(\.id))))
+        case .nothingSynced: state = .nothingSynced
+        case .unavailable: state = .unavailable
         }
     }
 

@@ -704,6 +704,40 @@ struct MobileSpacesTests {
         #expect(opened[0].rows[1].kind == .folder(open: true))
     }
 
+    /// The sheet reads the Mac's sidebar each time it opens, and that read takes a moment. A
+    /// reopened sheet showed "Connecting" (a bright flash in dark mode) for it every time; it now
+    /// opens on what the last read found, and "Connecting" is only for the first opening.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/556")) func aReopenedSheetShowsTheLastReadAtOnce() {
+        var sheet = MobileSpacesSheet()
+        #expect(sheet.opening == nil, "nothing read yet: Connecting")
+        let (document, _) = Self.sidebar()
+        sheet.remember(.spaces(document), askedICloud: true)
+        #expect(sheet.opening == .spaces(document))
+        var changed = document
+        changed.spaces.removeLast()
+        sheet.remember(.spaces(changed), askedICloud: true)
+        #expect(sheet.opening == .spaces(changed), "the newer read replaces it")
+        sheet.remember(.nothingSynced, askedICloud: true)
+        #expect(sheet.opening == .nothingSynced, "Sync turned off on the Mac shows as such")
+        var signedOut = MobileSpacesSheet()
+        signedOut.remember(.unavailable, askedICloud: true)
+        #expect(signedOut.opening == .unavailable, "without iCloud the explanation shows at once too")
+    }
+
+    /// The tab row's look for its sync card doesn't ask iCloud: Spaces it finds make the first
+    /// opening instant, a file not brought down yet doesn't hide Spaces read before.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/556")) func aQuickLookOnlyAddsSpaces() {
+        let (document, _) = Self.sidebar()
+        var sheet = MobileSpacesSheet()
+        sheet.remember(.nothingSynced, askedICloud: false)
+        #expect(sheet.opening == nil)
+        sheet.remember(.spaces(document), askedICloud: false)
+        #expect(sheet.opening == .spaces(document))
+        sheet.remember(.nothingSynced, askedICloud: false)
+        sheet.remember(.unavailable, askedICloud: false)
+        #expect(sheet.opening == .spaces(document))
+    }
+
     @Test func theSyncedFileReadsBack() throws {
         let (document, _) = Self.sidebar()
         let encoder = JSONEncoder()

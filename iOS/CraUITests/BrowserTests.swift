@@ -853,6 +853,43 @@ final class SpacesTests: BrowserTestCase {
         XCTAssertFalse(app.buttons["share-prompt-set-up"].exists, "the prompt asks once")
     }
 
+    // promise: #556
+    /// The sheet reads the Mac's sidebar every time it opens, here taking 3 s. The first opening
+    /// shows "Connecting" for it; a reopened sheet shows the Spaces it read at once (it showed the
+    /// bright "Connecting" again on every reopen).
+    func testAReopenedSpacesSheetShowsItsSpacesAtOnce() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraSyncDelay", "3"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.staticTexts["spaces-connecting"].waitForExistence(timeout: 2), "the first read is still on its way")
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 10))
+        noThanks.tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
+        app.buttons["spaces-close"].tap()
+        XCTAssertFalse(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 2))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 1.5), "reopened, the Spaces show while they are read again")
+        XCTAssertFalse(app.staticTexts["spaces-connecting"].exists)
+        keep("spaces-reopened")
+    }
+
+    // promise: #556
+    /// The tab row reads the Mac's Spaces as it comes up, so even the first opening shows them at
+    /// once when that read is back.
+    func testTheFirstSpacesOpeningAfterTheTabRowIsInstant() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraSyncDelay", "3"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        sleep(5)
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.buttons["share-prompt-no-thanks"].waitForExistence(timeout: 1.5), "the read ahead's Spaces show at once")
+        XCTAssertFalse(app.staticTexts["spaces-connecting"].exists)
+    }
+
     // promise: #465
     /// A sidebar.json as the Mac writes it into the sync folder shows its Spaces: dates as ISO 8601
     /// text (build 616 read them as numbers and showed "Sync with Cra for Mac"), and an item kind

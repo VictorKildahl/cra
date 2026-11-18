@@ -1122,6 +1122,10 @@
 #550   Tests/FloatingSidebarTests.swift::theShadowStaysUnderTheSidebar  831fdb6d0b6c
 #550   Tests/Scenarios/floating-sidebar-shadow.scenario  a59106d5ba21
 #551   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::leavingCraKeepsTheBarOpen  d0842a6daad8
+#556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aQuickLookOnlyAddsSpaces  f7cc377147bf
+#556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aReopenedSheetShowsTheLastReadAtOnce  cafb3f7eae67
+#556   iOS/CraUITests/BrowserTests.swift::testAReopenedSpacesSheetShowsItsSpacesAtOnce  6b396824ee16
+#556   iOS/CraUITests/BrowserTests.swift::testTheFirstSpacesOpeningAfterTheTabRowIsInstant  c2e03398873d
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
 crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01
