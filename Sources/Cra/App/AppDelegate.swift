@@ -2086,6 +2086,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("back \(label): selected=\(main.selectedTab?.tab?.url ?? "-") back=\(main.sidebarUI.canGoBack ? 1 : 0) today=\(today)")
                 return
             }
+            // todayOrder=<label>: the front space's Today top to bottom, each tab by address, a split's panes in
+            // brackets (where a link's tab lands, #532).
+            if let label = dict["todayOrder"] {
+                func row(_ id: UUID) -> String {
+                    guard let it = store.item(id) else { return "?" }
+                    if it.isSplit { return "[" + it.children.map(row).joined(separator: " + ") + "]" }
+                    if it.isFolder { return it.displayTitle + "{" + it.children.map(row).joined(separator: " , ") + "}" }
+                    return it.tab?.url ?? "?"
+                }
+                let today = store.item(store.focusedSpace(window: main.windowID).todayContainerID)?.children ?? []
+                CraLog.note("today order \(label): \(today.map(row).joined(separator: " | "))")
+                return
+            }
             // swipeBack=<label>[&go=1]: what Chromium's two-finger swipe asks the front page's view
             // before a swipe back starts, and with go=1 what it does at the end (#370).
             if let label = dict["swipeBack"] {

@@ -1079,6 +1079,13 @@
 #531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::waitsForThePopupItAskedFor  a788cd606142
 #531   Tests/ExtensionPopupWindowTests.swift::closesOnAClickElsewhere  ce46cd273792
 #531   Tests/Scenarios/floating-sidebar-extension-popup.scenario  66d9ded39b65
+#532   Packages/CraCore/Tests/CraCoreTests/LinkTabPlacementTests.swift::aSplitPanesLinkGoesBelowTheSplit  d0b1baafd246
+#532   Packages/CraCore/Tests/CraCoreTests/LinkTabPlacementTests.swift::aTabInAFolderGetsItsSlotInTheFolder  9a2b0dca7861
+#532   Packages/CraCore/Tests/CraCoreTests/LinkTabPlacementTests.swift::aTodayTabsLinkGoesRightBelowIt  a6bc1f337c9b
+#532   Packages/CraCore/Tests/CraCoreTests/LinkTabPlacementTests.swift::laterLinksGoAfterTheOnesTheSourceOpenedBefore  7589c3bf1124
+#532   Packages/CraCore/Tests/CraCoreTests/LinkTabPlacementTests.swift::outsideTodayThereIsNoSlot  a0bd1c2da8e9
+#532   Packages/CraCore/Tests/CraCoreTests/LinkTabPlacementTests.swift::theSettingIsOffByDefault  e20d26a93b83
+#532   Tests/Scenarios/background-tabs-below-current.scenario  870f24656b87
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::covered  5dce52db57cb
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::pageHostWindowInFrontIsTheWindowsOwn  28fe34a47445
 #533   Tests/Scenarios/pip-window-covered.scenario  34732af6a587

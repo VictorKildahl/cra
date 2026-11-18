@@ -1736,16 +1736,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // cra:// is Cra's scripting scheme (DevTools Protocol, key presses); a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
         let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
-        let parentIndex = source.flatMap { id -> Int? in
-            guard let it = store.item(id), let p = it.parentID, store.rootContainer(of: id) != nil,
-                  case .today = store.rootContainer(of: id)! else { return nil }
-            return (store.item(p)?.children.firstIndex(of: id) ?? -1) + 1
+        // Links from a today tab open right below it (Arc), a split's below the split; otherwise at
+        // the top. With "Open background tabs below the current tab" on, one behind the page goes
+        // after the tabs `source` opened before (#532). Back on the new tab, with no page behind,
+        // closes it and shows `source` again (#273).
+        let slot = source.flatMap {
+            store.linkTabSlot(below: $0, afterEarlierLinks: background && store.settings.backgroundTabsBelowCurrent)
         }
-        // Links from a today tab open right below it (Arc); otherwise at the top. Back on the new
-        // tab, with no page behind, closes it and shows `source` again (#273).
         let tab = store.createTab(url: url, in: sourceSpace, select: !background,
-                                  parent: parentIndex != nil ? source.flatMap { store.item($0)?.parentID } : nil,
-                                  index: parentIndex, window: windowID, referrer: source)
+                                  parent: slot?.parent, index: slot?.index, window: windowID, referrer: source)
         if background {
             store.markUnread(tab.id, true)
             ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
@@ -1767,7 +1766,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
             return host
         }
         let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
-        let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID, referrer: source)
+        // A ⌘-click or middle click goes where new tabs go, or with "Open background tabs below the
+        // current tab" on right below `source`, after the tabs it opened before (#532).
+        let slot = background && store.settings.backgroundTabsBelowCurrent
+            ? source.flatMap { store.linkTabSlot(below: $0, afterEarlierLinks: true) } : nil
+        let tab = store.createTab(url: url, in: sourceSpace, select: !background, parent: slot?.parent, index: slot?.index,
+                                  window: windowID, referrer: source)
         if background { store.markUnread(tab.id, true) }
         let host = makePopupHost(for: tab.id, opener: browser)
         if !background { show(tab.id, focus: true) }

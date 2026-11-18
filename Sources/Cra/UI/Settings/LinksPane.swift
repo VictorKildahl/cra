@@ -90,6 +90,11 @@ struct LinksPane: View {
                         SettingsToggleRow("Switch to links opened in new tabs",
                                           detail: "“Open Link in New Tab” brings the new tab to the front. Off, the page you’re reading stays in front, as in Arc. ⌘-click opens a link behind the page and ⇧⌘-click switches to it either way.",
                                           isOn: $store.settings.openLinksInForeground)
+                        SettingsCardDivider()
+                        // Not in Arc's settings (GitHub #532), off by default: Arc puts a link's tab below its source.
+                        SettingsToggleRow("Open background tabs below the current tab",
+                                          detail: "A link you ⌘-click or middle-click opens right below the tab you’re reading, in the order you open them, instead of with your other new tabs. Links from pinned tabs and favorites still open with your new tabs.",
+                                          isOn: $store.settings.backgroundTabsBelowCurrent)
                     }
 
                     // Not in Arc (GitHub #498): both off by default, a split holds Arc's four panes and a middle

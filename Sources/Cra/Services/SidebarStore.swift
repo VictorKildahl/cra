@@ -665,6 +665,11 @@ final class SidebarStore {
         return tab
     }
 
+    /// Where a tab a link in `source` opens goes when it goes below `source` (`LinkTabPlacement`, #532).
+    func linkTabSlot(below source: UUID, afterEarlierLinks: Bool) -> LinkTabPlacement.Slot? {
+        LinkTabPlacement.belowSource(source, afterEarlierLinks: afterEarlierLinks) { self.items[$0] }
+    }
+
     /// What Back does on tab `id`, whose page `canGoBack` or not: a tab a link opened, with no
     /// page behind, closes to the tab it came from while that one is still in the sidebar (#273).
     /// `swipe`: a two-finger swipe back over the page asks (#370).

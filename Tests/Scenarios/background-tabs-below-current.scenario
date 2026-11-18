@@ -1,0 +1,47 @@
+# Settings ▸ Links ▸ "Open background tabs below the current tab", off by default (GitHub #532): with it on, a link
+# ⌘-clicked or middle-clicked opens right below the tab it was clicked in, in click order, instead of at the top of
+# Today with every other new tab. The clicks go through the app's event queue, as the mouse's do; on the engine
+# these tabs come from Chromium's new pages (popupHostForURL). The slot is CraCore's (LinkTabPlacementTests).
+# promise: #532
+budget rss=1200 stalls50=40
+pace 0.5
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "backgroundTabsBelowCurrent": true}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=source
+cra://open?url=${PAGE}?n=a
+cra://open?url=${PAGE}?n=b
+expect-log n=b HTTP
+wait 1
+# New tabs at the top: source is third. Show it.
+cra://debug?selectTab=n=source
+wait 1
+cra://debug?todayOrder=start
+expect-log today order start: \S+n=b \| \S+n=a \| \S+n=source$
+
+# Two ⌘-clicks: below source, the first one first.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=one',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed one'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed one"
+cra://debug?clickAt=760,400&mods=1048576
+expect-log n=one HTTP
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=two',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:10;background:pink',document.body.append(a),'placed two'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed two"
+cra://debug?clickAt=760,400&mods=1048576
+expect-log n=two HTTP
+wait 1
+cra://debug?todayOrder=command
+expect-log today order command: \S+n=b \| \S+n=a \| \S+n=source \| \S+n=one \| \S+n=two$
+
+# A middle click goes after them too, and the page stays in front.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=three',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:11;background:pink',document.body.append(a),'placed three'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed three"
+cra://debug?clickAt=760,400&button=middle
+expect-log n=three HTTP
+wait 1
+cra://debug?todayOrder=middle
+expect-log today order middle: \S+n=b \| \S+n=a \| \S+n=source \| \S+n=one \| \S+n=two \| \S+n=three$
+cra://debug?selectedTab=end
+expect-log selected tab end: \S+n=source$
+reject-log fault:
