@@ -2574,7 +2574,15 @@ bool HandleDebugMethod(content::WebContents* contents,
          finalUpdate:result.final_update()];
 }
 
+// The page took focus: a click into it, or its window became key again. It becomes Chrome's active tab too, as
+// Cra's own focusing makes it: Chrome opens a page's file picker only for its Browser's active tab
+// (WebContentsImpl::RunFileChooser asks IsContentsActive) and closes one whose page stops being it. A click back
+// into a page from a Little Window's, or from another window's, left Chrome's active tab on that other page, and
+// every upload button (X's media button) did nothing. Only in the key window: the page the user is in.
 - (void)pageFocused {
+  if (_container.window.isKeyWindow) {
+    [self makeChromeActiveTab];
+  }
   [_delegate browserDidReceiveFocus:self];
 }
 

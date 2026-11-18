@@ -1152,6 +1152,8 @@
 #557   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingAFolderOnItsTabKeepsTheTabAfterAnotherIsPicked  3ad20a437ad4
 #557   Tests/StoreTests.swift::folderPeekAfterClosing  8a03d5d820bc
 #563   Tests/Scenarios/page-menu-no-reading-mode.scenario  48887b488f2f
+#571   Tests/Scenarios/upload-picker-after-focus.scenario  16ab596cf4bd
+#571   Tests/Scenarios/upload-picker.scenario  c92bdec94797
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
 crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01
