@@ -1139,4 +1139,5 @@ crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfStateTests.s
 crash-tab-group-closed-window Tests/Scenarios/engine-tab-group-closed-window.scenario  14b438f2b3b0
 crash-tooltip-over-sheet Tests/Scenarios/tooltip-over-sheet.scenario  c4535ba50b5b
 crash-web-store-install-after-tab-closes Tests/Scenarios/web-store-install-after-tab-closes.scenario  a5324abc50b7
+crash-webstore-install-double-report Tests/Scenarios/web-store-install-copy-reloads.scenario  bb32e7100ecc
 crash-zen-favicon-size Tests/StoreTests.swift::zenFaviconSize  ede0eb368f2a

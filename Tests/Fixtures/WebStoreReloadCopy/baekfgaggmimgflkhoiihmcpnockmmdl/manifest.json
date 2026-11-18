@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Web Store Copy That Reloads",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a Web Store extension as an import copies it (the store's update_url, a folder named by its ID) that reloads itself once, 3 seconds after it first loads, while Cra's install from the store is still downloading.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5nW8GbCD0SNaDJ47Cb+riaYoZH6c/2ZkYHWrd/cSlWkg4TZsSNpy+x7E0d6qu+Iu1bpF4MUjPbbM9VqZC7y9nu7kSvC/6Mex61t8jN503mavQ8FVlPywzIKX2t7+SFy/Ib8jXCGzfUM095XwXuwKcHHyZJcZarpd5gZWswI430xyMiH1kfmxYUIDe+gOYF8qQKUgfEBhDmBwVT16CaV8GSeuoX3qqNrcFBmW5qEOsAI5KTTZeWzWpYct41RaZS6FS+9LEVqAka4b4Isq6FFZw3kqDjlueEQumPsVuY0d89xBzdIthwP8RVIfNuom6NmVajo/DLG1kfiO8uurg1oNiwIDAQAB",
+  "update_url": "https://clients2.google.com/service/update2/crx",
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage"]
+}

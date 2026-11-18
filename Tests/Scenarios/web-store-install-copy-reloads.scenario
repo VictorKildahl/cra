@@ -1,0 +1,16 @@
+# promise: crash-webstore-install-double-report
+# An imported extension's copy loads again (here it reloads itself, 3 s in) while Cra's install of it from the
+# Web Store is still under way. Chrome's WebstoreInstaller took any install of the ID for its own: it reported
+# success for the copy, Cra let go of the install's page, and the store install's next step, finding the page gone,
+# reported a failure on top: CHECK(failure_callback_) stopped Cra (0.1.48 crash report, 18 Nov 2026: the
+# --load-extension copy finished loading after the first page). Only the store's own install (INTERNAL) is its success
+# now, and a second report does nothing: the store's answer, a late 404, is what Cra hears.
+budget rss=700
+extension ${FIXTURES}/WebStoreReloadCopy/baekfgaggmimgflkhoiihmcpnockmmdl
+# The store's download answers 404, ten seconds late: the copy reloads in that time.
+arg --apps-gallery-download-url=${ORIGIN}/missing/%s.crx?delay=10
+cra://open?url=${PAGE}?n=store
+expect-log extension baekfgaggmimgflkhoiihmcpnockmmdl: installing from the Web Store in Default
+wait 13
+expect-log GET /missing/baekfgaggmimgflkhoiihmcpnockmmdl
+expect-log Web Store install in Default failed

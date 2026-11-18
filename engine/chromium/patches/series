@@ -65,3 +65,4 @@ cra-session-cookies.patch
 cra-page-compositor.patch
 secure-input-active-app.patch
 cra-alerts-helper-launch.patch
+webstore-installer-own-install.patch
