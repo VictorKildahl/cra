@@ -56,6 +56,12 @@ run the classes a change touches, and the whole suite in halves.
    When a locked test fails, the change broke something that shipped: fix the change, not the
    test. Only Victor decides that a shipped behaviour changes; then run
    `scripts/promises.py --update` and name the issue in the commit (docs/testing.md rule 8).
+7. **Everything built and everything reported gets a test.** A feature, on the Mac or the
+   iPhone, reported or not, ships with tests that pin what it does: CraCore for the decision, a
+   harness, UI test or scenario for the wiring. A report whose code turns out to be right still
+   gets the test that proves it, tagged with its issue. `scripts/promises.py` doesn't lock
+   iOS UI tests yet, so put the iPhone decision in CraCore `Mobile/` with a tagged test as well.
+   Nothing is done, or pushed, without its tests; the reply on the issue names the test.
 
 ## Known exceptions
 
