@@ -368,8 +368,9 @@ struct LittleWindowToolbarAutoHideTests {
     /// A video in full screen in a Little Window or a Peek has the whole screen, as in the browser
     /// window: the bar neither floats over it nor sits above it, whatever the switch says. With the
     /// Chromium engine the page is a view under the bar, so the bar stayed on top of the video
-    /// (X post, 18 Nov 2026).
-    @Test func aPageInFullScreenHasNoBar() {
+    /// (X post, 18 Nov 2026, #540).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/540"))
+    func aPageInFullScreenHasNoBar() {
         #expect(ToolbarAutoHide.littleWindowHasBar(barless: false, pageFullscreen: false))
         #expect(!ToolbarAutoHide.littleWindowHasBar(barless: false, pageFullscreen: true))
         // ⌥⌘N's card and an easel's Peek have none to begin with.

@@ -1,7 +1,8 @@
+# promise: #540
 # A video in full screen in a Little Window has the whole screen, with the "Hide the Little Window
 # toolbar until you need it" switch on as with it off: the bar neither floats over the page nor sits
 # above it. With the Chromium engine the page is a view under the bar, so the bar stayed on top of the
-# video (X post, 18 Nov 2026). Out of full screen, the bar floats again.
+# video (X post, 18 Nov 2026, #540). Out of full screen, the bar floats again.
 # It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
 requires screen
 budget rss=900 stalls50=40
