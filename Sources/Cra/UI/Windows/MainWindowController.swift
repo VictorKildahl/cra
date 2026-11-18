@@ -108,12 +108,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         set { store.updateWindow(windowID) { $0.sidebarVisible = newValue } }
     }
 
+    /// A new window's size with nothing to go by.
+    static let defaultSize = CGSize(width: 1400, height: 880)
+
     init(app: AppDelegate, session: WindowSession) {
         self.app = app
         windowID = session.id
         isIncognito = session.isIncognito
         commandBar = CommandBarController(engine: app.engine, store: app.store)
-        let frame = session.frame.map { NSRectFromString($0) } ?? NSRect(x: 0, y: 0, width: 1400, height: 880)
+        let frame = session.frame.map { NSRectFromString($0) } ?? NSRect(origin: .zero, size: Self.defaultSize)
         let window = CraWindow(contentRect: frame,
                                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                backing: .buffered, defer: false)
@@ -4814,7 +4817,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.needsLayout = true
         // Remembered for the next launch (#426), unless a page's video took the window there.
         if !enteredFullscreenForContent { store.updateWindow(windowID) { $0.fullScreen = true } }
+        runAfterFullScreen()
     }
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) { runAfterFullScreen() }
     func windowDidExitFullScreen(_ notification: Notification) {
         (window as? CraWindow)?.fullScreenChanged()
         // Put away into the menu bar, it leaves full screen only to order out: it comes back in it.
@@ -5029,10 +5034,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// A window that was in full screen when Cra quit (or went to the menu bar) goes back into it
     /// once shown (#426), on its own Space as before.
-    func enterSavedFullScreen() {
+    /// `then` runs once the window is on its full-screen Space (a new window's command bar, #528),
+    /// or right away when it doesn't go there.
+    func enterSavedFullScreen(then: (() -> Void)? = nil) {
         guard let window, window.isVisible, store.window(windowID).fullScreen,
-              !window.styleMask.contains(.fullScreen) else { return }
+              !window.styleMask.contains(.fullScreen) else { then?(); return }
+        afterFullScreen = then
         window.toggleFullScreen(nil)
+    }
+
+    private var afterFullScreen: (() -> Void)?
+
+    private func runAfterFullScreen() {
+        let then = afterFullScreen
+        afterFullScreen = nil
+        then?()
     }
 
     /// The window closed while others stay open: its pages close (the tabs stay in

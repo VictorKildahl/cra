@@ -839,19 +839,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let url { store.createTab(url: url, select: true, window: hidden.windowID) }
             return hidden
         }
-        var frame: String?
-        if let current = main?.window, current.isVisible, !current.styleMask.contains(.fullScreen) {
-            var f = current.frame.offsetBy(dx: 22, dy: -22)
-            if let screen = (current.screen ?? NSScreen.main)?.visibleFrame, !screen.contains(f) {
-                f.origin = NSPoint(x: screen.minX + 22, y: screen.maxY - f.height - 22)
-            }
-            frame = NSStringFromRect(f)
-        }
+        // From a window in full screen, the new one goes full screen on a Space of its own (#528).
+        let current = main.flatMap { m in m.window.flatMap { $0.isVisible ? (m, $0) : nil } }
+        let placement = NewWindowPlacement.of(
+            source: current?.1.frame,
+            sourceFullScreen: current.map { $0.1.styleMask.contains(.fullScreen) && store.window($0.0.windowID).fullScreen } ?? false,
+            screen: (current?.1.screen ?? NSScreen.main)?.visibleFrame, defaultSize: MainWindowController.defaultSize)
+        let frame = placement.frame.map(NSStringFromRect)
         let session = incognito ? store.addIncognitoWindow(frame: frame)
             : blank ? store.addBlankWindow(frame: frame)
             : store.addWindow(spaceID: store.focusedSpaceID(window: store.lastNormalWindowID), frame: frame)
+        if placement.opensFullScreen { store.updateWindow(session.id) { $0.fullScreen = true } }
         let c = showNewWindow(session)
-        if let url { store.createTab(url: url, select: true, window: c.windowID) } else { c.openCommandBar(.newTab) }
+        if let url { store.createTab(url: url, select: true, window: c.windowID) }
+        if placement.opensFullScreen {
+            // The bar comes up once the window is on its own Space, not on the one it left.
+            c.enterSavedFullScreen(then: url == nil ? { [weak c] in c?.openCommandBar(.newTab) } : nil)
+        } else if url == nil {
+            c.openCommandBar(.newTab)
+        }
         return c
     }
 

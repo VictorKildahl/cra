@@ -1,0 +1,31 @@
+# New Window (⌘N) and New Incognito Window (⇧⌘N) from a window in full screen go full screen on a
+# Space of their own, with ⌘N's command bar up once there, as in Safari and Chrome; from a
+# windowed one they stay windowed (#528). It takes over Spaces, so it runs only with
+# CRA_SCENARIO_SCREEN=1 (CI).
+# promise: #528
+requires screen
+budget rss=700 stalls50=5
+cra://open?url=${PAGE}?n=first
+wait 3
+cra://debug?fullscreen=1
+wait 3
+cra://action/newWindow
+wait 4
+cra://debug?windowState=new
+expect-log window state new: main0 fullscreen=1
+expect-log window state new: main1 fullscreen=1 visible=1 onSpace=1
+cra://debug?commandBarRows=new
+expect-log command bar rows new: open=1 mode=newTab
+cra://dismiss
+cra://action/newIncognitoWindow
+wait 4
+cra://debug?windowState=incognito
+expect-log window state incognito: main2 fullscreen=1 visible=1 onSpace=1
+cra://action/closeWindow
+wait 3
+cra://debug?fullscreen=0
+wait 3
+cra://action/newWindow
+wait 3
+cra://debug?windowState=windowed
+expect-log window state windowed: main2 fullscreen=0 visible=1 onSpace=1
