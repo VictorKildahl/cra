@@ -58,9 +58,12 @@ final class EaselCanvasView: NSView {
         self.document = document
         store = EaselFiles.store(document.id)
         // A new easel is on disk from the start, so Library ▸ Easels lists it.
-        if !FileManager.default.fileExists(atPath: store.url.path) { store.saveNow(document) }
+        let isNew = !FileManager.default.fileExists(atPath: store.url.path)
+        if isNew { store.saveNow(document) }
         sheet = EaselSheetView(document: document)
         super.init(frame: .zero)
+        EaselFiles.opened(self)
+        if isNew { EaselFiles.listChanged() }
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor
         scroll.drawsBackground = false
@@ -95,7 +98,10 @@ final class EaselCanvasView: NSView {
         document = doc
         guard !EaselFiles.deleted.contains(doc.id) else { return }
         store.save(doc)
-        if renamed { onTitle(doc.title) }
+        if renamed {
+            onTitle(doc.title)
+            EaselFiles.listChanged()
+        }
     }
 
     /// A deleted easel's tab, closing, writes nothing back.
@@ -544,6 +550,14 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    /// A capture sent here from a page (the capture menu's row for this easel): on the canvas at
+    /// once, picked, and in view.
+    func insert(_ item: Easel.Item) {
+        commit("Add Capture") { $0.items.append(item) }
+        selected = item.id
+        scrollToVisible(rect(item.frame).insetBy(dx: -40, dy: -40))
     }
 
     func deleteSelected() {

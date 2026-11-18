@@ -427,6 +427,9 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             _ = DownloadHistory.shared.thumbnails.count
             _ = MediaScanner.shared.files
             _ = BoostStore.shared.boosts
+            // An easel made, renamed or deleted, or a capture sent to one (it was only the archive
+            // changing, when a tab closed, that brought a new easel onto the page).
+            _ = EaselFiles.Changes.shared.count
             _ = store.settings.mediaLibraryEnabled
             _ = store.settings.mediaFolders
         } onChange: { [weak self] in

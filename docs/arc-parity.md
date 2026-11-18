@@ -243,6 +243,26 @@ The easel file: items Cra 0.1.40 can read stay in `items`; link cards and captur
 fails on a kind it doesn't know, and would show the easel empty); each item carries `z`, its place in the stack
 (fixtures `easel-0140.json` and `easel.json` in CraCore's Fixtures/Model).
 
+## Capture menu, measured (Arc 1.173.1, 17 Nov 2026)
+
+Read from a 2x still of the menu beside a capture, with two easels ("Test", "Movies") in the library
+(CraCore `CaptureMenuLayout`; the app's `CaptureMenu`).
+
+- 273 pt wide and, with nine rows, 433 pt tall: a field 12 pt down, 30 pt tall and 10 pt in from both
+  sides, with the prompt "Send To…" and the caret in it as the menu shows; the first row 7.5 pt under it;
+  40 pt rows; sections 9 pt apart; 5.5 pt under the last row.
+- Rows: Save to Library, Copy, Save..., Send via iMessage... | Edit, Retake | New Easel (a plus), then
+  each easel by name with the easel squiggle. An easel is picked in the menu itself: there is no
+  "Send To…" row opening a second list, which is what Cra had.
+- Cra: the same field and rows without Save to Library and Edit (no counterpart yet). Typing narrows
+  every row by its title, Return runs the picked row or the first one left, ↑ ↓ move, Escape ends the
+  mode. At most eight easels are listed, the latest edited first; typing reaches the others. What the
+  field does in Arc wasn't tried (Arc can only be looked at here), so the narrowing is Cra's reading
+  of it.
+- A capture sent to an easel that is open in a tab goes onto its canvas, which shows and saves it.
+  Before, it was written to the easel's file and the tab then saved its older copy over it, so the
+  capture never showed. Library ▸ Easels now follows an easel made, renamed or deleted while it shows.
+
 ## Easel toolbar, measured (Arc 1.173.1, 17 Nov 2026)
 
 Read from 2x captures of a purple space's easel with the pointer over each button in turn, and from

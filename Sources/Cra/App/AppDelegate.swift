@@ -1393,6 +1393,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let g = dict["capturePick"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 main.debugCapturePick(at: NSPoint(x: g[0], y: g[1]), deeper: dict["deeper"] == "1"); return
             }
+            // captureMenu=<typed>&run=<row>: the capture menu beside a capture of the page, <typed> in its
+            // field; cra.log lists its rows, then the row titled <row> is chosen.
+            if let typed = dict["captureMenu"] { main.debugCaptureMenu(typed: typed == "-" ? "" : typed, run: dict["run"]); return }
+            // easels=list: the easels Library ▸ Easels and the capture menu list, the latest edited first;
+            // easels=open: what the open easel shows and what its file holds; easels=tiles: how many
+            // tiles Library ▸ Easels shows.
+            if let what = dict["easels"] {
+                if what == "tiles" {
+                    // The tiles Library ▸ Easels shows now.
+                    func count(in view: NSView) -> Int {
+                        (view is EaselTile && !view.isHiddenOrHasHiddenAncestor ? 1 : 0) + view.subviews.reduce(0) { $0 + count(in: $1) }
+                    }
+                    CraLog.note("easel tiles: \(main.window?.contentView.map(count(in:)) ?? 0)")
+                } else if what == "open", let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                    let id = canvas.document.id
+                    CraLog.note("easel open: shown=\(canvas.document.items.count) saved=\(EaselFiles.load(id).items.count) title=\(canvas.document.title)")
+                } else {
+                    let all = EaselFiles.all()
+                    CraLog.note("easels listed: \(all.count) titles=\(all.map(\.title).joined(separator: "|"))")
+                }
+                return
+            }
             // captureToEasel=1: the page's screenshot, then the capture menu's New Easel.
             if let how = dict["captureToEasel"] { main.debugCaptureToEasel(send: how == "send"); return }
             // easelLive=<s>: the open easel's first capture shows the live website; <s> seconds later

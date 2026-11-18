@@ -260,5 +260,6 @@ extension EaselFiles {
         remove()
         // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: remove)
+        listChanged()
     }
 }

@@ -108,6 +108,7 @@ final class EaselBrowser: CraBrowser, NativePage {
         closed = true
         MainActor.assumeIsolated {
             canvas.saveNow()
+            EaselFiles.closed(canvas)
             canvas.closeLives()
             canvas.removeFromSuperview()
         }
@@ -139,12 +140,51 @@ enum EaselFiles {
     }
     static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
 
+    // MARK: Easels open in tabs
+
+    /// A canvas holds what its easel is now; its file follows 0.4 s after an edit (JSONStore.save)
+    /// and is written over when the tab closes. So whatever reads or changes an easel that is open
+    /// goes through its canvas.
+    private final class Open { weak var canvas: EaselCanvasView? }
+    private static var open: [UUID: Open] = [:]
+
+    static func opened(_ canvas: EaselCanvasView) {
+        let entry = Open()
+        entry.canvas = canvas
+        open[canvas.document.id] = entry
+    }
+
+    static func closed(_ canvas: EaselCanvasView) {
+        if open[canvas.document.id]?.canvas === canvas { open[canvas.document.id] = nil }
+    }
+
+    static func canvas(for id: UUID) -> EaselCanvasView? { open[id]?.canvas }
+
+    /// The easel as it is now: its canvas's, or its file's.
+    static func current(_ id: UUID) -> Easel { canvas(for: id)?.document ?? load(id) }
+
+    /// Library ▸ Easels and the capture menu list the easels: this counts the changes they show
+    /// (one made, renamed, deleted, a capture added), so a list on screen follows.
+    @Observable final class Changes {
+        @MainActor static let shared = Changes()
+        var count = 0
+    }
+
+    static func listChanged() { Changes.shared.count += 1 }
+
     /// Arc's capture menu ▸ Send To…: the capture added below what the easel holds. With `source`
     /// (the page it came from) it is a capture that can go live, else a plain picture.
     static func add(picture png: Data, to id: UUID, source: Easel.Capture? = nil) -> Bool {
-        var easel = load(id)
+        var easel = current(id)
         let bottom = easel.items.map { $0.frame.y + $0.frame.height }.max() ?? 160
         guard let item = captureItem(png, easel: id, source: source, at: .init(120, bottom + 40)) else { return false }
+        defer { listChanged() }
+        // Open in a tab: onto its canvas, which shows it at once and saves it. Written to the file
+        // behind the canvas's back, the picture was gone as soon as the canvas saved again.
+        if let canvas = canvas(for: id) {
+            canvas.sheetView.insert(item)
+            return true
+        }
         easel.items.append(item)
         store(id).saveNow(easel)
         return true
@@ -156,6 +196,7 @@ enum EaselFiles {
         guard let item = captureItem(png, easel: easel.id, source: source, at: .init(120, 160)) else { return nil }
         easel.items = [item]
         store(easel.id).saveNow(easel)
+        listChanged()
         return easel
     }
 
@@ -176,11 +217,21 @@ enum EaselFiles {
     static func all() -> [(id: UUID, title: String, edited: Date)] {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         let decoder = JSONDecoder()
-        return files.filter { $0.pathExtension == "json" }.compactMap { url -> (id: UUID, title: String, edited: Date)? in
+        var listed = files.filter { $0.pathExtension == "json" }.compactMap { url -> (id: UUID, title: String, edited: Date)? in
             guard let data = try? Data(contentsOf: url), let e = try? decoder.decode(Easel.self, from: data) else { return nil }
             let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            return (e.id, e.title, date)
-        }.sorted { $0.edited > $1.edited }
+            // An easel open in a tab has the name on its canvas; its file gets it a moment later.
+            return (e.id, canvas(for: e.id)?.document.title ?? e.title, date)
+        }
+        for (id, entry) in open where !deleted.contains(id) && !listed.contains(where: { $0.id == id }) {
+            if let canvas = entry.canvas { listed.append((id, canvas.document.title, Date())) }
+        }
+        return listed.sorted { $0.edited > $1.edited }
+    }
+
+    /// The easels a capture can go to, the latest edited first (the capture menu's rows).
+    static func destinations() -> [CaptureMenuLayout.Destination] {
+        all().map { CaptureMenuLayout.Destination(id: $0.id, title: $0.title) }
     }
     static func pictures(_ id: UUID) -> URL {
         let u = folder.appendingPathComponent(id.uuidString, isDirectory: true)

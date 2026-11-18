@@ -61,6 +61,26 @@ extension MainWindowController {
         }
     }
 
+    /// Testing without the pointer (cra://debug?captureMenu=<typed>&run=<row>): part of the page
+    /// captured as Capture Image… does, so the menu shows beside it; `typed` goes in its field,
+    /// cra.log lists the rows left, and the row titled `run` is then chosen.
+    func debugCaptureMenu(typed: String, run: String?) {
+        // A menu already showing takes the text and the choice.
+        if let overlay = captureOverlay, overlay.isOpen {
+            CraLog.note("capture menu: \(overlay.debugMenu(typed: typed, run: run))")
+            return
+        }
+        guard captureRequest == nil, let source = captureSource(in: nil) else { CraLog.note("capture menu: no page"); return }
+        let request = UUID()
+        captureRequest = (request, source.window)
+        let rect = CGRect(x: 40, y: 40, width: max(60, min(320, source.rect.width - 80)), height: max(60, min(200, source.rect.height - 80)))
+        takeCapture(source.browser, liftImageAt: rect, in: nil, request: request)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let overlay = self?.captureOverlay, overlay.isOpen else { CraLog.note("capture menu: none"); return }
+            CraLog.note("capture menu: \(overlay.debugMenu(typed: typed, run: run))")
+        }
+    }
+
     private func takeCapture(_ b: CraBrowser, liftImageAt image: CGRect?, in peek: LittleWindowController?, request: UUID) {
         let lift = image
         b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self, weak b] shot, error in
