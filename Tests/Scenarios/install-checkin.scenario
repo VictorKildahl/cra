@@ -1,0 +1,21 @@
+# The daily check-in that counts Cra's users (docs/sharing.md, "Install count"): it goes with the
+# sharing settings off, 30 s after launch as a released Mac sends it, and holds the install id kept
+# in sharing.json, the version and the chip; the usage stats stay off. Making the id once and
+# checking in once per UTC day are CraCore's SharingTests.
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed sharing.json {"crashesSeenUntil": "2001-01-01T00:00:00Z", "installID": "11111111-1111-4111-8111-111111111111", "checkInSentAt": "2001-01-01T00:00:00Z"}
+env CRA_SHARING_ENDPOINT=${ORIGIN}
+expect-log sharing: stats off, crash reports ask
+wait 5
+expect-log POST /api/checkin .*"id" : "11111111-1111-4111-8111-111111111111"
+expect-log POST /api/checkin .*"arch" : "(arm64|x86_64)"
+expect-log POST /api/checkin .*"version" : "[0-9]
+expect-log sharing: check-in sent
+reject-log POST /api/stats
+# Kept across a relaunch: the next check-in carries the same id.
+relaunch
+cra://debug?sharing=checkin
+wait 2
+expect-log sharing: check-in sent
+reject-log POST /api/checkin .*"id" : "[02-9A-F]

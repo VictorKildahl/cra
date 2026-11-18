@@ -171,7 +171,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         kind = self.headers.get("Content-Type")
-        print(f"POST {self.path} {len(body)} bytes {kind}", flush=True)
+        # The install check-in is three short fields: logged whole, so a scenario can expect its id.
+        shown = " " + " ".join(body.decode("utf-8", "replace").split()) if self.path.endswith("/checkin") else ""
+        print(f"POST {self.path} {len(body)} bytes {kind}{shown}", flush=True)
         os.makedirs(sys.argv[3], exist_ok=True)
         name = self.path.strip("/").replace("/", "-")
         open(os.path.join(sys.argv[3], f"{name}-{len(os.listdir(sys.argv[3])) + 1}.json"), "wb").write(body)

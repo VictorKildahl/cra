@@ -2236,10 +2236,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // a background test copy is in either state depending on what it was sent.
             if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }
             // Settings ▸ Privacy sharing now, not in 30 s or tomorrow (only with CRA_SHARING_ENDPOINT
-            // in a test copy): stats sends the usage report, crash looks for new crash reports,
-            // on and off tick and untick onboarding's "Help improve Cra" row.
+            // in a test copy): stats sends the usage report, checkin the daily install check-in,
+            // crash looks for new crash reports, on and off tick and untick onboarding's
+            // "Help improve Cra" row.
             if let v = dict["sharing"] {
                 if v == "stats" { SharingService.shared.sendStatsIfDue(force: true) }
+                if v == "checkin" { SharingService.shared.sendCheckInIfDue(force: true) }
                 if v == "crash" { SharingService.shared.checkCrashReports() }
                 if v == "on" { store.settings.setSharesToImproveCra(true) }
                 if v == "card-share" { SharingCard.answer(share: true) }
