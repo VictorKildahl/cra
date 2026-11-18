@@ -1135,6 +1135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
             // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
             // never-shown window drew there instead, and the tab stayed blank (GitHub #469).

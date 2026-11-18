@@ -1031,3 +1031,6 @@
 #531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::waitsForThePopupItAskedFor  a788cd606142
 #531   Tests/ExtensionPopupWindowTests.swift::closesOnAClickElsewhere  ce46cd273792
 #531   Tests/Scenarios/floating-sidebar-extension-popup.scenario  66d9ded39b65
+#533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::covered  5dce52db57cb
+#533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::pageHostWindowInFrontIsTheWindowsOwn  28fe34a47445
+#533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5

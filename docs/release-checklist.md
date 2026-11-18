@@ -58,6 +58,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#400 (macOS 27 only):** a white page with DevTools docked right and set to dark, toolbar shown,
   Edge to edge on and off: no white shows at any corner of the page or DevTools. This Mac runs
   macOS 26, where the test stands in for 27 with AppKit's own window radius; ask the reporter to confirm.
+- **#533 (macOS 27 only):** Cra alone on a second display playing a YouTube video with sound; click
+  another app on the first display: the video keeps playing in its tab. Cover Cra's window with
+  another app, or minimise it: the video goes to Picture in Picture. macOS 26 never called the window
+  not visible here, so WindowCoverageTests and `window-coverage-own-parts` stand in; ask the reporter.
 
 ### Sidebar, tabs and the command bar
 
