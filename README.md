@@ -77,6 +77,7 @@ Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
 | Easels | ✅ |
 | Boosts | ✅ |
 | Peek | ✅ |
+| Netflix, Disney+, Spotify and other DRM streaming | ✅ In Safari's engine with Apple's FairPlay; Disney+ and Prime Video [confirmed playing signed in](docs/protected-media.md#confirmed-playing), and any other site that asks for DRM can switch over |
 | Notes | Left out: Arc itself no longer makes new Notes |
 | Arc Max | Ask on Page, Instant Links, Tidy Tabs, Tidy Tab Titles, Tidy Downloads and 5-Second Previews, on the Mac's Apple Intelligence; only Instant Links' search queries leave the Mac, to the search engine |
 
