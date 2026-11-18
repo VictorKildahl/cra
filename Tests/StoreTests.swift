@@ -2409,6 +2409,13 @@ enum StoreTests {
         defer { try? FileManager.default.removeItem(at: container) }
         setenv("CRA_SYNC_ICLOUD_DIR", container.path, 1)
         defer { unsetenv("CRA_SYNC_ICLOUD_DIR") }
+        // Every store here loads settings.json from the one data folder, as the test before this one
+        // left it once its 0.4 s save landed: with HTTPS-Only on. Under load it had landed, the second
+        // Mac's change below changed nothing, and the third Mac was offered the first Mac's bundle
+        // (18 Nov 2026). It is on disk every time now.
+        let earlier = SidebarStore(clock: ManualScheduler())
+        earlier.settings.httpsOnly = true
+        earlier.saveAll()
         let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
         let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
         let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
@@ -2433,22 +2440,30 @@ enum StoreTests {
 
         // And back, with no question on the first Mac either.
         clockB.advance(by: 20)
-        b.settings.httpsOnly = true
+        // A change whatever the loaded settings held: the second Mac turns HTTPS-Only the other way.
+        let httpsOnly = !b.settings.httpsOnly
+        b.settings.httpsOnly = httpsOnly
         syncB.poll()
         downloaded = false
         syncA.downloadStatus = { url in url.lastPathComponent == SettingsSync.settingsName && !downloaded ? .notDownloaded : nil }
         syncA.poll()
         downloaded = true
         syncA.poll()
-        expect(syncA.pendingChoice == nil && a.settings.httpsOnly, "a setting changed on the second Mac reaches the first without a question")
+        expect(syncA.pendingChoice == nil && a.settings.httpsOnly == httpsOnly, "a setting changed on the second Mac reaches the first without a question")
 
         // The first two Macs stop here, so that neither's debounced save of sync.json lands between
         // the third Mac's save and its relaunch.
         syncA.disable(); syncB.disable()
 
         // Cra quit while the first download was still coming in: the question is still asked.
+        // The third Mac shares the first two's data folder here, and their 0.4 s saves of a sidebar
+        // with the tab could land before it loads (under load, 18 Nov 2026): they are on disk now,
+        // and the third Mac starts from a sidebar of its own, as it would on its own disk.
+        a.saveAll(); b.saveAll()
         let clockC = ManualScheduler(now: clockB.now)
         let c = SidebarStore(clock: clockC)
+        c.replace(document: .fresh())
+        expect(!c.document.items.contains { $0.id == tab.id }, "the third Mac hasn't seen the tab")
         let syncC = SettingsSyncService(store: c, clock: clockC, device: "Mini", deviceID: "mini")
         syncC.downloadStatus = { url in url.lastPathComponent == SettingsSync.sidebarName ? .notDownloaded : nil }
         expect(syncC.enableICloud() == .downloading, "a third Mac turns iCloud on while the bundle downloads")
@@ -3184,12 +3199,35 @@ enum StoreTests {
         expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
     }
 
+    /// Every store in this process loads what earlier tests' stores saved to the one data folder, with
+    /// their clocks' times, and some ran hours ahead. A test that ranks tabs it didn't make (⌃⌥Tab lists
+    /// every space) moves its clock past all of them first, so its own tabs are the newest.
+    @MainActor
+    private static func startAfterLoadedTabs(_ store: SidebarStore, _ clock: ManualScheduler) {
+        guard let latest = store.document.items.compactMap({ $0.tab?.timeLastActiveAt }).max(), latest >= clock.now else { return }
+        clock.advance(by: latest.timeIntervalSince(clock.now) + 1)
+    }
+
     /// ⌃⌥Tab (#467): every space's recent tabs, the window's own first. Picking another space's tab
     /// goes to that space, and the next tap comes back to the tab it left.
+    ///
+    /// It lists every space, so it also sees the ones the store loaded from what earlier tests saved,
+    /// some on clocks hours ahead of this one. Whether that save had landed was a race that failed this
+    /// test under load (20 of 24 parallel runs, 18 Nov 2026); a newer tab is now always on disk.
     @MainActor
     private static func recentTabsInAllSpacesGoBack() {
+        let earlierClock = ManualScheduler()
+        let earlier = AppComposition(clock: earlierClock).store
+        let leftover = earlier.createTab(url: "https://example.com/leftover", in: earlier.focusedSpaceID)
+        earlierClock.advance(by: 3600)
+        earlier.selectTab(leftover.id)
+        earlier.saveAll()
+
         let clock = ManualScheduler()
         let store = AppComposition(clock: clock).store
+        expect(store.item(leftover.id)?.tab?.timeLastActiveAt.map { $0 > clock.now } == true,
+               "the store loaded a tab last active after this test's clock starts")
+        startAfterLoadedTabs(store, clock)
         let work = store.createSpace(title: "Work", emoji: "💼").id
         let workTab = store.createTab(url: "https://example.com/work", in: work)
         clock.advance(by: 1)
@@ -3206,6 +3244,8 @@ enum StoreTests {
         store.selectTab(workTab.id)
         expect(store.focusedSpaceID == work, "picking another space's tab goes to its space")
         expect(store.recentTabsInAllSpaces(limit: 2) == [workTab.id, homeTab.id], "and the next tap comes back")
+        store.archiveTab(leftover.id, reason: .manual)
+        store.saveAll()
     }
 
     /// Zen's favicons come from Firefox's favicons.sqlite, where the widest icon is often an SVG,

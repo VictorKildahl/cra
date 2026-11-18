@@ -28,6 +28,12 @@ Commands for each piece are in [development.md](development.md#tests).
 6. **Never assert on a fake's bookkeeping alone.** A test whose only check is "the fake
    recorded a call" tests the fake.
 7. **A flaky test is rewritten on the clock or deleted**, never retried or given a sleep.
+   `scripts/test-store.sh` runs every test in one process on one data folder, and a store saves
+   0.4 s later in real time: a new store loads whatever earlier tests' saves have landed, their
+   clocks hours ahead of yours. A test that reads state it didn't make puts it on disk itself
+   (`saveAll()`) so it is there every time, then copes with it (`startAfterLoadedTabs`, a change
+   that flips a setting instead of assuming it is off). Stress such a test with ten copies of the
+   kept binary at once (`CRA_TEST_KEEP`): two checks passed alone and failed most of those runs.
 8. **What a closed issue shipped is pinned.** The test that proves an issue's fix carries
    `.bug("https://github.com/VictorKildahl/cra/issues/<n>")` (`// promise: #<n>` above a harness
    func or an iPhone UI test in iOS/CraUITests), and `Tests/promises.lock` holds a
