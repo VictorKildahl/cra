@@ -10,6 +10,10 @@ public enum ContentCapture {
     public static let dragThreshold: CGFloat = 4
     /// A drag smaller than this either way captures nothing.
     public static let minimumSize: CGFloat = 8
+    /// How long a capture sent to an easel waits for the page to say where it is scrolled. A page
+    /// whose next address hasn't responded holds that answer back, so past this the capture goes
+    /// to the easel with its address and title only.
+    public static let sourceAnswerWait: TimeInterval = 0.5
 
     public static func isDrag(from start: CGPoint, to end: CGPoint) -> Bool {
         hypot(end.x - start.x, end.y - start.y) >= dragThreshold

@@ -23,6 +23,7 @@ enum CaptureOverlayTests {
         checkMainWindow()
         checkLittleWindow()
         checkOptionPicksDeeper()
+        checkFieldKeepsEditingKeys()
         print("Capture overlay: \(checks) checks, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }
@@ -101,6 +102,39 @@ enum CaptureOverlayTests {
                "the capture says where on the page it was, for an easel's live capture")
         expect(panel.parent == nil && !panel.isVisible && fixture.peekWindow.isVisible,
                "copy ends capture and leaves Peek open")
+    }
+
+    /// The "Send To…" field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z for its text: they ended the capture,
+    /// as any other ⌘ key does. ⌘C still copies the picture.
+    @MainActor
+    private static func checkFieldKeepsEditingKeys() {
+        let fixture = Fixture()
+        defer { fixture.close() }
+        var finished: CaptureOverlay.Action??
+        fixture.main.onCaptureFinished = { action, _ in finished = .some(action) }
+        pressCapture(fixture)
+        fixture.answerScreenshots()
+        let panel = fixture.peekPanel()
+        let view = panel.contentView!
+        let start = NSPoint(x: 30, y: 30), end = NSPoint(x: 190, y: 150)
+        for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+            let event = NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil), modifierFlags: [],
+                                          timestamp: 1, windowNumber: panel.windowNumber, context: nil,
+                                          eventNumber: 0, clickCount: 1, pressure: 0)!
+            switch type {
+            case .leftMouseDown: view.mouseDown(with: event)
+            case .leftMouseDragged: view.mouseDragged(with: event)
+            default: view.mouseUp(with: event)
+            }
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        expect(panel.firstResponder is NSTextView, "the Send To field holds the keyboard once the menu shows")
+        for (c, code) in [("a", UInt16(0)), ("v", 9), ("x", 7), ("z", 6)] {
+            _ = view.performKeyEquivalent(with: key(c, code: code, modifiers: .command, in: panel))
+            expect(finished == nil && panel.isVisible, "Command-\(c.uppercased()) in the field keeps the capture")
+        }
+        expect(view.performKeyEquivalent(with: key("c", code: 8, modifiers: .command, in: panel)), "Command-C still copies the capture")
+        expect(finished == .some(.copy), "Command-C ends the capture with a copy")
     }
 
     @MainActor

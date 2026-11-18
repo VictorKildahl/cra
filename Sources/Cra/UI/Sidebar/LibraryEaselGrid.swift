@@ -40,7 +40,7 @@ final class EaselRowCell: NSView {
     }
 }
 
-private final class EaselTile: NSView {
+final class EaselTile: NSView {
     var open: (EaselEntry) -> Void = { _ in }
     var delete: (EaselEntry) -> Void = { _ in }
     private var entry: EaselEntry?
@@ -49,7 +49,7 @@ private final class EaselTile: NSView {
     private let picture = CALayer()
     private let mark = NSImageView()
     private let title = NSTextField(labelWithString: "")
-    private var hovering = false { didSet { refresh() } }
+    private var hovering = false { didSet { if hovering != oldValue { refresh(animated: true) } } }
     private var downAt: NSPoint?
 
     override init(frame: NSRect) {
@@ -96,8 +96,50 @@ private final class EaselTile: NSView {
         needsLayout = true
     }
 
-    private func refresh() {
-        layer?.backgroundColor = ink.withAlphaComponent(hovering ? 0.08 : 0.04).cgColor
+    /// Arc's tile under the pointer: its backing brightens and the tile grows about its centre
+    /// (CraCore EaselTileHover), both in a tenth of a second; the same way back.
+    private func refresh(animated: Bool = false) {
+        guard let layer else { return }
+        let fill = ink.withAlphaComponent(EaselTileHover.fill(hovering: hovering)).cgColor
+        if animated {
+            let tint = CABasicAnimation(keyPath: "backgroundColor")
+            tint.fromValue = layer.presentation()?.backgroundColor ?? layer.backgroundColor
+            tint.toValue = fill
+            tint.duration = EaselTileHover.duration
+            tint.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(tint, forKey: "hover_tint")
+        }
+        layer.backgroundColor = fill
+        // AppKit owns a layer-backed view's anchor and transform, so the growth is an animation
+        // that stays while the pointer is over the tile, carrying the centre itself.
+        var to = CATransform3DIdentity
+        if hovering {
+            let s = EaselTileHover.scale, a = layer.anchorPoint
+            let c = CGPoint(x: bounds.width * (0.5 - a.x), y: bounds.height * (0.5 - a.y))
+            to = CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(c.x, c.y, 0), s, s, 1), -c.x, -c.y, 0)
+        }
+        guard animated || !hovering else { return }
+        let grow = CABasicAnimation(keyPath: "transform")
+        grow.fromValue = NSValue(caTransform3D: layer.presentation()?.transform ?? CATransform3DIdentity)
+        grow.toValue = NSValue(caTransform3D: to)
+        grow.duration = animated ? EaselTileHover.duration : 0
+        grow.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        grow.fillMode = .forwards
+        grow.isRemovedOnCompletion = !hovering
+        layer.add(grow, forKey: "hover_grow")
+        // Over its neighbours while it is the larger one.
+        layer.zPosition = hovering ? 1 : 0
+    }
+
+    /// cra://debug?easelTileHover=1|0: the pointer over the tile, or gone; what it then shows.
+    func debugHover(_ on: Bool, done: @escaping (String) -> Void) {
+        hovering = on
+        DispatchQueue.main.asyncAfter(deadline: .now() + EaselTileHover.duration + 0.15) { [weak self] in
+            guard let self, let layer = self.layer else { return }
+            let scale = (layer.presentation() ?? layer).transform.m11
+            let fill = layer.backgroundColor.map { $0.alpha } ?? 0
+            done(String(format: "hover=%@ scale=%.3f fill=%.2f title=%@", on ? "on" : "off", scale, fill, self.title.stringValue))
+        }
     }
 
     override func layout() {
@@ -218,5 +260,6 @@ extension EaselFiles {
         remove()
         // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: remove)
+        listChanged()
     }
 }

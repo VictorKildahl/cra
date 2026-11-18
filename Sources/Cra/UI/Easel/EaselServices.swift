@@ -88,6 +88,27 @@ extension EaselCanvasView {
         CraLog.note("easel pick: picker=\(picker.isHidden ? "hidden" : "shown") color=\(picker.current?.rawValue ?? "none") menu=\(rows)")
     }
 
+    /// cra://debug?easelTool=<key>&hover=<tool>: a key pressed on the canvas ("esc" for Escape, "-"
+    /// for none) and the pointer put over a toolbar button ("duplicate", "none"); what the toolbar
+    /// shows then, logged.
+    func debugTool(key: String, hover: String?) {
+        if key != "-", !key.isEmpty {
+            let escape = key == "esc"
+            let characters = escape ? "\u{1B}" : key
+            if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                            windowNumber: window?.windowNumber ?? 0, context: nil, characters: characters,
+                                            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: escape ? 53 : 0) {
+                sheetView.keyDown(with: event)
+            }
+        }
+        if let hover {
+            let item: EaselToolbarLayout.Item? = hover == "duplicate" ? .duplicate : Easel.Tool(rawValue: hover).map { .tool($0) }
+            let rect = item.map(EaselToolbarLayout.rect(of:))
+            toolbarView.hover(at: rect.map { NSPoint(x: $0.midX, y: $0.midY) })
+        }
+        CraLog.note("easel toolbar: \(toolbarView.debugLine)")
+    }
+
     /// cra://debug?easelLink=<url>: a link card, as if pasted; what it read, logged once filled in.
     func debugLink(_ url: String) {
         sheetView.addLink(url, title: nil, at: nil)

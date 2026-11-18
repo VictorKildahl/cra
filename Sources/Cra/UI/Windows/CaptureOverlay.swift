@@ -17,7 +17,25 @@ import UniformTypeIdentifiers
 /// capture is exactly what was on screen. Decisions (picker, geometry) are in CraCore's ContentCapture.
 @MainActor
 final class CaptureOverlay {
-    enum Action { case copy, save, message, newEasel, sendToEasel, retake }
+    enum Action: Equatable {
+        case copy, save, message, newEasel, retake
+        /// The easel picked in the menu.
+        case sendToEasel(UUID)
+
+        /// New Easel or an easel's row: the capture keeps where on its page it came from.
+        var goesToAnEasel: Bool {
+            if case .sendToEasel = self { return true }
+            return self == .newEasel
+        }
+    }
+
+    /// The easels a capture can go to, the latest edited first: the menu's rows after New Easel.
+    /// The app sets it at launch (the overlay knows nothing of where easels are kept).
+    static var easels: () -> [CaptureMenuLayout.Destination] = { [] }
+
+    /// Set by cra://debug?captureMenu=: a test copy runs behind other windows, where its panel
+    /// can lose the keys as it opens, which would end the mode before the menu is read.
+    var staysWithoutKeys = false
 
     private let panel: CapturePanel
     private let view: CaptureView
@@ -35,8 +53,9 @@ final class CaptureOverlay {
         view.finish = { [weak self] action, png in self?.finish(action, png) }
         panel.onResignKey = { [weak self] in
             // Another window took the keys (the sidebar, another app): the mode ends, as in Arc.
-            if self?.view.isSettled == false { return }
-            self?.finish(nil, nil)
+            guard let self, !self.closed, self.view.isSettled, !self.staysWithoutKeys else { return }
+            CraLog.note("capture: another window took the keys, the mode ends")
+            self.finish(nil, nil)
         }
         window.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
@@ -58,11 +77,15 @@ final class CaptureOverlay {
     var pageSize: CGSize { view.bounds.size }
     /// The element a click would take now, in page points (the harness reads it).
     var pickedElement: CGRect? { view.pickedElement }
+    /// cra://debug?captureMenu=: `typed` goes in the menu's field; its rows, then `run` is chosen.
+    func debugMenu(typed: String, run: String?) -> String { view.debugMenu(typed: typed, run: run) }
 
     private func finish(_ action: Action?, _ png: Data?) {
         guard !closed else { return }
         closed = true
         view.stop()
+        // The menu's field may hold the keyboard: its text editor ends with the mode.
+        if panel.firstResponder !== view { panel.makeFirstResponder(view) }
         parent?.removeChildWindow(panel)
         panel.orderOut(nil)
         NSCursor.arrow.set()
@@ -113,6 +136,9 @@ enum CaptureStyle {
     static let menuText = NSColor(white: 1, alpha: 0.9)
     static let menuIcon = NSColor(white: 1, alpha: 0.3)
     static let menuDivider = NSColor(white: 1, alpha: 0.07)
+    /// The "Send To…" field: a lighter box on the menu, its prompt dimmer than a row's text.
+    static let menuField = NSColor(white: 1, alpha: 0.07)
+    static let menuPrompt = NSColor(white: 1, alpha: 0.45)
     static let menuHover = NSColor(srgbRed: 0.161, green: 0.18, blue: 0.757, alpha: 1)
     static let menuHoverText = NSColor(white: 1, alpha: 0.95)
 }
@@ -430,6 +456,11 @@ final class CaptureView: NSView {
             default: break
             }
         }
+        // The "Send To…" field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z for its text (the Edit menu's).
+        if actionsMenu?.hasKeyboard == true, event.modifierFlags.intersection([.command, .control, .option]) == .command,
+           CaptureMenuLayout.fieldKeeps(commandKey: event.charactersIgnoringModifiers ?? "") {
+            return false
+        }
         if event.modifierFlags.contains(.command), KeyBindingRegistry.shared.action(for: event)?.id != "capturePage" {
             finish?(nil, nil)
         }
@@ -542,6 +573,7 @@ final class CaptureView: NSView {
         addSubview(menu)
         menu.appear()
         actionsMenu = menu
+        menu.focus()
         NSCursor.arrow.set()
     }
 
@@ -553,7 +585,9 @@ final class CaptureView: NSView {
     }
 
     private func makeMenu(png: Data) -> CaptureMenu {
-        CaptureMenu { [weak self] action in
+        // Only the easels that fit the page inside its margins (a Peek or a Little Window is short).
+        let room = bounds.height - 2 * ContentCapture.menuMargin
+        let menu = CaptureMenu(easels: CaptureOverlay.easels(), maxHeight: room) { [weak self] action in
             guard let self else { return }
             self.isSettled = false
             if action == .retake {
@@ -562,6 +596,16 @@ final class CaptureView: NSView {
                 self.finish?(action, png)
             }
         }
+        menu.onCancel = { [weak self] in self?.finish?(nil, nil) }
+        return menu
+    }
+
+    func debugMenu(typed: String, run: String?) -> String {
+        guard let menu = actionsMenu else { return "no menu" }
+        menu.debugType(typed)
+        let line = "typed=\(typed) keyboard=\(menu.hasKeyboard ? "field" : "elsewhere") rows=\(menu.debugRows)"
+        if let run { DispatchQueue.main.async { if !menu.debugRun(run) { CraLog.note("capture menu: no row \(run)") } } }
+        return line
     }
 
     private func showMenu(png: Data) {
@@ -572,10 +616,14 @@ final class CaptureView: NSView {
         addSubview(m)
         m.appear()
         actionsMenu = m
+        m.focus()
     }
 
     private func dropMenu() {
-        actionsMenu?.removeFromSuperview()
+        guard let menu = actionsMenu else { return }
+        // The keys go back to the page's picture before the field that held them leaves.
+        if menu.hasKeyboard { window?.makeFirstResponder(self) }
+        menu.removeFromSuperview()
         actionsMenu = nil
     }
 
@@ -811,38 +859,34 @@ final class CaptureBubble: NSView {
 
 // MARK: - The menu after a capture
 
-/// Arc's CapturedImageActionsView, dark whatever the theme: 273 pt wide, 10 pt corners, fill
-/// (18,15,46); 40 pt rows with a 13 pt symbol centred 25 pt in at white 30 % and 14 pt medium text
-/// from 41 pt at white 90 %; sections apart by 9 pt with a hairline 10 pt in from both sides.
-/// Arc's Send To… puts the capture on an easel you pick, New Easel starts one with it; its other
-/// rows (Save to Library, Edit) Cra doesn't have yet.
-final class CaptureMenu: NSView {
-    struct Row {
-        let title: String
-        let symbol: String
-        let action: CaptureOverlay.Action
-    }
-
-    static let width: CGFloat = 273
-    static let rowHeight: CGFloat = 40
-    static let sectionGap: CGFloat = 9
-    static let padding: CGFloat = 6
+/// Arc's CapturedImageActionsView, dark whatever the theme (Arc 1.173.1, 17 Nov 2026): 273 pt
+/// wide, 10 pt corners, fill (18,15,46); a "Send To…" field on top that takes the keyboard and
+/// narrows the rows as you type; 40 pt rows with a 13 pt symbol centred 25 pt in at white 30 % and
+/// 14 pt medium text from 41 pt at white 90 %; sections apart by 9 pt with a hairline 10 pt in from
+/// both sides. The last section is where the capture can go: New Easel, then each easel by name
+/// (CraCore CaptureMenuLayout). Arc's Save to Library and Edit rows Cra doesn't have yet.
+final class CaptureMenu: NSView, NSTextFieldDelegate {
     static let cornerRadius: CGFloat = 10
-    static let sections: [[Row]] = [
-        [Row(title: "Copy", symbol: "doc.on.doc.fill", action: .copy),
-         Row(title: "Save...", symbol: "square.and.arrow.down.fill", action: .save),
-         Row(title: "Send via iMessage...", symbol: "message.fill", action: .message)],
-        [Row(title: "Send To…", symbol: "paperplane.fill", action: .sendToEasel),
-         Row(title: "New Easel", symbol: "pencil.and.scribble", action: .newEasel)],
-        [Row(title: "Retake", symbol: "arrow.counterclockwise", action: .retake)],
-    ]
 
+    private let easels: [CaptureMenuLayout.Destination]
+    /// The page's height inside its margins: the menu lists only the easels that fit.
+    private let maxHeight: CGFloat
+    private var sections: [[CaptureMenuLayout.Row]]
+    private var rows: [CaptureMenuLayout.Row] = []
     private var rowViews: [CaptureMenuRow] = []
+    private var lines: [NSView] = []
+    private let fieldBox = NSView()
+    private let field = NSTextField()
     private var selected: Int? { didSet { for (i, r) in rowViews.enumerated() { r.highlighted = i == selected } } }
     private let choose: (CaptureOverlay.Action) -> Void
+    /// Escape in the field.
+    var onCancel: () -> Void = {}
 
-    init(choose: @escaping (CaptureOverlay.Action) -> Void) {
+    init(easels: [CaptureMenuLayout.Destination], maxHeight: CGFloat = .infinity, choose: @escaping (CaptureOverlay.Action) -> Void) {
+        self.easels = easels
+        self.maxHeight = maxHeight
         self.choose = choose
+        sections = CaptureMenuLayout.sections(easels: easels, maxHeight: maxHeight)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = CaptureStyle.menuFill.cgColor
@@ -855,36 +899,92 @@ final class CaptureMenu: NSView {
             s.shadowOffset = NSSize(width: 0, height: -4)
             return s
         }()
-        var y = Self.padding
-        for (si, section) in Self.sections.enumerated() {
-            if si > 0 {
-                let line = NSView(frame: NSRect(x: 10, y: y + 3.5, width: Self.width - 20, height: 0.5))
-                line.wantsLayer = true
-                line.layer?.backgroundColor = CaptureStyle.menuDivider.cgColor
-                addSubview(line)
-                y += Self.sectionGap
-            }
-            for row in section {
-                let index = rowViews.count
-                let v = CaptureMenuRow(row: row) { [weak self] in self?.choose(row.action) }
-                v.onHover = { [weak self] inside in
-                    if inside { self?.selected = index } else if self?.selected == index { self?.selected = nil }
-                }
-                v.frame = NSRect(x: 0, y: y, width: Self.width, height: Self.rowHeight)
-                addSubview(v)
-                rowViews.append(v)
-                y += Self.rowHeight
-            }
-        }
+        let m = CaptureMenuLayout.self
+        fieldBox.wantsLayer = true
+        fieldBox.layer?.backgroundColor = CaptureStyle.menuField.cgColor
+        fieldBox.layer?.cornerRadius = 7
+        fieldBox.layer?.cornerCurve = .continuous
+        fieldBox.frame = NSRect(x: m.fieldInset, y: m.fieldTop, width: m.width - 2 * m.fieldInset, height: m.fieldHeight)
+        addSubview(fieldBox)
+        let font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = font
+        field.textColor = CaptureStyle.menuText
+        field.placeholderAttributedString = NSAttributedString(string: "Send To…", attributes: [.font: font, .foregroundColor: CaptureStyle.menuPrompt])
+        field.cell?.usesSingleLineMode = true
+        field.cell?.lineBreakMode = .byTruncatingTail
+        field.delegate = self
+        field.setAccessibilityLabel("Send To")
+        let fh = ceil(field.intrinsicContentSize.height)
+        field.frame = NSRect(x: 8, y: ((m.fieldHeight - fh) / 2).rounded(), width: fieldBox.frame.width - 16, height: fh)
+        fieldBox.addSubview(field)
+        rebuild()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
 
+    private static func symbol(_ item: CaptureMenuLayout.Item) -> String {
+        switch item {
+        case .copy: "doc.on.doc.fill"
+        case .save: "square.and.arrow.down.fill"
+        case .message: "message.fill"
+        case .retake: "arrow.counterclockwise"
+        case .newEasel: "plus"
+        case .easel: "scribble"
+        }
+    }
+
+    private static func action(_ item: CaptureMenuLayout.Item) -> CaptureOverlay.Action {
+        switch item {
+        case .copy: .copy
+        case .save: .save
+        case .message: .message
+        case .retake: .retake
+        case .newEasel: .newEasel
+        case .easel(let id): .sendToEasel(id)
+        }
+    }
+
+    /// The rows for what is typed, laid out under the field.
+    private func rebuild() {
+        rowViews.forEach { $0.removeFromSuperview() }
+        lines.forEach { $0.removeFromSuperview() }
+        rowViews = []
+        lines = []
+        rows = []
+        let m = CaptureMenuLayout.self
+        var y = m.header
+        for (si, section) in sections.enumerated() {
+            if si > 0 {
+                let line = NSView(frame: NSRect(x: 10, y: y + 4.25, width: m.width - 20, height: 0.5))
+                line.wantsLayer = true
+                line.layer?.backgroundColor = CaptureStyle.menuDivider.cgColor
+                addSubview(line)
+                lines.append(line)
+                y += m.sectionGap
+            }
+            for row in section {
+                let index = rowViews.count
+                let v = CaptureMenuRow(title: row.title, symbol: Self.symbol(row.item)) { [weak self] in self?.choose(Self.action(row.item)) }
+                v.onHover = { [weak self] inside in
+                    if inside { self?.selected = index } else if self?.selected == index { self?.selected = nil }
+                }
+                v.frame = NSRect(x: 0, y: y, width: m.width, height: m.rowHeight)
+                addSubview(v)
+                rowViews.append(v)
+                rows.append(row)
+                y += m.rowHeight
+            }
+        }
+        selected = nil
+    }
+
     override var intrinsicContentSize: NSSize {
-        let rows = Self.sections.reduce(0) { $0 + $1.count }
-        return NSSize(width: Self.width, height: Self.padding * 2 + CGFloat(rows) * Self.rowHeight + CGFloat(Self.sections.count - 1) * Self.sectionGap)
+        NSSize(width: CaptureMenuLayout.width, height: CaptureMenuLayout.height(sections))
     }
 
     func appear() {
@@ -895,19 +995,79 @@ final class CaptureMenu: NSView {
         }
     }
 
+    /// The field takes the keyboard, as Arc's does when the menu shows: on the next turn of the
+    /// run loop, once the menu is in its window for good. A menu dropped before then (a retake,
+    /// the mode ending) never starts a text editor, which a window being closed would hold on to.
+    func focus() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window, window.isVisible, self.superview != nil else { return }
+            window.makeFirstResponder(self.field)
+        }
+    }
+    var hasKeyboard: Bool { field.currentEditor() != nil }
+
     func run(_ action: CaptureOverlay.Action) { choose(action) }
 
-    /// ↑ ↓ pick a row, Return runs it.
-    func handleKey(_ event: NSEvent) -> Bool {
-        switch event.keyCode {
-        case 125: selected = selected.map { min($0 + 1, rowViews.count - 1) } ?? 0; return true
-        case 126: selected = selected.map { max($0 - 1, 0) } ?? rowViews.count - 1; return true
-        case 36, 76:
-            guard let i = selected else { return false }
-            rowViews[i].run()
-            return true
+    // MARK: Typing
+
+    func controlTextDidChange(_ obj: Notification) { narrow() }
+
+    private func narrow() {
+        sections = CaptureMenuLayout.sections(easels: easels, filter: field.stringValue, maxHeight: maxHeight)
+        rebuild()
+        // The menu keeps its top (its view counts down from there) and ends under its last row.
+        frame.size.height = intrinsicContentSize.height
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.moveDown(_:)): move(1); return true
+        case #selector(NSResponder.moveUp(_:)): move(-1); return true
+        case #selector(NSResponder.insertNewline(_:)): return runSelected()
+        case #selector(NSResponder.cancelOperation(_:)): onCancel(); return true
         default: return false
         }
+    }
+
+    private func move(_ by: Int) {
+        guard !rowViews.isEmpty else { return }
+        if let i = selected { selected = min(max(i + by, 0), rowViews.count - 1) } else { selected = by > 0 ? 0 : rowViews.count - 1 }
+    }
+
+    /// Return: the picked row, or the first one left once something is typed.
+    private func runSelected() -> Bool {
+        if let i = selected { rowViews[i].run(); return true }
+        guard let row = CaptureMenuLayout.defaultRow(sections, filter: field.stringValue) else { return false }
+        choose(Self.action(row.item))
+        return true
+    }
+
+    /// ↑ ↓ pick a row, Return runs it (while the picture, not the field, has the keyboard).
+    func handleKey(_ event: NSEvent) -> Bool {
+        switch event.keyCode {
+        case 125: move(1); return true
+        case 126: move(-1); return true
+        case 36, 76: return runSelected()
+        default: return false
+        }
+    }
+
+    // MARK: Test hooks
+
+    var debugRows: String {
+        sections.map { $0.map(\.title).joined(separator: "|") }.joined(separator: "|—|")
+    }
+
+    func debugType(_ text: String) {
+        guard field.stringValue != text else { return }
+        field.stringValue = text
+        narrow()
+    }
+
+    func debugRun(_ title: String) -> Bool {
+        guard let i = rows.firstIndex(where: { $0.title == title }) else { return false }
+        rowViews[i].run()
+        return true
     }
 }
 
@@ -919,22 +1079,23 @@ final class CaptureMenuRow: NSView {
     var onHover: ((Bool) -> Void)?
     var highlighted = false { didSet { paint() } }
 
-    init(row: CaptureMenu.Row, action: @escaping () -> Void) {
+    init(title: String, symbol: String, action: @escaping () -> Void) {
         self.action = action
-        label = NSTextField(labelWithString: row.title)
+        label = NSTextField(labelWithString: title)
         super.init(frame: .zero)
         wantsLayer = true
         fill.cornerRadius = 6
         fill.cornerCurve = .continuous
         layer?.addSublayer(fill)
-        icon.image = NSImage(systemSymbolName: row.symbol, accessibilityDescription: nil)?
+        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
         icon.imageScaling = .scaleNone
         label.font = .systemFont(ofSize: 14, weight: .medium)
         addSubview(icon)
         addSubview(label)
         setAccessibilityRole(.button)
-        setAccessibilityLabel(row.title)
+        setAccessibilityLabel(title)
+        label.lineBreakMode = .byTruncatingTail
         paint()
     }
 
@@ -948,6 +1109,8 @@ final class CaptureMenuRow: NSView {
         fill.frame = bounds.insetBy(dx: 5, dy: 2)
         icon.frame = NSRect(x: 25 - 10, y: (bounds.height - 20) / 2, width: 20, height: 20)
         label.sizeToFit()
+        // A long easel name ends in an ellipsis inside the menu.
+        label.frame.size.width = min(label.frame.width, bounds.width - 41 - 14)
         label.frame.origin = NSPoint(x: 41, y: ((bounds.height - label.frame.height) / 2).rounded())
     }
 

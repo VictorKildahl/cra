@@ -58,9 +58,12 @@ final class EaselCanvasView: NSView {
         self.document = document
         store = EaselFiles.store(document.id)
         // A new easel is on disk from the start, so Library ▸ Easels lists it.
-        if !FileManager.default.fileExists(atPath: store.url.path) { store.saveNow(document) }
+        let isNew = !FileManager.default.fileExists(atPath: store.url.path)
+        if isNew { store.saveNow(document) }
         sheet = EaselSheetView(document: document)
         super.init(frame: .zero)
+        EaselFiles.opened(self)
+        if isNew { EaselFiles.listChanged() }
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor
         scroll.drawsBackground = false
@@ -72,13 +75,18 @@ final class EaselCanvasView: NSView {
         sheet.onChange = { [weak self] doc in self?.changed(doc) }
         sheet.onToolDone = { [weak self] in self?.toolbar.tool = .pointer; self?.sheet.tool = .pointer }
         toolbar.onDuplicate = { [weak self] in self?.sheet.duplicateSelected() }
-        toolbar.onPick = { [weak self] tool in
+        let pick: (Easel.Tool) -> Void = { [weak self] tool in
             guard let self else { return }
             if tool == .image { self.sheet.addPictureFromFile(); return }
             self.sheet.tool = tool
             self.toolbar.tool = tool
         }
+        toolbar.onPick = pick
+        // A tool's key, pressed on the canvas, picks it as a click on its button does.
+        sheet.onToolKey = pick
     }
+
+    var toolbarView: EaselToolbar { toolbar }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -90,7 +98,10 @@ final class EaselCanvasView: NSView {
         document = doc
         guard !EaselFiles.deleted.contains(doc.id) else { return }
         store.save(doc)
-        if renamed { onTitle(doc.title) }
+        if renamed {
+            onTitle(doc.title)
+            EaselFiles.listChanged()
+        }
     }
 
     /// A deleted easel's tab, closing, writes nothing back.
@@ -114,9 +125,8 @@ final class EaselCanvasView: NSView {
         scroll.frame = bounds
         sheet.frame = NSRect(x: 0, y: 0, width: max(bounds.width - (scroll.verticalScroller?.frame.width ?? 0) * 0, 300),
                              height: Easel.canvasHeight)
-        let n = CGFloat(Easel.Tool.allCases.count + 1)  // the tools, then Duplicate
-        let w = 4 + n * 38 - 2 + 4
-        toolbar.frame = NSRect(x: 16, y: bounds.height - 16 - 44, width: w, height: 44)
+        toolbar.frame = NSRect(x: 16, y: bounds.height - 16 - EaselToolbarLayout.height,
+                               width: EaselToolbarLayout.width, height: EaselToolbarLayout.height)
     }
 }
 
@@ -127,6 +137,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     var tool: Easel.Tool = .pointer { didSet { window?.invalidateCursorRects(for: self); placeColorPicker() } }
     var onChange: (Easel) -> Void = { _ in }
     var onToolDone: () -> Void = {}
+    /// A tool's key was pressed (Arc: V, I, T, O, R, A, P), or Escape with a tool in hand.
+    var onToolKey: (Easel.Tool) -> Void = { _ in }
     private let title = EaselTextField()
     private var texts: [UUID: NSTextField] = [:]
     private var selected: UUID? { didSet { if selected != nil { titlePicked = false }; needsDisplay = true; placeSizePill(); window?.invalidateCursorRects(for: self) } }
@@ -528,9 +540,24 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
             deleteSelected()
         } else if event.keyCode == 53 {
             selected = nil
+            // Arc: Escape with a tool in hand goes back to the pointer.
+            if tool != .pointer { onToolKey(.pointer) }
+        } else if let picked = Easel.Tool.picked(byKey: event.charactersIgnoringModifiers ?? "",
+                                                 command: event.modifierFlags.contains(.command),
+                                                 control: event.modifierFlags.contains(.control),
+                                                 option: event.modifierFlags.contains(.option)) {
+            onToolKey(picked)
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    /// A capture sent here from a page (the capture menu's row for this easel): on the canvas at
+    /// once, picked, and in view.
+    func insert(_ item: Easel.Item) {
+        commit("Add Capture") { $0.items.append(item) }
+        selected = item.id
+        scrollToVisible(rect(item.frame).insetBy(dx: -40, dy: -40))
     }
 
     func deleteSelected() {
@@ -1169,38 +1196,78 @@ final class EaselToolbar: NSView {
     private static let bar = NSColor(srgbRed: 0.06, green: 0.05, blue: 0.0, alpha: 0.96)
     private static let picked = NSColor(white: 1, alpha: 0.22)
     private static let glyph = NSColor(white: 1, alpha: 0.92)
+    // Arc 1.173.1 on a purple space (17 Nov 2026): bar #080913, picked #4E4F7F, under the
+    // pointer #393A58, the line before Duplicate #20212A. Here as the same steps over Cra's bar.
+    private static let hover = NSColor(white: 1, alpha: 0.145)
+    private static let line = NSColor(white: 1, alpha: 0.1)
+
+    /// The button under the pointer (Arc: a darker fill than the picked tool's, and the tool's key).
+    private(set) var hovered: EaselToolbarLayout.Item? { didSet { if hovered != oldValue { needsDisplay = true } } }
 
     override var isFlipped: Bool { true }
 
     override var mouseDownCanMoveWindow: Bool { false }
 
-    private func buttonRect(_ i: Int) -> NSRect { NSRect(x: 4 + CGFloat(i) * 38, y: 4, width: 36, height: 36) }
-
     override func draw(_ dirtyRect: NSRect) {
         Self.bar.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
-        for (i, t) in Easel.Tool.allCases.enumerated() {
-            let r = buttonRect(i)
-            if t == tool {
-                Self.picked.setFill()
+        Self.line.setFill()
+        EaselToolbarLayout.divider.fill()
+        let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold).applying(.init(paletteColors: [Self.glyph]))
+        for item in EaselToolbarLayout.items {
+            let r = EaselToolbarLayout.rect(of: item)
+            let look = EaselToolbarLayout.look(of: item, picked: tool, hovered: hovered)
+            if look.fill != .none {
+                (look.fill == .picked ? Self.picked : Self.hover).setFill()
                 NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill()
             }
-            let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold).applying(.init(paletteColors: [Self.glyph]))
-            guard let img = NSImage(systemSymbolName: Self.symbols[t] ?? "circle", accessibilityDescription: Self.names[t])?
-                .withSymbolConfiguration(config) else { continue }
-            img.draw(in: NSRect(x: r.midX - img.size.width / 2, y: r.midY - img.size.height / 2, width: img.size.width, height: img.size.height))
-        }
-        let dr = buttonRect(Easel.Tool.allCases.count)
-        let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold).applying(.init(paletteColors: [Self.glyph]))
-        if let img = NSImage(systemSymbolName: "square.on.square", accessibilityDescription: "Duplicate")?.withSymbolConfiguration(config) {
-            img.draw(in: NSRect(x: dr.midX - img.size.width / 2, y: dr.midY - img.size.height / 2, width: img.size.width, height: img.size.height))
+            let symbol: String, name: String?
+            switch item {
+            case .tool(let t): (symbol, name) = (Self.symbols[t] ?? "circle", Self.names[t])
+            case .duplicate: (symbol, name) = ("square.on.square", "Duplicate")
+            }
+            if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: name)?.withSymbolConfiguration(config) {
+                img.draw(in: NSRect(x: r.midX - img.size.width / 2, y: r.midY - img.size.height / 2, width: img.size.width, height: img.size.height))
+            }
+            if let hint = look.hint {
+                let font = NSFont.systemFont(ofSize: EaselToolbarLayout.hintSize, weight: .bold)
+                let text = NSAttributedString(string: hint, attributes: [.font: font, .foregroundColor: Self.glyph])
+                let baseline = r.maxY - EaselToolbarLayout.hintBaseline
+                text.draw(at: NSPoint(x: r.maxX - EaselToolbarLayout.hintTrailing - text.size().width, y: baseline - font.ascender))
+            }
         }
     }
 
     override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        for (i, t) in Easel.Tool.allCases.enumerated() where buttonRect(i).contains(p) { onPick(t) }
-        if buttonRect(Easel.Tool.allCases.count).contains(p) { onDuplicate() }
+        switch EaselToolbarLayout.item(at: convert(event.locationInWindow, from: nil)) {
+        case .tool(let t)?: onPick(t)
+        case .duplicate?: onDuplicate()
+        case nil: break
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hover(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) { hover(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { hovered = nil }
+
+    /// The pointer at `point` (the toolbar's coordinates), or gone (nil). Also the test hook's way in.
+    func hover(at point: NSPoint?) { hovered = point.flatMap { EaselToolbarLayout.item(at: $0) } }
+
+    /// For cra.log: the picked tool, the button under the pointer and each letter that shows.
+    var debugLine: String {
+        let hints = EaselToolbarLayout.items.compactMap { EaselToolbarLayout.look(of: $0, picked: tool, hovered: hovered).hint }
+        let over: String = switch hovered {
+        case .tool(let t)?: t.rawValue
+        case .duplicate?: "duplicate"
+        case nil: "none"
+        }
+        return "picked=\(tool.rawValue) hover=\(over) letters=\(hints.joined(separator: ","))"
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

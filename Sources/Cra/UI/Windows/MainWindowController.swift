@@ -2764,10 +2764,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// (a new one when it has none open).
     private func sendCapture(_ png: Data, toEasel id: UUID, source: Easel.Capture? = nil) {
         guard EaselFiles.add(picture: png, to: id, source: source) else { return }
-        CraLog.note("capture sent to an easel, which now holds \(EaselFiles.load(id).items.count) items")
+        CraLog.note("capture sent to an easel, which now holds \(EaselFiles.current(id).items.count) items")
         let url = Easel(id: id).url
         if let tab = store.allTabs().first(where: { $0.tab?.url == url }) {
-            browsers.unload(tab.id)  // opened again from the file, picture included
+            // An easel open in a tab took the capture on its canvas (EaselFiles.add): unloading it
+            // would save what it showed before over the file. One asleep opens from the file.
+            if EaselFiles.canvas(for: id) == nil { browsers.unload(tab.id) }
             store.selectTab(tab.id, window: windowID)
             refresh()
         } else {
@@ -2800,17 +2802,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func captureSource(_ b: CraBrowser, rect: CGRect, page: CGSize, done: @escaping (Easel.Capture?) -> Void) {
         let url = b.currentURL, title = b.currentTitle
         guard Easel.webAddress(url) != nil else { done(nil); return }
+        // Without the page's answer the capture keeps its address and title, and can't go live.
+        let plain = Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date())
+        var answered = false
+        let finish: (Easel.Capture) -> Void = { capture in
+            guard !answered else { return }
+            answered = true
+            done(capture)
+        }
+        // Chromium holds a page's answers back while its next address hasn't responded ("Still
+        // waiting for … to respond"), so the capture waited for ever and no easel was made. The
+        // picture is already taken: after the deadline it goes on without the page's scroll.
+        DispatchQueue.main.asyncAfter(deadline: .now() + ContentCapture.sourceAnswerWait) {
+            if !answered { CraLog.note("capture: the page didn't say where it is scrolled, sent without") }
+            finish(plain)
+        }
         let script = "[scrollX, scrollY, innerWidth, innerHeight]"
         let params = (try? JSONSerialization.data(withJSONObject: ["expression": script, "returnByValue": true])).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         b.sendDevToolsMethod("Runtime.evaluate", params: params) { result, _ in
             let v = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 .flatMap { ($0["result"] as? [String: Any])?["value"] as? [Double] }
             DispatchQueue.main.async {
-                guard let v, v.count == 4, page.width > 0 else { done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date())); return }
+                guard let v, v.count == 4, page.width > 0 else { finish(plain); return }
                 let k = v[2] / page.width  // CSS pixels per point (the page's zoom)
-                done(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date(),
-                                   viewport: .init(v[2], v[3]), scroll: .init(v[0], v[1]),
-                                   area: .init(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k)))
+                finish(Easel.Capture(url: url, title: title.isEmpty ? nil : title, image: "", captured: Date(),
+                                     viewport: .init(v[2], v[3]), scroll: .init(v[0], v[1]),
+                                     area: .init(x: rect.minX * k, y: rect.minY * k, width: rect.width * k, height: rect.height * k)))
             }
         }
     }
@@ -2818,7 +2835,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The capture menu's choice, once the overlay is down.
     func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil,
                          from: (browser: CraBrowser, rect: CGRect, page: CGSize)? = nil) {
-        if action == .newEasel || action == .sendToEasel, let from, let png {
+        if action?.goesToAnEasel == true, let from, let png {
             captureSource(from.browser, rect: from.rect, page: from.page) { [weak self] source in
                 self?.captureFinished(action, png, in: peek, source: source)
             }
@@ -2847,18 +2864,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .newEasel?:
             guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
-        case .sendToEasel?:
+        case .sendToEasel(let id)?:
             guard let png else { return }
-            let easels = EaselFiles.all()
-            guard !easels.isEmpty else {
-                if let easel = EaselFiles.create(withPicture: png, source: source) { _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID) }
-                return
-            }
-            let menu = NSMenu()
-            for e in easels {
-                MenuItems.add(menu, e.title) { [weak self] in self?.sendCapture(png, toEasel: e.id, source: source) }
-            }
-            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+            sendCapture(png, toEasel: id, source: source)
         case .retake?:
             capturePage(in: peek)
         case nil:

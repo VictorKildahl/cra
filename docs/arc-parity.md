@@ -243,6 +243,46 @@ The easel file: items Cra 0.1.40 can read stay in `items`; link cards and captur
 fails on a kind it doesn't know, and would show the easel empty); each item carries `z`, its place in the stack
 (fixtures `easel-0140.json` and `easel.json` in CraCore's Fixtures/Model).
 
+## Capture menu, measured (Arc 1.173.1, 17 Nov 2026)
+
+Read from a 2x still of the menu beside a capture, with two easels ("Test", "Movies") in the library
+(CraCore `CaptureMenuLayout`; the app's `CaptureMenu`).
+
+- 273 pt wide and, with nine rows, 433 pt tall: a field 12 pt down, 30 pt tall and 10 pt in from both
+  sides, with the prompt "Send To…" and the caret in it as the menu shows; the first row 7.5 pt under it;
+  40 pt rows; sections 9 pt apart; 5.5 pt under the last row.
+- Rows: Save to Library, Copy, Save..., Send via iMessage... | Edit, Retake | New Easel (a plus), then
+  each easel by name with the easel squiggle. An easel is picked in the menu itself: there is no
+  "Send To…" row opening a second list, which is what Cra had.
+- Cra: the same field and rows without Save to Library and Edit (no counterpart yet). Typing narrows
+  every row by its title, Return runs the picked row or the first one left, ↑ ↓ move, Escape ends the
+  mode. At most eight easels are listed, the latest edited first; typing reaches the others. What the
+  field does in Arc wasn't tried (Arc can only be looked at here), so the narrowing is Cra's reading
+  of it.
+- A capture sent to an easel that is open in a tab goes onto its canvas, which shows and saves it.
+  Before, it was written to the easel's file and the tab then saved its older copy over it, so the
+  capture never showed. Library ▸ Easels now follows an easel made, renamed or deleted while it shows.
+
+## Easel toolbar, measured (Arc 1.173.1, 17 Nov 2026)
+
+Read from 2x captures of a purple space's easel with the pointer over each button in turn, and from
+key presses on the canvas (CraCore `EaselToolbarLayout`, `Easel.Tool.key`; the app's `EaselToolbar`).
+
+- The bar is 44 pt tall, its 36 pt buttons 38 pt apart and 4 pt in. After Freehand comes a 5 pt gap
+  with a 1 pt line in its middle (#20212A on the bar's #080913), then Duplicate, 4 pt from the end:
+  313 pt in all.
+- The picked tool sits on #4E4F7F. A button under the pointer gets a darker fill, #393A58, Duplicate
+  too; the picked tool's fill doesn't change under the pointer. Cra's bar keeps its own fixed colours,
+  so the two fills are the same steps over it (white at 22 % and 14.5 %).
+- A tool under the pointer, and the picked tool, show their key in the button's bottom right corner:
+  a bold lowercase letter of about 10 pt, its right edge 5.5 pt in and its baseline 4.2 pt up. Image
+  i, Text t, Ellipse o, Rectangle r, Arrow a, Freehand p. The Pointer's button and Duplicate show none.
+- With the canvas holding the keyboard, R picked the rectangle, O the ellipse and V the pointer, and
+  Escape went from Freehand back to the pointer. I, T, A and P are taken from the letters drawn; they
+  weren't each pressed. Nothing happens until the canvas has been clicked.
+- Not measured: whether ⇧ with a letter picks the tool (Cra takes either case), and Arc's own cursors
+  per tool (its bundle has Pencil, Shape, Text and Arrow cursor pictures; Cra uses the system's).
+
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 
 - The command bar's "New Boost" opens the editor for the open site: a 183 × 588 pt floating panel 10 pt in
@@ -359,6 +399,12 @@ fails on a kind it doesn't know, and would show the easel empty); each item carr
   AirDrop, —, Show in Finder, —, Hide from Arc (Cra: "Hide from Cra"; the file stays on disk).
 - The selected rail page's glyph and the Spaces page's + take the space's colours (an olive space: a
   cream disc with a dark mark), not a fixed blue.
+- An easel's tile under the pointer (Arc 1.173.1, a 120 Hz screen recording read frame by frame,
+  17 Nov 2026): the tile grows about its centre from 128.6 to 136.3 pt (× 1.06; the edges read to
+  about ± 0.5 px, so 1.0625 nearly fits too) in 0.1 s, fast first with no overshoot, and its backing
+  stands twice as far from the sidebar's colour; the same way back when the pointer leaves. Cra:
+  CraCore EaselTileHover; the list leaves the top row's tiles room to grow. Not found in Arc's binary:
+  the constant itself (its code holds 1.06 once, in an unrelated angle).
 - Boost rows: the site's icon on a 43 pt light tile with a white rim, name 14 pt over the site; under
   the pointer a rounded card and a 36 × 22 pt switch; off = the tile struck through; right-click
   Rename (in place), Delete.

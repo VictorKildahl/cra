@@ -9,6 +9,8 @@ final class JSONStore<T: Codable> {
 @MainActor
 enum EaselFiles {
     static var deleted: Set<UUID> = []
+    static func opened(_ canvas: EaselCanvasView) {}
+    static func listChanged() {}
     static func store(_ id: UUID) -> JSONStore<Easel> { JSONStore() }
     static func pictures(_ id: UUID) -> URL { URL(fileURLWithPath: NSTemporaryDirectory()) }
 }
