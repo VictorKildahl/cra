@@ -2359,13 +2359,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.debugNewSpacePull(Double(pull).map { CGFloat($0) }, lift: pull == "lift" || dict["lift"] != nil)
                 return
             }
+            // spaceCreation=state|type:<name>|icon:<emoji>|theme:<n>|profile:<n>|engine:<keyword>|create|cancel: Arc's
+            // Create a Space page, one step on it, and what it and the dock then show.
+            if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
                 return
             }
-            // spaceCreation=state|type:<name>|icon:<emoji>|theme:<n>|profile:<n>|create|cancel: Arc's
-            // Create a Space page, one step on it, and what it and the dock then show.
-            if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }
             // What the side panel's close button does (scripts/scenario.sh).
             if dict["sidePanel"] == "close" { main.sidePanel.hide(); return }

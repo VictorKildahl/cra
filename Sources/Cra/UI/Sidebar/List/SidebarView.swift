@@ -186,6 +186,54 @@ final class SidebarView: NSView {
         needsLayout = true
     }
 
+    // MARK: Create a Space
+
+    private func observeCreation() {
+        observeChanges(of: { [ui] in ui.spaceCreation != nil }) { [weak self] on in self?.showCreation(on) }
+    }
+
+    /// Where the page goes: the room between the top row and the dock (Arc's ends 50 pt above the
+    /// sidebar's bottom).
+    private var creationFrame: NSRect {
+        let b = tabs.bounds, top = topBar.preferredHeight
+        return NSRect(x: 0, y: top, width: b.width, height: max(0, b.height - 50 - top))
+    }
+
+    /// Arc pushes the page in from the right as the space's column leaves to the left (about 0.2 s),
+    /// and the column back in from the left on the way out (about 0.1 s).
+    private func showCreation(_ on: Bool) {
+        if on, creationHost == nil {
+            let v = SpaceCreationView(store: store, ui: ui, actions: actions, palette: palette)
+            tabs.addSubview(v)
+            creationHost = v
+            let f = creationFrame, was = pager.frame
+            v.frame = f.offsetBy(dx: f.width, dy: 0)
+            v.layoutSubtreeIfNeeded()
+            for other in [player, trayHost, bannerHost] as [NSView] { other.alphaValue = 0 }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                v.animator().frame = f
+                pager.animator().frame = was.offsetBy(dx: -was.width, dy: 0)
+            }
+            v.focusName()
+        } else if !on, let v = creationHost {
+            creationHost = nil
+            let f = v.frame, home = NSRect(x: 0, y: pager.frame.minY, width: pager.frame.width, height: pager.frame.height)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                v.animator().frame = f.offsetBy(dx: f.width, dy: 0)
+                v.animator().alphaValue = 0
+                pager.animator().frame = home
+                for other in [player, trayHost, bannerHost] as [NSView] { other.animator().alphaValue = 1 }
+            } completionHandler: {
+                v.removeFromSuperview()
+            }
+            needsLayout = true
+        }
+    }
+
     private var bannerHeight: CGFloat = 0
 
     /// DownloadsTrayMask: the tab list is hidden from 3 pt above the downloads list's first row
@@ -249,54 +297,6 @@ final class SidebarView: NSView {
             } completionHandler: {
                 host.removeFromSuperview()
             }
-        }
-    }
-
-    // MARK: Create a Space
-
-    private func observeCreation() {
-        observeChanges(of: { [ui] in ui.spaceCreation != nil }) { [weak self] on in self?.showCreation(on) }
-    }
-
-    /// Where the page goes: the room between the top row and the dock (Arc's ends 50 pt above the
-    /// sidebar's bottom).
-    private var creationFrame: NSRect {
-        let b = tabs.bounds, top = topBar.preferredHeight
-        return NSRect(x: 0, y: top, width: b.width, height: max(0, b.height - 50 - top))
-    }
-
-    /// Arc pushes the page in from the right as the space's column leaves to the left (about 0.2 s),
-    /// and the column back in from the left on the way out (about 0.1 s).
-    private func showCreation(_ on: Bool) {
-        if on, creationHost == nil {
-            let v = SpaceCreationView(store: store, ui: ui, actions: actions, palette: palette)
-            tabs.addSubview(v)
-            creationHost = v
-            let f = creationFrame, was = pager.frame
-            v.frame = f.offsetBy(dx: f.width, dy: 0)
-            v.layoutSubtreeIfNeeded()
-            for other in [player, trayHost, bannerHost] as [NSView] { other.alphaValue = 0 }
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                v.animator().frame = f
-                pager.animator().frame = was.offsetBy(dx: -was.width, dy: 0)
-            }
-            v.focusName()
-        } else if !on, let v = creationHost {
-            creationHost = nil
-            let f = v.frame, home = NSRect(x: 0, y: pager.frame.minY, width: pager.frame.width, height: pager.frame.height)
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.12
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                v.animator().frame = f.offsetBy(dx: f.width, dy: 0)
-                v.animator().alphaValue = 0
-                pager.animator().frame = home
-                for other in [player, trayHost, bannerHost] as [NSView] { other.animator().alphaValue = 1 }
-            } completionHandler: {
-                v.removeFromSuperview()
-            }
-            needsLayout = true
         }
     }
 

@@ -69,6 +69,46 @@ struct SpaceCreationTests {
         #expect(f.title.minY == 98 && f.subtitle.minY == 128)
     }
 
+    /// Arc's SwiftUI page compares its width with 227 and 190.
+    @Test func thePageHasThreeLayoutsByWidth() {
+        typealias D = SpaceCreationLayout.Density
+        #expect(D(sidebarWidth: 250) == .wide && D(sidebarWidth: 227.5) == .wide)
+        #expect(D(sidebarWidth: 227) == .medium && D(sidebarWidth: 190.5) == .medium)
+        #expect(D(sidebarWidth: 190) == .narrow && D(sidebarWidth: 165) == .narrow)
+        #expect(D.wide.showsRowGlyphs && !D.medium.showsRowGlyphs && !D.narrow.showsRowGlyphs)
+        #expect(D.wide.rowLabelInset == 32 && D.medium.rowLabelInset == 16 && D.narrow.rowLabelInset == 16)
+        #expect(!D.wide.stacksPills && !D.medium.stacksPills && D.narrow.stacksPills)
+        #expect(D.wide.subtitle.contains("\n") && D.medium.subtitle.contains("\n") && !D.narrow.subtitle.contains("\n"))
+    }
+
+    /// A 165 pt sidebar, measured: the subtitle on three lines, the Profile row 60 pt tall.
+    @Test func aNarrowSidebarStacksTheProfileRowUnderALongerSubtitle() {
+        let f = SpaceCreationLayout.frames(in: CGSize(width: 165, height: 1155), subtitleLines: 3)
+        #expect(f.subtitle.height == 49.5)
+        let field = CGRect(x: 13.5, y: 205.5, width: 138, height: 35)
+        #expect(f.field == field)
+        #expect(f.profile.height == 60 && f.theme.height == 36 && f.search.height == 60)
+        #expect(f.theme.minY == f.profile.maxY + 7)
+        let pill = SpaceCreationLayout.pillFrame(row: f.profile.size, labelEnd: 62, fits: 70, trailing: 30, stacked: true)
+        let stacked = CGRect(x: 8, y: 29, width: 122, height: 23)
+        #expect(pill == stacked)
+    }
+
+    @Test func aPillStandsAGapAfterItsLabelAndNeverRunsPastTheRow() {
+        let row = CGSize(width: 223, height: 36)
+        let pill = SpaceCreationLayout.pillFrame(row: row, labelEnd: 78, fits: 70, trailing: 30, stacked: false)
+        let beside = CGRect(x: 85.5, y: 7.25, width: 70, height: 21.5)
+        #expect(pill == beside)
+        // A long name is cut to what the row has left.
+        let long = SpaceCreationLayout.pillFrame(row: row, labelEnd: 120, fits: 140, trailing: 8, stacked: false)
+        #expect(long.minX == 127.5 && long.maxX == 215)
+        // Cra's Search Engine row stacks when its pill has no room beside the label.
+        #expect(!SpaceCreationLayout.pillFits(rowWidth: 223, labelEnd: 120, fits: 140, trailing: 8))
+        #expect(SpaceCreationLayout.pillFits(rowWidth: 301, labelEnd: 124, fits: 134, trailing: 8))
+        let f = SpaceCreationLayout.frames(in: CGSize(width: 250, height: 1155), searchStacked: true)
+        #expect(f.profile.height == 36 && f.search.height == 60)
+    }
+
     @Test func thePartsFollowTheSidebarsWidth() {
         let f = SpaceCreationLayout.frames(in: CGSize(width: 328, height: 700))
         #expect(f.field.width == 301 && f.create.width == 301)

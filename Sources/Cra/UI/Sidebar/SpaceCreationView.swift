@@ -161,23 +161,47 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
 
     override func layout() {
         super.layout()
-        let f = SpaceCreationLayout.frames(in: bounds.size)
+        // Arc's three layouts by the sidebar's width (SpaceCreationLayout.Density).
+        let density = SpaceCreationLayout.Density(sidebarWidth: bounds.width)
+        if subtitle.stringValue != density.subtitle { subtitle.stringValue = density.subtitle }
+        subtitle.maximumNumberOfLines = density == .narrow ? 4 : 2
+        let room = NSRect(x: 0, y: 0, width: max(0, bounds.width - 2 * SpaceCreationLayout.inset), height: 400)
+        let tall = subtitle.cell?.cellSize(forBounds: room).height ?? 2 * SpaceCreationLayout.subtitleLine
+        let lines = max(1, min(4, Int((tall / SpaceCreationLayout.subtitleLine).rounded())))
+        // Cra's Search Engine names are long: its pill goes under the label when it has no room beside it.
+        let rowWidth = max(0, bounds.width - 2 * SpaceCreationLayout.inset)
+        let searchStacked = density.stacksPills || !SpaceCreationLayout.pillFits(
+            rowWidth: rowWidth, labelEnd: density.rowLabelInset + searchRow.labelWidth, fits: enginePill.fittingWidth, trailing: 8)
+        let f = SpaceCreationLayout.frames(in: bounds.size, subtitleLines: lines, searchStacked: searchStacked)
         picture.frame = f.picture
         title.frame = f.title
         subtitle.frame = f.subtitle
+        for row in [profileRow, themeRow, searchRow] {
+            row.showsGlyph = density.showsRowGlyphs
+            row.labelInset = density.rowLabelInset
+        }
+        profileRow.labelCentre = density.stacksPills ? SpaceCreationLayout.stackedLabelCentre : nil
+        searchRow.labelCentre = searchStacked ? SpaceCreationLayout.stackedLabelCentre : nil
         fieldBox.frame = f.field
         iconButton.frame = f.icon.offsetBy(dx: -f.field.minX, dy: -f.field.minY)
         let x = SpaceCreationLayout.textInset
         name.frame = NSRect(x: x, y: (f.field.height - 18) / 2, width: f.field.width - x - 8, height: 18)
         profileRow.frame = f.profile
         themeRow.frame = f.theme
-        let pillWidth = pill.fittingWidth
-        pill.frame = NSRect(x: 78, y: (f.profile.height - SpaceCreationLayout.pillHeight) / 2, width: pillWidth, height: SpaceCreationLayout.pillHeight)
         let side = SpaceCreationLayout.infoSide + 4
-        info.frame = NSRect(x: f.profile.width - SpaceCreationLayout.infoInset - side + 2, y: (f.profile.height - side) / 2, width: side, height: side)
+        profileRow.layoutSubtreeIfNeeded()
+        // The (i) ends the row, or follows the label when the pill is under it.
+        let infoX = density.stacksPills ? profileRow.labelEnd + 5 : f.profile.width - SpaceCreationLayout.infoInset - side + 2
+        let infoY = (density.stacksPills ? SpaceCreationLayout.stackedLabelCentre : f.profile.height / 2) - side / 2
+        info.frame = NSRect(x: infoX, y: infoY, width: side, height: side)
+        pill.fills = density.stacksPills
+        pill.frame = SpaceCreationLayout.pillFrame(row: f.profile.size, labelEnd: profileRow.labelEnd, fits: pill.fittingWidth,
+                                                   trailing: SpaceCreationLayout.infoInset + side + 4, stacked: density.stacksPills)
         searchRow.frame = f.search
-        let engineWidth = min(enginePill.fittingWidth, f.search.width - 124 - 8)
-        enginePill.frame = NSRect(x: 124, y: (f.search.height - SpaceCreationLayout.pillHeight) / 2, width: engineWidth, height: SpaceCreationLayout.pillHeight)
+        searchRow.layoutSubtreeIfNeeded()
+        enginePill.fills = searchStacked
+        enginePill.frame = SpaceCreationLayout.pillFrame(row: f.search.size, labelEnd: searchRow.labelEnd, fits: enginePill.fittingWidth,
+                                                         trailing: 8, stacked: searchStacked)
         create.frame = f.create
         cancel.frame = f.cancel
         if !creating {
@@ -408,7 +432,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
     var debugLine: String {
         func r(_ f: NSRect) -> String { "\(Int(f.minX.rounded())),\(Int(f.minY.rounded())),\(Int(f.width.rounded()))x\(Int(f.height.rounded()))" }
         return "name=\"\(name.stringValue)\" keys=\(nameHasKeys ? 1 : 0) icon=\(iconButton.label) profile=\(pill.title) engine=\(enginePill.title)"
-            + " create=\(create.isOn ? "on" : "off") field=\(r(fieldBox.frame)) rows=\(r(profileRow.frame)),\(r(themeRow.frame)) button=\(r(create.frame))"
+            + " layout=\(SpaceCreationLayout.Density(sidebarWidth: bounds.width)) create=\(create.isOn ? "on" : "off") field=\(r(fieldBox.frame)) rows=\(r(profileRow.frame)),\(r(themeRow.frame)) button=\(r(create.frame))"
     }
 
     /// Typed into the name as the keyboard would.
@@ -518,6 +542,14 @@ final class SpaceCreationRow: NSView {
     private var rest = NSColor.clear, hover = NSColor.clear
     private var hovered = false { didSet { refresh() } }
     private var pressed = false { didSet { refresh() } }
+    /// Arc drops the glyph and starts the label 16 pt in once the sidebar is 227 pt or narrower.
+    var showsGlyph = true { didSet { if showsGlyph != oldValue { glyph.isHidden = !showsGlyph; needsLayout = true } } }
+    var labelInset: CGFloat = SpaceCreationLayout.rowLabelInset { didSet { if labelInset != oldValue { needsLayout = true } } }
+    /// The label's centre from the row's top when a pill stands under it; nil centres it in the row.
+    var labelCentre: CGFloat? { didSet { if labelCentre != oldValue { needsLayout = true } } }
+    /// Where the label ends, for what follows it, and how wide it is when nothing cuts it.
+    var labelEnd: CGFloat { label.frame.maxX }
+    var labelWidth: CGFloat { label.fittingSize.width }
 
     init(symbol: String, label text: String) {
         label = NSTextField(labelWithString: text)
@@ -528,6 +560,7 @@ final class SpaceCreationRow: NSView {
         glyph.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         glyph.symbolConfiguration = .init(pointSize: 12, weight: .semibold)
         label.font = .systemFont(ofSize: SpaceCreationLayout.textFont, weight: .semibold)
+        label.lineBreakMode = .byTruncatingTail
         addSubview(glyph)
         addSubview(label)
         setAccessibilityElement(true)
@@ -557,7 +590,8 @@ final class SpaceCreationRow: NSView {
         super.layout()
         glyph.frame = NSRect(x: SpaceCreationLayout.rowGlyphInset, y: (bounds.height - 16) / 2, width: 16, height: 16)
         label.sizeToFit()
-        label.frame.origin = NSPoint(x: SpaceCreationLayout.rowLabelInset, y: (bounds.height - label.frame.height) / 2)
+        let width = min(label.frame.width, max(0, bounds.width - labelInset - 6))
+        label.frame = NSRect(x: labelInset, y: (labelCentre ?? bounds.height / 2) - label.frame.height / 2, width: width, height: label.frame.height)
     }
 
     override func updateTrackingAreas() {
@@ -579,7 +613,9 @@ final class SpaceCreationRow: NSView {
 @MainActor
 final class SpaceCreationPill: NSView {
     var onClick: () -> Void = {}
-    var title = "Default" { didSet { label.stringValue = title; superview?.needsLayout = true } }
+    var title = "Default" { didSet { label.stringValue = title; superview?.superview?.needsLayout = true } }
+    /// As wide as its row, under the label: the chevron goes to its end (Arc at 190 pt and under).
+    var fills = false { didSet { if fills != oldValue { needsLayout = true } } }
     private let label = NSTextField(labelWithString: "Default")
     private let chevron = NSImageView()
 
@@ -587,6 +623,7 @@ final class SpaceCreationPill: NSView {
         super.init(frame: frame)
         wantsLayer = true
         label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.lineBreakMode = .byTruncatingTail
         chevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
         chevron.symbolConfiguration = .init(pointSize: 9, weight: .bold)
         addSubview(label)
@@ -612,8 +649,10 @@ final class SpaceCreationPill: NSView {
         super.layout()
         layer?.cornerRadius = bounds.height / 2
         label.sizeToFit()
-        label.frame.origin = NSPoint(x: 10, y: (bounds.height - label.frame.height) / 2)
-        chevron.frame = NSRect(x: label.frame.maxX + 5, y: (bounds.height - 10) / 2, width: 10, height: 10)
+        // A name longer than the pill is cut short; the chevron keeps its place at the end.
+        let width = min(label.frame.width, max(0, bounds.width - 10 - 5 - 10 - 9))
+        label.frame = NSRect(x: 10, y: (bounds.height - label.frame.height) / 2, width: width, height: label.frame.height)
+        chevron.frame = NSRect(x: fills ? bounds.width - 9 - 10 : label.frame.maxX + 5, y: (bounds.height - 10) / 2, width: 10, height: 10)
     }
 
     override func mouseDown(with event: NSEvent) {}

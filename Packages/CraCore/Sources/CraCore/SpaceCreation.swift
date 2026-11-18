@@ -83,27 +83,84 @@ public enum SpaceCreationLayout {
     public static let buttonBottom: CGFloat = 44
     public static let cancelCentre: CGFloat = 23
 
+    /// Arc's page lays itself out by the sidebar's width (its SwiftUI view compares the width with
+    /// 227 and 190, 0x102602d4c and 0x102602ce8): over 227 pt the rows carry a glyph; at 227 pt and
+    /// under they lose it and their label starts 16 pt in; at 190 pt and under the Profile row
+    /// stacks, its label and (i) over a pill as wide as the row, and the subtitle wraps as it
+    /// falls, three lines in a 165 pt sidebar, instead of breaking after "life,".
+    public enum Density: Equatable, Sendable {
+        case wide, medium, narrow
+
+        public init(sidebarWidth: CGFloat) {
+            self = sidebarWidth > 227 ? .wide : sidebarWidth > 190 ? .medium : .narrow
+        }
+
+        public var showsRowGlyphs: Bool { self == .wide }
+        public var rowLabelInset: CGFloat { self == .wide ? SpaceCreationLayout.rowLabelInset : 16 }
+        /// A row with a pill puts it under its label.
+        public var stacksPills: Bool { self == .narrow }
+        /// The subtitle breaks after "life," unless the sidebar is too narrow for that.
+        public var subtitle: String {
+            self == .narrow ? "Separate your tabs for life, work, projects, and more."
+                            : "Separate your tabs for life,\nwork, projects, and more."
+        }
+    }
+
+    /// A stacked row (a 165 pt sidebar, measured): 60 pt tall, its label centred 16 pt down, its
+    /// pill 23 pt tall, 29 pt down and 8 pt inside the row's sides.
+    public static let stackedRowHeight: CGFloat = 60
+    public static let stackedLabelCentre: CGFloat = 16
+    public static let stackedPillTop: CGFloat = 29
+    public static let stackedPillHeight: CGFloat = 23
+    public static let stackedPillInset: CGFloat = 8
+    /// Side by side, the pill starts this far after its label.
+    public static let pillGap: CGFloat = 7.5
+    /// The field starts 28 pt under the subtitle's last line.
+    public static let subtitleGap: CGFloat = 28
+
     public struct Frames: Equatable, Sendable {
         public let picture, title, subtitle, field, icon, profile, theme, search, create, cancel: CGRect
     }
 
-    /// Every frame for a page of that size, origin top left.
-    public static func frames(in size: CGSize) -> Frames {
+    /// Every frame for a page of that size, origin top left; `subtitleLines` is how many lines the
+    /// subtitle takes at that width, and `searchStacked` whether the Search Engine row's pill is
+    /// under its label because it doesn't fit beside it (`pillFits`).
+    public static func frames(in size: CGSize, subtitleLines: Int = 2, searchStacked: Bool = false) -> Frames {
+        let density = Density(sidebarWidth: size.width)
         let wide = max(0, size.width - 2 * inset)
-        let field = CGRect(x: inset, y: fieldTop, width: wide, height: fieldHeight)
-        let profile = CGRect(x: inset, y: field.maxY + fieldGap, width: wide, height: rowHeight)
+        let pillRow = density.stacksPills ? stackedRowHeight : rowHeight
+        let subtitleHeight = CGFloat(max(1, subtitleLines)) * subtitleLine
+        let field = CGRect(x: inset, y: subtitleTop + subtitleHeight + subtitleGap, width: wide, height: fieldHeight)
+        let profile = CGRect(x: inset, y: field.maxY + fieldGap, width: wide, height: pillRow)
         let theme = CGRect(x: inset, y: profile.maxY + rowGap, width: wide, height: rowHeight)
-        // Cra's Search Engine row follows Arc's two, the same size and gap.
-        let search = CGRect(x: inset, y: theme.maxY + rowGap, width: wide, height: rowHeight)
+        // Cra's Search Engine row follows Arc's two, laid out like the Profile row.
+        let search = CGRect(x: inset, y: theme.maxY + rowGap, width: wide, height: searchStacked ? stackedRowHeight : pillRow)
         let create = CGRect(x: inset, y: size.height - buttonBottom - buttonHeight, width: wide, height: buttonHeight)
         return Frames(
             picture: CGRect(x: ((size.width - pictureSize.width) / 2).rounded(), y: pictureTop, width: pictureSize.width, height: pictureSize.height),
             title: CGRect(x: 0, y: titleTop, width: size.width, height: 20),
-            subtitle: CGRect(x: inset, y: subtitleTop, width: wide, height: 2 * subtitleLine),
+            subtitle: CGRect(x: inset, y: subtitleTop, width: wide, height: subtitleHeight),
             field: field,
             icon: CGRect(x: field.minX + iconInset, y: field.midY - iconSide / 2, width: iconSide, height: iconSide),
             profile: profile, theme: theme, search: search, create: create,
             cancel: CGRect(x: inset, y: size.height - cancelCentre - 10, width: wide, height: 20))
+    }
+
+    /// A pill in its row (the row's own coordinates), `labelEnd` being where the row's label ends
+    /// and `fits` the pill's own width: after the label with a gap, no wider than what is left
+    /// before `trailing` points kept at the row's end; or stacked, as wide as the row.
+    public static func pillFrame(row: CGSize, labelEnd: CGFloat, fits: CGFloat, trailing: CGFloat, stacked: Bool) -> CGRect {
+        if stacked {
+            return CGRect(x: stackedPillInset, y: stackedPillTop, width: max(0, row.width - 2 * stackedPillInset), height: stackedPillHeight)
+        }
+        let x = labelEnd + pillGap
+        return CGRect(x: x, y: (row.height - pillHeight) / 2, width: max(0, min(fits, row.width - x - trailing)), height: pillHeight)
+    }
+
+    /// Whether a pill `fits` wide has room beside a label ending at `labelEnd` in a row that wide.
+    /// Cra's Search Engine names are long ("Default (Google)"), so that row stacks when it hasn't.
+    public static func pillFits(rowWidth: CGFloat, labelEnd: CGFloat, fits: CGFloat, trailing: CGFloat) -> Bool {
+        labelEnd + pillGap + fits + trailing <= rowWidth
     }
 
     /// The page needs this much height for the button not to reach the last row.

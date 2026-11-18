@@ -365,6 +365,13 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   with the icon (62.5 × 79 pt, radius 5 pt) that drops to the sidebar's middle by 1.0 s; a glow of
   the theme pulses behind it at 1.3 to 1.5 s; the card fades at 1.8 to 2.0 s; the space shows at
   about 2.5 s. A form opened after that is empty.
+- The page lays itself out by the sidebar's width; its SwiftUI view compares the width with 227 and
+  190 (0x102602d4c, 0x102602ce8). Over 227 pt the rows carry a glyph. At 227 pt and under they
+  lose it and their label starts 16 pt in. At 190 pt and under the subtitle is one string that wraps
+  as it falls (three lines in a 165 pt sidebar) instead of breaking after "life,", and the Profile
+  row stacks: 60 pt tall, "Profile" and the (i) on a line centred 16 pt down, the pill under them,
+  23 pt tall, 8 pt inside the row's sides, its chevron at the end. Measured in a 165 pt sidebar.
+  Cra's Search Engine row stacks the same way, and also whenever its pill has no room beside it.
 - Cra's own: a new space starts on one random brand colour (#155, #170) where Arc starts on a
   dark navy; the page has a Search Engine row under Choose a Theme, which Arc's has not (#306, so nothing the sheet offered is lost); the picture is Cra's drawing;
   and while the page is up the page area keeps showing the space it was opened on, in the new
