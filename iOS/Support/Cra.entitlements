@@ -16,6 +16,12 @@
 	<array>
 		<string>iCloud.dk.kildahl.cra</string>
 	</array>
+	<!-- Apple's managed default-browser entitlement (#504): granted to the team on 18 Nov 2026
+	     (request 2557T8YX24). Without it iOS doesn't offer Cra under Default Apps ▸ Browser App.
+	     The App ID dk.kildahl.cra must have Default Web Browser turned on in the developer portal,
+	     or the signing profile lacks it; the Mac app shares that App ID (docs/ios.md). -->
+	<key>com.apple.developer.web-browser</key>
+	<true/>
 	<!-- Links saved from other apps' share sheets wait here (MobileShareInbox). -->
 	<key>com.apple.security.application-groups</key>
 	<array>

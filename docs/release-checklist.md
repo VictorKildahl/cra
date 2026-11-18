@@ -365,6 +365,13 @@ built release app with a test profile. Note anything that fails in the release's
   real iCloud: the harness only stands in for a file that is still downloading.
 - **PR #289:** the same with a folder in Dropbox, OneDrive or a similar service instead of iCloud.
 
+### iPhone
+
+- **#504:** on a TestFlight build with the default-browser entitlement, Settings ▸ Set Cra as
+  Default Browser opens Cra's page in iOS Settings with a "Default Browser App" row; picking Cra
+  there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
+  lists Cra too. Needs a real iPhone and Apple's signing: the policy test only sees the file.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into

@@ -979,6 +979,7 @@
 #499   Tests/Scenarios/sidebar-edge-drag.scenario  78006ab4e6ca
 #500   Tests/Scenarios/little-window-over-browser.scenario  95a396732422
 #503   Tests/Scenarios/extension-window-focus.scenario  93c9f59c585d
+#504   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
 #505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::aSiteWithTheSwitchOffShowsTheBarItArrivesWithout  f83a1077e558
 #505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::withTheSwitchOffTheBarNeverCollapses  64abe6c45e72
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7
