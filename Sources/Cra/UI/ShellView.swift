@@ -210,6 +210,9 @@ final class ShellView: NSView {
     /// the floating sidebar, no window of ours reliably gets mouse-moved events over a page.
     private var toolbarPoll: Timer?
     private var toolbarActivation: [NSObjectProtocol] = []
+    /// The window's first responder, watched while a bar floats: Tab onto one of its buttons brings it out.
+    private var toolbarFocusWatch: NSKeyValueObservation?
+    private weak var toolbarFocusWindow: NSWindow?
     /// The clock the toolbar's waits run on, and where the pointer is in the shell's coordinates
     /// (nil: nowhere that counts); the tests stand both in.
     var toolbarNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
@@ -840,6 +843,7 @@ final class ShellView: NSView {
                 }
             }
         }
+        syncToolbarFocusWatch()
         syncToolbarPolling()
     }
 
@@ -849,7 +853,40 @@ final class ShellView: NSView {
             toolbarTracker.reset()
             if let card = floatingCard { reveal(card, false, animated: true) }
         }
+        // Back in front with a button still focused: the bar comes back out for it.
+        if NSApp.isActive { toolbarFocusChanged() }
         syncToolbarPolling()
+    }
+
+    /// The first responder is watched only while a bar floats, in the window the shell is in.
+    private func syncToolbarFocusWatch() {
+        guard let window, floatingCard != nil else {
+            toolbarFocusWatch = nil
+            toolbarFocusWindow = nil
+            return
+        }
+        if toolbarFocusWatch == nil || toolbarFocusWindow !== window {
+            toolbarFocusWindow = window
+            toolbarFocusWatch = window.observe(\.firstResponder) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.toolbarFocusChanged() }
+            }
+        }
+        toolbarFocusChanged()
+    }
+
+    /// Whether one of the floating bar's buttons has the keyboard focus (Tab with Full Keyboard Access).
+    private var toolbarHasFocus: Bool {
+        guard let card = floatingCard, let view = window?.firstResponder as? NSView else { return false }
+        return view.isDescendant(of: card.toolbarHost)
+    }
+
+    /// The focus came to the floating bar or left it: out at once for a focused button, and the usual
+    /// way back once the focus has gone (the pointer samples see to the wait).
+    private func toolbarFocusChanged() {
+        let inBar = toolbarHasFocus
+        guard let card = floatingCard, inBar != toolbarTracker.focused else { return }
+        toolbarTracker.focus(inBar, at: toolbarNow())
+        reveal(card, toolbarTracker.shown, animated: true)
     }
 
     private func syncToolbarPolling() {
@@ -920,6 +957,13 @@ final class ShellView: NSView {
             toolbarTracker.reset()
             if let card = floatingCard { reveal(card, false, animated: false) }
         case "sample": sampleToolbarPointer()
+        // The keyboard focus on the bar's first button that takes it, as Tab puts it there with Full
+        // Keyboard Access, and away from the bar again (to the window).
+        case "focus":
+            if let card = paneCards.first, let button = (card.toolbarHost as? PaneToolbarView)?.firstFocusableButton {
+                window?.makeFirstResponder(button)
+            }
+        case "blur": window?.makeFirstResponder(nil)
         default: break
         }
         layoutSubtreeIfNeeded()
@@ -936,8 +980,8 @@ final class ShellView: NSView {
         }
         return "toolbar \(command): floats=\(floatingCard != nil ? 1 : 0) out=\(toolbarTracker.shown ? 1 : 0) "
             + "inset=\(Int(card?.barInset ?? 0)) page=\(Int(card?.webArea.frame.height ?? 0))/\(Int(card?.bounds.height ?? 0)) "
-            + "barHidden=\(card?.toolbarHost.isHidden == true ? 1 : 0) polling=\(toolbarPoll != nil ? 1 : 0) "
-            + "hangs=\(card.map(somethingHangsFromToolbar) == true ? 1 : 0)"
+            + "barHidden=\(card?.toolbarInSight == true ? 0 : 1) polling=\(toolbarPoll != nil ? 1 : 0) "
+            + "hangs=\(card.map(somethingHangsFromToolbar) == true ? 1 : 0) focus=\(toolbarHasFocus ? 1 : 0)"
     }
 
     // MARK: Layout

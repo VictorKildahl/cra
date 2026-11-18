@@ -1,0 +1,54 @@
+# The hidden toolbar from the keyboard (asked on X, 18 Nov 2026: "Does the hidden toolbar reappear when you tab
+# into its buttons, or only when you move the pointer?"). With Full Keyboard Access, Tab reaches the buttons of a
+# bar that is put away, and the bar comes out at once for the one that gets the focus. It stays out while a
+# button has the focus, wherever the pointer is, and goes a moment after the focus leaves, as after the pointer.
+# Full Keyboard Access is a setting of the Mac's, so `toolbar=focus` puts the focus where Tab would.
+# The browser window's bar first, then a Peek's (#493), which has the same buttons.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "autoHideToolbar": true, "peekInEveryTab": true, "autoHidePeekToolbar": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=keys
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+
+cra://debug?toolbar=start
+expect-log toolbar start: floats=1 out=0 inset=0 page=780/780 barHidden=1 .* focus=0
+# A button of the put-away bar gets the focus: out at once, no wait for a pointer.
+cra://debug?toolbar=focus
+expect-log toolbar focus: floats=1 out=1 .* focus=1
+wait 1
+# Out over the page, which keeps its size; the pointer is away and the bar stays.
+cra://debug?toolbar=sample
+expect-log toolbar sample: floats=1 out=1 inset=0 page=780/780 barHidden=0 .* focus=1
+cra://debug?toolbar=stillOut
+expect-log toolbar stillOut: floats=1 out=1 .* focus=1
+# The focus leaves the bar: still out for a moment, then away with the next look at the pointer.
+cra://debug?toolbar=blur
+expect-log toolbar blur: floats=1 out=1 .* focus=0
+wait 1
+cra://debug?toolbar=sample
+expect-log toolbar sample: floats=1 out=0 .* focus=0
+wait 0.5
+cra://debug?toolbar=gone
+expect-log toolbar gone: floats=1 out=0 inset=0 page=780/780 barHidden=1 .* focus=0
+
+# A Peek with its bar put away.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?littleToolbar=start
+expect-log littleToolbar start: floats=1 out=0 .* barHidden=1 .* focus=0
+cra://debug?littleToolbar=focus
+expect-log littleToolbar focus: floats=1 out=1 .* focus=1
+wait 1
+cra://debug?littleToolbar=stillOut
+expect-log littleToolbar stillOut: floats=1 out=1 .* barHidden=0 .* focus=1
+# The focus leaves with the pointer away (the real pointer of a background copy can be anywhere, the
+# bar included): the Peek's own clock takes the bar away a moment later.
+cra://debug?littleToolbar=away
+cra://debug?littleToolbar=blur
+expect-log littleToolbar blur: floats=1 out=1 .* focus=0
+wait 1
+cra://debug?littleToolbar=gone
+expect-log littleToolbar gone: floats=1 out=0 .* barHidden=1 .* focus=0

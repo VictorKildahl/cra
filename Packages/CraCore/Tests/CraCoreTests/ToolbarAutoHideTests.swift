@@ -228,6 +228,94 @@ struct ToolbarAutoHideTests {
         #expect(out.shown)
     }
 
+    // MARK: Keyboard focus
+
+    /// Tab (with Full Keyboard Access) onto one of the hidden bar's buttons: the bar comes out at once,
+    /// without the pointer's wait, so the focused button is seen.
+    @Test func focusOnTheBarBringsItOutAtOnce() {
+        var tracker = ToolbarAutoHideTracker()
+        #expect(tracker.focus(true, at: 100) == nil)
+        #expect(tracker.shown)
+        #expect(tracker.focused)
+    }
+
+    /// While a button has the focus the bar stays, wherever the pointer is.
+    @Test func theBarStaysOutWhileItHasTheFocus() {
+        var tracker = ToolbarAutoHideTracker()
+        tracker.focus(true, at: 100)
+        #expect(tracker.sample(.away, at: 100.1) == nil)
+        tracker.tick(at: 130)
+        #expect(tracker.shown)
+        // A pointer that came by and left again doesn't take it away either.
+        tracker.sample(.bar, at: 131)
+        tracker.sample(.away, at: 132)
+        tracker.tick(at: 132 + ToolbarAutoHide.hideDelay)
+        #expect(tracker.shown)
+    }
+
+    /// Focus moves on to the page (Tab past the last button): the bar goes the usual way, a moment
+    /// after, as it does once the pointer has left it.
+    @Test func theBarGoesAMomentAfterTheFocusLeaves() {
+        var tracker = ToolbarAutoHideTracker()
+        tracker.focus(true, at: 100)
+        tracker.sample(.away, at: 101)
+        #expect(tracker.focus(false, at: 110) == 110 + ToolbarAutoHide.hideDelay)
+        #expect(tracker.shown)
+        #expect(!tracker.focused)
+        tracker.tick(at: 110 + ToolbarAutoHide.hideDelay - 0.01)
+        #expect(tracker.shown)
+        tracker.tick(at: 110 + ToolbarAutoHide.hideDelay)
+        #expect(!tracker.shown)
+    }
+
+    /// The focus leaves while the pointer rests on the bar: the pointer keeps it.
+    @Test func thePointerKeepsTheBarTheFocusLeft() {
+        var tracker = ToolbarAutoHideTracker()
+        tracker.focus(true, at: 100)
+        tracker.sample(.bar, at: 101)
+        #expect(tracker.focus(false, at: 102) == nil)
+        tracker.tick(at: 110)
+        #expect(tracker.shown)
+    }
+
+    /// The pointer brought the bar out first, then Tab went into it: leaving with the pointer keeps
+    /// it while it has the focus.
+    @Test func focusKeepsABarThePointerBroughtOut() {
+        var tracker = ToolbarAutoHideTracker()
+        tracker.sample(.strip, at: 100)
+        tracker.tick(at: 100 + ToolbarAutoHide.revealDwell)
+        #expect(tracker.shown)
+        tracker.focus(true, at: 101)
+        #expect(tracker.sample(.away, at: 102) == nil)
+        tracker.tick(at: 110)
+        #expect(tracker.shown)
+    }
+
+    /// The same focus said twice changes nothing; focus that was never on the bar leaving it neither.
+    @Test func focusSaidAgainChangesNothing() {
+        var hidden = ToolbarAutoHideTracker()
+        #expect(hidden.focus(false, at: 100) == nil)
+        #expect(hidden == ToolbarAutoHideTracker())
+        var out = ToolbarAutoHideTracker()
+        out.focus(true, at: 100)
+        out.sample(.away, at: 100.5)
+        let before = out
+        #expect(out.focus(true, at: 101) == nil)
+        #expect(out == before)
+    }
+
+    /// The app went to the background (or the bar stopped floating): the bar goes and the focus is
+    /// forgotten, so whoever still sees it on the bar says so again and it comes back out.
+    @Test func resetForgetsTheFocus() {
+        var tracker = ToolbarAutoHideTracker()
+        tracker.focus(true, at: 100)
+        tracker.reset()
+        #expect(!tracker.shown)
+        #expect(!tracker.focused)
+        tracker.focus(true, at: 105)
+        #expect(tracker.shown)
+    }
+
     @Test func resetHidesAndForgetsTheWait() {
         var tracker = ToolbarAutoHideTracker()
         tracker.sample(.strip, at: 90)
@@ -346,5 +434,38 @@ struct PeekToolbarAutoHideTests {
         #expect(classify(700 - ToolbarAutoHide.revealInside - 1, shown: false) == .away)
         #expect(classify(700 - 32 - ToolbarAutoHide.leaveSlack, shown: true) == .bar)
         #expect(classify(700 - 32 - ToolbarAutoHide.leaveSlack - 1, shown: true) == .away)
+    }
+}
+
+/// The toolbar's buttons from the keyboard: Tab reaches them with Full Keyboard Access, a click leaves
+/// the keys where they were, and Space, Return or Enter press the focused one.
+struct ToolbarKeyboardTests {
+    @Test func tabStopsOnlyWithFullKeyboardAccessAndAtAButtonThatWorks() {
+        #expect(ToolbarKeyboard.tabStops(fullKeyboardAccess: true, enabled: true))
+        #expect(!ToolbarKeyboard.tabStops(fullKeyboardAccess: false, enabled: true))
+        #expect(!ToolbarKeyboard.tabStops(fullKeyboardAccess: true, enabled: false))
+    }
+
+    /// Clicking Back with the pointer must leave the keys with the page: only the keyboard focuses a button.
+    @Test func aClickNeverTakesTheFocus() {
+        #expect(ToolbarKeyboard.takesFocus(enabled: true, byClick: false))
+        #expect(!ToolbarKeyboard.takesFocus(enabled: true, byClick: true))
+        #expect(!ToolbarKeyboard.takesFocus(enabled: false, byClick: false))
+    }
+
+    @Test func spaceReturnAndEnterPressTheFocusedButton() {
+        func presses(_ c: String, command: Bool = false, option: Bool = false, control: Bool = false) -> Bool {
+            ToolbarKeyboard.presses(characters: c, command: command, option: option, control: control)
+        }
+        #expect(presses(" "))
+        #expect(presses("\r"))
+        #expect(presses("\u{3}"))
+        #expect(!presses("\t"))
+        #expect(!presses("a"))
+        #expect(!presses("\u{1b}"))
+        // Shortcuts go on to the menus: ⌘Return, ⌥Space, ⌃Space.
+        #expect(!presses("\r", command: true))
+        #expect(!presses(" ", option: true))
+        #expect(!presses(" ", control: true))
     }
 }

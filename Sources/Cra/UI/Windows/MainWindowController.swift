@@ -161,6 +161,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         window.trafficLightsHidden = !sidebarVisible
         lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
         window.contentView = shell
+        // Tab (with Full Keyboard Access) goes through the views there are now: toolbars come and go with
+        // the cards, and their buttons with the page (ToolbarKeyboard).
+        window.autorecalculatesKeyViewLoop = true
         window.backgroundColor = NSColor(palette.gradientColors.first ?? .gray)
 
         browsers = BrowserManager(store: store, favicons: app.favicons, container: shell.parkingView, clock: app.composition.clock)

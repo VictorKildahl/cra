@@ -100,13 +100,16 @@ public enum ToolbarAutoHide {
     }
 }
 
-/// Whether the floating toolbar is out, from pointer samples and the clock.
+/// Whether the floating toolbar is out, from pointer samples, keyboard focus and the clock.
 ///
 /// The pointer has to rest in the strip for `revealDwell` before the toolbar comes out, and has to
 /// be away for `hideDelay` before it goes. A resting pointer sends no samples, so each sample
-/// returns when to look again; `tick(at:)` is that look.
+/// returns when to look again; `tick(at:)` is that look. Keyboard focus on one of the bar's
+/// buttons brings it out too, and keeps it out until the focus leaves (`focus(_:at:)`).
 public struct ToolbarAutoHideTracker: Equatable, Sendable {
     public private(set) var shown = false
+    /// One of the bar's buttons has the keyboard focus.
+    public private(set) var focused = false
     private var last: ToolbarAutoHide.Pointer = .away
     private var held = false
     private var stripSince: TimeInterval?
@@ -131,6 +134,22 @@ public struct ToolbarAutoHideTracker: Equatable, Sendable {
         return step(at: now)
     }
 
+    /// The keyboard focus came to one of the bar's buttons (Tab with Full Keyboard Access on, Shift-Tab
+    /// back into it) or left the bar. Focus brings the bar out at once: there is no pointer passing
+    /// by to wait out, and the button with the focus ring has to be seen. The bar stays out while it
+    /// has the focus, wherever the pointer is, and once the focus has left it goes the usual way.
+    /// Returns the time to call `tick(at:)`, as `sample` does.
+    @discardableResult
+    public mutating func focus(_ inBar: Bool, at now: TimeInterval) -> TimeInterval? {
+        guard inBar != focused else { return nil }
+        focused = inBar
+        guard inBar else { return step(at: now) }
+        shown = true
+        stripSince = nil
+        awaySince = nil
+        return nil
+    }
+
     /// Out now, whatever the pointer does: something asked for the toolbar (a popover hangs under
     /// one of its buttons). It goes again the usual way once the pointer is away and nothing holds it.
     public mutating func bringOut() {
@@ -139,7 +158,8 @@ public struct ToolbarAutoHideTracker: Equatable, Sendable {
         awaySince = nil
     }
 
-    /// Hidden now: the toolbar stopped floating, or another tab took the card.
+    /// Hidden now: the toolbar stopped floating, or another tab took the card. The focus is forgotten
+    /// too; whoever still sees it on the bar says so again.
     public mutating func reset() {
         self = ToolbarAutoHideTracker()
     }
@@ -147,7 +167,7 @@ public struct ToolbarAutoHideTracker: Equatable, Sendable {
     private mutating func step(at now: TimeInterval) -> TimeInterval? {
         if shown {
             stripSince = nil
-            guard last == .away, !held else { awaySince = nil; return nil }
+            guard last == .away, !held, !focused else { awaySince = nil; return nil }
             let start = awaySince ?? now
             awaySince = start
             // Compared with the time handed back, so the look asked for is never a hair too early.

@@ -245,10 +245,12 @@ final class PaneCardView: NSView {
             toolbarBackground.animator().frame = frames.bar
             floatingEdge.animator().frame = frames.edge
         }, completionHandler: { [weak self] in
-            // A bar that is out of the card is hidden too, so nothing in it takes the keyboard.
             MainActor.assumeIsolated { self?.needsLayout = true }
         })
     }
+
+    /// Whether the bar can be seen: shown, and inside the card (not put away above it).
+    var toolbarInSight: Bool { !toolbarHost.isHidden && bounds.intersects(toolbarHost.frame) }
 
     /// Where the bar and the line under it sit: at the card's top, or just above it while a
     /// floating bar is put away.
@@ -267,8 +269,10 @@ final class PaneCardView: NSView {
         // What the page gives up to the bar; a floating bar lies over the page instead.
         let th: CGFloat = barInset
         let frames = barFrames()
-        let barAway = !showToolbar || (floating && !toolbarRevealed)
-        toolbarHost.isHidden = barAway
+        // A floating bar that is put away is out of sight above the card, which clips it, and takes no
+        // clicks there. It isn't hidden: Tab (with Full Keyboard Access) still reaches its buttons, and
+        // the shell brings it out for the one that gets the focus (ToolbarAutoHideTracker.focus).
+        toolbarHost.isHidden = !showToolbar
         toolbarHost.frame = frames.bar
         toolbarBackground.isHidden = floating && !toolbarRevealed
         toolbarBackground.frame = frames.bar

@@ -126,7 +126,8 @@ final class PaneToolbarView: NSView {
         addTrackingArea(area)
         hoverArea = area
         if let window {
-            let inside = !isHiddenOrHasHiddenAncestor && bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+            let inside = !isHiddenOrHasHiddenAncestor && (superview as? PaneCardView)?.toolbarInSight != false
+                && bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
             if inside != hovered { hovered = inside }
         }
     }
@@ -237,8 +238,16 @@ final class PaneToolbarView: NSView {
     /// The sliders button (screen rect), for the Site Control Center opened from elsewhere (a toast's Why?).
     func siteControlsButtonFrameOnScreen() -> NSRect? { buttonFrameOnScreen("extensions") }
 
+    /// The leftmost button the keyboard can focus, for `cra://debug?toolbar=focus`.
+    var firstFocusableButton: NSView? {
+        ([urlButton] + left + right).filter { $0.superview === self && !$0.isHidden && $0.acceptsFirstResponder }
+            .min { $0.frame.minX < $1.frame.minX }
+    }
+
     func buttonFrameOnScreen(_ key: String) -> NSRect? {
-        guard let b = buttons[key], !b.isHiddenOrHasHiddenAncestor, b.frame.width > 0, let window else { return nil }
+        // A floating bar put away above its card has no button to hang anything from.
+        guard let b = buttons[key], !b.isHiddenOrHasHiddenAncestor, b.frame.width > 0, let window,
+              (superview as? PaneCardView)?.toolbarInSight != false else { return nil }
         return window.convertToScreen(b.convert(b.bounds, to: nil))
     }
 
@@ -616,6 +625,22 @@ final class PaneToolbarView: NSView {
     }
 }
 
+extension NSEvent {
+    /// A mouse button going down or up: focus offered while this is the current event comes from a click.
+    var isPointerPress: Bool {
+        [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp].contains(type)
+    }
+}
+
+extension ToolbarKeyboard {
+    /// Whether this key, pressed on a focused toolbar button, presses it.
+    static func presses(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags
+        return presses(characters: event.characters ?? "", command: flags.contains(.command), option: flags.contains(.option),
+                       control: flags.contains(.control))
+    }
+}
+
 private final class ToolbarMenuAction: NSObject {
     let run: () -> Void
     init(_ run: @escaping () -> Void) { self.run = run }
@@ -664,10 +689,43 @@ final class ToolbarGlyphButton: NSView {
         layer?.cornerRadius = 7
         layer?.cornerCurve = .continuous
         imageView.imageScaling = .scaleNone
+        imageView.setAccessibilityElement(false)
         addSubview(imageView)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: Keyboard and VoiceOver (ToolbarKeyboard)
+
+    /// What VoiceOver calls the button: its tooltip without the shortcut.
+    private var axLabel = ""
+
+    /// The keyboard can focus the button (Tab with Full Keyboard Access); a click never does, so
+    /// clicking Back leaves the keys with the page.
+    override var acceptsFirstResponder: Bool {
+        ToolbarKeyboard.takesFocus(enabled: enabled, byClick: NSApp.currentEvent?.isPointerPress == true)
+    }
+    override var canBecomeKeyView: Bool {
+        ToolbarKeyboard.tabStops(fullKeyboardAccess: NSApp.isFullKeyboardAccessEnabled, enabled: enabled) && super.canBecomeKeyView
+    }
+    override var focusRingMaskBounds: NSRect { bounds }
+    override func drawFocusRingMask() {
+        NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+    }
+    override func keyDown(with event: NSEvent) {
+        guard enabled, ToolbarKeyboard.presses(event) else { return super.keyDown(with: event) }
+        action()
+    }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { axLabel }
+    override func isAccessibilityEnabled() -> Bool { enabled }
+    override func accessibilityPerformPress() -> Bool {
+        guard enabled else { return false }
+        action()
+        return true
+    }
 
     /// `animated` swaps another symbol in the way Arc swaps refresh and stop.
     func configure(symbol: String?, image: NSImage?, help: String, enabled: Bool, width: CGFloat, iconSize: CGFloat, tint: NSColor,
@@ -695,6 +753,7 @@ final class ToolbarGlyphButton: NSView {
         }
         iconBox = symbol == nil ? NSSize(width: iconSize, height: iconSize) : nil
         needsLayout = true
+        axLabel = ArcTooltipLabel.split(help).0
         if help.isEmpty {
             tip?.removeFromSuperview()
             tip = nil
@@ -708,6 +767,7 @@ final class ToolbarGlyphButton: NSView {
 
     override func layout() {
         super.layout()
+        noteFocusRingMaskChanged()
         let h = bounds.height
         imageView.frame = iconBox.map { NSRect(x: (bounds.width - $0.width) / 2, y: (iconRowHeight - $0.height) / 2, width: $0.width, height: $0.height) }
             ?? NSRect(x: 0, y: 0, width: width, height: h)
@@ -821,9 +881,46 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
         addSubview(tip)
         (copyTip.text, copyTip.keys) = ArcTooltipLabel.split("Copy URL (⇧⌘C)")
         addSubview(copyTip)
+        for v in [icon, label] as [NSView] { v.setAccessibilityElement(false) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: Keyboard and VoiceOver (ToolbarKeyboard)
+
+    /// As the glyph buttons: Tab with Full Keyboard Access focuses the address, a click never does
+    /// (it opens the command bar or the address field, which take the keys themselves).
+    override var acceptsFirstResponder: Bool {
+        ToolbarKeyboard.takesFocus(enabled: field == nil, byClick: NSApp.currentEvent?.isPointerPress == true)
+    }
+    override var canBecomeKeyView: Bool {
+        ToolbarKeyboard.tabStops(fullKeyboardAccess: NSApp.isFullKeyboardAccessEnabled, enabled: field == nil) && super.canBecomeKeyView
+    }
+    override var focusRingMaskBounds: NSRect { bounds }
+    override func drawFocusRingMask() {
+        let r = layer?.cornerRadius ?? 7
+        NSBezierPath(roundedRect: bounds, xRadius: r, yRadius: r).fill()
+    }
+    override func keyDown(with event: NSEvent) {
+        guard field == nil, ToolbarKeyboard.presses(event) else { return super.keyDown(with: event) }
+        action()
+    }
+
+    override func isAccessibilityElement() -> Bool { field == nil }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { url.isEmpty ? "Address" : "Address, \(url)" }
+    override func accessibilityPerformPress() -> Bool {
+        guard field == nil else { return false }
+        action()
+        return true
+    }
+    override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
+        guard showsCopy, field == nil else { return nil }
+        return [NSAccessibilityCustomAction(name: "Copy URL") { [weak self] in
+            self?.copyFromGlyph()
+            return true
+        }]
+    }
 
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
@@ -877,6 +974,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
 
     override func layout() {
         super.layout()
+        noteFocusRingMaskChanged()
         content.frame = bounds
         let h = bounds.height
         if split {

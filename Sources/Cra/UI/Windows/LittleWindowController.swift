@@ -288,6 +288,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = LittlePalette.barNS
         window.contentView = shell
+        // Tab (with Full Keyboard Access) reaches a Peek's bar buttons as they are now (ToolbarKeyboard).
+        window.autorecalculatesKeyViewLoop = true
         if parent != nil {
             // Arc's Peek is a card: no title bar or traffic lights, 8 pt corners, a shadow.
             shell.isPeek = true
@@ -647,6 +649,38 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         stopBarLook()
         shell.floatsBar = floats
         syncTrafficLights(animated: false)
+        syncBarFocusWatch()
+    }
+
+    /// The window's first responder, watched while the bar floats: Tab onto a Peek's bar button brings it out.
+    private var barFocusWatch: NSKeyValueObservation?
+
+    private func syncBarFocusWatch() {
+        guard shell.floatsBar, let window else {
+            barFocusWatch = nil
+            return
+        }
+        if barFocusWatch == nil {
+            barFocusWatch = window.observe(\.firstResponder) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.barFocusChanged() }
+            }
+        }
+        barFocusChanged()
+    }
+
+    /// Whether one of the floating bar's buttons has the keyboard focus.
+    private var barHasFocus: Bool {
+        guard shell.floatsBar, let view = window?.firstResponder as? NSView else { return false }
+        return view.isDescendant(of: shell.toolbarHost)
+    }
+
+    /// The focus came to the floating bar (out at once) or left it (the usual wait, then away). The window
+    /// reports one change more than once: only a change of focus counts, or a report that changed nothing
+    /// would call off the look the tracker asked for.
+    private func barFocusChanged() {
+        let inBar = barHasFocus
+        guard shell.floatsBar, inBar != barTracker.focused else { return }
+        apply(barTracker.focus(inBar, at: ProcessInfo.processInfo.systemUptime))
     }
 
     /// The shell saw the pointer move over the window (nil: it left). The page is a view in the
@@ -730,6 +764,19 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "in":
             barTracker.reset()
             apply(nil, animated: false)
+        // The keyboard focus on the bar's leftmost button that takes it, as Tab puts it there with Full
+        // Keyboard Access (a Peek's bar), and away from the bar again.
+        case "focus":
+            func buttons(in v: NSView) -> [NSView] {
+                v.subviews.flatMap { ($0 is ToolbarGlyphButton || $0 is ToolbarURLButton) ? [$0] : buttons(in: $0) }
+            }
+            let first = buttons(in: shell.toolbarHost).filter { !$0.isHiddenOrHasHiddenAncestor && $0.acceptsFirstResponder }
+                .min { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }
+            if let first { window?.makeFirstResponder(first) }
+        case "blur": window?.makeFirstResponder(nil)
+        // One pointer sample from the page's bottom left, as when the pointer has left the bar: the real
+        // pointer of a background copy can be anywhere, the bar included.
+        case "away": sampleBar(at: NSPoint(x: shell.page.frame.minX + 1, y: shell.page.frame.minY + 1))
         default: break
         }
         shell.layoutSubtreeIfNeeded()
@@ -744,8 +791,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             let page = shell.page.frame
             line = "littleToolbar \(command): floats=\(shell.floatsBar ? 1 : 0) out=\(barTracker.shown ? 1 : 0) "
                 + "pageTop=\(Int(shell.bounds.maxY - page.maxY)) page=\(Int(page.height))/\(Int(shell.bounds.height)) "
-                + "barHidden=\(shell.toolbarHost.isHidden ? 1 : 0) "
-                + "lights=\(window?.standardWindowButton(.closeButton)?.isHidden == false ? 1 : 0)"
+                + "barHidden=\(shell.barInSight ? 0 : 1) "
+                + "lights=\(window?.standardWindowButton(.closeButton)?.isHidden == false ? 1 : 0) focus=\(barHasFocus ? 1 : 0)"
         }
         CraLog.note(line)
     }
@@ -2297,7 +2344,12 @@ final class LittleShellView: NSView {
     /// Whether the bar floats and is put away.
     var barAway: Bool { floatsBar && !barRevealed }
 
-    private func syncBarVisibility() { toolbarHost.isHidden = hidesBar || barAway }
+    /// A floating bar that is put away is up out of the window, where it can't be seen or clicked. It
+    /// isn't hidden: Tab (with Full Keyboard Access) still reaches a Peek's buttons on it, and the
+    /// controller brings it out for the one that gets the focus.
+    private func syncBarVisibility() { toolbarHost.isHidden = hidesBar }
+    /// Whether the bar can be seen: shown, and inside the window (not put away above it).
+    var barInSight: Bool { !toolbarHost.isHidden && bounds.intersects(toolbarHost.frame) }
 
     /// Slides the floating bar down over the page's top, or back up out of the window.
     func setBarRevealed(_ revealed: Bool, animated: Bool) {
@@ -2311,7 +2363,6 @@ final class LittleShellView: NSView {
             ctx.timingFunction = CAMediaTimingFunction(name: revealed ? .easeOut : .easeIn)
             toolbarHost.animator().frame = target
         }, completionHandler: { [weak self] in
-            // A bar that is up out of the window is hidden too, so nothing in it takes a click.
             MainActor.assumeIsolated {
                 self?.syncBarVisibility()
                 self?.needsLayout = true
