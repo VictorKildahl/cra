@@ -15,7 +15,9 @@ enum LiveFolderProviderTests {
         try gitHubMergedSinceLastRefresh(github, executable: executable)
         try gitHubSSOKey(github, executable: executable)
         try gitLab(gitlab, executable: executable)
-        print("Bundled providers: GitHub and GitLab cases passed")
+        let azure = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/azure-devops"))
+        try azureDevOps(azure, executable: executable)
+        print("Bundled providers: GitHub, GitLab and Azure DevOps cases passed")
     }
 
     // MARK: Helpers
@@ -396,5 +398,129 @@ enum LiveFolderProviderTests {
         check(migrated["filters"] as? [String] == ["review", "assigned"], "GitLab filters migrate")
         let signIn = json(try invoke(gitlab, "signIn", input: ["settings": ["server": server], "state": [:]], origins: [], executable: executable))
         check(signIn["url"] as? String == server + "/users/sign_in", "sign in on the instance")
+    }
+
+    // MARK: Azure DevOps
+
+    private static func azureDevOps(_ azure: LiveFolderPluginPackage, executable: URL) throws {
+        let org = "https://dev.azure.com/acme"
+        let origins = ["https://dev.azure.com"]
+        let me = "11111111-1111-1111-1111-111111111111", other = "22222222-2222-2222-2222-222222222222"
+        let connection = #"{"authenticatedUser":{"id":"\#(me)","descriptor":"Microsoft.IdentityModel.Claims.ClaimsIdentity;acme\\alex"}}"#
+        func pull(_ id: Int, project: String = "Web Shop", repo: String = "checkout", by author: String = other,
+                  votes: [(String, Int)] = [], status: String = "active", created: String = "2026-11-06T12:00:00.1234567Z") -> [String: Any] {
+            ["pullRequestId": id, "title": "PR \(id)", "status": status, "creationDate": created,
+             "createdBy": ["id": author, "displayName": author == me ? "Alex" : "Sam"],
+             "repository": ["name": repo, "project": ["name": project]],
+             "reviewers": votes.map { ["id": $0.0, "vote": $0.1] }]
+        }
+        func body(_ rows: [[String: Any]]) -> String {
+            String(data: try! JSONSerialization.data(withJSONObject: ["count": rows.count, "value": rows]), encoding: .utf8)!
+        }
+        func refresh(server: String = org, filters: [String] = ["authored", "review"],
+                     respond: @escaping Respond) throws -> Result<LiveFolderPluginSnapshot, Failure> {
+            try Self.refresh(azure, executable: executable, origins: origins, filters: filters, settings: ["server": server], respond: respond)
+        }
+        func query(_ request: LiveFolderPluginRequest) -> [String: String] {
+            Dictionary(uniqueKeysWithValues: (URLComponents(string: request.url)!.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        }
+
+        let presentation = try JSONDecoder().decode(LiveFolderPluginPresentation.self,
+            from: invoke(azure, "describe", input: [:], origins: [], executable: executable))
+        try presentation.validate()
+        check(presentation.setup?.key == azure.manifest.sessionSetting && presentation.groups?.title == "Repositories", "address setup and repository groups")
+        check(presentation.filters.filter(\.enabledByDefault).map(\.id) == ["authored", "review"], "both filters start on")
+
+        // One query per filter with the signed-in user's id; the address of any page in the org is the org.
+        var asked: [String: [String: String]] = [:]
+        let snapshot = try refresh(server: org + "/Web%20Shop/_git/checkout/pullrequest/7") { request in
+            check(request.headers?["X-TFS-FedAuthRedirect"] == "Suppress", "signed out answers 401 instead of a sign-in page")
+            if request.url == org + "/_apis/connectionData" { return LiveFolderPluginResponse(status: 200, url: request.url, body: connection) }
+            check(request.url.hasPrefix(org + "/_apis/git/pullrequests?"), "pull requests come from the organization's API")
+            let q = query(request)
+            check(q["searchCriteria.status"] == "active" && q["$top"] == "100" && q["$skip"] == "0", "active ones, a page at a time")
+            if q["searchCriteria.creatorId"] == me {
+                asked["authored"] = q
+                return LiveFolderPluginResponse(status: 200, url: request.url, body: body([pull(3, by: me, created: "2026-11-05T09:00:00Z")]))
+            }
+            asked["review"] = q
+            check(q["searchCriteria.reviewerId"] == me, "review requests ask for the signed-in user")
+            return LiveFolderPluginResponse(status: 200, url: request.url, body: body([
+                pull(7, votes: [(me, 0)]),
+                pull(8, repo: "Web Shop", votes: [(me, 10)]),
+                pull(9, votes: [(me, -5)]),
+                pull(3, by: me, created: "2026-11-05T09:00:00Z"),
+            ]))
+        }.get()
+        check(Set(asked.keys) == ["authored", "review"], "one query per filter")
+        check(snapshot.items.map(\.url) == [org + "/Web%20Shop/_git/checkout/pullrequest/7", org + "/Web%20Shop/_git/checkout/pullrequest/3"],
+              "reviewed ones leave, your own are listed once, newest first: \(snapshot.items.map(\.url))")
+        check(snapshot.items.first?.group == "Web Shop/checkout" && snapshot.items.first?.subtitle == "Sam" && snapshot.items.first?.createdAt != nil,
+              "repository group, author and date")
+        check(snapshot.items.first?.title == "PR 7", "the pull request's title")
+
+        // A project's default repository has the project's name: the group is that name once.
+        let named = try refresh(filters: ["authored"]) { request in
+            LiveFolderPluginResponse(status: 200, url: request.url,
+                body: request.url.hasSuffix("/connectionData") ? connection : body([pull(1, project: "Shop", repo: "Shop", by: me)]))
+        }.get()
+        check(named.items.first?.group == "Shop", "a project's own repository groups under the project")
+
+        // A visualstudio.com organization and a Server collection keep their own address.
+        for (server, expected) in [("https://acme.visualstudio.com/Shop/_git", "https://acme.visualstudio.com"),
+                                   ("https://tfs.example.com/tfs/DefaultCollection", "https://tfs.example.com/tfs/DefaultCollection")] {
+            var first = ""
+            let host = URL(string: expected)!
+            _ = try Self.refresh(azure, executable: executable, origins: ["https://\(host.host!)"], filters: ["authored"],
+                                 settings: ["server": server]) { request in
+                if first.isEmpty { first = request.url }
+                return LiveFolderPluginResponse(status: 200, url: request.url, body: request.url.hasSuffix("/connectionData") ? connection : body([]))
+            }.get()
+            check(first == expected + "/_apis/connectionData", "\(server) is read at \(expected)")
+        }
+
+        // A full page asks for the next one.
+        var skips: [String] = []
+        let paged = try refresh(filters: ["authored"]) { request in
+            if request.url.hasSuffix("/connectionData") { return LiveFolderPluginResponse(status: 200, url: request.url, body: connection) }
+            let skip = query(request)["$skip"]!
+            skips.append(skip)
+            return LiveFolderPluginResponse(status: 200, url: request.url,
+                body: body(skip == "0" ? (1...100).map { pull($0, by: me) } : [pull(101, by: me)]))
+        }.get()
+        check(skips == ["0", "100"] && paged.items.count == 101, "paging continues after a full page")
+
+        // Failures never become an empty folder.
+        for (status, expected) in [(0, "network"), (401, "notSignedIn"), (403, "unexpectedPage"), (429, "rateLimited"), (500, "unexpectedPage")] {
+            check(code(try refresh { LiveFolderPluginResponse(status: status, url: $0.url, body: "") }) == expected, "status \(status)")
+        }
+        check(code(try refresh { _ in LiveFolderPluginResponse(status: 200, url: "https://dev.azure.com/_signin?realm=dev.azure.com", body: connection) })
+              == "notSignedIn", "sent to the sign-in page")
+        check(code(try refresh { LiveFolderPluginResponse(status: 203, url: $0.url, body: "<html>Sign in</html>") }) == "notSignedIn",
+              "an expired session's sign-in page")
+        check(code(try refresh { LiveFolderPluginResponse(status: 200, url: $0.url,
+            body: #"{"authenticatedUser":{"id":"00000000-0000-0000-0000-000000000000","descriptor":"System:PublicAccess;Anonymous"}}"#) })
+              == "notSignedIn", "an anonymous connection")
+        for wrong in [#"{"message":"TF400813"}"#, #"{"value":[{"pullRequestId":1}]}"#, body([pull(1, status: "completed")]),
+                      body([pull(1, repo: "")])] {
+            check(code(try refresh { request in
+                LiveFolderPluginResponse(status: 200, url: request.url, body: request.url.hasSuffix("/connectionData") ? connection : wrong)
+            }) == "unexpectedPage", "unreadable pull requests: \(wrong)")
+        }
+        check((try? refresh { request in
+            LiveFolderPluginResponse(status: 200, url: request.url, body: request.url.hasSuffix("/connectionData") ? connection : body([]))
+        }.get().items.isEmpty) == true, "no pull requests is an empty folder")
+        check((try? refresh(filters: []) { _ in fatalError("No filter asked anything") }.get().items.isEmpty) == true, "no filter, no requests")
+
+        // Sign-in and the pages that refresh the folder.
+        let signIn = json(try invoke(azure, "signIn", input: ["settings": ["server": org + "/Shop"], "state": [:]], origins: [], executable: executable))
+        check(signIn["url"] as? String == org && signIn["failureURL"] as? String == org + "/_pulls", "sign in at the organization")
+        check(signIn["instanceLabel"] as? String == "Azure DevOps (dev.azure.com/acme)", "the instance label")
+        for (url, refreshes) in [(org + "/Shop/_git/checkout/pullrequest/7", true), ("https://dev.azure.com/acme-other/x", false),
+                                 ("https://example.com/", false)] {
+            let changed = json(try invoke(azure, "pageChanged", input: ["url": url, "previousURL": "", "settings": ["server": org], "state": [:]],
+                                          origins: [], executable: executable))
+            check((changed["refreshAfter"] as? [Int] ?? []).isEmpty != refreshes && (changed["checkSignIn"] as? Bool) == refreshes, "page \(url)")
+        }
     }
 }
