@@ -291,6 +291,11 @@ built release app with a test profile. Note anything that fails in the release's
   the menu bar and into the Dock, and keep pushing before you lift. The window stops with the hidden
   pointer still on it, then flies into a corner on the lift, and the pointer shows again there.
   The CraCore test covers where it stops; only real fingers show that the lift still reaches it.
+- **#534:** on a trackpad, pinch the PiP open and closed, with Cra in front and with another app in
+  front: it follows the fingers smoothly in the video's shape, stops where an edge drag does at its
+  smallest and at the screen's edges, a window in a corner grows out of it, and a two-finger swipe
+  still throws it. Next to Arc's, check where it grows from. The scenario drives the pinch code;
+  only real fingers show that the magnify events reach the window.
 - **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the

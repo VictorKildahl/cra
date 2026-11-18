@@ -274,6 +274,17 @@ final class PictureInPictureChrome {
         }
     }
 
+    /// `cra://debug?pipPinch=<m>[,<m>…]`: a trackpad pinch on the window, one magnification
+    /// event per value (0.1 is 10 % apart), between its touch-down and lift (#534).
+    func debugPinch(_ steps: [CGFloat]) {
+        for o in overlays.values {
+            guard let view = o.contentView as? PictureInPictureOverlayView else { continue }
+            view.beginPinch()
+            steps.forEach(view.pinched(by:))
+            view.endPinch()
+        }
+    }
+
     /// The window's width as a share of its display's visible width, two decimals.
     private static func share(of w: NSWindow) -> String {
         guard let visible = (w.screen ?? NSScreen.main)?.visibleFrame, visible.width > 0 else { return "-" }
@@ -720,7 +731,7 @@ final class PictureInPictureOverlayView: NSView {
         // Chromium cut it from the bottom right; it grows back there.
         let f = target.frame
         give(NSRect(x: f.minX, y: f.maxY - size.height, width: size.width, height: size.height), to: target)
-        if settling, gesture == nil, swipe == nil, flight == nil { dropped() }
+        if settling, gesture == nil, swipe == nil, pinch == nil, flight == nil { dropped() }
         return true
     }
 
@@ -746,6 +757,55 @@ final class PictureInPictureOverlayView: NSView {
     override func rightMouseDown(with event: NSEvent) {}
     override func otherMouseDown(with event: NSEvent) {}
 
+    // MARK: Pinch to resize (Arc, #534)
+
+    private var pinch: PictureInPicturePinch?
+
+    /// Two fingers pinching on the trackpad resize the window, as Arc's do: apart larger, together
+    /// smaller, in the video's shape, inside the limits of an edge resize
+    /// (`PictureInPicturePinch`). Not while a press or a swipe has the window.
+    override func magnify(with event: NSEvent) {
+        switch event.phase {
+        case .began, .mayBegin: beginPinch()
+        case .changed: pinched(by: event.magnification)
+        case .ended, .cancelled: endPinch()
+        default:
+            // A magnify without phases (none comes from a trackpad today) is one step.
+            beginPinch(); pinched(by: event.magnification); endPinch()
+        }
+    }
+
+    func beginPinch() {
+        guard gesture == nil, swipe == nil, let target else { return }
+        land()
+        pinch = PictureInPicturePinch(frame: target.frame)
+        pressedOn = nil
+    }
+
+    func pinched(by magnification: CGFloat) {
+        guard let target else { return }
+        if pinch == nil { beginPinch() }
+        guard var p = pinch else { return }
+        let screen = target.screen ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? target.frame
+        let limits = PictureInPictureLayout.sizeLimits(aspect: p.startFrame.width / max(p.startFrame.height, 1),
+                                                       screen: screen?.frame ?? visible, visible: visible)
+        let minSize = NSSize(width: max(target.contentMinSize.width, limits.min.width), height: max(target.contentMinSize.height, limits.min.height))
+        let frame = p.magnify(by: magnification, minSize: minSize, maxSize: limits.max, visible: visible)
+        if p.scale != 1, pinch?.scale == 1 { CraLog.note("pip: pinch from \(Self.size(p.startFrame))") }
+        pinch = p
+        guard frame != target.frame else { return }
+        give(frame, to: target)
+    }
+
+    func endPinch() {
+        guard let p = pinch else { return }
+        pinch = nil
+        guard let target, p.scale != 1 else { return }
+        CraLog.note("pip: pinched \(Self.size(p.startFrame)) → \(Self.size(target.frame))")
+        PictureInPictureChrome.shared.remember(target.frame)
+    }
+
     // MARK: Swipe to a corner (Arc)
 
     private var swipe: PictureInPictureThrow?
@@ -765,7 +825,7 @@ final class PictureInPictureOverlayView: NSView {
     /// left out: the flight is the momentum. Scroll events only record where the fingers are;
     /// `tick` shows the window there, a frame at a time (see `PictureInPictureThrow.origin(at:)`).
     override func scrollWheel(with event: NSEvent) {
-        guard gesture == nil, let target, event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
+        guard gesture == nil, pinch == nil, let target, event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
         let t = event.timestamp
         switch event.phase {
         case .mayBegin, .began:

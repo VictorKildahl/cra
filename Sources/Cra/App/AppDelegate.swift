@@ -1975,7 +1975,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // presses the scrubber that far along; pipSize=<0…1> resizes it to that share of its
             // display's width; pipButton=back|minimize|close clicks that hover button (#434); pipShow=1
             // shows the hover controls and keeps them up until the pointer comes and goes (#463);
-            // pipPointer=readd|enter|move puts Chromium's tracking area back or sends its window the pointer (#535).
+            // pipPointer=readd|enter|move puts Chromium's tracking area back or sends its window the pointer (#535);
+            // pipPinch=<m>,<m>… pinches it, one trackpad magnification per value (#534).
             if let label = dict["pip"] { NSLog("Cra pip %@: %@", label, PictureInPictureChrome.shared.readout()); return }
             if let count = dict["pipClick"].flatMap(Int.init) { PictureInPictureChrome.shared.debugClick(count); return }
             if let at = dict["pipSeek"].flatMap(Double.init) { PictureInPictureChrome.shared.debugSeek(at); return }
@@ -1986,6 +1987,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let what = dict["pipPoke"] { PictureInPictureChrome.shared.debugPoke(what); return }
             if let edge = dict["pipDrop"] { PictureInPictureChrome.shared.debugDrop(edge); return }
             if let share = dict["pipSize"].flatMap(Double.init) { PictureInPictureChrome.shared.debugSize(CGFloat(share)); return }
+            if let steps = dict["pipPinch"] { PictureInPictureChrome.shared.debugPinch(steps.split(separator: ",").compactMap { Double($0) }.map { CGFloat($0) }); return }
             // peekShown=<label>: the page behind a Peek in each window, faded and drawn back or whole (PR #221).
             if let label = dict["peekShown"] {
                 for m in mainWindows { NSLog("Cra peek shown %@: %@", label, m.peekBackdropShown()) }

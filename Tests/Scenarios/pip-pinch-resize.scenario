@@ -1,0 +1,39 @@
+# A two-finger pinch on the Picture in Picture window resizes it, as Arc's does (GitHub #534):
+# fingers apart make it larger, together smaller, in the video's shape, no smaller than a resize
+# from an edge goes (Arc's 224 pt, or Chromium's own minimum where it is larger: 285 × 160 here)
+# and no larger than its display, and the next video opens at the size it was left at.
+# Here the window is made 30 % as wide as its display, pinched open by 10 % five times (1.61×),
+# closed to the smallest, then pinched open as far as it goes.
+# promise: #534
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pipSize=0.30
+expect-log pip: resized to
+wait 1
+cra://debug?pip=before
+expect-log Cra pip before: windows=1 .* share=0.30 .* onScreen=1
+cra://debug?pipPinch=0.1,0.1,0.1,0.1,0.1
+expect-log pip: pinched [0-9]+×[0-9]+ → [0-9]+×[0-9]+
+wait 1
+cra://debug?pip=larger
+expect-log Cra pip larger: windows=1 .* share=0.4[89] .* onScreen=1
+cra://debug?pipPinch=-0.5,-0.5,-0.5,-0.5
+wait 1
+cra://debug?pip=smallest
+expect-log Cra pip smallest: windows=1 .* width=(224|285) .* onScreen=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.exitPictureInPicture().then(()=>'pip:closed')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:closed"
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:again')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:again"
+wait 1
+cra://debug?pip=again
+expect-log Cra pip again: windows=1 .* width=(224|285) .* onScreen=1
+cra://debug?pipPinch=1,1,1,1
+wait 1
+cra://debug?pip=largest
+expect-log Cra pip largest: windows=1 .* share=0\.(9[0-9]|8[5-9]) .* onScreen=1

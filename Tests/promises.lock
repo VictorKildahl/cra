@@ -1079,6 +1079,13 @@
 #533   Tests/Scenarios/pip-window-covered.scenario  34732af6a587
 #533   Tests/Scenarios/pip-window-minimised.scenario  21d21ee9e121
 #533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::aWindowInACornerGrowsOutOfIt  acafc2788db3
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::apartGrowsTogetherShrinksAroundTheCentre  c2730a3dfd72
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::eventsCompound  db4543a96012
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::restingFingersChangeNothing  6140b32dcc35
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::stopsAtTheDisplaysEdges  ed869c3c8efd
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::stopsAtTheSmallestAndComesStraightBack  ed26adb7bc11
+#534   Tests/Scenarios/pip-pinch-resize.scenario  1b072ac3fe9d
 #535   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::chromiumsHoverTrackingIsTakenAway  e21a9fad9e65
 #535   Tests/Scenarios/pip-chromium-hover.scenario  d1383dc3d418
 #536   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
