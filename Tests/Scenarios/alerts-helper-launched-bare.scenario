@@ -1,0 +1,8 @@
+# Someone clicks a Cra notification after its Alerts helper quit: macOS launches the helper app with no arguments.
+# Chrome's helper sees that and exits quietly (chrome_main_mac.mm); Cra's notifications come from the Aperitif
+# Alerts helper (AperitifHelpers), which Chrome's check missed, so it stopped on "Helper application requires
+# --type" (a 0.1.46 crash report). cra-alerts-helper-launch.patch counts it as the Alerts helper too.
+bare-helper Alerts
+bare-helper Aperitif Alerts
+cra://open?url=${PAGE}?n=after
+expect-log GET /page\.html\?n=after
