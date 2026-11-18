@@ -30,6 +30,20 @@ struct TypedURLTests {
         #expect(TypedURL.navigation(typed: "example.com/shop", rowURL: "https://example.com/", rowIsForTyped: false) == "https://example.com/shop")
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/545"), arguments: [
+        ("chapter-2.16", false),
+        ("3.14", false),
+        ("v2.5", false),
+        ("example.com", true),
+        ("sub.example.co.uk/path", true),
+        ("example.com:8080/a", true),
+        ("192.168.1.1", true),
+        ("localhost:3000", true),
+    ])
+    func aTopLevelDomainHasALetter(input: String, isAddress: Bool) {
+        #expect(TypedURL.looksLikeURL(input) == isAddress)
+    }
+
     @Test func searchesAreNotAddresses() {
         #expect(!TypedURL.looksLikeURL("cra browser"))
         #expect(TypedURL.looksLikeURL("view-source:https://example.com"))
