@@ -61,7 +61,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// start with that typed in the search field, `-CraSearch NO` to launch without the search sheet,
 /// `-CraFakeModel YES` for canned answers in place of the on-device model, `-CraSummarize YES`
 /// to summarize the first page once it has loaded, `-CraSyncDir <folder>` for the folder the Mac's
-/// sidebar syncs into (`demo` for a made-up sidebar with two Spaces), `-CraFakeVoice <text>` for
+/// sidebar syncs into (`demo` for a made-up sidebar with two Spaces), `-CraSyncDelay <seconds>`
+/// to delay its read, `-CraFakeVoice <text>` for
 /// what voice search hears instead of the microphone (`-CraShowVoice YES` holds the voice overlay
 /// up with it, for a screenshot), `-CraOnboarding YES` to show onboarding on a test's data folder.
 enum LaunchOptions {
@@ -96,6 +97,7 @@ enum LaunchOptions {
     static var showsVoiceOverlay: Bool { LaunchOptions.value("CraShowVoice") == "YES" }
     /// `-CraHoldConnecting YES` keeps the Spaces sheet on "Connecting", for a screenshot.
     static var holdsConnecting: Bool { LaunchOptions.value("CraHoldConnecting") == "YES" }
+    static var syncDelay: TimeInterval? { LaunchOptions.value("CraSyncDelay").flatMap(TimeInterval.init) }
     static var summarizesFirstPage: Bool { LaunchOptions.value("CraSummarize") == "YES" }
     /// `-CraAIState off|preparing|unsupported` stands in for Apple Intelligence's state in tests.
     static var aiState: MobileAIState? {

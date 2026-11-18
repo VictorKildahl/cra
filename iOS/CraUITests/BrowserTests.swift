@@ -853,6 +853,32 @@ final class SpacesTests: BrowserTestCase {
         XCTAssertFalse(app.buttons["share-prompt-set-up"].exists, "the prompt asks once")
     }
 
+    // promise: #556
+    /// Reopening shows the last read while a fresh copy arrives with new Space IDs.
+    func testReopeningSpacesShowsTheLastRead() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraSyncDelay", "5"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let connecting = app.descendants(matching: .any)["spaces-connecting"]
+        XCTAssertTrue(connecting.waitForExistence(timeout: 2), "the first read should show Connecting")
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 10))
+        noThanks.tap()
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
+        app.buttons["spaces-close"].tap()
+        app.buttons["bar-spaces"].tap()
+        XCTAssertFalse(connecting.exists, "Connecting showed on reopen")
+        XCTAssertTrue(app.staticTexts["space-title"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].exists)
+        let flash = expectation(for: NSPredicate(format: "exists == true"), evaluatedWith: connecting)
+        flash.isInverted = true
+        wait(for: [flash], timeout: 6)
+        XCTAssertTrue(app.staticTexts["space-title"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["space-tab-Inbox"].exists)
+    }
+
     // promise: #465
     /// A sidebar.json as the Mac writes it into the sync folder shows its Spaces: dates as ISO 8601
     /// text (build 616 read them as numbers and showed "Sync with Cra for Mac"), and an item kind

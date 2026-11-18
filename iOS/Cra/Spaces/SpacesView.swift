@@ -7,7 +7,10 @@ final class SpacesModel: ObservableObject {
         case spaces(SidebarDocument)
     }
 
-    @Published var state: State = .loading
+    /// The Spaces read last: reopening the sheet shows them at once, not "Connecting" until iCloud answers.
+    private static var lastDocument: SidebarDocument?
+
+    @Published var state: State = SpacesModel.lastDocument.map { .spaces($0) } ?? .loading
     /// Folders opened by a tap; Arc Search shows them shut.
     @Published var openFolders = Set<UUID>()
     @Published var selected: UUID?
@@ -26,6 +29,7 @@ final class SpacesModel: ObservableObject {
     private var iconObserver: NSObjectProtocol?
 
     init() {
+        selected = spaces.first?.id
         iconObserver = NotificationCenter.default.addObserver(forName: FaviconStore.didChange, object: nil, queue: .main) { [weak self] _ in
             self?.objectWillChange.send()
         }
@@ -44,12 +48,14 @@ final class SpacesModel: ObservableObject {
             guard let self else { return }
             switch result {
             case .spaces(let document):
+                Self.lastDocument = document
                 self.asksToShare = MobileSyncIntro.showsSharePrompt(hasSpaces: true, seen: self.sharePromptSeen())
                 self.state = .spaces(document)
-                if self.selected == nil { self.selected = self.spaces.first?.id }
+                // The fresh copy may lack the Space shown from the remembered one (deleted on the Mac).
+                if !self.spaces.contains(where: { $0.id == self.selected }) { self.selected = self.spaces.first?.id }
                 self.fetchIcons(MobileSpaces.spaces(in: document, openFolders: Set(document.items.map(\.id))))
-            case .nothingSynced: self.state = .nothingSynced
-            case .unavailable: self.state = .unavailable
+            case .nothingSynced: Self.lastDocument = nil; self.state = .nothingSynced
+            case .unavailable: Self.lastDocument = nil; self.state = .unavailable
             }
         }
     }

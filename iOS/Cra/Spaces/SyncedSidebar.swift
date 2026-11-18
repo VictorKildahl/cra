@@ -27,7 +27,7 @@ enum SyncedSidebar {
     /// it, then it is downloaded) and it is read once it arrives, giving up after 30 seconds:
     /// iOS doesn't fetch another device's files until an app asks.
     static func load(_ done: @escaping (State) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
+        let readSidebar = {
             let state = read()
             DispatchQueue.main.async {
                 guard case .nothingSynced = state, LaunchOptions.value("CraSyncDir") == nil else { return done(state) }
@@ -38,6 +38,12 @@ enum SyncedSidebar {
                     }
                 }
             }
+        }
+        // `-CraSyncDelay` stands in for a slow iCloud read in UI tests.
+        if let delay = LaunchOptions.syncDelay {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay, execute: readSidebar)
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async(execute: readSidebar)
         }
     }
 
