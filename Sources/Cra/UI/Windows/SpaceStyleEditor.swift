@@ -88,6 +88,11 @@ struct SpaceStyleEditor: View {
             theme = SpaceThemeVariants.theme(key: p.key, intensity: p.intensity, noise: p.noise, appearance: p.appearance)
             onChange(theme)
         }
+        // A scenario moves the slider or the dial as a drag would (cra://debug?themeEditor=intensity:0.5).
+        .onReceive(NotificationCenter.default.publisher(for: SpaceStyleTick.debugSet)) { note in
+            if let v = note.userInfo?["intensity"] as? Double { pad.intensity = min(max(v, 0), 1) }
+            if let v = note.userInfo?["noise"] as? Double { pad.noise = min(max(v, 0), 1) }
+        }
     }
 
     private func pageArrow(_ symbol: String, to page: Int, label: String) -> some View {
@@ -272,39 +277,69 @@ private struct AppearanceToggles: View {
     }
 }
 
-/// The intensity: a wave over a 15 pt track with a white 16 × 46.5 pt thumb; the wave grows with the
-/// value and is bright up to the thumb, faint after it.
+/// The intensity: a wave over a 15 pt track with a white thumb. As in Arc both grow with the value
+/// (SpaceStyleControls): the wave from a flat line to its full height, the thumb from 11.5 × 40.5 to
+/// 25.5 × 53 pt, a tenth larger under the pointer or held. The wave is bright up to the thumb and
+/// faint after it, and the value ticks as it crosses each tenth.
 private struct WaveSlider: View {
     @Environment(\.editorInk) private var ink
     @Binding var value: Double
+    @State private var hovered = false
+    @State private var dragging = false
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
-            let x = 8 + (w - 16) * CGFloat(value)
+            let inset = SpaceStyleControls.trackInset
+            let x = inset + (w - 2 * inset) * CGFloat(value)
             let wave = Path { p in
-                let amp = 3 + (h / 2 - 12) * CGFloat(value)
-                for px in stride(from: 8.0, through: w - 8, by: 1) {
-                    let y = h / 2 - amp * sin((px - 8) / (w - 16) * CGFloat.pi * 14)
-                    px == 8 ? p.move(to: CGPoint(x: px, y: y)) : p.addLine(to: CGPoint(x: px, y: y))
+                let amp = SpaceStyleControls.waveAmplitude(value: value)
+                for px in stride(from: inset, through: w - inset, by: 1) {
+                    let y = h / 2 - amp * sin((px - inset) / (w - 2 * inset) * CGFloat.pi * 14)
+                    px == inset ? p.move(to: CGPoint(x: px, y: y)) : p.addLine(to: CGPoint(x: px, y: y))
                 }
             }
-            let style = StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round)
+            let style = StrokeStyle(lineWidth: SpaceStyleControls.waveLine, lineCap: .round, lineJoin: .round)
+            let thumb = SpaceStyleControls.thumbSize(value: value, held: hovered || dragging)
             ZStack(alignment: .leading) {
                 Capsule().fill(ink.opacity(0.1)).frame(height: 15)
                 wave.stroke(ink.opacity(ink == .black ? 0.12 : 0.25), style: style)
                 // Arc's light card draws the lit wave at about half black (130 on 237), its dark one brighter.
                 wave.stroke(ink.opacity(ink == .black ? 0.36 : 0.75), style: style).mask(Rectangle().frame(width: x).frame(maxWidth: .infinity, alignment: .leading))
-                Capsule().fill(.white).frame(width: 16, height: 46.5).position(x: x, y: h / 2)
+                Capsule().fill(.white).frame(width: thumb.width, height: thumb.height).position(x: x, y: h / 2)
+                    .animation(.spring(response: SpaceStyleControls.heldSpring.response, dampingFraction: SpaceStyleControls.heldSpring.damping),
+                               value: hovered || dragging)
             }
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { g in value = min(max((g.location.x - 8) / (w - 16), 0), 1) })
+            .onHover { hovered = $0 }
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { g in
+                    dragging = true
+                    value = min(max((g.location.x - inset) / (w - 2 * inset), 0), 1)
+                }
+                .onEnded { _ in dragging = false })
+        }
+        .onChange(of: value) { old, new in
+            if SpaceStyleControls.ticks(from: old, to: new, step: SpaceStyleControls.intensityStep) { SpaceStyleTick.play() }
         }
     }
 }
 
+/// Arc's tick for the slider and the dial: a generic haptic, now.
+@MainActor
+enum SpaceStyleTick {
+    /// How many have played, for a scenario, and the note a scenario moves a control with.
+    static var count = 0
+    static let debugSet = Notification.Name("CraDebugThemeEditorSet")
+
+    static func play() {
+        count += 1
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+    }
+}
+
 /// The grain: a dark disc showing it, a ring of dots lit from twelve o'clock round to a white knob;
-/// turning the knob sets the value.
+/// turning the knob sets the value, with a tick at each fifth.
 private struct GrainDial: View {
     @Environment(\.editorInk) private var ink
     @Binding var value: Double
@@ -335,6 +370,10 @@ private struct GrainDial: View {
                 if a < 0 { a += 2 * .pi }
                 value = a / (2 * .pi)
             })
+        }
+        // Arc's dial ticks as the grain crosses each fifth.
+        .onChange(of: value) { old, new in
+            if SpaceStyleControls.ticks(from: old, to: new, step: SpaceStyleControls.grainStep) { SpaceStyleTick.play() }
         }
     }
 }

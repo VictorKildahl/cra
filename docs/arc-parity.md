@@ -417,6 +417,26 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
 - Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once), and
   the faint colour wash in the middle of Arc's wheel.
 
+## Theme editor: the slider and the dial (Arc 1.173.1, 18 Nov 2026)
+
+From Arc's SpaceStyleEditor code (arm64, read with objdump) and a 120 Hz, 2x screen recording of the
+intensity slider dragged end to end (CraCore `SpaceStyleControls`; the app's `WaveSlider`, `GrainDial`).
+
+- Both controls tick: Arc plays a generic haptic (`performFeedbackPattern: 0`, now, 0x1017bd8e4)
+  when a value crosses a step, a multiple of the step lying between the old value and the new one,
+  ends included (0x1017bcf84). The editor calls that with 0.1 for one value and 0.2 for the other
+  (0x1017bcb0c, 0x1017bcd28). Which is which isn't certain from the code: the 0.2 one is held to
+  0…1 first, as a turned dial needs, so Cra ticks the slider at each tenth and the dial at each fifth.
+- The slider's wave is `SineWave {strength, frequency, phase}`, y = mid + strength × sin(phase +
+  x × frequency / width), with strength = maxAmplitude × value (0x1017c2198): a flat line at
+  nothing. In the recording it is 33.5 pt from trough to crest at full with its 5 pt line (20 pt at
+  0.54, 10.5 pt at 0.2), seven waves whatever the value.
+- The thumb grows with the value: held, 12.5 × 44.5 pt at nothing and 28 × 58.5 pt at full, its
+  width even between (21 pt at 0.54). At rest it is a tenth smaller (22 × 50.5 pt at 0.8): under
+  the pointer or held it scales to 1.1 on a spring (response 0.25, damping 0.9, 0x1017c18e4). Its
+  centre travels 202.8 pt.
+- Not seen: the dial turned slowly enough to count its ticks.
+
 ## Zap, measured (Arc 1.172.2, Victor's Arc on example.com, 12 Nov 2026)
 
 - Zap on (the editor's Zap button, dark while on): the page card gets a 58 pt shelf under the page, which
