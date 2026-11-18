@@ -208,6 +208,10 @@ built release app with a test profile. Note anything that fails in the release's
   move down past the bar and it goes. ⌘L opens the address with the bar away, and ✕, Expand and Add to Split beside
   the card still work. (`peek-toolbar-auto-hide` checks the layout, the strip and the keep zone through
   `cra://debug`; the real pointer's events over the card are this line.)
+- **#520:** open Gmail in a Peek (Shift-click a mail.google.com link, signed in) and press Escape: Close turns
+  into the red Confirm pill, and a second Escape closes the Peek. A quick double Escape closes it at once. Then a
+  plain site (github.com) in a Peek: one Escape closes it. (`peek-escape-closes` and `peek-escape-page-uses-it`
+  stand in for Gmail with a page that cancels Escape; Gmail's own key handling, which can change, is this line.)
 - **#381:** click a link to another site in a favorite, next to Arc doing the same: the peeked page's
   favicon springs onto the tile's top right corner on a white square (black in a dark space), 4 pt
   past the corner, with a soft shadow, and springs off when the Peek closes. Check a split favorite

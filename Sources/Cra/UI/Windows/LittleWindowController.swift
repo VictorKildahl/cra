@@ -2185,7 +2185,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             return true
         }
         // Esc in a Peek goes to the page first; after one the page kept, the next is Cra's and closes (#520).
-        if isPeek, !closingPeek, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
+        if isPeek, !closingPeek, PeekEscapePresses.isEscape(keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) {
             if escapes.beforePage(at: event.timestamp, holding: closeHold, isRepeat: event.isARepeat) {
                 CraLog.note("peek: Esc closes before the page (\(closeHold == nil ? "the page kept the last one" : "Close asked"))")
                 attemptPeekClose(.escape(prefersConfirmation: false))
@@ -2200,14 +2200,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// next Esc closes the Peek however the page treats it (#520).
     private func watchEscape(pressedAt: TimeInterval) {
         DispatchQueue.main.asyncAfter(deadline: .now() + PeekEscapePresses.answerTime) { [weak self] in
-            guard let self, self.escapes.pageKept(pressedAt: pressedAt), !self.closingPeek, self.closeHold == nil else { return }
+            guard let self, !self.closingPeek, self.escapes.pageKept(pressedAt: pressedAt, holding: self.closeHold) else { return }
             CraLog.note("peek: the page kept Esc, Close asks")
             self.attemptPeekClose(.escape(prefersConfirmation: true))
         }
     }
     func browser(_ browser: CraBrowser, handleUnhandledKeyEvent event: NSEvent) -> Bool {
         // Arc's "Exit the current context": Escape the page didn't use closes a Peek.
-        if isPeek, event.type == .keyDown, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
+        if isPeek, event.type == .keyDown, PeekEscapePresses.isEscape(keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) {
             escapes.pageLeft()
             // A second Esc may have closed it before the page handed this one back.
             if !closingPeek { attemptPeekClose(.escape(prefersConfirmation: false)) }
