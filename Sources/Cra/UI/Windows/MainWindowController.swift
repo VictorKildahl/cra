@@ -2952,7 +2952,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func holdFloatingSidebarForPopup() {
         guard floatingSidebar?.isShown == true else { return }
-        floatingSidebarPopupHold = Date().addingTimeInterval(3)
+        floatingSidebarPopupHold = Date().addingTimeInterval(FloatingSidebarKeepOut.popupWait)
     }
 
     /// Settings ▸ Sidebar on the right (#464): the window is laid out again at once, the traffic
@@ -2983,16 +2983,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Also while what it opened is up: its Site Control Center, and an extension's popup that hangs
         // from it (or is on its way), which lie beside it, past where the pointer sends it away (#531).
         f.staysShown = { [weak self, weak f] in
-            if FolderPreviewController.shared.isOpen { return true }
-            guard let self else { return false }
-            if self.siteControlCenter.isShown { return true }
-            if let anchor = ExtensionPopupWindow.shownAnchor {
-                // The popup is up: from now on where it hangs decides.
-                self.floatingSidebarPopupHold = nil
-                return f?.panelWindow.map { $0.frame.insetBy(dx: -1, dy: -1).contains(anchor) } ?? false
-            }
-            if let until = self.floatingSidebarPopupHold, Date() < until { return true }
-            return false
+            let keep = FloatingSidebarKeepOut(folderPreviewOpen: FolderPreviewController.shared.isOpen,
+                                              siteControlsOpen: self?.siteControlCenter.isShown == true,
+                                              popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
+                                              popupAwaitedUntil: self?.floatingSidebarPopupHold)
+            if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
+            return keep.staysOut(now: Date())
         }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.
@@ -3680,13 +3676,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Opened from the sidebar's URL field (toolbar hidden): the popup hangs under that field from the
         // sliders, as a pin in the sidebar's grid hangs it from its own button. It hung at the page's top
         // right, away from a floating sidebar, which then slid away under it (#531).
-        let sliders = (shell.sidebarHost as? SidebarView)?.siteControlsButtonFrameOnScreen
-        let fromSidebar = !(pressed != nil && shell.panesShowBars) && !store.settings.showToolbar ? sliders : nil
+        let fromSidebar = SiteControlsPopupAnchor.fromSidebar(
+            showToolbar: store.settings.showToolbar, openedInPaneBar: pressed != nil && shell.panesShowBars,
+            slidersFrame: (shell.sidebarHost as? SidebarView)?.siteControlsButtonFrameOnScreen, urlFieldBottom: y)
         actions.runExtension = { [weak self] id in
             guard let self else { return }
-            guard let sliders = fromSidebar else { return self.runExtensionAction(id) }
+            guard let anchor = fromSidebar else { return self.runExtensionAction(id) }
             self.holdFloatingSidebarForPopup()
-            self.runExtensionAction(id, buttonRightX: sliders.maxX, buttonBottomY: y)
+            self.runExtensionAction(id, buttonRightX: anchor.x, buttonBottomY: anchor.y)
         }
         actions.addExtension = { [weak self] in self?.openTab("https://chromewebstore.google.com/category/extensions") }
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }

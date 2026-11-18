@@ -1023,4 +1023,11 @@
 #524   Tests/LiveFolderPluginProcessTests.swift::jiraCloud  cf79a26f91cc
 #524   Tests/LiveFolderPluginProcessTests.swift::jiraCloudSignIn  5b161fa57e0e
 #527   Tests/Scenarios/sidebar-hover-other-space.scenario  2e7eb540d842
+#531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::aPopupElsewhereDoesNot  3d9f95ebc3c9
+#531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::aPopupHangingFromItKeepsIt  a2befdc3113d
+#531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::folderPreviewAndSiteControlsKeepIt  c15ce686df3d
+#531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::nothingOpenLetsThePointerDecide  390057acf193
+#531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::popupFromTheSidebarHangsUnderItsURLField  c6f6e93573a0
+#531   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarKeepOutTests.swift::waitsForThePopupItAskedFor  a788cd606142
+#531   Tests/ExtensionPopupWindowTests.swift::closesOnAClickElsewhere  ce46cd273792
 #531   Tests/Scenarios/floating-sidebar-extension-popup.scenario  66d9ded39b65
