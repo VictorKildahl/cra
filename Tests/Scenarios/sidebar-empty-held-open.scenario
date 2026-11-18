@@ -1,0 +1,88 @@
+# promise: #483
+# A window with no tab holds its hidden sidebar open, as Arc does: closing the last tab, the sidebar
+# button, switching to a space with no tab and a relaunch all bring it out at once, floating over the
+# window, and the button still docks it.
+# A tab ends the hold; the pointer then sends it in as before, which the floating-sidebar harness covers
+# (a scenario has no pointer). Out, the sidebar reads edge=floating and floating=left <x>.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A4830000-0000-0000-0000-000000000001","A4830000-0000-0000-0000-000000000002"],"spaces":[{"id":"A4830000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","favoritesContainerID":"C4830000-0000-0000-0000-000000000011","pinnedContainerID":"C4830000-0000-0000-0000-000000000012","todayContainerID":"C4830000-0000-0000-0000-000000000013","createdAt":"2026-11-18T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A4830000-0000-0000-0000-000000000002","title":"Empty","emoji":"🫧","favoritesContainerID":"C4830000-0000-0000-0000-000000000021","pinnedContainerID":"C4830000-0000-0000-0000-000000000022","todayContainerID":"C4830000-0000-0000-0000-000000000023","createdAt":"2026-11-18T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"items":[{"id":"C4830000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-18T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A4830000-0000-0000-0000-000000000001"}}}}},{"id":"C4830000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-18T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A4830000-0000-0000-0000-000000000001"}}}}},{"id":"C4830000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-18T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A4830000-0000-0000-0000-000000000001"}}}}},{"id":"C4830000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-18T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A4830000-0000-0000-0000-000000000002"}}}}},{"id":"C4830000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-18T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A4830000-0000-0000-0000-000000000002"}}}}},{"id":"C4830000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-18T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A4830000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=held
+expect-log GET \S*\?n=held
+wait 1
+
+# Hidden with a page open: hidden as before, nothing out.
+cra://action/toggleSidebar
+wait 1
+cra://debug?sidebarShown=page-hidden
+expect-log sidebar shown page-hidden: visible=0 .* presentation=hidden
+cra://debug?windowState=page-hidden
+expect-log window state page-hidden: main0 .* floating=none
+
+# Closing the last tab: the sidebar comes out by itself and stays.
+cra://action/closeTab
+wait 1
+cra://debug?selectedTab=empty
+expect-log selected tab empty: none
+cra://debug?sidebarShown=empty
+expect-log sidebar shown empty: visible=0 .* presentation=heldOpen
+cra://debug?windowState=empty
+expect-log window state empty: main0 .* lightsHidden=1 .* sidebar=left edge=floating .* floating=left \d+
+
+# The sidebar button docks it in place: docked, the panel gone, the window's own buttons back.
+# Detaching again in the empty window holds it out at once.
+cra://action/toggleSidebar
+wait 1
+cra://debug?windowState=docked
+expect-log window state docked: main0 .* lightsHidden=0 .* sidebar=left edge=left .* floating=none
+cra://action/toggleSidebar
+wait 1
+cra://debug?windowState=detached
+expect-log window state detached: main0 .* sidebar=left edge=floating .* floating=left \d+
+
+# Presses faster than the slide (85 ms) settle in one place: three end docked, a fourth holds it out.
+pace 0.03
+cra://action/toggleSidebar
+cra://action/toggleSidebar
+cra://action/toggleSidebar
+pace 0.2
+wait 1
+cra://debug?windowState=rapid
+expect-log window state rapid: main0 .* lightsHidden=0 .* sidebar=left edge=left .* floating=none
+cra://action/toggleSidebar
+wait 1
+cra://debug?windowState=rapid-held
+expect-log window state rapid-held: main0 .* lightsHidden=1 .* sidebar=left edge=floating .* floating=left \d+
+
+# A tab ends the hold.
+cra://open?url=${PAGE}?n=tab
+expect-log GET \S*\?n=tab
+wait 1
+cra://debug?sidebarShown=tab
+expect-log sidebar shown tab: visible=0 .* presentation=hidden
+
+# Tucked away in a space with a tab, then switching to an empty space: it comes straight back
+# held open. Returning to the tabbed space releases the hold and restores its hidden presentation.
+cra://debug?floatingSidebar=0
+wait 1
+cra://action/nextSpace
+wait 1
+cra://debug?selectedTab=space-empty
+expect-log selected tab space-empty: none
+cra://debug?sidebarShown=space-empty
+expect-log sidebar shown space-empty: visible=0 .* presentation=heldOpen
+cra://debug?windowState=space-empty
+expect-log window state space-empty: main0 .* sidebar=left edge=floating .* floating=left \d+
+cra://action/previousSpace
+wait 1
+cra://debug?sidebarShown=space-tab
+expect-log sidebar shown space-tab: visible=0 .* presentation=hidden
+
+# Empty again and saved hidden: after a relaunch the sidebar is out once the window is on screen.
+cra://action/closeTab
+wait 1
+relaunch
+cra://debug?selectedTab=relaunched
+expect-log selected tab relaunched: none
+cra://debug?windowState=relaunched
+expect-log window state relaunched: main0 .* sidebar=left edge=floating .* floating=left \d+

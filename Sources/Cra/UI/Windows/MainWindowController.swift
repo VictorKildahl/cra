@@ -55,7 +55,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The tab whose page (a video) is in element fullscreen.
     private var contentFullscreenTab: UUID?
     private var lastSidebarVisible = true
-    /// The theme the background and placeholder root views were made with.
+    /// The theme the window's root views were made with.
     private var shownTheme: SpaceTheme?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
@@ -97,6 +97,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private(set) lazy var splitDrop = PageSplitDrop(owner: self)
     /// The sidebar holds the content area's edge on its side: shown and docked, not floating over the page.
     var sidebarDocked: Bool { sidebarVisible && !shell.floatingSidebar }
+    /// How this window presents its sidebar now, from what it shows (CraCore SidebarPresentation).
+    var sidebarPresentation: SidebarPresentation {
+        SidebarPresentation(sidebarVisible: sidebarVisible, hasSelectedTab: selectedTabID != nil,
+                            folderPreviewOpen: FolderPreviewController.shared.isOpen, pageFullscreen: shell.contentFullscreen)
+    }
     var selectedTab: SidebarItem? { store.selectedTab(window: windowID) }
     var sidebarVisible: Bool {
         get { store.window(windowID).sidebarVisible }
@@ -280,7 +285,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             store.prefs.sidebarWidth = Double(shell.sidebarWidth)
             lastSidebarWidth = shell.sidebarWidth
         }
-        shell.onEdgeHover = { [weak self] show in self?.setFloatingSidebar(show) }
+        shell.onEdgeHover = { [weak self] inStrip in
+            if inStrip { self?.floatingSidebar?.edgeHovered() } else { self?.floatingSidebar?.edgeLeft() }
+        }
 
         installSwipeMonitor()
         installChildClickMonitor()
@@ -561,8 +568,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shownTheme = space.theme.shown
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
-            shell.placeholderHost.wantsLayer = true
-            shell.placeholderHost.layer?.backgroundColor = (palette.isDark ? NSColor.white.withAlphaComponent(0.04) : NSColor.black.withAlphaComponent(0.03)).cgColor
             shell.isDarkTheme = palette.isDark
             // The space's light or dark goes to the window's content (sidebar, toolbar, pages'
             // frame), not to the window: AppKit hands a window's appearance to every menu, sheet,
@@ -638,12 +643,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
         if sidebarVisible != lastSidebarVisible {
             lastSidebarVisible = sidebarVisible
-            (window as? CraWindow)?.trafficLightsHidden = !lastSidebarVisible
-            // Anchoring while the sidebar floats: bring it home first so it slides from there.
-            if lastSidebarVisible { floatingSidebar?.prepareForAnchoring() }
-            shell.animateSidebar(visible: lastSidebarVisible, floating: false, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth)
+            if lastSidebarVisible, !shell.contentFullscreen, let floating = floatingSidebar, floating.beginDock() {
+                // Docking the sidebar while it is out over the window: it grows into place on the
+                // window's own slide, and the window's buttons come back once it is docked, as the floating
+                // sidebar's stand-ins go. A page in full screen docks it out of sight, the old way.
+                shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth,
+                                     alongside: { floating.dockProgress($0) },
+                                     completion: { [weak self] in
+                                         if floating.finishDock() {
+                                             let drift = self?.shell.lastSidebarSlidePageDrift.map { ": page moved \($0) pt" } ?? ""
+                                             CraLog.note("sidebar docked in place\(drift)")
+                                         }
+                                         guard let self else { return }
+                                         (self.window as? CraWindow)?.trafficLightsHidden = !self.lastSidebarVisible
+                                     })
+            } else {
+                (window as? CraWindow)?.trafficLightsHidden = !lastSidebarVisible
+                // Anchoring while the sidebar floats: bring it home first so it slides from there.
+                if lastSidebarVisible { floatingSidebar?.prepareForAnchoring() }
+                // Hidden in a window with no tab, the sidebar is held open over it (#483): the shell lays
+                // out for a floating sidebar, so its flags match the panel the sidebar is about to be in.
+                let heldOpen = sidebarPresentation.mode == .heldOpen
+                shell.animateSidebar(visible: lastSidebarVisible, floating: heldOpen, fullscreen: shell.contentFullscreen, width: shell.sidebarWidth)
+            }
             floatingSidebar?.sidebarVisibilityChanged()
         }
+        holdSidebarOpenIfEmpty()
         if CGFloat(store.prefs.sidebarWidth) != lastSidebarWidth {
             lastSidebarWidth = CGFloat(store.prefs.sidebarWidth)
             shell.sidebarWidth = sidebarUI.libraryPage.map { libraryWidth($0) } ?? lastSidebarWidth
@@ -2864,7 +2889,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if showed { return }
         }
         sidebarVisible.toggle()
-        if !sidebarVisible { setFloatingSidebar(false) }
+        if !sidebarVisible { floatingSidebar?.hide(animated: true) }
     }
 
     // MARK: Library
@@ -2909,7 +2934,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.sidebarWidth = width
             shell.animateSidebar(visible: true, floating: false, fullscreen: shell.contentFullscreen, width: width)
         } else {
-            setFloatingSidebar(false)
+            floatingSidebar?.hide(animated: true)
             libraryShowedSidebar = true
             shell.sidebarWidth = width
             sidebarVisible = true
@@ -2966,11 +2991,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         CraLog.note("sidebar on the \(side.rawValue)")
     }
 
-    private func setFloatingSidebar(_ show: Bool) {
-        guard let floatingSidebar else { return }
-        if show { floatingSidebar.edgeHovered() } else { floatingSidebar.hide(animated: true) }
-    }
-
     private func installFloatingSidebar() {
         guard let window, floatingSidebar == nil else { return }
         let f = FloatingSidebarController(shell: shell, window: window, palette: { [weak self] in
@@ -2981,14 +3001,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.map { FloatingSidebarGeometry.mayReveal(sidebarShown: $0.sidebarVisible, pageFullscreen: $0.shell.contentFullscreen) } ?? false
         }
         // Also while what it opened is up: its Site Control Center, and an extension's popup that hangs
-        // from it (or is on its way), which lie beside it, past where the pointer sends it away (#531).
+        // from it (or is on its way), which lie beside it, past where the pointer sends it away (#531);
+        // and while the window has no tab, which holds a hidden sidebar open (SidebarPresentation, #483).
         f.staysShown = { [weak self, weak f] in
             let keep = FloatingSidebarKeepOut(folderPreviewOpen: FolderPreviewController.shared.isOpen,
                                               siteControlsOpen: self?.siteControlCenter.isShown == true,
                                               popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
                                               popupAwaitedUntil: self?.floatingSidebarPopupHold)
             if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
-            return keep.staysOut(now: Date())
+            return keep.staysOut(now: Date()) || self?.sidebarPresentation.mayRetract == false
         }
         f.didAttachPanel = { [weak self] in
             // Keep the find bar above the floating sidebar.
@@ -4912,6 +4933,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     override func showWindow(_ sender: Any?) {
         app.browserWindowWillShow(self)
         super.showWindow(sender)
+        // A window that opens with no tab and its sidebar hidden (a relaunch) holds it open now that
+        // it is on screen; the first refresh ran before it was.
+        holdSidebarOpenIfEmpty()
+    }
+
+    /// GitHub #483: a window with no tab holds its hidden sidebar open (SidebarPresentation.heldOpen),
+    /// whatever made it so: the sidebar button, the last tab closing, a space with nothing selected or a
+    /// relaunch. It waits for the window to be on screen and for a space swipe to land; a tab ends it,
+    /// and the pointer then sends the sidebar in as before.
+    private func holdSidebarOpenIfEmpty() {
+        guard let floatingSidebar, window?.isVisible == true, sidebarUI.spaceSwipe == 0,
+              sidebarPresentation.mode == .heldOpen, !floatingSidebar.isShown else { return }
+        floatingSidebar.showInPlace()
     }
 
     /// ⌘Q put Cra in the menu bar (#231): the window is out of sight and its pages are closed, as

@@ -1,0 +1,25 @@
+# promise: #483
+# A window with no tab shows Arc's white card in the page card's inset, with the page card's shadow,
+# beside the docked sidebar and beside the hidden one held open over the window (CraCore CardVeil
+# holds the veil for light and dark). A tab takes the card's place.
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=card
+expect-log GET \S*\?n=card
+wait 1
+cra://debug?emptyCard=tab
+expect-log empty card tab: none
+
+# Closing the last tab: the white card, casting its shadow, beside the docked sidebar.
+cra://action/closeTab
+wait 1
+cra://debug?selectedTab=docked
+expect-log selected tab docked: none
+cra://debug?emptyCard=docked
+expect-log empty card docked: veil=0\.(65|10) shadow=1
+
+# The sidebar hidden and held open over the window: the card stays as it is.
+cra://action/toggleSidebar
+wait 1
+cra://debug?emptyCard=held
+expect-log empty card held: veil=0\.(65|10) shadow=1

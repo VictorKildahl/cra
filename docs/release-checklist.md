@@ -35,7 +35,9 @@ built release app with a test profile. Note anything that fails in the release's
   swipes. With it off, a Dock restore and Stage Manager show no matte frame, and a ⌃←/⌃→
   full-screen round trip doesn't step.
 - **#46:** waking a slept tab in dark mode shows a black page area, not white.
-- **#6:** a new window's empty card has rounded corners.
+- **#6, #483:** a new window's empty card has rounded corners, is white over the space's colour
+  (stronger in light themes and faint in dark), casts the page card's soft shadow, and remains
+  below the find and status bars.
 - **#24:** edge to edge, there is no margin and the card is square, with the sidebar shown and
   hidden.
 - **#464:** with Settings ▸ Tabs ▸ Sidebar on the right, the sidebar and its traffic lights sit on the
@@ -64,6 +66,14 @@ built release app with a test profile. Note anything that fails in the release's
   not visible here, so WindowCoverageTests and `window-coverage-own-parts` stand in; ask the reporter.
 
 ### Sidebar, tabs and the command bar
+
+- **#483:** with no selected tab and the sidebar saved hidden, it comes straight out floating and
+  stays visible when the pointer leaves and when another app comes to the front. Its button switches
+  between docked and floating. Open a page: it remains while the pointer is over it, then slides away
+  when the pointer leaves. Switch to an empty space and it comes straight back.
+- **#483, docking:** dock the sidebar from floating over both the empty card and a real page. It grows
+  into place, its corners square and its shadow fades without the page jumping. Undocking in the empty
+  window still snaps to floating; smoothing that direction is a follow-up.
 
 - **PR #268, ⌘T:** next to Arc on a themed space and on a default one: the selected row is the
   space's colour (gold on a gold space), white text and a white arrow tile; the info badge takes the

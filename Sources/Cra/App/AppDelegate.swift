@@ -1839,7 +1839,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     [(NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
                         .filter { m.keyEquivalentModifierMask.contains($0.0) }.map(\.1).joined()
                 } ?? ""
-                CraLog.note("sidebar shown \(label): visible=\(main.sidebarVisible ? 1 : 0) menu=\(item?.title ?? "-") key=\(mods)\(item?.keyEquivalent ?? "-")")
+                // presentation: docked, hidden or heldOpen (SidebarPresentation, #483).
+                CraLog.note("sidebar shown \(label): visible=\(main.sidebarVisible ? 1 : 0) menu=\(item?.title ?? "-") key=\(mods)\(item?.keyEquivalent ?? "-") presentation=\(main.sidebarPresentation.mode)")
                 return
             }
             // menuRows=<menu>[&label=<label>]: a menu bar menu's rows as it draws them once validated
@@ -2064,6 +2065,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["relaunch"] != nil { relaunch(); return }
             // quit=1 quits for real, as the menu bar item's Quit; quit=menu is ⌘Q (#231).
             if let q = dict["quit"] { q == "menu" ? NSApp.terminate(nil) : quitFromMenuBar(); return }
+            // emptyCard=<label>: the front window's card while no tab is selected, its veil and shadow (#483).
+            if let label = dict["emptyCard"] {
+                CraLog.note("empty card \(label): \(main.shell.emptyCardReadout)")
+                return
+            }
             // selectedTab=<label>: the front window's open tab, by address (⌘1…⌘9 scenarios).
             if let label = dict["selectedTab"] {
                 CraLog.note("selected tab \(label): \(store.selectedTabID(window: main.windowID).flatMap { store.item($0)?.tab?.url } ?? "none")")
