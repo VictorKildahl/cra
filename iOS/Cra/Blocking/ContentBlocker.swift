@@ -8,9 +8,18 @@ final class ContentBlocker {
     static let shared = ContentBlocker()
 
     private(set) var list = MobileBlocklist(text: "")
+    /// The domains of the lists added in Default Site Settings ▸ Block Lists (#507), blocked as ads.
+    private(set) var added = MobileBlocklist(text: "")
+    /// How many rule lists the added domains were compiled into (MobileBlocklist.customChunks).
+    private var addedLists = 0
+    /// What the added lists were last compiled from, so the same domains aren't compiled twice.
+    private var addedKey: String?
     private var compiled: [String: WKContentRuleList] = [:]
     private var waiting: [() -> Void] = []
-    private(set) var isReady = false
+    private var bundledReady = false
+    /// Added lists are being looked up at launch: the first page waits for them too.
+    private var addedPending = false
+    var isReady: Bool { bundledReady && !addedPending }
 
     private init() {}
 
@@ -50,11 +59,21 @@ final class ContentBlocker {
         }
         group.notify(queue: .main) { [weak self] in
             guard let self else { return }
-            self.isReady = true
-            let waiting = self.waiting
-            self.waiting = []
-            waiting.forEach { $0() }
+            self.bundledReady = true
+            self.releaseWaiting()
         }
+    }
+
+    private func releaseWaiting() {
+        guard isReady else { return }
+        let waiting = self.waiting
+        self.waiting = []
+        waiting.forEach { $0() }
+    }
+
+    /// At launch, when lists were added: pages wait until `setAdded` has their rule lists.
+    func holdForAdded() {
+        addedPending = true
     }
 
     /// Runs `work` once the lists exist: at once from the second launch on.
@@ -66,8 +85,62 @@ final class ContentBlocker {
     func apply(_ options: MobileSiteOptions?, to controller: WKUserContentController) {
         controller.removeAllContentRuleLists()
         guard let options else { return }
-        for name in MobileBlocklist.ruleLists(for: options) {
+        for name in MobileBlocklist.ruleLists(for: options, customLists: addedLists) {
             if let list = compiled[name] { controller.add(list) }
+        }
+    }
+
+    /// Whether a request to `host` is stopped on a site with `options`, by Cra's list or an added one.
+    func stops(host: String, with options: MobileSiteOptions) -> Bool {
+        list.stops(host: host, with: options) || (options.blockAds && added.blocks(host: host))
+    }
+
+    /// Compiles the added lists' domains into rule lists of their own, which pages get from their
+    /// next load. Compiled lists are kept by WebKit under a name that carries their content, so a
+    /// launch with the same domains looks them up; ones no longer used are removed.
+    func setAdded(_ domains: [String]) {
+        let key = "\(domains.count)-\(CustomBlocklist.cacheFileName(for: domains.joined(separator: "\n")).dropLast(4))"
+        guard key != addedKey, let store = WKContentRuleListStore.default() else {
+            addedPending = false
+            return releaseWaiting()
+        }
+        addedKey = key
+        let chunks = MobileBlocklist.customChunks(domains)
+        let identifiers = chunks.indices.map { "cra-\(MobileBlocklist.customRuleListName($0))-\(key)" }
+        var lists: [String: WKContentRuleList] = [:]
+        let group = DispatchGroup()
+        for (index, chunk) in chunks.enumerated() {
+            group.enter()
+            let identifier = identifiers[index]
+            store.lookUpContentRuleList(forIdentifier: identifier) { found, _ in
+                if let found {
+                    lists[MobileBlocklist.customRuleListName(index)] = found
+                    return group.leave()
+                }
+                DispatchQueue.global(qos: .utility).async {
+                    let rules = MobileBlocklist.rulesJSON(blocking: chunk)
+                    DispatchQueue.main.async {
+                        store.compileContentRuleList(forIdentifier: identifier, encodedContentRuleList: rules) { list, _ in
+                            if let list { lists[MobileBlocklist.customRuleListName(index)] = list }
+                            group.leave()
+                        }
+                    }
+                }
+            }
+        }
+        group.notify(queue: .main) { [weak self] in
+            guard let self, self.addedKey == key else { return }
+            for name in self.compiled.keys where name.hasPrefix("custom-") { self.compiled[name] = nil }
+            self.compiled.merge(lists) { $1 }
+            self.addedLists = chunks.count  // a chunk that failed to compile is skipped by apply
+            self.added = MobileBlocklist(text: domains.joined(separator: "\n"))
+            self.addedPending = false
+            self.releaseWaiting()
+            store.getAvailableContentRuleListIdentifiers { names in
+                for name in names ?? [] where name.hasPrefix("cra-custom-") && !identifiers.contains(name) {
+                    store.removeContentRuleList(forIdentifier: name) { _ in }
+                }
+            }
         }
     }
 }

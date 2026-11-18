@@ -73,10 +73,21 @@ public struct MobileBlocklist {
         return "[{\"trigger\":{\"url-filter\":\".*\"},\"action\":{\"type\":\"css-display-none\",\"selector\":\"\(selector)\"}}]"
     }
 
-    /// The rule lists a page on a site with `options` gets, by name.
-    public static func ruleLists(for options: MobileSiteOptions) -> [String] {
+    /// Domains of the lists added in Default Site Settings ▸ Block Lists (#507), in rule lists
+    /// WebKit compiles: it stops at 150,000 rules a list, and big lists such as oisd go past that.
+    public static let customChunkSize = 50_000
+
+    public static func customChunks(_ domains: [String]) -> [[String]] {
+        stride(from: 0, to: domains.count, by: customChunkSize).map { Array(domains[$0..<min($0 + customChunkSize, domains.count)]) }
+    }
+
+    public static func customRuleListName(_ index: Int) -> String { "custom-\(index)" }
+
+    /// The rule lists a page on a site with `options` gets, by name. The added lists count as ads.
+    public static func ruleLists(for options: MobileSiteOptions, customLists: Int = 0) -> [String] {
         var names: [String] = []
         if options.blockAds { names.append(Kind.ads.rawValue) }
+        if options.blockAds { names += (0..<customLists).map(customRuleListName) }
         if options.blockTrackers { names.append(Kind.trackers.rawValue) }
         if options.blockCookieBanners { names.append("cookie-banners") }
         return names

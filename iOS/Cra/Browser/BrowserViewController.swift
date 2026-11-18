@@ -58,8 +58,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var keyboardHeight: CGFloat = 0
     var keyboard = MobileKeyboard()
     var keyboardDroveLayout = false
-    var barHiddenByScroll = false
-    var scrollTravel: CGFloat = 0
+    /// Scrolling puts the bar away where Collapse Bottom Bar is on (`MobileBarCollapse`).
+    var barCollapse = MobileBarCollapse()
+    var barHiddenByScroll: Bool { barCollapse.isHidden }
 
     init(store: TabStore, settings: MobileSettingsStore) {
         self.store = store
@@ -123,6 +124,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
 
         ContentBlocker.shared.prepare()
+        BlockLists.shared.set(addresses: settings.value.customBlocklists)
         DownloadManager.shared.load(from: LaunchOptions.dataDirectory)
         DownloadManager.shared.onFinish = { [weak self] item in self?.downloadFinished(item) }
         store.archiveStale(after: settings.value.archiveAfter)
@@ -303,6 +305,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     @objc func appDidBecomeActive() {
         takeSharedLinks()
+        BlockLists.shared.refreshDue()
     }
 
     @objc func appWillResignActive() {
@@ -474,8 +477,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             browseLoading.isHidden = browseLoading.tabID != page.tabID
             pageContainer.insertSubview(browseLoading, belowSubview: pageDim)
         }
-        barHiddenByScroll = false
-        scrollTravel = 0
+        barCollapse.reveal()
         updateBrowseToggle()
     }
 
@@ -524,7 +526,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         switcher.layoutIfNeeded()
         self.switcher = switcher
         pageContainer.isHidden = true
-        barHiddenByScroll = false
+        barCollapse.reveal()
         return switcher
     }
 
@@ -1004,6 +1006,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         store.update(page.tabID, url: address == "about:blank" ? nil : address, title: page.webView.title)
         if page === shownPage { updateBrowseToggle() }
         if page === shownPage { blockerNoticesFollow(page) }
+        // A site whose Collapse Bottom Bar is off never has the bar away, even arriving by a link
+        // from one that put it away (#505).
+        if page === shownPage, !isSearching, barCollapse.pageChanged(collapses: settings.value.options(for: page.webView.url?.host).collapseBottomBar) {
+            animateChrome(duration: 0.25, options: .curveEaseInOut)
+        }
     }
 
     func webPage(_ page: WebPage, didFinishLoading success: Bool) {
@@ -1026,20 +1033,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool) {
         guard page === shownPage, !isSearching else { return }
         // The bar leaves after 24 pt of scrolling down and returns on the way back up.
-        scrollTravel = delta * scrollTravel < 0 ? delta : scrollTravel + delta
         let collapses = settings.value.options(for: page.webView.url?.host).collapseBottomBar
-        let hide: Bool
-        if atTop || !collapses { hide = false } else if scrollTravel > 24 { hide = true } else if scrollTravel < -24 { hide = false } else { return }
-        guard hide != barHiddenByScroll else { return }
-        barHiddenByScroll = hide
+        guard barCollapse.scrolled(by: delta, atTop: atTop, collapses: collapses) else { return }
         animateChrome(duration: 0.25, options: .curveEaseInOut)
     }
 
     /// A tap on the strip under the page brings the bar back, as scrolling up does.
     @objc func revealBar() {
-        guard barHiddenByScroll else { return }
-        barHiddenByScroll = false
-        scrollTravel = 0
+        guard barCollapse.reveal() else { return }
         animateChrome(duration: 0.25, options: .curveEaseInOut)
     }
 

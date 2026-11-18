@@ -30,6 +30,7 @@ final class ExtensionPopupWindow: NSWindow {
     /// The frame's top-left when a title-bar drag began.
     private var dragStart = NSPoint.zero
     private var observers: [NSObjectProtocol] = []
+    private var clickMonitor: Any?
     private var placing = false
     /// A title-bar drag is under way (willMove is only posted for those, not when the main
     /// window carries this child along).
@@ -105,6 +106,12 @@ final class ExtensionPopupWindow: NSWindow {
                 w.dismiss(closingBubble: true)
             }
         })
+        // A click in a Cra window that doesn't take focus for it (the floating sidebar's panel becomes key
+        // only when a click needs it) never reached the observer above: the popup stayed up (#531).
+        w.clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak w] event in
+            MainActor.assumeIsolated { w?.mouseDown(elsewhere: event) }
+            return event
+        }
         w.observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willMoveNotification, object: w, queue: .main) { [weak w] _ in
             MainActor.assumeIsolated {
                 guard let w else { return }
@@ -189,10 +196,23 @@ final class ExtensionPopupWindow: NSWindow {
         return event.timestamp == closingClick
     }
 
+    /// A press in one of Cra's windows other than this popup (its frame, Chrome's bubble or a window the
+    /// bubble opened): it closes the popup, as a click that takes the popup's focus does.
+    private func mouseDown(elsewhere event: NSEvent) {
+        guard let bubble, let target = event.window, target !== self, target !== bubble, target.parent !== bubble else { return }
+        if event.type == .leftMouseDown { Self.closingClick = event.timestamp }
+        dismiss(closingBubble: true)
+    }
+
+    /// The point (screen) the popup on screen hangs from, nil while none is.
+    static var shownAnchor: NSPoint? { current.map { $0.anchor } }
+
     private func dismiss(closingBubble: Bool) {
         if let e = NSApp.currentEvent, e.type == .leftMouseDown { Self.closingClick = e.timestamp }
         for o in observers { NotificationCenter.default.removeObserver(o) }
         observers = []
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = nil
         if let bubble {
             removeChildWindow(bubble)
             // Not right away: the key change that got here can come from inside Chrome ordering

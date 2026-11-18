@@ -9,6 +9,34 @@ struct LiveFolderModelTests {
         #expect(folder.signInURL == "https://github.com/enterprises/example-ent/sso")
     }
 
+    /// Arc's folder row (ListHeaderCellView) shows a key while organisations want single sign-on
+    /// and a triangle when GitHub can't be read; Cra showed the triangle for both.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/521"))
+    func singleSignOnShowsAKeyAndSignedOutAWarning() {
+        var folder = LiveFolderData()
+        #expect(folder.alert == nil)
+        var plugin = LiveFolderPluginConfiguration(id: "github", settings: [:], filters: [], sessionOrigins: [])
+        plugin.signIn = .init(title: "Sign In to GitHub…", url: "https://github.com/login")
+        plugin.signInWarning = "Sign back in to GitHub."
+        var snapshot = LiveFolderPluginSnapshot(items: [], actions: [.init(title: "Sign In to acme with SSO…",
+                                                                           url: "https://github.com/orgs/acme/sso")])
+        snapshot.warning = "Login with SSO to unlock this folder"
+        plugin.snapshot = snapshot
+        folder.plugin = plugin
+
+        let sso = folder.alert
+        #expect(sso?.symbol == "key")
+        #expect(sso?.help == "Login with SSO to unlock this folder" && sso?.url == "https://github.com/orgs/acme/sso")
+
+        folder.lastError = .notSignedIn
+        let signIn = folder.alert
+        #expect(signIn?.symbol == "exclamationmark.triangle", "signed out beats SSO, as in Arc")
+        #expect(signIn?.help == "Sign back in to GitHub." && signIn?.url == "https://github.com/login")
+
+        folder.lastError = .network
+        #expect(folder.alert == .failed(.network) && folder.alert?.symbol == "exclamationmark.triangle" && folder.alert?.url == nil)
+    }
+
     @Test func defaultsShowEveryPullRequest() {
         let folder = LiveFolderData()
         #expect(folder.source == .github && folder.filter == GitHubLiveFilter() && folder.filter.attributes == .all)

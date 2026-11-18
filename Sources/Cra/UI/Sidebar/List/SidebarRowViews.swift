@@ -298,6 +298,9 @@ final class SidebarGlyphButton: NSView {
         setHelp(help)
     }
 
+    /// cra://debug?glyphs=: the symbol it shows and its tip, as `symbol "tip"`.
+    var debugReadout: String { "\(shownSymbol ?? "none") \"\(tip?.text ?? "")\"" }
+
     func setHelp(_ help: String) {
         if let tip { (tip.text, tip.keys) = ArcTooltipLabel.split(help) } else if !help.isEmpty { tip = ArcTooltipAnchorView.attach(to: self, help: help) }
     }
@@ -1483,10 +1486,8 @@ struct FolderRowModel: Equatable {
     var back: NSColor
     var tabCount: Int
     var liveBusy: Bool
-    /// The warning button's tip after a failed refresh.
-    var liveError: String?
-    /// Where the warning button signs in, when GitHub asked for that (else it tries again).
-    var liveSignInURL: String?
+    /// The warning button after a failed refresh or while single sign-on hides some of the folder.
+    var liveWarning: LiveFolderWarning?
     var liveHelp: String
     var liveIcon: NSImage? = nil
     var symbol: FolderSymbol? = nil
@@ -1561,11 +1562,12 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
                 p.startAnimation(nil)
                 slot.addSubview(p)
                 accessory = slot
-            } else if let error = m.liveError {
-                // Arc keeps the warning on hover too ("Sign back in to GitHub."): a click signs in, or tries again.
-                let signIn = m.liveSignInURL
-                accessory = SidebarGlyphButton(symbol: "exclamationmark.triangle", size: 26, iconSize: 13, weight: .regular,
-                                               help: error, colors: colors) { [weak list] in
+            } else if let warning = m.liveWarning {
+                // Arc keeps the warning on hover too ("Sign back in to GitHub.", or a key for "Login with
+                // SSO to unlock this folder"): a click signs in, or tries again.
+                let signIn = warning.signInURL
+                accessory = SidebarGlyphButton(symbol: warning.symbol, size: 26, iconSize: 13, weight: .regular,
+                                               help: warning.help, colors: colors) { [weak list] in
                     if let signIn { list?.actions.openURL(signIn) } else { LiveFolderManager.shared.refresh(id) }
                 }
             } else if hover {

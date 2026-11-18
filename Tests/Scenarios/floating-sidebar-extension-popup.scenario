@@ -1,0 +1,55 @@
+# promise: #531
+# With the sidebar hidden and the toolbar too (Cra's default), the sidebar that slides out at the
+# window's edge stays out while its Site Control Center is open, and an extension run from there
+# hangs its popup under the sidebar's URL field, with the sidebar still out beside it. A click in
+# that sidebar closes the popup, and then the sidebar goes as the pointer says. Until 0.1.48 the
+# sidebar slid away as soon as the pointer went into the Site Control Center, the popup hung at the
+# page's top right, and a click in the sidebar left it open (the sidebar's panel takes focus only
+# when a click needs it, and Chrome closes a popup only when it loses focus).
+requires screen
+# Cra has to come to the front for the pointer to count; a background test copy never does.
+env CRA_TEST_BACKGROUND=0
+budget rss=800 stalls50=20
+pace 0.4
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=popup
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 0.5
+cra://debug?activate=1
+wait 1
+# Out, then the Site Control Center from its URL field; then the real pointer, somewhere else on
+# screen, decides again.
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?urlFieldHover=1
+expect-log url field: copyURL siteControls$
+cra://debug?urlFieldPress=siteControls
+expect-log url field press siteControls: pressed true, site control center shown
+cra://debug?floatingSidebar=release
+wait 1
+cra://debug?floatingSidebar=state:menu
+expect-log floating sidebar menu: out$
+
+cra://debug?siteControlsPress=Cra%20Scenario%20Fixture
+expect-log site controls pressed Cra Scenario Fixture
+expect-log extension popup shown
+wait 1
+cra://debug?extensionPopup=run
+expect-log extension popup run: shown, hangs from sidebar$
+cra://debug?floatingSidebar=state:popup
+expect-log floating sidebar popup: out$
+
+# A click on the sidebar's empty space below its tabs.
+cra://debug?clickAt=120,600&target=floating
+wait 1
+cra://debug?extensionPopup=click
+expect-log extension popup click: closed$
+wait 1
+cra://debug?floatingSidebar=state:after
+expect-log floating sidebar after: in$
+cra://debug?removeExtension=${EXTENSION_ID}

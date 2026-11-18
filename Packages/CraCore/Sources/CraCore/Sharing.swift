@@ -146,7 +146,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "keepActiveSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar", "autoHideLittleWindowToolbar", "autoHidePeekToolbar",
-        "commandBarSiteColor", "sidebarSide",
+        "commandBarSiteColor", "sidebarSide", "customBlocklists",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {
