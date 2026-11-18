@@ -3092,6 +3092,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 // A swipe whose end never came (a view took the gesture's last events) is let go
                 // now, so the sidebar isn't left between two pages.
                 if self.swipeTracking { self.endSpaceSwipe() }
+                if self.creationSwiping { self.endCreationSwipe() }
                 self.swipeAxis = .vertical
             }
             // A mouse wheel only ever scrolls.
@@ -3144,11 +3145,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                         self.listScrolled(event)
                         return event
                     }
-                    // On Arc's Create a Space page a swipe back leaves it, and no other swipe pages the
-                    // spaces under it.
+                    // On Arc's Create a Space page a swipe back takes the page out under the fingers,
+                    // and no swipe pages the spaces under it.
                     if self.sidebarUI.spaceCreation != nil {
-                        self.swipeAxis = .vertical
-                        if self.swipeX > 0 { self.cancelSpaceCreation() }
+                        self.swipeAxis = .horizontal
+                        self.beginCreationSwipe()
+                        self.trackCreationSwipe(by: self.swipeX, at: event.timestamp)
                         return nil
                     }
                     self.swipeAxis = .horizontal
@@ -3157,13 +3159,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     self.trackSpaceSwipe(by: self.swipeX, at: event.timestamp)
                     return nil
                 case .horizontal:
-                    self.trackSpaceSwipe(by: event.scrollingDeltaX, at: event.timestamp)
+                    if self.creationSwiping {
+                        self.trackCreationSwipe(by: event.scrollingDeltaX, at: event.timestamp)
+                    } else {
+                        self.trackSpaceSwipe(by: event.scrollingDeltaX, at: event.timestamp)
+                    }
                     return nil
                 }
             case .ended, .cancelled:
                 if self.swipeAxis != .vertical { self.showListKnobs(after: ListKnobGate.shownAfterScroll) }
                 guard self.swipeAxis == .horizontal else { return event }
-                self.endSpaceSwipe()
+                if self.creationSwiping { self.endCreationSwipe() } else { self.endSpaceSwipe() }
                 return nil
             default:
                 return event
@@ -3523,10 +3529,59 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         creationOrigin = origin
         creationDone = created
         store.previewTheme(draft.theme, forSpace: origin)
+        // The page area shows the new space's empty page, as Arc's does.
+        store.windowsMakingSpace.insert(windowID)
         sidebarUI.spaceCreation = draft
         // With the sidebar hidden it comes out over the page and stays while the page is up.
         if !sidebarVisible, !shell.contentFullscreen { floatingSidebar?.show() }
         CraLog.note("space creation opens")
+    }
+
+    // A swipe back on the page (SpaceCreationSwipe).
+    private var creationSwiping = false
+
+    private func beginCreationSwipe() {
+        creationSwiping = true
+        swipeTravel = 0
+        swipeSamples = []
+        closeCreationPanels()
+        ArcTooltipController.shared.dismiss()
+    }
+
+    /// The page goes out under the fingers, `dx` points more to the right.
+    private func trackCreationSwipe(by dx: CGFloat, at time: TimeInterval) {
+        guard sidebarUI.spaceCreation != nil else { return }
+        swipeTravel += dx
+        swipeSamples.append((time, dx))
+        swipeSamples.removeAll { time - $0.time > 0.08 }
+        let pull = SpaceCreationSwipe.pull(travel: swipeTravel, width: max(1, shell.sidebarWidth))
+        (shell.sidebarHost as? SidebarView)?.setCreationPull(pull)
+    }
+
+    /// The fingers lift: past half way or flicked out the page leaves, as Cancel; else it goes back in.
+    private func endCreationSwipe() {
+        guard creationSwiping else { return }
+        creationSwiping = false
+        guard sidebarUI.spaceCreation != nil, let sidebar = shell.sidebarHost as? SidebarView else { return }
+        let span = (swipeSamples.last?.time ?? 0) - (swipeSamples.first?.time ?? 0)
+        let moved = swipeSamples.reduce(0) { $0 + $1.dx }
+        let velocity = span > 0.004 ? moved / CGFloat(span) / max(1, shell.sidebarWidth) : 0
+        let pull = sidebar.creationPull
+        let leaves = SpaceCreationSwipe.leaves(pull: pull, velocity: velocity)
+        CraLog.note("space creation swipe: lifted \(String(format: "%.2f", Double(pull))) out, \(leaves ? "leaves" : "goes back")")
+        if leaves { cancelSpaceCreation() } else { sidebar.setCreationPull(0, animated: true) }
+    }
+
+    /// Scenario hook: a swipe back of `travel` points held (`swipe:<pt>`), then let go (`lift`).
+    private func debugCreationSwipe(_ travel: CGFloat?) {
+        if let travel {
+            if !creationSwiping { beginCreationSwipe() }
+            // Slowly: no flick.
+            trackCreationSwipe(by: travel - swipeTravel, at: ProcessInfo.processInfo.systemUptime)
+            swipeSamples = []
+        } else {
+            endCreationSwipe()
+        }
     }
 
     /// Choose a Theme: Arc's editor beside the sidebar, level with the row, on the draft. Every
@@ -3566,6 +3621,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if let origin = creationOrigin { store.endThemePreview(forSpace: origin, keep: false) }
         creationOrigin = nil
         creationDone = nil
+        store.windowsMakingSpace.remove(windowID)
         sidebarUI.spaceCreation = nil
         currentBrowser?.setFocused(true)
         CraLog.note("space creation cancelled")
@@ -3592,13 +3648,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.setSearchEngine(draft.searchEngine, forSpace: id)
         // In this window, whichever one is active.
         store.focusSpace(id, window: windowID)
+        store.windowsMakingSpace.remove(windowID)
         sidebarUI.spaceCreation = nil
         CraLog.note("space creation made \"\(draft.createdTitle)\" on \(draft.profile == nil ? "Default" : "a profile"), theme \(draft.themeChosen ? "chosen" : "as opened"), search \(store.space(id)?.searchEngine ?? "default")")
         done?(id)
     }
 
     /// Scenario hook: the page's state, or one step on it (`type:<name>`, `icon:<emoji>`, `theme:<n>`,
-    /// `profile:<n>`, `engine:<keyword>`, `create`, `cancel`).
+    /// `profile:<n>`, `engine:<keyword>`, `create`, `cancel`, `tip:<profile|search>`, `swipe:<points>`, `lift`).
     func debugSpaceCreation(_ step: String) {
         let sidebar = shell.sidebarHost as? SidebarView
         let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
@@ -3618,13 +3675,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case "engine": sidebarUI.spaceCreation?.searchEngine = parts.count > 1 && !parts[1].isEmpty ? parts[1] : nil
         case "create": commitSpaceCreation()
         case "cancel": cancelSpaceCreation()
+        case "tip": CraLog.note("space creation tip \(parts.count > 1 ? parts[1] : "profile"): \(sidebar?.debugSpaceCreationTip(parts.count > 1 ? parts[1] : "profile") ?? "none")")
+        case "swipe": debugCreationSwipe(CGFloat(Double(parts.count > 1 ? parts[1] : "") ?? 0))
+        case "lift": debugCreationSwipe(nil)
         default: break
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self else { return }
             let dock = (self.shell.sidebarHost as? SidebarView)?.debugDockLine ?? "?"
             let page = self.sidebarUI.spaceCreation == nil ? "none" : (sidebar?.debugSpaceCreation ?? "none")
-            CraLog.note("space creation \(step): \(page) dock=\(dock) space=\(self.focusedSpace.title) spaces=\(self.store.spaceOrder.count)")
+            let pages = self.store.visiblePaneTabIDs(in: self.focusedSpaceID, window: self.windowID).count
+            CraLog.note("space creation \(step): \(page) dock=\(dock) space=\(self.focusedSpace.title) spaces=\(self.store.spaceOrder.count) pages=\(pages) pull=\(String(format: "%.2f", Double(sidebar?.creationPull ?? 0)))")
         }
     }
 
@@ -5243,6 +5304,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        // A page being made goes with its window: the space it was opened on gets its theme back.
+        cancelSpaceCreation()
         askOnPage.reset()
         LinkSummaryPreviewController.shared.stop(windowID: windowID)
         tabSwitcher.cancel()

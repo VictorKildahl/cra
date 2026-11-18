@@ -50,6 +50,7 @@ final class SidebarView: NSView {
     var debugSpaceCreation: String { creationHost?.debugLine ?? "none" }
     var debugDockLine: String { dock.debugLine }
     func debugTypeSpaceName(_ text: String) { creationHost?.debugType(text) }
+    func debugSpaceCreationTip(_ row: String) -> String { creationHost?.debugTip(row) ?? "none" }
     func closeSpaceCreationPopovers() { creationHost?.closeIconPicker() }
     func focusSpaceCreationName() { creationHost?.focusName() }
     /// The creation animation, then `done`; at once when the page isn't up.
@@ -199,14 +200,44 @@ final class SidebarView: NSView {
         return NSRect(x: 0, y: top, width: b.width, height: max(0, b.height - 50 - top))
     }
 
+    /// How far a swipe back has the page out, 0 to 1 (SpaceCreationSwipe): the page goes out to the
+    /// right under the fingers and the space's column comes back in beside it.
+    private(set) var creationPull: CGFloat = 0
+    /// The page moves inside this: on its way in and out it stays in the sidebar, never over the page.
+    private var creationClip: NSView?
+
+    /// The fingers moved, or lifted without leaving (`animated`: the page goes back in).
+    func setCreationPull(_ pull: CGFloat, animated: Bool = false) {
+        guard let v = creationHost, pull != creationPull else { return }
+        creationPull = pull
+        let f = NSRect(origin: .zero, size: creationFrame.size).offsetBy(dx: pull * tabs.bounds.width, dy: 0)
+        var column = pager.frame
+        column.origin.x = -tabs.bounds.width * (1 - pull)
+        guard animated else {
+            v.frame = f
+            pager.frame = column
+            return
+        }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            v.animator().frame = f
+            pager.animator().frame = column
+        }
+    }
+
     /// Arc pushes the page in from the right as the space's column leaves to the left (about 0.2 s),
     /// and the column back in from the left on the way out (about 0.1 s).
     private func showCreation(_ on: Bool) {
         if on, creationHost == nil {
             let v = SpaceCreationView(store: store, ui: ui, actions: actions, palette: palette)
-            tabs.addSubview(v)
+            let clip = NSView(frame: creationFrame)
+            clip.clipsToBounds = true
+            tabs.addSubview(clip)
+            clip.addSubview(v)
+            creationClip = clip
             creationHost = v
-            let f = creationFrame, was = pager.frame
+            let f = clip.bounds, was = pager.frame
             v.frame = f.offsetBy(dx: f.width, dy: 0)
             v.layoutSubtreeIfNeeded()
             for other in [player, trayHost, bannerHost] as [NSView] { other.alphaValue = 0 }
@@ -219,7 +250,11 @@ final class SidebarView: NSView {
             v.focusName()
         } else if !on, let v = creationHost {
             creationHost = nil
-            let f = v.frame, home = NSRect(x: 0, y: pager.frame.minY, width: pager.frame.width, height: pager.frame.height)
+            let clip = creationClip
+            creationClip = nil
+            // From wherever a swipe left it.
+            creationPull = 0
+            let f = NSRect(origin: .zero, size: creationFrame.size), home = NSRect(x: 0, y: pager.frame.minY, width: pager.frame.width, height: pager.frame.height)
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -228,7 +263,7 @@ final class SidebarView: NSView {
                 pager.animator().frame = home
                 for other in [player, trayHost, bannerHost] as [NSView] { other.animator().alphaValue = 1 }
             } completionHandler: {
-                v.removeFromSuperview()
+                clip?.removeFromSuperview()
             }
             needsLayout = true
         }
@@ -379,8 +414,9 @@ final class SidebarView: NSView {
         player.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, bannerTop - th))
         let listBottom = bannerTop - NowPlayingMetrics.restHeight(cards: player.shownCount)
         // While a space is being made its page stands where the column was, and the column is off to the left.
-        pager.frame = NSRect(x: creationHost != nil ? -b.width : 0, y: th, width: b.width, height: max(0, listBottom - th))
-        creationHost?.frame = creationFrame
+        pager.frame = NSRect(x: creationHost != nil ? -b.width * (1 - creationPull) : 0, y: th, width: b.width, height: max(0, listBottom - th))
+        creationClip?.frame = creationFrame
+        creationHost?.frame = NSRect(origin: .zero, size: creationFrame.size).offsetBy(dx: creationPull * b.width, dy: 0)
         let rows = DownloadHistory.shared.recent.count
         let trayH = DownloadsTrayMetrics.listHeight(rows: rows) + 4
         trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH)

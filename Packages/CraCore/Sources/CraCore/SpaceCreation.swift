@@ -173,13 +173,66 @@ public enum SpaceCreationLayout {
 /// the theme pulses behind it, it fades, and the space appears.
 public enum SpaceCreationAnimation {
     public typealias Span = ClosedRange<Double>
-    public static let buttonsFade: Span = 0...0.15
-    public static let rowsFade: Span = 0.11...0.21
-    public static let headingFade: Span = 0.21...0.31
-    /// The picture moves down as it tips, edge-on at the end.
-    public static let tip: Span = 0.31...0.46
-    /// Out of the flip as the card, down to the middle and up to its size.
-    public static let cardDrop: Span = 0.51...1.01
+    /// The two buttons fade where they stand.
+    public static let buttonsFade: Span = 0...0.17
+    /// The rest leaves from the bottom up, 0.03 s apart in Arc's code: Choose a Theme (and Cra's
+    /// Search Engine under it), Profile, the name, the subtitle, the title. Each slides `partSlide`
+    /// points down over `partSlideTime`, slow at both ends (Arc's `easeInOut(duration: 0.4)`), and
+    /// has faded by half way.
+    public static let partSlide: CGFloat = 80
+    public static let partSlideTime: Double = 0.4
+    public static let partFade: Double = 0.2
+    public static let themeRowStart: Double = 0.03
+    public static let profileRowStart: Double = 0.06
+    public static let fieldStart: Double = 0.09
+    public static let subtitleStart: Double = 0.12
+    public static let titleStart: Double = 0.15
+
+    /// The picture and the card are two faces of one thing. Arc's code moves it half the page's
+    /// height down and turns it half a turn about its level axis on one spring: response 0.8 s, no
+    /// bounce, 0.3 s after the press. Its place and its angle keep step, edge-on half way down.
+    public static let dropStart: Double = 0.30
+    public static let dropResponse: Double = 0.8
+    /// How far the eye is from the turning cards, in points (the far edge of Arc's card is 0.57 of
+    /// its near edge at 75°, 0.82 at 17°).
+    public static let perspective: CGFloat = 150
+    /// The picture's height, and how tall the card stands at its tallest, edge-on: 1.4 of its own
+    /// height. Measured in Arc: a 40 pt picture stretches to 109 pt as it turns away, and the 78 pt
+    /// card comes round from there to its size. Their width never changes.
+    public static let pictureHeight: CGFloat = 40
+    public static let cardStretch: CGFloat = 1.4
+
+    /// A spring with no bounce, `t` seconds in: 0 at rest, 1 where it settles.
+    public static func settled(_ t: Double, response: Double) -> Double {
+        guard t > 0, response > 0 else { return 0 }
+        let w = 2 * Double.pi / response
+        return 1 - (1 + w * t) * exp(-w * t)
+    }
+
+    /// How far along the way from the picture's place to the card's the cards are, 0 to 1.
+    public static func drop(at t: Double) -> Double { settled(t - dropStart, response: dropResponse) }
+
+    /// How far the cards have turned, in radians: 0 is the picture facing, π the card facing.
+    public static func turn(at t: Double) -> Double { .pi * drop(at: t) }
+
+    /// How tall the cards would stand if they faced you, `progress` of the way through the turn.
+    public static func height(at progress: Double) -> CGFloat {
+        let p = CGFloat(min(max(progress, 0), 1)), peak = cardStretch * cardSize.height
+        return p <= 0.5 ? pictureHeight + (peak - pictureHeight) * p * 2 : peak - (peak - cardSize.height) * (p - 0.5) * 2
+    }
+
+    /// The picture is whole until it turns away, two fifths there edge-on, and gone as the card
+    /// settles: its cards show behind the card's sides for a while.
+    public static func pictureOpacity(at t: Double) -> Double {
+        t <= 0.53 ? 1 - 0.6 * progress(0.40...0.53, at: t) : 0.4 * (1 - progress(0.53...1.0, at: t))
+    }
+
+    /// The card shows through the picture before it comes round, half there 0.4 s in and whole
+    /// soon after it is edge-on; at the end it fades (`cardFade`).
+    public static func cardOpacity(at t: Double) -> Double {
+        let arriving = t <= 0.40 ? 0.5 * progress(0.31...0.40, at: t) : 0.5 + 0.5 * progress(0.40...0.60, at: t)
+        return arriving * (1 - progress(cardFade, at: t))
+    }
     public static let glow: Span = 1.31...1.51
     public static let cardFade: Span = 1.76...1.96
     /// The sidebar is empty from the card's fade until the space shows.
@@ -211,5 +264,23 @@ extension SpaceDock {
         let n = count + 1
         let each = min(creationCellWidth, floor(max(0, room) / CGFloat(n) * 2) / 2)
         return Array(repeating: max(4, each), count: n)
+    }
+}
+
+/// A swipe back on the Create a Space page: the page follows the fingers out the way it came in,
+/// the space's column coming back beside it, and on the lift it leaves or goes back.
+public enum SpaceCreationSwipe {
+    /// How far out the page is, 0 (in place) to 1 (gone), with the fingers `travel` points to the
+    /// right of where they began. A swipe the other way has nowhere to go.
+    public static func pull(travel: CGFloat, width: CGFloat) -> CGFloat {
+        guard width > 0 else { return 0 }
+        return min(max(travel / width, 0), 1)
+    }
+
+    /// Whether the page leaves when the fingers lift: past half way, or flicked out. `velocity` is
+    /// in sidebar widths a second, rightwards; a flick is what turns a page between spaces (0.8).
+    public static func leaves(pull: CGFloat, velocity: CGFloat) -> Bool {
+        if abs(velocity) > 0.8 { return velocity > 0 && pull > 0 }
+        return pull > 0.5
     }
 }

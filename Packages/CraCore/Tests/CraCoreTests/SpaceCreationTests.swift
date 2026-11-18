@@ -130,14 +130,54 @@ struct SpaceCreationTests {
 
     @Test func theCreationAnimationRunsFromTheBottomUp() {
         typealias A = SpaceCreationAnimation
-        #expect(A.buttonsFade.lowerBound < A.rowsFade.lowerBound && A.rowsFade.lowerBound < A.headingFade.lowerBound)
-        #expect(A.headingFade.upperBound <= A.tip.lowerBound && A.tip.upperBound <= A.cardDrop.lowerBound)
-        #expect(A.cardDrop.upperBound < A.glow.lowerBound && A.glow.upperBound < A.cardFade.lowerBound)
-        #expect(A.cardFade.upperBound < A.done && A.done < 2.6)
-        #expect(A.progress(A.buttonsFade, at: 0.075) == 0.5)
-        #expect(A.progress(A.cardDrop, at: 0) == 0 && A.progress(A.cardDrop, at: 5) == 1)
+        // Arc's code: each part 0.03 s after the one under it, the cards 0.3 s after the press.
+        #expect([A.themeRowStart, A.profileRowStart, A.fieldStart, A.subtitleStart, A.titleStart] == [0.03, 0.06, 0.09, 0.12, 0.15])
+        #expect(A.buttonsFade.lowerBound == 0 && A.titleStart < A.dropStart && A.partSlide == 80 && A.partFade < A.partSlideTime)
+        #expect(A.glow.upperBound < A.cardFade.lowerBound && A.cardFade.upperBound < A.done && A.done < 2.6)
+        #expect(A.progress(A.buttonsFade, at: 0.085) == 0.5)
+        #expect(A.progress(A.cardFade, at: 0) == 0 && A.progress(A.cardFade, at: 5) == 1)
         let card = A.cardFrame(in: CGSize(width: 250, height: 1155))
         let expected = CGRect(x: 93.75, y: 538, width: 62.5, height: 79)
         #expect(card == expected)
+    }
+
+    /// Arc's cards, measured 120 times a second against the spring its code names.
+    @Test func theCardsDropOnASpringAndTurnOverOnTheWay() {
+        typealias A = SpaceCreationAnimation
+        // Still until 0.3 s, then down without a bounce: half way 0.52 s in.
+        #expect(A.drop(at: 0.30) == 0 && A.drop(at: 0.1) == 0)
+        for (t, measured) in [(0.35, 0.05), (0.517, 0.506), (0.60, 0.662), (0.767, 0.861), (0.90, 0.938), (1.10, 0.982)] {
+            #expect(abs(A.drop(at: t) - measured) < 0.03, "drop at \(t)")
+        }
+        var last = 0.0
+        for i in 0...200 {
+            let v = A.drop(at: Double(i) / 100)
+            #expect(v >= last && v <= 1)
+            last = v
+        }
+        // The turn keeps step with the drop: edge-on half way down, the card facing as the glow comes.
+        #expect(A.turn(at: 0.2) == 0 && A.turn(at: 0.7) == .pi * A.drop(at: 0.7))
+        #expect(abs(A.turn(at: 0.515) - .pi / 2) < 0.03)
+        #expect(A.turn(at: A.glow.lowerBound) > .pi * 0.99)
+        // A 40 pt picture, 1.4 card heights edge-on, the card's own height at the end.
+        #expect(A.height(at: 0) == 40 && A.height(at: 1) == 79 && A.height(at: 2) == 79 && A.height(at: -1) == 40)
+        #expect(abs(A.height(at: 0.5) - 110.6) < 1e-9)
+        // Arc's, read off its frames (as fractions of the way): the picture, then the card.
+        for (p, measured) in [(0.234, 69.0), (0.28, 76), (0.377, 100), (0.682, 96), (0.782, 93), (0.853, 87.6), (0.903, 84), (0.973, 79)] {
+            #expect(abs(A.height(at: p) - measured) < 9, "height at \(p)")
+        }
+        // The picture and the card swap as they turn.
+        #expect(A.pictureOpacity(at: 0.4) == 1 && abs(A.pictureOpacity(at: 0.53) - 0.4) < 1e-9 && A.pictureOpacity(at: 1) == 0)
+        #expect(A.cardOpacity(at: 0.3) == 0 && A.cardOpacity(at: 0.4) == 0.5 && A.cardOpacity(at: 0.7) == 1)
+        #expect(A.cardOpacity(at: A.cardFade.upperBound) == 0)
+    }
+
+    @Test func aSwipeBackFollowsTheFingersAndLeavesPastHalfOrOnAFlick() {
+        typealias S = SpaceCreationSwipe
+        #expect(S.pull(travel: 0, width: 250) == 0 && S.pull(travel: 100, width: 250) == 0.4)
+        #expect(S.pull(travel: -80, width: 250) == 0 && S.pull(travel: 400, width: 250) == 1 && S.pull(travel: 10, width: 0) == 0)
+        #expect(!S.leaves(pull: 0.4, velocity: 0) && S.leaves(pull: 0.6, velocity: 0) && !S.leaves(pull: 0.5, velocity: 0.5))
+        // A flick out leaves from anywhere; a flick back in stays, however far out it was.
+        #expect(S.leaves(pull: 0.1, velocity: 2) && !S.leaves(pull: 0.9, velocity: -2) && !S.leaves(pull: 0, velocity: 2))
     }
 }

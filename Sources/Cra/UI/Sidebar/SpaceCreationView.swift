@@ -24,6 +24,10 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
     /// Cra's own row (#306): the command bar's search engine in this space.
     private let searchRow = SpaceCreationRow(symbol: "magnifyingglass", label: "Search Engine")
     private let enginePill = SpaceCreationPill()
+    private let searchInfo = NSImageView()
+    /// What the sheet said under each choice, in Arc's own tip on the row's (i).
+    static let profileNote = "Profiles make your Spaces truly separate with their own logins, cookies and site data. Spaces with the same Profile share them."
+    static let searchNote = "Searches from the command bar in this space go here. Default follows Settings."
     private let create = SpaceCreationButton()
     private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
     private let card = NSView()
@@ -60,9 +64,16 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         iconButton.onClick = { [weak self] in self?.showIconPicker() }
         fieldBox.addSubview(iconButton)
         fieldBox.addSubview(name)
-        info.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "About Profiles")
-        info.symbolConfiguration = .init(pointSize: 12, weight: .semibold)
-        info.toolTip = "You can use a Profile to give this Space its own logins, history, and browsing data."
+        // Arc's (i) shows its tip as the pointer arrives, in its own bubble; the words are the sheet's.
+        for (view, note, label) in [(info, Self.profileNote, "About Profiles"), (searchInfo, Self.searchNote, "About the search engine")] {
+            view.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: label)
+            view.symbolConfiguration = .init(pointSize: 12, weight: .semibold)
+            let tip = ArcTooltipAnchorView(frame: view.bounds)
+            tip.autoresizingMask = [.width, .height]
+            tip.text = note
+            tip.delay = 0.05
+            view.addSubview(tip)
+        }
         pill.onClick = { [weak self] in self?.showProfileMenu() }
         profileRow.addSubview(pill)
         profileRow.addSubview(info)
@@ -73,8 +84,8 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         }
         enginePill.onClick = { [weak self] in self?.showEngineMenu() }
         searchRow.addSubview(enginePill)
+        searchRow.addSubview(searchInfo)
         searchRow.onClick = { [weak self] in self?.showEngineMenu() }
-        searchRow.toolTip = "Searches from the command bar in this space go here. Default follows Settings."
         create.title = "Create Space"
         create.onClick = { [weak self] in self?.actions.commitSpaceCreation() }
         cancel.isBordered = false
@@ -141,6 +152,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         pill.apply(colors: c, dark: dark)
         enginePill.apply(colors: c, dark: dark)
         info.contentTintColor = c.textPrimary.withAlphaComponent(0.85)
+        searchInfo.contentTintColor = info.contentTintColor
         cancel.contentTintColor = c.textPrimary.withAlphaComponent(0.6)
         cancel.attributedTitle = NSAttributedString(string: "Cancel", attributes: [
             .foregroundColor: c.textPrimary.withAlphaComponent(0.6), .font: NSFont.systemFont(ofSize: SpaceCreationLayout.textFont, weight: .medium)])
@@ -170,8 +182,10 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         let lines = max(1, min(4, Int((tall / SpaceCreationLayout.subtitleLine).rounded())))
         // Cra's Search Engine names are long: its pill goes under the label when it has no room beside it.
         let rowWidth = max(0, bounds.width - 2 * SpaceCreationLayout.inset)
+        let infoSide = SpaceCreationLayout.infoSide + 4
+        let infoRoom = SpaceCreationLayout.infoInset + infoSide + 4
         let searchStacked = density.stacksPills || !SpaceCreationLayout.pillFits(
-            rowWidth: rowWidth, labelEnd: density.rowLabelInset + searchRow.labelWidth, fits: enginePill.fittingWidth, trailing: 8)
+            rowWidth: rowWidth, labelEnd: density.rowLabelInset + searchRow.labelWidth, fits: enginePill.fittingWidth, trailing: infoRoom)
         let f = SpaceCreationLayout.frames(in: bounds.size, subtitleLines: lines, searchStacked: searchStacked)
         picture.frame = f.picture
         title.frame = f.title
@@ -199,9 +213,13 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
                                                    trailing: SpaceCreationLayout.infoInset + side + 4, stacked: density.stacksPills)
         searchRow.frame = f.search
         searchRow.layoutSubtreeIfNeeded()
+        // Its (i) ends the row, or follows the label when the pill is under it, like the Profile row's.
+        let searchInfoX = searchStacked ? searchRow.labelEnd + 5 : f.search.width - SpaceCreationLayout.infoInset - infoSide + 2
+        let searchInfoY = (searchStacked ? SpaceCreationLayout.stackedLabelCentre : f.search.height / 2) - infoSide / 2
+        searchInfo.frame = NSRect(x: searchInfoX, y: searchInfoY, width: infoSide, height: infoSide)
         enginePill.fills = searchStacked
         enginePill.frame = SpaceCreationLayout.pillFrame(row: f.search.size, labelEnd: searchRow.labelEnd, fits: enginePill.fittingWidth,
-                                                         trailing: 8, stacked: searchStacked)
+                                                         trailing: infoRoom, stacked: searchStacked)
         create.frame = f.create
         cancel.frame = f.cancel
         if !creating {
@@ -341,55 +359,40 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         creating = true
         window?.makeFirstResponder(nil)
         typealias A = SpaceCreationAnimation
-        func fade(_ views: [NSView], _ span: A.Span) {
-            for v in views {
-                let a = CABasicAnimation(keyPath: "opacity")
-                a.fromValue = 1
-                a.toValue = 0
-                a.beginTime = CACurrentMediaTime() + span.lowerBound
-                a.duration = span.upperBound - span.lowerBound
+        let now = CACurrentMediaTime()
+        for v in subviews { v.wantsLayer = true }
+        /// Fades from `start`, sliding down as it does (Arc's 80 pt, slow at both ends).
+        func leave(_ views: [NSView], from start: Double, slides: Bool = true) {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 1
+            fade.toValue = 0
+            fade.duration = slides ? A.partFade : A.buttonsFade.upperBound
+            let move = CABasicAnimation(keyPath: "transform.translation.y")
+            move.fromValue = 0
+            move.toValue = A.partSlide
+            move.duration = A.partSlideTime
+            for a in [fade, move] {
+                a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                a.beginTime = now + start
                 a.fillMode = .both
                 a.isRemovedOnCompletion = false
-                v.layer?.add(a, forKey: "creation")
+            }
+            for v in views {
+                v.layer?.add(fade, forKey: "creationFade")
+                if slides { v.layer?.add(move, forKey: "creationSlide") }
             }
         }
-        for v in subviews { v.wantsLayer = true }
-        fade([create, cancel], A.buttonsFade)
-        fade([searchRow, themeRow, profileRow, fieldBox], A.rowsFade)
-        fade([title, subtitle], A.headingFade)
-        // The picture moves down as it tips, edge-on at the end.
-        let rest = SpaceCreationAnimation.cardFrame(in: bounds.size)
-        // A view's layer is anchored at its corner: a squash about its middle goes there and back.
-        func aboutMiddle(_ t: CATransform3D, of size: CGSize) -> CATransform3D {
-            let to = CATransform3DMakeTranslation(-size.width / 2, -size.height / 2, 0)
-            let back = CATransform3DMakeTranslation(size.width / 2, size.height / 2, 0)
-            return CATransform3DConcat(CATransform3DConcat(to, t), back)
-        }
-        let now = CACurrentMediaTime()
-        let total = A.cardFade.upperBound
-        func at(_ t: Double) -> NSNumber { NSNumber(value: t / total) }
-        // The picture tips until it is edge-on, a third of the way down to the card's place, and is gone.
+        leave([create, cancel], from: A.buttonsFade.lowerBound, slides: false)
+        leave([searchRow, themeRow], from: A.themeRowStart)
+        leave([profileRow], from: A.profileRowStart)
+        leave([fieldBox], from: A.fieldStart)
+        leave([subtitle], from: A.subtitleStart)
+        leave([title], from: A.titleStart)
+
+        // The picture and the card are the two faces of one thing: it drops to the card's place on a
+        // spring and turns over on the way, the picture's top edge going away first.
+        let rest = A.cardFrame(in: bounds.size)
         let way = rest.midY - picture.frame.midY
-        if let l = picture.layer {
-            let edgeOn = CATransform3DConcat(CATransform3DMakeScale(1, 0.03, 1), CATransform3DMakeTranslation(0, way * 0.4, 0))
-            let tip = CAKeyframeAnimation(keyPath: "transform")
-            tip.values = [CATransform3DIdentity, CATransform3DIdentity, aboutMiddle(edgeOn, of: picture.bounds.size)].map { NSValue(caTransform3D: $0) }
-            tip.keyTimes = [0, at(A.tip.lowerBound), at(A.tip.upperBound)]
-            tip.timingFunctions = [CAMediaTimingFunction(name: .linear), CAMediaTimingFunction(name: .easeIn)]
-            let gone = CAKeyframeAnimation(keyPath: "opacity")
-            gone.values = [1, 1, 0]
-            gone.keyTimes = [0, at(A.tip.upperBound - 0.02), at(A.tip.upperBound)]
-            for a in [tip, gone] as [CAKeyframeAnimation] {
-                a.beginTime = now
-                a.duration = total
-                a.fillMode = .forwards
-                a.isRemovedOnCompletion = false
-            }
-            l.add(tip, forKey: "tip")
-            l.add(gone, forKey: "gone")
-        }
-        // It comes back from edge-on as one card with the icon, down to the middle and up to its size,
-        // and fades at the end.
         switch icon {
         case .emoji(let e): cardIcon.stringValue = e
         default: cardIcon.stringValue = ""
@@ -397,32 +400,53 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         card.frame = rest
         cardIcon.frame = card.bounds.insetBy(dx: 0, dy: (card.bounds.height - 46) / 2)
         card.isHidden = false
-        if let l = card.layer {
-            l.opacity = 0
-            let edgeOn = CATransform3DConcat(CATransform3DMakeScale(0.6, 0.03, 1), CATransform3DMakeTranslation(0, -way * 0.6, 0))
-            let from = aboutMiddle(edgeOn, of: rest.size)
-            let drop = CAKeyframeAnimation(keyPath: "transform")
-            drop.values = [from, from, CATransform3DIdentity, CATransform3DIdentity].map { NSValue(caTransform3D: $0) }
-            drop.keyTimes = [0, at(A.cardDrop.lowerBound), at(A.cardDrop.upperBound), 1]
-            drop.timingFunctions = [CAMediaTimingFunction(name: .linear), CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .linear)]
-            let shown = CAKeyframeAnimation(keyPath: "opacity")
-            shown.values = [0, 0, 1, 1, 0]
-            shown.keyTimes = [0, at(A.cardDrop.lowerBound), at(A.cardDrop.lowerBound + 0.03), at(A.cardFade.lowerBound), 1]
-            for a in [drop, shown] as [CAKeyframeAnimation] {
-                a.beginTime = now
-                a.duration = total
-                a.fillMode = .forwards
-                a.isRemovedOnCompletion = false
-            }
-            l.add(drop, forKey: "drop")
-            l.add(shown, forKey: "shown")
+        card.layer?.opacity = 0
+        /// A view's layer is anchored at its corner: this stretches it to `height` and turns it about
+        /// its middle, seen from `perspective` points away, `down` points lower.
+        func placed(_ size: CGSize, height: CGFloat, turn: Double, down: CGFloat) -> CATransform3D {
+            var t = CATransform3DMakeTranslation(-size.width / 2, -size.height / 2, 0)
+            t = CATransform3DConcat(t, CATransform3DMakeScale(1, height / max(1, size.height), 1))
+            t = CATransform3DConcat(t, CATransform3DMakeRotation(CGFloat(turn), 1, 0, 0))
+            var eye = CATransform3DIdentity
+            eye.m34 = -1 / A.perspective
+            t = CATransform3DConcat(t, eye)
+            return CATransform3DConcat(t, CATransform3DMakeTranslation(size.width / 2, size.height / 2 + down, 0))
         }
+        // A spring and half a turn aren't a curve between two values: each frame is its own.
+        let rate = 120.0
+        let frames = Int((A.cardFade.upperBound * rate).rounded())
+        func run(_ layer: CALayer?, _ key: String, _ value: (Double) -> Any) {
+            let a = CAKeyframeAnimation(keyPath: key)
+            a.values = (0...frames).map { value(Double($0) / rate) }
+            a.calculationMode = .linear
+            a.beginTime = now
+            a.duration = Double(frames) / rate
+            a.fillMode = .forwards
+            a.isRemovedOnCompletion = false
+            layer?.add(a, forKey: "creation-" + key)
+        }
+        // The picture's drawing fills its view, which is as tall as Arc's picture.
+        let pictureSize = picture.bounds.size, pictureGrows = pictureSize.height / A.pictureHeight
+        run(picture.layer, "transform") { t in
+            let p = A.drop(at: t)
+            return NSValue(caTransform3D: placed(pictureSize, height: A.height(at: p) * pictureGrows, turn: A.turn(at: t), down: way * CGFloat(p)))
+        }
+        run(picture.layer, "opacity") { A.pictureOpacity(at: $0) }
+        // Its other face: in front of the picture all the way, so it shows through it before the turn.
+        card.layer?.zPosition = 400
+        run(card.layer, "transform") { t in
+            let p = A.drop(at: t)
+            return NSValue(caTransform3D: placed(rest.size, height: A.height(at: p), turn: A.turn(at: t) - .pi, down: -way * CGFloat(1 - p)))
+        }
+        run(card.layer, "opacity") { A.cardOpacity(at: $0) }
+
         let pulse = CAKeyframeAnimation(keyPath: "opacity")
         pulse.values = [0, 1, 0]
         pulse.keyTimes = [0, 0.5, 1]
-        pulse.beginTime = CACurrentMediaTime() + A.glow.lowerBound
+        pulse.beginTime = now + A.glow.lowerBound
         pulse.duration = (A.glow.upperBound - A.glow.lowerBound) * 2
         glow.add(pulse, forKey: "pulse")
+        CraLog.note("space creation plays: the cards drop \(Int(way.rounded())) pt and turn over, \(frames + 1) frames")
         DispatchQueue.main.asyncAfter(deadline: .now() + A.done) { done() }
     }
 
@@ -433,6 +457,14 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         func r(_ f: NSRect) -> String { "\(Int(f.minX.rounded())),\(Int(f.minY.rounded())),\(Int(f.width.rounded()))x\(Int(f.height.rounded()))" }
         return "name=\"\(name.stringValue)\" keys=\(nameHasKeys ? 1 : 0) icon=\(iconButton.label) profile=\(pill.title) engine=\(enginePill.title)"
             + " layout=\(SpaceCreationLayout.Density(sidebarWidth: bounds.width)) searchGlyph=\(searchRow.debugGlyph) create=\(create.isOn ? "on" : "off") field=\(r(fieldBox.frame)) rows=\(r(profileRow.frame)),\(r(themeRow.frame)) button=\(r(create.frame))"
+    }
+
+    /// The tip of a row's (i), shown as the pointer would: its words, its wait, and its size.
+    func debugTip(_ row: String) -> String {
+        let view = row == "search" ? searchInfo : info
+        guard let tip = view.subviews.compactMap({ $0 as? ArcTooltipAnchorView }).first else { return "none" }
+        let size = ArcTooltipController.shared.debugShow(for: tip)
+        return "\"\(tip.text)\" wait=\(tip.idleDelay) bubble=\(Int(size.width.rounded()))x\(Int(size.height.rounded())) native=\((view.toolTip ?? searchRow.toolTip ?? profileRow.toolTip) == nil ? 0 : 1)"
     }
 
     /// Typed into the name as the keyboard would.
