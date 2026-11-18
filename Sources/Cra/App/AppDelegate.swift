@@ -1184,7 +1184,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note(WindowManagers.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }
             if let g = dict["screenshotPick"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
-                CraLog.note(main.screenshotPickReadout(at: CGPoint(x: g[0], y: g[1]))); return
+                let little = dict["target"] == "little"
+                let window = little ? littleWindows.last?.window : main.window
+                CraLog.note(ScreenshotPick.readout(of: window, named: little ? "little window" : "main window", at: CGPoint(x: g[0], y: g[1]))); return
             }
             // Tests that leave the pointer alone: scroll=dy,steps,x,y scrolls the scroll view at a
             // point of the main window (from its top left); swipe=dx,steps plays a space swipe.

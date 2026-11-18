@@ -1,0 +1,30 @@
+# promise: #539
+# A screenshot app's "window under the pointer" over a Little Window takes the Little Window, over
+# its strip and its page alike. Screenshot apps that list windows through ScreenCaptureKit (iShot
+# on macOS 27) see no sharing state or alpha, so on the engine they took the never-seen window
+# holding the profile's pages, laid over whichever Cra window was in use, the Little Window
+# included, and the shot came out blank (GitHub #539, 0.1.48; the browser window's side is #346).
+# The readout reads the window list the way such a picker does (cra://debug?screenshotPick).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleCard=go:${PAGE}?n=little-pick
+wait 2
+cra://debug?littleShown=page
+expect-log little shown page: windows=1 .* card=0
+cra://debug?screenshotPick=200,12&target=little
+expect-log screenshot pick at 200,12: little window
+cra://debug?screenshotPick=200,200&target=little
+expect-log screenshot pick at 200,200: little window
+cra://debug?screenshotPick=700,450&target=little
+expect-log screenshot pick at 700,450: little window
+
+# The browser window behind it too, once it is the window in use again.
+cra://action/newWindow
+wait 2
+cra://debug?screenshotPick=150,400
+expect-log screenshot pick at 150,400: main window
+reject-log fault:

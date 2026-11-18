@@ -1728,30 +1728,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private var pageInsetsReadouts = 0
 
-    /// `cra://debug?screenshotPick=x,y`: the window a screenshot app's "window under the pointer"
-    /// takes at that point of this window (from its top left), read from the window list it reads.
-    /// Over a page that is this window, whose card draws the page (#346). Only Cra's windows
-    /// count: a test copy runs behind other apps. Read as a ScreenCaptureKit picker reads it,
-    /// without sharing state or alpha (an `SCWindow` has neither): a window left out of capture
-    /// is still the one such a picker takes, and its capture is blank (#346 on the engine).
-    func screenshotPickReadout(at p: CGPoint) -> String {
-        guard let window else { return "screenshot pick: no window" }
-        let pid = Int(ProcessInfo.processInfo.processIdentifier)
-        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-        let mine = list.compactMap { d -> ScreenshotPick.Window? in
-            guard (d[kCGWindowOwnerPID as String] as? Int) == pid, let number = d[kCGWindowNumber as String] as? Int,
-                  let bounds = d[kCGWindowBounds as String] as? NSDictionary,
-                  let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return nil }
-            return .init(number: number, frame: frame, layer: d[kCGWindowLayer as String] as? Int ?? 0,
-                         alpha: d[kCGWindowAlpha as String] as? Double ?? 1,
-                         shared: (d[kCGWindowSharingState as String] as? Int ?? 1) != 0)
-        }
-        guard let me = mine.first(where: { $0.number == window.windowNumber }) else { return "screenshot pick: window not listed" }
-        let pick = ScreenshotPick.window(at: CGPoint(x: me.frame.minX + p.x, y: me.frame.minY + p.y), in: mine, readsSharing: false)
-        let name = pick.map { $0.number == window.windowNumber ? "main window" : "window \($0.number) \(Int($0.frame.width))x\(Int($0.frame.height))" } ?? "none"
-        return "screenshot pick at \(Int(p.x)),\(Int(p.y)): \(name)"
-    }
-
     /// `cra://debug?embedDump=1`: where every page view is, for EmbeddedPages work.
     func embeddedPagesDump() -> String {
         func tree(_ v: NSView, _ depth: Int) -> String {
