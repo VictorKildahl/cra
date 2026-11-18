@@ -430,11 +430,23 @@ final class GestureTests: BrowserTestCase {
     }
 
     private func openSecondTab() {
+        openTab("Second")
+    }
+
+    private func openTab(_ title: String) {
         app.buttons["bar-search"].tap()
         let field = app.textFields["search-field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.typeText(Self.page("Second") + "\n")
-        waitForPage("Second")
+        field.typeText(Self.page(title) + "\n")
+        waitForPage(title)
+    }
+
+    /// A flick up that starts on the tab stack button.
+    private func flickUpFromTheTabButton() {
+        let start = app.buttons["bar-tabs"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)),
+                    withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
     }
 
     /// The title of the tab on screen: opens the tab row, reads the focused card (the selected
@@ -495,6 +507,27 @@ final class GestureTests: BrowserTestCase {
         start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.55)), withVelocity: .default, thenHoldForDuration: 0)
         XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["bar-spaces"].exists)
+    }
+
+    // promise: #537
+    /// A flick up from the tab button goes to the tab looked at last, not the row's neighbour,
+    /// and the next flick comes back (Arc Search's toggle).
+    func testFlickingUpFromTheTabButtonTogglesTheTwoLatestTabs() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        openTab("Third")
+        // A swipe along the bar to Second: the row's older neighbour is now First, but Third
+        // was on screen last.
+        drag(fromX: 0.3, toX: 0.9, y: 0.95)
+        sleep(1)
+        XCTAssertEqual(shownTabTitle(), "Second")
+        flickUpFromTheTabButton()
+        XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
+        XCTAssertEqual(shownTabTitle(), "Third")
+        flickUpFromTheTabButton()
+        XCTAssertEqual(shownTabTitle(), "Second")
+        keep("flicked back")
     }
 
     // promise: #509

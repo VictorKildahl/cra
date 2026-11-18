@@ -47,7 +47,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let velocity = pan.velocity(in: view)
         switch pan.name {
         case Name.bar:
-            // Sideways for the neighbouring tab, upwards for the tab row.
+            // Sideways for the neighbouring tab, upwards for the tab row (from the tab button,
+            // the previous tab).
             return !isSearching && switcher == nil && shownPage != nil && (abs(velocity.x) > abs(velocity.y) || velocity.y < 0)
         case Name.page:
             guard !isSearching, switcher == nil, menuHost == nil, let page = shownPage, abs(velocity.x) > 1.5 * abs(velocity.y) else { return false }
@@ -107,11 +108,84 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         }
     }
 
+    /// A drag up that starts on the tab button (#537), Arc Search's flick: the tab looked at
+    /// before this one grows out of the button's back card under the finger while the page
+    /// sinks back, and letting go puts it on screen. The next flick comes back.
+    private func barFlickedUp(_ pan: UIPanGestureRecognizer, to target: MobileTab) {
+        let up = -pan.translation(in: view).y
+        let origin = bar.tabsButton.backCard(in: view)
+        let full = view.bounds
+        // The card starts page-shaped, as wide as the button's back card.
+        let start = CGRect(x: origin.midX - origin.width / 2, y: origin.maxY - origin.width * full.height / full.width,
+                           width: origin.width, height: origin.width * full.height / full.width)
+        func place(_ progress: CGFloat) {
+            let p = progress
+            // As in Arc Search, the card heads for the middle sooner than it grows: half grown,
+            // it is already centred across the screen.
+            let across = min(1, 2 * p)
+            let size = CGSize(width: start.width + (full.width - start.width) * p, height: start.height + (full.height - start.height) * p)
+            let center = CGPoint(x: start.midX + (full.midX - start.midX) * across, y: start.midY + (full.midY - start.midY) * p)
+            swipeNeighbour?.frame = CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
+            swipeNeighbour?.layer.cornerRadius = 5 + 35 * p
+            let scale = 1 - 0.12 * p
+            pageContainer.transform = CGAffineTransform(scaleX: scale, y: scale)
+        }
+        switch pan.state {
+        case .began:
+            captureSnapshot()
+            let picture = UIImageView(image: store.snapshot(target.id))
+            picture.backgroundColor = .systemBackground
+            picture.contentMode = .scaleAspectFill
+            picture.clipsToBounds = true
+            picture.layer.cornerCurve = .continuous
+            // A hairline, as on the tab button's cards, keeps a white page apart from a white page.
+            picture.layer.borderWidth = 1 / max(1, view.traitCollection.displayScale)
+            picture.layer.borderColor = UIColor(white: 0, alpha: 0.12).cgColor
+            picture.accessibilityIdentifier = "previous-tab-card"
+            view.insertSubview(picture, aboveSubview: pageContainer)
+            swipeNeighbour?.removeFromSuperview()
+            swipeNeighbour = picture
+            place(0)
+        case .changed:
+            place(MobileSwipe.previousTabProgress(dragUp: up))
+        case .ended, .cancelled:
+            barSwipeTarget = nil
+            let picture = swipeNeighbour
+            let switches = pan.state == .ended && MobileSwipe.switchesToPreviousTab(dragUp: up, velocityUp: -pan.velocity(in: view).y)
+            UIView.animate(spring: MobileMotion.tabOpen) {
+                if switches {
+                    place(1)
+                    picture?.layer.cornerRadius = 0
+                    picture?.layer.borderWidth = 0
+                } else {
+                    place(0)
+                    picture?.alpha = 0
+                }
+            } completion: {
+                if switches, self.store.tabs.contains(where: { $0.id == target.id }) {
+                    self.store.select(target.id)
+                    self.show(target)
+                    self.refreshTabStack()
+                    UISelectionFeedbackGenerator().selectionChanged()
+                }
+                self.pageContainer.transform = .identity
+                picture?.removeFromSuperview()
+                if self.swipeNeighbour === picture { self.swipeNeighbour = nil }
+            }
+        default: break
+        }
+    }
+
     @objc func barSwiped(_ pan: UIPanGestureRecognizer) {
         if pan.state == .began {
             let velocity = pan.velocity(in: view)
             barSwipeOpensRow = abs(velocity.y) > abs(velocity.x)
+            let at = pan.location(in: bar), moved = pan.translation(in: bar)
+            let startedAt = CGPoint(x: at.x - moved.x, y: at.y - moved.y)
+            barSwipeTarget = barSwipeOpensRow && bar.tabsButton.frame.contains(startedAt) ? store.previousTab : nil
+            if barSwipeTarget != nil { barSwipeOpensRow = false }
         }
+        if let target = barSwipeTarget { return barFlickedUp(pan, to: target) }
         if barSwipeOpensRow { return barDraggedUp(pan) }
         let width = view.bounds.width, gap: CGFloat = 20
         var x = pan.translation(in: view).x

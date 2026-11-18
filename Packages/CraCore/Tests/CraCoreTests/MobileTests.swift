@@ -184,6 +184,25 @@ struct MobileTabsTests {
         #expect(MobileArchiveAfter.oneDay.settingValue == "After 1 day")
     }
 
+    /// A flick up on the tab button goes to the tab looked at last, whatever its place in the
+    /// row, and the next flick comes back: Arc Search's toggle between the two newest tabs.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/537")) func theFlickGoesToTheTabLookedAtLast() {
+        var document = MobileTabsDocument()
+        let a = Self.tab("a", hoursAgo: 3), b = Self.tab("b", hoursAgo: 2), c = Self.tab("c", hoursAgo: 1)
+        [a, b, c].forEach { document.open($0) }
+        #expect(document.previousTab?.title == "b")
+        document.select(a.id, now: Self.start)
+        #expect(document.previousTab?.title == "c", "the row's neighbour is b, but c was on screen last")
+        document.select(c.id, now: Self.start.addingTimeInterval(1))
+        #expect(document.previousTab?.title == "a")
+        // Incognito tabs are not in the row, so a flick never lands on one.
+        document.add(Self.tab("secret", hoursAgo: 0, incognito: true))
+        #expect(document.previousTab?.title == "a")
+        var alone = MobileTabsDocument()
+        alone.open(a)
+        #expect(alone.previousTab == nil)
+    }
+
     @Test func restoringAnArchivedTabShowsIt() {
         var document = MobileTabsDocument()
         let old = Self.tab("old", hoursAgo: 50), current = Self.tab("current", hoursAgo: 0)
@@ -490,6 +509,19 @@ struct MobileSwipeTests {
         #expect(!MobileSwipe.mayStart(at: 200, width: 393, mode: .fromEdges))
         #expect(MobileSwipe.mayStart(at: 10, width: 393, mode: .fromEdges))
         #expect(MobileSwipe.mayStart(at: 385, width: 393, mode: .fromEdges))
+    }
+
+    /// The flick up from the tab button switches once it is far enough or quick enough upwards.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/537")) func theFlickUpSwitchesByDistanceOrSpeed() {
+        #expect(MobileSwipe.switchesToPreviousTab(dragUp: 120, velocityUp: 0))
+        #expect(!MobileSwipe.switchesToPreviousTab(dragUp: 50, velocityUp: 0))
+        #expect(MobileSwipe.switchesToPreviousTab(dragUp: 50, velocityUp: 700))
+        #expect(!MobileSwipe.switchesToPreviousTab(dragUp: 10, velocityUp: 2000))
+        #expect(!MobileSwipe.switchesToPreviousTab(dragUp: 120, velocityUp: -800), "pulled back down before letting go")
+        #expect(MobileSwipe.previousTabProgress(dragUp: 0) == 0)
+        #expect(MobileSwipe.previousTabProgress(dragUp: 250) == 0.5)
+        #expect(MobileSwipe.previousTabProgress(dragUp: 900) == 1)
+        #expect(MobileSwipe.previousTabProgress(dragUp: -40) == 0)
     }
 
     @Test func pullToRefreshActsOnRelease() {

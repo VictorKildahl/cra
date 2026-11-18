@@ -203,10 +203,19 @@ final class TabStackButton: UIControl {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    /// The newest tab's picture in front, the one before it behind.
+    /// The tab on screen in front, the one looked at before it behind.
     func setSnapshots(front: UIImage?, back: UIImage?) {
         self.front.image = front
         self.back.image = back
+    }
+
+    /// The card behind, unturned and in `view`'s coordinates: where the previous tab grows from
+    /// on a flick up.
+    func backCard(in view: UIView) -> CGRect {
+        guard let holder = back.superview else { return convert(bounds, to: view) }
+        let center = convert(holder.center, to: view)
+        return CGRect(x: center.x - holder.bounds.width / 2, y: center.y - holder.bounds.height / 2,
+                      width: holder.bounds.width, height: holder.bounds.height)
     }
 
     override func layoutSubviews() {

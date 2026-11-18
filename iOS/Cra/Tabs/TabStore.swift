@@ -58,6 +58,9 @@ final class TabStore {
     /// The tab row's tabs: incognito tabs are never in it.
     var rowTabs: [MobileTab] { document.rowTabs }
 
+    /// Where a flick up on the tab button goes: the tab looked at before this one.
+    var previousTab: MobileTab? { document.previousTab }
+
     func close(_ id: UUID) {
         let wasSelected = document.selected == id
         var opener = pages[id]?.opener

@@ -169,6 +169,16 @@ extension MobileTabsDocument {
     /// The tab row's tabs: every open tab that is not incognito.
     public var rowTabs: [MobileTab] { tabs.filter { !$0.isIncognito } }
 
+    /// Where a flick up on the tab button goes (#537): the row's tab looked at most recently
+    /// before the one on screen, so a second flick comes back. Arc Search 1.0 toggled between
+    /// the current and the previous page this way. Ties go to the newer tab in the row.
+    public var previousTab: MobileTab? {
+        rowTabs.filter { $0.id != selected }.reduce(nil) { best, tab in
+            guard let best, best.lastActive > tab.lastActive else { return tab }
+            return best
+        }
+    }
+
     /// Export Data: the open tabs as text, a title and an address each. Incognito tabs stay out.
     public var exportText: String {
         tabs.filter { !$0.isIncognito }.map { "\($0.displayTitle)\n\($0.url)" }.joined(separator: "\n\n")

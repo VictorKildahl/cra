@@ -41,6 +41,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var swipeNeighbourStep = 0
     var tabArchivedBySwipe: UUID?
     var barSwipeOpensRow = false
+    /// A drag up from the tab button: the tab it brings back (#537).
+    var barSwipeTarget: MobileTab?
     // Voice search (BrowserGestures.swift).
     var voice: VoiceSearch?
     var voiceOverlay: VoiceOverlayView?
@@ -484,7 +486,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func refreshTabStack() {
         let tabs = store.rowTabs
         let front = store.selected ?? tabs.last
-        let back = tabs.last { $0.id != front?.id }
+        // Behind it, the tab a flick up on the button goes to.
+        let back = store.selected == nil ? tabs.last(where: { $0.id != front?.id }) : store.previousTab
         bar.tabsButton.setSnapshots(front: front.flatMap { store.snapshot($0.id) }, back: back.flatMap { store.snapshot($0.id) })
     }
 
