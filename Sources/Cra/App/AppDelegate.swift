@@ -2363,6 +2363,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
                 return
             }
+            // spaceCreation=state|type:<name>|icon:<emoji>|theme:<n>|profile:<n>|create|cancel: Arc's
+            // Create a Space page, one step on it, and what it and the dock then show.
+            if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }
             // What the side panel's close button does (scripts/scenario.sh).
             if dict["sidePanel"] == "close" { main.sidePanel.hide(); return }
@@ -3080,7 +3083,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard !main.isBlank else { break }
             let f = store.createFolder(named: "New Folder", in: store.focusedSpace.pinnedContainerID, index: 0)
             main.sidebarUI.renamingID = f.id
-        case "newSpace": main.showSpaceEditor(space: nil)
+        case "newSpace": main.beginSpaceCreation()
         case "newProfile": if !main.isIncognito, let w = main.window { main.showNewProfileDialog(over: w) }
         case "share": main.shareSelectedPage()
         case "newBoost": main.openBoostEditor()

@@ -45,6 +45,18 @@ final class SidebarView: NSView {
         return newSpacePlus.debugLine
     }
     private var libraryHost: LibraryView?
+    /// Arc's Create a Space page, over the space's column while one is being made.
+    private var creationHost: SpaceCreationView?
+    var debugSpaceCreation: String { creationHost?.debugLine ?? "none" }
+    var debugDockLine: String { dock.debugLine }
+    func debugTypeSpaceName(_ text: String) { creationHost?.debugType(text) }
+    func closeSpaceCreationPopovers() { creationHost?.closeIconPicker() }
+    func focusSpaceCreationName() { creationHost?.focusName() }
+    /// The creation animation, then `done`; at once when the page isn't up.
+    func playSpaceCreation(icon: SpaceIcon, done: @escaping () -> Void) {
+        guard let host = creationHost else { return done() }
+        host.playCreation(icon: icon, done: done)
+    }
     /// The palette drawn now; the theme-shown scenario hook reads it (#155).
     private(set) var palette: SpacePalette
     private var lastSpaceID: UUID?
@@ -79,6 +91,7 @@ final class SidebarView: NSView {
         player.onCountChange = { [weak self] in self?.needsLayout = true }
         ui.observeLibraryReveal { [weak self] in self?.applyLibraryReveal() }
         observe()
+        observeCreation()
         observeRenameCard()
     }
 
@@ -164,6 +177,7 @@ final class SidebarView: NSView {
             bannerHost.themeColor = shown.accent ?? shown.colors.first
             player.setTheme(shown.accent ?? shown.colors.first, dark: palette.isDark)
             libraryHost?.palette = palette
+            creationHost?.palette = palette
             newSpacePlus.ink = colors.textPrimary
         }
         self.bannerHeight = bannerHeight
@@ -235,6 +249,54 @@ final class SidebarView: NSView {
             } completionHandler: {
                 host.removeFromSuperview()
             }
+        }
+    }
+
+    // MARK: Create a Space
+
+    private func observeCreation() {
+        observeChanges(of: { [ui] in ui.spaceCreation != nil }) { [weak self] on in self?.showCreation(on) }
+    }
+
+    /// Where the page goes: the room between the top row and the dock (Arc's ends 50 pt above the
+    /// sidebar's bottom).
+    private var creationFrame: NSRect {
+        let b = tabs.bounds, top = topBar.preferredHeight
+        return NSRect(x: 0, y: top, width: b.width, height: max(0, b.height - 50 - top))
+    }
+
+    /// Arc pushes the page in from the right as the space's column leaves to the left (about 0.2 s),
+    /// and the column back in from the left on the way out (about 0.1 s).
+    private func showCreation(_ on: Bool) {
+        if on, creationHost == nil {
+            let v = SpaceCreationView(store: store, ui: ui, actions: actions, palette: palette)
+            tabs.addSubview(v)
+            creationHost = v
+            let f = creationFrame, was = pager.frame
+            v.frame = f.offsetBy(dx: f.width, dy: 0)
+            v.layoutSubtreeIfNeeded()
+            for other in [player, trayHost, bannerHost] as [NSView] { other.alphaValue = 0 }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                v.animator().frame = f
+                pager.animator().frame = was.offsetBy(dx: -was.width, dy: 0)
+            }
+            v.focusName()
+        } else if !on, let v = creationHost {
+            creationHost = nil
+            let f = v.frame, home = NSRect(x: 0, y: pager.frame.minY, width: pager.frame.width, height: pager.frame.height)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                v.animator().frame = f.offsetBy(dx: f.width, dy: 0)
+                v.animator().alphaValue = 0
+                pager.animator().frame = home
+                for other in [player, trayHost, bannerHost] as [NSView] { other.animator().alphaValue = 1 }
+            } completionHandler: {
+                v.removeFromSuperview()
+            }
+            needsLayout = true
         }
     }
 
@@ -316,7 +378,9 @@ final class SidebarView: NSView {
         // The player rests where the list ends and takes that room from it; opened, it grows over the list.
         player.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, bannerTop - th))
         let listBottom = bannerTop - NowPlayingMetrics.restHeight(cards: player.shownCount)
-        pager.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, listBottom - th))
+        // While a space is being made its page stands where the column was, and the column is off to the left.
+        pager.frame = NSRect(x: creationHost != nil ? -b.width : 0, y: th, width: b.width, height: max(0, listBottom - th))
+        creationHost?.frame = creationFrame
         let rows = DownloadHistory.shared.recent.count
         let trayH = DownloadsTrayMetrics.listHeight(rows: rows) + 4
         trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH)
@@ -1042,6 +1106,9 @@ final class SpaceDockView: NSView {
     private var hovered: UUID? { didSet { if hovered != oldValue { hoverChanged() } } }
     private var reorder: (id: UUID, from: Int, to: Int, start: NSPoint, moved: Bool)?
     private var syncQueued = false
+    /// The new space's item while Arc's Create a Space page is up; not a space of the store's.
+    private static let pendingID = UUID()
+    private var creating = false
 
     init(store: SidebarStore, ui: SidebarUIState, actions: SidebarActions) {
         self.store = store
@@ -1099,6 +1166,7 @@ final class SpaceDockView: NSView {
     private func sync() {
         syncQueued = false
         var spaces: [Space] = []
+        var pending: SpaceCreationDraft?
         withObservationTracking {
             colors = SidebarColors(store.focusedSpace(window: ui.windowID).theme.palette)
             incognito = store.window(ui.windowID).isIncognito
@@ -1107,6 +1175,7 @@ final class SpaceDockView: NSView {
             // Arc's single-space mode drops the lone space icon along with the header; incognito and
             // Blank Windows show no space icons (Arc 1.172 keeps the + in a Blank Window).
             spaces = store.isStandalone(window: ui.windowID) || store.hidesSpaceHeader(f) ? [] : store.orderedSpaces
+            pending = ui.spaceCreation
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.syncQueued else { return }
@@ -1116,11 +1185,30 @@ final class SpaceDockView: NSView {
         }
         library.colors = colors
         plus.colors = colors
-        plus.isHidden = incognito
-        let ids = spaces.map(\.id)
+        // Arc's dock while a space is being made: no Library or "+" button, and one more item at
+        // the end for the new space, lit in place of the open one.
+        creating = pending != nil
+        library.isHidden = creating
+        plus.isHidden = incognito || creating
+        var ids = spaces.map(\.id)
+        if creating {
+            ids.append(Self.pendingID)
+            focused = Self.pendingID
+            hovered = nil
+        }
         for (id, c) in cells where !ids.contains(id) {
             c.removeFromSuperview()
             cells[id] = nil
+        }
+        if let pending {
+            let c = cells[Self.pendingID] ?? {
+                let c = SpaceCellView(spaceID: Self.pendingID, store: store, ui: ui)
+                cells[Self.pendingID] = c
+                addSubview(c)
+                return c
+            }()
+            // A dot until a theme is chosen, then the picked icon (SpaceCreationDraft.dockMark).
+            c.show(icon: pending.themeChosen ? pending.icon : .none, title: "Create Space")
         }
         for s in spaces {
             let c = cells[s.id] ?? {
@@ -1134,6 +1222,13 @@ final class SpaceDockView: NSView {
         order = ids
         refreshCells()
         needsLayout = true
+    }
+
+    /// What each cell draws and how wide, and whether the Library and "+" buttons show, for a scenario.
+    var debugLine: String {
+        let ws = cellWidths
+        let drawn = order.enumerated().map { i, id in "\(cells[id]?.markLabel ?? "?")@\(String(format: "%g", ws[i]))" }
+        return "\(drawn.joined(separator: " ")) buttons=\(library.isHidden ? 0 : 1)\(plus.isHidden ? 0 : 1)"
     }
 
     /// Scenarios (cra://debug?hover=SpaceCellView,n): that space hovered as if the pointer were on
@@ -1183,7 +1278,8 @@ final class SpaceDockView: NSView {
     /// (or the hovered one, #252) keeps 22 and the others split the rest. The strip stays centred,
     /// so it never runs past the buttons.
     private var cellWidths: [CGFloat] {
-        SpaceDock.widths(count: order.count, open: wide.flatMap { order.firstIndex(of: $0) }, room: room)
+        if creating { return SpaceDock.widthsWhileCreating(count: order.count - 1, room: max(0, bounds.width - 20)) }
+        return SpaceDock.widths(count: order.count, open: wide.flatMap { order.firstIndex(of: $0) }, room: room)
     }
 
     /// Left edges of the cells, in order.
@@ -1267,6 +1363,13 @@ final class SpaceDockView: NSView {
     override func mouseDown(with event: NSEvent) {
         let p = point(event)
         guard let i = index(at: p) else { return }
+        // While a space is being made nothing is dragged: a click on a space leaves the page for it.
+        if creating {
+            guard order[i] != Self.pendingID else { return }
+            actions.cancelSpaceCreation()
+            store.focusSpace(order[i], window: ui.windowID)
+            return
+        }
         reorder = (order[i], i, i, p, false)
         refreshCells()
     }
@@ -1333,7 +1436,7 @@ final class SpaceDockView: NSView {
     /// Arc 1.172.2: the header's whole space menu, for the space whose icon was clicked (#339).
     /// Change Space Icon… points its popover down at that icon.
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let i = index(at: point(event)), let cell = cells[order[i]] else { return nil }
+        guard !creating, let i = index(at: point(event)), let cell = cells[order[i]] else { return nil }
         let id = order[i], ui = self.ui
         return SpaceMenu.make(spaceID: id, store: store, ui: ui, actions: actions, anchor: cell, from: .dock) {
             ui.renamingSpaceID = id

@@ -316,7 +316,7 @@ space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView
   with white in light. The same disc is the Add Space card in
   Library ▸ Spaces (`SpaceManagementAddSpaceView`, 30 × 30 at 0x10039fcb0).
 - It works with the sidebar docked and with it hidden and out over the page.
-- Arc then opens its Create a Space form inside the sidebar. Cra opens its New Space sheet for now.
+- Arc then opens its Create a Space page in the sidebar, and so does Cra ("Create a Space, measured").
 - Past the last space the list gives on Arc's own rubber band, which upstream measured past the
   Library (docs/arc-reverse-engineering.md, "Swipe into the Library": 300 px of fingers for 20.5 pt,
   D(1 − 1/(0.15 x / D + 1)) with x half the fingers' travel). It is about a quarter as giving as the
@@ -327,6 +327,51 @@ space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView
   was built with). The catalog's light variant wasn't seen.
 - Not known: the strip's width in Arc's layout, and whether that band's D is the page's width (the
   fit gave 215 pt; over this range it hardly matters).
+
+## Create a Space, measured (Arc 1.173.1, 18 Nov 2026)
+
+From a 2x still of the page, a 148 s screen recording read frame by frame (120 Hz), and Arc's code
+(the page is SwiftUI, `SpaceCreation/SpaceCreationView.swift`; its constants include the 36 pt rows
+and the 8 pt spacing). CraCore `SpaceCreationDraft`, `SpaceCreationLayout`, `SpaceCreationAnimation`;
+the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, in a 250 pt sidebar.
+
+- New Space is a page in the sidebar, after the last space, not a dialog. From the "+" past the
+  last space it pushes in over about 0.18 s; from the dock's "+" menu about 0.25 s, the window
+  taking the new space's colours on the way. Cancel brings the old space back from the left in
+  about 0.1 s. The sidebar's top row stays; the favorites and the tab list give way to the page.
+- A picture of three tilted cards (64 × 41 pt, top 79 pt), "Create a Space" (about 16 pt bold, top
+  140 pt) and a two-line subtitle (about 13 pt, 16.5 pt apart, top 170 pt).
+- The name: a 223 × 35 pt field at 13.6, 231 (radius about 6 pt), white at 6 % on a dark sidebar and
+  about 60 % on a light one. It has the keyboard as the page opens (a blue caret, no focus ring),
+  the placeholder "Space name…", and a dashed 18 pt "+" at 21, 239.5 that opens the icon picker in
+  a popover under it (264 × 265 pt, Emoji and Icon). A picked icon takes the "+"'s place.
+- Profile: a 36 pt row 6 pt under the field, white at 8 % on dark (12 % under the pointer), with a
+  pill for the profile's name (about 21.5 pt tall) and an (i) 12.5 pt across whose tip reads "You can
+  use a Profile to give this Space its own logins, history, and browsing data." The pill's menu is
+  a native one and isn't in a window recording; an item of it opens Create a new Profile. Cra's
+  menu has the rows of Arc's Change Profile menu: Default, the profiles, a line, New Profile….
+- Choose a Theme: a 36 pt row 7 pt under Profile. It opens the theme editor beside the sidebar
+  (347.5 × 496 pt, an arrow at the row), and every change shows at once on the sidebar, the page,
+  the button and the dock. A click in the sidebar closes it and the theme stays.
+- Create Space: 223 × 35.5 pt, ending 94 pt above the sidebar's bottom, a deep shade of the theme
+  (#A3164B on a pink #B8718A sidebar, #1C25FF on Arc's dark navy). Dim until the name has a
+  character, then on at once, and off again with an empty name. Cancel is a text button centred
+  73 pt above the bottom.
+- The dock under the page loses its Library and "+" buttons, its items stand 28 pt apart (33
+  before) and one more follows the last space: a lit dot, and the picked icon once a theme has
+  been chosen. The space that was open is dimmed.
+- Create Space, about 2.5 s: the button and Cancel fade (0.15 s), then the rows, then the title;
+  the three cards tip over as they move down, edge-on 0.46 s in, and come back as one white card
+  with the icon (62.5 × 79 pt, radius 5 pt) that drops to the sidebar's middle by 1.0 s; a glow of
+  the theme pulses behind it at 1.3 to 1.5 s; the card fades at 1.8 to 2.0 s; the space shows at
+  about 2.5 s. A form opened after that is empty.
+- Cra's own: a new space starts on one random brand colour (#155, #170) where Arc starts on a
+  dark navy; the search engine choice (#306) stays in Edit Space; the picture is Cra's drawing;
+  and while the page is up the page area keeps showing the space it was opened on, in the new
+  theme, where Arc shows the new space's empty page.
+- Not seen: Escape, Return and Tab on the page (Cra: Escape cancels, Return creates); a click on
+  another space in the dock (Cra leaves the page for it); and whether a cancelled page keeps its
+  text (Cra's opens empty).
 
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 

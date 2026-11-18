@@ -1,7 +1,7 @@
 # Arc's "+" past the last space (Arc 1.173.1's EdgeFeedbackView): a swipe left on the last space
 # overscrolls the tab list, 15 pt of that brings a disc and a soft bulge out at the sidebar's right
 # edge on a spring, 22.5 pt fills the disc's ring, and a lift with the ring full for a tenth of a
-# second opens New Space. Less, or another space, and nothing happens. Cra only rubber-banded.
+# second opens Arc's Create a Space page. Less, or another space, and nothing happens. Cra only rubber-banded.
 budget rss=700 stalls50=10
 seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
 cra://debug?windowSize=1280x800
@@ -24,14 +24,14 @@ cra://debug?newSpacePull=15
 expect-log new space plus: 15\.0 pt out, column=15\.0 shown=1\.00 disc=40\.0 ring=0\.67 activated=0 bulge=0\.0,164\.0 hidden=0
 cra://debug?newSpacePull=lift
 expect-log new space pull: lifted 15\.0 pt out, nothing
-reject-log space editor opens
+reject-log space creation opens
 # The ring full, held, then let go.
 cra://debug?newSpacePull=30
 expect-log new space plus: 30\.0 pt out, column=30\.0 shown=1\.00 disc=40\.0 ring=1\.00 activated=1
 wait 0.3
 cra://debug?newSpacePull=lift
 expect-log new space pull: lifted 30\.0 pt out, New Space opens
-expect-log space editor opens: a new space
+expect-log space creation opens
 cra://dismiss
 wait 1
 # Full and let go in the same breath: not long enough.
