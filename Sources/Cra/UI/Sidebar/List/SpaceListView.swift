@@ -287,8 +287,7 @@ final class SpaceListView: NSView, NSDraggingSource {
                     editing: renaming == item.id, expanded: expanded, peeked: !peeked.isEmpty, live: item.isLiveFolder,
                     tint: NSColor(glyph.tint), fill: NSColor(glyph.fill), back: NSColor(glyph.back),
                     tabCount: expanded ? 0 : store.tabs(under: item.id).count,
-                    liveBusy: refreshing.contains(item.id), liveError: item.liveFolder.flatMap(LiveFolderText.warning)?.help,
-                    liveSignInURL: item.liveFolder.flatMap(LiveFolderText.warning)?.signInURL,
+                    liveBusy: refreshing.contains(item.id), liveWarning: item.liveFolder.flatMap(LiveFolderText.warning),
                     liveHelp: LiveFolderText.refreshHelp(item.liveFolder), liveIcon: item.liveFolder.flatMap { LiveFolderPluginStore.shared.entry(for: $0)?.icon },
                     symbol: item.folderSymbol))
                 out.append(row)

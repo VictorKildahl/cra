@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+/// A live folder row's warning button, from `LiveFolderData.alert`.
+struct LiveFolderWarning: Equatable {
+    var symbol: String
+    var help: String
+    var signInURL: String?
+}
+
 @MainActor
 enum LiveFolderText {
     private static let relative: RelativeDateTimeFormatter = {
@@ -21,14 +28,14 @@ enum LiveFolderText {
         return "Refresh · \(lastUpdate(live))"
     }
 
-    /// The folder's warning button: Arc's tip, and where a click signs in (nil: it tries again).
-    static func warning(_ live: LiveFolderData) -> (help: String, signInURL: String?)? {
-        if live.lastError == .notSignedIn, let plugin = live.plugin, let warning = plugin.signInWarning {
-            return (warning, plugin.signIn?.url)
+    /// The folder's warning button: Arc's glyph (a key for single sign-on, #521) and tip, and where a
+    /// click signs in (nil: it tries again).
+    static func warning(_ live: LiveFolderData) -> LiveFolderWarning? {
+        guard let alert = live.alert else { return nil }
+        if case .failed(let error) = alert {
+            return LiveFolderWarning(symbol: alert.symbol, help: "\(status(error, live: live)). Click to try again.", signInURL: nil)
         }
-        if let error = live.lastError { return ("\(status(error, live: live)). Click to try again.", nil) }
-        if let warning = live.plugin?.snapshot?.warning { return (warning, live.plugin?.snapshot?.actions.first?.url) }
-        return nil
+        return LiveFolderWarning(symbol: alert.symbol, help: alert.help ?? "", signInURL: alert.url)
     }
 
     static func status(_ error: LiveFolderError, live: LiveFolderData) -> String {

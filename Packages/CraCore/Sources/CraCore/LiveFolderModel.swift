@@ -141,6 +141,53 @@ public struct LiveFolderData: Codable, Equatable {
     }
 }
 
+/// What a live folder's row button warns about. Arc 1.172's ListHeaderCellView draws the SF Symbol
+/// "key" while organisations want single sign-on (needsSSO) and "exclamationmark.triangle" when
+/// GitHub can't be read; the tips are its "Login with SSO to unlock this folder" and "Sign back in
+/// to GitHub." (#521).
+public enum LiveFolderAlert: Equatable {
+    /// Signed out: the plugin's tip, and where a click signs in.
+    case signIn(help: String, url: String?)
+    /// The last refresh failed. The app words it from the plugin's status messages; a click tries again.
+    case failed(LiveFolderError)
+    /// The folder reads, but some of it waits for a sign-in elsewhere (a snapshot's `warning`: GitHub
+    /// organisations behind SAML single sign-on).
+    case singleSignOn(help: String, url: String?)
+
+    public var symbol: String {
+        if case .singleSignOn = self { return "key" }
+        return "exclamationmark.triangle"
+    }
+
+    public var help: String? {
+        switch self {
+        case .signIn(let help, _), .singleSignOn(let help, _): return help
+        case .failed: return nil
+        }
+    }
+
+    public var url: String? {
+        switch self {
+        case .signIn(_, let url), .singleSignOn(_, let url): return url
+        case .failed: return nil
+        }
+    }
+}
+
+extension LiveFolderData {
+    /// The row's warning, if any: a failed refresh beats a partial sign-in.
+    public var alert: LiveFolderAlert? {
+        if lastError == .notSignedIn, let plugin, let warning = plugin.signInWarning {
+            return .signIn(help: warning, url: plugin.signIn?.url)
+        }
+        if let lastError { return .failed(lastError) }
+        if let snapshot = plugin?.snapshot, let warning = snapshot.warning {
+            return .singleSignOn(help: warning, url: snapshot.actions.first?.url)
+        }
+        return nil
+    }
+}
+
 /// One pull request as the GitHub client reads it (Arc: LiveItem.Data.github.pullRequest).
 public struct LivePullRequest: Codable, Equatable, Identifiable {
     public enum State: String, Codable { case open, draft, merged, closed }
