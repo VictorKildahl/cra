@@ -62,24 +62,57 @@ final class SearchEngines {
 
     /// Every row of the profile's keywords table, as the settings page lists them.
     func keywords(profilePath: String?) -> [ChromiumSearchEngine] {
-        let dir = profilePath.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
-        let file = dir.appendingPathComponent("Web Data")
-        guard let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate else { return [] }
-        if let hit = keywordCache[file.path], hit.modified == modified { return hit.engines }
-        let engines = Self.readKeywords(file)
+        let file = keywordsFile(profilePath: profilePath)
+        guard let modified = Self.modificationDate(file) else { return [] }
+        let cached = keywordCache[file.path]
+        if let cached, cached.modified == modified { return cached.engines }
+        guard let engines = Self.readKeywords(file) else { return cached?.engines ?? [] }
         keywordCache[file.path] = (modified, engines)
         return engines
     }
 
+    /// Chromium batches keyword writes for up to five seconds. A bar opened in that gap can
+    /// pick up the saved shortcuts as soon as Web Data changes.
+    func watchKeywords(profilePath: String?, onChange: @escaping @MainActor () -> Void) -> DispatchSourceFileSystemObject? {
+        let file = keywordsFile(profilePath: profilePath)
+        let fd = open(file.path, O_EVTONLY)
+        guard fd >= 0 else { return nil }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .global(qos: .userInitiated))
+        source.setEventHandler { [weak self, weak source] in
+            guard let modified = Self.modificationDate(file), let engines = Self.readKeywords(file),
+                  Self.modificationDate(file) == modified else { return }
+            DispatchQueue.main.async { [weak self, weak source] in
+                guard let self, source?.isCancelled == false else { return }
+                // Another bar may already have picked up a newer edit.
+                let cachedDate = self.keywordCache[file.path]?.modified ?? .distantPast
+                if cachedDate <= modified {
+                    self.keywordCache[file.path] = (modified, engines)
+                }
+                onChange()
+            }
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        return source
+    }
+
+    private func keywordsFile(profilePath: String?) -> URL {
+        let dir = profilePath.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
+        return dir.appendingPathComponent("Web Data")
+    }
+
+    private nonisolated static func modificationDate(_ file: URL) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate]) as? Date
+    }
+
     /// Chromium holds the database open with an exclusive lock, so it is read as immutable: no
-    /// locks taken, nothing written. A read that lands mid-write gets nothing and the next one,
-    /// after the write changes the file's date, tries again.
-    nonisolated static func readKeywords(_ file: URL) -> [ChromiumSearchEngine] {
-        guard let path = file.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return [] }
+    /// locks taken, nothing written. A failed read leaves the last complete result cached.
+    nonisolated static func readKeywords(_ file: URL) -> [ChromiumSearchEngine]? {
+        guard let path = file.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
         var db: OpaquePointer?
         guard sqlite3_open_v2("file:\(path)?immutable=1", &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK else {
             sqlite3_close(db)
-            return []
+            return nil
         }
         defer { sqlite3_close(db) }
         let sql = """
@@ -87,16 +120,19 @@ final class SearchEngines {
                is_active, starter_pack_id, sync_guid FROM keywords
         """
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         func text(_ i: Int32) -> String { sqlite3_column_text(stmt, i).map { String(cString: $0) } ?? "" }
         var out: [ChromiumSearchEngine] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
+        var status = sqlite3_step(stmt)
+        while status == SQLITE_ROW {
             out.append(ChromiumSearchEngine(
                 id: sqlite3_column_int64(stmt, 0), name: text(1), keyword: text(2), url: text(3), suggestURL: text(4), faviconURL: text(5),
                 prepopulateID: Int(sqlite3_column_int(stmt, 6)), safeForAutoreplace: sqlite3_column_int(stmt, 7) != 0,
                 isActive: Int(sqlite3_column_int(stmt, 8)), starterPackID: Int(sqlite3_column_int(stmt, 9)), syncGUID: text(10)))
+            status = sqlite3_step(stmt)
         }
+        guard status == SQLITE_DONE else { return nil }
         return out.filter { !$0.keyword.isEmpty && !$0.url.isEmpty }
     }
 }
