@@ -226,7 +226,8 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   as an 11pt second line (see "A pinned tab away from its page"), folders use a blue folder glyph, nested rows indent 16 pt (measured 3 Nov, #139). Bottom row: library icon
   left, tiny space emoji centered (inactive dimmed), + right.
 - [O] Content: rounded card inset ~8-10pt with the toolbar strip (42pt: lock + monospaced URL, copy link, extensions,
-  capture, DevTools, sidebar toggle) on top; no card at all when no tab is selected.
+  capture, DevTools, sidebar toggle) on top. With no tab selected, Arc 1.173.1 shows the empty card measured in
+  "Empty-window sidebar and card" below; the earlier capture was incorrectly read as having no card.
 - [O] Command bar: ~766pt wide, vertically centered, dark translucent in dark mode. Input row 60pt with the top match's
   favicon; rows 50pt single-line "Title — url"; the completion row comes first, then the typed query, then matches; open
   tabs show "Switch to Tab" + arrow box (other-space tabs show the space name); the selected row is tinted with the
@@ -270,7 +271,8 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Toolbar strip = first theme colour at 46% (#72601D), URL #E4E0D4 12pt monospaced starting 40pt from the card edge.
 - [O] Title row centre 24pt (traffic lights at x 19/43/67, sidebar toggle at 93, nav ← → ↻⌄ at 236/270/299/314).
   Favorites tiles 70×47 with 8pt gaps, first row at y≈45. Space header centre y≈118, rows 41pt pitch, favicon centre x=26,
-  text x=45. With no tab selected the content area is a faintly lighter card with a 40pt toolbar strip and a hairline.
+  text x=45. With no tab selected, use the measurements in "Empty-window sidebar and card" below; the earlier
+  capture was only described as a faintly lighter card.
 
 ## Calibration update, 24 Oct 2026 (afternoon)
 
@@ -4966,3 +4968,19 @@ Every phrase and every number is in GitHub #407. Tags as above: [O] observed, [B
   when Google reloads its page under the script. The only data that leaves the Mac is the queries, to the search
   engine. Not measured: the row's exact spacing, the flower's size in Arc's row, what Arc does when a second run
   starts while the first works.
+
+## Empty-window sidebar and card (Arc 1.173.1, 17–18 Nov 2026, GitHub #483)
+
+Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window recordings and 2x captures.
+
+- [O] In a space with no selected tab and the sidebar hidden, Arc brings the sidebar straight to its floating
+  position and holds it there. Moving the pointer away or bringing another app to the front doesn't retract it.
+  The sidebar button still switches between docked and floating.
+- [O] Selecting or opening a tab ends the hold. The sidebar remains while the pointer is over it, then slides away
+  when the pointer leaves. Switching to a space with no selected tab brings it straight back and holds it open again.
+- [O] The empty window has a page-shaped white card in the normal content inset. Its colour fits white over the
+  space gradient at about 0.65–0.68 in a light theme and 0.10 in a dark theme.
+- [O] The card uses the page card's soft shadow: about 19–25 levels darker over 4–5 pt at the left edge, about 16
+  over 4 pt at the top, and about 35–42 over 6–8 pt below. The stronger lower edge matches the page card.
+- Cra (#483): `SidebarPresentation` derives the held-open state without storing another flag; `CardVeil` uses 0.65
+  light and 0.10 dark, and the empty card reuses the page card's shadow.

@@ -1,0 +1,21 @@
+# promise: #483
+# The sidebar out over a page, docked with the sidebar button: it grows into its docked place in its
+# own panel on the window's slide, squaring its corners as its shadow fades, and the window takes it
+# back once it is there. Swapped into the window first, it lost its corners, shadow and backdrop in
+# one frame and jumped by the floating margin. The page stays where it ends up, as for ⌘S (#317).
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=dock
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=1
+wait 1
+cra://debug?windowState=out
+expect-log window state out: main0 .* sidebar=left edge=floating .* floating=left 5
+cra://action/toggleSidebar
+wait 1
+expect-log sidebar docked in place: page moved 0 pt$
+cra://debug?windowState=docked
+expect-log window state docked: main0 .* lightsHidden=0 .* sidebar=left edge=left .* floating=none

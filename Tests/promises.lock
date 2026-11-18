@@ -949,6 +949,17 @@
 #478   Tests/Scenarios/zap-related.scenario  50571144aa8b
 #480   Tests/Scenarios/native-window-hide.scenario  a18926843adf
 #480   Tests/Scenarios/native-window-shortcuts.scenario  574dd03566ae
+#483   Packages/CraCore/Tests/CraCoreTests/CardVeilTests.swift::aWindowWithNoTabShowsAWhiteCard  7368abb779bd
+#483   Packages/CraCore/Tests/CraCoreTests/CardVeilTests.swift::anEmptyPaneKeepsItsFaintVeil  6d08fa132b39
+#483   Packages/CraCore/Tests/CraCoreTests/SidebarPresentationTests.swift::aSelectedTabEndsTheHold  3db96da6de97
+#483   Packages/CraCore/Tests/CraCoreTests/SidebarPresentationTests.swift::aWindowWithNoTabHoldsItsHiddenSidebarOpen  ce85f566ef6e
+#483   Tests/FloatingSidebarTests.swift::anEmptyWindowKeepsItOut  3032c131a868
+#483   Tests/FloatingSidebarTests.swift::dockingARevealedSidebarCanBeSuperseded  396e400e26b7
+#483   Tests/FloatingSidebarTests.swift::dockingFromHeldOpenHasOneOwner  79224a679332
+#483   Tests/FloatingSidebarTests.swift::heldOpenComesOutInPlace  cecb3cc9f3a7
+#483   Tests/Scenarios/empty-window-card.scenario  0362e2c759bd
+#483   Tests/Scenarios/sidebar-dock-floating.scenario  0c4b6820eb2b
+#483   Tests/Scenarios/sidebar-empty-held-open.scenario  6a29debe38e4
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
 #484   Tests/Scenarios/extension-remove.scenario  ce468889560a
 #490   Packages/CraCore/Tests/CraCoreTests/AskOnPageTests.swift::theCardKeepsTheSpacesSaturation  9a2fea86634b
