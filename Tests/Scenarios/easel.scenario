@@ -11,6 +11,12 @@ cra://debug?browserWindows=relaunched
 expect-log browser windows relaunched: kind=normal listed=1 tabs=1 open=1
 cra://action/viewEasels
 wait 1
+# Arc's tile under the pointer (Arc 1.173.1, recorded 17 Nov 2026): it grows by 6 % about its
+# centre and its backing brightens, in a tenth of a second, and goes back when the pointer leaves.
+cra://debug?easelTileHover=1
+expect-log easel tile: hover=on scale=1\.060 fill=0\.08 title=Untitled Easel
+cra://debug?easelTileHover=0
+expect-log easel tile: hover=off scale=1\.000 fill=0\.04 title=Untitled Easel
 # The capture menu's New Easel: an easel with the capture on it opens in a new tab (after the
 # relaunch only cra.log is read, which counts tabs rather than naming them).
 cra://open?url=${PAGE}?n=captured

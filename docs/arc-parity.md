@@ -379,6 +379,12 @@ key presses on the canvas (CraCore `EaselToolbarLayout`, `Easel.Tool.key`; the a
   AirDrop, —, Show in Finder, —, Hide from Arc (Cra: "Hide from Cra"; the file stays on disk).
 - The selected rail page's glyph and the Spaces page's + take the space's colours (an olive space: a
   cream disc with a dark mark), not a fixed blue.
+- An easel's tile under the pointer (Arc 1.173.1, a 120 Hz screen recording read frame by frame,
+  17 Nov 2026): the tile grows about its centre from 128.6 to 136.3 pt (× 1.06; the edges read to
+  about ± 0.5 px, so 1.0625 nearly fits too) in 0.1 s, fast first with no overshoot, and its backing
+  stands twice as far from the sidebar's colour; the same way back when the pointer leaves. Cra:
+  CraCore EaselTileHover; the list leaves the top row's tiles room to grow. Not found in Arc's binary:
+  the constant itself (its code holds 1.06 once, in an unrelated angle).
 - Boost rows: the site's icon on a 43 pt light tile with a white rim, name 14 pt over the site; under
   the pointer a rounded card and a 36 × 22 pt switch; off = the tile struck through; right-click
   Rename (in place), Delete.

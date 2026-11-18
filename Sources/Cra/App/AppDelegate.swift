@@ -1413,6 +1413,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let key = dict["easelTool"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugTool(key: key, hover: dict["hover"]); return
             }
+            // easelTileHover=1|0: the pointer over Library ▸ Easels' first tile, or gone; cra.log says
+            // how large it is drawn and how bright its backing is.
+            if let on = dict["easelTileHover"] {
+                func first(in view: NSView) -> EaselTile? {
+                    if let tile = view as? EaselTile, !tile.isHiddenOrHasHiddenAncestor { return tile }
+                    for sub in view.subviews { if let found = first(in: sub) { return found } }
+                    return nil
+                }
+                guard let tile = main.window?.contentView.flatMap(first(in:)) else { CraLog.note("easel tile: none"); return }
+                tile.debugHover(on == "1") { CraLog.note("easel tile: \($0)") }
+                return
+            }
             // easelLink=<url>: the open easel gets a link card for <url>, as a paste does; cra.log says what it read.
             if let url = dict["easelLink"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugLink(url); return
