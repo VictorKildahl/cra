@@ -1059,6 +1059,7 @@
 #521   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::singleSignOnShowsAKeyAndSignedOutAWarning  e523aa0032fa
 #521   Tests/LiveFolderProviderTests.swift::gitHubSSOKey  275f1e1d6edc
 #521   Tests/Scenarios/live-folder-sso-key.scenario  334b5a8d69af
+#522   Tests/Scenarios/sidebar-hover-third-space.scenario  280e2feecab9
 #523   Tests/LiveFolderProviderTests.swift::gitHubMergedSinceLastRefresh  0e9f7750f936
 #523   Tests/LiveFolderProviderTests.swift::gitHubOpenOnly  ae23500415c4
 #523   Tests/LiveFolderProviderTests.swift::gitHubOpenOnlyEdges  afdcd32978cd
@@ -1129,6 +1130,10 @@
 #548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::inkFollowsWhatIsUnderTheBar  c1270445b16c
 #548   Tests/Scenarios/loading-bar-edge-to-edge.scenario  ec60a4518d95
 #548   Tests/Scenarios/loading-bar-full-screen.scenario  9f4ff50f7b0b
+#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::anAutoThemesNameFollowsMacOSButItsStripDoesnt  8f73c859196b
+#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::onlyTheSpaceNameTakesTheSpacesColour  efd6d2934c10
+#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::theStripIsArcsGradientWhateverTheSpaceTheme  249428d34570
+#549   Tests/Scenarios/little-window-strip-theme.scenario  e7fdc52d6742
 #550   Tests/FloatingSidebarTests.swift::theShadowStaysUnderTheSidebar  831fdb6d0b6c
 #550   Tests/Scenarios/floating-sidebar-shadow.scenario  a59106d5ba21
 #551   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::leavingCraKeepsTheBarOpen  d0842a6daad8
@@ -1143,10 +1148,6 @@
 #556   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aReopenedSheetShowsTheLastReadAtOnce  cafb3f7eae67
 #556   iOS/CraUITests/BrowserTests.swift::testAReopenedSpacesSheetShowsItsSpacesAtOnce  6b396824ee16
 #556   iOS/CraUITests/BrowserTests.swift::testTheFirstSpacesOpeningAfterTheTabRowIsInstant  c2e03398873d
-#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::anAutoThemesNameFollowsMacOSButItsStripDoesnt  8f73c859196b
-#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::onlyTheSpaceNameTakesTheSpacesColour  efd6d2934c10
-#549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::theStripIsArcsGradientWhateverTheSpaceTheme  249428d34570
-#549   Tests/Scenarios/little-window-strip-theme.scenario  e7fdc52d6742
 #557   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingAFolderOnItsTabKeepsTheTabAfterAnotherIsPicked  3ad20a437ad4
 #557   Tests/StoreTests.swift::folderPeekAfterClosing  8a03d5d820bc
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
