@@ -9,11 +9,23 @@ import CoreGraphics
 public enum MCPAgentPresence {
     /// The sidebar face stays this long after the agent's last call in the tab.
     public static let lingers: TimeInterval = 8
-    /// The cursor fades this long after its last move or press.
-    public static let cursorLingers: TimeInterval = 2.5
+    /// The cursor fades this long after its last move, press or scroll: as long as the face marks
+    /// the tab, so it doesn't vanish while the agent thinks between steps (18 Nov 2026).
+    public static let cursorLingers: TimeInterval = lingers
+    /// The longest a watched page takes to scroll smoothly to an agent's target before it jumps
+    /// the rest of the way, so a page that never settles can't hold the agent up.
+    public static let revealLimit: TimeInterval = 1.2
     /// A watched pointer rests on its target this long before it presses, so the user sees what
     /// is about to be clicked.
     public static let dwell: TimeInterval = 0.15
+    /// A step's words stay in the pill at least this long. An agent can take several steps within
+    /// a few milliseconds (a script, then a click): words that come sooner wait, only the latest
+    /// waiting ones show, and the pill never starts a new slide before the last has landed.
+    public static let pillHold: TimeInterval = 0.7
+
+    /// How long new words wait when the pill's words have shown for `shownFor` seconds.
+    public static func pillWait(shownFor: TimeInterval) -> TimeInterval { max(0, pillHold - max(0, shownFor)) }
+
     /// The longest quoted page text in the toast (a ref's accessible name is the page's own words).
     public static let targetLimit = 32
 
@@ -103,6 +115,30 @@ public enum MCPAgentPresence {
     }
 
     public static func glideDuration(distance: Double) -> Double { min(0.6, max(0.3, 0.22 + distance / 2200)) }
+
+    /// Which way the page has to scroll to bring an element into view (x right, y down, pointing
+    /// at the element), or nil when it is already all in view and the page stays still. While the
+    /// user watches, that scroll is a smooth one they can follow, the cursor looking along it,
+    /// instead of a jump that leaves them on a different part of the page (18 Nov 2026).
+    public static func revealDirection(element: CGRect, viewport: CGSize) -> CGVector? {
+        guard viewport.width > 0, viewport.height > 0, element.width > 0 || element.height > 0 else { return nil }
+        let view = CGRect(origin: .zero, size: viewport)
+        // A box larger than the view counts as in view when it fills it along that axis.
+        let inX = element.minX >= view.minX - 0.5 && element.maxX <= view.maxX + 0.5 || element.width > view.width && element.minX <= 0 && element.maxX >= view.maxX
+        let inY = element.minY >= view.minY - 0.5 && element.maxY <= view.maxY + 0.5 || element.height > view.height && element.minY <= 0 && element.maxY >= view.maxY
+        if inX && inY { return nil }
+        return CGVector(dx: inX ? 0 : element.midX - view.midX, dy: inY ? 0 : element.midY - view.midY)
+    }
+
+    /// A page_scroll's wheel notches of about 40 px. Unwatched: at most 8, sent at once (a few-pixel
+    /// scroll is one whole notch, not fractions Chromium drops). Watched: up to 16, spread over
+    /// 0.25–0.6 s, so the page moves under the cursor at a pace the eye can follow.
+    public static func wheel(dx: Int, dy: Int, watched: Bool) -> (steps: Int, gap: TimeInterval) {
+        let distance = max(abs(dx), abs(dy))
+        guard watched else { return (max(1, min(8, distance / 40)), 0) }
+        let steps = max(1, min(16, distance / 40))
+        return (steps, min(0.6, max(0.25, 0.2 + Double(distance) / 4000)) / Double(steps))
+    }
 
     /// Where the face's eyes look, as an offset of at most `reach` from their rest: along the way
     /// the face travels (y down, as on the page), straight ahead when it stands still.

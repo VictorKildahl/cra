@@ -1471,6 +1471,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the latest pill's Stop (that agent disconnects, MCP stays on).
             if dict["mcpStop"] != nil { MCPServer.shared.stopLatestPill(); return }
+            // mcpWatched=on|off: a shown tab counts as watched even while its window is covered.
+            if let watched = dict["mcpWatched"] { MainWindowController.agentTabsWatchedUnseen = watched == "on"; return }
             // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸
             // Advanced ▸ Reset Translated-site Prompts and the translate choices it forgets, in every profile.
             if let t = dict["translatePrompts"] {

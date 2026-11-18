@@ -275,6 +275,27 @@ final class AgentCursor {
         keepUp()
     }
 
+    /// The page scrolls under the pointer at `css`: the cursor shows there (it may have faded while
+    /// the agent read the page) and looks the way the page goes, nudging that way like a flick of
+    /// the wheel, so a moving page always has the cursor that moved it on it.
+    func scroll(at css: CGPoint, toward direction: CGVector, zoom: CGFloat, in window: NSWindow) {
+        move(to: css, zoom: zoom, duration: 0, in: window)
+        guard isShown, point != nil else { return }
+        CraLog.note("mcp cursor: scrolling")
+        face.look(direction, duration: 0.25)
+        let length = hypot(direction.dx, direction.dy)
+        guard length > 0 else { return }
+        let nudge = CAKeyframeAnimation(keyPath: "transform.translation")
+        let reach: CGFloat = 4
+        let step = CGSize(width: direction.dx / length * reach, height: -direction.dy / length * reach)
+        nudge.values = [CGSize.zero, step, CGSize.zero].map { NSValue(size: $0) }
+        nudge.keyTimes = [0, 0.35, 1]
+        nudge.duration = 0.45
+        nudge.isAdditive = true
+        nudge.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)]
+        face.add(nudge, forKey: "nudge")
+    }
+
     /// A press at the pointer: the face squishes and a ring spreads from its tip.
     func press() {
         guard isShown, let point, isWatched() else { return }
@@ -359,4 +380,9 @@ final class AgentPointer: MCPPointerWatcher {
     }
 
     func pressed() { cursor.press() }
+
+    func scrolls(at point: CGPoint, toward direction: CGVector) {
+        guard let browser, let nsWindow = window?.window else { return }
+        cursor.scroll(at: point, toward: direction, zoom: CGFloat(pow(1.2, browser.zoomLevel())), in: nsWindow)
+    }
 }

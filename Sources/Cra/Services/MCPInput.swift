@@ -9,6 +9,9 @@ protocol MCPPointerWatcher: AnyObject {
     var isWatched: Bool { get }
     func moved(to point: CGPoint, duration: Double)
     func pressed()
+    /// The page scrolls under the pointer at `point` (page CSS pixels), toward `direction`: the
+    /// cursor shows where it is and looks along the scroll.
+    func scrolls(at point: CGPoint, toward direction: CGVector)
 }
 
 /// Performs input through Chromium. JavaScript in an isolated world only locates targets
@@ -387,13 +390,15 @@ final class MCPInput {
     }
 
     private func wheel(dx: Int, dy: Int) async throws {
-        // Notches of about 40 px, at most 8: a few-pixel scroll is one whole event, not eight fractions Chromium drops.
-        let steps = max(1, min(8, max(abs(dx), abs(dy)) / 40))
+        // Whole notches of about 40 px (MCPAgentPresence.wheel); a watched page scrolls at a pace
+        // the eye can follow, under the cursor.
+        let (steps, gap) = MCPAgentPresence.wheel(dx: dx, dy: dy, watched: watching)
+        if watching { pointer?.scrolls(at: position, toward: CGVector(dx: dx, dy: dy)) }
         for _ in 0..<steps {
             dispatched = true
             _ = try await call("Input.dispatchMouseEvent", ["type": "mouseWheel", "x": position.x, "y": position.y,
                                                            "deltaX": Double(dx) / Double(steps), "deltaY": Double(dy) / Double(steps)])
-            try await pace(0.012 + Double.random(in: 0...0.012))
+            if watching { try await pause(gap) } else { try await pace(0.012 + Double.random(in: 0...0.012)) }
         }
         // Chromium scrolls a wheel step over a few frames; let it land before the result reads it.
         try await pause(0.2)
@@ -544,6 +549,7 @@ final class MCPInput {
         guard let node else { throw Failure(message: "No target node.") }
         if scroll {
             _ = try await inspect()
+            if watching { try? await reveal() }  // best effort: scrollIntoViewIfNeeded follows
             do { _ = try await call("DOM.scrollIntoViewIfNeeded", ["objectId": node]) }
             catch let failure as MCPCDP.Failure where failure.message.contains("layout object") {
                 throw Failure(message: "That element isn't shown on the page (it has no box): something may reveal it, like a menu or a search icon. Take a screenshot or snapshot.")
@@ -552,6 +558,46 @@ final class MCPInput {
             _ = try? await call("Runtime.evaluate", ["expression": "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))",
                                                     "awaitPromise": true, "contextId": context, "timeout": 500])
         }
+    }
+
+    /// A target out of view, while the user watches: the page scrolls to it smoothly, the cursor
+    /// showing where it is and looking that way, instead of jumping (MCPAgentPresence.revealDirection).
+    /// DOM.scrollIntoViewIfNeeded then finishes whatever the smooth scroll didn't.
+    private func reveal() async throws {
+        let measured = try await function("""
+        function() {
+          const r = this.node.getBoundingClientRect(), d = document.documentElement;
+          return [r.left, r.top, r.width, r.height, d.clientWidth || innerWidth, d.clientHeight || innerHeight];
+        }
+        """)
+        guard let box = (measured["result"] as? [String: Any])?["value"] as? [Double], box.count == 6,
+              let direction = MCPAgentPresence.revealDirection(element: CGRect(x: box[0], y: box[1], width: box[2], height: box[3]),
+                                                               viewport: CGSize(width: box[4], height: box[5])) else { return }
+        CraLog.note("mcp cursor: the page scrolls to the target")
+        pointer?.scrolls(at: position, toward: direction)
+        guard let object else { return }
+        // Settled once the box has stopped for three frames after moving, or 0.25 s without
+        // starting (no smooth scrolling here); a timer ends it when frames don't come.
+        _ = try await call("Runtime.callFunctionOn", ["objectId": object, "returnByValue": true, "awaitPromise": true, "objectGroup": group,
+                                                      "arguments": [["value": MCPAgentPresence.revealLimit * 1000]], "functionDeclaration": """
+        function(limit) {
+          const n = this.node, start = performance.now();
+          n.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'nearest'});
+          return new Promise(done => {
+            let last = '', still = 0, moved = false;
+            setTimeout(() => done(false), limit);
+            const tick = () => {
+              const r = n.getBoundingClientRect(), now = r.left + ',' + r.top, waited = performance.now() - start;
+              if (last && now !== last) moved = true;
+              still = now === last ? still + 1 : 0;
+              last = now;
+              if (moved && still >= 3 || !moved && waited > 250 || waited > limit) return done(moved);
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          });
+        }
+        """])
     }
 
     /// For a ref in a same-site iframe (page_snapshot lists their elements): the child frame

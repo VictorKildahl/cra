@@ -78,6 +78,63 @@ struct MCPAgentPresenceTests {
         #expect(still.count == 1 && still[0].delay == 0 && still[0].point == CGPoint(x: 6, y: 5))
     }
 
+    @Test func quickStepsDontPileUpInThePill() {
+        // Each step's words land before the next slide starts (it outlasts the 0.07 + 0.32 s slide in).
+        #expect(MCPAgentPresence.pillHold >= 0.4 && MCPAgentPresence.pillHold <= 1)
+        #expect(MCPAgentPresence.pillWait(shownFor: 0.001) > 0.69)
+        #expect(MCPAgentPresence.pillWait(shownFor: 0.3) == MCPAgentPresence.pillHold - 0.3)
+        #expect(MCPAgentPresence.pillWait(shownFor: 5) == 0)
+        #expect(MCPAgentPresence.pillWait(shownFor: -1) == MCPAgentPresence.pillHold)
+    }
+
+    @Test func theCursorStaysWhileTheAgentThinks() {
+        // Agents take seconds between steps: the cursor lasts as long as the tab's face does.
+        #expect(MCPAgentPresence.cursorLingers == MCPAgentPresence.lingers)
+        #expect(MCPAgentPresence.cursorLingers >= 8)
+        #expect(MCPAgentPresence.revealLimit > 0.5 && MCPAgentPresence.revealLimit < 2)
+    }
+
+    @Test func aWatchedPageScrollsOnlyToWhatIsOutOfView() throws {
+        let view = CGSize(width: 1000, height: 800)
+        // In view: nothing moves.
+        #expect(MCPAgentPresence.revealDirection(element: CGRect(x: 100, y: 100, width: 80, height: 30), viewport: view) == nil)
+        #expect(MCPAgentPresence.revealDirection(element: CGRect(x: 0, y: 770, width: 1000, height: 30), viewport: view) == nil)
+        // A box taller than the view that covers it is in view; one that starts below isn't.
+        #expect(MCPAgentPresence.revealDirection(element: CGRect(x: 0, y: -200, width: 500, height: 2000), viewport: view) == nil)
+        // Below the fold: the page scrolls down, toward it.
+        let below = try #require(MCPAgentPresence.revealDirection(element: CGRect(x: 100, y: 2400, width: 80, height: 30), viewport: view))
+        #expect(below.dx == 0 && below.dy > 0)
+        // Partly cut off at the top: up.
+        let above = try #require(MCPAgentPresence.revealDirection(element: CGRect(x: 100, y: -10, width: 80, height: 30), viewport: view))
+        #expect(above.dx == 0 && above.dy < 0)
+        // Off to the right and below: both.
+        let corner = try #require(MCPAgentPresence.revealDirection(element: CGRect(x: 1400, y: 900, width: 50, height: 20), viewport: view))
+        #expect(corner.dx > 0 && corner.dy > 0)
+        // Nothing to measure: no scroll.
+        #expect(MCPAgentPresence.revealDirection(element: .zero, viewport: view) == nil)
+        #expect(MCPAgentPresence.revealDirection(element: CGRect(x: 0, y: 2000, width: 10, height: 10), viewport: .zero) == nil)
+    }
+
+    @Test func aWatchedWheelScrollIsPacedToFollow() {
+        // Unwatched: at most 8 notches at once, as before.
+        func unwatched(_ dx: Int, _ dy: Int) -> [Double] {
+            let plan = MCPAgentPresence.wheel(dx: dx, dy: dy, watched: false)
+            return [Double(plan.steps), plan.gap]
+        }
+        #expect(unwatched(0, 12) == [1, 0])
+        #expect(unwatched(0, 600) == [8, 0])
+        #expect(unwatched(-5000, 0) == [8, 0])
+        // Watched: finer notches spread over a quarter to six tenths of a second.
+        for (dx, dy) in [(0, 12), (0, 300), (0, -800), (2000, 0), (0, 100_000)] {
+            let plan = MCPAgentPresence.wheel(dx: dx, dy: dy, watched: true)
+            let total = Double(plan.steps) * plan.gap
+            #expect(plan.steps >= 1 && plan.steps <= 16)
+            #expect(total >= 0.249 && total <= 0.601)
+            #expect(plan.steps >= MCPAgentPresence.wheel(dx: dx, dy: dy, watched: false).steps)
+        }
+        #expect(MCPAgentPresence.wheel(dx: 0, dy: 600, watched: true).steps == 15)
+    }
+
     @Test func eyesLookWhereTheFaceGoes() {
         let right = MCPAgentPresence.gaze(dx: 50, dy: 0, reach: 2)
         #expect(right.dx == 2 && right.dy == 0)

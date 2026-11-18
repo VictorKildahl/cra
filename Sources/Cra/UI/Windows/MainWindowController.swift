@@ -4447,10 +4447,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The user can see tab `id`'s page: it is shown in this window, and the window is on screen
     /// and not covered. Only then does the agent's cursor show and its pointer slow down to be followed.
     func agentTabIsWatched(_ id: UUID) -> Bool {
-        guard let window, window.isVisible, !window.isMiniaturized, window.occlusionState.contains(.visible),
+        guard let window, window.isVisible, !window.isMiniaturized, window.occlusionState.contains(.visible) || Self.agentTabsWatchedUnseen,
               browsers.visibleTabIDs.contains(id), browsers.runtime(for: id)?.pageScreenFrame != nil else { return false }
         return true
     }
+
+    /// Tests (cra://debug?mcpWatched=on): a shown tab counts as watched in a window behind other
+    /// apps, so Tests/mcp_agent.py sees the watched cursor and scrolling without taking the screen.
+    static var agentTabsWatchedUnseen = false
 
     /// The update banner's news while this window's sidebar (which carries the banner) is hidden:
     /// Cra's toast with the banner's action, staying until its ✕ so it isn't missed.

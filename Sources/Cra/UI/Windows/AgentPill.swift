@@ -45,6 +45,10 @@ final class AgentPill {
     private var takeOver: (() -> Void)?
     private var page: (() -> NSRect?)?
     private var hide: DispatchWorkItem?
+    /// When the shown words came in, and newer words waiting for them to have shown long enough
+    /// (MCPAgentPresence.pillHold); only the latest waits.
+    private var shownAt: CFTimeInterval = 0
+    private var waiting: DispatchWorkItem?
     private var resize: NSObjectProtocol?
     private var pointerInside = false
 
@@ -149,11 +153,33 @@ final class AgentPill {
             face.startBlinking()
             NSAccessibility.post(element: window, notification: .announcementRequested,
                                  userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.low.rawValue])
-        } else if text != self.text {
-            change(to: text, sizes: sizes, scale: scale)
+            waiting?.cancel()
+            waiting = nil
+            shownAt = CACurrentMediaTime()
+            self.text = text
+            view.setAccessibilityLabel(text)
+            CraLog.note("mcp pill shows: \(text)")
+        } else if text == self.text {
+            waiting?.cancel()
+            waiting = nil
+        } else {
+            let wait = MCPAgentPresence.pillWait(shownFor: CACurrentMediaTime() - shownAt)
+            waiting?.cancel()
+            waiting = nil
+            if wait == 0 {
+                swap(to: text, sizes: sizes, scale: scale)
+            } else {
+                let work = DispatchWorkItem { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self, self.isShown, self.pill.opacity > 0, let window = self.panel.parent, let frame = self.page?() else { return }
+                        self.waiting = nil
+                        self.swap(to: text, sizes: Self.widths(text: text, available: frame.width), scale: window.backingScaleFactor)
+                    }
+                }
+                waiting = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
+            }
         }
-        self.text = text
-        view.setAccessibilityLabel(text)
         if resize == nil {
             resize = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -248,13 +274,26 @@ final class AgentPill {
         pill.add(fade, forKey: "fade")
     }
 
+    private func swap(to text: String, sizes: (pill: CGFloat, text: CGFloat), scale: CGFloat) {
+        change(to: text, sizes: sizes, scale: scale)
+        CraLog.note("mcp pill shows: \(text)")
+        shownAt = CACurrentMediaTime()
+        self.text = text
+        view.setAccessibilityLabel(text)
+    }
+
     /// New words: the old rise and fade, the new come up into place a moment later, and the
     /// capsule (with its button) eases to the new width around its middle.
     private func change(to text: String, sizes: (pill: CGFloat, text: CGFloat), scale: CGFloat) {
         let slide: CGFloat = reduceMotion ? 0 : 8
         let old = label
+        // Words still leaving from an earlier change go now, so never more than two lines overlap.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for leftover in clip.sublayers ?? [] where leftover is CATextLayer && leftover !== old { leftover.removeFromSuperlayer() }
         let new = makeLabel(text, width: sizes.text, scale: scale)
         clip.addSublayer(new)
+        CATransaction.commit()
         label = new
 
         CATransaction.begin()
@@ -266,9 +305,11 @@ final class AgentPill {
         if let old {
             CATransaction.begin()
             CATransaction.setCompletionBlock { old.removeFromSuperlayer() }
+            // From where it is: words still coming in fade from there, not from full.
             let out = CABasicAnimation(keyPath: "opacity")
-            out.fromValue = 1
+            out.fromValue = old.presentation()?.opacity ?? 1
             out.toValue = 0
+            old.removeAnimation(forKey: "in")
             let up = CABasicAnimation(keyPath: "transform.translation.y")
             up.fromValue = 0
             up.toValue = slide
@@ -370,6 +411,8 @@ final class AgentPill {
 
     func dismiss() {
         hide?.cancel()
+        waiting?.cancel()
+        waiting = nil
         hide = nil
         takeOver = nil
         pointerInside = false

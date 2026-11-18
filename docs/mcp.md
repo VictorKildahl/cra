@@ -51,7 +51,12 @@ The same face sits at the end of the sidebar row of every tab an agent works in,
 goes eight seconds after its last call there. When you are looking at the tab the agent acts in,
 the face is its cursor: it glides to what the agent points at, slowly enough to follow, rests on it
 for a moment and squishes when it clicks, so a page never changes without you seeing what was
-clicked. On a tab you aren't looking at there is no cursor and the agent works at full speed.
+clicked. When the agent acts on something out of view, the page scrolls to it smoothly while the
+cursor looks that way, and its wheel scrolls are paced under the cursor, so the page never jumps
+somewhere you didn't see it go. The cursor stays up as long as the tab's face does, so it doesn't
+vanish while the agent thinks. Steps a few milliseconds apart change the pill's words at most once
+every 0.7 s, the latest winning. On a tab you aren't looking at there is no cursor and the agent
+works at full speed.
 
 ## How an agent works in Cra
 

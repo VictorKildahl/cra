@@ -451,6 +451,38 @@ try:
     check("the pill says when the agent types", "mcp pill: cra-agent is typing" in log)
     check("the rows of the tabs it works in show its face", "mcp faces: 1 tab" in log)
     check("no cursor over tabs nobody is looking at", "mcp cursor:" not in log)
+    # Steps a few milliseconds apart (a script, then a click) don't pile up as overlapping slides:
+    # the pill's words change at most once per MCPAgentPresence.pillHold (0.7 s), the latest winning.
+    def stamp(line):
+        clock = line.split(" ")[1]
+        h, m, s = clock.split(":")
+        return int(h) * 3600 + int(m) * 60 + float(s)
+    shows = [stamp(l) for l in log.splitlines() if "mcp pill shows:" in l]
+    steps = [l for l in log.splitlines() if "mcp pill: " in l]
+    check("the pill's words change at most once per 0.7 s", len(shows) >= 2 and all(b - a >= 0.68 for a, b in zip(shows, shows[1:])), shows[:20])
+    check("quick steps fold into fewer changes of the pill", len(shows) < len(steps), [len(shows), len(steps)])
+
+    # A tab the user watches: the agent's cursor is on it, a target below the fold comes into view
+    # by a smooth scroll the user can follow (not a jump), and a wheel scroll is paced under the
+    # cursor. This copy is behind other apps, so the shown tab is counted as watched.
+    value(client.tool("tab_show", tabId=tab))
+    command("cra://debug?mcpWatched=on")
+    js(tab, "scrollTo(0, 0); window.scrolls = []; addEventListener('scroll', () => window.scrolls.push(Math.round(scrollY))); 1")
+    value(client.tool("page_click", tabId=tab, selector="#bottom"))
+    log = (folder / "browser.log").read_text(errors="replace")
+    check("a watched click below the fold still clicks", "bottom clicked" in events(tab)[-1:])
+    check("the cursor shows over the watched tab", "mcp cursor: shown over the watched tab" in log)
+    check("a watched page scrolls to a target out of view, with the cursor on it",
+          "mcp cursor: the page scrolls to the target" in log and "mcp cursor: scrolling" in log)
+    scrolls = js(tab, "window.scrolls")
+    check("the watched scroll is smooth, not one jump", len(set(scrolls)) >= 4, scrolls)
+    js(tab, "window.scrolls = []; 1")
+    value(client.tool("page_click", tabId=tab, selector="#bottom"))
+    check("a target already in view doesn't scroll the page", js(tab, "window.scrolls") == [])
+    scrolled = client.tool("page_scroll", tabId=tab, dy=-600)
+    value(scrolled)
+    check("a watched wheel scroll is paced to follow", scrolled["seconds"] >= 0.25)
+    command("cra://debug?mcpWatched=off")
     command("cra://debug?mcpStop=1")
     check("Take Over ends the acting agent's session", eventually(lambda: client.proc.poll() is not None))
     check("Take Over takes its faces off the sidebar", eventually(lambda: "mcp faces: 0 tabs" in (folder / "browser.log").read_text(errors="replace")))
