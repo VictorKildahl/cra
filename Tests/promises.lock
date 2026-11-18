@@ -1111,6 +1111,11 @@
 #539   Tests/Scenarios/little-window-screenshot-pick.scenario  a4df2e9bd27b
 #540   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::aPageInFullScreenHasNoBar  a35e4af16d57
 #540   Tests/Scenarios/little-window-fullscreen-bar.scenario  68c2b18c5237
+#543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::anotherSpaceIsNamed  6d3b818e11aa
+#543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::hiddenSidebarSaysSo  f40706666c21
+#543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::sidebarOutShowsTheRowInstead  bafff498f7e3
+#543   Tests/BrowserManagerLifecycleTests.swift::backgroundTabToastCase  9cde0b455475
+#543   Tests/Scenarios/background-tab-toast.scenario  2c50b42bceca
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
 crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01

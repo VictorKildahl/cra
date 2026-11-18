@@ -185,8 +185,8 @@ built release app with a test profile. Note anything that fails in the release's
 - **#28:** the speaker sits between favicon and title, a click mutes, and it doesn't blink
   between tracks.
 - **#47:** ⌘T highlights the New Tab row; the list scrolls only enough to show the active row.
-- **#85:** ⌘Return keeps the bar open; the "New Tab Created" toast shows only while the sidebar
-  is hidden.
+- **#85, #543:** ⌘Return keeps the bar open; the "New Tab Created" toast shows only while the sidebar
+  is hidden, for a ⌘-clicked, middle-clicked or Open Link in New Tab link too.
 - **#92:** in a Little Window, ⌃⌘2 sends the page to the window already on space 2.
 - **#174:** with a page text field focused, ⌘Space switches input source and ⌘` switches
   windows.

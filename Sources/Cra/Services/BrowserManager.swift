@@ -126,6 +126,9 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID)
     /// The page's context menu on an image: Capture Image… (page points from the top left).
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID)
+    /// A page made tab `tabID` behind it (a ⌘-click, a middle click, Open Link in New Tab, a Peek's
+    /// ⌘-click): Arc says so in its toast while the sidebar is hidden (BackgroundTabToast, #543).
+    func browserManagerOpenedInBackground(_ tabID: UUID)
 }
 
 /// A page's permission request on its way to Cra's card (#371); `completion` answers it in Chromium.
@@ -1748,6 +1751,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         if background {
             store.markUnread(tab.id, true)
             ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
+            delegate?.browserManagerOpenedInBackground(tab.id)
         }
     }
 
@@ -1774,7 +1778,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                                   window: windowID, referrer: source)
         if background { store.markUnread(tab.id, true) }
         let host = makePopupHost(for: tab.id, opener: browser)
-        if !background { show(tab.id, focus: true) }
+        if background { delegate?.browserManagerOpenedInBackground(tab.id) } else { show(tab.id, focus: true) }
         return host
     }
 

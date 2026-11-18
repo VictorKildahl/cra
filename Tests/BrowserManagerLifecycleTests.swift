@@ -215,6 +215,7 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
         await pageEngineCase()
+        await backgroundTabToastCase()
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
         permissionPopoverStepsAsideCase()
@@ -601,6 +602,36 @@ enum BrowserManagerLifecycleTests {
             runtime.browser.finishClose()
             source.closeAll()
         }
+    }
+
+    // promise: #543
+    /// Every tab a page opens behind it reaches the window, which toasts it while the sidebar is hidden
+    /// (BackgroundTabToast): a ⌘-click or middle click (Chromium's new page, popupHostForURL) and Open
+    /// Link in New Tab (requestsNewTabWithURL), not only ⌘Return in the bar. A tab in front says nothing.
+    @MainActor
+    private static func backgroundTabToastCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let source = store.createTab(url: "https://example.test/source").id
+        manager.show(source, focus: false)
+        let page = manager.runtime(for: source)!.browser
+
+        _ = manager.browser(page, popupHostForURL: "https://example.test/clicked", inBackground: true)
+        let clicked = store.items.values.first { $0.tab?.url == "https://example.test/clicked" }?.id
+        expect(clicked != nil && observer.backgroundTabs == [clicked!], "a ⌘-clicked link's background tab reaches the window")
+
+        manager.browser(page, requestsNewTabWithURL: "https://example.test/menu", inBackground: true)
+        let menu = store.items.values.first { $0.tab?.url == "https://example.test/menu" }?.id
+        expect(menu != nil && observer.backgroundTabs == [clicked!, menu!], "Open Link in New Tab's background tab reaches the window")
+
+        _ = manager.browser(page, popupHostForURL: "https://example.test/front", inBackground: false)
+        manager.browser(page, requestsNewTabWithURL: "https://example.test/front2", inBackground: false)
+        expect(observer.backgroundTabs.count == 2, "a tab opened in front is no background tab")
+        manager.browser(page, requestsNewTabWithURL: "cra://action/nextTab", inBackground: true)
+        expect(observer.backgroundTabs.count == 2, "a cra:// link opens nothing, so nothing is said")
+        manager.closeAll()
     }
 
     /// DRM services open in WebKit (ProtectedMediaSites); a popup keeps its opener's engine; a
@@ -2372,4 +2403,6 @@ private final class Observer: BrowserManagerDelegate {
     func browserManagerCaptureImage(at point: NSPoint, tabID: UUID) { capturedImages.append((point, tabID)) }
     var splitLinks: [(url: String, tab: UUID)] = []
     func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID) { splitLinks.append((url, tabID)) }
+    var backgroundTabs: [UUID] = []
+    func browserManagerOpenedInBackground(_ tabID: UUID) { backgroundTabs.append(tabID) }
 }

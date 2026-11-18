@@ -3252,6 +3252,17 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   (JYSK space) it is dark with white text: 43/24/102 → 33/19/79, outline 26/15/62, i.e. the same hue at
   saturation 0.76, brightness 0.40 → 0.31 (outline 0.24); the light one is saturation 0.19 → 0.25, brightness
   0.89 → 0.85 (outline 0.61) in the theme's hue. Cra: ShinyToast.
+- [O static + live] Arc 1.173.1 (18 Nov 2026, issue #543): the toast isn't the command bar's own. A tab made in the
+  background posts `Arc_ShowBackgroundTabAffordance` ("Invalid NSNotification for showing BackgroundTabAffordance"),
+  which `BackgroundTabAffordanceController` (BackgroundTabAffordanceView.swift, `BackgroundTabNotificationContent`)
+  answers with `backgroundTabCreated` or `backgroundTabCreatedInSpace`; the strings' comments are "Letting the user
+  know a new tab has been created when the sidebar is hidden." and "Toast indicating that a tab was created in the
+  background in a specific Space." Live, in a Blank Window on a local page: with the sidebar out, ⌘Return on a
+  focused link opened a background row and no toast (twice); with it hidden, ⌘Return on the link, a ⌘-click and a
+  middle click each showed "New Tab Created" at the top right of the page (AX static text, window captures). No
+  setting turns it on with the sidebar out or off. [U] Open Link in New Tab from the page menu (not driven; same
+  notification) and the "in %@" variant (not reached). Cra: BackgroundTabToast (CraCore),
+  BrowserManagerDelegate.browserManagerOpenedInBackground, MainWindowController.toastBackgroundTab.
 - [O static] It is Arc's one toast (Toasts.ShinyToastView, `ToastContent`): the same component carries
   "Copied Current URL" (`copyTabURL`), "Cannot Add New Pane" (`maxNumberPanes`), "Screenshot Copied to Clipboard",
   "Pinned Tab to …", zoom changes, undo and more; some kinds add an SF Symbol (`quote.bubble.fill`,

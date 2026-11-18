@@ -1,0 +1,40 @@
+# promise: #543
+# Arc's "New Tab Created" toast says so for every tab opened behind the page while the sidebar is hidden: a ⌘-click
+# and a middle click (Chromium's new pages, popupHostForURL), as ⌘Return in the command bar did alone before (#85).
+# With the sidebar out the new row in Today says it and no toast shows. Open Link in New Tab goes through
+# requestsNewTabWithURL (the browser-manager harness checks it); BackgroundTabToast (CraCore) decides the text.
+budget rss=1200 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=source
+expect-log n=source HTTP
+wait 1
+
+# Sidebar out: a ⌘-click opens its tab and says nothing.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=one',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed one'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed one"
+cra://debug?clickAt=760,400&mods=1048576
+expect-log n=one HTTP
+wait 1
+reject-log background tab toast
+
+# Sidebar hidden: a ⌘-click says so.
+cra://action/toggleSidebar
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=two',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:10;background:pink',document.body.append(a),'placed two'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed two"
+cra://debug?clickAt=600,400&mods=1048576
+expect-log n=two HTTP
+expect-log background tab toast 1: New Tab Created$
+
+# A middle click too, and the page stays in front.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=three',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:11;background:pink',document.body.append(a),'placed three'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed three"
+cra://debug?clickAt=600,400&button=middle
+expect-log n=three HTTP
+expect-log background tab toast 2: New Tab Created$
+cra://debug?selectedTab=end
+expect-log selected tab end: \S+n=source$
+reject-log fault:

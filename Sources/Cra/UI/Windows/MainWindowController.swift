@@ -2259,6 +2259,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         app.openLink(url, in: kind, space: space, fromIncognito: fromIncognito)
     }
 
+    func browserManagerOpenedInBackground(_ tabID: UUID) { toastBackgroundTab(tabID) }
+
     /// Open Link in Split View (#257): the link opens as a pane beside the page it was clicked in,
     /// as ⌥Return does from the command bar; a split of four says so, as Add Split View does.
     func browserManagerOpenLinkInSplit(_ url: String, fromTab tabID: UUID) {
@@ -4328,10 +4330,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // opening (windowDidResignKey).
         commandBarOpenedAt = Date()
         browsers.ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
-        // With the sidebar out the new row shows there; hidden, Arc says so in a toast.
-        if !sidebarVisible { showToast("New Tab Created") }
+        toastBackgroundTab(tab.id)
         return true
     }
+
+    /// A tab opened behind the page, from the bar or from a page (#543): with the sidebar out the
+    /// new row shows there; hidden, Arc says so in its toast.
+    private func toastBackgroundTab(_ id: UUID) {
+        let space = store.spaceID(ofItem: id)
+        guard let text = BackgroundTabToast.text(sidebarVisible: sidebarVisible, tabSpace: space, shownSpace: focusedSpaceID,
+                                                 tabSpaceTitle: space.flatMap { store.space($0)?.title }) else { return }
+        backgroundTabToasts += 1
+        CraLog.note("background tab toast \(backgroundTabToasts): \(text)")
+        showToast(text)
+    }
+
+    /// The background-tab toasts this window showed, for cra.log (scenario background-tab-toast).
+    private var backgroundTabToasts = 0
 
     /// ⌥Return in the bar: the row opens as a split pane beside the current tab instead of in its
     /// place, an open tab of this space joining the split as it is. False takes it as Return: no
