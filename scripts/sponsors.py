@@ -10,11 +10,11 @@ this report. A tier includes the perks of the cheaper tiers of its kind (monthly
 one-time), and a custom amount gets the highest tier at or below it, as GitHub does.
 
   - "release notes": one-time sponsors are named in the next release notes; monthly
-    sponsors once a year (due when no release in the past 365 days lists them in its
-    `sponsors` field in cra-website's releases.ts, CRA_WEBSITE to point elsewhere), and
-    again after they raise their monthly amount: only releases from the day of the raise
-    on count as thanking them for it.
-  - "ask Backers first": active monthly sponsors to ask about the next big feature.
+    sponsors as often as their tier says ("once a year", "twice a year", "every quarter",
+    "every release"; due when no release in that span lists them in its `sponsors` field
+    in cra-website's releases.ts, CRA_WEBSITE to point elsewhere), and again after they
+    raise their monthly amount: only releases from the day of the raise on count as
+    thanking them for it.
   - "logo": companies whose logo belongs on crabrowser.app/support.
 
 Private sponsors are never named; they're listed so they can be reached privately.
@@ -31,10 +31,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEBSITE = Path(os.environ.get("CRA_WEBSITE", ROOT.parent / "cra-website"))
 PERKS = {  # perk -> (pattern in a tier description, what it means)
-    "notes": (r"release notes", "Name in these release notes"),
-    "ask": (r"ask backers first|say in what", "Ask first about the next big feature"),
+    "notes": (r"release notes|notes of every release", "Name in these release notes"),
     "logo": (r"\blogo\b", "Logo on crabrowser.app/support"),
 }
+EVERY = [  # how often a monthly tier's name is in the release notes, in days
+    (r"every release", 0),
+    (r"every quarter", 91),
+    (r"twice a year", 182),
+    (r"once a year", 365),
+]
 QUERY = """
 query($endCursor: String) { viewer {
   sponsorsListing { tiers(first: 50) { nodes {
@@ -100,15 +105,26 @@ def tier_title(tier):
     return m.group(1) if m else tier["name"]
 
 
-def thanked_in_past_year(names, raised=None, path=None, today=None):
-    """Whether a release from the past 365 days thanks one of `names` as a sponsor, and when
+def notes_every(descriptions):
+    """Days between a monthly sponsor's names in the release notes: the most often any of
+    their tiers promises, so a tier that says "Everything in Insider" keeps Insider's pace.
+    Once a year when no tier says how often."""
+    days = [d for pat, d in EVERY for text in descriptions if re.search(pat, text or "", re.I)]
+    return min(days, default=365)
+
+
+def thanked_within(names, days, raised=None, path=None, today=None):
+    """Whether a release from the past `days` days thanks one of `names` as a sponsor, and when
     `raised` (a YYYY-MM-DD day) is given, a release from that day on: a sponsor who pays more
-    is named again. Release dates are days, so a release on the day of the raise counts."""
+    is named again. Release dates are days, so a release on the day of the raise counts.
+    0 days means every release, so no earlier release counts."""
+    if days == 0:
+        return False
     path = path or WEBSITE / "src/content/releases.ts"
     if not path.exists():
         print(f"  (no {path}; monthly sponsors all show as due)")
         return False
-    cutoff = ((today or dt.date.today()) - dt.timedelta(days=365)).isoformat()
+    cutoff = ((today or dt.date.today()) - dt.timedelta(days=days)).isoformat()
     cutoff = max(cutoff, raised or "")
     for entry in path.read_text().split("\n  {\n    version:")[1:]:
         date = re.search(r'date: "([\d-]+)"', entry)
@@ -130,6 +146,7 @@ def main():
         own = [x for x in tiers if x["isOneTime"] == t["isOneTime"] and x["monthlyPriceInDollars"] <= t["monthlyPriceInDollars"]]
         s["reward"] = tier_title(max(own, key=lambda x: x["monthlyPriceInDollars"])) if own else None
         s["perks"] = {p for p, (pat, _) in PERKS.items() for x in own if re.search(pat, x["description"] or "", re.I)}
+        s["every"] = notes_every(x["description"] for x in own)
         s["new"] = dt.datetime.fromisoformat(s["createdAt"].replace("Z", "+00:00")).timestamp() > since
         e, private = s["sponsorEntity"], s["privacyLevel"] == "PRIVATE"
         raise_ = raises.get(e.get("login")) if s["isActive"] and not t["isOneTime"] else None
@@ -144,13 +161,13 @@ def main():
     def due(s, perk):
         if perk not in s["perks"]:
             return False
-        if perk != "notes":  # a private sponsor can still be asked, in private
+        if perk != "notes":  # a private company is reached privately about its logo
             return s["isActive"] and not s["tier"]["isOneTime"]
         if not s["names"]:  # private: never named
             return False
         if s["tier"]["isOneTime"]:
             return s["new"]
-        return s["isActive"] and not thanked_in_past_year(s["names"], s["raised"])
+        return s["isActive"] and not thanked_within(s["names"], s["every"], s["raised"])
 
     print(f"Sponsors, for the release after {arg}:")
     for perk, (_, title) in PERKS.items():

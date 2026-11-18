@@ -4,6 +4,9 @@
 18 Nov 2026: @saivan raised their sponsorship from $5 to $15 a month the day after 0.1.46
 thanked them. The script counted that thank-you for the whole year, so a sponsor who pays
 more was never named again.
+
+18 Nov 2026: the tiers changed. Backer ($15) no longer promises to be asked first (nobody
+was), it's named twice a year; Insider ($30) every quarter; Patron ($60) every release.
 """
 import datetime as dt
 import importlib.util
@@ -50,8 +53,8 @@ class ThankedTests(unittest.TestCase):
     def tearDown(self):
         self.dir.cleanup()
 
-    def thanked(self, raised=None, today=TODAY):
-        return sponsors.thanked_in_past_year(["theChosenOne", "saivan"], raised, self.path, today)
+    def thanked(self, raised=None, today=TODAY, days=365):
+        return sponsors.thanked_within(["theChosenOne", "saivan"], days, raised, self.path, today)
 
     def test_a_release_this_year_counts(self):
         self.assertTrue(self.thanked())
@@ -64,6 +67,37 @@ class ThankedTests(unittest.TestCase):
 
     def test_a_release_on_the_day_of_the_raise_counts(self):
         self.assertTrue(self.thanked(raised="2026-11-17"))
+
+    def test_twice_a_year_is_due_after_half_a_year(self):
+        self.assertTrue(self.thanked(today=dt.date(2027, 5, 17), days=182))
+        self.assertFalse(self.thanked(today=dt.date(2027, 5, 19), days=182))
+
+    def test_every_quarter_is_due_after_three_months(self):
+        self.assertTrue(self.thanked(today=dt.date(2027, 2, 15), days=91))
+        self.assertFalse(self.thanked(today=dt.date(2027, 2, 17), days=91))
+
+    def test_every_release_is_always_due(self):
+        self.assertFalse(self.thanked(today=dt.date(2026, 11, 17), days=0))
+
+
+SUPPORTER = "**Supporter** — Your name in the release notes once a year, and a Sponsor badge on your GitHub profile."
+BACKER = "**Backer** — Everything in Supporter, plus your name in the release notes twice a year."
+INSIDER = "**Insider** — Everything in Backer, plus your name in the release notes every quarter."
+PATRON = "**Patron** — Everything in Insider, plus your name in the notes of every release while you sponsor."
+
+
+class EveryTests(unittest.TestCase):
+    def test_the_most_often_of_their_tiers_wins(self):
+        self.assertEqual(sponsors.notes_every([SUPPORTER]), 365)
+        self.assertEqual(sponsors.notes_every([SUPPORTER, BACKER]), 182)
+        self.assertEqual(sponsors.notes_every([SUPPORTER, BACKER, INSIDER]), 91)
+        self.assertEqual(sponsors.notes_every([SUPPORTER, BACKER, INSIDER, PATRON]), 0)
+
+    def test_no_frequency_means_once_a_year(self):
+        self.assertEqual(sponsors.notes_every(["**Thank you** — Keeps the lights on.", None]), 365)
+
+    def test_patron_counts_as_a_release_notes_perk(self):
+        self.assertRegex(PATRON, sponsors.PERKS["notes"][0])
 
 
 class RaiseTests(unittest.TestCase):
