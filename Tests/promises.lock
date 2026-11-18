@@ -1059,6 +1059,7 @@
 #521   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::singleSignOnShowsAKeyAndSignedOutAWarning  e523aa0032fa
 #521   Tests/LiveFolderProviderTests.swift::gitHubSSOKey  275f1e1d6edc
 #521   Tests/Scenarios/live-folder-sso-key.scenario  334b5a8d69af
+#522   Tests/Scenarios/sidebar-hover-third-space-fullscreen.scenario  3a6bdebc0588
 #522   Tests/Scenarios/sidebar-hover-third-space.scenario  280e2feecab9
 #523   Tests/LiveFolderProviderTests.swift::gitHubMergedSinceLastRefresh  0e9f7750f936
 #523   Tests/LiveFolderProviderTests.swift::gitHubOpenOnly  ae23500415c4
