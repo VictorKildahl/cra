@@ -39,15 +39,27 @@ public enum CaptureMenuLayout {
     public static var header: CGFloat { fieldTop + fieldHeight + fieldGap }
 
     /// The rows to show, in Arc's order, for what is typed in the field: every row whose title
-    /// holds the text, whatever its case; a section with none left goes with its line.
-    public static func sections(easels: [Destination], filter: String = "") -> [[Row]] {
+    /// holds the text, whatever its case; a section with none left goes with its line. With
+    /// `maxHeight` (the page's height inside its margins) only the easels that fit are listed, so
+    /// on a short page (a Peek, a Little Window) the menu's last rows don't run off it; typing
+    /// still reaches the rest.
+    public static func sections(easels: [Destination], filter: String = "", maxHeight: CGFloat = .infinity) -> [[Row]] {
         let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
         func keep(_ rows: [Row]) -> [Row] { needle.isEmpty ? rows : rows.filter { $0.title.lowercased().contains(needle) } }
         let actions = keep([Row(.copy, "Copy"), Row(.save, "Save..."), Row(.message, "Send via iMessage...")])
         let again = keep([Row(.retake, "Retake")])
         let named = easels.map { Row(.easel($0.id), $0.title.isEmpty ? "Untitled Easel" : $0.title) }
-        let places = keep([Row(.newEasel, "New Easel")]) + Array(keep(named).prefix(easelLimit))
-        return [actions, again, places].filter { !$0.isEmpty }
+        let newEasel = keep([Row(.newEasel, "New Easel")])
+        var listed = Array(keep(named).prefix(easelLimit))
+        func all() -> [[Row]] { [actions, again, newEasel + listed].filter { !$0.isEmpty } }
+        while !listed.isEmpty, height(all()) > maxHeight { listed.removeLast() }
+        return all()
+    }
+
+    /// Whether the "Send To…" field, holding the keyboard, keeps a ⌘ key for its text (select all,
+    /// paste, cut, undo and ⇧⌘Z redo) rather than the key ending the capture as other ⌘ keys do.
+    public static func fieldKeeps(commandKey: String) -> Bool {
+        ["a", "v", "x", "z"].contains(commandKey.lowercased())
     }
 
     public static func height(_ sections: [[Row]]) -> CGFloat {

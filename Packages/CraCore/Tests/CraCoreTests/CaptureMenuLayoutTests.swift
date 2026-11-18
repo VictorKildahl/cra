@@ -47,6 +47,30 @@ struct CaptureMenuLayoutTests {
         #expect(twelfth == expected)
     }
 
+    /// A short page (a Peek, a Little Window) lists the easels that fit: the menu pinned to the top
+    /// margin ran its bottom rows, the easels, off the page. Typing still reaches the rest.
+    @Test func aShortPageListsTheEaselsThatFit() {
+        let many = (1...8).map { CaptureMenuLayout.Destination(id: UUID(), title: "Easel \($0)") }
+        let tall = CaptureMenuLayout.height(CaptureMenuLayout.sections(easels: many))
+        let room = tall - 3 * CaptureMenuLayout.rowHeight
+        let fitted = CaptureMenuLayout.sections(easels: many, maxHeight: room)
+        #expect(CaptureMenuLayout.height(fitted) <= room)
+        #expect(fitted.last?.count == 1 + many.count - 3)
+        #expect(fitted.last?.first?.item == .newEasel)
+        // Never fewer than New Easel, however short.
+        #expect(CaptureMenuLayout.sections(easels: many, maxHeight: 50).last?.map(\.item) == [.newEasel])
+        let typed: [[String]] = titles(CaptureMenuLayout.sections(easels: many, filter: "easel 8", maxHeight: room))
+        #expect(typed == [["Easel 8"]])
+    }
+
+    /// The field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z (and ⇧⌘Z) for its text; any other ⌘ key ends the
+    /// capture as before, and ⌘C ⌘S still copy and save the picture.
+    @Test func theFieldKeepsItsEditingKeys() {
+        for key in ["a", "v", "x", "z"] { #expect(CaptureMenuLayout.fieldKeeps(commandKey: key)) }
+        for key in ["c", "s", "w", "t", "l"] { #expect(!CaptureMenuLayout.fieldKeeps(commandKey: key)) }
+        #expect(CaptureMenuLayout.fieldKeeps(commandKey: "Z"))
+    }
+
     @Test func itsHeightFollowsItsRows() {
         // Arc's menu with two easels is 433 pt (866 px at 2x): the field, nine rows, two lines and
         // the bottom. Cra's has seven rows there, without Save to Library and Edit.

@@ -456,6 +456,11 @@ final class CaptureView: NSView {
             default: break
             }
         }
+        // The "Send To…" field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z for its text (the Edit menu's).
+        if actionsMenu?.hasKeyboard == true, event.modifierFlags.intersection([.command, .control, .option]) == .command,
+           CaptureMenuLayout.fieldKeeps(commandKey: event.charactersIgnoringModifiers ?? "") {
+            return false
+        }
         if event.modifierFlags.contains(.command), KeyBindingRegistry.shared.action(for: event)?.id != "capturePage" {
             finish?(nil, nil)
         }
@@ -580,7 +585,9 @@ final class CaptureView: NSView {
     }
 
     private func makeMenu(png: Data) -> CaptureMenu {
-        let menu = CaptureMenu(easels: CaptureOverlay.easels()) { [weak self] action in
+        // Only the easels that fit the page inside its margins (a Peek or a Little Window is short).
+        let room = bounds.height - 2 * ContentCapture.menuMargin
+        let menu = CaptureMenu(easels: CaptureOverlay.easels(), maxHeight: room) { [weak self] action in
             guard let self else { return }
             self.isSettled = false
             if action == .retake {
@@ -862,6 +869,8 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
     static let cornerRadius: CGFloat = 10
 
     private let easels: [CaptureMenuLayout.Destination]
+    /// The page's height inside its margins: the menu lists only the easels that fit.
+    private let maxHeight: CGFloat
     private var sections: [[CaptureMenuLayout.Row]]
     private var rows: [CaptureMenuLayout.Row] = []
     private var rowViews: [CaptureMenuRow] = []
@@ -873,10 +882,11 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
     /// Escape in the field.
     var onCancel: () -> Void = {}
 
-    init(easels: [CaptureMenuLayout.Destination], choose: @escaping (CaptureOverlay.Action) -> Void) {
+    init(easels: [CaptureMenuLayout.Destination], maxHeight: CGFloat = .infinity, choose: @escaping (CaptureOverlay.Action) -> Void) {
         self.easels = easels
+        self.maxHeight = maxHeight
         self.choose = choose
-        sections = CaptureMenuLayout.sections(easels: easels)
+        sections = CaptureMenuLayout.sections(easels: easels, maxHeight: maxHeight)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = CaptureStyle.menuFill.cgColor
@@ -1003,7 +1013,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
     func controlTextDidChange(_ obj: Notification) { narrow() }
 
     private func narrow() {
-        sections = CaptureMenuLayout.sections(easels: easels, filter: field.stringValue)
+        sections = CaptureMenuLayout.sections(easels: easels, filter: field.stringValue, maxHeight: maxHeight)
         rebuild()
         // The menu keeps its top (its view counts down from there) and ends under its last row.
         frame.size.height = intrinsicContentSize.height
