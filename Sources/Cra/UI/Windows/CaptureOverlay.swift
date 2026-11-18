@@ -33,6 +33,10 @@ final class CaptureOverlay {
     /// The app sets it at launch (the overlay knows nothing of where easels are kept).
     static var easels: () -> [CaptureMenuLayout.Destination] = { [] }
 
+    /// Set by cra://debug?captureMenu=: a test copy runs behind other windows, where its panel
+    /// can lose the keys as it opens, which would end the mode before the menu is read.
+    var staysWithoutKeys = false
+
     private let panel: CapturePanel
     private let view: CaptureView
     private weak var parent: NSWindow?
@@ -49,8 +53,9 @@ final class CaptureOverlay {
         view.finish = { [weak self] action, png in self?.finish(action, png) }
         panel.onResignKey = { [weak self] in
             // Another window took the keys (the sidebar, another app): the mode ends, as in Arc.
-            if self?.view.isSettled == false { return }
-            self?.finish(nil, nil)
+            guard let self, !self.closed, self.view.isSettled, !self.staysWithoutKeys else { return }
+            CraLog.note("capture: another window took the keys, the mode ends")
+            self.finish(nil, nil)
         }
         window.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
@@ -79,6 +84,8 @@ final class CaptureOverlay {
         guard !closed else { return }
         closed = true
         view.stop()
+        // The menu's field may hold the keyboard: its text editor ends with the mode.
+        if panel.firstResponder !== view { panel.makeFirstResponder(view) }
         parent?.removeChildWindow(panel)
         panel.orderOut(nil)
         NSCursor.arrow.set()
@@ -978,8 +985,15 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// The field takes the keyboard, as Arc's does when the menu shows.
-    func focus() { window?.makeFirstResponder(field) }
+    /// The field takes the keyboard, as Arc's does when the menu shows: on the next turn of the
+    /// run loop, once the menu is in its window for good. A menu dropped before then (a retake,
+    /// the mode ending) never starts a text editor, which a window being closed would hold on to.
+    func focus() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window, window.isVisible, self.superview != nil else { return }
+            window.makeFirstResponder(self.field)
+        }
+    }
     var hasKeyboard: Bool { field.currentEditor() != nil }
 
     func run(_ action: CaptureOverlay.Action) { choose(action) }

@@ -74,14 +74,15 @@ extension MainWindowController {
         let request = UUID()
         captureRequest = (request, source.window)
         let rect = CGRect(x: 40, y: 40, width: max(60, min(320, source.rect.width - 80)), height: max(60, min(200, source.rect.height - 80)))
-        takeCapture(source.browser, liftImageAt: rect, in: nil, request: request)
+        takeCapture(source.browser, liftImageAt: rect, in: nil, request: request, staysWithoutKeys: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             guard let overlay = self?.captureOverlay, overlay.isOpen else { CraLog.note("capture menu: none"); return }
             CraLog.note("capture menu: \(overlay.debugMenu(typed: typed, run: run))")
         }
     }
 
-    private func takeCapture(_ b: CraBrowser, liftImageAt image: CGRect?, in peek: LittleWindowController?, request: UUID) {
+    private func takeCapture(_ b: CraBrowser, liftImageAt image: CGRect?, in peek: LittleWindowController?, request: UUID,
+                             staysWithoutKeys: Bool = false) {
         let lift = image
         b.sendDevToolsMethod("Page.captureScreenshot", params: #"{"format":"png","captureBeyondViewport":false}"#) { [weak self, weak b] shot, error in
             MainActor.assumeIsolated {
@@ -94,6 +95,7 @@ extension MainWindowController {
                     return
                 }
                 let overlay = CaptureOverlay(over: source.window, pageRect: source.rect, shot: image, browser: b)
+                overlay.staysWithoutKeys = staysWithoutKeys
                 overlay.onFinish = { [weak self, weak overlay, weak b] action, png in
                     let from = b.flatMap { b in overlay?.takenRect.map { (browser: b, rect: $0, page: overlay?.pageSize ?? .zero) } }
                     self?.captureFinished(action, png, in: peek, from: from)
