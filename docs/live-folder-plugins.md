@@ -20,13 +20,15 @@ ZIP archives are limited to 10 MiB compressed,
 20 MiB expanded, 4 MiB per entry and 100 entries. Encrypted archives, links, duplicate paths
 and paths outside the package are rejected. Temporary files are removed on cancellation or failure.
 
-## Jira Data Center
+## Jira
 
-Add **Live Folders → Jira…** and enter your Jira base address, including a context path
-or non-default port if needed (for example `https://jira.example.com:8443/jira`).
-Sign in to Jira in the same Space’s Profile. The plugin uses the browser session with
-[Jira Data Center REST API v2](https://developer.atlassian.com/server/jira/platform/jira-rest-api-examples/);
-Jira Cloud is not currently supported by this provider.
+Add **Live Folders → Jira…** and enter the address you open Jira at: a Jira Cloud site
+(`https://example.atlassian.net`; an address copied from a Cloud page keeps only the site) or a
+Jira Data Center server, including a context path or non-default port if needed (for example
+`https://jira.example.com:8443/jira`). Sign in to Jira in the same Space’s Profile. The plugin uses
+the browser session with Jira REST API v2. `/myself` tells the two apart: Cloud users have an
+`accountId` and no `name`, and Cloud lists issues from `/search/jql` with page tokens (it answers
+the retired `/search` with an error), while Data Center pages `/search` by `startAt` (#524).
 
 The folder shows issues assigned to you in **To Do** and **In Progress** by default. **Reported by Me** and
 **Watched by Me** can be enabled independently; these ownership filters are combined with OR.
@@ -102,7 +104,9 @@ exclusion submenu. Optional `setup` has `key`, `title`, `message`, `placeholder`
 
 A snapshot contains `items`, `actions` and `preservedGroups`. Each item has a unique `id` and `url`,
 `title`, optional `subtitle`, `group` and `createdAt` (Unix seconds). Actions have `title` and `url`;
-optional `actionMessage` and `warning` describe additional sign-in requirements. `preservedGroups`
+optional `actionMessage` and `warning` describe additional sign-in requirements; while a snapshot has a
+`warning`, the folder row shows a key (Arc's single sign-on glyph) with it as the tip, and a click opens
+the first action. A sign-in or refresh error shows a warning triangle instead and wins over it. `preservedGroups`
 keeps already visible items from those groups when partial authorization hides them from a response.
 Return the complete result or throw; a failed request must not turn into an empty successful folder.
 

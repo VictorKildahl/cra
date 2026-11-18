@@ -90,6 +90,7 @@ struct LiveFolderPluginProcessTests {
             precondition(message.contains("notSignedIn") && state["enterprise"] == "example")
         }
         try jira(executable: executable)
+        try jiraCloud(executable: executable)
         try LiveFolderProviderTests.run(executable: executable)
         try sandboxed(executable: executable)
         print("Plugin transport, permissions, timeout, bundled provider checks passed")
@@ -199,6 +200,81 @@ struct LiveFolderPluginProcessTests {
             let result = try JSONSerialization.jsonObject(with: invoke("pageChanged", extra: ["url": url])) as! [String: Any]
             precondition((result["refreshAfter"] as! [Double]).isEmpty != refreshes)
             precondition(result["checkSignIn"] as? Bool == refreshes)
+        }
+    }
+
+    /// Jira Cloud (*.atlassian.net): `/myself` has an accountId and no `name` (GDPR), and issues come
+    /// from `/search/jql` with page tokens, since Cloud retired `/search`. A signed-in Cloud user read
+    /// as signed out and the folder stayed on "Sign back in to Jira." (#524).
+    // promise: #524
+    private static func jiraCloud(executable: URL) throws {
+        let package = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/jira"))
+        let server = "https://example.atlassian.net"
+        let origin = try LiveFolderSessionOrigin(server)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        func refresh(address: String = server, fetch: (LiveFolderPluginRequest) throws -> LiveFolderPluginResponse) throws -> Data {
+            let input: [String: Any] = ["settings": ["server": address], "filters": ["assigned", "todo", "inProgress"], "state": [:]]
+            return try LiveFolderPluginProcess.invoke(executable: executable, script: package.script, method: "refresh",
+                input: JSONSerialization.data(withJSONObject: input), origins: [origin], fetch: fetch)
+        }
+        func json(_ object: Any) -> String { String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)! }
+        let myself = #"{"accountId":"5b10ac8d82e05b22cc7d4ef5","accountType":"atlassian","displayName":"Alice","active":true}"#
+        var tokens: [String?] = []
+        let result = try refresh { request in
+            precondition(request.headers?["Accept"] == "application/json")
+            if request.url == server + "/rest/api/2/myself" {
+                return LiveFolderPluginResponse(status: 200, url: request.url, body: myself)
+            }
+            let url = URLComponents(string: request.url)!
+            precondition(url.path == "/rest/api/2/search/jql", "Cloud answers /search with 410 Gone")
+            let parameters = Dictionary(uniqueKeysWithValues: url.queryItems!.map { ($0.name, $0.value!) })
+            precondition(parameters["jql"] == #"statusCategory IN ("To Do", "In Progress") AND (assignee = currentUser()) ORDER BY created DESC, key ASC"#)
+            precondition(parameters["startAt"] == nil && parameters["fields"] == "summary,status,project,created")
+            let token = parameters["nextPageToken"]
+            tokens.append(token)
+            precondition(tokens.count <= 2)
+            let project = token == nil ? "APP" : "OPS"
+            var body: [String: Any] = ["isLast": token != nil, "issues": [
+                ["id": token == nil ? "10" : "11", "key": project + "-1", "fields": [
+                    "summary": "Fix startup", "status": ["name": "To Do"], "project": ["key": project],
+                    "created": "2026-11-17T17:32:06.123+0100"]]
+            ]]
+            if token == nil { body["nextPageToken"] = "page-2" }
+            return LiveFolderPluginResponse(status: 200, url: request.url, body: json(body))
+        }
+        let snapshot = try decoder.decode(LiveFolderPluginSnapshot.self, from: result)
+        try snapshot.validate()
+        precondition(tokens == [nil, "page-2"] && snapshot.items.map(\.group) == ["APP", "OPS"])
+        precondition(snapshot.items.first?.url == server + "/browse/APP-1" && snapshot.items.first?.createdAt != nil)
+
+        // The last page may leave isLast out and just drop the token; a token that comes back is a loop.
+        let last = try decoder.decode(LiveFolderPluginSnapshot.self, from: refresh { request in
+            LiveFolderPluginResponse(status: 200, url: request.url,
+                body: request.url.hasSuffix("/myself") ? myself : #"{"issues":[]}"#)
+        })
+        precondition(last.items.isEmpty)
+        // An address copied from a Cloud page keeps its path; the site is the root.
+        var urls: [String] = []
+        _ = try refresh(address: server + "/jira/your-work") { request in
+            urls.append(request.url)
+            return LiveFolderPluginResponse(status: 200, url: request.url, body: request.url.hasSuffix("/myself") ? myself : #"{"issues":[]}"#)
+        }
+        precondition(urls.count == 2 && urls.allSatisfy { $0.hasPrefix(server + "/rest/api/2/") })
+        for body in [#"{"issues":[],"nextPageToken":"same","isLast":false}"#, #"{"isLast":true}"#, #"{"issues":{},"isLast":true}"#] {
+            do {
+                _ = try refresh { request in
+                    LiveFolderPluginResponse(status: 200, url: request.url, body: request.url.hasSuffix("/myself") ? myself : body)
+                }
+                fatalError("Invalid Jira Cloud search succeeded")
+            } catch LiveFolderPluginError.pluginFailed(let message, _) { precondition(message.contains("unexpectedPage")) }
+        }
+        // Signed out, Cloud's /myself is a 401; an inactive account is not signed in either.
+        for (status, body) in [(401, ""), (200, #"{"accountId":"5b10","active":false}"#), (200, #"{"accountId":""}"#)] {
+            do {
+                _ = try refresh { request in LiveFolderPluginResponse(status: status, url: request.url, body: body) }
+                fatalError("Signed-out Jira Cloud succeeded")
+            } catch LiveFolderPluginError.pluginFailed(let message, _) { precondition(message.contains("notSignedIn")) }
         }
     }
 
