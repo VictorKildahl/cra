@@ -2247,6 +2247,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // floatingSidebar=1 out, =0 away, =hold out and kept there whatever the pointer does (#424).
+            // =release lets the pointer decide again without sending it away; =state:<step> logs it (#531).
+            if let f = dict["floatingSidebar"], f.hasPrefix("state") { main.debugFloatingSidebarState(String(f.dropFirst(6))); return }
+            if dict["floatingSidebar"] == "release" { main.floatingSidebar?.heldOut = false; return }
+            // extensionPopup=<step>: whether an extension's popup is up and where it hangs (#531).
+            if let step = dict["extensionPopup"] { main.debugExtensionPopup(step); return }
             if let f = dict["floatingSidebar"] {
                 main.floatingSidebar?.heldOut = f == "hold"
                 if f == "1" || f == "hold" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }

@@ -58,6 +58,28 @@ enum ExtensionPopupWindowTests {
             DispatchQueue.main.async { continuation.resume() }
         }
         expect(!bubble.isVisible, "dismissal closes the visible Chrome bubble asynchronously")
+
+        // #531: a click in a window of Cra's that doesn't become key for it (the floating sidebar's panel
+        // takes focus only when a click needs it) closes the popup too. Chrome closes it only when it
+        // loses focus, so the popup stayed up over the sidebar. Clicks in the popup itself keep it.
+        let second = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 314, height: 214),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        second.isReleasedWhenClosed = false
+        ExtensionPopupWindow.present(second, anchor: NSPoint(x: -10000, y: -10000))
+        guard let frame = second.parent as? ExtensionPopupWindow else { fatalError("Second popup frame missing") }
+        second.orderFront(nil)
+        let sidebar = NSPanel(contentRect: NSRect(x: -12000, y: -10000, width: 260, height: 600),
+                              styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        sidebar.becomesKeyOnlyIfNeeded = true
+        sidebar.isReleasedWhenClosed = false
+        sidebar.orderFront(nil)
+        NSApp.sendEvent(click(at: NSPoint(x: 20, y: 20), in: second))
+        expect(frame.isVisible && second.parent === frame, "a click in the popup's own page keeps it open")
+        NSApp.sendEvent(click(at: NSPoint(x: 120, y: 300), in: sidebar))
+        expect(!frame.isVisible && second.parent == nil, "a click in the floating sidebar's panel closes the popup")
+        expect(ExtensionPopupWindow.closed(by: click(at: NSPoint(x: 120, y: 300), in: sidebar)),
+               "that click is the one that closed it (GitHub #87)")
+        sidebar.orderOut(nil)
         print("Extension popup window: \(checks) checks passed")
     }
 
@@ -66,6 +88,13 @@ enum ExtensionPopupWindowTests {
         NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil), modifierFlags: [], timestamp: 1,
                            windowNumber: view.window!.windowNumber, context: nil, eventNumber: 0,
                            clickCount: 1, pressure: 0)!
+    }
+
+    /// A left mouse-down in `window` at a point of its content (timestamp 2, so `closed(by:)` can match it).
+    @MainActor
+    private static func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
+        NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 2,
+                           windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

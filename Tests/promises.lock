@@ -1012,3 +1012,4 @@
 #523   Tests/LiveFolderProviderTests.swift::gitHubOpenOnly  ae23500415c4
 #524   Tests/LiveFolderPluginProcessTests.swift::jiraCloud  cf79a26f91cc
 #527   Tests/Scenarios/sidebar-hover-other-space.scenario  2e7eb540d842
+#531   Tests/Scenarios/floating-sidebar-extension-popup.scenario  66d9ded39b65
