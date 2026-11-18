@@ -33,6 +33,20 @@ public enum LinkSplitClick {
             && clickAge >= 0 && clickAge <= freshness && panes(url)
     }
 
+    /// Cra's own, not in Arc (GitHub #498): with Settings ▸ Links ▸ "Middle-click a link in a split
+    /// adds a pane" on, a link middle-clicked in a page that is a pane of a split opens as a new
+    /// pane beside it instead of a tab behind the page. A middle click is a background tab to
+    /// Chromium, as a ⌘-click is, so it is the page's last middle click (`clickAge` seconds ago,
+    /// -1 when the last one wasn't in this page) that tells them apart, with no key held
+    /// (`modifiers`, AppKit's flags: ⇧ makes it a front tab, ⌘ or ⌥ their own clicks). Outside a
+    /// split (`panes` 1), or in a split already holding `limit` panes, the link stays a tab.
+    public static func middleClickAddsPane(_ url: String, enabled: Bool, panes: Int, limit: Int,
+                                           clickAge: TimeInterval, modifiers: UInt = 0) -> Bool {
+        enabled && panes >= 2 && panes < limit
+            && KeyChord.Modifiers(rawValue: modifiers).intersection(relevant).isEmpty
+            && clickAge >= 0 && clickAge <= freshness && self.panes(url)
+    }
+
     /// Web addresses only: a page never opens a local file (Chromium's rule), and an app's
     /// address (spotify:) asks "Open <app>?" as a plain click does.
     private static func panes(_ url: String) -> Bool {

@@ -1,0 +1,59 @@
+# Settings ▸ Links ▸ Split View, Cra's own and off by default (GitHub #498): with "Middle-click a link in a split
+# to add a pane" on, a link middle-clicked in a split's pane opens as a new pane beside it, and with "More than four
+# panes in a split" on a split takes a fifth. A ⌘-click, which Chromium also opens as a tab behind the page, stays
+# one. The clicks go through the app's event queue, as the mouse's do. The decisions are CraCore's
+# (SplitPaneOptionsTests); off, a middle click opens a tab behind the page (middle-click-page) and a split stops at
+# Arc's four.
+# promise: #498
+budget rss=1200 stalls50=40
+pace 0.5
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "splitMiddleClickAddsPane": true, "splitMorePanes": true}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# Not in a split yet: an Option-click makes one (#298).
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p2',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p2'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed p2"
+cra://debug?clickAt=760,400&mods=524288
+expect-log n=p2 HTTP
+wait 1.5
+cra://debug?split=two
+expect-log split two: panes=\S+n=source \| \S+n=p2 selected=\S+n=p2 downloads
+
+# Middle clicks in the new pane, the rightmost each time, add a pane after it: three, four, then a fifth.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p3',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p3'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed p3"
+cra://debug?clickAt=1180,400&button=middle
+expect-log n=p3 HTTP
+wait 1.5
+cra://debug?split=three
+expect-log split three: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 selected=\S+n=p3 downloads
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p4',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p4'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed p4"
+cra://debug?clickAt=1180,400&button=middle
+expect-log n=p4 HTTP
+wait 1.5
+cra://debug?split=four
+expect-log split four: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 \| \S+n=p4 selected=\S+n=p4 downloads
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p5',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p5'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed p5"
+cra://debug?clickAt=1180,400&button=middle
+expect-log n=p5 HTTP
+wait 1.5
+cra://debug?split=five
+expect-log split five: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 \| \S+n=p4 \| \S+n=p5 selected=\S+n=p5 downloads
+
+# ⌘-click: a tab behind the page, as before; the split keeps its five.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=behind',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed behind'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed behind"
+cra://debug?clickAt=1180,400&mods=1048576
+wait 0.5
+wait 1.5
+cra://debug?split=command
+expect-log split command: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 \| \S+n=p4 \| \S+n=p5 selected=\S+n=p5 downloads
+reject-log fault:

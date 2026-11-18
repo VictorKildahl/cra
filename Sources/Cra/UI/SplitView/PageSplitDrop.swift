@@ -56,7 +56,8 @@ final class PageSplitDrop: PageDropTarget {
         let layout = shell.dropLayout
         guard let proposal = SplitDropProposal.propose(at: point, ids: layout.ids, frames: shell.dropBaseFrames, orientation: layout.orientation,
                                                        area: layout.area, region: layout.frames[ShellView.dropRegionID], current: current,
-                                                       sidebarSide: owner.sidebarDocked, sidebarOn: shell.sidebarSide, link: payload.isLink) else { return clear(info) }
+                                                       sidebarSide: owner.sidebarDocked, sidebarOn: shell.sidebarSide, link: payload.isLink,
+                                                       paneLimit: store.splitPaneLimit) else { return clear(info) }
         if let swapTo {
             swapped = swapTo
             store.selectTab(swapTo.shown, window: owner.windowID)
@@ -111,7 +112,7 @@ final class PageSplitDrop: PageDropTarget {
         var replaced: UUID?
         switch target {
         case .insert(let i):
-            guard panes.count < SplitDropProposal.maximumPanes else { return nil }
+            guard panes.count < store.splitPaneLimit else { return nil }
             insert = i
         case .replace(let index):
             guard panes.indices.contains(index), panes.count > 1 else { return nil }
@@ -207,7 +208,8 @@ final class PageSplitDrop: PageDropTarget {
         let point = CGPoint(x: layout.area.minX + layout.area.width * x, y: layout.area.maxY - layout.area.height * y)
         let onScreen: Bool = { if case .tab(let id) = payload { return layout.ids.contains(id) } else { return false } }()
         let proposal = onScreen ? nil : SplitDropProposal.propose(at: point, ids: layout.ids, frames: shell.dropBaseFrames, orientation: layout.orientation,
-                                                                    area: layout.area, region: nil, current: nil, sidebarSide: owner.sidebarDocked, sidebarOn: shell.sidebarSide, link: payload.isLink)
+                                                                    area: layout.area, region: nil, current: nil, sidebarSide: owner.sidebarDocked, sidebarOn: shell.sidebarSide, link: payload.isLink,
+                                                                    paneLimit: store.splitPaneLimit)
         guard let proposal else { CraLog.note("dropSplit: none"); return }
         switch proposal {
         case .insert(let insert):

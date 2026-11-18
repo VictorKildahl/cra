@@ -988,6 +988,12 @@
 #495   Tests/Scenarios/little-window-swipe-back.scenario  2a12df243277
 #495   Tests/Scenarios/little-window-typed-back.scenario  56bca9fe43e8
 #497   Tests/Scenarios/command-bar-close-shortcut.scenario  37c8d8eb9aa6
+#498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::aDropOnFourPanesOpensAFifthOnlyWithMorePanes  479626e09a74
+#498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::aMiddleClickInASplitAddsAPaneWhenTurnedOn  1fd0016fc182
+#498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::aSplitHoldsArcsFourUnlessMorePanesIsOn  ab44765a9a5c
+#498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::offByDefault  b19a78f103c5
+#498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::openInSplitViewTakesUpToTheLimit  3ca722af278c
+#498   Tests/Scenarios/split-middle-click-pane.scenario  d371b10abe89
 #498   Tests/StoreTests.swift::fullSplitTakesNoMorePanes  7b27b455e777
 #499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::edges  541bacddf659
 #499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::leavingTheEdgeStartsOver  e93abb2a1742

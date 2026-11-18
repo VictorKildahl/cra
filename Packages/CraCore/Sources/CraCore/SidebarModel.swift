@@ -607,6 +607,12 @@ public struct AppSettings: Codable, Equatable {
     /// item leaves the page in front and the tab loading behind it (GitHub #276). A new key: #183's
     /// openLinksInBackground was off (switch) in every settings.json that never turned it on.
     public var openLinksInForeground: Bool = false
+    /// Cra's own, not in Arc (GitHub #498), off by default: a split holds up to eight panes instead of
+    /// Arc's four (`SplitPaneLimit`).
+    public var splitMorePanes: Bool = false
+    /// Cra's own, not in Arc (GitHub #498), off by default: a link middle-clicked in a split's pane opens
+    /// as a new pane beside it instead of a tab behind the page (`LinkSplitClick.middleClickAddsPane`).
+    public var splitMiddleClickAddsPane: Bool = false
     /// Arc's Previews ▸ Folders (folderPreviewEnabled): resting the pointer on a closed folder
     /// lists its tabs, most recent first, with a search field.
     public var folderPreviews: Bool = true
@@ -976,6 +982,8 @@ extension AppSettings {
         littleWindowShortcutEverywhere = try c.decodeIfPresent(Bool.self, forKey: .littleWindowShortcutEverywhere) ?? true
         littleWindowOnOptionCommandClick = try c.decodeIfPresent(Bool.self, forKey: .littleWindowOnOptionCommandClick) ?? false
         openLinksInForeground = try c.decodeIfPresent(Bool.self, forKey: .openLinksInForeground) ?? false
+        splitMorePanes = try c.decodeIfPresent(Bool.self, forKey: .splitMorePanes) ?? false
+        splitMiddleClickAddsPane = try c.decodeIfPresent(Bool.self, forKey: .splitMiddleClickAddsPane) ?? false
         folderPreviews = try c.decodeIfPresent(Bool.self, forKey: .folderPreviews) ?? true
         hapticFeedbackOnReorder = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedbackOnReorder) ?? true
         warnBeforeQuitting = try c.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? false

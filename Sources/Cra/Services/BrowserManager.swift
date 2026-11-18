@@ -191,6 +191,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         self.container = container
         self.clock = clock ?? LiveScheduler.shared
         super.init()
+        PageMiddleClick.install()
         documentObserver = NotificationCenter.default.addObserver(forName: SidebarStore.documentReplaced, object: store, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated { self?.reassertLivePages() }
         }
@@ -1679,7 +1680,30 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     }
 
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
+        if background, middleClickAddsPane(url, in: browser) { return }
         openLinkTab(url, from: tabID(of: browser), inBackground: background)
+    }
+
+    /// A link middle-clicked in a split's pane opens as a pane beside it, with Settings ▸ Links ▸
+    /// "Middle-click a link in a split adds a pane" on (GitHub #498, not in Arc). Chromium asks for
+    /// a tab behind the page, as for a ⌘-click; the page's last middle click tells them apart.
+    private func middleClickAddsPane(_ url: String, in browser: CraBrowser) -> Bool {
+        guard let id = tabID(of: browser), middleClickMakesPane(url, in: browser, tab: id) else { return false }
+        // After Chromium's call returns: the pane makes a page of its own.
+        DispatchQueue.main.async { [weak self] in self?.delegate?.browserManagerOpenLinkInSplit(url, fromTab: id) }
+        return true
+    }
+
+    /// Whether the link `browser`'s page (tab `id`) asks to open behind it is a middle click that adds a
+    /// pane (`LinkSplitClick.middleClickAddsPane`); the click is used up when it is.
+    private func middleClickMakesPane(_ url: String, in browser: CraBrowser, tab id: UUID) -> Bool {
+        let click = PageMiddleClick.last(in: browser.containerView)
+        guard LinkSplitClick.middleClickAddsPane(url, enabled: store.settings.splitMiddleClickAddsPane,
+                                                 panes: store.paneTabIDs(for: id).count, limit: store.splitPaneLimit,
+                                                 clickAge: click.age, modifiers: click.modifiers) else { return false }
+        PageMiddleClick.taken()
+        CraLog.note("middle click: pane for a link in a split")
+        return true
     }
 
     func browser(_ browser: CraBrowser, requestsCaptureOfImageAt point: NSPoint) {
@@ -1734,6 +1758,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // The page opened a pop-up Chromium blocked before (a shared folder's next click): the
         // blocked pop-ups button no longer offers it (#357).
         if let source, runtimes[source]?.blockedPopups.markOpened(url: url) == true { delegate?.browserManagerDidUpdate(source) }
+        // A middle click in a split's pane with Split View's switch on: the page Chromium made is a new pane
+        // beside it, the opened page keeping its opener as a tab's does (#498).
+        if background, let source, middleClickMakesPane(url, in: browser, tab: source),
+           let pane = store.openLinkInSplit(url, from: source, window: windowID) {
+            let host = makePopupHost(for: pane.id, opener: browser)
+            show(pane.id, focus: true)
+            return host
+        }
         let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
         let tab = store.createTab(url: url, in: sourceSpace, select: !background, window: windowID, referrer: source)
         if background { store.markUnread(tab.id, true) }
@@ -2032,4 +2064,37 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         // window.close() (a sign-in or payment popup finishing): the tab goes, like Chrome.
         if browser.closedByPage { log(id, "closed by its page"); delegate?.browserManagerPageClosedTab(id) }
     }
+}
+
+/// The last middle click (button 2's release) in any of Cra's windows: the view under it, the keys
+/// held and when (GitHub #498). Chromium opens a middle-clicked link as a tab behind the page, as it
+/// does a ⌘-click, and only a click on the left button is noted by the engine.
+@MainActor
+enum PageMiddleClick {
+    private static weak var view: NSView?
+    private static var time: TimeInterval = -1
+    private static var modifiers: UInt = 0
+    private static var monitor: Any?
+
+    static func install() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseUp) { event in
+            guard event.buttonNumber == 2, let window = event.window else { return event }
+            let root = window.contentView?.superview ?? window.contentView
+            view = root?.hitTest(event.locationInWindow)
+            modifiers = event.modifierFlags.rawValue
+            time = event.timestamp
+            return event
+        }
+    }
+
+    /// Seconds since the last middle click and its keys, when it landed in `page` (a page's view);
+    /// age -1 when it didn't. Split panes share a window, so the pane is the page under the click.
+    static func last(in page: NSView) -> (age: TimeInterval, modifiers: UInt) {
+        guard time >= 0, let view, view.isDescendant(of: page) else { return (-1, 0) }
+        return (ProcessInfo.processInfo.systemUptime - time, modifiers)
+    }
+
+    /// One click, one pane.
+    static func taken() { time = -1 }
 }

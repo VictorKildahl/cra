@@ -1054,7 +1054,7 @@ final class SpaceDockView: NSView {
         let selected = store.selectedTabID(window: ui.windowID)
         let url = selected.flatMap { store.item($0)?.tab?.url }.flatMap(URL.init(string:))
         let canBoost = ["http", "https"].contains(url?.scheme?.lowercased() ?? "") && url?.host != nil
-        let canSplit = selected.map { store.paneTabIDs(for: $0).count < 4 } ?? false
+        let canSplit = selected.map { store.paneTabIDs(for: $0).count < store.splitPaneLimit } ?? false
         let entries: [(String, String, String, Bool)] = [
             ("newSpace", "New Space", "plus.rectangle.on.rectangle", true),
             ("newFolder", "New Folder", "folder", true),

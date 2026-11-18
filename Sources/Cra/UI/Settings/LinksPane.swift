@@ -91,6 +91,19 @@ struct LinksPane: View {
                                           detail: "“Open Link in New Tab” brings the new tab to the front. Off, the page you’re reading stays in front, as in Arc. ⌘-click opens a link behind the page and ⇧⌘-click switches to it either way.",
                                           isOn: $store.settings.openLinksInForeground)
                     }
+
+                    // Not in Arc (GitHub #498): both off by default, a split holds Arc's four panes and a middle
+                    // click opens a tab behind the page.
+                    SettingsHeader("Split View").padding(.top, 20)
+                    SettingsFeatureCard {
+                        SettingsToggleRow("Middle-click a link in a split to add a pane",
+                                          detail: "In a split view, a link you click with the middle mouse button opens as a new pane beside the page. Outside a split it still opens a tab behind the page.",
+                                          isOn: $store.settings.splitMiddleClickAddsPane)
+                        SettingsCardDivider()
+                        SettingsToggleRow("More than four panes in a split",
+                                          detail: "A split view holds up to \(SplitPaneLimit.more) panes instead of Arc’s four.",
+                                          isOn: $store.settings.splitMorePanes)
+                    }
                 }
                 .padding(.horizontal, SettingsMetrics.paneInset)
                 .padding(.bottom, SettingsMetrics.paneBottom)

@@ -133,7 +133,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
         "littleWindowOnOptionCommandClick", "notionCalendarPreviews", "outlookCalendarPreviews", "outlookMailPreviews", "littleWindowShortcutEverywhere", "liveCalendar", "mediaLibraryEnabled", "newTabButtonAtTop", "newTabsAtTop",
         "openLinksInForeground", "pageTopWindowDrag", "peekExpandInSourceTab", "peekInEveryTab", "peekLinksToOtherSites", "peekOnShiftClick",
         "perfRecording", "recentPagesPreviews", "restoreWindows", "searchEngine", "searchSuggestions", "shareThemeWithWebsites",
-        "sharedFavorites", "showSpaceHeaderOnSingleSpace", "showStatusBar", "showToolbar", "soundEffects",
+        "sharedFavorites", "showSpaceHeaderOnSingleSpace", "showStatusBar", "showToolbar", "soundEffects", "splitMiddleClickAddsPane", "splitMorePanes",
         "startOnNewTab", "tabSleepAfter", "tabSleepOnMemoryPressure", "tabSleepTimerEnabled", "tidyDownloads",
         "tidyTabTitles", "tidyTabs", "toolbarShowsFullURL", "warnBeforeQuitting", "websiteAppearance",
         "allowAppleEventsJavaScript", "perfHidesSiteNames",

@@ -31,8 +31,9 @@ public enum PickedTabsMenu {
         ["archive", "archiveBelow"],
     ]
 
-    /// A split holds at most four panes; past that Open in Split View is dimmed.
-    public static let maxPanes = 4
+    /// A split holds at most four panes (Arc's); past that Open in Split View is dimmed. With
+    /// "More than four panes in a split" on, `Picks.paneLimit` is eight (#498).
+    public static let maxPanes = SplitPaneLimit.arc
 
     /// What the menu is opened on.
     public struct Picks: Equatable, Sendable {
@@ -47,15 +48,18 @@ public enum PickedTabsMenu {
         public var anySound: Bool
         /// Whether a pick is in a split already (a split doesn't nest).
         public var anyInSplit: Bool
+        /// The most panes a split holds (`SplitPaneLimit`).
+        public var paneLimit: Int
 
         public init(count: Int, anyEasel: Bool = false, clickedInToday: Bool = true, allMuted: Bool = false,
-                    anySound: Bool = false, anyInSplit: Bool = false) {
+                    anySound: Bool = false, anyInSplit: Bool = false, paneLimit: Int = PickedTabsMenu.maxPanes) {
             self.count = count
             self.anyEasel = anyEasel
             self.clickedInToday = clickedInToday
             self.allMuted = allMuted
             self.anySound = anySound
             self.anyInSplit = anyInSplit
+            self.paneLimit = paneLimit
         }
     }
 
@@ -73,7 +77,7 @@ public enum PickedTabsMenu {
     public static func isEnabled(_ id: String, for picks: Picks) -> Bool {
         switch id {
         case "changeIcon", "archiveBelow": false
-        case "openInSplitView": picks.count <= maxPanes
+        case "openInSplitView": picks.count <= picks.paneLimit
         case "mute": picks.anySound || picks.allMuted
         default: true
         }

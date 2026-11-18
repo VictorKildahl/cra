@@ -174,7 +174,8 @@ enum SidebarMenus {
                                          clickedInToday: !store.isPinned(clicked),
                                          allMuted: !tabs.isEmpty && tabs.allSatisfy { $0.1.muted },
                                          anySound: tabs.contains { $0.1.muted || ui.audibleTabIDs.contains($0.0) },
-                                         anyInSplit: ids.contains { store.splitContaining($0) != nil })
+                                         anyInSplit: ids.contains { store.splitContaining($0) != nil },
+                                         paneLimit: store.splitPaneLimit)
         for (i, section) in PickedTabsMenu.shown(for: picks).enumerated() {
             if i > 0 { menu.addItem(.separator()) }
             for row in section {
@@ -466,7 +467,7 @@ enum SidebarMenus {
         let children = panes.map(\.id)
         add(menu, "Separate All Tabs") { store.separateAll(id) }
         // Arc greys it out while the split is closed (no pane to add next to).
-        add(menu, action: "addSplitView", "Add Tab…", enabled: open && children.count < 4) {
+        add(menu, action: "addSplitView", "Add Tab…", enabled: open && children.count < store.splitPaneLimit) {
             if let first = children.first {
                 actions.focusPane(first)
                 actions.performAction("addSplitView")

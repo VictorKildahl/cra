@@ -1109,6 +1109,10 @@ final class SidebarStore {
 
     /// The panes shown when `tabID` is selected: its split's children in pane
     /// order, or just the tab itself.
+    /// The most panes a split holds: Arc's four, or eight with Settings ▸ Links ▸ "More than four
+    /// panes in a split" on (GitHub #498, `SplitPaneLimit`).
+    var splitPaneLimit: Int { SplitPaneLimit.maximum(morePanes: settings.splitMorePanes) }
+
     func paneTabIDs(for tabID: UUID) -> [UUID] {
         if let split = splitContaining(tabID) { return split.children.filter { items[$0]?.isTab == true } }
         return [tabID]
@@ -1232,22 +1236,24 @@ final class SidebarStore {
 
     /// A page's "Open Link in Split View" (#257): the link opens in a new pane right after the
     /// page it was clicked in (`tabID`), in that tab's split or a new one, and is the open pane.
-    /// Nil when the split already has four panes, Arc's most (the window says "Cannot Add New Pane").
+    /// Nil when the split already has its most panes, Arc's four or Cra's eight (`splitPaneLimit`; the
+    /// window says "Cannot Add New Pane").
     @discardableResult
     func openLinkInSplit(_ url: String, from tabID: UUID, window: UUID? = nil) -> SidebarItem? {
-        guard items[tabID]?.isTab == true, paneTabIDs(for: tabID).count < 4 else { return nil }
+        guard items[tabID]?.isTab == true, paneTabIDs(for: tabID).count < splitPaneLimit else { return nil }
         return addEmptyPane(nextTo: tabID, url: url, window: window)
     }
 
     /// Add an existing tab as a pane of a split (Arc: onDropSidebarItem). A
     /// pinned or favorite tab stays where it is; a Today copy becomes the pane.
-    /// A split already holding Arc's four panes takes nothing (#498).
+    /// A split already holding its most panes takes nothing (#498): Arc's four, or eight with
+    /// "More than four panes in a split" on (`splitPaneLimit`).
     func addToSplit(_ splitID: UUID, tabID: UUID, at index: Int?) {
         guard var split = items[splitID], split.isSplit, var tab = items[tabID], tab.isTab, tab.parentID != splitID else {
             if let i = index, let sp = items[splitID], sp.children.firstIndex(of: tabID) != nil { moveWithinSplit(splitID, tabID: tabID, to: i) }
             return
         }
-        guard split.children.count < SplitDropProposal.maximumPanes else { return }
+        guard split.children.count < splitPaneLimit else { return }
         let previousAskProfiles = askProfileOwnership(of: [tabID])
         defer { notifyAskProfileChanges(previousAskProfiles) }
         let from = tab.parentID

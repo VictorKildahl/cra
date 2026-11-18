@@ -963,7 +963,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// one, with the command bar ready to fill it.
     func addSplitPane() {
         guard let current = selectedTabID else { openCommandBar(.newTab); return }
-        if store.paneTabIDs(for: current).count >= 4 {
+        if store.paneTabIDs(for: current).count >= store.splitPaneLimit {
             showToast("Cannot Add New Pane")
             return
         }
@@ -977,7 +977,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func openTabInSplit(_ id: UUID) {
         guard let current = selectedTabID, current != id, store.item(current)?.isEmptyTab == false else { return }
         if store.paneTabIDs(for: current).contains(id) { store.selectTab(id, window: windowID); return }
-        guard store.paneTabIDs(for: current).count < 4 else { showToast("Cannot Add New Pane"); return }
+        guard store.paneTabIDs(for: current).count < store.splitPaneLimit else { showToast("Cannot Add New Pane"); return }
         let split = store.splitContaining(current).map { sp in store.addToSplit(sp.id, tabID: id, at: nil); return store.item(sp.id) }
             ?? store.createSplit(with: [current, id], at: current)
         store.selectTab(split.flatMap { store.paneID(for: id, in: $0) } ?? id, window: windowID)
@@ -2528,7 +2528,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Add To Split from a Peek: the peeked page, a new tab, joins `source` as a pane (Arc's
     /// openInSplit), or a toast when the split is full.
-    func canAddPane(to source: UUID) -> Bool { store.paneTabIDs(for: source).count < 4 }
+    func canAddPane(to source: UUID) -> Bool { store.paneTabIDs(for: source).count < store.splitPaneLimit }
 
     func joinSplit(_ tabID: UUID, with source: UUID) {
         let split = store.splitContaining(source).map { sp in store.addToSplit(sp.id, tabID: tabID, at: nil); return store.item(sp.id) }
@@ -4366,7 +4366,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 return true
             }
         }
-        guard store.paneTabIDs(for: current).count < 4 else {
+        guard store.paneTabIDs(for: current).count < store.splitPaneLimit else {
             showToast("Cannot Add New Pane")
             return true
         }
