@@ -2606,7 +2606,8 @@ GitHub issue #4: opening in window B a tab that window A shows left A with no ta
   when clicking on links with Shift held" (`shiftClickModalEntryPointEnabled`); "Exit the current context. Such
   as closing a Peek window"; "Undo prompt for re-opening a closed Peek". Not seen live (needs a real click).
 - Cra: a Little Window docked over the page area (6 %/5 % inset), a 25 % black shade over the browser window
-  that closes it on click, Escape the page didn't use closes it, "Open in <space>" makes it a tab. Same site =
+  that closes it on click, Escape the page didn't use closes it (one the page keeps asks first, #520), "Open in
+  <space>" makes it a tab. Same site =
   registrable domain (`SiteKey`). Verified on a test bundle with a CDP click in a favorite: Peek opened, the tab
   stayed, promote and ⌘W worked.
 
@@ -3755,8 +3756,12 @@ event with `shiftClickModalEntryPointEnabled` set for the run, AX frames and 60 
   button is round again. Not seen live (a Peek needs Victor's Arc).
 - Cra (#425): PeekCloseHold (CraCore) has the rule, the timeouts and the pill's numbers; PeekControlButton draws the
   pill on its own layers (face ▸ clip ▸ glyphs and a CATextLayer) and PeekControlsPanel widens itself while it is up.
-  LittleWindowController.attemptPeekClose takes the Close button, ⌘W, Esc and the click catcher; Cra's Esc never asks,
-  so only a Peek using the camera or microphone (CraBrowser.isCapturingMedia) holds its first close.
+  LittleWindowController.attemptPeekClose takes the Close button, ⌘W, Esc and the click catcher; a Peek using the
+  camera or microphone (CraBrowser.isCapturingMedia) holds its first close.
+- Cra (#520): Cra's Esc asks only when the page kept it. Gmail cancels every Esc, so a Peek of it never closed.
+  PeekEscapePresses (CraCore): an Esc the page hasn't handed back after 0.5 s (Use Both's answer time) shows the
+  Esc pill, and while a pill is up the next Esc closes before the page sees it. Inferred: Arc's sender for
+  `prefersConfirmation: true` wasn't found, so whether Arc asks for this reason isn't known.
 - [O, 4 Nov] Which links peek, with both Links settings on (`modalEnabled` and
   `shiftClickModalEntryPointEnabled` set for the run, the sidebar reset before each run), HID clicks on a
   lab page at 127.0.0.1 in a pinned tab: a link to localhost peeked, plain or target=_blank; a link to

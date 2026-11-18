@@ -192,6 +192,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The Peek's Close is the red Confirm pill, waiting for a second close (#425).
     private var closeHold: PeekCloseHold?
     private var closeHoldReset: DispatchWorkItem?
+    /// The Esc the page hasn't handed back yet (#520).
+    private var escapes = PeekEscapePresses()
     /// The click catcher's frame (screen coordinates), for cra://debug?peekCatcher.
     var dimFrame: NSRect? { dim?.frame }
     private var controls: PeekControlsPanel?
@@ -2182,12 +2184,33 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             browser.exitFullscreen()
             return true
         }
+        // Esc in a Peek goes to the page first; after one the page kept, the next is Cra's and closes (#520).
+        if isPeek, !closingPeek, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
+            if escapes.beforePage(at: event.timestamp, holding: closeHold, isRepeat: event.isARepeat) {
+                CraLog.note("peek: Esc closes before the page (\(closeHold == nil ? "the page kept the last one" : "Close asked"))")
+                attemptPeekClose(.escape(prefersConfirmation: false))
+                return true
+            }
+            if !event.isARepeat { watchEscape(pressedAt: event.timestamp) }
+        }
         return app.handleReservedKey(event)
+    }
+
+    /// An Esc the page keeps (Gmail cancels every one) turns Close into Arc's Confirm pill, so the
+    /// next Esc closes the Peek however the page treats it (#520).
+    private func watchEscape(pressedAt: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + PeekEscapePresses.answerTime) { [weak self] in
+            guard let self, self.escapes.pageKept(pressedAt: pressedAt), !self.closingPeek, self.closeHold == nil else { return }
+            CraLog.note("peek: the page kept Esc, Close asks")
+            self.attemptPeekClose(.escape(prefersConfirmation: true))
+        }
     }
     func browser(_ browser: CraBrowser, handleUnhandledKeyEvent event: NSEvent) -> Bool {
         // Arc's "Exit the current context": Escape the page didn't use closes a Peek.
         if isPeek, event.type == .keyDown, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
-            attemptPeekClose(.escape(prefersConfirmation: false))
+            escapes.pageLeft()
+            // A second Esc may have closed it before the page handed this one back.
+            if !closingPeek { attemptPeekClose(.escape(prefersConfirmation: false)) }
             return true
         }
         return app.handleUnhandledKey(event)
