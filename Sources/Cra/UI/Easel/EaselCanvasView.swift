@@ -1257,7 +1257,7 @@ final class EaselToolbar: NSView {
     override func mouseExited(with event: NSEvent) { hovered = nil }
 
     /// The pointer at `point` (the toolbar's coordinates), or gone (nil). Also the test hook's way in.
-    func hover(at point: NSPoint?) { hovered = point.flatMap(EaselToolbarLayout.item(at:)) }
+    func hover(at point: NSPoint?) { hovered = point.flatMap { EaselToolbarLayout.item(at: $0) } }
 
     /// For cra.log: the picked tool, the button under the pointer and each letter that shows.
     var debugLine: String {

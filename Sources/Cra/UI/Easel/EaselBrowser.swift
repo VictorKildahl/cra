@@ -1,5 +1,6 @@
 import AppKit
 import CraCEF
+import Observation
 
 /// An Easel's page (Arc's File ▸ New Easel ⌃⇧E, measured on Arc 1.172.1; docs/arc-parity.md
 /// "Easels, measured"). Like WebKitBrowser it is a CraBrowser hosting its own view in
@@ -227,11 +228,6 @@ enum EaselFiles {
             if let canvas = entry.canvas { listed.append((id, canvas.document.title, Date())) }
         }
         return listed.sorted { $0.edited > $1.edited }
-    }
-
-    /// The easels a capture can go to, the latest edited first (the capture menu's rows).
-    static func destinations() -> [CaptureMenuLayout.Destination] {
-        all().map { CaptureMenuLayout.Destination(id: $0.id, title: $0.title) }
     }
     static func pictures(_ id: UUID) -> URL {
         let u = folder.appendingPathComponent(id.uuidString, isDirectory: true)

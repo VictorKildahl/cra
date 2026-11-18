@@ -29,6 +29,10 @@ final class CaptureOverlay {
         }
     }
 
+    /// The easels a capture can go to, the latest edited first: the menu's rows after New Easel.
+    /// The app sets it at launch (the overlay knows nothing of where easels are kept).
+    static var easels: () -> [CaptureMenuLayout.Destination] = { [] }
+
     private let panel: CapturePanel
     private let view: CaptureView
     private weak var parent: NSWindow?
@@ -569,7 +573,7 @@ final class CaptureView: NSView {
     }
 
     private func makeMenu(png: Data) -> CaptureMenu {
-        let menu = CaptureMenu(easels: EaselFiles.destinations()) { [weak self] action in
+        let menu = CaptureMenu(easels: CaptureOverlay.easels()) { [weak self] action in
             guard let self else { return }
             self.isSettled = false
             if action == .retake {
