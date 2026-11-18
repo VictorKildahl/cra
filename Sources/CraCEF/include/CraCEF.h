@@ -132,6 +132,9 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 - (void)browserDidReceiveFocus:(CraBrowser *)browser;
 - (void)browserDidClose:(CraBrowser *)browser;
 @optional
+/// A Chromium tab starts hidden until its container is shown in a window.
+- (BOOL)browserStartsHidden:(CraBrowser *)browser;
+
 /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
 - (void)browser:(CraBrowser *)browser requestsWindowWithURL:(NSString *)url kind:(CraLinkWindow)kind;
 /// The page's context menu: Open Link in Split View, a pane beside this page (#257). Without it

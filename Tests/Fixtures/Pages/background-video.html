@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Background video fixture</title>
+<video id="video" src="clip.mp4" muted loop playsinline></video>
+<script>
+  const video = document.getElementById('video');
+  const test = location.search.slice(1);
+  video.addEventListener('playing', () => {
+    fetch('/' + test + '-playing-' + document.visibilityState, { method: 'POST' });
+  }, { once: true });
+  fetch('/' + test + '-loaded-' + document.visibilityState, { method: 'POST' });
+  video.play();
+</script>

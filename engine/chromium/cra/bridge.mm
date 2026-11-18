@@ -2117,16 +2117,23 @@ bool HandleDebugMethod(content::WebContents* contents,
   if (_isIncognito) {
     profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   }
+  // Before its first show, Chromium trusts the creation-time visibility even if
+  // the container is hidden. Start tabs hidden so Chromium defers media until
+  // the user sees them. Spare pages are only taken by tabs.
+  content::WebContents::CreateParams params(profile);
+  params.initially_hidden = _isSpare ||
+      ([_delegate respondsToSelector:@selector(browserStartsHidden:)] &&
+       [_delegate browserStartsHidden:self]);
   if (_isSpare) {
     // Made now, while nothing waits on it; it goes in a tab strip when a tab takes it (takeSpareWithURL:).
     _spareProfile = profile;
-    _spareContents = content::WebContents::Create(content::WebContents::CreateParams(profile));
+    _spareContents = content::WebContents::Create(params);
     [SparePages() addObject:self];
     // Made: a tab can take it (SparePages.take), as the CEF bridge reports a spare once its browser exists.
     _isCreated = YES;
     return;
   }
-  std::unique_ptr<content::WebContents> made = content::WebContents::Create(content::WebContents::CreateParams(profile));
+  std::unique_ptr<content::WebContents> made = content::WebContents::Create(params);
   if (_sidePanel) {
     extensions::SetViewType(made.get(), extensions::mojom::ViewType::kExtensionSidePanel);
   }
@@ -3548,6 +3555,7 @@ bool HandleDebugMethod(content::WebContents* contents,
 // Test hook: the commands scenarios run by name.
 + (BOOL)runNextPageMenuCommand:(NSString*)name {
   static NSDictionary<NSString*, NSNumber*>* const commands = @{
+    @"IDC_CONTENT_CONTEXT_OPENLINKNEWTAB" : @(kMenuOpenLinkNewTab),
     @"IDC_VIEW_SOURCE" : @(IDC_VIEW_SOURCE),
     @"IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE" : @(IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE),
     @"IDC_CONTENT_CONTEXT_INSPECTELEMENT" : @(IDC_CONTENT_CONTEXT_INSPECTELEMENT),

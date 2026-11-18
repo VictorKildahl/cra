@@ -588,6 +588,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerPageWindowsChanged(focus: tabID(of: browser) == visibleTabID)
     }
 
+    func browserStartsHidden(_ browser: CraBrowser) -> Bool { true }
+
     func unload(_ tabID: UUID) {
         // CEF closes asynchronously. Retire ownership first so reopening the tab
         // creates a new browser, and late callbacks cannot mutate its replacement.
