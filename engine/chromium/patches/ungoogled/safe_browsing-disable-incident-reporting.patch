@@ -14,8 +14,8 @@ the URL so we get notified if this happens again in the future).
  .../security_interstitials/core/safe_browsing_loud_error_ui.cc | 1 +
  5 files changed, 7 insertions(+), 4 deletions(-)
 
---- a/chrome/browser/safe_browsing/chrome_safe_browsing_blocking_page_factory.cc
-+++ b/chrome/browser/safe_browsing/chrome_safe_browsing_blocking_page_factory.cc
+--- a/chrome/browser/safe_browsing/interstitials/chrome_safe_browsing_blocking_page_factory.cc
++++ b/chrome/browser/safe_browsing/interstitials/chrome_safe_browsing_blocking_page_factory.cc
 @@ -63,8 +63,7 @@ ChromeSafeBrowsingBlockingPageFactory::C
        Profile::FromBrowserContext(web_contents->GetBrowserContext());
    // Create appropriate display options for this blocking page.

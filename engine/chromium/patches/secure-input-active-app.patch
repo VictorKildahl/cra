@@ -76,7 +76,7 @@ diff --git a/ui/base/cocoa/secure_password_input.mm b/ui/base/cocoa/secure_passw
  
  ScopedPasswordInputEnabler::~ScopedPasswordInputEnabler() {
    --g_password_input_counter;
-   DCHECK_LE(0, g_password_input_counter);
+   CHECK_LE(0, g_password_input_counter, base::NotFatalUntil::M163);
 -  if (!g_password_input_counter) {
 -    SetPasswordInputEnabled(false);
 -  }
@@ -84,48 +84,3 @@ diff --git a/ui/base/cocoa/secure_password_input.mm b/ui/base/cocoa/secure_passw
  }
  
  // static
-diff --git a/content/browser/renderer_host/render_widget_host_view_mac.mm b/content/browser/renderer_host/render_widget_host_view_mac.mm
---- a/content/browser/renderer_host/render_widget_host_view_mac.mm
-+++ b/content/browser/renderer_host/render_widget_host_view_mac.mm
-@@ -1834,7 +1834,9 @@ void RenderWidgetHostViewMac::SetActive(bool active) {
-       host()->LostFocus();
-     }
-   }
--  if (HasFocus())
-+  // Cra: an inactive view never keeps the password lock, focused or not
-+  // (VictorKildahl/cra#511).
-+  if (HasFocus() || !active)
-     SetTextInputActive(active);
-   if (!active)
-     UnlockPointer();
-@@ -1924,6 +1926,13 @@ void RenderWidgetHostViewMac::SetTextInputActive(bool active) {
-       return false;
-     }
- 
-+    // Cra: only a field in the key window takes the keys, so only it holds
-+    // Secure Input. A page that focused its password field while its window
-+    // wasn't key kept the lock (VictorKildahl/cra#511).
-+    if (!this->is_window_key_ && !this->IsHeadless()) {
-+      return false;
-+    }
-+
-     const ui::mojom::TextInputState* state =
-         this->text_input_manager_->GetTextInputState();
-     if (state->type == ui::TEXT_INPUT_TYPE_PASSWORD ||
-@@ -2041,12 +2050,15 @@ void RenderWidgetHostViewMac::OnFirstResponderChanged(bool is_first_responder) {
-       SetTextInputActive(true);
-     }
-   } else {
-+    // Cra: the password lock goes with first responder even when the page's
-+    // widget had already lost focus; it stayed with a background tab
-+    // (VictorKildahl/cra#511).
-+    SetTextInputActive(false);
-     bool has_focused_widget =
-         host()->delegate() &&
-         host()->delegate()->GetRenderWidgetHostWithPageFocus() &&
-         host()->delegate()->GetRenderWidgetHostWithPageFocus()->is_focused();
-     if (IsHeadless() || has_focused_widget) {
--      SetTextInputActive(false);
-       host()->LostFocus();
-     }
-   }

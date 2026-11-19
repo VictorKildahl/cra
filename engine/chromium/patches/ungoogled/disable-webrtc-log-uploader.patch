@@ -1,10 +1,11 @@
 # Disables WebRTC log uploading to Google
 
+diff --git a/chrome/browser/media/webrtc/webrtc_log_uploader.cc b/chrome/browser/media/webrtc/webrtc_log_uploader.cc
 --- a/chrome/browser/media/webrtc/webrtc_log_uploader.cc
 +++ b/chrome/browser/media/webrtc/webrtc_log_uploader.cc
-@@ -182,31 +182,13 @@ void WebRtcLogUploader::OnLoggingStopped
-   CHECK(meta_data.get(), base::NotFatalUntil::M161);
-   CHECK(!upload_done_data.paths.directory.empty(), base::NotFatalUntil::M161);
+@@ -184,31 +184,13 @@ void WebRtcLogUploader::OnLoggingStopped(
+   // confident it won't be triggered.
+   DCHECK(!upload_done_data.paths.directory.empty());
  
 -  std::string compressed_log = CompressLog(log_buffer.get());
 -
@@ -35,7 +36,7 @@
    } else {
      main_task_runner_->PostTask(
          FROM_HERE,
-@@ -225,28 +207,7 @@ void WebRtcLogUploader::PrepareMultipart
+@@ -227,28 +209,7 @@ void WebRtcLogUploader::PrepareMultipartPostData(
    CHECK(!compressed_log.empty(), base::NotFatalUntil::M161);
    CHECK(meta_data.get(), base::NotFatalUntil::M161);
  
@@ -65,7 +66,7 @@
  }
  
  void WebRtcLogUploader::LoggingStoppedDoStore(
-@@ -261,48 +222,6 @@ void WebRtcLogUploader::LoggingStoppedDo
+@@ -263,48 +224,6 @@ void WebRtcLogUploader::LoggingStoppedDoStore(
    CHECK(log_buffer.get(), base::NotFatalUntil::M161);
    CHECK(!log_paths.directory.empty(), base::NotFatalUntil::M161);
  
@@ -114,9 +115,10 @@
    main_task_runner_->PostTask(
        FROM_HERE, base::BindOnce(std::move(done_callback), true, ""));
  
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
-@@ -164,7 +164,7 @@ void RegisterBrowserUserPrefs(user_prefs
+@@ -164,7 +164,7 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
    registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
    registry->RegisterBooleanPref(prefs::kWebRtcEventLogCollectionAllowed, false);
    registry->RegisterListPref(prefs::kWebRtcLocalIpsAllowedUrls);

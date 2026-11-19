@@ -10,7 +10,7 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
  #include <algorithm>
  #include <memory>
  #include <set>
-@@ -110,6 +112,7 @@
+@@ -116,6 +118,7 @@
  #include "ui/events/keycodes/dom/keycode_converter.h"
  #include "ui/events/keycodes/keyboard_code_conversion.h"
  #include "ui/events/keycodes/keyboard_codes.h"
@@ -18,7 +18,7 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
  #include "url/origin.h"
  
  #include "base/win/windows_h_disallowed.h"
-@@ -1402,6 +1405,8 @@ DevToolsWindow* DevToolsWindow::Create(
+@@ -1472,6 +1475,8 @@ DevToolsWindow* DevToolsWindow::Create(
    }
  
    SessionID inspected_browser_session_id = SessionID::InvalidValue();
@@ -27,7 +27,7 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
  #if BUILDFLAG(IS_ANDROID)
    // Docking is not supported yet.
    can_dock = false;
-@@ -1421,14 +1426,28 @@ DevToolsWindow* DevToolsWindow::Create(
+@@ -1491,14 +1496,28 @@ DevToolsWindow* DevToolsWindow::Create(
      if (!devtools_ui_controller || !devtools_ui_controller->CanDockDevtools()) {
        can_dock = false;
      }
@@ -57,7 +57,7 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
    main_web_contents->GetController().LoadURL(
        DecorateFrontendURL(url), content::Referrer(),
        ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
-@@ -1616,6 +1635,10 @@ WebContents* DevToolsWindow::AddNewContents(
+@@ -1686,6 +1705,10 @@ WebContents* DevToolsWindow::AddNewContents(
      return nullptr;
    }
  
@@ -68,7 +68,7 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
    WebContents* inspected_web_contents = GetInspectedWebContents();
    if (inspected_web_contents) {
      inspected_web_contents->GetDelegate()->AddNewContents(
-@@ -1634,6 +1657,10 @@ void DevToolsWindow::WebContentsCreated(
+@@ -1704,6 +1727,10 @@ void DevToolsWindow::WebContentsCreated(
    if (target_url.SchemeIs(content::kChromeDevToolsScheme) &&
        target_url.GetPath().rfind("device_mode_emulation_frame.html") !=
            std::string::npos) {
@@ -79,16 +79,20 @@ diff --git a/chrome/browser/devtools/devtools_window.cc b/chrome/browser/devtool
      CHECK(can_dock_);
  
      // Ownership will be passed in DevToolsWindow::AddNewContents.
-@@ -1795,10 +1822,11 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
+@@ -1865,12 +1892,13 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
      return;
    }
  
--  CHECK(can_dock_ || !dock_requested, base::NotFatalUntil::M161);
+-  // TODO(crbug.com/579584319): CHECK-exclusion: Convert to a CHECK once we are
+-  // confident it won't be triggered.
+-  DCHECK(can_dock_ || !dock_requested);
 +  // Cra: its pages' frontends ask to dock (they dock in Cra's card); Chrome's window stays undocked.
    if (!can_dock_) {
      dock_requested = false;
    }
-+  CHECK(can_dock_ || !dock_requested, base::NotFatalUntil::M161);
++  // TODO(crbug.com/579584319): CHECK-exclusion: Convert to a CHECK once we are
++  // confident it won't be triggered.
++  DCHECK(can_dock_ || !dock_requested);
  
    bool was_docked = is_docked_;
    is_docked_ = dock_requested;

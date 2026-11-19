@@ -1,27 +1,5 @@
 # Disables references to fonts.googleapis.com
 
---- a/components/dom_distiller/content/browser/dom_distiller_viewer_source.cc
-+++ b/components/dom_distiller/content/browser/dom_distiller_viewer_source.cc
-@@ -308,7 +308,7 @@ bool DomDistillerViewerSource::ShouldSer
- std::string DomDistillerViewerSource::GetContentSecurityPolicy(
-     network::mojom::CSPDirectiveName directive) {
-   if (directive == network::mojom::CSPDirectiveName::StyleSrc) {
--    return "style-src 'self' https://fonts.googleapis.com;";
-+    return "style-src 'self';";
-   } else if (directive == network::mojom::CSPDirectiveName::ChildSrc) {
-     return "child-src *;";
-   } else if (directive ==
---- a/components/dom_distiller/core/html/preview.html
-+++ b/components/dom_distiller/core/html/preview.html
-@@ -11,7 +11,7 @@ found in the LICENSE file.
-   <meta name="theme-color" id="theme-color">
-   <title>Title goes here and it could be kind of lengthy - Publisher name</title>
-   <link href="../css/distilledpage.css" rel="stylesheet" type="text/css">
--  <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/css'>
-+  <link href='chrome://resources/css/roboto.css' rel='stylesheet' type='text/css'>
-   <style>
-     .english :lang(th) {display: none}
-     .english :lang(zh) {display: none}
 --- a/third_party/crashpad/crashpad/doc/support/crashpad_doxygen.css
 +++ b/third_party/crashpad/crashpad/doc/support/crashpad_doxygen.css
 @@ -12,11 +12,11 @@
