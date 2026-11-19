@@ -1094,6 +1094,7 @@
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::covered  5dce52db57cb
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::pageHostWindowInFrontIsTheWindowsOwn  28fe34a47445
 #533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::summaryNamesWhatIsOverIt  adec95d4f616
+#533   Packages/CraCore/Tests/CraCoreTests/WindowCoverageTests.swift::theDocksWindowCoversNothing  8e69c34fdc7f
 #533   Tests/Scenarios/pip-window-covered.scenario  34732af6a587
 #533   Tests/Scenarios/pip-window-minimised.scenario  21d21ee9e121
 #533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5
