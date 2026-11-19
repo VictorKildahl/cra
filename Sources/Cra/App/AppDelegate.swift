@@ -1677,6 +1677,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
+            // littleRow=<text>&typed=<text>: the newest Little Window's ⌘L bar picks the row for that page (#599).
+            if let address = dict["littleRow"] { littleWindows.last?.debugPickRow(containing: address, typed: dict["typed"] ?? ""); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
             // littleFind=<label>: the newest Little Window's (or Peek's) find bar: shown, where on its page,

@@ -1219,6 +1219,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.theme = store.focusedSpace.theme.shown
         commandBar.focusedSpaceID = store.focusedSpaceID
         commandBar.spaceShown = isPeek ? nil : state.targetSpaceID
+        commandBar.window = isPeek ? .peek : .littleWindow
         commandBar.open(mode: hasPage ? .editURL : .newTab, prefill: prefill)
         commandBar.attached = false
         commandBar.panelWidth = isCard ? window.frame.width - 2 * LittleMetrics.edgeInset
@@ -1417,6 +1418,28 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let row = rows.first { if case .switchSpace = $0.kind { true } else { false } }
         CraLog.note("little commit \(typed): \(row?.title ?? "no Switch to row")")
         if let row { handleCommit(row, typed: typed, mode: .newTab) }
+    }
+
+    /// `cra://debug?littleRow=<text in its address>&typed=<text>`: opens this window's ⌘L bar, types `typed`
+    /// (nothing lists what the bar shows before typing), logs the row for that page as the bar lists it (its
+    /// kind and the words at its end) and picks it, as ↩ on it does (#599).
+    func debugPickRow(containing address: String, typed: String) {
+        openCommandBar()
+        commandBar.setQuery(typed)
+        guard let row = commandBar.result.items.first(where: { $0.url?.contains(address) == true }) else {
+            CraLog.note("little row \(address): none in \(commandBar.result.items.count) rows")
+            commandBar.close()
+            return
+        }
+        let kind: String
+        switch row.kind {
+        case .switchToTab: kind = "tab"
+        case .archived: kind = "archived"
+        case .history: kind = "history"
+        default: kind = "other"
+        }
+        CraLog.note("little row \(address): kind=\(kind) trailing=\(row.trailing ?? "none")")
+        commandBar.commit(row)
     }
 
     /// cra://debug?littleMenu=<step>: drives the "Open in" menu (#331) and logs what it shows.
@@ -2082,7 +2105,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     /// A Shift-clicked link opens in this window: Arc's Little Arc has no Peek of its own, so its
-    /// Shift-click is a plain click (1.171, 3 Nov 2026).
+    /// Shift-click is a plain click (1.171, 3 Nov 2026). So does a target=_blank link in a Little
+    /// Window, rather than one more Little Window each time (LittleWindowLinks, #599).
     /// In a Peek, a target=_blank link leaves it for a tab (PeekTrigger.leavesPeek, #202).
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
         if url.lowercased().hasPrefix("cra:") { return false }
@@ -2090,7 +2114,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             openTabFromPeek(url, inBackground: false)
             return true
         }
-        guard shiftClick else { return false }
+        guard isPeek ? shiftClick : LittleWindowLinks.loadsInWindow(url, shiftClick: shiftClick, newTab: newTab) else { return false }
         browser.loadURL(url)
         return true
     }

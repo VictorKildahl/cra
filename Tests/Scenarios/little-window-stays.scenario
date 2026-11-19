@@ -1,0 +1,57 @@
+# promise: #599
+# A Little Window keeps its browsing in itself (#599), until ⌘O moves the page:
+# - its address bar's rows for a page open in a browser window's tab ("Switch to Tab") or in the archive
+#   ("Restore", where closed Little Windows go) load that page in the Little Window, listed as plain page
+#   rows; before, picking one switched the browser window to the tab (or restored it there) and brought
+#   that window over the Little Window;
+# - a link that asks for a new tab (target=_blank, from a click) loads in the Little Window; before, each
+#   one opened one more Little Window.
+budget rss=800 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "defaultLinkDestination": {"littleWindow": {}}}
+# Two tabs in the browser window (the bar leaves out the one in front), and a page in the archive.
+cra://open?url=${PAGE}?n=kept
+expect-log GET /page\.html\?n=kept
+cra://open?url=${PAGE}?n=front
+expect-log GET /page\.html\?n=front
+cra://debug?externalURL=${PAGE}?n=gone
+expect-log GET /page\.html\?n=gone
+wait 2
+cra://action/closeWindow
+wait 1
+cra://debug?littleShown=closed
+expect-log little shown closed: windows=0
+cra://debug?externalURL=${PAGE}?n=little
+expect-log GET /page\.html\?n=little
+wait 2
+cra://debug?littleShown=front
+expect-log little shown front: windows=1 .*behind=0
+
+# The open tab's row, from the bar's list before typing: a page row, and it loads here.
+cra://debug?littleRow=n%3Dkept
+expect-log little row n=kept: kind=history trailing=none
+wait 2
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"'little at '+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"little at \?n=kept"
+cra://debug?littleShown=tab
+expect-log little shown tab: windows=1 .*behind=0
+cra://debug?browserWindows=tab
+expect-log Cra browser windows tab: kind=normal .* open=[^ ]*n=front 
+
+# The archived page's row: the same.
+cra://debug?littleRow=n%3Dgone
+expect-log little row n=gone: kind=history trailing=none
+wait 2
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"'little at '+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"little at \?n=gone"
+cra://debug?littleShown=archived
+expect-log little shown archived: windows=1 .*behind=0
+
+# A target=_blank link clicked in the page: it loads here, and no second Little Window opens.
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(a=>(a.href='${PAGE}?n=blank',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log GET /page\.html\?n=blank
+wait 2
+cra://debug?littleShown=blank
+expect-log little shown blank: windows=1
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"'little at '+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"little at \?n=blank"
