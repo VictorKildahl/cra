@@ -130,7 +130,7 @@ struct ProtectedVideosTests {
     /// Fandango at Home (Vudu) didn't move by itself, and turned on by hand it arrived in WebKit
     /// signed out, where its play page reloads without end. It is a mixed site: the film's page
     /// asks, moves alone and takes the session along.
-    @Test func fandangoAtHomeIsMixed() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/588")) func fandangoAtHomeIsMixed() throws {
         let site = try #require(sites.mixedSite(for: fandangoFilm))
         #expect(site.name == "Fandango at Home" && site.host == "athome.fandango.com")
         #expect(sites.engine(for: fandangoFilm) == .chromium)
@@ -166,7 +166,7 @@ struct ProtectedVideosTests {
         #expect(whole.mixedSite(for: fandangoFilm) == nil && whole.engine(for: fandangoFilm) == .webKit)
     }
 
-    @Test func fandangoPageIsItsPlayPath() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/588")) func fandangoPageIsItsPlayPath() {
         let key = "athome.fandango.com/content/browse/play/7236/PURCHASED_CONTENT"
         #expect(sites.pageKey(for: fandangoFilm) == key)
         // The query (where to go back to) isn't the film.
@@ -191,7 +191,7 @@ struct ProtectedVideosTests {
 
     /// Its session is in cookies on ".fandango.com" (names are base64 of "myvudu.sessionKey" and
     /// the like): they go along, or the page arrives signed out.
-    @Test func fandangoSessionCookiesAreCopied() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/588")) func fandangoSessionCookiesAreCopied() throws {
         let site = try #require(sites.mixedSite(for: fandangoFilm))
         #expect(ProtectedVideoHandoff.cookieDomains(for: site) == ["athome.fandango.com", "fandango.com"])
         let answer = """
@@ -486,7 +486,7 @@ struct ProtectedVideosTests {
         return context
     }
 
-    @Test func aFramesRequestCountsForItsPage() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/588")) func aFramesRequestCountsForItsPage() throws {
         let page = try framedPage()
         func bool(_ js: String) -> Bool { page.evaluateScript(js).toBool() }
         func text(_ js: String) -> String { page.evaluateScript(js).toString() }

@@ -1,3 +1,4 @@
+# promise: #588
 # A player that is a frame of its page (Fandango at Home's player_frame.html) asks for Widevine in
 # that frame, not in the page. The request counts for the page (WidevineSignal,
 # docs/protected-media.md): the Site Control Center offers the Safari's Engine switch, which it

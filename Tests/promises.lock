@@ -1223,6 +1223,11 @@
 #577   Packages/CraCore/Tests/CraCoreTests/FindCommandTests.swift::findCommandsAreTheBarsToAnswer  cf4d50b13e64
 #577   Tests/Scenarios/little-window-find.scenario  c625f6c437bb
 #578   Tests/Scenarios/extension-normal-window.scenario  eb942cee6d0d
+#588   Packages/CraCore/Tests/CraCoreTests/ProtectedVideosTests.swift::aFramesRequestCountsForItsPage  0922d6cc3626
+#588   Packages/CraCore/Tests/CraCoreTests/ProtectedVideosTests.swift::fandangoAtHomeIsMixed  607c5909c10a
+#588   Packages/CraCore/Tests/CraCoreTests/ProtectedVideosTests.swift::fandangoPageIsItsPlayPath  652264e70a77
+#588   Packages/CraCore/Tests/CraCoreTests/ProtectedVideosTests.swift::fandangoSessionCookiesAreCopied  141115c66d55
+#588   Tests/Scenarios/widevine-in-a-frame.scenario  6cfe915f3c8e
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
 #590   Tests/Scenarios/view-history.scenario  d890566954b5
