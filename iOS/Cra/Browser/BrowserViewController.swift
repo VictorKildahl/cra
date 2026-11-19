@@ -489,10 +489,16 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         refreshTabStack()
     }
 
-    func show(_ tab: MobileTab) {
+    /// The tab's page, following the app's site settings.
+    func page(for tab: MobileTab) -> WebPage {
         let page = store.page(for: tab)
         page.siteOptions = { [weak self] host in self?.settings.value.options(for: host) ?? MobileSiteOptions() }
         page.appLinks = { [weak self] in self?.settings.value.openAppLinksIn ?? .nativeApp }
+        return page
+    }
+
+    func show(_ tab: MobileTab) {
+        let page = self.page(for: tab)
         guard page !== shownPage else { return }
         closeReader()
         dropBlockerNotices()
@@ -1093,6 +1099,19 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func webPage(_ page: WebPage, openInNewTab url: URL) {
         incognitoSearch = store.tabs.first(where: { $0.id == page.tabID })?.isIncognito ?? false
         open(url.absoluteString)
+    }
+
+    /// Arc Search's "Open in Background Tab": the link loads in a tab at the end of the row and
+    /// the page stays on screen. An incognito page has no such row (`MobileLinkMenu`).
+    func webPage(_ page: WebPage, openInBackground url: URL) {
+        guard !page.isIncognito else { return webPage(page, openInNewTab: url) }
+        let tab = store.add(url: url.absoluteString, title: "")
+        let background = self.page(for: tab)
+        // Its title and icon reach the row while it loads off screen.
+        background.delegate = self
+        background.load(url.absoluteString)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        refreshTabStack()
     }
 
     func webPage(_ page: WebPage, createPopupWith configuration: WKWebViewConfiguration, request: URLRequest) -> WKWebView? {

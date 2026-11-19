@@ -44,10 +44,14 @@ final class TabStore {
         return tab
     }
 
-    /// A tab at the end of the row that is not shown (a link saved from another app).
-    func add(url: String, title: String) {
-        document.add(MobileTab(url: url, title: title, lastActive: now()))
+    /// A tab at the end of the row that is not shown (a link saved from another app, or opened
+    /// in the background).
+    @discardableResult
+    func add(url: String, title: String) -> MobileTab {
+        let tab = MobileTab(url: url, title: title, lastActive: now())
+        document.add(tab)
         changed()
+        return tab
     }
 
     func select(_ id: UUID) {

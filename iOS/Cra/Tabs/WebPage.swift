@@ -8,6 +8,8 @@ protocol WebPageDelegate: AnyObject {
     func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool)
     /// A link that asked for a new window.
     func webPage(_ page: WebPage, openInNewTab url: URL)
+    /// "Open in Background Tab" on a link: a tab in the row, the page stays on screen (#572).
+    func webPage(_ page: WebPage, openInBackground url: URL)
     /// WebKit keeps the original navigation (including POST and window.opener) in this view.
     func webPage(_ page: WebPage, createPopupWith configuration: WKWebViewConfiguration, request: URLRequest) -> WKWebView?
     func webPageDidClose(_ page: WebPage)
@@ -19,6 +21,8 @@ protocol WebPageDelegate: AnyObject {
 final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, WKScriptMessageHandler {
     let tabID: UUID
     let webView: WKWebView
+    /// The tab is incognito: its links open incognito too.
+    let isIncognito: Bool
     /// The page that opened this one as a popup. Weak: the store keeps an open tab's page
     /// (`TabStore.changed()` keeps a private popup's openers), and a closed or archived opener
     /// must not keep running off screen. WebKit then gives the popup a null `window.opener`.
@@ -51,6 +55,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     init(tab: MobileTab, configuration supplied: WKWebViewConfiguration? = nil, opener: WebPage? = nil) {
         tabID = tab.id
+        isIncognito = tab.isIncognito
         self.opener = opener
         webKitOwnsInitialNavigation = supplied != nil
         let configuration = supplied ?? WKWebViewConfiguration()

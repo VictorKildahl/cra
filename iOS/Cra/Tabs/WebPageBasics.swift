@@ -128,23 +128,29 @@ extension WebPage: WKDownloadDelegate {
 
     func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo) async -> UIContextMenuConfiguration? {
         guard let url = elementInfo.linkURL else { return nil }
+        let items = MobileLinkMenu.items(incognito: isIncognito)
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
-            UIMenu(children: [
-                UIAction(title: "Open", image: UIImage(systemName: "arrow.up.right")) { _ in self?.webView.load(URLRequest(url: url)) },
-                UIAction(title: "Open in New Tab", image: UIImage(systemName: "plus.square.on.square")) { _ in
-                    guard let self else { return }
-                    self.delegate?.webPage(self, openInNewTab: url)
-                },
-                UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in
-                    UIPasteboard.general.string = CleanURL.withoutTrackers(url.absoluteString)
-                },
-                UIAction(title: "Share...", image: UIImage(systemName: "square.and.arrow.up")) { _ in
-                    guard let self, let presenter = self.presenter else { return }
-                    let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                    share.popoverPresentationController?.sourceView = self.webView
-                    presenter.present(share, animated: true)
-                },
-            ])
+            UIMenu(children: items.map { item in
+                UIAction(title: item.title, image: UIImage(systemName: item.symbol)) { _ in self?.linkMenu(picked: item, url: url) }
+            })
+        }
+    }
+
+    private func linkMenu(picked item: MobileLinkMenu.Item, url: URL) {
+        switch item {
+        case .open:
+            webView.load(URLRequest(url: url))
+        case .openInNewTab:
+            delegate?.webPage(self, openInNewTab: url)
+        case .openInBackgroundTab:
+            delegate?.webPage(self, openInBackground: url)
+        case .copyLink:
+            UIPasteboard.general.string = CleanURL.withoutTrackers(url.absoluteString)
+        case .share:
+            guard let presenter else { return }
+            let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            share.popoverPresentationController?.sourceView = webView
+            presenter.present(share, animated: true)
         }
     }
 }

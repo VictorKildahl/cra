@@ -1172,6 +1172,11 @@
 #569   iOS/CraUITests/CertificateTests.swift::testGoBackClosesTheWarningAndLeavesThePageUnloaded  f9084acee64c
 #571   Tests/Scenarios/upload-picker-after-focus.scenario  16ab596cf4bd
 #571   Tests/Scenarios/upload-picker.scenario  c92bdec94797
+#572   Packages/CraCore/Tests/CraCoreTests/MobileLinkMenuTests.swift::aBackgroundTabJoinsTheRowUnseen  3b5597a4f374
+#572   Packages/CraCore/Tests/CraCoreTests/MobileLinkMenuTests.swift::aLinkOpensInANewOrABackgroundTab  a7b8086d6889
+#572   Packages/CraCore/Tests/CraCoreTests/MobileLinkMenuTests.swift::anIncognitoPageHasNoBackgroundTab  ee1d54c33334
+#572   iOS/CraUITests/LinkMenuTests.swift::testALinkOpensInABackgroundTab  0bbc1e9d996a
+#572   iOS/CraUITests/LinkMenuTests.swift::testAPrivateTabsLinksStayPrivate  4b4c2b864967
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::aBubbleOverTheSidebarIsOnTheWindow  3770d4c4f881
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::anAlertOverThePageIsOnThePage  39da5a1e7e35
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::elsewhereIsOff  208002bd0a23
