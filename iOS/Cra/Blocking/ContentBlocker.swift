@@ -13,7 +13,9 @@ final class ContentBlocker {
     private(set) var filters = FilterList(text: "")
     /// The domains of the lists added in Default Site Settings ▸ Block Lists (#507), blocked as ads.
     private(set) var added = MobileBlocklist(text: "")
-    /// How many rule lists the added domains were compiled into (MobileBlocklist.customChunks).
+    /// The full rules of added lists that have more than domains (#570), once read: for the count.
+    private(set) var addedFilters: [FilterList] = []
+    /// How many rule lists the added lists were compiled into: custom-0, custom-1, …
     private var addedLists = 0
     /// What the added lists were last compiled from, so the same domains aren't compiled twice.
     private var addedKey: String?
@@ -107,53 +109,115 @@ final class ContentBlocker {
     func stops(url: String, onPage pageHost: String?, with options: MobileSiteOptions) -> Bool {
         if list.stops(url: url, onPage: pageHost, with: options, filters: filters) { return true }
         guard options.blockAds, let host = URL(string: url)?.host else { return false }
-        return added.blocks(host: host)
+        return added.blocks(host: host) || addedFilters.contains { $0.blocks(url: url, onPage: pageHost) }
     }
 
-    /// Compiles the added lists' domains into rule lists of their own, which pages get from their
-    /// next load. Compiled lists are kept by WebKit under a name that carries their content, so a
-    /// launch with the same domains looks them up; ones no longer used are removed.
-    func setAdded(_ domains: [String]) {
-        let key = "\(domains.count)-\(CustomBlocklist.cacheFileName(for: domains.joined(separator: "\n")).dropLast(4))"
+    /// The added lists' full rules as read, for `stops`.
+    func setAddedFilters(_ lists: [FilterList]) {
+        addedFilters = lists
+    }
+
+    /// An added list with full rules (#570): the key its compiled rule lists are named by, and its
+    /// rules, read only when they have to be compiled.
+    struct AddedList {
+        let key: String
+        let rules: () -> BlocklistRules
+    }
+
+    /// Compiles the added lists into rule lists of their own, which pages get from their next load:
+    /// the domain lists' merged domains (#507), then each list with full rules on its own (#570).
+    /// WebKit keeps compiled lists under names that carry what they were made from, so a launch with
+    /// the same lists looks them up; a list with full rules isn't even read for that (its names say
+    /// how many it has). Ones no longer used are removed.
+    func setAdded(_ domains: [String], lists added: [AddedList] = []) {
+        let domainKey = "\(domains.count)-\(CustomBlocklist.cacheFileName(for: domains.joined(separator: "\n")).dropLast(4))"
+        let key = ([domainKey] + added.map(\.key)).joined(separator: "+")
         guard key != addedKey, let store = WKContentRuleListStore.default() else {
             readiness.addedListsCompiled()
             return releaseWaiting()
         }
         addedKey = key
         let chunks = MobileBlocklist.customChunks(domains)
-        let identifiers = chunks.indices.map { "cra-\(MobileBlocklist.customRuleListName($0))-\(key)" }
-        var lists: [String: WKContentRuleList] = [:]
-        let group = DispatchGroup()
-        for (index, chunk) in chunks.enumerated() {
-            group.enter()
-            let identifier = identifiers[index]
-            store.lookUpContentRuleList(forIdentifier: identifier) { found, _ in
-                if let found {
-                    lists[MobileBlocklist.customRuleListName(index)] = found
-                    return group.leave()
+        let domainIdentifiers = chunks.indices.map { "cra-\(MobileBlocklist.customRuleListName($0))-\(domainKey)" }
+        store.getAvailableContentRuleListIdentifiers { available in
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.addedKey == key else { return }
+                let available = available ?? []
+                var domainLists = [WKContentRuleList?](repeating: nil, count: chunks.count)
+                var ruleLists = [[WKContentRuleList?]](repeating: [], count: added.count)
+                var used = Set(domainIdentifiers)
+                let group = DispatchGroup()
+                for (index, chunk) in chunks.enumerated() {
+                    group.enter()
+                    let identifier = domainIdentifiers[index]
+                    store.lookUpContentRuleList(forIdentifier: identifier) { found, _ in
+                        if let found {
+                            domainLists[index] = found
+                            return group.leave()
+                        }
+                        DispatchQueue.global(qos: .utility).async {
+                            let rules = MobileBlocklist.rulesJSON(blocking: chunk)
+                            DispatchQueue.main.async {
+                                store.compileContentRuleList(forIdentifier: identifier, encodedContentRuleList: rules) { list, _ in
+                                    domainLists[index] = list
+                                    group.leave()
+                                }
+                            }
+                        }
+                    }
                 }
-                DispatchQueue.global(qos: .utility).async {
-                    let rules = MobileBlocklist.rulesJSON(blocking: chunk)
-                    DispatchQueue.main.async {
-                        store.compileContentRuleList(forIdentifier: identifier, encodedContentRuleList: rules) { list, _ in
-                            if let list { lists[MobileBlocklist.customRuleListName(index)] = list }
+                for (n, list) in added.enumerated() {
+                    if let names = MobileBlocklist.compiledRuleLists(key: list.key, in: available) {
+                        used.formUnion(names)
+                        ruleLists[n] = Array(repeating: nil, count: names.count)
+                        for (j, name) in names.enumerated() {
+                            group.enter()
+                            store.lookUpContentRuleList(forIdentifier: name) { found, _ in
+                                ruleLists[n][j] = found
+                                group.leave()
+                            }
+                        }
+                        continue
+                    }
+                    group.enter()
+                    DispatchQueue.global(qos: .utility).async {
+                        let rules = list.rules()
+                        let json = MobileBlocklist.customRuleLists(domains: [], filters: [rules.filters]).map { $0.json() }
+                        DispatchQueue.main.async {
+                            let names = json.indices.map { MobileBlocklist.ruleListIdentifier(key: list.key, index: $0, count: json.count) }
+                            used.formUnion(names)
+                            ruleLists[n] = Array(repeating: nil, count: names.count)
+                            for (j, name) in names.enumerated() {
+                                group.enter()
+                                store.compileContentRuleList(forIdentifier: name, encodedContentRuleList: json[j]) { compiled, error in
+                                    if let error { NSLog("Cra: added list %@ rule list %d didn't compile: %@", list.key, j, String(describing: error)) }
+                                    ruleLists[n][j] = compiled
+                                    group.leave()
+                                }
+                            }
                             group.leave()
                         }
                     }
                 }
-            }
-        }
-        group.notify(queue: .main) { [weak self] in
-            guard let self, self.addedKey == key else { return }
-            for name in self.compiled.keys where name.hasPrefix("custom-") { self.compiled[name] = nil }
-            self.compiled.merge(lists) { $1 }
-            self.addedLists = chunks.count  // a chunk that failed to compile is skipped by apply
-            self.added = MobileBlocklist(text: domains.joined(separator: "\n"))
-            self.readiness.addedListsCompiled()
-            self.releaseWaiting()
-            store.getAvailableContentRuleListIdentifiers { names in
-                for name in names ?? [] where name.hasPrefix("cra-custom-") && !identifiers.contains(name) {
-                    store.removeContentRuleList(forIdentifier: name) { _ in }
+                group.notify(queue: .main) { [weak self] in
+                    guard let self, self.addedKey == key else { return }
+                    // A rule list that failed to compile is left out; the rest are named in order.
+                    let lists = (domainLists + ruleLists.flatMap { $0 }).compactMap { $0 }
+                    for name in self.compiled.keys where name.hasPrefix("custom-") { self.compiled[name] = nil }
+                    for (index, list) in lists.enumerated() { self.compiled[MobileBlocklist.customRuleListName(index)] = list }
+                    self.addedLists = lists.count
+                    self.added = MobileBlocklist(text: domains.joined(separator: "\n"))
+                    self.readiness.addedListsCompiled()
+                    self.releaseWaiting()
+                    store.getAvailableContentRuleListIdentifiers { names in
+                        DispatchQueue.main.async { [weak self] in
+                            // A later call may be compiling lists of its own by now.
+                            guard self?.addedKey == key else { return }
+                            for name in names ?? [] where name.hasPrefix("cra-custom-") && !used.contains(name) {
+                                store.removeContentRuleList(forIdentifier: name) { _ in }
+                            }
+                        }
+                    }
                 }
             }
         }

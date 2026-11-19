@@ -1,0 +1,12 @@
+! Cra block list rules (added in Settings): the list as fetched, below these three lines.
+! url: https://lists.example/regional.txt
+! fetched: 2026-11-01T06:00:00Z
+[Adblock Plus 2.0]
+! Title: Regional list
+||ads.example^
+/banner/ad-loader.js$script
+@@||ads.example/ok.js
+##.sponsored-box
+news.example##.promo
+example.com##+js(nowoif)
+0.0.0.0 hosts.example

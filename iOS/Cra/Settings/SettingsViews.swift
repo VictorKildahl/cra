@@ -449,7 +449,7 @@ struct BlockListsView: View {
                 }
                 .accessibilityIdentifier("block-lists-add")
             } footer: {
-                Text("Add a list to block more, like ads in your country. Cra uses its domain rules (hosts files, domain lists and Adblock Plus “||domain^” rules) where Block Ads is on, and fetches it again each day.")
+                Text("Add a list to block more, like ads in your country. Cra uses hosts files, domain lists and Adblock Plus lists such as EasyList, with their path and element-hiding rules, where Block Ads is on, and fetches each list again every day. Rules the iPhone’s blocker can’t run, like scriptlets, are left out and counted.")
             }
             .settingsRow()
         }
@@ -484,8 +484,9 @@ struct BlockListsView: View {
                     if let failure = lists.failures[address] {
                         Text(failure).foregroundStyle(.red)
                     } else if let list {
-                        Text(CustomBlocklist.summary(domains: list.domains.count, skippedRules: list.skippedRules)
-                             + " · Updated " + list.fetched.formatted(.relative(presentation: .named)))
+                        // A list with full rules (#570) says how many apply once they're read.
+                        let summary = lists.rules[address].map(CustomBlocklist.summary) ?? "Reading the list…"
+                        Text(summary + " · Updated " + list.fetched.formatted(.relative(presentation: .named)))
                     } else {
                         Text("Fetching…")
                     }

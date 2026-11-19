@@ -1,0 +1,7 @@
+# Cra block list (added in Settings). One domain per line; a domain also blocks its subdomains.
+# url: https://lists.example/regional.txt
+# title: Regional list
+# fetched: 2026-11-01T06:00:00Z
+# skipped: 5
+ads.example
+hosts.example

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
-(PasskeyTests), a plain-http page and one to come back to from a refused address (PlainHTTPTests),
+(PasskeyTests), a block list and the script it stops (BlockingTests), a plain-http page and one to come back to from a refused address (PlainHTTPTests),
 links and a script redirect to other apps' addresses (ExternalLinkTests) and, given a certificate, the same pages over
 HTTPS with that certificate, which the simulator can't verify (CertificateTests). No external
 requests."""
@@ -23,6 +23,15 @@ class PopupHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         if cookie:
             self.send_header('Set-Cookie', cookie)
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def text(self, body, content_type='text/plain'):
+        encoded = body.encode()
+        self.send_response(200)
+        self.send_header('Content-Type', f'{content_type}; charset=utf-8')
+        self.send_header('Content-Length', str(len(encoded)))
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(encoded)
 
@@ -93,6 +102,21 @@ function createPasskey() {
             # A script sends the page to a mailto: address with no tap.
             self.page('<title>Scheme Redirect</title><h1>Scheme Redirect</h1>'
                       "<script>setTimeout(() => { location.href = 'mailto:fixture@cra.test'; }, 300);</script>")
+        elif url.path == '/cra-570/list.txt':
+            # A block list in Adblock Plus syntax (BlockingTests, #570): a path rule for a script on
+            # a host no list has, a hiding rule, and a scriptlet Cra can't run.
+            self.text('[Adblock Plus 2.0]\n! Title: Cra test list 570\n'
+                      '/cra-570-ads/loader.js$script\n##.cra-570-banner\ncra.localhost##+js(nowoif)\n')
+        elif url.path == '/cra-570/page':
+            # A page asking for that script from cra.localhost (the loopback by another name); its
+            # title says whether the script loaded or was stopped.
+            script = f'http://cra.localhost:{self.server.server_port}/cra-570-ads/loader.js'
+            self.page('<title>waiting</title><h1>Path rule</h1>'
+                      f'<script src="{script}" onload="document.title=\'loader-ran\'" '
+                      'onerror="document.title=\'loader-stopped\'"></script>')
+        elif url.path == '/cra-570-ads/loader.js':
+            # What that path rule stops; let through, it loads.
+            self.text('window.craLoaderRan = true;\n', 'text/javascript')
         elif url.path == '/untrusted':
             self.page('<title>Untrusted Fixture</title><h1>Untrusted Fixture</h1>')
         elif url.path == '/checkout':

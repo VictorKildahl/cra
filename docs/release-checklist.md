@@ -453,6 +453,14 @@ built release app with a test profile. Note anything that fails in the release's
   filter them: the Mac this was built on resolves both to a DNS sinkhole. CraCore's FilterListTests
   and the UI test `testAnAdLoaderFromAnUnlistedDomainIsStoppedByItsPath` pin the rules themselves.
 
+- **#570, added lists:** on a real iPhone, add `https://easylist.to/easylist/easylist.txt` under
+  Default Site Settings ▸ Block Lists. Its row says "N rules · M rules Cra can’t use" within a few
+  seconds of the fetch, the next page load has its rules (a news site loses its ad slots), and a
+  relaunch opens the first page without a wait (the compiled lists are looked up, not compiled
+  again). Needs a phone for WebKit's compile time and the real list: CraCore's
+  `AddedListRulesTests` compile a list of EasyList's shape on the Mac, and
+  `testAnAddedListsPathRuleStopsAScriptFromAnUnlistedDomain` pins a served list in the simulator.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into

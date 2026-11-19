@@ -313,6 +313,57 @@ final class BlockingTests: BrowserTestCase {
         keep("ad-loader-blocked")
     }
 
+    // promise: #570
+    /// A list added under Block Lists applies its path rules, not only its domains (#570). The list,
+    /// served by the local fixture server, has a path rule for a script on `cra.localhost`, which no
+    /// list has, a hiding rule and a scriptlet Cra can't run. Its row says so; then a reload of the
+    /// page stops the script (the tab's title says which of onload/onerror ran) and the menu counts it.
+    /// Before #570 the list had no domains, so its fetch failed and the script loaded.
+    func testAnAddedListsPathRuleStopsAScriptFromAnUnlistedDomain() throws {
+        let base = ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765"
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        // Added as Add List would, but over http: the fixture server is plain http on the loopback,
+        // which the app's fetch may reach and Add List refuses to type in.
+        try #"{"hasSeenOnboarding": true, "hasSeenBlockTip": true, "customBlocklists": ["\#(base)/cra-570/list.txt"]}"#
+            .write(to: data.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
+        // The page comes from the fixture server too: XCUITest drops the quotes its onerror needs.
+        app.launchArguments = ["-CraDataDir", data.path, "-CraOpenURL", base + "/cra-570/page", "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("Path rule")
+
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
+        app.buttons["setting-global-site-settings"].tap()
+        XCTAssertTrue(app.buttons["setting-block-lists"].waitForExistence(timeout: 5))
+        app.buttons["setting-block-lists"].tap()
+        XCTAssertTrue(app.staticTexts["Cra test list 570"].waitForExistence(timeout: 30), "the list was fetched")
+        let summary = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "2 rules · 1 rule Cra can’t use · ")).firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 10), "the row says what the list applies")
+        keep("added-list-full-rules")
+        app.buttons["Done"].tap()
+
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        app.buttons["tab-card-0"].tap()
+        waitForPage("Path rule")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-reload"].waitForExistence(timeout: 5))
+        app.buttons["menu-reload"].tap()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        sleep(3)
+        app.buttons["bar-menu"].tap()
+        let footer = app.buttons["menu-reload-without-blockers"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 10))
+        XCTAssertEqual(footer.value as? String, "Cra scrubbed 1 tracker", "the added list's path rule is counted")
+        keep("added-list-path-blocked")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        app.buttons["bar-tabs"].tap()
+        let card = app.buttons["tab-card-0"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertEqual(card.label, "loader-stopped", "WebKit stopped the script")
+    }
+
     // promise: #507
     /// An added list blocks from the first page after launch (#507): its kept copy in the data
     /// folder is compiled before that page loads, even when the list can't be fetched again

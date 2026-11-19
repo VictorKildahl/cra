@@ -3,7 +3,8 @@ import Foundation
 /// Block lists the person adds on top of the one Cra ships (GitHub #507): a regional list such as
 /// ABPindo, or a bigger one such as oisd. Not in Arc, which had no blocker of its own; Cra's comes
 /// from Dia's onboarding switch, and an added list goes under that switch on the Mac and under
-/// Block Ads on the iPhone. Cra's blocker matches domains, so only a list's domain rules apply.
+/// Block Ads on the iPhone. The Mac's blocker matches domains, so only a list's domain rules apply
+/// there; the iPhone applies its other rules too (#570, BlocklistRules).
 public enum CustomBlocklist {
     /// The address a person typed, as the list's URL: https:// is assumed without a scheme. Only
     /// http(s) addresses with a dotted host, and (on the Mac, from Choose File) file URLs.
@@ -111,6 +112,21 @@ public enum CustomBlocklist {
         }
         return text
     }
+
+    /// The iPhone's row (#570): a list applied with its full rules says how many of its rules apply
+    /// (its domain lines among them) and how many can't; a list of domains says it as before.
+    public static func summary(_ rules: BlocklistRules) -> String {
+        guard rules.hasFilterRules else { return summary(domains: rules.domains.count, skippedRules: rules.skippedRules) }
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.locale = Locale(identifier: "en_US")
+        let n = { (value: Int) in f.string(from: NSNumber(value: value)) ?? String(value) }
+        var text = rules.appliedRules == 1 ? "1 rule" : "\(n(rules.appliedRules)) rules"
+        if rules.skippedRules > 0 {
+            text += " · \(n(rules.skippedRules)) " + (rules.skippedRules == 1 ? "rule" : "rules") + " Cra can’t use"
+        }
+        return text
+    }
 }
 
 /// A list's text as Cra's domain blocker reads it. Takes hosts files ("0.0.0.0 ads.example"), plain
@@ -137,52 +153,68 @@ public struct ParsedBlocklist: Equatable {
         var domains: [String] = []
         var skipped = 0
         var title: String?
-        func add(_ candidate: Substring) -> Bool {
-            guard let domain = Self.domain(candidate) else { return false }
-            if seen.insert(domain).inserted { domains.append(domain) }
-            return true
-        }
         for raw in text.split(whereSeparator: \.isNewline) {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("[") { continue }
-            let isHiding = Self.isHidingRule(line)
-            if line.hasPrefix("!") || (line.hasPrefix("#") && !isHiding) {
-                if title == nil, let named = Self.title(inComment: line) { title = named }
-                continue
+            switch Self.classify(raw.trimmingCharacters(in: .whitespaces)) {
+            case .ignored: continue
+            case .comment(let named):
+                if title == nil, let named { title = named }
+            case .domains(let names, _):
+                for domain in names where seen.insert(domain).inserted { domains.append(domain) }
+            case .unusable:
+                skipped += 1
             }
-            if isHiding || line.hasPrefix("@@") { skipped += 1; continue }
-            if line.hasPrefix("||") {
-                if !Self.addAdblockRule(line.dropFirst(2), add) { skipped += 1 }
-                continue
-            }
-            if line.hasPrefix("address=/") || line.hasPrefix("server=/") || line.hasPrefix("local=/") {
-                let parts = line.split(separator: "/", omittingEmptySubsequences: false)
-                if parts.count < 2 || !add(parts[1]) { skipped += 1 }
-                continue
-            }
-            // Hosts files and plain lists: a comment can follow the entries.
-            let entry = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
-            let words = entry.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            guard let first = words.first else { continue }
-            if words.count > 1, Self.isAddress(first) {
-                for word in words.dropFirst() { _ = add(word) }  // localhost and the like are dropped
-                continue
-            }
-            if words.count == 1 {
-                let name = first.hasPrefix("*.") ? first.dropFirst(2) : first
-                if add(name) { continue }
-                if Self.isAddress(first) || ["localhost", "local", "broadcasthost"].contains(first.lowercased()) { continue }
-            }
-            skipped += 1
         }
         self.title = title
         self.domains = domains
         skippedRules = skipped
     }
 
+    /// What one line of a list is to the domain blocker. BlocklistRules reads lines the same way.
+    enum Line: Equatable {
+        /// Blank, a "[Adblock Plus 2.0]" header, or a hosts entry for localhost and the like.
+        case ignored
+        case comment(title: String?)
+        /// Blocked by domain. `adblock` for an Adblock Plus "||domain^" rule, false for a hosts,
+        /// plain, wildcard or dnsmasq line. A hosts line's names can all be dropped (localhost).
+        case domains([String], adblock: Bool)
+        /// Not a domain rule. `adblock` when it may be one of Adblock Plus's other rules (hiding,
+        /// exception, path), false for a dnsmasq line without a domain.
+        case unusable(adblock: Bool)
+    }
+
+    /// `line` is trimmed.
+    static func classify(_ line: String) -> Line {
+        if line.isEmpty || line.hasPrefix("[") { return .ignored }
+        let isHiding = isHidingRule(line)
+        if line.hasPrefix("!") || (line.hasPrefix("#") && !isHiding) { return .comment(title: title(inComment: line)) }
+        if isHiding || line.hasPrefix("@@") { return .unusable(adblock: true) }
+        if line.hasPrefix("||") {
+            return adblockDomain(line.dropFirst(2)).map { .domains([$0], adblock: true) } ?? .unusable(adblock: true)
+        }
+        if line.hasPrefix("address=/") || line.hasPrefix("server=/") || line.hasPrefix("local=/") {
+            let parts = line.split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count >= 2, let name = domain(parts[1]) else { return .unusable(adblock: false) }
+            return .domains([name], adblock: false)
+        }
+        // Hosts files and plain lists: a comment can follow the entries.
+        let entry = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        let words = entry.split(whereSeparator: { $0 == " " || $0 == "\t" })
+        guard let first = words.first else { return .ignored }
+        if words.count > 1, isAddress(first) {
+            return .domains(words.dropFirst().compactMap(domain), adblock: false)  // localhost and the like are dropped
+        }
+        if words.count == 1 {
+            let name = first.hasPrefix("*.") ? first.dropFirst(2) : first
+            if let name = domain(name) { return .domains([name], adblock: false) }
+            if isAddress(first) || ["localhost", "local", "broadcasthost"].contains(first.lowercased()) { return .ignored }
+        }
+        return .unusable(adblock: true)
+    }
+
     /// An element-hiding rule ("##.ad", "site.example##.ad", "#@#", "#?#", …), told apart from
     /// a hosts file's "## comment" and "#####" lines: a selector never starts with a space or "#".
     static func isHidingRule(_ line: String) -> Bool {
+        guard line.utf8.contains(UInt8(ascii: "#")) else { return false }
         let markers = ["##", "#@#", "#?#", "#$#", "#%#"]
         guard line.hasPrefix("#") else { return markers.contains { line.contains($0) } }
         if let marker = markers.dropFirst().first(where: { line.hasPrefix($0) }) { return line.count > marker.count }
@@ -191,17 +223,17 @@ public struct ParsedBlocklist: Equatable {
     }
 
     /// "||ads.example^" or "||ads.example^$third-party": the domain and its subdomains.
-    private static func addAdblockRule(_ rule: Substring, _ add: (Substring) -> Bool) -> Bool {
+    private static func adblockDomain(_ rule: Substring) -> String? {
         let parts = rule.split(separator: "$", maxSplits: 1, omittingEmptySubsequences: false)
         var pattern = parts[0]
         if pattern.hasSuffix("^|") { pattern = pattern.dropLast() }
-        guard pattern.hasSuffix("^") else { return false }
+        guard pattern.hasSuffix("^") else { return nil }
         pattern = pattern.dropLast()
         if parts.count > 1 {
             let options = parts[1].split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-            guard options.allSatisfy(wholeDomainOptions.contains) else { return false }
+            guard options.allSatisfy(wholeDomainOptions.contains) else { return nil }
         }
-        return add(pattern)
+        return domain(pattern)
     }
 
     private static func title(inComment line: String) -> String? {
@@ -220,12 +252,26 @@ public struct ParsedBlocklist: Equatable {
     /// A blockable domain name, lowercased without a trailing dot; nil for an address, a bare name
     /// (localhost) or anything with a path, wildcard or other character a host can't have.
     static func domain(_ word: Substring) -> String? {
-        var name = word.lowercased()
-        while name.hasSuffix(".") { name.removeLast() }
-        guard name.count <= 253, name.contains("."), !name.hasPrefix("."), !name.hasPrefix("-"), !name.contains(".."),
-              name.allSatisfy({ ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "-" || $0 == "." || $0 == "_" }),
-              !isAddress(Substring(name)), name != "localhost.localdomain"
+        // By bytes: big lists such as EasyList ask this hundreds of thousands of times.
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(word.utf8.count)
+        for byte in word.utf8 {
+            switch byte {
+            case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "0")...UInt8(ascii: "9"),
+                 UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"):
+                bytes.append(byte)
+            case UInt8(ascii: "A")...UInt8(ascii: "Z"):
+                bytes.append(byte + 32)
+            default:
+                return nil
+            }
+        }
+        while bytes.last == UInt8(ascii: ".") { bytes.removeLast() }
+        guard bytes.count <= 253, bytes.contains(UInt8(ascii: ".")), bytes.first != UInt8(ascii: "."), bytes.first != UInt8(ascii: "-")
         else { return nil }
+        for index in bytes.indices.dropFirst() where bytes[index] == UInt8(ascii: ".") && bytes[index - 1] == UInt8(ascii: ".") { return nil }
+        let name = String(decoding: bytes, as: UTF8.self)
+        guard !isAddress(Substring(name)), name != "localhost.localdomain" else { return nil }
         return name
     }
 }

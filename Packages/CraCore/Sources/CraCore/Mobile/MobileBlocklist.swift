@@ -75,6 +75,7 @@ public struct MobileBlocklist {
 
     /// Domains of the lists added in Default Site Settings ▸ Block Lists (#507), in rule lists
     /// WebKit compiles: it stops at 150,000 rules a list, and big lists such as oisd go past that.
+    /// Lists with more than domains add rule lists of their own (#570, `customRuleLists`).
     public static let customChunkSize = 50_000
 
     public static func customChunks(_ domains: [String]) -> [[String]] {
@@ -82,6 +83,66 @@ public struct MobileBlocklist {
     }
 
     public static func customRuleListName(_ index: Int) -> String { "custom-\(index)" }
+
+    /// One of the rule lists made from the added lists: some of their merged domains, or some of one
+    /// list's full rules (#570) followed by all of that list's exceptions.
+    public enum CustomRuleList: Equatable {
+        case domains([String])
+        case filters(rules: ArraySlice<FilterList.Rule>, exceptions: ArraySlice<FilterList.Rule>)
+
+        public var ruleCount: Int {
+            switch self {
+            case .domains(let domains): return domains.count
+            case .filters(let rules, let exceptions): return rules.count + exceptions.count
+            }
+        }
+
+        public func json() -> String {
+            switch self {
+            case .domains(let domains): return MobileBlocklist.rulesJSON(blocking: domains)
+            case .filters(let rules, let exceptions): return FilterList.json(rules + exceptions)
+            }
+        }
+    }
+
+    /// Every rule list the added lists make, in the order they're named custom-0, custom-1, …: the
+    /// merged domains in lists of 50,000, then each list with full rules in lists of 50,000 rules
+    /// plus its exceptions (at most `BlocklistRules.maxExceptions`), so none passes WebKit's 150,000.
+    public static func customRuleLists(domains: [String], filters: [FilterList], chunkSize: Int = customChunkSize) -> [CustomRuleList] {
+        var lists = customChunks(domains).map(CustomRuleList.domains)
+        for list in filters {
+            let rules = list.blocking + list.hiding
+            let exceptions = list.exceptions.prefix(BlocklistRules.maxExceptions)
+            for start in stride(from: 0, to: rules.count, by: chunkSize) {
+                lists.append(.filters(rules: rules[start..<min(start + chunkSize, rules.count)], exceptions: exceptions))
+            }
+        }
+        return lists
+    }
+
+    /// The name WebKit keeps the `index`-th of a list's `count` rule lists under (#570). The count is
+    /// in the name, so a launch can tell from the names alone that all of them were compiled, and
+    /// look them up without reading the list.
+    public static func ruleListIdentifier(key: String, index: Int, count: Int) -> String {
+        "cra-custom-rules-\(key)-\(index)of\(count)"
+    }
+
+    /// A list's compiled rule lists among `available`, in order; nil unless every one is there.
+    public static func compiledRuleLists(key: String, in available: [String]) -> [String]? {
+        let prefix = "cra-custom-rules-\(key)-"
+        var found: [Int: String] = [:]
+        var count: Int?
+        for name in available where name.hasPrefix(prefix) {
+            let parts = name.dropFirst(prefix.count).split(separator: "o")
+            guard parts.count == 2, parts[1].hasPrefix("f"), let index = Int(parts[0]), let total = Int(parts[1].dropFirst()),
+                  total > 0, index < total, count == nil || count == total
+            else { return nil }
+            count = total
+            found[index] = name
+        }
+        guard let count, found.count == count else { return nil }
+        return (0..<count).compactMap { found[$0] }
+    }
 
     /// The rule lists a page on a site with `options` gets, by name. The added lists count as ads.
     public static func ruleLists(for options: MobileSiteOptions, customLists: Int = 0) -> [String] {

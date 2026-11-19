@@ -9,8 +9,14 @@ import Foundation
 /// procedural selectors, `redirect=`, `csp=`, lookarounds, …) is counted in `skippedRules`.
 ///
 /// The iPhone compiles Cra's own list (resources/blocklist/filters.txt) into its Block Ads rule
-/// list. Nothing is fetched or sent: the list ships with the app.
-public struct FilterList {
+/// list. Lists added under Block Lists go through it too, each compiled into rule lists of its own
+/// (BlocklistRules, MobileBlocklist.customRuleLists).
+public struct FilterList: Equatable {
+    public static func == (a: FilterList, b: FilterList) -> Bool {
+        a.blocking == b.blocking && a.hiding == b.hiding && a.exceptions == b.exceptions
+            && a.skippedRules == b.skippedRules && a.appliedRules == b.appliedRules
+    }
+
     public struct Trigger: Equatable {
         /// WebKit's regex subset: no alternation, counted repeats or \d, ASCII only.
         public var urlFilter: String
@@ -38,6 +44,8 @@ public struct FilterList {
     public private(set) var exceptions: [Rule] = []
     /// Rules Cra can't turn into WebKit's: counted, never guessed at.
     public private(set) var skippedRules = 0
+    /// The list's lines that became rules (an exception or a hiding rule counts as one).
+    public private(set) var appliedRules = 0
     private let matcher: Matcher
 
     /// Blocks and hides first, exceptions last: WebKit's `ignore-previous-rules` undoes only the
@@ -52,11 +60,13 @@ public struct FilterList {
         var blocking: [Rule] = []
         var exceptions: [Rule] = []
         var skipped = 0
+        var applied = 0
         var generic: [String] = []
         var genericSeen = Set<String>()
         var notGeneric = Set<String>()
         var genericExceptions: [String: [String]] = [:]
         var specific: [(key: [String], unless: Bool, selectors: [String])] = []
+        var specificIndex: [SpecificKey: Int] = [:]
 
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
@@ -72,17 +82,21 @@ public struct FilterList {
                     if genericSeen.insert(selector).inserted { generic.append(selector) }
                 } else {
                     let unless = domains.only.isEmpty
-                    let key = unless ? domains.unless : domains.only
-                    if let index = specific.firstIndex(where: { $0.key == key && $0.unless == unless }) {
+                    let key = SpecificKey(domains: unless ? domains.unless : domains.only, unless: unless)
+                    // Looked up, not searched: EasyList has tens of thousands of these.
+                    if let index = specificIndex[key] {
                         specific[index].selectors.append(selector)
                     } else {
-                        specific.append((key, unless, [selector]))
+                        specificIndex[key] = specific.count
+                        specific.append((key.domains, unless, [selector]))
                     }
                 }
+                applied += 1
                 continue
             }
             if line.hasPrefix("#") { continue }  // a hosts-style comment
             guard let rules = Self.networkRules(line) else { skipped += 1; continue }
+            applied += 1
             for rule in rules {
                 if rule.action == .allow { exceptions.append(rule) } else { blocking.append(rule) }
             }
@@ -117,7 +131,37 @@ public struct FilterList {
         self.hiding = hiding
         self.exceptions = exceptions
         skippedRules = skipped
+        appliedRules = applied
         matcher = Matcher(blocking: blocking, exceptions: exceptions)
+    }
+
+    private struct SpecificKey: Hashable {
+        var domains: [String]
+        var unless: Bool
+    }
+
+    private init(blocking: [Rule], hiding: [Rule], exceptions: [Rule], skipped: Int, applied: Int) {
+        self.blocking = blocking
+        self.hiding = hiding
+        self.exceptions = exceptions
+        skippedRules = skipped
+        appliedRules = applied
+        matcher = Matcher(blocking: blocking, exceptions: exceptions)
+    }
+
+    /// Both lists as one: blocks, hides, then both lists' exceptions.
+    public func merging(_ other: FilterList) -> FilterList {
+        FilterList(blocking: blocking + other.blocking, hiding: hiding + other.hiding, exceptions: exceptions + other.exceptions,
+                   skipped: skippedRules + other.skippedRules, applied: appliedRules + other.appliedRules)
+    }
+
+    /// Rules as a WebKit rule list, brackets included.
+    public static func json<Rules: Sequence>(_ rules: Rules) -> String where Rules.Element == Rule {
+        let objects = rules.map(\.json)
+        guard let data = try? JSONSerialization.data(withJSONObject: objects, options: [.withoutEscapingSlashes]),
+              let text = String(data: data, encoding: .utf8)
+        else { return "[]" }
+        return text
     }
 
     /// Whether WebKit, given these rules, stops a request for `url` on a page of `pageHost` (nil for
@@ -130,12 +174,10 @@ public struct FilterList {
     /// The rules as WebKit's JSON objects, comma-separated without the surrounding brackets, so
     /// they can follow other rules in one list. Empty when there are none.
     public func contentRulesJSON() -> String {
-        let objects = rules.map(\.json)
-        guard !objects.isEmpty,
-              let data = try? JSONSerialization.data(withJSONObject: objects, options: [.withoutEscapingSlashes]),
-              let text = String(data: data, encoding: .utf8)
-        else { return "" }
-        return String(text.dropFirst().dropLast())
+        let all = rules
+        guard !all.isEmpty else { return "" }
+        let text = Self.json(all)
+        return text == "[]" ? "" : String(text.dropFirst().dropLast())
     }
 
     // MARK: Network rules
@@ -348,7 +390,7 @@ public struct FilterList {
     static func usableSelector(_ selector: String) -> String? {
         let trimmed = selector.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("+js("), !trimmed.hasPrefix("^"),
-              !extendedSyntax.contains(where: { trimmed.contains($0) })
+              !trimmed.utf8.contains(UInt8(ascii: ":")) || !extendedSyntax.contains(where: { trimmed.contains($0) })
         else { return nil }
         return trimmed
     }
@@ -572,14 +614,58 @@ struct RegexExpander {
 }
 
 /// Matches addresses the way the compiled rules do, to count what they stopped.
+/// An added list such as EasyList has tens of thousands of rules, so a request isn't run through
+/// every regex: each rule is filed under a word its address must contain (`token(of:)`), and a
+/// request is checked against the rules filed under its own words, plus the few that have none.
+/// Regexes are compiled the first time a rule is checked.
 private final class Matcher {
-    struct Compiled {
-        let regex: NSRegularExpression
+    /// A rule and its regex once compiled. Only used under the matcher's lock.
+    final class Indexed {
         let trigger: FilterList.Trigger
+        private var regex: NSRegularExpression??
+
+        init(_ trigger: FilterList.Trigger) { self.trigger = trigger }
+
+        func matches(_ url: String) -> Bool {
+            if regex == nil {
+                let options: NSRegularExpression.Options = trigger.caseSensitive ? [] : [.caseInsensitive]
+                regex = .some(try? NSRegularExpression(pattern: trigger.urlFilter, options: options))
+            }
+            guard let compiled = regex ?? nil else { return false }
+            return compiled.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)) != nil
+        }
     }
 
-    private let blocking: [Compiled]
-    private let exceptions: [Compiled]
+    struct Index {
+        var rules: [Indexed] = []
+        var byToken: [String: [Int]] = [:]
+        var everywhere: [Int] = []
+
+        init(_ rules: [FilterList.Rule]) {
+            for rule in rules {
+                let index = self.rules.count
+                self.rules.append(Indexed(rule.trigger))
+                if let token = Matcher.token(of: rule.trigger.urlFilter) {
+                    byToken[token, default: []].append(index)
+                } else {
+                    everywhere.append(index)
+                }
+            }
+        }
+
+        func candidates(_ tokens: [String]) -> [Indexed] {
+            var seen = Set<Int>()
+            var out: [Indexed] = []
+            for token in tokens {
+                for index in byToken[token] ?? [] where seen.insert(index).inserted { out.append(rules[index]) }
+            }
+            return out + everywhere.map { rules[$0] }
+        }
+    }
+
+    private let blocking: Index
+    private let exceptions: Index
+    private let lock = NSLock()
 
     init(blocking: [FilterList.Rule], exceptions: [FilterList.Rule]) {
         // A failed request is never a popup or the page itself.
@@ -587,21 +673,14 @@ private final class Matcher {
             let types = rule.trigger.resourceTypes
             return !(types == ["popup"] || (types == ["document"] && rule.trigger.loadContexts != ["child-frame"]))
         }
-        self.blocking = Self.compile(counted)
-        self.exceptions = Self.compile(exceptions)
-    }
-
-    private static func compile(_ rules: [FilterList.Rule]) -> [Compiled] {
-        rules.compactMap { rule in
-            let options: NSRegularExpression.Options = rule.trigger.caseSensitive ? [] : [.caseInsensitive]
-            return (try? NSRegularExpression(pattern: rule.trigger.urlFilter, options: options)).map { Compiled(regex: $0, trigger: rule.trigger) }
-        }
+        self.blocking = Index(counted)
+        self.exceptions = Index(exceptions)
     }
 
     func blocks(url: String, pageHost: String?) -> Bool {
-        guard !blocking.isEmpty, let host = URL(string: url)?.host?.lowercased() else { return false }
+        guard !blocking.rules.isEmpty, let host = URL(string: url)?.host?.lowercased() else { return false }
         let thirdParty = pageHost.map { Self.site($0) != Self.site(host) } ?? true
-        func matches(_ rule: Compiled) -> Bool {
+        func matches(_ rule: Indexed) -> Bool {
             let trigger = rule.trigger
             if trigger.loadTypes == ["third-party"] && !thirdParty { return false }
             if trigger.loadTypes == ["first-party"] && thirdParty { return false }
@@ -609,9 +688,112 @@ private final class Matcher {
                 guard let pageHost, trigger.ifDomains.contains(where: { Self.host(pageHost, isIn: $0) }) else { return false }
             }
             if let pageHost, trigger.unlessDomains.contains(where: { Self.host(pageHost, isIn: $0) }) { return false }
-            return rule.regex.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)) != nil
+            return rule.matches(url)
         }
-        return blocking.contains(where: matches) && !exceptions.contains(where: matches)
+        let tokens = Self.tokens(in: url)
+        lock.lock()
+        defer { lock.unlock() }
+        return blocking.candidates(tokens).contains(where: matches) && !exceptions.candidates(tokens).contains(where: matches)
+    }
+
+    /// An address's words: its runs of ASCII letters and digits, lowercased.
+    static func tokens(in url: String) -> [String] {
+        var tokens: [String] = []
+        var current: [UInt8] = []
+        for byte in url.utf8 {
+            switch byte {
+            case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "0")...UInt8(ascii: "9"): current.append(byte)
+            case UInt8(ascii: "A")...UInt8(ascii: "Z"): current.append(byte + 32)
+            default:
+                if !current.isEmpty { tokens.append(String(decoding: current, as: UTF8.self)); current.removeAll(keepingCapacity: true) }
+            }
+        }
+        if !current.isEmpty { tokens.append(String(decoding: current, as: UTF8.self)) }
+        return tokens
+    }
+
+    /// The prefix FilterList writes for "||": the host or a subdomain of it, so what follows starts
+    /// after "/" or ".".
+    static let hostPrefix = "^[^:]+://+([^/:]+\\.)?"
+
+    /// The longest word every address the filter matches has as a whole word: letters and digits
+    /// the filter spells out, with an edge on both sides ("/", ".", a separator class, an anchor).
+    /// nil when there is none, as for ".*". By bytes: FilterList's filters are ASCII.
+    static func token(of filter: String) -> String? {
+        // A piece is a spelled-out byte, an edge (matches only what ends a word, or an end of the
+        // address) or open (could match a letter or digit, or nothing).
+        let edge: Int16 = -1, open: Int16 = -2
+        var pieces: [Int16] = []
+        var bytes = Array(filter.utf8)[...]
+        if bytes.starts(with: hostPrefixBytes) {
+            pieces.append(edge)
+            bytes = bytes.dropFirst(hostPrefixBytes.count)
+        } else if bytes.first == UInt8(ascii: "^") {
+            pieces.append(edge)
+            bytes = bytes.dropFirst()
+        } else {
+            pieces.append(open)
+        }
+        let characters = Array(bytes)
+        var endAnchored = false
+        var index = 0
+        while index < characters.count {
+            let byte = characters[index]
+            switch byte {
+            case UInt8(ascii: "\\"):
+                guard index + 1 < characters.count else { return nil }
+                let escaped = characters[index + 1]
+                pieces.append(isWord(escaped) || escaped >= 0x80 ? open : Int16(escaped))
+                index += 2
+                continue
+            case UInt8(ascii: "["):
+                var close = index + 1
+                if close < characters.count, characters[close] == UInt8(ascii: "^") { close += 1 }
+                if close < characters.count, characters[close] == UInt8(ascii: "]") { close += 1 }
+                while close < characters.count, characters[close] != UInt8(ascii: "]") {
+                    close += characters[close] == UInt8(ascii: "\\") ? 2 : 1
+                }
+                guard close < characters.count else { return nil }
+                pieces.append(separatorSets.contains(Array(characters[index...close])) ? edge : open)
+                index = close + 1
+                continue
+            case UInt8(ascii: "*"), UInt8(ascii: "+"), UInt8(ascii: "?"):
+                // The piece before may repeat or be missing.
+                if !pieces.isEmpty { pieces[pieces.count - 1] = open }
+            case UInt8(ascii: "$") where index == characters.count - 1:
+                endAnchored = true
+            case UInt8(ascii: "."), UInt8(ascii: "("), UInt8(ascii: ")"), UInt8(ascii: "|"), UInt8(ascii: "^"), UInt8(ascii: "$"),
+                 UInt8(ascii: "{"), UInt8(ascii: "}"):
+                pieces.append(open)
+            default:
+                pieces.append(byte >= 0x80 ? open : Int16(byte))
+            }
+            index += 1
+        }
+        pieces.append(endAnchored ? edge : open)
+
+        func isWordPiece(_ piece: Int16) -> Bool { piece >= 0 && isWord(UInt8(piece)) }
+        func isEdge(_ piece: Int16) -> Bool { piece == edge || (piece >= 0 && !isWord(UInt8(piece))) }
+        var best: ArraySlice<Int16>?
+        var start = 0
+        while start < pieces.count {
+            guard isWordPiece(pieces[start]) else { start += 1; continue }
+            var end = start
+            while end < pieces.count, isWordPiece(pieces[end]) { end += 1 }
+            if start > 0, isEdge(pieces[start - 1]), end < pieces.count, isEdge(pieces[end]), end - start > (best?.count ?? 0) {
+                best = pieces[start..<end]
+            }
+            start = end
+        }
+        return best.map { word in String(decoding: word.map { UInt8($0) }, as: UTF8.self).lowercased() }
+    }
+
+    private static let hostPrefixBytes = Array(hostPrefix.utf8)
+    private static let separatorSets: Set<[UInt8]> = [Array("[/:]".utf8), Array("[^a-zA-Z0-9_.%-]".utf8)]
+
+    private static func isWord(_ byte: UInt8) -> Bool {
+        (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte) || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte)
+            || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
     }
 
     /// "*example.com" covers example.com and its subdomains.
