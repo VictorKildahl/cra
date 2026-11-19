@@ -5384,6 +5384,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             CraLog.note("window not visible to macOS, nothing in front covers it: \(coverage.summary)")
             return
         }
+        // What covered it, so a Picture in Picture nobody expected can be told apart (a test runner's window over Cra).
+        CraLog.note("window out of sight: \(coverage.summary)")
         browsers.windowVisibilityChanged(covered: true)
     }
 

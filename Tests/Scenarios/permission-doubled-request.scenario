@@ -3,6 +3,8 @@
 # answering it ends both requests without a crash: answering one Chromium had already dropped crashed Cra
 # (#111). Not Now, so macOS is never asked.
 budget rss=900 stalls50=40
+# Chromium's stand-in camera and microphone: a Mac without any (Nightly's runners) failed the request before asking.
+arg --use-fake-device-for-media-stream
 cra://open?url=${PAGE}?n=asker
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 wait 1

@@ -54,7 +54,7 @@
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::choosingPerSite  ce4dddce6977
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::handoffRules  6eea8116562b
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::servicesOpenInWebKit  1f4f8537772e
-#66    Tests/Scenarios/webkit-drm-tabs.scenario  0c04612b16e0
+#66    Tests/Scenarios/webkit-drm-tabs.scenario  dbb8c2962c79
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::differentTopRatesAreMixed  e6736f0fff82
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::fixedRateDisplayShowsOneRate  7c3babaccb16
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::intervalsBecomeWholeHertz  7fba8a629c39
@@ -166,7 +166,7 @@
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::line  fe1dcfb4701b
 #110   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::severalTemplatesAreOneServerEach  dc2fe791c93f
 #110   Tests/Scenarios/secure-dns-default.scenario  1042904fb8ce
-#111   Tests/Scenarios/permission-doubled-request.scenario  b5196411ebdf
+#111   Tests/Scenarios/permission-doubled-request.scenario  17e7b93a6357
 #111   Tests/Scenarios/permission-element-system-denied.scenario  bd00ce2acf5e
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::arcSpaceProfiles  c9cf90d32a72
 #131   Packages/CraCore/Tests/CraCoreTests/ExtensionProfilesTests.swift::commandLineFollowsTheLoadExtensionOrder  eb3441dc88ab
@@ -829,7 +829,7 @@
 #417   Tests/AskOnPageServiceTests.swift::aStreamedAnswerReachesTheCardTenTimesASecond  575d2b3f9d9a
 #417   Tests/AskOnPageServiceTests.swift::anEchoedRequestIsAskedAgain  d1f194e424f7
 #417   Tests/Scenarios/ask-on-page-echo.scenario  9bc8e75be466
-#417   Tests/Scenarios/ask-on-page-long-answer.scenario  a2ea2f28b9b8
+#417   Tests/Scenarios/ask-on-page-long-answer.scenario  8f6bf5ed7f48
 #419   Packages/CraCore/Tests/CraCoreTests/SidebarLinkDropTests.swift::whichLinkBecomesTheTab  74f055957ef6
 #419   Packages/CraCore/Tests/CraCoreTests/SplitDropProposalTests.swift::regionTakesAnEvenShare  38941c92125d
 #419   Packages/CraCore/Tests/CraCoreTests/SplitDropProposalTests.swift::whereADropGoes  8386b61546f2
