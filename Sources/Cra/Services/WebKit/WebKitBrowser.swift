@@ -669,12 +669,53 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     // MARK: Picture in Picture (WebKit's own, the system's floating window)
 
+    /// View ▸ Picture in Picture and a Little Window's (#585: the command did nothing on a WebKit
+    /// page, which left a service's video with no way out but the sidebar player's button). The
+    /// page's video is asked in Cra's world, where the page can't have replaced the request, and
+    /// as on a Chromium page a second ask puts the video back. A script WebKit runs for the app
+    /// is a user gesture, which the request needs.
     override func requestPictureInPicture(automatic: Bool) {
-        // BrowserManager asked the page first; WebKit has no other way in.
+        if inPictureInPicture {
+            if !automatic { exitPictureInPicture() }
+            return
+        }
+        let script = PictureInPictureRequest.script(engine: .webKit, automatic: automatic, request: true)
+        MainActor.assumeIsolated {
+            webView?.callAsyncJavaScript("return await (\n\(script)\n);", arguments: [:], in: nil, in: Self.world) { [weak self] r in
+                MainActor.assumeIsolated {
+                    guard let self, !self.closed else { return }
+                    let answer = PictureInPictureRequest.Answer((try? r.get()) as? String)
+                    guard let line = PictureInPictureRequest.logLine(answer, automatic: automatic) else { return }
+                    CraLog.note("WebKit page \(self.incognitoPage ? "(incognito)" : CraLog.host(self.currentURL)) \(line)")
+                }
+            }
+        }
     }
 
     override func exitPictureInPicture() {
         runPictureInPicture("if (document.pictureInPictureElement) document.exitPictureInPicture();")
+    }
+
+    /// The system Picture in Picture window's ↖ button: WebKit says so here, before it moves the
+    /// video back into the page, and Safari selects the video's tab at this point. The window's ✕
+    /// doesn't come this way (it pauses the video and puts it back). WebKit's private UI delegate
+    /// call, like the preference that turns Picture in Picture on.
+    @objc(_webViewFullscreenMayReturnToInline:)
+    func webViewFullscreenMayReturnToInline(_ webView: WKWebView) {
+        MainActor.assumeIsolated {
+            guard inPictureInPicture, !closed else { return }
+            (delegate as? WebKitPageDelegate)?.webKitPageReturnsFromPictureInPicture(self)
+        }
+    }
+
+    /// `cra://debug?pipBackToTab=1`: the ↖ button as WebKit reports it. The button itself is in the
+    /// system's window (PIPAgent's, another process), which a scenario can't press.
+    func debugPressPictureInPictureBackToTab() {
+        MainActor.assumeIsolated {
+            guard let web = webView, inPictureInPicture, let ui = web.uiDelegate as? NSObject else { return }
+            let selector = NSSelectorFromString("_webViewFullscreenMayReturnToInline:")
+            if ui.responds(to: selector) { ui.perform(selector, with: web) }
+        }
     }
 
     override func closePictureInPicture() {

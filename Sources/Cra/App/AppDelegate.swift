@@ -2286,6 +2286,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // pipBackToTab=1: the ↖ (back to tab) button of the system's Picture in Picture window, as
+            // WebKit reports it for the WebKit page whose video is out (#585).
+            if dict["pipBackToTab"] != nil {
+                for rt in main.browsers.runtimes.values { (rt.browser as? WebKitBrowser)?.debugPressPictureInPictureBackToTab() }
+                return
+            }
             // The sidebar player without the pointer: play/pause/next/previous/pip on the newest
             // card ("state" only logs), then its cards: "Cra nowPlaying[<label>] <host> playing=… prev=… next=… video=… pip=…".
             if let op = dict["nowPlaying"], let np = main.browsers.nowPlaying {

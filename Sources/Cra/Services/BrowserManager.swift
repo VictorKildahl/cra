@@ -144,7 +144,7 @@ private struct PermissionRequest {
 
 /// Creates, shows, hides and tears down CEF browsers inside a container view.
 @MainActor
-final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
+final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKitPageDelegate {
     let store: SidebarStore
     let favicons: FaviconCache
     let container: NSView
@@ -1108,6 +1108,20 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         runtimes[tabID]?.browser.exitPictureInPicture()
     }
 
+    /// A WebKit page's video is in the system's Picture in Picture window, whose ↖ button is its
+    /// "back to tab": the tab comes to the front, in its window, as Back to Tab on Cra's own
+    /// window does for a Chromium page. Until then the button did nothing: WebKit asks for the page
+    /// to be shown before it moves the video, and with the tab still hidden the window stayed up
+    /// (#585). WebKit puts the video back itself.
+    func webKitPageReturnsFromPictureInPicture(_ browser: CraBrowser) {
+        guard let id = tabID(of: browser) else { return }
+        log(id, "Picture in Picture: back to tab")
+        runtimes[id]?.pendingAutoPictureInPicture = false
+        store.selectTab(id, window: windowID)
+        container.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     /// Back on the tab: the video comes home. Arc closes its Picture in Picture
     /// window whenever the tab it came from is in front again, however it was
     /// opened (observed on 1.168: the window went away the moment its source
@@ -1385,35 +1399,31 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     /// The gesture goes only to a page that has such a video: a first look runs without one. A
     /// user gesture is a page's licence to open pop-ups for the next few seconds, and leaving any
     /// tab handed one out, so a page could open a window as it was left (#357).
+    ///
+    /// Which video, and what a page's `disablePictureInPicture` means to the ask, is
+    /// `PictureInPictureRequest`'s: Netflix's player sets it, and on a WebKit page the video is taken
+    /// all the same. An ask that opens nothing says why in the log.
     private func requestPictureInPicture(_ id: UUID, automatic: Bool) {
         guard let browser = runtimes[id]?.browser else { return }
-        let script = { (request: Bool) in """
-        ((auto, request) => {
-          if (document.pictureInPictureElement) return 'ok';
-          const area = v => { const r = v.getBoundingClientRect(); return r.width * r.height; };
-          const v = [...document.querySelectorAll('video')].filter(v => !v.disablePictureInPicture && v.readyState >= 1)
-            .filter(v => !auto || (!v.paused && !v.ended && !v.muted && v.volume > 0 && v.videoWidth > 0 && area(v) >= 20000))
-            .sort((a, b) => ((b.paused ? 0 : 1) - (a.paused ? 0 : 1)) || (area(b) - area(a)))[0];
-          if (!v) return 'none';
-          return request ? v.requestPictureInPicture().then(() => 'ok', e => e.name + ': ' + e.message) : 'video';
-        })(\(automatic), \(request))
-        """ }
-        func evaluate(_ request: Bool, then: @escaping (String?) -> Void) {
-            let params: [String: Any] = ["expression": script(request), "returnByValue": true, "awaitPromise": true, "userGesture": request]
+        let webKit = browser is WebKitBrowser
+        func evaluate(_ request: Bool, then: @escaping (PictureInPictureRequest.Answer) -> Void) {
+            let script = PictureInPictureRequest.script(engine: webKit ? .webKit : .chromium, automatic: automatic, request: request)
+            let params: [String: Any] = ["expression": script, "returnByValue": true, "awaitPromise": true, "userGesture": request]
             let json = String(data: try! JSONSerialization.data(withJSONObject: params), encoding: .utf8)!
             browser.sendDevToolsMethod("Runtime.evaluate", params: json) { result, _ in
-                DispatchQueue.main.async { then(Self.stringResult(result)) }
+                DispatchQueue.main.async { then(.init(Self.stringResult(result))) }
             }
         }
-        evaluate(false) { [weak browser] look in
-            guard look == "video" else {
-                if look == nil || look == "none" { browser?.requestPictureInPicture(automatic: automatic) }
-                return
-            }
-            evaluate(true) { [weak browser] answer in
-                if answer == nil || answer == "none" { browser?.requestPictureInPicture(automatic: automatic) }
-                else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture request failed: %@", answer) }
-            }
+        // The page was asked: a Chromium page's frames get the engine's request, a WebKit page
+        // has no other way in.
+        let finish = { [weak self, weak browser] (answer: PictureInPictureRequest.Answer) in
+            let step = PictureInPictureRequest.step(after: answer)
+            if step == .frames, !webKit { browser?.requestPictureInPicture(automatic: automatic); return }
+            if let line = PictureInPictureRequest.logLine(answer, automatic: automatic) { self?.log(id, line) }
+        }
+        evaluate(false) { look in
+            guard PictureInPictureRequest.step(after: look) == .request else { return finish(look) }
+            evaluate(true, then: finish)
         }
     }
 

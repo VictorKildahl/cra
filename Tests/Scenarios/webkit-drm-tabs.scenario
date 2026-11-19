@@ -10,6 +10,7 @@
 # Picture in Picture while it runs behind your windows.
 budget rss=900 stalls50=40
 pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "autoPictureInPictureSites": {"localhost": false}}
 
 # A Chromium tab, then a service: WebKit, Safari's user agent, the page's world without Cra's.
 cra://open?url=${PAGE}?n=chromium
@@ -88,9 +89,11 @@ cra://debug?nowPlaying=toggle
 wait 1
 cra://debug?nowPlaying=state&label=paused
 expect-log Cra nowPlaying\[paused\] localhost playing=0
-# Playing on out of sight (Spotify while you browse other tabs): the card stays playing. No
-# Picture in Picture for this video, so leaving its tab pops nothing out over your screen.
-cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.disablePictureInPicture=true,v.play().then(()=>'again')))(document.querySelector('video'))","awaitPromise":true}
+# Playing on out of sight (Spotify while you browse other tabs): the card stays playing. Automatic
+# Picture in Picture is off for this site (the seed above, the Site Control Center's switch, #326),
+# so leaving its tab pops nothing out over your screen. A video that says disablePictureInPicture
+# no longer stays in its page by that: Netflix's says it, and leaving its tab takes it (#585).
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.querySelector('video').play().then(()=>'again')","awaitPromise":true}
 expect-log Cra cdp Runtime.evaluate .*"value":"again"
 cra://open?url=${PAGE}?n=away
 wait 5

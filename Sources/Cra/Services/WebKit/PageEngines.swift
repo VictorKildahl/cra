@@ -10,6 +10,14 @@ protocol NativePage: AnyObject {
     func owns(_ url: String) -> Bool
 }
 
+/// What only a WebKit page tells its delegate (CraBrowserDelegate is the engine bridge's).
+@MainActor
+protocol WebKitPageDelegate: AnyObject {
+    /// The system Picture in Picture window's back-to-tab button was pressed for this page's
+    /// video: WebKit is about to put the video back in the page.
+    func webKitPageReturnsFromPictureInPicture(_ browser: CraBrowser)
+}
+
 @MainActor
 enum PageEngines {
     /// The app's pages of its own (EaselBrowser), registered at launch: a browser for an address

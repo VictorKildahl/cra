@@ -1,0 +1,46 @@
+# promise: #585
+# Picture in Picture on a service's page in WebKit. View ▸ Picture in Picture did nothing there (the
+# command had no WebKit side), and a player that makes its video with disablePictureInPicture, as
+# Netflix's does, had no video Cra would ask, so the sidebar player's button and leaving its tab did
+# nothing either. The system Picture in Picture window's back-to-tab button didn't bring the tab back.
+# ${WEBKIT} is the fixture server as localhost, which this run lists as a service; the clip's sound
+# track is silent. The fixture's title says what its video last heard ("Media enterpictureinpicture").
+# No & in a script: it ends the cra:// query.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${WEBKIT}/media.html
+expect-log loaded localhost \(HTTP 200\)
+wait 2
+# As Netflix's player: the video says no to Picture in Picture, and plays.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.disablePictureInPicture=true,v.play().then(()=>['playing',v.disablePictureInPicture,'userAgentData' in navigator].join())))(document.querySelector('video'))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"playing,true,false"
+
+# View ▸ Picture in Picture takes it.
+cra://action/pictureInPicture
+expect-log enters Picture in Picture
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'out:'+document.title+':'+document.querySelector('video').webkitPresentationMode"}
+expect-log Cra cdp Runtime.evaluate .*"value":"out:Media enterpictureinpicture:picture-in-picture"
+# A second ask puts the video back, as on a Chromium page.
+cra://action/pictureInPicture
+expect-log leaves Picture in Picture
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'back:'+document.title+':'+document.querySelector('video').webkitPresentationMode"}
+expect-log Cra cdp Runtime.evaluate .*"value":"back:Media leavepictureinpicture:inline"
+
+# Leaving the tab takes it too, as it takes any video playing aloud (Netflix's film as you switch tabs).
+cra://open?url=${PAGE}?n=away
+wait 5
+cra://debug?nowPlaying=state&label=away
+expect-log Cra nowPlaying\[away\] localhost playing=1 prev=1 next=1 video=1 pip=1
+# The system window's back-to-tab button (↖), as WebKit reports it: its tab comes to the front, where
+# the video comes home, and stops. The button used to do nothing: its tab stayed hidden.
+cra://debug?pipBackToTab=1
+expect-log Picture in Picture: back to tab
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.pause(),'home:'+v.webkitPresentationMode))(document.querySelector('video'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"home:inline"
+cra://debug?checkStore=1
+reject-log refuses Picture in Picture
+reject-log WebKit page process ended

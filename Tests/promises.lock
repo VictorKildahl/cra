@@ -54,7 +54,7 @@
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::choosingPerSite  ce4dddce6977
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::handoffRules  6eea8116562b
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::servicesOpenInWebKit  1f4f8537772e
-#66    Tests/Scenarios/webkit-drm-tabs.scenario  0c04612b16e0
+#66    Tests/Scenarios/webkit-drm-tabs.scenario  e8ddf5877679
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::differentTopRatesAreMixed  e6736f0fff82
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::fixedRateDisplayShowsOneRate  7c3babaccb16
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::intervalsBecomeWholeHertz  7fba8a629c39
@@ -1181,6 +1181,14 @@
 #574   Tests/Scenarios/page-pickers.scenario  7521785768d2
 #574   Tests/Scenarios/page-print-button.scenario  4095f14bad8f
 #574   Tests/Scenarios/page-save-password.scenario  ef5590d50ccd
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::aWebKitThatRefusesAnOptedOutVideoIsAskedItsOwnWay  3b5385bb653a
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::anAskThatOpensNothingSaysWhy  3fb80bdd0ce4
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::leavingAWebKitTabTakesAnOptedOutVideo  26e6c6cacf7d
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::optedOutVideoIsFoundAndAskedOnAWebKitPage  6e36d2dba50f
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::optedOutVideoIsTakenOnWebKitOnly  15ed00cdf893
+#585   Tests/BrowserManagerLifecycleTests.swift::webKitPictureInPictureBackToTabCase  4c48bae6117d
+#585   Tests/BrowserManagerLifecycleTests.swift::webKitPictureInPictureCase  b9d991dec3f1
+#585   Tests/Scenarios/webkit-pip-opted-out.scenario  dfaa5069ce4f
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-clear-browsing-data-cancel Tests/Scenarios/clear-browsing-data-cancel.scenario  3b19c444be85
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
