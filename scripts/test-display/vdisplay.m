@@ -1,5 +1,5 @@
 // vdisplay: a virtual Retina display for test copies of Cra, alive as long as this process runs.
-//   vdisplay [width-points height-points]     default 1440 900, at 2x, named "Cra Test Display"
+//   vdisplay [width-points height-points]     default 1728 1117 (a 16" MacBook Pro), at 2x, named "Cra Test Display"
 // Prints "ready <id> <x>,<y> <w>x<h>" once the display is extended (not mirrored) below the main one, then waits.
 // Scenarios run on it with CRA_TEST_SCREEN="Cra Test Display" (scripts/test-display.sh): GitHub's macOS runners have
 // one small 1x screen, where a 1200x800 window doesn't fit and the scenarios' geometry and 2x snapshots fail.
@@ -36,8 +36,8 @@
 
 int main(int argc, const char* argv[]) {
   @autoreleasepool {
-    unsigned int width = argc > 2 ? (unsigned int)atoi(argv[1]) : 1440;
-    unsigned int height = argc > 2 ? (unsigned int)atoi(argv[2]) : 900;
+    unsigned int width = argc > 2 ? (unsigned int)atoi(argv[1]) : 1728;
+    unsigned int height = argc > 2 ? (unsigned int)atoi(argv[2]) : 1117;
     Class descriptorClass = NSClassFromString(@"CGVirtualDisplayDescriptor");
     Class displayClass = NSClassFromString(@"CGVirtualDisplay");
     if (!descriptorClass || !displayClass) {

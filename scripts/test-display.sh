@@ -1,5 +1,5 @@
 #!/bin/bash
-# test-display.sh: a virtual 1440x900 pt Retina display ("Cra Test Display") below the main one, for scenarios, kept
+# test-display.sh: a virtual 1728x1117 pt Retina display (a 16" MacBook Pro, the Macs the scenarios were set on) ("Cra Test Display") below the main one, for scenarios, kept
 # by a background vdisplay process until it is killed (or the CI job ends). Then run scenarios on it with
 #   CRA_TEST_SCREEN="Cra Test Display" scripts/scenario.sh …
 # GitHub's macOS runners have one small 1x screen: a scenario's 1200x800 window didn't fit (the page came out
