@@ -15,13 +15,15 @@ permissions:
 
 jobs:
   scenarios:
-    name: Scenarios (backdrop=${{ matrix.backdrop }})
+    name: Scenarios (backdrop=${{ matrix.backdrop }}, ${{ matrix.shard }}/4)
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
+      # Four jobs per backdrop share the list (CRA_SCENARIO_SHARD): one ran out of its hour after 118 of 321.
       matrix:
         backdrop: [layer, material]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
 
@@ -43,9 +45,10 @@ jobs:
           # Budgets and snapshots were set on a Mac; on this VM they go in the summary, and only
           # what the app does fails the job (scripts/scenario.sh).
           CRA_BUDGETS: report
+          CRA_SCENARIO_SHARD: ${{ matrix.shard }}/4
         run: |
           {
-            echo "## Scenarios, backdrop=${{ matrix.backdrop }}"
+            echo "## Scenarios, backdrop=${{ matrix.backdrop }}, shard ${{ matrix.shard }}/4"
             echo
             echo "| Scenario | Result | Longest stall / over 50 ms | Memory | Problems |"
             echo "|---|---|---|---|---|"
@@ -60,7 +63,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: scenarios-${{ matrix.backdrop }}
+          name: scenarios-${{ matrix.backdrop }}-${{ matrix.shard }}
           path: build/scenarios
           if-no-files-found: ignore
 

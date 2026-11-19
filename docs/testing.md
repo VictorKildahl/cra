@@ -126,6 +126,7 @@ one. Every launch checks the sidebar and logs a fault for each broken link.
 
     scripts/scenario.sh fifty-tabs      # one
     scripts/scenario.sh all             # every one, about 6 minutes
+    CRA_SCENARIO_SHARD=2/4 scripts/scenario.sh all   # every 4th from the 2nd (Nightly runs 4 per backdrop)
 
 A scenario (`Tests/Scenarios/*.scenario`) is a list of `cra://` commands plus a few
 directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `snapshot`, `seed`, `env`,

@@ -79,8 +79,16 @@ TABS_CREATE_EXTENSION_ID="$(cat "$FIXTURES/TabsCreateExtension/ID")"
 TABS_QUERY_EXTENSION_ID="$(cat "$FIXTURES/TabsQueryExtension/ID")"
 
 if [ "${1:-}" = "all" ]; then
+  # CRA_SCENARIO_SHARD=k/n runs every n-th scenario from the k-th (1-based), so n jobs share the list: one job
+  # ran out of Nightly's hour after 118 of 321, and the rest never ran.
+  shard="${CRA_SCENARIO_SHARD:-1/1}"
+  k="${shard%/*}"; n="${shard#*/}"
+  [[ "$k" =~ ^[0-9]+$ && "$n" =~ ^[0-9]+$ && "$k" -ge 1 && "$k" -le "$n" ]] || { echo "CRA_SCENARIO_SHARD is k/n, 1 <= k <= n: $shard" >&2; exit 2; }
   failed=()
+  i=0
   for f in Tests/Scenarios/*.scenario; do
+    i=$((i + 1))
+    [ $(((i - 1) % n)) -eq $((k - 1)) ] || continue
     name="$(basename "$f" .scenario)"
     "$0" "$name" || failed+=("$name")
   done
