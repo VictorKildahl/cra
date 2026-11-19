@@ -89,6 +89,9 @@ final class SpacePagerView: NSView {
         placedSwipe = swipe
     }
 
+    /// How far left of its page the strip stands now, for a scenario's reading.
+    var debugShift: CGFloat { max(0, -(strip.frame.minX + CGFloat(placedIndex) * placedWidth)) }
+
     /// The strip at `index`'s page, `offset` points to the right of it.
     private func place(index: Int, offset: CGFloat) {
         let x = -CGFloat(index) * placedWidth + offset
