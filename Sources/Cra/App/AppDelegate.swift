@@ -2613,6 +2613,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"])
                 return
             }
+            // splitMenu=<n>[&label=][&run=<row>]: the n-th split row's menu, from the top (#600).
+            if let n = dict["splitMenu"].flatMap(Int.init) {
+                main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"], split: true)
+                return
+            }
             // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387).
             if let n = dict["favoriteMenu"].flatMap(Int.init) {
                 main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])

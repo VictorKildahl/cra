@@ -1235,10 +1235,13 @@
 #599   Packages/CraCore/Tests/CraCoreTests/LittleBarRowsTests.swift::littleWindowLoadsOpenTabsAndArchivedPagesInPlace  3db7ce838adc
 #599   Packages/CraCore/Tests/CraCoreTests/LittleWindowLinksTests.swift::newTabLinkLoadsInTheWindow  80fbb6cec90e
 #599   Tests/Scenarios/little-window-stays.scenario  f152fd5a1638
-#600   Tests/Scenarios/favorite-duplicate.scenario  1382602330ad
+#600   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::splitIcon  05a9196e97d2
+#600   Tests/Scenarios/favorite-duplicate.scenario  93d14728a17b
+#600   Tests/Scenarios/split-menu-arc.scenario  10935539dd24
 #600   Tests/Scenarios/tab-menu-arc.scenario  6476ea9bdc4a
 #600   Tests/StoreTests.swift::archiveTabsAboveAndOthers  ba0f7add3191
 #600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  63a22561dc03
+#600   Tests/StoreTests.swift::splitIconAndReset  e6b28707383e
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceKeepsOtherSpacesPinnedTabs  0a684ba0fd54
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceReopensTheTabClosedHere  fb422863c018
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceSettingIsOffByDefaultAndSaved  84ce8a563ddd

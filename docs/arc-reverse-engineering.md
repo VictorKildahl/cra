@@ -1094,6 +1094,19 @@ Duplicate pressed over AX, StorableSidebar.json read after each.
   Use Site Icon, Use Page Title and Tile Color ▸, which have no other way in; Pin/Unpin Tab, Add to Favorites, Move
   to Folder ▸, New Folder with Tab, Back to Pinned Page and Close and Keep Pinned are gone (⌘D, drag, the menu bar,
   ⌘W). Tabs ▸ Duplicate Tab and its command-bar row leave the copy in the background.
+- [O live] A tab in a pinned folder has the pinned tab's menu, row for row.
+- [O live] Split menu (Today, open): Share Split View… | Separate All Tabs, Add Tab…, Convert to Vertical Split View |
+  Tab Options (dimmed header), a submenu per pane (Separate from Split View | Share ▸, Mute, Copy Link, Copy link as
+  Markdown | Archive Item) | Change Icon…, Rename… | Duplicate, Move to ▸ (spaces, ──, New Space…) | Archive Item
+  (⌥ Archive Other Tabs), Archive Tabs Below (⌥ Archive Tabs Above). Pinned and open: the last section is Archive
+  Item, Close. With a name or an icon, Reset Name and Icon comes before Change Icon….
+- [O live] Change Icon… on a split opens the Emoji / Icon picker under the row; picking 😀 turned the row into one
+  row "😀 2 Tabs" and saved `splitView.customInfo.iconType = {emoji: 128512, emoji_v2: "😀"}`; the picker then
+  shows a trash button.
+- [O live] Share Split View… shows the share warning sheet: "Send this Split View to anyone, on any browser.",
+  "Anyone with this link can view your Split View. …", Cancel / Copy Link to Split View (offline, no link made).
+- Cra (#600): SidebarMenus.split follows these rows; SplitData.emoji/symbol hold the icon (SpaceIconPicker without
+  its Image tab); the share link is FolderShareLink's, toast "Copied Folder URL".
 
 ### Clear cookies / cache (Arc 1.171, 30 Oct)
 - [O] Command bar: "clear" lists Clear Cache and Refresh (selected, above the typed row), then "clear", then

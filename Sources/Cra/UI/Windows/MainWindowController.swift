@@ -796,19 +796,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// opens, nothing picked (rows as menuReadout writes them, then its Edit Pinned Page and Move to
     /// submenus). `run` picks a row by title, in a submenu too, and logs the space's pinned and Today
     /// rows (page queries) and the open tab (#600).
-    func testTabMenu(_ n: Int, label: String, run: String?) {
-        func rows(in v: NSView) -> [TabRowView] {
-            (v as? TabRowView).map { [$0] } ?? v.subviews.flatMap { rows(in: $0) }
+    func testTabMenu(_ n: Int, label: String, run: String?, split: Bool = false) {
+        let kind = split ? "split menu" : "tab menu"
+        func rows(in v: NSView) -> [SidebarRowView] {
+            if let r = v as? TabRowView, !split { return [r] }
+            if let r = v as? SplitRowView, split, !r.isHiddenOrHasHiddenAncestor { return [r] }
+            return v.subviews.flatMap { rows(in: $0) }
         }
-        let listed = store.listedTabIDs(in: focusedSpaceID)
-        guard listed.indices.contains(n - 1),
-              let row = window?.contentView.flatMap(rows(in:))?.first(where: { $0.model?.id == listed[n - 1] })
-        else { CraLog.note("tab menu \(label): no row \(n)"); return }
+        let found = window?.contentView.flatMap(rows(in:)) ?? []
+        let row: SidebarRowView?
+        if split {
+            // The n-th split row from the top of the list.
+            let splits = found.compactMap { $0 as? SplitRowView }.sorted { $0.convert($0.bounds, to: nil).maxY > $1.convert($1.bounds, to: nil).maxY }
+            row = splits.indices.contains(n - 1) ? splits[n - 1] : nil
+        } else {
+            let listed = store.listedTabIDs(in: focusedSpaceID)
+            row = listed.indices.contains(n - 1) ? found.first { ($0 as? TabRowView)?.model?.id == listed[n - 1] } : nil
+        }
+        guard let row else { CraLog.note("\(kind) \(label): no row \(n)"); return }
         sidebarUI.clearPicks()
-        guard let menu = row.contextMenu(at: .zero) else { CraLog.note("tab menu \(label): no menu"); return }
-        CraLog.note("tab menu \(label): \(Self.menuReadout(menu))")
-        for item in menu.items where item.submenu != nil && ["Edit Pinned Page", "Move to"].contains(item.title) {
-            CraLog.note("tab menu \(label) \(item.title): \(Self.menuReadout(item.submenu!))")
+        guard let menu = row.contextMenu(at: .zero) else { CraLog.note("\(kind) \(label): no menu"); return }
+        CraLog.note("\(kind) \(label): \(Self.menuReadout(menu))")
+        for item in menu.items where item.submenu != nil && (["Edit Pinned Page", "Move to"].contains(item.title) || split) {
+            CraLog.note("\(kind) \(label) \(item.title): \(Self.menuReadout(item.submenu!))")
         }
         let all = menu.items + menu.items.flatMap { $0.submenu?.items ?? [] }
         guard let run, let item = all.first(where: { $0.title == run }), let owner = item.menu else { return }
@@ -819,7 +829,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.store.children(of: container).map { $0.isSplit ? $0.children.map(query).joined(separator: "+") : query($0.id) }.joined(separator: " ")
         }
         let open = store.selectedTabID(window: windowID).map(query) ?? "-"
-        CraLog.note("tab menu \(label) ran \(run): pinned: \(list(space.pinnedContainerID)) today: \(list(space.todayContainerID)) open: \(open)")
+        CraLog.note("\(kind) \(label) ran \(run): pinned: \(list(space.pinnedContainerID)) today: \(list(space.todayContainerID)) open: \(open)")
     }
 
     /// `cra://debug?spaceMenu=<label>`: logs the menu a right-click on the open space's header

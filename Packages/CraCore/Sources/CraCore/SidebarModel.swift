@@ -136,6 +136,19 @@ public struct SplitData: Codable, Equatable {
     /// The pane that has keyboard focus (Arc: focusItemID).
     public var focusTabID: UUID?
     public var timeLastActiveAt: Date?
+    /// Arc's Change Icon… on a split (customInfo.iconType, #600): an emoji, or an SF Symbol from the
+    /// picker's Icon tab. With one, the row shows it and the name (or "N Tabs") instead of the panes.
+    public var emoji: String?
+    public var symbol: String?
+
+    /// The icon as the picker gives it; `.none` clears it. A picture isn't offered for a split.
+    public var icon: SpaceIcon {
+        get { SpaceIcon(emoji: emoji ?? "", symbol: symbol) }
+        set {
+            emoji = newValue.emoji.isEmpty ? nil : newValue.emoji
+            symbol = newValue.symbol
+        }
+    }
 
     public init() {}
     public init(from decoder: Decoder) throws {
@@ -144,6 +157,8 @@ public struct SplitData: Codable, Equatable {
         orientation = try c.decodeIfPresent(SplitOrientation.self, forKey: .orientation) ?? .horizontal
         focusTabID = try c.decodeIfPresent(UUID.self, forKey: .focusTabID)
         timeLastActiveAt = try c.decodeIfPresent(Date.self, forKey: .timeLastActiveAt)
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji)
+        symbol = try c.decodeIfPresent(String.self, forKey: .symbol)
     }
 }
 

@@ -60,10 +60,11 @@ final class AppDialog {
     /// Arc's privacy warning before a share link is made (Share Folder…, Share N Items…; #356,
     /// #357), word for word: Arc 1.17x's Dialogs.SheetWindow, captured at 2x on 11 Nov 2026 (560 pt
     /// card, the envelope 62 × 49.5 pt at 48.5, 44.5). Arc names the picked tabs a Folder too.
-    static func shareLink() -> AppDialog {
-        AppDialog(title: "Send this Folder to anyone, on any browser.",
-                  message: "Anyone with this link can view your Folder. Viewers won’t receive future updates and this permalink cannot be deleted.",
-                  actions: [DialogAction("Copy Link to Folder"), .cancel], suppressionTitle: "Never show me this again.",
+    /// Arc's warning before a share link, worded for what is shared: "Folder", or "Split View" (#600).
+    static func shareLink(kind: String = "Folder") -> AppDialog {
+        AppDialog(title: "Send this \(kind) to anyone, on any browser.",
+                  message: "Anyone with this link can view your \(kind). Viewers won’t receive future updates and this permalink cannot be deleted.",
+                  actions: [DialogAction("Copy Link to \(kind)"), .cancel], suppressionTitle: "Never show me this again.",
                   icon: .envelope, width: 560, buttonSpacing: 32, buttonOutset: 21, older: true)
     }
 

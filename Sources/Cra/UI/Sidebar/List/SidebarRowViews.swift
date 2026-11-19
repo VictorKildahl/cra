@@ -1692,9 +1692,13 @@ struct SplitRowModel: Equatable {
     var highlighted: Bool
     var focusRing: Bool
     var cells: [Cell]
+    /// Arc's Change Icon… on a split (#600): its emoji or glyph, shown where the pane count goes.
+    var icon: NSImage? = nil
 
-    /// Arc's customInfo layout for a renamed split: the pane count and the name, one row.
-    var named: Bool { title != nil || editing }
+    /// Arc's customInfo layout for a renamed split, or one with an icon: the pane count (or the
+    /// icon) and the name, "N Tabs" when it has none, one row.
+    var named: Bool { title != nil || editing || icon != nil }
+    var shownTitle: String { title ?? "\(cells.count) Tabs" }
 }
 
 /// Arc's split cell (SplitViewCellView): the panes side by side, hairlines between them, each
@@ -1707,6 +1711,7 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
     private var separators: [NSView] = []
     private var focusRing: FocusRingLayer?
     private let countBadge = SplitCountBadgeView()
+    private let iconView = NSImageView()
     private let titleLabel = NSTextField.sidebarLabel(size: 14)
     private var renameField: NSTextField?
     private lazy var closeButton: SidebarGlyphButton = {
@@ -1723,8 +1728,13 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
     override init(key: SpaceListView.RowKey, list: SpaceListView, colors: SidebarColors) {
         super.init(key: key, list: list, colors: colors)
         addSubview(countBadge)
+        iconView.imageScaling = .scaleNone
+        addSubview(iconView)
         addSubview(titleLabel)
     }
+
+    /// Where the pane count or the icon sits, for the icon picker's arrow.
+    var iconRect: NSRect { countBadge.frame }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -1753,8 +1763,11 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
             s.isHidden = m.highlighted || m.named
         }
         countBadge.show(m.cells.count, colors: colors)
-        countBadge.isHidden = !m.named
-        titleLabel.stringValue = m.title ?? ""
+        countBadge.isHidden = !m.named || m.icon != nil
+        iconView.image = m.icon
+        iconView.contentTintColor = colors.textSecondary
+        iconView.isHidden = !m.named || m.icon == nil
+        titleLabel.stringValue = m.named ? m.shownTitle : ""
         titleLabel.textColor = colors.textPrimary
         titleLabel.isHidden = !m.named || m.editing
         if m.editing != (renameField != nil) { m.editing ? beginRename(m.renameText) : endRename() }
@@ -1851,6 +1864,7 @@ final class SplitRowView: SidebarRowView, NSTextFieldDelegate, ArcTooltipTarget 
             let h = bounds.height
             var x = CraMetrics.rowLeading + CGFloat(m.depth) * CraMetrics.indent
             countBadge.frame = NSRect(x: x, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
+            iconView.frame = countBadge.frame
             x += CraMetrics.favicon + 11
             let right = button?.minX ?? bounds.width - 6
             let th = titleLabel.intrinsicContentSize.height

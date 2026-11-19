@@ -348,7 +348,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     title: item.title, renameText: item.title ?? "\(cells.count) Tabs", editing: renaming == item.id,
                     selected: selected, highlighted: selected && !placeholder,
                     focusRing: focusID.map { f in children.contains { $0.id == f } } ?? false,
-                    cells: cells))
+                    cells: cells,
+                    icon: item.split.flatMap { SpaceMenuIcon.image(emoji: $0.emoji ?? "", symbol: $0.symbol) }))
                 out.append(row)
             }
         }
@@ -745,6 +746,29 @@ final class SpaceListView: NSView, NSDraggingSource {
             guard let row = l.views[.item(folderID)] as? FolderRowView else { continue }
             FolderPreviewController.shared.debugOpen(folderID, row: row, list: l)
         }
+    }
+
+    /// Arc's Change Icon… on a split (#600): the Emoji / Icon picker under the row's icon.
+    func showSplitIconPicker(_ id: UUID) {
+        guard let row = views[.item(id)] as? SplitRowView, let split = store.item(id)?.split,
+              let content = row.window?.contentView else { return }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let store = self.store
+        let set: (SpaceIcon) -> Void = { [weak popover] icon in
+            store.setSplitIcon(id, icon)
+            popover?.performClose(nil)
+        }
+        let picker = SpaceIconPicker(current: split.emoji ?? "", currentSymbol: split.symbol, showsImage: false,
+                                     onPick: { set(.emoji($0)) }, onPickSymbol: { set(.symbol($0)) }, onRemove: { set(.none) })
+        let host = NSHostingController(rootView: picker)
+        host.sizingOptions = []
+        host.preferredContentSize = NSSize(width: 272, height: 272)
+        popover.contentViewController = host
+        popover.contentSize = host.preferredContentSize
+        // A split showing its panes has no icon yet: the arrow points at the row's start, as Arc's does.
+        let rect = row.model?.named == true ? row.iconRect : NSRect(x: CraMetrics.rowLeading, y: 0, width: CraMetrics.favicon, height: row.bounds.height)
+        popover.show(relativeTo: row.convert(rect, to: content), of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
     }
 
     func showFolderIconPicker(_ id: UUID) {
