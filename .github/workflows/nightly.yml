@@ -28,7 +28,8 @@ jobs:
       # Four jobs per backdrop share the list (CRA_SCENARIO_SHARD): one ran out of its hour after 118 of 321.
       matrix:
         backdrop: [layer, material]
-        shard: [1, 2, 3, 4]
+        # A run by hand for a few scenarios needs one job per backdrop, and nothing else holding the runners.
+        shard: ${{ fromJSON(github.event.inputs.scenarios != '' && '[1]' || '[1, 2, 3, 4]') }}
     steps:
       - uses: actions/checkout@v7
 
@@ -88,6 +89,7 @@ jobs:
           if-no-files-found: ignore
 
   sanitizers:
+    if: github.event.inputs.scenarios == ''
     name: Harnesses under ${{ matrix.sanitizer }} sanitizer
     runs-on: macos-26
     timeout-minutes: 30
@@ -107,6 +109,7 @@ jobs:
           done
 
   fuzz:
+    if: github.event.inputs.scenarios == ''
     name: Parser fuzzing
     runs-on: macos-26
     timeout-minutes: 45
@@ -126,7 +129,7 @@ jobs:
 
   mutation:
     name: Mutation testing
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 1'
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.scenarios == '') || github.event.schedule == '41 3 * * 1'
     runs-on: macos-26
     timeout-minutes: 90
     steps:
