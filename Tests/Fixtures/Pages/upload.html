@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Upload fixture</title>
+<style>
+  html, body { margin: 0; height: 100%; font: 14px -apple-system, sans-serif; }
+  /* The top half takes a click and nothing else; the bottom half is the file input's label, as X's
+     media button is a button over a hidden input. */
+  #plain { position: fixed; inset: 0 0 50% 0; background: #eef; }
+  #pick { position: fixed; inset: 50% 0 0 0; background: #efe; display: block; }
+  #file { display: none; }
+</style>
+<div id="plain">plain</div>
+<label id="pick" for="file">choose a file</label>
+<input id="file" type="file">
+<script>
+  // What the file input saw: "cancel" when Chrome turned the picker down or it was closed, "change" for a pick.
+  var events = [];
+  var file = document.getElementById('file');
+  file.addEventListener('cancel', () => events.push('cancel'));
+  file.addEventListener('change', () => events.push('change'));
+  // Whether the page was shown and had focus when its label was clicked: Chrome also turns a picker down
+  // for a hidden or covered page, which is a different failure.
+  document.getElementById('pick').addEventListener('click',
+      () => events.push('click:' + document.visibilityState + ':' + (document.hasFocus() ? 'focus' : 'nofocus')));</script>

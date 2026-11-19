@@ -1,0 +1,46 @@
+# promise: #571
+# A page's file pickers open: <input type=file> and the File System Access pickers
+# (showOpenFilePicker), which X's media button, Gmail's attach and every upload button use. Since
+# 0.1.49 every one of them was turned down without showing anything (GitHub #571): Chrome 158 opens a picker only
+# over a window of at least 400x300 (WebContentsBasedCanceller::IsWindowTooSmall) and measured the
+# hidden Browser window that holds a profile's pages, a 1 pt strip along Cra's window since #346.
+# cra-file-picker-window.patch measures the page in front instead. Runs without the screen, in
+# every scenario run; upload-picker-after-focus has the real clicks.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/upload.html
+expect-log GET /upload.html
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'upload shown='+document.visibilityState"}
+expect-log "value":"upload shown=visible"
+
+# The input, as a click on X's media button reaches it: a sheet over Cra's window, no "cancel".
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(file.click(),'input asked')","userGesture":true}
+expect-log "value":"input asked"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'input events='+events.join(',')"}
+expect-log "value":"input events="\}
+cra://debug?windowState=input
+expect-log window state input: main0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'input closed='+events.join(',')"}
+expect-log "value":"input closed=cancel"
+cra://debug?windowState=input-closed
+expect-log window state input-closed: main0 .* sheet=0
+
+# showOpenFilePicker: still waiting while its sheet is up, AbortError once it is closed.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.fsa='waiting',showOpenFilePicker().then(()=>fsa='picked',e=>fsa=e.name),'fsa asked')","userGesture":true}
+expect-log "value":"fsa asked"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'fsa '+fsa"}
+expect-log "value":"fsa waiting"
+cra://debug?windowState=fsa
+expect-log window state fsa: main0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'fsa closed '+fsa"}
+expect-log "value":"fsa closed AbortError"
+reject-log fault:

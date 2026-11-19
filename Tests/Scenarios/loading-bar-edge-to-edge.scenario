@@ -1,0 +1,32 @@
+# promise: #548
+# Edge to edge the card fills the window, and the loading bar stays at the window's top middle over
+# the card's top, where Arc keeps it once the card fills the screen (full screen, sidebar hidden).
+# It hid wherever there was no margin above the card. Its ink follows what is under it: the page
+# while the toolbar is off, the toolbar while it is on, so it shows on a white page too.
+# Readout: the bar's centre less the card's, its top below the window's, its size, ink, shown, phase.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "edgeToEdgeContent": true, "showToolbar": false}
+cra://open?url=${STALL}
+wait 3
+cra://debug?windowState=edge-waiting
+expect-log window state edge-waiting: main0 .* card=[0-9]+,0,0,0 r0 fills=1 .* loading=0,0,132x10 ink=[a-z]+ shown=1 phase=waiting
+
+cra://open?url=${ORIGIN}/loading-light.html
+wait 4
+cra://debug?windowState=edge-page-light
+expect-log window state edge-page-light: main0 .* fills=1 .* loading=0,0,132x10 ink=dark shown=1 phase=loading
+
+cra://open?url=${ORIGIN}/loading-dark.html
+wait 4
+cra://debug?windowState=edge-page-dark
+expect-log window state edge-page-dark: main0 .* fills=1 .* loading=0,0,132x10 ink=light shown=1 phase=loading
+
+cra://action/toggleToolbar
+wait 2
+cra://debug?windowState=edge-toolbar-dark
+expect-log window state edge-toolbar-dark: main0 .* fills=1 .* loading=0,0,132x10 ink=light shown=1 phase=loading
+
+cra://open?url=${ORIGIN}/loading-light.html
+wait 4
+cra://debug?windowState=edge-toolbar-light
+expect-log window state edge-toolbar-light: main0 .* fills=1 .* loading=0,0,132x10 ink=dark shown=1 phase=loading

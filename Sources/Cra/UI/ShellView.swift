@@ -83,7 +83,8 @@ final class ShellView: NSView {
     private var animatingFrames = false
     /// Set while panes animate open/closed; layout() keeps their frames.
     private var animatingPanes = false
-    /// Arc's loading bar in the margin above the card, for the front tab.
+    /// Arc's loading bar at the window's top middle (in the margin above the card, or on the card's
+    /// top), for the front tab.
     let loadingIndicator = LoadingIndicatorView()
     private var loadingTabID: UUID?
     let statusHost: NSView
@@ -108,18 +109,24 @@ final class ShellView: NSView {
     var isDarkTheme = false {
         didSet {
             for c in paneCards { c.isDark = isDarkTheme }
-            loadingIndicator.isDark = isDarkTheme
+            refreshLoadingInk()
         }
     }
     /// The ring around the focused split pane: the space's shadedDark (PaneCardView.focusRing).
     var focusRingColor: NSColor? { didSet { if focusRingColor != oldValue { updateFocusRings() } } }
     /// Each tab's page background ("#RRGGBB"), painted under its page window (PaneCardView.pageColor).
     var pageColors: [UUID: String] = [:] {
-        didSet { for c in paneCards where c.pageColor != pageColors[c.tabID] { c.pageColor = pageColors[c.tabID] } }
+        didSet {
+            for c in paneCards where c.pageColor != pageColors[c.tabID] { c.pageColor = pageColors[c.tabID] }
+            refreshLoadingInk()
+        }
     }
     /// Each tab's toolbar colour ("#RRGGBB"), painted behind its toolbar (PaneCardView.toolbarColor).
     var toolbarColors: [UUID: String] = [:] {
-        didSet { for c in paneCards where c.toolbarColor != toolbarColors[c.tabID] { c.toolbarColor = toolbarColors[c.tabID] } }
+        didSet {
+            for c in paneCards where c.toolbarColor != toolbarColors[c.tabID] { c.toolbarColor = toolbarColors[c.tabID] }
+            refreshLoadingInk()
+        }
     }
 
     var sidebarWidth: CGFloat = CraMetrics.sidebarDefaultWidth { didSet { needsLayout = true } }
@@ -128,6 +135,9 @@ final class ShellView: NSView {
     /// moves with the Library's edge and past the window's instead of narrowing (LibraryWidth.page, #340).
     var pageBesideLibrary: () -> PageBesideLibrary? = { nil }
     struct PageBesideLibrary { var tabSidebar: CGFloat? }
+    /// The Library on its way in from a hidden sidebar (LibrarySwipe, "From a hidden sidebar"): the
+    /// page card rides the Library's edge from where it rests. nil at rest.
+    var libraryRevealFromHidden: (reveal: CGFloat, library: CGFloat)? { didSet { needsLayout = true } }
     /// Off while the Library has the sidebar: its width is not the user's to drag.
     var sidebarResizable = true { didSet { needsLayout = true } }
     var sidebarVisible = true { didSet { needsLayout = true } }
@@ -823,6 +833,7 @@ final class ShellView: NSView {
     private func reveal(_ card: PaneCardView, _ shown: Bool, animated: Bool) {
         guard card.toolbarRevealed != shown else { return }
         card.setToolbarRevealed(shown, animated: animated)
+        refreshLoadingInk()
         onFloatingToolbarChange?(animated)
     }
 
@@ -1021,21 +1032,29 @@ final class ShellView: NSView {
                 pageWidth = CGFloat(LibraryWidth.page(window: Double(b.width), library: Double(width),
                                                       tabSidebar: kept.tabSidebar.map(Double.init), inset: Double(inset)))
             }
-            let content = NSRect(x: width, y: inset, width: max(0, pageWidth), height: max(0, b.height - 2 * inset))
+            // Brought out of a hidden sidebar, the Library's page never comes nearer the window's edge
+            // than where it rests with the sidebar hidden: a swipe out of it ends there.
+            let hiddenRest = pageBesideLibrary().map { $0.tabSidebar == nil } ?? false
+            let content = NSRect(x: hiddenRest ? max(width, inset) : width, y: inset, width: max(0, pageWidth), height: max(0, b.height - 2 * inset))
             return Frames(sidebar: NSRect(x: 0, y: 0, width: width, height: b.height),
                           handle: NSRect(x: width - 4, y: 0, width: 8, height: b.height),
                           content: content, cornerRadius: radius, sidebarCorner: 0)
         }
+        var card = b.insetBy(dx: inset, dy: inset)
+        if let coming = libraryRevealFromHidden {
+            card.origin.x = LibrarySwipe.pageEdgeFromHidden(reveal: coming.reveal, library: coming.library, inset: inset)
+        }
         if floating {
-            // The floating sidebar hovers over the page; the card does not move (Arc).
+            // The floating sidebar hovers over the page; the card does not move (Arc), until a swipe
+            // brings the Library in under it.
             let m = FloatingSidebarGeometry.margin
             return Frames(sidebar: NSRect(x: m, y: m, width: width, height: b.height - 2 * m),
-                          handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: radius, sidebarCorner: 12)
+                          handle: .zero, content: card, cornerRadius: radius, sidebarCorner: 12)
         }
         // Sidebar hidden: Arc keeps the rounded card floating in its inset (measured 25 Oct:
         // card edge 10 pt from the window edge after ⌘S), with a sidebar toggle in the bar.
         return Frames(sidebar: NSRect(x: -width - 20, y: 0, width: width, height: b.height),
-                      handle: .zero, content: b.insetBy(dx: inset, dy: inset), cornerRadius: radius, sidebarCorner: 0)
+                      handle: .zero, content: card, cornerRadius: radius, sidebarCorner: 0)
     }
 
     private var cardCornerRadius: CGFloat = CraMetrics.contentCornerRadius
@@ -1079,17 +1098,44 @@ final class ShellView: NSView {
         layoutContentChildren()
     }
 
-    /// Centred over the card, in the margin above it; hidden where there is none (edge to
-    /// edge, fullscreen).
+    /// At the window's top middle, centred over the card: in the margin above it, or over the
+    /// card's top where it fills the window (edge to edge, full screen), as in Arc (#548). A page
+    /// in full screen has none.
     private func placeLoadingIndicator(over content: NSRect) {
-        let margin = bounds.maxY - content.maxY
-        loadingIndicator.isHidden = margin < CGFloat(LoadingIndicator.height) + 2
+        loadingIndicator.isHidden = contentFullscreen
         loadingIndicator.frame = loadingIndicatorFrame(over: content)
+        refreshLoadingInk()
     }
 
     private func loadingIndicatorFrame(over content: NSRect) -> NSRect {
-        let w = CGFloat(LoadingIndicator.trackWidth) + 2
-        return NSRect(x: (content.midX - w / 2).rounded(), y: content.maxY, width: w, height: bounds.maxY - content.maxY)
+        LoadingIndicator.frame(window: bounds, card: content)
+    }
+
+    /// What lies under the loading bar: the margin, or the top of the card under it (its toolbar,
+    /// or its page while the bar is hidden or floated away).
+    private var loadingGround: LoadingIndicator.Ground {
+        guard LoadingIndicator.overCard(window: bounds, card: contentContainer.frame) else { return .margin }
+        let x = contentContainer.convert(NSPoint(x: loadingIndicator.frame.midX, y: 0), from: self).x
+        guard let card = paneCards.first(where: { !$0.isHidden && $0.frame.minX <= x && x < $0.frame.maxX }) ?? focusedCard,
+              card.hasPage else { return .margin }
+        let barOnTop = card.showToolbar && (!card.toolbarIsFloating || card.toolbarRevealed)
+        guard barOnTop else { return .page(card.pageColor) }
+        return card.developerBar != nil ? .developerBar : .toolbar(card.toolbarColor)
+    }
+
+    private func refreshLoadingInk() {
+        let canvasDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        loadingIndicator.isDark = LoadingIndicator.lightInk(on: loadingGround, themeDark: isDarkTheme, canvasDark: canvasDark)
+    }
+
+    /// For `cra://debug?windowState`: the loading bar's frame from the window's top middle and its
+    /// ink, whether it can show and the front tab's phase, e.g. `loading=0,0,132x10 ink=light shown=1
+    /// phase=waiting` (#548). x is its centre less the card's, y how far its top is below the window's.
+    var loadingReadout: String {
+        let f = loadingIndicator.frame
+        return String(format: "loading=%.0f,%.0f,%.0fx%.0f ink=%@ shown=%d phase=%@", f.midX - contentContainer.frame.midX,
+                      bounds.maxY - f.maxY, f.width, f.height, loadingIndicator.isDark ? "light" : "dark",
+                      loadingIndicator.isHidden ? 0 : 1, String(describing: loadingIndicator.phase))
     }
 
     /// The front tab's loading state. Another tab coming to the front shows its state at once.
@@ -1102,6 +1148,7 @@ final class ShellView: NSView {
     func layoutContentChildren(animated: Bool = false) {
         let cb = contentContainer.bounds
         updateFocusRings()
+        defer { refreshLoadingInk() }
         let toolbarVisible = panesShowBars
         let floating = toolbarFloats
         let layout = paneLayout(in: cb)

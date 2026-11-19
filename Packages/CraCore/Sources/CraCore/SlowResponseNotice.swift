@@ -1,9 +1,9 @@
 import Foundation
 
 /// A page that accepts the connection and then takes long to answer looks blank apart from the
-/// loading bar, and edge to edge or in fullscreen there is no bar at all (GitHub #256). After ten
-/// seconds in the loading bar's waiting phase (the request is out, nothing committed), Cra says
-/// so in its toast with Stop Loading; the request goes on unless that is pressed.
+/// loading bar, which then had no place edge to edge or in fullscreen (GitHub #256; it has since
+/// #548). After ten seconds in the loading bar's waiting phase (the request is out, nothing
+/// committed), Cra says so in its toast with Stop Loading; the request goes on unless that is pressed.
 ///
 /// Not Arc: Arc 1.172.1 shows nothing more than the bar during a long wait (offline copy against
 /// a local server that answers after 40 s, 8 Nov 2026: white page, "Untitled" tab, the address

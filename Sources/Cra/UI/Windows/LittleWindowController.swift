@@ -86,15 +86,13 @@ enum LittleMetrics {
 }
 
 /// Arc renders Little Arc with the default profile's dark palette whatever the
-/// focused space's theme is (observed with the light "Victor" space focused).
+/// focused space's theme is (observed with the light "Victor" space focused; kept for #549).
 enum LittlePalette {
-    /// The strip, left to right: one gradient in every space (the same pixels after switching spaces).
-    /// Arc 1.172.1, 10 Nov 2026, window captures at 2x, pixels read along the strip's top edge of a
-    /// 1185 pt window: #242438 at the left end, #26243A, #292839 and #2C2439 between, #312339 at the
-    /// right. The values wobble by a few units rather than rise, so two stops stay within them; 1.168's
-    /// flat #0C091C is gone (#329).
-    static let stripLeft = NSColor(srgbRed: 0x24 / 255, green: 0x24 / 255, blue: 0x38 / 255, alpha: 1)
-    static let stripRight = NSColor(srgbRed: 0x31 / 255, green: 0x23 / 255, blue: 0x39 / 255, alpha: 1)
+    /// The strip, left to right: one gradient in every space (CraCore LittleStripTones, #329 #549).
+    /// The measured values wobble by a few units rather than rise, so two stops stay within them;
+    /// 1.168's flat #0C091C is gone (#329).
+    static let stripLeft = NSColor(LittleStripTones.stripLeft)
+    static let stripRight = NSColor(LittleStripTones.stripRight)
     /// The address pill is a lighter wash over the strip (about #38394A on the left, #43394B on the
     /// right, which is white at 9–10 %), so it follows the gradient. The hover is not measured.
     static let pill = Color.white.opacity(0.09)
@@ -144,9 +142,11 @@ enum LittlePalette {
 
     /// The space name in "Open in Victor": the target theme's light foreground
     /// (Arc: semanticColorPalette.dark.foregroundPrimary; Victor → #FCEDBC).
-    static func spaceName(_ theme: SpaceTheme) -> Color {
-        let theme = theme.shown
-        return Color(hex: theme.accent ?? theme.colors.first ?? "#FFFFFF").blendedToward(.white, 0.72)
+    static func spaceName(_ theme: SpaceTheme) -> Color { Color(tones(theme).spaceName) }
+
+    /// The strip's colours for the space "Open in" names (CraCore LittleStripTones).
+    static func tones(_ theme: SpaceTheme) -> LittleStripTones {
+        LittleStripTones(target: theme, systemDark: SystemAppearance.shared.isDark)
     }
 }
 
@@ -2733,8 +2733,18 @@ final class LittleToolbarView: NSView {
     /// The magnifier, or the open padlock for a page that isn't served over https (#330).
     private let search = NSImageView()
     private var isInsecure = false
-    /// For `cra://debug?littleShown`: the padlock and the pill's text.
-    var debugReadout: String { "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)" }
+    /// For `cra://debug?littleShown`: the strip's gradient ends and the space name's colour as drawn
+    /// (#549), the padlock and the pill's text.
+    var debugReadout: String {
+        func hex(_ c: Any?) -> String {
+            guard let c, CFGetTypeID(c as CFTypeRef) == CGColor.typeID else { return "-" }
+            return NSColor(cgColor: c as! CGColor).map { Color(nsColor: $0).hexString } ?? "-"
+        }
+        let label = openLabel.attributedStringValue
+        let name = label.length > 0 ? label.attribute(.foregroundColor, at: label.length - 1, effectiveRange: nil) as? NSColor : nil
+        return "gradient=\(hex(gradient.colors?.first))-\(hex(gradient.colors?.last)) name=\(name.map { Color(nsColor: $0).hexString } ?? "-") "
+            + "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)"
+    }
     private let urlLabel = NSTextField.sidebarLabel(size: 13)
     private let puzzle = LittleIconView(symbol: "puzzlepiece.extension", size: 15)
     private let link = LittleIconView(symbol: "link", size: 14)
@@ -2756,7 +2766,6 @@ final class LittleToolbarView: NSView {
         self.store = store
         super.init(frame: .zero)
         wantsLayer = true
-        gradient.colors = [LittlePalette.stripLeft.cgColor, LittlePalette.stripRight.cgColor]
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.insertSublayer(gradient, at: 0)
@@ -2833,11 +2842,16 @@ final class LittleToolbarView: NSView {
         profileChip.isHidden = profile == nil
         profileChip.name = profile ?? ""
         profileChip.hovered = hover == .profile
+        let tones = LittlePalette.tones(space.theme)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.colors = [NSColor(tones.left).cgColor, NSColor(tones.right).cgColor]
+        CATransaction.commit()
         let openTitle = SpaceMenuTitle.named(space.title, prefix: "Open in ")
         let text = NSMutableAttributedString(string: "Open in ", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium),
                                                                              .foregroundColor: NSColor(LittlePalette.label)])
         text.append(NSAttributedString(string: openTitle.displayedName, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
-                                                                         .foregroundColor: NSColor(LittlePalette.spaceName(space.theme))]))
+                                                                         .foregroundColor: NSColor(tones.spaceName)]))
         openLabel.attributedStringValue = text
         openButton.toolTip = "Open this page in \(space.title) as a tab (⌘O)"
         openPart.layer?.backgroundColor = hover == .open ? NSColor(LittlePalette.buttonHover).cgColor : nil

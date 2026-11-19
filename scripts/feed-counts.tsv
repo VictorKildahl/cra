@@ -1,3 +1,7 @@
 # Update-feed download counts kept by scripts/promote.sh just before it uploads over the feeds, which starts
 # GitHub's counts over (docs/release.md, "Channels"). Columns: recorded at (UTC), release, asset, download count.
 # Not kept (promoted before this file): v0.1.45 on 2026-11-17 and v0.1.49 on 2026-11-18.
+2026-11-19T07:51:49Z	v0.1.50	appcast-intel.xml	0
+2026-11-19T07:51:49Z	v0.1.50	appcast-stable-intel.xml	0
+2026-11-19T07:51:49Z	v0.1.50	appcast-stable.xml	0
+2026-11-19T07:51:49Z	v0.1.50	appcast.xml	0

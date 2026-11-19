@@ -1183,6 +1183,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if button != "1" { CraLog.note(ChromiumDialogs.press(button)) }
                 return
             }
+            // pageDialogs=<label>[&target=little][&fill=<a,b>][&press=<button>]: the windows Chromium shows for pages
+            // (dialogs, bubbles, popups), where they sit against the page and what they say (PageDialogs).
+            if let label = dict["pageDialogs"] {
+                let little = dict["target"] == "little" ? littleWindows.last : nil
+                let browser = little?.browser ?? main.currentBrowser
+                CraLog.note(PageDialogs.readout(label, page: browser?.containerView, window: little?.window ?? main.window,
+                                                press: dict["press"], fill: dict["fill"].map { $0.components(separatedBy: ",") }))
+                return
+            }
             if let label = dict["switcherWindows"] {
                 CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }
@@ -1795,8 +1804,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // windowState=<label>: each window's full screen, Space, traffic lights (#277), whether a
-            // drag can move it (#308), where the page card sits in it (#315), whether it floats (Stay On
-            // Top) and has a sheet open (#333), and which side its sidebar is on (#464). Lights are "hidden", or
+            // drag can move it (#308), where the page card sits in it (#315) and the loading bar over it (#548), whether
+            // it floats (Stay On Top) and has a sheet open (#333), and which side its sidebar is on (#464). Lights are "hidden", or
             // their alpha; "-" when a window has none.
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
@@ -1822,7 +1831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         + "movable=\(flag(w.isMovable)) backgroundMovable=\(flag(w.isMovableByWindowBackground)) "
                         + "lightsIn=\(lightsPlace(w)) card=\(m.shell.cardReadout) sidebar=\(m.shell.sidebarReadout) "
                         + "floating=\(m.floatingSidebar?.edgeReadout ?? "-") shadow=\(m.floatingSidebar?.shadowReadout ?? "-") "
-                        + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil)) frameAdjust=\(CraWindow.frameAdjustment)")
+                        + "onTop=\(flag(m.staysOnTop)) sheet=\(flag(w.attachedSheet != nil)) \(m.shell.loadingReadout) frameAdjust=\(CraWindow.frameAdjustment)")
                 }
                 for (i, l) in littleWindows.enumerated() where !l.isPeek {
                     guard let w = l.window else { continue }
@@ -2236,10 +2245,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // a background test copy is in either state depending on what it was sent.
             if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }
             // Settings ▸ Privacy sharing now, not in 30 s or tomorrow (only with CRA_SHARING_ENDPOINT
-            // in a test copy): stats sends the usage report, crash looks for new crash reports,
-            // on and off tick and untick onboarding's "Help improve Cra" row.
+            // in a test copy): stats sends the usage report, checkin the daily install check-in,
+            // crash looks for new crash reports, on and off tick and untick onboarding's
+            // "Help improve Cra" row.
             if let v = dict["sharing"] {
                 if v == "stats" { SharingService.shared.sendStatsIfDue(force: true) }
+                if v == "checkin" { SharingService.shared.sendCheckInIfDue(force: true) }
                 if v == "crash" { SharingService.shared.checkCrashReports() }
                 if v == "on" { store.settings.setSharesToImproveCra(true) }
                 if v == "card-share" { SharingCard.answer(share: true) }
@@ -2375,6 +2386,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
+                return
+            }
+            // hiddenLibraryReveal=<0…1>: the Library held that far in from a hidden sidebar, and where
+            // it, the page and the floating sidebar are; hiddenLibraryReveal=lift lets go.
+            if let r = dict["hiddenLibraryReveal"] {
+                main.debugHiddenLibraryReveal(CGFloat(Double(r) ?? 0), lift: r == "lift")
                 return
             }
             if let id = dict["extensionAction"] { main.runExtensionAction(id); return }

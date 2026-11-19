@@ -52,6 +52,32 @@ public enum LibrarySwipe {
         libraryX(reveal: r, base: base, library: library) + library
     }
 
+    // MARK: From a hidden sidebar
+    //
+    // Arc 1.173.1, a 120 Hz, 2x screen recording read frame by frame, 18 Nov 2026 (a 250 pt
+    // sidebar out over the page, a 405 pt Library): the same swipe on the first space brings the
+    // Library in docked. It slides in from the window's edge under the floating sidebar and pushes
+    // the page before it, at its full width, while the floating sidebar goes back out the way it
+    // came, two points for every three the page moves (ratio 1.43 to 1.53 over 12 frames). It lands
+    // as the Library does from a docked sidebar, and leaving it by a swipe slides it back out to a
+    // hidden sidebar, without the floating one in between.
+
+    /// A swipe toward the Library may start in a floating sidebar that is out, on the first space.
+    public static func startsFromHiddenSidebar(floatingShown: Bool, onFirstSpace: Bool) -> Bool {
+        floatingShown && onFirstSpace
+    }
+
+    /// How far the floating sidebar has gone back toward the window's edge at reveal `r`.
+    public static func floatingRetreat(reveal r: CGFloat, library: CGFloat) -> CGFloat {
+        max(0, r) * library / 1.5
+    }
+
+    /// The page card's leading edge at reveal `r`: against the Library's edge, and never nearer
+    /// the window's than its own `inset`, where it rests with the sidebar hidden.
+    public static func pageEdgeFromHidden(reveal r: CGFloat, library: CGFloat, inset: CGFloat) -> CGFloat {
+        max(inset, sidebarWidth(reveal: r, base: 0, library: library))
+    }
+
     /// Where a released swipe settles: a flick goes its way, else past halfway opens.
     /// `velocity` is in reveals per second, + toward the Library.
     public static func target(reveal r: CGFloat, velocity: CGFloat) -> CGFloat {

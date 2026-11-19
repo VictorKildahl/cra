@@ -1,0 +1,24 @@
+# promise: #574
+# A page that asks for a USB device (WebUSB: a keyboard's configurator, a microcontroller's flasher) gets
+# Chrome's device chooser on Cra's window, big enough to use, and Cancel tells the page no device was
+# picked. Chrome anchors the chooser to its (never seen) Browser window, a 1 pt strip along the top of
+# Cra's window since 0.1.49 (#346); it held on engine -25 (#574), and this keeps it so. WebHID, Web Serial
+# and Bluetooth use the same chooser.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/dialogs.html?n=usb
+expect-log GET /dialogs.html\?n=usb
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('usb',navigator.usb.requestDevice({filters:[]}))","userGesture":true}
+expect-log "value":"usb asked"
+wait 2
+cra://debug?pageDialogs=usb
+expect-log page dialog usb: chrome [0-9]+x[0-9]+ at=(page|window) front=1 .*buttons=.*Cancel
+cra://debug?pageDialogs=usb-cancel&press=Cancel
+expect-log page dialogs usb-cancel: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'said '+said.join(',')"}
+expect-log "value":"said usb:NotFoundError"
+reject-log fault:

@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dialogs fixture</title>
+<!-- Everything a page asks the browser to show over it, for the page-dialogs scenarios: alert, confirm and
+     prompt, "Leave site?", print, the screen-share picker, a device chooser, a <select>'s menu, a date
+     picker and the colour panel. Each answer lands in `said`, which a scenario reads after it answered. -->
+<style>
+  body { margin: 0; padding: 24px; font: 14px -apple-system, sans-serif; }
+  select, input { display: block; margin: 12px 0; }
+</style>
+<select id="pick"><option>one</option><option>two</option><option>three</option></select>
+<input id="day" type="date">
+<input id="colour" type="color">
+<script>
+  var said = [];
+  // From a timer, so the scenario's own call returns before the page waits on the dialog.
+  function ask(kind) {
+    setTimeout(function () {
+      var answer = kind == 'alert' ? alert('Alert from the page')
+                 : kind == 'confirm' ? confirm('Delete this page?')
+                 : prompt('Your name?', 'Ada');
+      said.push(kind + ':' + answer);
+    }, 0);
+    return kind + ' asked';
+  }
+  // "Leave site?" / "Reload site?": a page with unsaved work. Chrome asks only after the user did something
+  // on the page, which the scenario's call (userGesture) stands in for.
+  function guard() {
+    window.marker = 'kept';
+    addEventListener('beforeunload', function (e) { e.preventDefault(); e.returnValue = ''; });
+    return 'guarded';
+  }
+  function settle(kind, promise) {
+    promise.then(function () { said.push(kind + ':ok'); }, function (e) { said.push(kind + ':' + e.name); });
+    return kind + ' asked';
+  }
+</script>

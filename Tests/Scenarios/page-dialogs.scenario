@@ -1,0 +1,85 @@
+# promise: #574
+# A page's alert, confirm and prompt show over the page and take an answer: in the window's page, in a
+# space on another profile, and in a Little Window. Chrome hangs them on the hidden Browser window that
+# holds a profile's pages, a 1 pt strip along the top of Cra's window since 0.1.49 (#346); #574 asked
+# whether they survived it. They did on engine -25: this keeps them there (the split's own pane is
+# page-dialog-split's). Every Cra page has a DevTools session (Cra's page scripts), so Chrome never holds
+# one back for not being its front tab: confirm() in a second profile's space asks too.
+budget rss=1000 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/dialogs.html?n=main&space=A0000000-0000-0000-0000-000000000001
+expect-log GET /dialogs.html\?n=main
+wait 2
+
+# alert(): over the page, in front, and OK lets the page go on.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('alert')"}
+expect-log "value":"alert asked"
+wait 1
+cra://debug?pageDialogs=alert
+expect-log page dialog alert: chrome [0-9]+x[0-9]+ at=page front=1 text=.*Alert from the page.* buttons=OK
+cra://debug?pageDialogs=alert-answered&press=OK
+expect-log page dialogs alert-answered: pressed OK
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'said '+said.join(',')"}
+expect-log "value":"said alert:undefined"
+cra://debug?pageDialogs=alert-gone
+expect-log page dialogs alert-gone: n=0
+
+# confirm(): Cancel answers false, OK true.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('confirm')"}
+wait 1
+cra://debug?pageDialogs=confirm
+expect-log page dialog confirm: chrome [0-9]+x[0-9]+ at=page front=1 text=.*Delete this page\?.* buttons=.*Cancel
+cra://debug?pageDialogs=confirm-cancel&press=Cancel
+expect-log page dialogs confirm-cancel: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('confirm')"}
+wait 1
+cra://debug?pageDialogs=confirm-ok&press=OK
+expect-log page dialogs confirm-ok: pressed OK
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'said '+said.join(',')"}
+expect-log "value":"said alert:undefined,confirm:false,confirm:true"
+
+# prompt(): a field with the page's default; OK answers it, a typed answer replaces it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('prompt')"}
+wait 1
+cra://debug?pageDialogs=prompt
+expect-log page dialog prompt: chrome [0-9]+x[0-9]+ at=page front=1 .*buttons=Cancel.OK fields=1
+cra://debug?pageDialogs=prompt-typed&fill=Grace&press=OK
+expect-log page dialogs prompt-typed: filled 1 of 1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'said '+said.slice(3).join(',')"}
+expect-log "value":"said prompt:Grace"
+
+# A space on another profile (Random, on Hobbies): its own hidden Browser, the same dialogs.
+cra://open?url=${ORIGIN}/dialogs.html?n=hobbies&space=A0000000-0000-0000-0000-000000000002
+expect-log GET /dialogs.html\?n=hobbies
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('confirm')"}
+wait 1
+cra://debug?pageDialogs=hobbies
+expect-log page dialog hobbies: chrome [0-9]+x[0-9]+ at=page front=1 text=.*Delete this page\?
+cra://debug?pageDialogs=hobbies-ok&press=OK
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'hobbies said '+said.join(',')"}
+expect-log "value":"hobbies said confirm:true"
+
+# A Little Window's page: over that page, in front of the main window.
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleCard=go:${ORIGIN}/dialogs.html?n=little
+expect-log GET /dialogs.html\?n=little
+wait 2
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"ask('alert')"}
+wait 1
+cra://debug?target=little&pageDialogs=little
+expect-log page dialog little: chrome [0-9]+x[0-9]+ at=page front=1 text=.*Alert from the page
+cra://debug?target=little&pageDialogs=little-ok&press=OK
+wait 1
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"'little said '+said.join(',')"}
+expect-log "value":"little said alert:undefined"
+reject-log fault:

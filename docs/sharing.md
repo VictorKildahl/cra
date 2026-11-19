@@ -28,6 +28,23 @@ with `CRA_RELEASE=1`), its bundle id is `dk.kildahl.cra` and it isn't a `CRA_DAT
 nothing. `CRA_SHARING_ENDPOINT=http://127.0.0.1:<port>` points any copy at a local server on
 purpose; the `sharing` scenario does that.
 
+## Install count
+
+Every released Cra checks in once per UTC day it runs, whatever the sharing settings, so Cra's
+users can be counted exactly (Victor, 18 Nov 2026; there is no switch). `POST
+https://crabrowser.app/api/checkin`, 30 s after launch and every 6 hours with the usage stats'
+timers; `sharing.json` keeps `installID` and `checkInSentAt`. The body is CraCore's `InstallCheckIn`:
+
+| Field | Example | Notes |
+|---|---|---|
+| `id` | `5B0F…` | A random UUID made on the first check-in and kept in `sharing.json`: the same Mac sends the same id every day. A new data folder makes a new one. |
+| `version` | `0.1.50` | |
+| `arch` | `arm64` | `x86_64` on Intel copies. |
+
+Nothing else, and never anything from the usage stats: the two can't be tied together. Who sends
+is the same as above (`Sharing.mayReport`). `cra://debug?sharing=checkin` sends one now; scenario
+`install-checkin` checks it goes with sharing off and keeps its id across a relaunch.
+
 ## Usage stats
 
 `POST https://crabrowser.app/api/stats`, once per UTC day the app runs (checked 30 s after launch,
@@ -78,7 +95,7 @@ becomes `~`). Over 512 KB, only the crashed thread is kept. A failed send isn't 
 
 ## On crabrowser.app
 
-`src/app/api/stats/route.ts` and `src/app/api/crash/route.ts` in cra-website, with the checks in
+`src/app/api/stats/route.ts`, `src/app/api/crash/route.ts` and `src/app/api/checkin/route.ts` in cra-website, with the checks in
 `src/lib/app-reports.ts`: a report with any other field, a value outside the ranges, a path or
 one of the dropped ids is refused (400).
 
@@ -91,12 +108,16 @@ one of the dropped ids is refused (400).
   visitor, so **visitors per day are the day's users who share**, and Phantom's events report
   (grouped by name) splits them by version. Phantom's event properties card shows every field at
   once: users, then each field's values with counts and shares, and users a day over longer ranges.
+- A check-in becomes one event in Phantom's "Cra installs" site (`installs.crabrowser.app`), named
+  after the version, with Version and Chip, and the install id as the visitor. So **its visitors
+  are Cra's users**: per day, per week or per month, split by version in the events report and by
+  chip on the properties card. Only Macs on a release with the check-in (0.1.50 on) are counted.
 - Crash reports are stored in the private Vercel Blob store `cra-crash-reports` (Frankfurt) as
   `crashes/<day>/<id>.json`, and nowhere else: a crash event in Phantom would count as one more
   user. `node --env-file=.env.local scripts/crashes.mjs [days]` in cra-website counts them by
   version, process, exception and top frames; `… crashes.mjs show <id>` prints one.
 
 Environment on Vercel (production and development): `PHANTOM_INGEST_KEY` (Phantom's server key),
-`PHANTOM_APP_WEBSITE_ID` (the "Cra app" site), `NEXT_PUBLIC_PHANTOM_HOST` and
+`PHANTOM_APP_WEBSITE_ID` (the "Cra app" site), `PHANTOM_INSTALLS_WEBSITE_ID` (the "Cra installs" site), `NEXT_PUBLIC_PHANTOM_HOST` and
 `BLOB_READ_WRITE_TOKEN` (set when the Blob store was connected). `vercel env pull .env.local
 --environment development` gives a local `next dev` the same, to test the routes for real.

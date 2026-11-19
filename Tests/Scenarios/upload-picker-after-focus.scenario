@@ -1,0 +1,65 @@
+# promise: #571
+# A page's file picker opens (X's media button, GitHub #571), also after a click back into the
+# page from a Little Window's. Two things turned every picker down without showing it; the page's
+# input heard "cancel" at once and no sheet came up:
+# - Chrome 158 opens a picker only over a window of at least 400x300 (IsWindowTooSmall), and took the
+#   window of the hidden Browser that holds a profile's pages for the page's window. Since 0.1.49
+#   (#346) that window is a 1 pt strip along the top of Cra's: no page could open a picker.
+#   cra-file-picker-window.patch measures the page in front instead.
+# - Chrome opens a picker only for its Browser's active tab, which followed only the pages Cra
+#   focused itself (a tab switch, a Little Window's page). A click back into the page in a window
+#   already showing it left the Little Window's page Chrome's active tab; the bridge's pageFocused
+#   now makes a page the user clicks into the active tab.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/upload.html
+expect-log GET /upload.html
+wait 2
+cra://debug?activate=1
+wait 1
+
+# The page on its own: a click in its plain top half, then on the file input's label.
+cra://debug?clickAt=760,250
+wait 1
+cra://debug?clickAt=760,650
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'upload alone='+events.join(',')"}
+expect-log "value":"upload alone=click:visible:focus"\}
+cra://debug?windowState=alone
+expect-log window state alone: main0 .* sheet=1
+# Closed as Escape would: the input hears it.
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(events.length=0,'upload closed alone')"}
+expect-log "value":"upload closed alone"
+cra://debug?windowState=closed-alone
+expect-log window state closed-alone: main0 .* sheet=0
+
+# Another page of the same profile in a Little Window, which Cra focuses: Chrome's active tab now.
+cra://action/newLittleWindow
+wait 1
+cra://debug?littleCard=go:${PAGE}?n=little
+wait 3
+cra://debug?littleShown=little
+expect-log little shown little: windows=1 .* card=0
+
+# Back to the upload page with the pointer: a click in its plain top half brings its window to the
+# front and the page takes focus, then a click on the label.
+cra://debug?clickAt=760,250
+wait 1
+cra://debug?clickAt=760,650
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'upload back='+events.join(',')"}
+expect-log "value":"upload back=click:visible:focus"\}
+cra://debug?windowState=back
+expect-log window state back: main0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'upload closed back='+events.join(',')"}
+expect-log "value":"upload closed back=click:visible:focus,cancel"
+reject-log fault:

@@ -335,6 +335,27 @@ final class SidebarView: NSView {
         }
     }
 
+    /// The Library for a swipe that brings it in from a hidden sidebar: the window shows it under
+    /// the floating sidebar until it lands, then `adoptLibrary` takes it in here.
+    func makeDetachedLibrary(_ page: LibraryPage) -> LibraryView {
+        LibraryView(page: page, palette: palette, store: store, ui: ui, actions: actions, favicons: favicons)
+    }
+
+    /// The Library that came in from a hidden sidebar is this column's now, shown as it landed.
+    func adoptLibrary(_ host: LibraryView, page: LibraryPage) {
+        libraryHost?.removeFromSuperview()
+        host.removeFromSuperview()
+        host.page = page
+        host.alphaValue = 1
+        host.frame = bounds
+        addSubview(host)
+        libraryHost = host
+        shownLibrary = page
+        tabs.alphaValue = 0
+        tabs.isHidden = true
+        host.focusSearch()
+    }
+
     private func makeLibraryHost(_ page: LibraryPage) -> LibraryView {
         let h = LibraryView(page: page, palette: palette, store: store, ui: ui, actions: actions, favicons: favicons)
         addSubview(h)
@@ -381,7 +402,11 @@ final class SidebarView: NSView {
         layer?.masksToBounds = true
         let base = ui.libraryRevealBase, library = ui.libraryRevealWidth
         host.frame = NSRect(x: LibrarySwipe.libraryX(reveal: r, base: base, library: library), y: 0, width: library, height: bounds.height)
-        tabs.frame = NSRect(x: LibrarySwipe.spaceX(reveal: r, base: base, library: library), y: 0, width: base, height: bounds.height)
+        // Out to a hidden sidebar (base 0) no tab list follows the Library.
+        tabs.isHidden = base <= 0
+        if base > 0 {
+            tabs.frame = NSRect(x: LibrarySwipe.spaceX(reveal: r, base: base, library: library), y: 0, width: base, height: bounds.height)
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

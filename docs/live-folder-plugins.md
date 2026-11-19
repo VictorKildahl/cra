@@ -1,6 +1,6 @@
 # Live folder plugins
 
-Live folders use JavaScript providers and native sidebar rows. GitHub, GitLab and Jira ship in
+Live folders use JavaScript providers and native sidebar rows. GitHub, GitLab, Jira and Azure DevOps ship in
 `resources/live-folder-plugins`; they use the same execution and presentation API as installed
 packages. Service-specific requests, parsing, filters, icons, labels and navigation triggers belong
 to the package. Cra owns tabs, persistence, scheduling, profile selection and permission checks.
@@ -38,6 +38,21 @@ At least one ownership filter and one category must be enabled to show issues.
 Rows show the issue key, summary and status. **Projects** lists project keys from matching
 issues and lets you hide projects separately for each folder. Switching a filter refreshes
 the folder; excluded issues are removed after a successful refresh without the usual retention.
+
+## Azure DevOps
+
+Add **Live Folders → Azure DevOps…** and enter your organization's address (`https://dev.azure.com/example`
+or `https://example.visualstudio.com`; an address copied from any page in it keeps only the organization) or
+an Azure DevOps Server collection (`https://tfs.example.com/tfs/DefaultCollection`). Sign in to Azure DevOps
+in the same Space's Profile. The plugin reads `/_apis/connectionData` for your id and lists active pull requests
+across every project with `/_apis/git/pullrequests` (REST 6.0), 100 at a time. Requests carry
+`X-TFS-FedAuthRedirect: Suppress`, so a signed-out session answers 401 instead of Microsoft's sign-in page.
+
+**My Pull Requests** lists the ones you created, **Review Requests** the ones that name you as a reviewer while
+your vote is still "No vote", so a pull request leaves once you approve, wait for the author or reject it, as
+Arc's GitHub review requests do. Reviews requested from a team you're in aren't listed: the API matches reviewers
+by id only. Rows show the title and the author; **Repositories** groups them by `project/repository`, or by the
+repository alone when it has the project's name. Opening a page in the organization refreshes the folder 2 s later.
 
 ## Saved folders
 

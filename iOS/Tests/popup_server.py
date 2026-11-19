@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests) and a passkey page
-(PasskeyTests). No external requests."""
+"""Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
+(PasskeyTests) and a plain-http page (PlainHTTPTests). No external requests."""
 import argparse
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -70,6 +70,10 @@ function createPasskey() {
           error => { answered = true; answer.textContent = 'Passkey refused: ' + error.name; });
 }
 </script>''')
+        elif url.path == '/plain':
+            # A plain-http page (PlainHTTPTests), opened by a domain name: iOS's App Transport
+            # Security lets IP addresses and plain `localhost` through, but not `cra.localhost`.
+            self.page('<title>Plain HTTP Fixture</title><h1>Plain HTTP Fixture</h1>')
         elif url.path == '/checkout':
             self.page('<title>POST lost</title><h1>POST lost</h1><p>Unexpected GET</p>')
         else:

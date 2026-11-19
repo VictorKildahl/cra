@@ -55,6 +55,21 @@ struct FolderPeekTests {
         #expect(FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [outer: [tab, other]]) == [outer: [tab]])
     }
 
+    /// #557: open a tab inside a folder, close the folder, pick a tab outside it. The tab stays under the
+    /// closed folder, as in Arc (the peek is saved per window and stays after another tab is picked);
+    /// only opening the folder or closing the tab takes it out.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/557"))
+    func closingAFolderOnItsTabKeepsTheTabAfterAnotherIsPicked() {
+        let closed = FolderPeek.expanding(outer, false, openTabInside: tab, peeks: [:])
+        #expect(closed == [outer: [tab]])
+        // Picking a tab outside every folder changes no peek.
+        #expect(FolderPeek.opening(other, folders: [], isExpanded: { _ in false }, peeks: closed) == closed)
+        #expect(FolderPeek.listed(in: outer, peeks: closed, tabsInside: [other, tab]) == [tab])
+        // Opening the folder or closing the tab (⌘W) are what take it out.
+        #expect(FolderPeek.expanding(outer, true, openTabInside: nil, peeks: closed).isEmpty)
+        #expect(FolderPeek.removing(tab, peeks: closed).isEmpty)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/85"))
     func closingATabDropsItFromEveryPeek() {
         let peeks = [outer: [tab, other], inner: [tab]]

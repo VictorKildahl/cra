@@ -1,0 +1,39 @@
+# promise: #574
+# A page with unsaved work asks before it goes: "Reload site?" shows over Cra's window; Cancel keeps the
+# page as it was, Reload reloads it. Chrome asks only once the user has done something on the page (a
+# click, sent here as DevTools input to the page alone), and asks with an AppKit alert of its own, not on
+# the hidden Browser window, so the 1 pt strip of 0.1.49 (#346, #574) never reached it: this keeps it so.
+# Closing a tab never asks (a forced close, as in Arc).
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/dialogs.html?n=draft
+expect-log GET /dialogs.html\?n=draft
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"guard()","userGesture":true}
+expect-log "value":"guarded"
+# A click in the page (DevTools input, only to the page): what Chrome counts as the user having been there.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":700,"y":650,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":700,"y":650,"button":"left","clickCount":1}
+
+# Reload: the prompt over the page; Cancel and the page keeps its state.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(setTimeout(()=>location.reload(),0),'reloading')"}
+wait 1
+cra://debug?pageDialogs=reload
+expect-log page dialog reload: alert [0-9]+x[0-9]+ at=page front=1 .*buttons=.*Cancel
+cra://debug?pageDialogs=stay&press=Cancel
+expect-log page dialogs stay: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'draft '+window.marker"}
+expect-log "value":"draft kept"
+
+# Again, and Reload: the page loads afresh.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(setTimeout(()=>location.reload(),0),'reloading again')"}
+wait 1
+cra://debug?pageDialogs=reload-again&press=Reload
+expect-log page dialogs reload-again: pressed Reload
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'draft after '+window.marker"}
+expect-log "value":"draft after undefined"
+reject-log fault:

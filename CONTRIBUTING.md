@@ -54,7 +54,7 @@ new feature fits when:
   pills, menus, spacing and motion. If it needs its own visual language, it probably doesn't
   fit.
 - **Nothing leaves the Mac.** No account, server or cloud AI, and no new data in the opt-in
-  usage stats. On-device Apple Intelligence is fine, and the feature stays hidden when it's
+  usage stats or the daily check-in that counts users (docs/sharing.md). On-device Apple Intelligence is fine, and the feature stays hidden when it's
   off, like Tidy Tabs.
 - **It stays out of the way.** People who never use it don't see new settings, badges or
   prompts.

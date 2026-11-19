@@ -1,0 +1,31 @@
+# promise: #554
+# ⌃Tab with a split (#554), as Arc 1.172 shows it (measured 18 Nov 2026): the split is one card, its
+# panes' thumbnails side by side in a dark frame with each pane's favicon under it, not a card per
+# pane. solo opens first, then the split of left and right (right focused), then front on screen.
+# Before the fix the switcher listed left and right as two cards. A tap of ⌃Tab from front goes
+# to the split, on the pane used last; the next tap comes back to front.
+budget rss=600 stalls50=10
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=solo
+wait 1
+cra://open?url=${PAGE}?n=left
+wait 1
+cra://action/addSplitView
+cra://navigate?url=${PAGE}?n=right
+wait 2
+cra://open?url=${PAGE}?n=front
+wait 2
+cra://action/recentTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'split:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"split:\?n=right"
+cra://action/recentTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'back:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"back:\?n=front"
+# Open, it shows three cards (the debug hook opens it without a held key, on the split).
+cra://debug?switcher=1
+expect-log tab switcher: 3 cards: Fixture front, split\(Fixture left \| Fixture right\), Fixture solo$
+snapshot TabSwitcherView tab-switcher-split
