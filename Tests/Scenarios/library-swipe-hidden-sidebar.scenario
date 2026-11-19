@@ -1,0 +1,63 @@
+# Arc 1.173.1: with the sidebar hidden and out over the page, a swipe on the first space brings the
+# Library in docked. It slides in under the floating sidebar and pushes the page before it, the
+# floating sidebar goes back out two points for the page's three, and leaving the Library by a
+# swipe ends on the hidden sidebar again. Cra took no swipe toward the Library there.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=hidden-library
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=hold
+wait 1
+# Held part way in: the Library under the floating sidebar, the page against its edge.
+cra://debug?hiddenLibraryReveal=0.4
+expect-log hidden library reveal 0\.40: library x=-250 w=417 page x=167 floating back=111
+cra://debug?hiddenLibraryReveal=lift
+wait 2
+expect-log library swipe from the hidden sidebar: back to the space
+cra://debug?windowState=back
+expect-log window state back: main0 .* lightsHidden=1 .* card=10,10,10,10 .* edge=floating
+# The swipe's own events, all the way: docked, the window's buttons back, the page beside it.
+cra://debug?swipe=30,25
+wait 2
+expect-log library swipe from the hidden sidebar: lands docked 417 pt wide
+cra://debug?themeShown=in
+expect-log Cra theme shown in: space=Home .* library=[a-z]+
+cra://debug?windowState=in
+expect-log window state in: main0 .* lightsHidden=0 .* card=417,.* sidebar=left edge=left .* floating=none
+# Out again by a swipe: the sidebar is hidden as before, on the same space.
+cra://debug?swipe=-30,25
+wait 2
+expect-log library left by a swipe: the sidebar hides again
+cra://debug?themeShown=out
+expect-log Cra theme shown out: space=Home .* library=-
+cra://debug?windowState=out
+expect-log window state out: main0 .* lightsHidden=1 .* card=10,10,10,10
+# The Library by ⇧⌘L from the hidden sidebar, left by a swipe: hidden again. It stayed docked, and
+# the next ⇧⌘L out of the Library hid it by surprise (Cra 0.1.49).
+cra://action/openLibrary
+wait 2
+cra://debug?windowState=key
+expect-log window state key: main0 .* lightsHidden=0 .* floating=none
+cra://debug?swipe=-30,25
+wait 2
+cra://debug?windowState=keyout
+expect-log window state keyout: main0 .* lightsHidden=1 .* card=10,10,10,10
+cra://action/openLibrary
+wait 2
+cra://debug?windowState=keyagain
+expect-log window state keyagain: main0 .* lightsHidden=0 .* floating=none
+cra://action/openLibrary
+wait 2
+cra://debug?windowState=keyleft
+expect-log window state keyleft: main0 .* lightsHidden=1 .* card=10,10,10,10
+# A mouse's back button over the floating sidebar goes the same way in.
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?clickAt=120,400&button=back&target=floating
+wait 2
+cra://debug?themeShown=mouse
+expect-log Cra theme shown mouse: space=Home .* library=[a-z]+

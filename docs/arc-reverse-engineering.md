@@ -109,6 +109,13 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   in the site's colour (hard-coded, e.g. YouTube #FF0000, GitHub #743FC7; glow in the same colour) before the
   field, placeholder "Search…", rows reduced to the typed search tinted with that colour. Backspace on the empty
   field drops the pill and puts back what was typed; Escape returns to how the bar opened. Cra: SiteSearch.all.
+- [O] Site Search colour key (19 Nov, Arc 1.173.1, `strings` on the binary; PR #562): the command bar's state keeps
+  `autoActivatedEngineURLToPrimaryColor` and `_siteSearchDominantColor`, an `(NSColor?, isFromAutoActivatedList: Bool)`
+  filled by a `loadedSiteSearchDominantColor` action from `FaviconDominantColorFetcher.fetchColor`. So the hard-coded
+  colour follows the engine's URL, not its keyword: YouTube with its keyword edited to `yt` keeps its red. Any other
+  engine takes its favicon's dominant colour. Cra keys its palette on the search URL's host (`SiteSearch.init(_:)`,
+  subdomains included) and gives engines outside it the space's colour.
+  [U] Arc's favicon colour algorithm, and whether its URL match is exact or by host.
 - [O] Scopes (1 Nov, Arc 1.171 Swift field names): `ScopedSearchType` has two cases, `siteSearch` and `typeTravel`;
   there is no tab scope. The bar's state keeps `scopedSearchType`, `scopedSearchColor`,
   `queryBeforeEnteringScopedSearch` (what Backspace puts back) and `postScopedSearchRestoration` (Escape); the

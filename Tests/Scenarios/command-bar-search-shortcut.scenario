@@ -1,0 +1,16 @@
+# Chromium saves a custom keyword while the command bar is opening. The open bar picks it up
+# after Web Data is written, and "yt" gets the same red fill as the built-in YouTube scope.
+budget rss=650 stalls50=12
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"showToolbar":false,"commandBarSiteColor":true,"searchSuggestions":false}
+cra://open?url=chrome%3A%2F%2Fsettings%2FsearchEngines
+expect-log loaded settings \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params=%7B%22expression%22%3A%22chrome.send%28%27searchEngineEditStarted%27%2C%5Bnull%5D%29%3Bchrome.send%28%27searchEngineEditCompleted%27%2C%5B%27YouTube%27%2C%27yt%27%2C%27https%3A%2F%2Fwww.youtube.com%2Fresults%3Fsearch_query%3D%25s%27%5D%29%3B%27saved-yt%27%22%2C%22returnByValue%22%3Atrue%7D
+expect-log Cra cdp Runtime.evaluate.*saved-yt
+cra://commandbar?query=yt
+# Chromium batches keyword database writes for five seconds.
+wait 6
+cra://debug?commandBarScope=enter
+expect-log command bar scope enter: YouTube, fill [[:punct:]](4B2323|F6DFDF)
+cra://commandbar?query=c%2B%2B
+cra://debug?commandBarRows=youtube-shortcut
+expect-log Cra command bar rows youtube-shortcut: open=1 .*other:https://www.youtube.com/results\?search_query=c%2B%2B

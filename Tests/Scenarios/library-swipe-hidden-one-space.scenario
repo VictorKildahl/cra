@@ -1,0 +1,38 @@
+# One space, the sidebar hidden and out over the page: a swipe right still brings the Library in
+# docked (LibrarySwipe, "From a hidden sidebar"), and a swipe left still brings Arc's "+" out past
+# the last space (NewSpaceSwipe, #564). Both PRs let a one-space window swipe in a floating sidebar.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one-space
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=hold
+wait 1
+# Toward the Library: in, docked.
+cra://debug?swipe=30,25
+wait 2
+expect-log library swipe from the hidden sidebar: lands docked [0-9]+ pt wide
+cra://debug?windowState=in
+expect-log window state in: main0 .* lightsHidden=0 .* floating=none
+reject-log new space pull: lifted
+# Out by a swipe: hidden again, and the rest of that swipe brings no "+".
+cra://debug?swipe=-30,25
+wait 2
+cra://debug?windowState=out
+expect-log window state out: main0 .* lightsHidden=1 .* card=10,10,10,10
+reject-log new space pull: lifted
+reject-log space editor opens
+# The other way, out over the page again: Arc's "+", and New Space.
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?swipe=-8,100
+wait 1
+expect-log new space pull: lifted [0-9.]+ pt out, New Space opens
+expect-log space editor opens: a new space
+cra://dismiss
+wait 1
+cra://debug?windowState=plus
+expect-log window state plus: main0 .* lightsHidden=1 .* card=10,10,10,10

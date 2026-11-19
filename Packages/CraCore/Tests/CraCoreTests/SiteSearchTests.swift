@@ -67,14 +67,25 @@ struct SiteSearchTests {
         #expect(SiteSearch.match("ka", completion: nil, keywords: [kagi])?.name == "Kagi")
         #expect(SiteSearch.match("@hist", completion: nil, keywords: keywords) == nil)
         #expect(SiteSearch.match("duck", completion: nil, keywords: [])?.name == nil)
-        // A keyword on one of Arc's hosts keeps Arc's colour; others take the space's.
+        #expect(SiteSearch(Self.wiki).searchURL("a b") == "https://da.wikipedia.org/w/index.php?search=a%20b")
+    }
+
+    @Test func shortcutsUseTheirSearchDestinationsColor() {
         var youtube = Self.autoYouTube
         youtube.isActive = 1
         youtube.keyword = "yt"
-        #expect(SiteSearch(youtube).color == nil)
-        youtube.keyword = "youtube.com"
-        #expect(SiteSearch(youtube).color == "#FF0000")
-        #expect(SiteSearch(Self.wiki).searchURL("a b") == "https://da.wikipedia.org/w/index.php?search=a%20b")
+        let alias = SiteSearch.match("yt", completion: nil, keywords: [youtube])
+        #expect(alias?.color == "#FF0000")
+        #expect(alias?.searchURL("c++") == "https://www.youtube.com/results?search_query=c%2B%2B&utm_source=opensearch")
+        #expect(SiteSearch.match("youtube.com", completion: nil, keywords: [youtube])?.color == alias?.color)
+        #expect(SiteSearch(Self.wiki).color == "#FFA500")
+
+        let spotify = ChromiumSearchEngine(name: "Spotify", keyword: "sp", url: "https://open.spotify.com/search/{searchTerms}")
+        #expect(SiteSearch(spotify).color == "#1DB954")
+        let unrelated = ChromiumSearchEngine(name: "YouTube", keyword: "youtube.com", url: "https://notyoutube.com/?q={searchTerms}")
+        #expect(SiteSearch(unrelated).color == nil)
+        let proxied = ChromiumSearchEngine(name: "Other", keyword: "proxy", url: "https://example.com/?url=https://youtube.com&q={searchTerms}")
+        #expect(SiteSearch(proxied).color == nil)
     }
 
     /// Arc's own list keeps its `%s` URLs.

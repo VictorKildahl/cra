@@ -216,7 +216,11 @@ public struct SiteSearch: Equatable, Sendable {
     }
 
     public init(_ engine: ChromiumSearchEngine) {
-        let arc = Self.all.first { $0.host == engine.keyword.lowercased() }
+        // Arc keys the colour on the engine's URL, not its keyword (`autoActivatedEngineURLToPrimaryColor`,
+        // Arc 1.173), so YouTube's red stays when its keyword becomes "yt". Match the search URL's
+        // host, including site subdomains such as www.youtube.com and da.wikipedia.org.
+        let target = URL(string: engine.searchURL(""))?.host(percentEncoded: false)?.lowercased()
+        let arc = target.flatMap { host in Self.all.first { host == $0.host || host.hasSuffix("." + $0.host) } }
         self.init(name: engine.name, host: engine.keyword, url: engine.url, color: arc?.color)
     }
 
