@@ -1677,6 +1677,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
+            // littleKey=<n>: the nth Little Window (oldest first) picked as Mission Control picks one (#581);
+            // littleOrder=<label>: Cra's browser and Little Windows, front to back, as the window server has them.
+            if let n = dict["littleKey"].flatMap(Int.init), littleWindows.indices.contains(n) { littleWindows[n].debugPick(); return }
+            if let label = dict["littleOrder"] {
+                var names: [Int: String] = [:]
+                for (i, m) in mainWindows.enumerated() { if let w = m.window { names[w.windowNumber] = "main\(i)" } }
+                for (i, l) in littleWindows.enumerated() where !l.isPeek { if let w = l.window { names[w.windowNumber] = "little\(i)" } }
+                let order = (NSWindow.windowNumbers(options: []) ?? []).compactMap { names[$0.intValue] }
+                CraLog.note("little order \(label): \(order.joined(separator: " "))")
+                return
+            }
             // littleRow=<text>&typed=<text>: the newest Little Window's ⌘L bar picks the row for that page (#599).
             if let address = dict["littleRow"] { littleWindows.last?.debugPickRow(containing: address, typed: dict["typed"] ?? ""); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).

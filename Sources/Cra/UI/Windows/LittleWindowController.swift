@@ -1442,6 +1442,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.commit(row)
     }
 
+    /// `cra://debug?littleKey=<n>`: this window picked as Mission Control or App Exposé picks one: brought
+    /// forward, made key, and its page takes the keyboard (#581).
+    func debugPick() {
+        window?.orderFront(nil)
+        window?.makeKey()
+        browser?.setFocused(true)
+    }
+
     /// cra://debug?littleMenu=<step>: drives the "Open in" menu (#331) and logs what it shows.
     /// open (as the ⌄ or ⇧⌘O), down<n> (↓ n times), type:<text> (the filter), close.
     /// A step after the open finds the menu as it was even when another app took the keyboard between
