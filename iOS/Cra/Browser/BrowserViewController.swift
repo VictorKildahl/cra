@@ -124,6 +124,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         center.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         Self.saveFakeShareForTest()
         center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
+        center.addObserver(self, selector: #selector(faviconsChanged), name: FaviconStore.didChange, object: nil)
 
         ContentBlocker.shared.prepare()
         BlockLists.shared.set(addresses: settings.value.customBlocklists)
@@ -377,6 +378,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             favicons.fetchFromHomePage(for: row.url)
         }
         sheet.setRecentTabs(rows.map { ($0, favicons.icon(for: $0.url)) })
+    }
+
+    /// A Mac tab's icon, asked of its site, arrived while the recent tabs show.
+    @objc private func faviconsChanged() {
+        guard isSearching, sheet.text.isEmpty else { return }
+        updateRecentTabs()
     }
 
     func searchSheet(_ sheet: SearchSheet, didChangeText text: String) {
