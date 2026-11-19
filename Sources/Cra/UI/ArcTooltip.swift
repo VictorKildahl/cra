@@ -117,6 +117,12 @@ final class ArcTooltipController {
     /// Testing: whether a tip is on screen.
     var debugShown: Bool { panel != nil }
 
+    /// Testing: `target`'s own tip, without a pointer, and its size once shown.
+    func debugShow(for target: any ArcTooltipTarget) -> NSSize {
+        show(for: target)
+        return panel?.frame.size ?? .zero
+    }
+
     /// Testing: the tip for `help` over a rect of `view`, without a pointer.
     func debugShow(_ help: String, in view: NSView, at rect: NSRect) {
         let a = ArcTooltipAnchorView(frame: rect)
@@ -260,6 +266,10 @@ final class ArcTooltipAnchorView: NSView, ArcTooltipTarget {
     var subtitle: String?
     /// Shown instead while ⌥ is held (the split close button un-splits on ⌥-click).
     var optionText: String?
+    /// How long the pointer rests before the tip shows, when it isn't the usual wait: the (i) on
+    /// Arc's Create a Space page shows its tip as the pointer arrives.
+    var delay: TimeInterval?
+    var idleDelay: TimeInterval { delay ?? ArcTooltipController.idleDelay }
     var onShow: (() -> Void)?
     var placement = ArcTooltipPlacement.corner
 

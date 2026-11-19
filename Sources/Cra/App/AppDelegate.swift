@@ -2301,7 +2301,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
-            if dict["themeEditor"] != nil { main.showSpaceStyleEditor(space: store.focusedSpace); return }
+            // themeEditor=1 opens it; themeEditor=intensity:<0…1> or noise:<0…1> moves its slider or
+            // dial as a drag would, and logs how many ticks that played.
+            if let step = dict["themeEditor"] {
+                let parts = step.split(separator: ":").map(String.init)
+                guard parts.count == 2, let v = Double(parts[1]) else { main.showSpaceStyleEditor(space: store.focusedSpace); return }
+                let before = SpaceStyleTick.count
+                NotificationCenter.default.post(name: SpaceStyleTick.debugSet, object: nil, userInfo: [parts[0]: v])
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    CraLog.note("theme editor \(parts[0]) \(parts[1]): ticks +\(SpaceStyleTick.count - before)")
+                }
+                return
+            }
             if dict["jumpPill"] != nil { SpaceListView.jumpToSelected(for: main.sidebarUI, space: store.focusedSpaceID); return }
             // The open folder preview: the pointer resting on a row, the list scrolled under it, and
             // "Cra folderPreview <label>: lit=<rows> top=<pt>", the rows with the pointer's highlight and how far
@@ -2370,6 +2381,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.debugNewSpacePull(Double(pull).map { CGFloat($0) }, lift: pull == "lift" || dict["lift"] != nil)
                 return
             }
+            // spaceCreation=state|type:<name>|icon:<emoji>|symbol:<name>|theme:<n>|profile:<n>|engine:<keyword>|create|cancel: Arc's
+            // Create a Space page, one step on it, and what it and the dock then show.
+            if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
                 return
@@ -3097,7 +3111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard !main.isBlank else { break }
             let f = store.createFolder(named: "New Folder", in: store.focusedSpace.pinnedContainerID, index: 0)
             main.sidebarUI.renamingID = f.id
-        case "newSpace": main.showSpaceEditor(space: nil)
+        case "newSpace": main.beginSpaceCreation()
         case "newProfile": if !main.isIncognito, let w = main.window { main.showNewProfileDialog(over: w) }
         case "share": main.shareSelectedPage()
         case "newBoost": main.openBoostEditor()

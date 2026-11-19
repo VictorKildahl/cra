@@ -101,6 +101,8 @@ final class SidebarUIState {
     /// The space pager and the window tint follow the swipe directly in AppKit, not through SwiftUI.
     @ObservationIgnored private var spaceSwipeObservers: [() -> Void] = []
     func observeSpaceSwipe(_ f: @escaping () -> Void) { spaceSwipeObservers.append(f) }
+    /// The space being made in Arc's Create a Space page, while that page is up (SpaceCreationDraft).
+    var spaceCreation: SpaceCreationDraft?
     /// How far the tab list is overscrolled past the last space, in points; 0 when it isn't.
     /// Arc's "+" comes in with it (NewSpaceSwipe).
     var newSpacePull: CGFloat = 0 { didSet { if newSpacePull != oldValue { for f in newSpacePullObservers { f() } } } }
@@ -222,6 +224,13 @@ final class SidebarActions {
     var editSpace: (Space?) -> Void = { _ in }
     /// Move to ▸ New Space… on picked tabs: the new space sheet, and the tabs go to the space it makes.
     var newSpaceWith: ([UUID]) -> Void = { _ in }
+    /// Arc's Create a Space page: leave it, make the space, open the theme editor beside the row
+    /// (its frame on screen), the New Profile dialog, and close what the page has opened.
+    var cancelSpaceCreation: () -> Void = {}
+    var commitSpaceCreation: () -> Void = {}
+    var chooseCreationTheme: (NSRect) -> Void = { _ in }
+    var newProfileForCreation: () -> Void = {}
+    var closeCreationPanels: () -> Void = {}
     /// Arc's space menu: the icon picker under the header, the theme editor, a new profile for
     /// the space, the Library's Spaces page, and deleting this space (not the focused one).
     var changeSpaceIcon: (Space, NSView) -> Void = { _, _ in }

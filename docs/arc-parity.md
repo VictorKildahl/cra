@@ -316,7 +316,7 @@ space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView
   with white in light. The same disc is the Add Space card in
   Library ▸ Spaces (`SpaceManagementAddSpaceView`, 30 × 30 at 0x10039fcb0).
 - It works with the sidebar docked and with it hidden and out over the page.
-- Arc then opens its Create a Space form inside the sidebar. Cra opens its New Space sheet for now.
+- Arc then opens its Create a Space page in the sidebar, and so does Cra ("Create a Space, measured").
 - Past the last space the list gives on Arc's own rubber band, which upstream measured past the
   Library (docs/arc-reverse-engineering.md, "Swipe into the Library": 300 px of fingers for 20.5 pt,
   D(1 − 1/(0.15 x / D + 1)) with x half the fingers' travel). It is about a quarter as giving as the
@@ -327,6 +327,84 @@ space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView
   was built with). The catalog's light variant wasn't seen.
 - Not known: the strip's width in Arc's layout, and whether that band's D is the page's width (the
   fit gave 215 pt; over this range it hardly matters).
+
+## Create a Space, measured (Arc 1.173.1, 18 Nov 2026)
+
+From a 2x still of the page, a 148 s screen recording read frame by frame (120 Hz), and Arc's code
+(the page is SwiftUI, `SpaceCreation/SpaceCreationView.swift`; its constants include the 36 pt rows
+and the 8 pt spacing). CraCore `SpaceCreationDraft`, `SpaceCreationLayout`, `SpaceCreationAnimation`;
+the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, in a 250 pt sidebar.
+
+- New Space is a page in the sidebar, after the last space, not a dialog. From the "+" past the
+  last space it pushes in over about 0.18 s; from the dock's "+" menu about 0.25 s, the window
+  taking the new space's colours on the way. Cancel brings the old space back from the left in
+  about 0.1 s. The sidebar's top row stays; the favorites and the tab list give way to the page.
+  It never draws over the web page on the way. While it is up the page area is the new space's
+  empty page in the draft's theme (Cra: the window shows no tab and no split until it closes).
+- A swipe back takes the page out under the fingers, the space's column coming back beside it. On
+  the lift it leaves past half way or on a flick (the rule for a page between spaces), else goes
+  back in over 0.2 s. CraCore `SpaceCreationSwipe`.
+- A picture of three tilted cards (64 × 41 pt, top 79 pt), "Create a Space" (about 16 pt bold, top
+  140 pt) and a two-line subtitle (about 13 pt, 16.5 pt apart, top 170 pt).
+- The name: a 223 × 35 pt field at 13.6, 231 (radius about 6 pt), white at 6 % on a dark sidebar and
+  about 60 % on a light one. It has the keyboard as the page opens (a blue caret, no focus ring),
+  the placeholder "Space name…", and a dashed 18 pt "+" at 21, 239.5 that opens the icon picker in
+  a popover under it (264 × 265 pt, Emoji and Icon). A picked icon takes the "+"'s place.
+- Profile: a 36 pt row 6 pt under the field, white at 8 % on dark (12 % under the pointer), with a
+  pill for the profile's name (about 21.5 pt tall) and an (i) 12.5 pt across. Its tip is Arc's own
+  bubble (navy 12/15/70 with text 157/159/212 on the dark navy theme, radius 10 pt), up as the
+  pointer arrives and fading over 0.25 s; Arc's reads "You can use a Profile to give this Space
+  its own logins, history, and browsing data." Cra shows it in its Arc tooltip (ArcTooltip) after
+  0.05 s, with the words its sheet had under Profile, and the Search Engine row has an (i) with the
+  sheet's words for that choice. The pill's menu is
+  a native one and isn't in a window recording; an item of it opens Create a new Profile. Cra's
+  menu has the rows of Arc's Change Profile menu: Default, the profiles, a line, New Profile….
+- Choose a Theme: a 36 pt row 7 pt under Profile. It opens the theme editor beside the sidebar
+  (347.5 × 496 pt, an arrow at the row), and every change shows at once on the sidebar, the page,
+  the button and the dock. A click in the sidebar closes it and the theme stays.
+- Create Space: 223 × 35.5 pt, ending 94 pt above the sidebar's bottom, a deep shade of the theme
+  (#A3164B on a pink #B8718A sidebar, #1C25FF on Arc's dark navy). Dim until the name has a
+  character, then on at once, and off again with an empty name. Cancel is a text button centred
+  73 pt above the bottom.
+- The dock under the page loses its Library and "+" buttons, its items stand 28 pt apart (33
+  before) and one more follows the last space: a lit dot, and the picked icon once a theme has
+  been chosen. The space that was open is dimmed.
+- Create Space, about 2.5 s. From Arc's code (0x102602250 to 0x102603974, and the press at
+  0x102604428) and its frames:
+  - The press runs `withAnimation(.easeInOut(duration: 0.4))`. The button and Cancel fade where
+    they stand (0.17 s). Each other part goes 80 pt down and out, 0.03 s after the one under it
+    (`.delay`): Choose a Theme 0.03, Profile 0.06, the name 0.09, the subtitle 0.12, the title 0.15.
+    A part has faded by half its slide (0.2 s; the name is 36 pt down when it is gone).
+  - The picture and the card are two faces of one thing: `rotation3DEffect` of π about the level
+    axis (x 1, y 0, z 0; anchor centre, anchorZ 0, perspective 1), a `scaleEffect` with its own x
+    and y, and an offset of half the page's height, all on `spring(response: 0.8,
+    dampingFraction: 1).delay(0.3)`. So its place and its angle keep step: edge-on 0.52 s in, half
+    way down. Measured at 120 Hz the drop is 1 − (1 + ωt)e^(−ωt) with ω 7.85 to within 3 % all the
+    way (534 pt in a 1250 pt window).
+  - The picture's top edge goes away first, and the card with the icon (62.5 × 79 pt, radius 5 pt)
+    comes round top edge nearest. The far edge is 0.57 of the near one at 75° and 0.82 at 17°: an
+    eye about 150 pt away. The width never changes; the height does: the 40 pt picture would stand
+    109 pt edge-on, and the card comes from 1.4 of its height down to its own (96 pt at 0.60 s,
+    88 at 0.73, 84 at 0.80, 79 at 1.0).
+  - The card shows through the picture before the turn (a white sheet over it, half there 0.4 s
+    in) and the picture's side cards show behind the card until about 0.85 s.
+  - A glow of the theme pulses behind the card at 1.3 to 1.5 s; the card fades at 1.8 to 2.0 s; the
+    space shows at about 2.5 s. A form opened after that is empty.
+  CraCore `SpaceCreationAnimation` (`drop`, `turn`, `height`); the view plays it as one transform
+  a frame, 120 a second.
+- The page lays itself out by the sidebar's width; its SwiftUI view compares the width with 227 and
+  190 (0x102602d4c, 0x102602ce8). Over 227 pt the rows carry a glyph. At 227 pt and under they
+  lose it and their label starts 16 pt in. At 190 pt and under the subtitle is one string that wraps
+  as it falls (three lines in a 165 pt sidebar) instead of breaking after "life,", and the Profile
+  row stacks: 60 pt tall, "Profile" and the (i) on a line centred 16 pt down, the pill under them,
+  23 pt tall, 8 pt inside the row's sides, its chevron at the end. Measured in a 165 pt sidebar.
+  Cra's Search Engine row stacks the same way, and also whenever its pill has no room beside it.
+- Cra's own: a new space starts on one random brand colour (#155, #170) where Arc starts on a
+  dark navy; the page has a Search Engine row under Choose a Theme, which Arc's has not (#306, so nothing the sheet offered is lost); the picture is Cra's drawing;
+  and the (i) tips carry Cra's own words.
+- Not seen: Escape, Return and Tab on the page (Cra: Escape cancels, Return creates); a click on
+  another space in the dock (Cra leaves the page for it); and whether a cancelled page keeps its
+  text (Cra's opens empty).
 
 ## Boosts, measured (Arc 1.172.1, Victor's Arc, 7 Nov 2026)
 
@@ -364,6 +442,26 @@ space, read frame by frame (CraCore `NewSpaceSwipe`; the app's `NewSpacePlusView
   Extension…. Cra keeps Copy URL in the second slot where a page can't be boosted (Arc not measured there).
 - Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once), and
   the faint colour wash in the middle of Arc's wheel.
+
+## Theme editor: the slider and the dial (Arc 1.173.1, 18 Nov 2026)
+
+From Arc's SpaceStyleEditor code (arm64, read with objdump) and a 120 Hz, 2x screen recording of the
+intensity slider dragged end to end (CraCore `SpaceStyleControls`; the app's `WaveSlider`, `GrainDial`).
+
+- Both controls tick: Arc plays a generic haptic (`performFeedbackPattern: 0`, now, 0x1017bd8e4)
+  when a value crosses a step, a multiple of the step lying between the old value and the new one,
+  ends included (0x1017bcf84). The editor calls that with 0.1 for one value and 0.2 for the other
+  (0x1017bcb0c, 0x1017bcd28). Which is which isn't certain from the code: the 0.2 one is held to
+  0…1 first, as a turned dial needs, so Cra ticks the slider at each tenth and the dial at each fifth.
+- The slider's wave is `SineWave {strength, frequency, phase}`, y = mid + strength × sin(phase +
+  x × frequency / width), with strength = maxAmplitude × value (0x1017c2198): a flat line at
+  nothing. In the recording it is 33.5 pt from trough to crest at full with its 5 pt line (20 pt at
+  0.54, 10.5 pt at 0.2), seven waves whatever the value.
+- The thumb grows with the value: held, 12.5 × 44.5 pt at nothing and 28 × 58.5 pt at full, its
+  width even between (21 pt at 0.54). At rest it is a tenth smaller (22 × 50.5 pt at 0.8): under
+  the pointer or held it scales to 1.1 on a spring (response 0.25, damping 0.9, 0x1017c18e4). Its
+  centre travels 202.8 pt.
+- Not seen: the dial turned slowly enough to count its ticks.
 
 ## Zap, measured (Arc 1.172.2, Victor's Arc on example.com, 12 Nov 2026)
 

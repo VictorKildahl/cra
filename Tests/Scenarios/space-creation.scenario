@@ -1,0 +1,106 @@
+# Arc's Create a Space page (Arc 1.173.1): New Space opens as a page in the sidebar, not a sheet.
+# The name takes the keyboard, Create Space is on once it has a character, the dock loses its two
+# buttons and gains an item for the new space (a dot, then the picked icon once a theme is chosen),
+# Cancel leaves everything as it was, and Create Space makes the space in this window.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x900
+cra://open?url=${PAGE}?n=creation
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/newSpace
+expect-log space creation opens
+reject-log space editor opens
+cra://debug?spaceCreation=state
+expect-log space creation state: name="" keys=1 icon=plus profile=Default engine=Default \(Google\) layout=wide searchGlyph=18 create=off field=14,189,301x35 rows=14,230,301x36,14,273,301x36 button=14,681,301x36 dock=🏠@28 💼@28 dot8@28 buttons=00 space=Home spaces=2 pages=0 pull=0\.00
+# The page area shows the new space's empty page while the form is up, as Arc's does.
+reject-log space creation state: .* pages=1
+# Each (i) shows what the sheet said under that choice, in Arc's own bubble as the pointer arrives,
+# not the system's tooltip.
+cra://debug?spaceCreation=tip:profile
+expect-log space creation tip profile: "Profiles make your Spaces truly separate with their own logins, cookies and site data\. Spaces with the same Profile share them\." wait=0\.05 bubble=[0-9]+x[0-9]+ native=0
+cra://debug?tooltipShown=profile
+expect-log tooltip profile: shown=1
+cra://debug?spaceCreation=tip:search
+expect-log space creation tip search: "Searches from the command bar in this space go here\. Default follows Settings\." wait=0\.05 bubble=[0-9]+x[0-9]+ native=0
+# A swipe back takes the page out under the fingers, and its tip goes. Let go short of half way and
+# the page goes back in; past half way it leaves, as Cancel.
+cra://debug?spaceCreation=swipe:100
+expect-log space creation swipe:100: name="" .* pages=0 pull=0\.30
+cra://debug?tooltipShown=swiping
+expect-log tooltip swiping: shown=0
+cra://debug?spaceCreation=lift
+expect-log space creation swipe: lifted 0\.30 out, goes back
+expect-log space creation lift: name="" .* pull=0\.00
+cra://debug?spaceCreation=swipe:200
+cra://debug?spaceCreation=lift
+expect-log space creation swipe: lifted 0\.61 out, leaves
+expect-log space creation lift: none dock=🏠@34 💼@34 buttons=11 space=Home spaces=2 pages=1 pull=0\.00
+cra://action/newSpace
+# A name turns Create Space on, and an empty one off again.
+cra://debug?spaceCreation=type:H
+expect-log space creation type:H: name="H" .* create=on
+cra://debug?spaceCreation=type:
+expect-log space creation type:: name="" .* create=off
+# Cancel: the space it came from, its theme and the dock as they were.
+cra://debug?themeShown=before
+cra://debug?spaceCreation=cancel
+expect-log space creation cancelled
+expect-log space creation cancel: none dock=🏠@34 💼@34 buttons=11 space=Home spaces=2 pages=1
+# Again, through to a space: a picked icon stays a dot in the dock until a theme is chosen.
+cra://action/newSpace
+cra://debug?spaceCreation=type:Travel
+cra://debug?spaceCreation=icon:🧳
+expect-log space creation icon:🧳: name="Travel" keys=1 icon=🧳 .* dock=🏠@28 💼@28 dot8@28 buttons=00
+cra://debug?spaceCreation=theme:3
+expect-log space creation theme:3: .* dock=🏠@28 💼@28 🧳@28 buttons=00
+# Cra's own row: the space's search engine, which Arc's page doesn't have (#306).
+cra://debug?spaceCreation=engine:duckduckgo.com
+expect-log space creation engine:duckduckgo.com: .* engine=DuckDuckGo layout=wide searchGlyph=18 create=on
+cra://debug?spaceCreation=create
+# The picture drops to the card's place on Arc's spring and turns over on the way.
+expect-log space creation plays: the cards drop [0-9]+ pt and turn over, 236 frames, card=🧳
+wait 3
+expect-log space creation made "Travel" on Default, theme chosen, search duckduckgo\.com
+cra://debug?spaceCreation=state
+expect-log space creation state: none dock=🏠@34 💼@34 🧳@34 buttons=11 space=Travel spaces=3
+# Another space brought to the front leaves the page too.
+cra://action/newSpace
+cra://debug?spaceCreation=type:Elsewhere
+cra://action/previousSpace
+wait 1
+expect-log space creation cancelled
+cra://debug?themeShown=elsewhere
+expect-log Cra theme shown elsewhere: space=Work .* library=-
+cra://action/nextSpace
+wait 1
+# cra://dismiss leaves the page, like a sheet.
+cra://action/newSpace
+cra://debug?spaceCreation=type:Gone
+cra://dismiss
+expect-log space creation cancelled
+cra://debug?spaceCreation=state
+expect-log space creation state: none dock=🏠@34 💼@34 🧳@34 buttons=11 space=Travel spaces=3
+# With the sidebar hidden the page brings it out and holds it.
+cra://action/toggleSidebar
+wait 1
+cra://action/newSpace
+wait 1
+cra://debug?windowState=hiddenform
+expect-log window state hiddenform: main0 .* edge=floating .* floating=left 5
+cra://debug?spaceCreation=type:Later
+expect-log space creation type:Later: name="Later" .* create=on
+cra://debug?spaceCreation=cancel
+expect-log space creation cancel: none
+# A symbol for an icon comes round on the card too, not a blank card.
+cra://action/toggleSidebar
+wait 1
+cra://action/newSpace
+cra://debug?spaceCreation=type:Stars
+cra://debug?spaceCreation=symbol:star.fill
+cra://debug?spaceCreation=theme:2
+expect-log space creation theme:2: name="Stars" keys=[01] icon=star\.fill
+cra://debug?spaceCreation=create
+expect-log space creation plays: the cards drop [0-9]+ pt and turn over, 236 frames, card=star\.fill
+wait 3
+expect-log space creation made "Stars" on Default, theme chosen

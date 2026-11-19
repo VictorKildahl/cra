@@ -618,7 +618,17 @@ final class SidebarStore {
         guard let id = self.window(window).selectedTabPerSpace[spaceID], items[id]?.isTab == true else { return nil }
         return id
     }
-    func selectedTabID(window: UUID?) -> UUID? { selectedTabID(in: focusedSpaceID(window: window), window: window) }
+    func selectedTabID(window: UUID?) -> UUID? {
+        isMakingSpace(window: window) ? nil : selectedTabID(in: focusedSpaceID(window: window), window: window)
+    }
+
+    /// Windows showing Arc's Create a Space page. Such a window shows the new space's empty page,
+    /// not the page of the space it was opened on, so it has no selected tab and no panes until the
+    /// page is left; what each space has selected is untouched.
+    var windowsMakingSpace: Set<UUID> = []
+    func isMakingSpace(window: UUID?) -> Bool {
+        !windowsMakingSpace.isEmpty && windowsMakingSpace.contains(window ?? activeWindowID)
+    }
     func selectedTab(window: UUID?) -> SidebarItem? { selectedTabID(window: window).flatMap { items[$0] } }
     var selectedTabID: UUID? { selectedTabID(window: nil) }
     var selectedTab: SidebarItem? { selectedTab(window: nil) }
@@ -1137,7 +1147,7 @@ final class SidebarStore {
 
     /// Panes shown in a space right now (the selected tab's split).
     func visiblePaneTabIDs(in spaceID: UUID, window: UUID? = nil) -> [UUID] {
-        guard let sel = selectedTabID(in: spaceID, window: window) else { return [] }
+        guard !isMakingSpace(window: window), let sel = selectedTabID(in: spaceID, window: window) else { return [] }
         return paneTabIDs(for: sel)
     }
 

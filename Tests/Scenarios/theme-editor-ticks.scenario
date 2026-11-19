@@ -1,0 +1,26 @@
+# Arc's theme editor ticks (a generic haptic) as the intensity slider crosses each tenth and as the
+# grain dial crosses each fifth (Arc 1.173.1's SpaceStyleEditor). Cra's played none.
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x900
+wait 1
+cra://debug?themeEditor=1
+wait 1
+# The slider: inside one tenth nothing, across 0.5 one tick, and one for a long drag over several.
+cra://debug?themeEditor=intensity:0.43
+wait 0.5
+cra://debug?themeEditor=intensity:0.47
+expect-log theme editor intensity 0\.47: ticks \+0
+cra://debug?themeEditor=intensity:0.53
+expect-log theme editor intensity 0\.53: ticks \+1
+cra://debug?themeEditor=intensity:0.58
+expect-log theme editor intensity 0\.58: ticks \+0
+cra://debug?themeEditor=intensity:0.92
+expect-log theme editor intensity 0\.92: ticks \+1
+# The dial's steps are twice as far apart.
+cra://debug?themeEditor=noise:0.25
+wait 0.5
+cra://debug?themeEditor=noise:0.35
+expect-log theme editor noise 0\.35: ticks \+0
+cra://debug?themeEditor=noise:0.45
+expect-log theme editor noise 0\.45: ticks \+1
+cra://dismiss
