@@ -283,6 +283,12 @@ built release app with a test profile. Note anything that fails in the release's
 - **#298:** in a tab on a DRM service (it opens in WebKit, docs/protected-media.md), Option-click a
   link: it opens as a split pane beside the page, as it does in any other tab (that scenario's
   posted click never reaches a WebKit page behind other windows).
+- **Protected videos on YouTube** (docs/protected-media.md; it takes an account that owns a
+  film, which protected-video-prompt.scenario's fixture can't stand in for): signed in to YouTube
+  in Chromium, open a bought film. The toast offers Safari's engine with Once and Always. Once: the
+  page opens in WebKit signed in, the film goes on from where it was, and its quality menu offers
+  more than 480p. An ordinary video opened in that tab is Chromium's again, extensions and all.
+  The Chromium session is still signed in afterwards.
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.

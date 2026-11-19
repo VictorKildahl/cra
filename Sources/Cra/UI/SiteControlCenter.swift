@@ -26,8 +26,8 @@ struct SiteControlCenterActions {
     var showCertificate: (() -> Void)?
     /// A WebKit page's "Learn more" (docs/protected-media.md).
     var learnAboutProtectedMedia: () -> Void = {}
-    /// The Safari's Engine switch: true plays the site in WebKit from now on, false in Chromium.
-    var chooseSafariEngine: (Bool) -> Void = { _ in }
+    /// The Safari's Engine row's click, with the row as it stood (SafariEngineRow says what each does).
+    var pressSafariEngine: (SafariEngineRow) -> Void = { _ in }
     /// Arc's New Boost, in the second action slot and the More menu; nil where a page can't be
     /// boosted (not a website, or Boosts off in Settings), and Copy URL takes the slot.
     var newBoost: (() -> Void)?
@@ -64,14 +64,14 @@ final class SiteControlCenterView: NSView {
     /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place,
     /// and the ad blocker's switch goes (it is Chromium's).
     private let protectedMedia: String?
-    /// The Safari's Engine switch's state, nil without the switch (a page that uses no DRM).
-    private let safariEngine: Bool?
+    /// The Safari's Engine row, nil without it (a page that uses no DRM).
+    private let safariEngine: SafariEngineRow?
     private var extensions: ExtensionStore { .shared }
     /// The tiles by extension ID, whose icons follow the extensions' own changes in place.
     private var extensionTiles: [String: SiteExtensionTile] = [:]
 
     init(url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?, protectedMedia: String? = nil,
-         safariEngine: Bool? = nil, actions: SiteControlCenterActions, store: SidebarStore) {
+         safariEngine: SafariEngineRow? = nil, actions: SiteControlCenterActions, store: SidebarStore) {
         self.protectedMedia = protectedMedia
         self.safariEngine = safariEngine
         self.url = url
@@ -208,10 +208,11 @@ final class SiteControlCenterView: NSView {
         ]
         // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
         if protectedMedia != nil { rowsSpec.remove(at: 1) }
-        // A page that plays DRM, or one in WebKit: which engine plays this site (docs/protected-media.md).
-        if let on = safariEngine {
-            let choose = actions.chooseSafariEngine
-            rowsSpec.append(("safari", "Safari’s Engine", on ? "On" : "Off", on, { choose(!on) }))
+        // A page that plays DRM, or one in WebKit: which engine plays this site, or for a mixed
+        // site (YouTube) its protected videos or just this one (docs/protected-media.md).
+        if let row = safariEngine {
+            let press = actions.pressSafariEngine
+            rowsSpec.append(("safari", "Safari’s Engine", row.state, row.isOn, { press(row) }))
         }
         for (i, r) in rowsSpec.enumerated() {
             let row = SiteSettingRow(symbol: r.0, title: r.1, subtitle: r.2, active: r.3, colors: colors, action: r.4)
@@ -827,7 +828,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
     }
 
     func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
-              protectedMedia: String? = nil, safariEngine: Bool? = nil, toggleChecked: Bool = false,
+              protectedMedia: String? = nil, safariEngine: SafariEngineRow? = nil, toggleChecked: Bool = false,
               store: SidebarStore, actions: SiteControlCenterActions) {
         if !toggleChecked, closesInstead() { return }
         if let popover, popover.isShown { popover.performClose(nil) }
@@ -852,7 +853,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.showCertificate = actions.showCertificate.map(closing)
         acts.learnAboutProtectedMedia = closing(actions.learnAboutProtectedMedia)
         // The page opens again in the other engine: the popover's content would be the old page's.
-        acts.chooseSafariEngine = { [weak p] on in p?.performClose(nil); actions.chooseSafariEngine(on) }
+        acts.pressSafariEngine = { [weak p] row in p?.performClose(nil); actions.pressSafariEngine(row) }
         acts.newBoost = actions.newBoost.map(closing)
         acts.editBoost = { [weak p] id in p?.performClose(nil); actions.editBoost(id) }
         acts.manageBoosts = closing(actions.manageBoosts)
@@ -880,6 +881,14 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         }
         walk(root)
         CraLog.note("site controls: actions=\(actions.joined(separator: "|")) boosts=\(rows.joined(separator: "|"))")
+        // The Settings rows, each "title, state" ("Safari’s Engine, This Video").
+        var settings: [String] = []
+        func rowsOf(_ v: NSView) {
+            if v is SiteSettingRow, v.accessibilityCustomActions()?.isEmpty != false { settings.append(v.accessibilityLabel() ?? "") }
+            v.subviews.forEach(rowsOf)
+        }
+        rowsOf(root)
+        CraLog.note("site controls settings: \(settings.joined(separator: "|"))")
     }
 
     /// cra://debug?siteControlsPress=<label>[&accessory=1] (#478): the button or row with that

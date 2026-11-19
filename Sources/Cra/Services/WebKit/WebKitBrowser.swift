@@ -40,6 +40,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var capturing = false
     /// Muted before the web view existed (a popup host's): applied in makeWebView (#387).
     private var audioMuted = false
+    private let resume: (url: String, seconds: Double)?
     /// The service this page opened for ("Spotify"), kept while it signs in elsewhere: what the
     /// toast, the Site Control Center and the dimmed extension buttons name (PageEngines).
     var serviceName = ""
@@ -70,7 +71,11 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     /// `interactionState`: the back and forward list WKWebView saved for this tab (PageHistory,
     /// #273). It goes in instead of loading `url`, and WebKit loads its current page.
-    init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?, interactionState: Data?) {
+    /// `resume`: a page that moved here from Chromium for a protected video takes its video to
+    /// where it was, once (ProtectedVideoHandoff.seekScript).
+    init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?, interactionState: Data?,
+         resume: (url: String, seconds: Double)? = nil) {
+        self.resume = resume
         container = NSView(frame: frame)
         incognitoPage = incognito
         profile = incognito ? nil : profilePath
@@ -127,6 +132,11 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         content.addUserScript(WKUserScript(source: PageScript.mediaSessionWrapper + PageScript.mainWorld, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
         content.addUserScript(WKUserScript(source: PageScript.isolatedWorld + Self.isolatedAddOn, injectionTime: .atDocumentStart,
                                            forMainFrameOnly: false, in: Self.world))
+        if let resume, given == nil {
+            let until = (Date().timeIntervalSince1970 + 60) * 1000
+            content.addUserScript(WKUserScript(source: ProtectedVideoHandoff.seekScript(url: resume.url, seconds: resume.seconds, until: until),
+                                               injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Self.world))
+        }
         let proxy = ScriptMessageProxy(owner: self)
         content.add(proxy, contentWorld: Self.world, name: "cra")
         messages = proxy

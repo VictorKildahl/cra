@@ -17,6 +17,12 @@ It isn't only a fixed list of sites. Any other site that asks for Widevine gets 
 Engine** switch in its Site Control Center, and with it on the site plays in WebKit from then on
 (see [How it works](#how-it-works)).
 
+A third kind is the site that is mostly not DRM: YouTube, where a film bought or rented plays at
+480p in Cra's Chromium among ordinary videos that play fine. There Cra asks, and moves only the
+page that plays the film (see [Protected videos on an ordinary site](#protected-videos-on-an-ordinary-site)).
+That YouTube gives Safari's engine more than 480p for a purchase has not been checked with a real
+account yet.
+
 ## Why
 
 Chromium's Widevine CDM works in Cra: the component updater installs it, and sites whose licence
@@ -75,6 +81,69 @@ licence, keys usable, 720p playing). That is the whole requirement.
 - **A popup** (`window.open`) keeps its opener's engine, so `window.opener` still works for
   sign-in windows.
 
+## Protected videos on an ordinary site
+
+YouTube can't go on the list: every YouTube page would lose its extensions for the sake of the
+few that play a bought film. So YouTube is a **mixed site** (`ProtectedMediaSites.defaultMixedSites`:
+`youtube.com` and its subdomains, without `music.youtube.com`), and the engine is chosen per
+page. `ProtectedVideoPages` (CraCore, `ProtectedVideos.swift`) holds the rules, with tests:
+
+- **When Cra asks:** a Chromium page of a mixed site that asks for Widevine. The page tells Cra
+  itself: PageScript's `drmNext()` in Cra's world is a promise Cra leaves waiting in the page
+  (`BrowserManager.watchProtectedVideo`), which settles when the page calls
+  `navigator.requestMediaKeySystemAccess('com.widevine…')`. Nothing polls. Once a page has
+  asked, each `encrypted` media event counts as asking again, because a player that changes
+  videos without a navigation may keep the key system it got. An ordinary YouTube video asks for
+  neither (checked signed out, 19 Nov 2026), so it gets no prompt.
+- **The prompt** is Cra's toast, staying until it is answered: "Protected video: better quality
+  with Safari's engine, no extensions", with **Once** and **Always**. Its ✕ leaves that page in
+  Chromium, and the page isn't asked about again in that tab (another video is). The toast goes
+  with its page when another tab comes to the front and returns with it. An incognito page
+  offers Once only, so no site is written to disk from it.
+- **Once** moves this page to WebKit, at its address, in its split pane and with its focus
+  (`BrowserManager.switchToSafariEngine`, the same reopening as the other handoffs). The place
+  in the video goes along: in the address where the site has a time parameter (YouTube's
+  `&t=754s`), else the WebKit page seeks its first video there once
+  (`ProtectedVideoHandoff`). Under 5 seconds the video just starts over.
+- **A page, not a site:** what was switched is the video (`ProtectedMediaSites.pageKey`: the
+  site, the path and the `v` parameter; a time or a playlist don't make it another page). When
+  the WebKit page's address becomes another video's, or no video's, the tab opens that address
+  in Chromium again. YouTube changes videos without a navigation, so it is the address that is
+  watched. The site's sign-in keeps the page in WebKit: Google's hosts,
+  `accounts.youtube.com`, `consent.youtube.com` and `/signin`.
+- **Always** is kept per site in `protected-media.json` as `protectedVideos` (not `added`, which
+  is the whole site). From then on a page of that site that asks for Widevine moves without a
+  prompt. The move is still that page's only.
+- **Sign-in goes along:** before the move, the cookies of the site and of where it signs in
+  (YouTube: `youtube.com` and `google.com`, subdomains included) are copied from the tab's
+  Chromium profile to the same profile's WebKit store (`Network.getAllCookies`, filtered by
+  `ProtectedVideoHandoff.cookies`; partitioned and expired cookies stay). An incognito page's
+  go to the incognito session's throwaway WebKit store and nowhere else. If the copy fails or
+  takes over 2 seconds the page moves anyway and asks to sign in. Whether Google keeps a copied
+  session alive under Safari's user agent has not been checked with a real account yet.
+- **The Site Control Center's Safari's Engine row** says what is in force
+  (`ProtectedVideoPages.row`) and its click changes it:
+
+  | Row | Where | Click |
+  |---|---|---|
+  | On | a page of a site that plays in WebKit as a whole | the site goes back to Chromium (as before) |
+  | Off | a Chromium page off the mixed sites that asked for Widevine | the site moves to WebKit (as before) |
+  | Protected Videos | any page of a mixed site with Always | Always is taken back; a switched page returns to Chromium |
+  | This Video | a page switched Once | the page returns to Chromium |
+  | Off | a mixed site's Chromium page that asked and stayed | Always for the site, and this page moves (an incognito page: this page only) |
+
+  A page taken back with the row isn't asked about again. A mixed site that someone added whole
+  with the old switch is a whole-site entry and behaves as one.
+- **On the switched page** the Site Control Center's Protected Media card and the dimmed
+  extension buttons say "This video", not the site: the rest of YouTube keeps its extensions. The
+  once-per-service "plays with Safari's engine" toast doesn't show for it; the prompt was the telling.
+
+A switched page is remembered for the session only. After a relaunch its tab opens in Chromium,
+where the film asks for Widevine again: with Always it moves by itself, otherwise the prompt
+shows. Back doesn't cross the move: each engine keeps its own history, as with the other handoffs.
+Known gaps: only the top frame's request is seen (a player inside an iframe isn't), and Little
+Windows and Peeks don't prompt.
+
 `WebKitBrowser` (`Sources/Cra/Services/WebKit/`) is a `CraBrowser` subclass backed by a
 `WKWebView`. It hosts the way Alloy pages do: its view sits in `containerView`, which split view
 places in the pane, and it has no `hostWindow`. It sends the same delegate callbacks as CraCEF.
@@ -126,7 +195,8 @@ address. A WebKit page signing in on accounts.spotify.com still counts as Spotif
 
 - **Chrome extensions**, including password managers' autofill: those services are signed into
   once, by hand or from the password manager's own app.
-- **Chromium's logins and cookies**: the first visit to a service signs in again.
+- **Chromium's logins and cookies**: the first visit to a service signs in again. The exception
+  is a page moved for a protected video on a mixed site, whose sign-in cookies are copied.
 - **Chromium's site settings, content blocking, HTTPS-Only and fingerprinting protection**
   (fingerprinting-protection.patch is in Cra's Chromium): camera and microphone ask
   through Cra's prompt on every visit.
@@ -149,16 +219,25 @@ address. A WebKit page signing in on accounts.spotify.com still counts as Spotif
     defaults write dk.kildahl.cra webKitProtectedMedia -bool NO        # every page Chromium's again
 
 The Safari's Engine choices and the closed toasts are in the data folder's `protected-media.json`
-(`ProtectedMediaChoices`: `added`, `removed`, `told`), so each test instance (`CRA_DATA_DIR`) keeps
-its own and never writes the daily Cra's. They are read at launch. A test instance takes `CRA_WEBKIT_DRM=0|1` and
-`CRA_WEBKIT_HOSTS=<host,host>` (the scenarios list `localhost`).
+(`ProtectedMediaChoices`: `added`, `removed`, `told`, and `protectedVideos` for the mixed sites with
+Always, written only once it has an entry), so each test instance (`CRA_DATA_DIR`) keeps
+its own and never writes the daily Cra's. They are read at launch. A test instance takes `CRA_WEBKIT_DRM=0|1`,
+`CRA_WEBKIT_HOSTS=<host,host>` (the scenarios list `localhost`) and `CRA_MIXED_HOSTS=<host,host>`
+(its own mixed sites; `protected-video-prompt` lists `127.0.0.1`).
 
 ## Testing
 
-- `swift test --package-path Packages/CraCore --filter ProtectedMedia`: the rules.
+- `swift test --package-path Packages/CraCore --filter "ProtectedMedia|ProtectedVideos"`: the rules.
 - `Tests/test-browser-manager.sh` (`pageEngineCase`): the real `BrowserManager` and
   `PageEngines` choosing engines, popups keeping their opener's engine, and handoffs in both
-  directions keeping the split, its order and its focus.
+  directions keeping the split, its order and its focus. `protectedVideoCase`: a mixed site's
+  page asking for Widevine, Once with the time and the cookies, the next video going back, Always
+  moving unasked, and the row taking it back.
+- `scripts/scenario.sh protected-video-prompt`: the running app on the fixture server as a
+  mixed site (`film.html`). No prompt for an ordinary page; the prompt with Once, Always and ✕;
+  Once moving only that page, with its place in the video and a cookie set in Chromium; the next
+  page going back to Chromium; ✕ not asking twice; Always skipping the prompt; the Site Control
+  Center's row saying what is in force and taking it back.
 - `scripts/scenario.sh webkit-drm-tabs`: the running app. The fixture server is reached as
   `localhost`, which the run lists, so it needs no network and no account. The scenario covers
   FairPlay being offered and every emulated protocol method. It also covers both handoffs, split
@@ -174,3 +253,7 @@ its own and never writes the daily Cra's. They are read at launch. A test instan
   tab in WebKit. A download from a WebKit page lands in Downloads.
 - Still by hand, with real accounts: Spotify plays track after track, Netflix and Disney+ play,
   and sign-in through Google or Apple comes back signed in. Peek from a pinned WebKit tab.
+- Never tried, because it takes a YouTube account that owns a film: that the film asks for
+  Widevine in the top frame so the prompt shows, that YouTube serves Safari's engine more than
+  480p, that Google keeps the copied session signed in under Safari's user agent (and doesn't
+  sign the Chromium one out), and that the film resumes at its time from `&t=`.
