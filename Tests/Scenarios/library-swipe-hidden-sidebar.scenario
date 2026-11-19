@@ -36,6 +36,24 @@ cra://debug?themeShown=out
 expect-log Cra theme shown out: space=Home .* library=-
 cra://debug?windowState=out
 expect-log window state out: main0 .* lightsHidden=1 .* card=10,10,10,10
+# The Library by ⇧⌘L from the hidden sidebar, left by a swipe: hidden again. It stayed docked, and
+# the next ⇧⌘L out of the Library hid it by surprise (Cra 0.1.49).
+cra://action/openLibrary
+wait 2
+cra://debug?windowState=key
+expect-log window state key: main0 .* lightsHidden=0 .* floating=none
+cra://debug?swipe=-30,25
+wait 2
+cra://debug?windowState=keyout
+expect-log window state keyout: main0 .* lightsHidden=1 .* card=10,10,10,10
+cra://action/openLibrary
+wait 2
+cra://debug?windowState=keyagain
+expect-log window state keyagain: main0 .* lightsHidden=0 .* floating=none
+cra://action/openLibrary
+wait 2
+cra://debug?windowState=keyleft
+expect-log window state keyleft: main0 .* lightsHidden=1 .* card=10,10,10,10
 # A mouse's back button over the floating sidebar goes the same way in.
 cra://debug?floatingSidebar=hold
 wait 1
