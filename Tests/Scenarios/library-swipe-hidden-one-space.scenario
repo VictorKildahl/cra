@@ -24,14 +24,14 @@ wait 2
 cra://debug?windowState=out
 expect-log window state out: main0 .* lightsHidden=1 .* card=10,10,10,10
 reject-log new space pull: lifted
-reject-log space editor opens
+reject-log space creation opens
 # The other way, out over the page again: Arc's "+", and New Space.
 cra://debug?floatingSidebar=hold
 wait 1
 cra://debug?swipe=-8,100
 wait 1
 expect-log new space pull: lifted [0-9.]+ pt out, New Space opens
-expect-log space editor opens: a new space
+expect-log space creation opens
 cra://dismiss
 wait 1
 cra://debug?windowState=plus
