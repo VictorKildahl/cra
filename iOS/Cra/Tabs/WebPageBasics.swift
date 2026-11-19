@@ -144,6 +144,8 @@ extension WebPage: WKDownloadDelegate {
             delegate?.webPage(self, openInNewTab: url)
         case .openInBackgroundTab:
             delegate?.webPage(self, openInBackground: url)
+        case .openInIncognito:
+            delegate?.webPage(self, openInIncognito: url)
         case .copyLink:
             UIPasteboard.general.string = CleanURL.withoutTrackers(url.absoluteString)
         case .share:

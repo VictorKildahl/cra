@@ -10,6 +10,8 @@ protocol WebPageDelegate: AnyObject {
     func webPage(_ page: WebPage, openInNewTab url: URL)
     /// "Open in Background Tab" on a link: a tab in the row, the page stays on screen (#572).
     func webPage(_ page: WebPage, openInBackground url: URL)
+    /// "Open in Incognito" on a link: a new private tab, shown (#572).
+    func webPage(_ page: WebPage, openInIncognito url: URL)
     /// WebKit keeps the original navigation (including POST and window.opener) in this view.
     func webPage(_ page: WebPage, createPopupWith configuration: WKWebViewConfiguration, request: URLRequest) -> WKWebView?
     func webPageDidClose(_ page: WebPage)

@@ -57,6 +57,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var browseToggleState: (side: MobileBrowseToggle.Side, query: String)?
     var isSearching = false
     var incognitoSearch = false
+    /// The sheet is editing the address of the page on screen (#572): what it opens loads there.
+    var editsShownTab = false
     var keyboardHeight: CGFloat = 0
     var keyboard = MobileKeyboard()
     var keyboardDroveLayout = false
@@ -332,6 +334,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         guard searching != isSearching else { return }
         if searching {
             dropBlockerNotices()
+            editsShownTab = false
             if let incognito { incognitoSearch = incognito }
             sheet.isIncognito = incognitoSearch
             backdrop.isIncognito = incognitoSearch
@@ -355,6 +358,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             }
         } else {
             suggestions.cancel()
+            editsShownTab = false
         }
         isSearching = searching
         dismissArea.isHidden = !searching
@@ -423,12 +427,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String) {
         noteSearched()
-        open(searchDestination(text))
+        go(searchDestination(text))
     }
 
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row) {
         noteSearched()
-        open(MobileSuggestions.destination(for: row, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe))
+        go(MobileSuggestions.destination(for: row, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe))
     }
 
     func searchSheet(_ sheet: SearchSheet, didPickRecentTab row: MobileRecentTabs.Row) {
@@ -440,18 +444,51 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             setSearching(false)
             refreshTabStack()
         case .mac:
-            open(row.url)
+            go(row.url)
         }
     }
 
     func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site) {
-        open(site.url)
+        go(site.url)
     }
 
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row) {
         guard appleIntelligenceIsReady() else { return }
         noteSearched()
-        open(MobileBrowseForMe.tabAddress(query: row.text))
+        go(MobileBrowseForMe.tabAddress(query: row.text))
+    }
+
+    /// Where the sheet's choice loads: in the page on screen when its address is being edited
+    /// (`MobileAddressEdit`), otherwise in a new tab, as + does.
+    func go(_ address: String) {
+        guard let page = shownPage, let tab = store.tabs.first(where: { $0.id == page.tabID }),
+              MobileAddressEdit.target(editing: editsShownTab, tabIsIncognito: tab.isIncognito, sheetIsIncognito: incognitoSearch) == .currentTab
+        else { return open(address) }
+        setSearching(false)
+        if let query = MobileBrowseForMe.query(fromTabAddress: address) {
+            store.update(page.tabID, url: address, title: query)
+            browse(for: query, in: page)
+        } else {
+            page.load(address)
+        }
+        updateBrowseToggle()
+    }
+
+    /// The search sheet over the page with `text` (its address, or a Browse for Me page's
+    /// question) in the field, selected, ready to change; what is chosen loads in this tab.
+    func editAddress(of page: WebPage, text: String) {
+        setSearching(true, incognito: page.isIncognito)
+        editsShownTab = true
+        sheet.text = text
+        if MobileBrowseForMe.query(fromTabAddress: store.tabs.first { $0.id == page.tabID }?.url ?? "") != nil {
+            // A question: its suggestions, as for any typed question.
+            searchSheet(sheet, didChangeText: text)
+        } else {
+            // An address is not sent to the engine for suggestions until it is changed.
+            sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: incognitoSearch ? [] : knownSites(),
+                                                 limit: MobileSearchSheet.listedRows))
+        }
+        DispatchQueue.main.async { [weak self] in self?.sheet.field.selectAll(nil) }
     }
 
     func searchSheet(_ sheet: SearchSheet, didMoveFavoriteFrom source: Int, to destination: Int) {
@@ -562,7 +599,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let switcher = TabSwitcherView(frame: view.bounds)
         switcher.delegate = self
         let onRow = store.selected.map { !$0.isIncognito } ?? false
-        switcher.setTabs(store.rowTabs, focus: store.selected?.id, snapshot: store.snapshot, favicon: { self.favicons.icon(for: $0.url) })
+        // On a private page the private tabs waiting unseen are cards too, marked with the eyes.
+        switcher.setTabs(store.switcherTabs, focus: store.selected?.id, snapshot: store.snapshot,
+                         favicon: { $0.isIncognito ? UIImage(systemName: "eyes")?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal) : self.favicons.icon(for: $0.url) })
         // An incognito page has no card to shrink into; the row just appears.
         switcher.expandedID = onRow ? store.selected?.id : nil
         switcher.expansion = onRow ? 1 : 0
@@ -959,6 +998,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
     func pageMenuCopyLink() { copyLink() }
 
+    func pageMenuEditAddress() {
+        guard let page = shownPage, let tab = store.tabs.first(where: { $0.id == page.tabID }) else { return }
+        let text = MobileAddressEdit.text(tabAddress: tab.url, pageAddress: page.webView.url?.absoluteString)
+        menuHost?.dismiss { [weak self] in self?.editAddress(of: page, text: text) }
+    }
+
     /// Display Options opened or closed: the sheet follows the menu's new height.
     func pageMenuDidChangeHeight() {
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
@@ -1090,10 +1135,16 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         animateChrome(duration: 0.25, options: .curveEaseInOut)
     }
 
+    /// The question capsule on a Browse for Me page: the same editing as the page menu's address,
+    /// so the changed question is asked in this tab too.
     func webPage(_ page: WebPage, editQuery query: String) {
-        setSearching(true, incognito: store.tabs.first { $0.id == page.tabID }?.isIncognito ?? false)
-        sheet.text = query
-        searchSheet(sheet, didChangeText: query)
+        editAddress(of: page, text: query)
+    }
+
+    /// "Open in Incognito" (#572): a new private tab with the link, shown.
+    func webPage(_ page: WebPage, openInIncognito url: URL) {
+        incognitoSearch = true
+        open(url.absoluteString)
     }
 
     func webPage(_ page: WebPage, openInNewTab url: URL) {
@@ -1102,10 +1153,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// Arc Search's "Open in Background Tab": the link loads in a tab at the end of the row and
-    /// the page stays on screen. An incognito page has no such row (`MobileLinkMenu`).
+    /// the page stays on screen. From a private page it is private, and waits unseen in the
+    /// private session (`MobileTabsDocument.addInBackground`).
     func webPage(_ page: WebPage, openInBackground url: URL) {
-        guard !page.isIncognito else { return webPage(page, openInNewTab: url) }
-        let tab = store.add(url: url.absoluteString, title: "")
+        let tab = store.addInBackground(url: url.absoluteString, incognito: page.isIncognito)
         let background = self.page(for: tab)
         // Its title and icon reach the row while it loads off screen.
         background.delegate = self

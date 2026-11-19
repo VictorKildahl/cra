@@ -44,12 +44,17 @@ final class TabStore {
         return tab
     }
 
-    /// A tab at the end of the row that is not shown (a link saved from another app, or opened
-    /// in the background).
-    @discardableResult
-    func add(url: String, title: String) -> MobileTab {
-        let tab = MobileTab(url: url, title: title, lastActive: now())
-        document.add(tab)
+    /// A tab at the end of the row that is not shown (a link saved from another app).
+    func add(url: String, title: String) {
+        document.add(MobileTab(url: url, title: title, lastActive: now()))
+        changed()
+    }
+
+    /// "Open in Background Tab": a tab at the end of the row, not shown. An incognito one waits
+    /// unseen while the private session goes on (`MobileTabsDocument.addInBackground`).
+    func addInBackground(url: String, incognito: Bool) -> MobileTab {
+        let tab = MobileTab(url: url, lastActive: now(), isIncognito: incognito)
+        document.addInBackground(tab)
         changed()
         return tab
     }
@@ -61,6 +66,9 @@ final class TabStore {
 
     /// The tab row's tabs: incognito tabs are never in it.
     var rowTabs: [MobileTab] { document.rowTabs }
+
+    /// The tab switcher's cards: the row, and on a private page the private tabs waiting unseen.
+    var switcherTabs: [MobileTab] { document.switcherTabs }
 
     /// Where a flick up on the tab button goes: the tab looked at before this one.
     var previousTab: MobileTab? { document.previousTab }
