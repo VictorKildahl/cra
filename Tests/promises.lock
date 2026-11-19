@@ -1184,6 +1184,9 @@
 #574   Tests/Scenarios/page-pickers.scenario  7521785768d2
 #574   Tests/Scenarios/page-print-button.scenario  4095f14bad8f
 #574   Tests/Scenarios/page-save-password.scenario  ef5590d50ccd
+#590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
+#590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
+#590   Tests/Scenarios/view-history.scenario  d890566954b5
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceKeepsOtherSpacesPinnedTabs  0a684ba0fd54
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceReopensTheTabClosedHere  fb422863c018
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceSettingIsOffByDefaultAndSaved  84ce8a563ddd

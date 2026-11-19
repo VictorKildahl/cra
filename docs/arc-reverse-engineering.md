@@ -58,6 +58,10 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] { archivedAt, reason: manual|auto, source: space{id}|littleArc|standaloneSidebar|unknown, sidebarItem: <copy> }.
 - [O] Auto-archive thresholds enum: twelveHours, twentyFourHours, sevenDays, thirtyDays (this Mac: sevenDays, per profile).
 - [O] Actions: viewArchive, clearArchive, reopenClosedTab, resetSpace, archiveTab.
+- [O] Archive menu, Arc 1.172 MainMenu.nib (19 Nov 2026, #590): View History ⌘Y is action `viewHistory`
+  (command bar "Show History; History"), selector `showAllHistory:`, Chromium's history page; View Archive is
+  `viewArchive` ("Archive"), with no key. Cra keeps the id `viewArchive` for its ⌘Y row (keybindings.json) and
+  calls Arc's View Archive `showArchive` (CraCore `HistoryPage`).
 
 ## Command bar (ARC_CommandBar.bundle + strings + StorableCommandBarAdditionalRanking.json)
 - [O live] ⌘T (9 Nov 2026, Arc 1.172.1 offline copy, 1x sRGB captures + AX, PR #268): panel 766 wide, radius

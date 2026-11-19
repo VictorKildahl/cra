@@ -61,6 +61,7 @@ Arc's actions (Settings ▸ Shortcuts, 106 rows) that Cra has no action for:
 | Reveal Tab in Sidebar (Tabs) / Reveal Current Tab | ⌃Space | done |
 | Reset all tabs in this Space (Tabs) | — | done |
 | View Archive… / Clear Archive (Archive menu) | — | done |
+| View History (Archive menu) | ⌘Y | done | Chromium's History page in a new tab of the space in use, so its profile's history (GitHub #590, `HistoryPage`). Arc 1.172's MainMenu.nib: action `viewHistory`, selector `showAllHistory:`. Until #590 Cra's ⌘Y opened the archive, which is View Archive… |
 | Collapse All Folders / Expand All Folders | — | done |
 | Next Tab / Previous Tab, second binding | ⌘} / ⌘{ | done |
 | Go Back / Go Forward, second binding | ⌘← / ⌘→ | done | Bound since the first build; as in Chrome they act only when the page leaves the key alone (a text field keeps ⌘← for the line start). |

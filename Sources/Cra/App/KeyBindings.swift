@@ -293,9 +293,10 @@ final class KeyBindingRegistry {
             // Archive
             KeyAction(id: "goBack", name: "Go Back", section: .archive, shortcuts: [Shortcut("[", cmd), Shortcut(Shortcut.left, cmd)]),
             KeyAction(id: "goForward", name: "Go Forward", section: .archive, shortcuts: [Shortcut("]", cmd), Shortcut(Shortcut.right, cmd)]),
-            KeyAction(id: "viewArchive", name: "View History", section: .archive, shortcuts: [Shortcut("y", cmd)], triggers: ["archive", "history", "closed tabs"]),
+            // Arc: Archive ▸ View History ⌘Y, Chromium's History page for the space's profile (#590, HistoryPage).
+            KeyAction(id: HistoryPage.action, name: "View History", section: .archive, shortcuts: [Shortcut("y", cmd)], triggers: HistoryPage.triggers),
             // Arc: Archive ▸ View Archive…, Clear Archive.
-            KeyAction(id: "showArchive", name: "View Archive…", section: .archive, shortcuts: [], triggers: ["archive", "archived tabs"]),
+            KeyAction(id: "showArchive", name: "View Archive…", section: .archive, shortcuts: [], triggers: ["archive", "archived tabs", "closed tabs"]),
             KeyAction(id: "clearArchive", name: "Clear Archive", section: .archive, shortcuts: [], triggers: ["clear archive"], symbol: "trash"),
             // Window
             KeyAction(id: "openLibrary", name: "Open Library…", section: .window, shortcuts: [Shortcut("l", cmdShift)], triggers: ["library"]),

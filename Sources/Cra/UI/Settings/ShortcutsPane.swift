@@ -353,7 +353,7 @@ enum ShortcutDescriptions {
         "pauseAllMedia": "Pause the audio and video playing in every window, space and profile. Sleeping tabs stay asleep, and nothing starts playing again by itself.",
         "goBack": "Go back a page.",
         "goForward": "Go forward a page.",
-        "viewArchive": "Open the archive of closed tabs.",
+        "viewArchive": "Open the browsing history of this space’s profile.",
         "openLibrary": "Open the Library.",
         "viewDownloads": "Show your downloads.",
         "promoteLittleWindow": "Move the Little Window’s or Peek’s page into the space its Open in button names.",
