@@ -1217,6 +1217,7 @@
 #574   Tests/Scenarios/page-save-password.scenario  ef5590d50ccd
 #577   Packages/CraCore/Tests/CraCoreTests/FindCommandTests.swift::findCommandsAreTheBarsToAnswer  cf4d50b13e64
 #577   Tests/Scenarios/little-window-find.scenario  c625f6c437bb
+#578   Tests/Scenarios/extension-normal-window.scenario  eb942cee6d0d
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
 #590   Tests/Scenarios/view-history.scenario  d890566954b5

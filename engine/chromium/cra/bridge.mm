@@ -512,8 +512,9 @@ class PageObserver : public content::WebContentsObserver,
 // A Browser's window that holds Cra's pages: never seen, never clicked, never captured, never key or main (keys
 // would go to a window with nothing in it). Chrome still anchors bubbles to it (an extension's popup), which Cra's
 // app finds as a child of a page window (ExtensionPopupCandidate) and frames under its own button.
-// The windows MakeHostWindow made; Chrome's window class answers NO for them (swapped once, as Cra's app does for
-// CEF's page windows in EmbeddedPages: the window's own class may be a KVO subclass, so it isn't replaced).
+// The windows MakeHostWindow made, and the unseen stray windows (StrayWindows); Chrome's window class answers NO for
+// them (swapped once, as Cra's app does for CEF's page windows in EmbeddedPages: the window's own class may be a KVO
+// subclass, so it isn't replaced).
 NSHashTable<NSWindow*>* g_host_windows = nil;
 
 // Where and how pages and Chrome's windows for them came on screen: cra://debug?pageWindows= (#354), as the CEF
@@ -595,16 +596,11 @@ void NoteChromeWindowShown(NSWindow* window) {
   }
 }
 
-void MakeHostWindow(NSWindow* window) {
+// A Chrome window nobody sees never becomes key or main: keys would go to a window with nothing in it on screen.
+void NeverKeyOrMain(NSWindow* window) {
   if (!window) {
     return;
   }
-  PlaceChromeWindow(window);
-  NoteChromeWindowShown(window);
-  window.alphaValue = 0;
-  window.ignoresMouseEvents = YES;
-  window.sharingType = NSWindowSharingNone;
-  NeverFullScreen(window);
   if (!g_host_windows) {
     g_host_windows = [NSHashTable weakObjectsHashTable];
   }
@@ -627,6 +623,19 @@ void MakeHostWindow(NSWindow* window) {
     }
   }
   [g_host_windows addObject:window];
+}
+
+void MakeHostWindow(NSWindow* window) {
+  if (!window) {
+    return;
+  }
+  PlaceChromeWindow(window);
+  NoteChromeWindowShown(window);
+  window.alphaValue = 0;
+  window.ignoresMouseEvents = YES;
+  window.sharingType = NSWindowSharingNone;
+  NeverFullScreen(window);
+  NeverKeyOrMain(window);
 }
 
 // The DevTools frontend of a page of Cra's: the panel it shows, on load and on every switch, so ⌥⌘J and Network
@@ -1408,8 +1417,9 @@ bool IsHost(BrowserWindowInterface* browser) {
 
 // Chrome windows Cra didn't make (the CEF bridge's stray page handling): a normal one, which Chrome opens for an
 // extension's windows.create or a welcome page after an extension loads, is never shown; its page becomes a
-// Cra tab through the app's stray page handler and the window closes. A popup one (windows.create type
-// popup) stays Chrome's window, as in Arc.
+// Cra tab through the app's stray page handler and the window closes. One with only a blank page (an extension's
+// windows.create({url: "about:blank"}), to fill later) has nothing to adopt and stays, unseen, so the extension's
+// window id keeps working (GitHub #578). A popup one (windows.create type popup) stays Chrome's window, as in Arc.
 class StrayWindows : public BrowserCollectionObserver, public TabStripModelObserver {
  public:
   void Start() { observation_.Observe(GlobalBrowserCollection::GetInstance()); }
@@ -1451,6 +1461,9 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
     window.ignoresMouseEvents = YES;
     window.collectionBehavior = (window.collectionBehavior & ~NSWindowCollectionBehaviorFullScreenPrimary) |
                                 NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorMoveToActiveSpace;
+    // Nor key or main: windows.create shows it with makeKeyAndOrderFront, and one that stays (nothing to adopt)
+    // would keep the keys from Cra's own window.
+    NeverKeyOrMain(window);
     browser->GetTabStripModel()->AddObserver(this);
     Later(base::BindOnce(&StrayWindows::TakePages, base::Unretained(this), browser->GetWeakPtr()));
   }
@@ -1498,11 +1511,16 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
     }
     TabStripModel* tabs = browser->GetTabStripModel();
     NSString* profile = ProfileFolder(browser->GetProfile());
+    bool blank_only = true;
     for (int i = 0; i < tabs->count(); ++i) {
       std::string url = tabs->GetWebContentsAt(i)->GetVisibleURL().spec();
+      // A blank page: what an extension's windows.create({url: "about:blank"}) starts with, to fill it later.
+      if (url.empty() || url == url::kAboutBlankURL) {
+        continue;
+      }
+      blank_only = false;
       // Chrome's own empty tab (after a Web Store install): nobody asked for it.
-      if (url.empty() || url == url::kAboutBlankURL || base::StartsWith(url, "chrome://newtab") ||
-          base::StartsWith(url, "chrome://new-tab-page")) {
+      if (base::StartsWith(url, "chrome://newtab") || base::StartsWith(url, "chrome://new-tab-page")) {
         continue;
       }
       if (g_stray_page_handler) {
@@ -1510,6 +1528,12 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       }
     }
     tabs->RemoveObserver(this);
+    // Only blank pages: the window stays, unseen, for the extension that made it, as the CEF bridge kept it (GitHub
+    // #578). Closed, the id windows.create gave back named no window: windows.get, tabs.query and tabs.create on it
+    // all failed, and windows.getAll never listed it.
+    if (blank_only && tabs->count() > 0) {
+      return;
+    }
     browser->GetWindow()->Close();
   }
 

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Normal Window Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: on a page opened with ?n=normal-window it makes a normal window on about:blank and uses its id (windows.get, windows.getAll, tabs.create and tabs.query in it, windows.remove), as an agent extension's own window does (GitHub #578), and a normal window on a page, which becomes a Cra tab. It reports by asking the fixture server for page.html?n=normal-window-<answers>.",
+  "permissions": ["tabs"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "worker.js" },
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["content.js"] }]
+}
