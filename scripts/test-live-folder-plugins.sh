@@ -1,6 +1,6 @@
 #!/bin/bash
 # Live folder plugins: the real CraPluginHost (JavaScriptCore, sandboxed) and the bundled GitHub,
-# GitLab and Jira providers, driven through LiveFolderPluginProcess with made-up session responses.
+# GitLab, Jira and Azure DevOps providers, driven through LiveFolderPluginProcess with made-up session responses.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-live-folder-plugins.XXXXXX")"

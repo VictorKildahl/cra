@@ -101,6 +101,11 @@ final class SidebarUIState {
     /// The space pager and the window tint follow the swipe directly in AppKit, not through SwiftUI.
     @ObservationIgnored private var spaceSwipeObservers: [() -> Void] = []
     func observeSpaceSwipe(_ f: @escaping () -> Void) { spaceSwipeObservers.append(f) }
+    /// How far the tab list is overscrolled past the last space, in points; 0 when it isn't.
+    /// Arc's "+" comes in with it (NewSpaceSwipe).
+    var newSpacePull: CGFloat = 0 { didSet { if newSpacePull != oldValue { for f in newSpacePullObservers { f() } } } }
+    @ObservationIgnored private var newSpacePullObservers: [() -> Void] = []
+    func observeNewSpacePull(_ f: @escaping () -> Void) { newSpacePullObservers.append(f) }
     /// Release velocity for the settle spring, relative to the distance left to travel.
     var spaceSettleVelocity: Double = 0
     /// The strip is springing onto its page (after a swipe or a space change); it takes no

@@ -72,14 +72,24 @@ extension WebPage: WKDownloadDelegate {
         }
     }
 
-    /// A page whose certificate can't be verified: say so, and let the user go on if they insist
-    /// (Arc Search 1.12's bypass). Returns whether the error was one of those.
-    func offerCertificateBypass(for error: Error) -> Bool {
+    /// A page that failed before any of it showed (`MobileLoadFailure`): a certificate warning, or
+    /// a page that says it couldn't load and why. Before #568 anything but a certificate error left
+    /// the tab a blank white page.
+    func answerLoadFailure(_ error: Error) {
         let failure = error as NSError
-        let codes = [NSURLErrorServerCertificateUntrusted, NSURLErrorServerCertificateHasBadDate, NSURLErrorServerCertificateHasUnknownRoot,
-                     NSURLErrorServerCertificateNotYetValid, NSURLErrorSecureConnectionFailed]
-        guard failure.domain == NSURLErrorDomain, codes.contains(failure.code),
-              let url = failure.userInfo[NSURLErrorFailingURLErrorKey] as? URL, let host = url.host, let presenter else { return false }
+        let answer = MobileLoadFailure.answer(domain: failure.domain, code: failure.code)
+        if answer == .nothing || (answer == .certificateWarning && offerCertificateBypass(for: failure)) { return }
+        guard let url = (failure.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+                ?? (failure.userInfo[NSURLErrorFailingURLStringErrorKey] as? String).flatMap(URL.init(string:)) else { return }
+        // At the failing address, so the address shows it and Reload tries it again.
+        webView.loadSimulatedRequest(URLRequest(url: url),
+                                     responseHTML: MobileLoadFailure.page(host: url.host ?? url.absoluteString, message: failure.localizedDescription))
+    }
+
+    /// A page whose certificate can't be verified: say so, and let the user go on if they insist
+    /// (Arc Search 1.12's bypass). Returns whether the warning showed.
+    private func offerCertificateBypass(for failure: NSError) -> Bool {
+        guard let url = failure.userInfo[NSURLErrorFailingURLErrorKey] as? URL, let host = url.host, let presenter else { return false }
         let alert = UIAlertController(title: MobileCertificateExceptions.warningTitle(host: host),
                                       message: MobileCertificateExceptions.warningMessage(host: host), preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Go Back", style: .cancel))

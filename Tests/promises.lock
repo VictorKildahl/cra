@@ -1114,6 +1114,8 @@
 #539   Tests/Scenarios/little-window-screenshot-pick.scenario  a4df2e9bd27b
 #540   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::aPageInFullScreenHasNoBar  a35e4af16d57
 #540   Tests/Scenarios/little-window-fullscreen-bar.scenario  68c2b18c5237
+#542   Tests/LiveFolderProviderTests.swift::azureDevOps  0d42712d01b7
+#542   Tests/Scenarios/live-folder-azure-devops.scenario  8a12a260ea63
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::anotherSpaceIsNamed  6d3b818e11aa
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::hiddenSidebarSaysSo  f40706666c21
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::sidebarOutShowsTheRowInstead  bafff498f7e3
@@ -1154,6 +1156,12 @@
 #560   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aPagesOwnRedirectAsksOncePerPageLoad  c95f209d3ba8
 #560   Tests/Scenarios/external-app-links.scenario  41a4c12ac485
 #563   Tests/Scenarios/page-menu-no-reading-mode.scenario  48887b488f2f
+#568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aCertificateFailureStillAsksAndAStoppedLoadSaysNothing  1db90d7ec6e9
+#568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aNetworkFailureShowsAnErrorPage  a7fefa2b6d10
+#568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::theErrorPageNamesTheHostAndTheReason  1985a3c83c37
+#568   Tests/PolicyTests.swift::iPhoneWebContentLoadsHTTP  929c5de9a58a
+#568   iOS/CraUITests/PlainHTTPTests.swift::testAPageThatCantLoadSaysSo  cd070c9d7e8f
+#568   iOS/CraUITests/PlainHTTPTests.swift::testAPlainHTTPPageLoads  891ae35f0a31
 #571   Tests/Scenarios/upload-picker-after-focus.scenario  16ab596cf4bd
 #571   Tests/Scenarios/upload-picker.scenario  c92bdec94797
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::aBubbleOverTheSidebarIsOnTheWindow  3770d4c4f881

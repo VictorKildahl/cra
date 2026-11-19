@@ -23,6 +23,7 @@ enum PolicyTests {
         try webHandoff()
         try defaultBrowserPicker()
         try iPhoneDefaultBrowser()
+        try iPhoneWebContentLoadsHTTP()
         print("Policies: \(checks) checks passed")
     }
 
@@ -95,6 +96,21 @@ enum PolicyTests {
         let schemes = (info?["CFBundleURLTypes"] as? [[String: Any]] ?? [])
             .flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
         expect(schemes.contains("http") && schemes.contains("https"), "the iPhone app opens http and https links")
+    }
+
+    // promise: #568
+    /// #568: every http:// address opened as a blank white page on the iPhone. With no
+    /// NSAppTransportSecurity entry iOS refuses plain-http loads in the web view too (error -1022).
+    /// NSAllowsArbitraryLoadsInWebContent is Apple's key for browsers: it lets web views load http
+    /// as Arc Search, Safari and Cra for Mac do, while the app's own requests stay under ATS. The
+    /// broader NSAllowsArbitraryLoads would let those through as well, and iOS ignores the
+    /// web-content key when it is set.
+    private static func iPhoneWebContentLoadsHTTP() throws {
+        let plist = try Data(contentsOf: URL(fileURLWithPath: "iOS/Support/Info.plist"))
+        let info = try PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any]
+        let ats = info?["NSAppTransportSecurity"] as? [String: Any]
+        expect(ats?["NSAllowsArbitraryLoadsInWebContent"] as? Bool == true, "the iPhone app's web views load http:// pages")
+        expect(ats?["NSAllowsArbitraryLoads"] == nil, "the app's own requests stay https-only")
     }
 
     /// #41: a click never reaches an extension turned off in chrome://extensions (Chromium crashed
