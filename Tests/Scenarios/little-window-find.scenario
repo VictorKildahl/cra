@@ -1,0 +1,48 @@
+# promise: #577
+# ⌘F in a Little Window opens a find bar of its own over its page, top trailing as in a browser window,
+# and what is typed there is found on the Little Window's page: ⌘G steps to the next match, and Escape
+# closes the bar and clears the page's matches. The browser window's bar stays shut throughout. Before
+# the fix the Little Window dropped every Find command, so ⌘F there did nothing (#577).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleShown=front
+expect-log little shown front: windows=1
+# ⌘F typed to the Little Window's page, as a person types it.
+cra://debug?key=f,3,1048576&page=1&target=little
+wait 1
+cra://debug?littleFind=opened
+expect-log little find opened: visible=1 top=10 trailing=10 child=1 focused=1 count=none active=0 query=$
+# A letter typed in the field searches the Little Window's page as it goes.
+cra://debug?key=r,15,0&target=littleFind
+wait 1.5
+cra://debug?littleFind=letter
+expect-log little find letter: visible=1 .*focused=1 count=[1-9][0-9]* active=1 query=r$
+cra://debug?littleFindQuery=Row%201
+wait 1.5
+cra://debug?littleFind=typed
+# "Row 1" is in "Row 1", "Row 10"…"Row 19" and "Row 100"…"Row 199": 111 matches, the first one active.
+expect-log little find typed: visible=1 .*count=111 active=1 query=Row 1$
+# ⌘G in the bar: the next match.
+cra://debug?key=g,5,1048576&target=littleFind
+wait 1
+cra://debug?littleFind=next
+expect-log little find next: visible=1 .*count=111 active=2 query=Row 1$
+# The browser window's find bar never opened.
+cra://debug?findBar=main
+expect-log findBar main: visible=0
+# Escape in the field: the bar goes, and so do the page's matches.
+cra://debug?key=%1B,53,0&target=littleFind
+wait 1
+cra://debug?littleFind=escaped
+expect-log little find escaped: visible=0
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"'selection:'+getSelection().toString().length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"selection:0"
+# ⌘F again from the page: the last search, found again.
+cra://debug?key=f,3,1048576&page=1&target=little
+wait 1.5
+cra://debug?littleFind=reopened
+expect-log little find reopened: visible=1 .*focused=1 count=111 active=1 query=Row 1$

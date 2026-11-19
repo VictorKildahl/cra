@@ -1293,7 +1293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags, in: roots, window: w)
                 } else {
                     // The ⌘T bar, while it is open, has the keyboard; target=find sends it to the find bar's panel.
-                    let target = dict["target"] == "find" ? main.debugFindPanel : main.openCommandPanel
+                    let target = dict["target"] == "find" ? main.debugFindPanel
+                        : dict["target"] == "littleFind" ? littleWindows.last?.finder.debugPanel : main.openCommandPanel
                     TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: target ?? w)
                 }
                 return
@@ -1678,6 +1679,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
+            // littleFind=<label>: the newest Little Window's (or Peek's) find bar: shown, where on its page,
+            // the keys, the search and the page's count (#577). key=…&target=littleFind types into it.
+            // littleFindQuery=<text>: that text in its field, as typed (each change searches).
+            if let q = dict["littleFindQuery"] { littleWindows.last?.finder.overlay.findQuery = q; return }
+            if let label = dict["littleFind"] { CraLog.note(littleWindows.last?.finder.readout(label) ?? "little find \(label): no window"); return }
             // littleCard=<step>: the newest Little Window's card, see debugCardStep (#337).
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).

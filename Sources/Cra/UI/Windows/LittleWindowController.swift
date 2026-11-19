@@ -217,6 +217,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var tooltip: LittleTooltipPanel?
     private var tooltipTimer: Timer?
     private let toast = ShinyToast()
+    /// Find in page over this window's page (⌘F, #577).
+    private(set) lazy var finder = LittleFindBar(window: { [weak self] in self?.window }, browser: { [weak self] in self?.browser },
+                                                 page: { [weak self] in self?.findPage })
     /// The page's wait for its first response (GitHub #256), whether the toast shows it, and the
     /// check when it falls due.
     private var slowResponse = SlowResponseNotice()
@@ -394,7 +397,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         v.frame = shell.page.bounds
         v.autoresizingMask = [.width, .height]
         shell.page.addSubview(v)
-        shell.onPageFrame = { [weak self] rect in self?.positionHostWindow(rect) }
+        shell.onPageFrame = { [weak self] rect in
+            self?.positionHostWindow(rect)
+            self?.finder.refit()
+        }
+        finder.pageChanged()
         if let w = b.hostWindow { attachHostWindow(w) }
     }
 
@@ -724,7 +731,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func apply(_ due: TimeInterval?, animated: Bool = true) {
         let wasOut = shell.barRevealed
         shell.setBarRevealed(barTracker.shown, animated: animated)
-        if wasOut != shell.barRevealed { syncTrafficLights(animated: animated) }
+        if wasOut != shell.barRevealed {
+            syncTrafficLights(animated: animated)
+            finder.refit()
+        }
         stopBarLook()
         guard let due else { return }
         barLook = Timer.scheduledTimer(withTimeInterval: max(0, due - ProcessInfo.processInfo.systemUptime), repeats: false) { [weak self] _ in
@@ -992,6 +1002,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         tooltipTimer?.invalidate(); hideTooltip()
         closePopup()
         commandBar.close()
+        finder.close()
         for w in [dim, controls].compactMap({ $0 }) {
             w.parent?.removeChildWindow(w)
             w.orderOut(nil)
@@ -1133,6 +1144,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func endPeek() {
         guard isPeek, let dim else { return }
         self.dim = nil
+        finder.close()
         transition?.remove()
         transition = nil
         dim.parent?.removeChildWindow(dim)
@@ -1703,8 +1715,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // Arc's Peek is a card in the browser window, so ⌘S and View ▸ Hide Sidebar reach that
         // window's sidebar; a Little Window has none (#402).
         case "toggleSidebar": peekParent?.toggleSidebar()
-        // No find bar, sidebar or split in little windows; keep them off the main window.
-        case "find", "findNext", "findPrevious", "useSelectionForFind", "pinTab", "favoriteTab", "renameTab",
+        // Find on this window's page, in its own bar (#577).
+        case let id where FindCommand(action: id) != nil:
+            if hasPage, let command = FindCommand(action: id) { finder.perform(command) }
+        // No sidebar or split in little windows; keep them off the main window.
+        case "pinTab", "favoriteTab", "renameTab",
              "duplicateTab", "resetTab", "muteTab", "clearToday", "nextTab", "previousTab", "recentTab", "recentTabBackward",
              "recentTabAllSpaces", "recentTabAllSpacesBackward",
              "revealTab", "collapsePinned", "collapseAllFolders", "expandAllFolders", "resetSpaceTabs",
@@ -1823,6 +1838,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         tooltipTimer?.invalidate(); hideTooltip()
         closePopup()
         commandBar.close()
+        finder.close()
         archivePage()
         if let b = browser {
             b.containerView.isHidden = true
@@ -1954,6 +1970,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
+        if loading, !state.isLoading, browser === self.browser { finder.pageChanged() }
         state.isLoading = loading
         state.canGoBack = canGoBack
         state.canGoForward = canGoForward
@@ -2026,6 +2043,34 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         shell.page.layer?.backgroundColor = (hex.isEmpty ? CraBrowser.pageCanvasColor : NSColor(Color(hex: hex))).cgColor
     }
     func browser(_ browser: CraBrowser, didChangeStatusMessage message: String) {}
+
+    // MARK: Find in page (#577)
+
+    func browser(_ browser: CraBrowser, didFindMatches count: Int, activeMatch: Int, generation: UUID, quote: Bool, identifier: Int, finalUpdate: Bool) {
+        guard browser === self.browser else { return }
+        finder.accept(count: count, activeMatch: activeMatch, generation: generation, quote: quote, identifier: identifier, finalUpdate: finalUpdate)
+    }
+
+    /// Chrome's own Find commands (its ⌘F reached the page first) open this window's bar.
+    func browser(_ browser: CraBrowser, requestsFindAction action: CraFindAction) {
+        guard browser === self.browser, hasPage else { return }
+        switch action {
+        case .show: finder.perform(.show)
+        case .next: finder.perform(.step(forward: true))
+        case .previous: finder.perform(.step(forward: false))
+        @unknown default: break
+        }
+    }
+
+    /// The page's area on screen, and how much of its top the floating bar covers while it is out:
+    /// the find bar hangs under it then, as in a browser window (#405).
+    private var findPage: (rect: NSRect, cover: CGFloat)? {
+        guard let window, !shell.page.frame.isEmpty else { return nil }
+        let page = shell.page.frame
+        let bar = shell.toolbarHost
+        let cover = !bar.isHidden && bar.frame.intersects(page) ? max(0, page.maxY - bar.frame.minY) : 0
+        return (window.convertToScreen(shell.convert(page, to: nil)), cover)
+    }
 
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
