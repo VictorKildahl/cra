@@ -1273,7 +1273,10 @@ final class ShellView: NSView {
     /// floating sidebar docking in place rides on this slide, so both move on one clock.
     func animateSidebar(visible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat, duration: TimeInterval = SidebarMotion.duration,
                         alongside: ((Double) -> Void)? = nil, completion: (() -> Void)? = nil) {
-        // A slide still running is replaced: what rode along with it finishes now, once.
+        // A slide still running is replaced: what rode along with it finishes now, once, after its readout, so a
+        // dock that ends this way still says how far the page moved (on a slow machine the next slide came first,
+        // and sidebar-dock-floating's "page moved 0 pt" went missing).
+        if sidebarSlide != nil { endSlideReadout() }
         finishSlideCompanions()
         slideAlongside = alongside
         slideCompletion = completion
