@@ -29,6 +29,11 @@ CEF one does.
   fix CEF become the layer's own code. Google's background services go with ungoogled-chromium's patches (BSD,
   taken one by one); never Helium's (GPL-3.0; Cra is MIT). Chrome's security updaters stay on: CRLSet, PKI
   metadata, Safe Browsing lists.
+- **The hidden Browser's elements**: Chrome's views for a Browser are never seen, so Chrome's element tracker may
+  not find them (its `BrowserView`, its toolbar's buttons). Chrome code that `CHECK`s it found one crashes Cra: Clear
+  browsing data's Cancel did in 0.1.50 (`cra-browser-element-checks.patch`, scenario `clear-browsing-data-cancel`).
+  `apply.sh` runs `engine/chromium/check-element-checks.py` after the patches, so a new Chrome that adds such a
+  `CHECK` in `chrome/browser` stops the engine build until it is patched into a null check the same way.
 - **CPUs**: arm64 and x64, as every release (docs/release.md).
 
 ## Steps

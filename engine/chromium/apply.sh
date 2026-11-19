@@ -38,6 +38,10 @@ grep -v '^#' "$HERE/patches/series" | while read -r patch; do
   echo "patched $patch"
 done
 
+# Chrome code that CHECKs it found a UI element crashes Cra, whose pages belong to a hidden Browser
+# (crash-clear-browsing-data-cancel): a new Chrome that adds one stops here until it gets a patch.
+python3 "$HERE/check-element-checks.py" "$SRC" || exit 1
+
 python3 -I - "$SRC" <<'EOF'
 import sys
 src = sys.argv[1]
