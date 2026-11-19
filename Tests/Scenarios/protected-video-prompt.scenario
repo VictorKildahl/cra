@@ -6,7 +6,8 @@
 # Covers: no prompt for an ordinary page; the prompt with Once, Always and ✕; Once moving only
 # that page to WebKit with its place in the video and Chromium's cookie; the next page going back
 # to Chromium; ✕ not asking again for that page; Always stored for the site and skipping the
-# prompt; the Site Control Center's row saying what is in force and taking it back.
+# prompt; the Site Control Center's row saying what is in force and taking it back; a player in a
+# frame asking for its page.
 # No & in a script: it ends the cra:// query. The clip is silent and never plays.
 env CRA_MIXED_HOSTS=127.0.0.1
 budget rss=900 stalls50=40
@@ -140,4 +141,16 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"'e back: '+report()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"e back: Film e, chromium, time 0, session=chromium"
 cra://debug?protectedVideo=state&step=end
 expect-log protected video state end: prompt none, engine chromium, row Off, always $
+
+# The player in a frame of its page (as Fandango at Home's is): the frame's request is its
+# page's, so a mixed site's page with such a player is asked about too.
+cra://debug?pageJS=location.href='${ORIGIN}/frame-player.html?frame=same'
+wait 2
+cra://debug?protectedVideo=state&step=frame-before
+expect-log protected video state frame-before: prompt none, engine chromium, row none, always $
+cra://debug?pageJS=play()
+wait 3
+cra://debug?protectedVideo=state&step=frame
+expect-log protected video state frame: prompt Once\|Always\|✕, engine chromium, row Off, always $
+cra://debug?protectedVideo=close
 cra://debug?checkStore=1

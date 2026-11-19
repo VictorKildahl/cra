@@ -195,6 +195,85 @@ public struct ProtectedVideoPages: Equatable, Sendable {
     }
 }
 
+/// How a page's request for Widevine reaches Cra (the scripts PageScript runs in every frame).
+///
+/// A wrapper in the page's world sees `navigator.requestMediaKeySystemAccess('com.widevine…')`
+/// and tells Cra's isolated world of the same frame, through an event whose name (`channel`) is
+/// random per launch. A request counts for the page, whichever frame made it: a player is often
+/// a frame of its own (Fandango at Home's `player_frame.html`), so a frame's isolated world tells
+/// the top frame's, which keeps the page's answer. A frame of the page's own origin raises the
+/// same event on the top window; one of another origin can't touch that window, so it posts a
+/// message instead, which the top frame stops at its own listener (a page that listened before
+/// Cra's script was in, on a new tab's first page, can still see that one string).
+///
+/// A frame from another site runs in another process in Chromium, where Cra's scripts aren't
+/// installed (they go in through the page's own protocol session): its request isn't seen.
+/// WebKit runs them in every frame.
+///
+/// - `__cra.drm`: the page asked (the Site Control Center's Safari's Engine switch reads it).
+/// - `__cra.drmNext()`: a promise that settles the next time the page asks, with the page's
+///   address then, or with "" when a later call takes its place. Cra leaves one waiting in a
+///   mixed site's page (`nextRequest`), so the page tells Cra and nothing polls.
+///
+/// Once a page has asked, each `encrypted` media event counts as asking again: a player that
+/// changes videos without a navigation may keep the key system it got and not ask twice.
+public enum WidevineSignal {
+    /// The page's world, in every frame: the wrapper.
+    public static func pageWorld(channel: String) -> String {
+        """
+        (() => {
+          const proto = window.Navigator?.prototype, request = proto?.requestMediaKeySystemAccess;
+          if (!request) return;
+          Object.defineProperty(proto, 'requestMediaKeySystemAccess', { configurable: true, writable: true,
+            value: { requestMediaKeySystemAccess(keySystem, configs) {
+              if (String(keySystem).startsWith('com.widevine')) dispatchEvent(new CustomEvent('\(channel)d'));
+              return request.call(this, keySystem, configs);
+            } }.requestMediaKeySystemAccess });
+        })();
+        """
+    }
+
+    /// Cra's isolated world, in every frame: statements for the script that made `cra`
+    /// (`window.__cra`).
+    public static func isolatedWorld(channel: String) -> String {
+        """
+        cra.drmN = 0;
+        cra.drmSeen = 0;
+        const drmTop = window.top === window;
+        const drmAsked = () => { cra.drm = true; cra.drmN++; cra.drmTell?.(); };
+        const drmTold = () => {
+          drmAsked();
+          if (drmTop) return;
+          try { window.top.dispatchEvent(new CustomEvent('\(channel)d')); } catch {
+            try { window.top.postMessage('\(channel)f', '*'); } catch {}
+          }
+        };
+        addEventListener('\(channel)d', drmTold);
+        addEventListener('encrypted', () => { if (cra.drm) drmTold(); }, true);
+        if (drmTop) addEventListener('message', e => {
+          if (e.data !== '\(channel)f') return;
+          e.stopImmediatePropagation();
+          drmAsked();
+        }, true);
+        cra.drmNext = () => new Promise(done => {
+          cra.drmStop?.();
+          cra.drmStop = () => done('');
+          cra.drmTell = () => {
+            if (cra.drmN <= cra.drmSeen) return;
+            cra.drmSeen = cra.drmN;
+            cra.drmTell = cra.drmStop = null;
+            done(location.href);
+          };
+          cra.drmTell();
+        });
+        """
+    }
+
+    /// Asked in Cra's isolated world of the top frame, and left waiting (`drmNext`). A page that
+    /// navigates away ends it with an error.
+    public static let nextRequest = "window.__cra?.drmNext?.() ?? ''"
+}
+
 /// What goes with a page when it moves to WebKit for a protected video: the place in the video
 /// and the sign-in.
 public enum ProtectedVideoHandoff {

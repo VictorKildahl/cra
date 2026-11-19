@@ -63,7 +63,16 @@ licence, keys usable, 720p playing). That is the whole requirement.
   `music.amazon.<store>`. The rest of Amazon (shopping, Login with Amazon) stays in Chromium.
 - **Any other site, by the user**: when a Chromium page asks for Widevine (PageScript's `drm`, a
   wrapper around `navigator.requestMediaKeySystemAccess`), the Site Control Center shows a
-  **Safari's Engine** switch. On, the site plays in WebKit from then on and the page reopens there.
+  **Safari's Engine** switch. The request counts for the page whichever of its frames made it
+  (`WidevineSignal` in CraCore): Fandango at Home's player is a frame of its own
+  (`athome.fandango.com/bluesteel/player_frame.html`), and while only the top frame was asked
+  that site never got the switch. Each frame's copy of the script tells the top frame's, in
+  Cra's world, on a name that is random per launch: a frame of the page's own origin raises the
+  event on the top window, and one of another origin posts a message, which the top frame stops
+  at its own listener. **Not seen in Chromium:** a player frame from another site. It runs in
+  another process, and Cra's page scripts go in through the page's own protocol session
+  (`Page.addScriptToEvaluateOnNewDocument` in the bridge), which doesn't reach it. That needs
+  the bridge to attach to such frames or to inject from the renderer. On, the site plays in WebKit from then on and the page reopens there.
   A WebKit page shows it on, so a listed site can be taken back to Chromium the same way
   (`ProtectedMediaSites.choosing`, kept in the data folder's `protected-media.json`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
   other sites send their "Sign in with Spotify/Tidal/Deezer" through `accounts.spotify.com`,
@@ -88,7 +97,7 @@ few that play a bought film. So YouTube is a **mixed site** (`ProtectedMediaSite
 `youtube.com` and its subdomains, without `music.youtube.com`), and the engine is chosen per
 page. `ProtectedVideoPages` (CraCore, `ProtectedVideos.swift`) holds the rules, with tests:
 
-- **When Cra asks:** a Chromium page of a mixed site that asks for Widevine. The page tells Cra
+- **When Cra asks:** a Chromium page of a mixed site that asks for Widevine, in any frame. The page tells Cra
   itself: PageScript's `drmNext()` in Cra's world is a promise Cra leaves waiting in the page
   (`BrowserManager.watchProtectedVideo`), which settles when the page calls
   `navigator.requestMediaKeySystemAccess('com.widevine…')`. Nothing polls. Once a page has
@@ -141,8 +150,8 @@ page. `ProtectedVideoPages` (CraCore, `ProtectedVideos.swift`) holds the rules, 
 A switched page is remembered for the session only. After a relaunch its tab opens in Chromium,
 where the film asks for Widevine again: with Always it moves by itself, otherwise the prompt
 shows. Back doesn't cross the move: each engine keeps its own history, as with the other handoffs.
-Known gaps: only the top frame's request is seen (a player inside an iframe isn't), and Little
-Windows and Peeks don't prompt.
+A player in a frame of the same site counts for its page here too. Known gaps: a player frame
+from another site isn't seen (above), and Little Windows and Peeks don't prompt.
 
 `WebKitBrowser` (`Sources/Cra/Services/WebKit/`) is a `CraBrowser` subclass backed by a
 `WKWebView`. It hosts the way Alloy pages do: its view sits in `containerView`, which split view
@@ -233,11 +242,16 @@ its own and never writes the daily Cra's. They are read at launch. A test instan
   directions keeping the split, its order and its focus. `protectedVideoCase`: a mixed site's
   page asking for Widevine, Once with the time and the cookies, the next video going back, Always
   moving unasked, and the row taking it back.
+- `scripts/scenario.sh widevine-in-a-frame`: a page whose player frame asks for Widevine
+  (`frame-player.html`, the frame on the page's own origin as Fandango's is): the page's `drm`
+  turns true, the page's own listener sees only the frame's own message, and the Site Control
+  Center's switch shows and works. A frame of another origin is covered by the CraCore test only
+  (`aFramesRequestCountsForItsPage`), on stand-in windows.
 - `scripts/scenario.sh protected-video-prompt`: the running app on the fixture server as a
   mixed site (`film.html`). No prompt for an ordinary page; the prompt with Once, Always and ✕;
   Once moving only that page, with its place in the video and a cookie set in Chromium; the next
   page going back to Chromium; ✕ not asking twice; Always skipping the prompt; the Site Control
-  Center's row saying what is in force and taking it back.
+  Center's row saying what is in force and taking it back; a player frame asking for its page.
 - `scripts/scenario.sh webkit-drm-tabs`: the running app. The fixture server is reached as
   `localhost`, which the run lists, so it needs no network and no account. The scenario covers
   FairPlay being offered and every emulated protocol method. It also covers both handoffs, split
@@ -253,6 +267,9 @@ its own and never writes the daily Cra's. They are read at launch. A test instan
   tab in WebKit. A download from a WebKit page lands in Downloads.
 - Still by hand, with real accounts: Spotify plays track after track, Netflix and Disney+ play,
   and sign-in through Google or Apple comes back signed in. Peek from a pinned WebKit tab.
+- Fandango at Home itself was only looked at signed out in a test copy (19 Nov 2026: the frame
+  asks, the top frame doesn't). That the switch shows there now, and that a film plays in
+  Safari's engine once it is on, is still to be seen with an account.
 - Never tried, because it takes a YouTube account that owns a film: that the film asks for
   Widevine in the top frame so the prompt shows, that YouTube serves Safari's engine more than
   480p, that Google keeps the copied session signed in under Safari's user agent (and doesn't

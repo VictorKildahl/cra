@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Player frame</title>
+<!-- The player of frame-player.html, a frame of its own as on Fandango at Home
+     (athome.fandango.com/bluesteel/player_frame.html): it asks for Widevine as it loads, then
+     tells its parent it is ready (an ordinary message, which the page must still get). -->
+<script>
+  const config = [{ initDataTypes: ['cenc'], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }] }];
+  const told = () => parent.postMessage('ready', '*');
+  navigator.requestMediaKeySystemAccess('com.widevine.alpha', config).then(told, told);
+</script>

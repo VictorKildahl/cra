@@ -349,6 +349,98 @@ struct ProtectedVideosTests {
     }
 
     #if canImport(JavaScriptCore)
+    // MARK: A request in any frame is the page's
+
+    /// A top frame, a player frame of its origin and one of another origin (`deep`), each with the
+    /// page's world wrapper and Cra's world, as PageScript runs them: `top`, `frame` and `deep` are the windows, `ask(w)` is the frame's page calling
+    /// requestMediaKeySystemAccess, `seen` what the page's own message listener got.
+    private func framedPage() throws -> JSContext {
+        let context = try #require(JSContext())
+        context.exceptionHandler = { _, error in Issue.record("script threw: \(error?.toString() ?? "?")") }
+        let pageWorld = try #require(String(data: JSONEncoder().encode(WidevineSignal.pageWorld(channel: "chan")), encoding: .utf8))
+        let isolated = try #require(String(data: JSONEncoder().encode(WidevineSignal.isolatedWorld(channel: "chan")), encoding: .utf8))
+        context.evaluateScript("""
+        function CustomEvent(type) { this.type = type; }
+        function makeWindow(href, top) {
+          const w = { listeners: [], location: { href }, asked: [] };
+          w.top = top || w;
+          w.addEventListener = (type, f, capture) => w.listeners.push({ type, f });
+          w.dispatchEvent = e => {
+            let stopped = false;
+            e.stopImmediatePropagation = () => { stopped = true; };
+            for (const l of w.listeners.slice()) { if (l.type === e.type && !stopped) l.f(e); }
+          };
+          w.postMessage = (data, origin) => w.dispatchEvent({ type: 'message', data });
+          function Navigator() {}
+          Navigator.prototype.requestMediaKeySystemAccess = function (keySystem) { w.asked.push(keySystem); return 'access'; };
+          w.Navigator = Navigator;
+          w.navigator = new Navigator();
+          // Cra's world first (document start), then the page's world and the page's own listener.
+          new Function('window', 'addEventListener', 'location', 'CustomEvent', 'const cra = window.__cra = {};' + \(isolated))(w, w.addEventListener, w.location, CustomEvent);
+          new Function('window', 'dispatchEvent', 'CustomEvent', \(pageWorld))(w, w.dispatchEvent, CustomEvent);
+          return w;
+        }
+        var top = makeWindow('https://athome.example/watch/1');
+        var seen = [];
+        top.addEventListener('message', e => seen.push(e.data));
+        var frame = makeWindow('https://athome.example/player_frame.html', top);
+        // A frame of another origin sees a top it can post to and nothing else.
+        var posted = 0;
+        var foreignTop = { postMessage: (data, origin) => { posted++; top.postMessage(data, origin); },
+                           get dispatchEvent() { throw new Error('SecurityError'); } };
+        var deep = makeWindow('https://player.example/inner.html', foreignTop);
+        var ask = (w, keySystem) => w.navigator.requestMediaKeySystemAccess(keySystem || 'com.widevine.alpha');
+        var next = []; var wait = () => { top.__cra.drmNext().then(v => next.push(v)); };
+        """)
+        return context
+    }
+
+    @Test func aFramesRequestCountsForItsPage() throws {
+        let page = try framedPage()
+        func bool(_ js: String) -> Bool { page.evaluateScript(js).toBool() }
+        func text(_ js: String) -> String { page.evaluateScript(js).toString() }
+        #expect(!bool("top.__cra.drm === true"))
+        // Another key system, in the frame: not Widevine, nothing is told; the call still goes through.
+        #expect(text("ask(frame, 'com.apple.fps')") == "access" && !bool("top.__cra.drm === true || frame.__cra.drm === true"))
+        // The player frame asks for Widevine: the top frame knows, without a message the page could see.
+        page.evaluateScript("wait()")
+        #expect(text("next.join()") == "")
+        #expect(text("ask(frame)") == "access" && text("frame.asked.join()") == "com.apple.fps,com.widevine.alpha")
+        #expect(bool("frame.__cra.drm === true") && bool("top.__cra.drm === true"))
+        #expect(text("seen.join()") == "" && text("posted") == "0")
+        #expect(text("next.join()") == "https://athome.example/watch/1", "the waiting ask answers with the page's address, not the frame's")
+        // Any other message reaches the page as before.
+        page.evaluateScript("top.postMessage('hello')")
+        #expect(text("seen.join()") == "hello")
+        // A frame of another origin can't reach the top window: it posts, and the top frame keeps that
+        // message from the page's own listeners.
+        page.evaluateScript("wait(); ask(deep, 'com.widevine.alpha.experiment')")
+        #expect(text("next.length") == "2" && text("top.__cra.drmN") == "2" && text("posted") == "1")
+        #expect(text("seen.join()") == "hello")
+    }
+
+    @Test func thePageTellsWhenItAsksAgain() throws {
+        let page = try framedPage()
+        func text(_ js: String) -> String { page.evaluateScript(js).toString() }
+        // The top frame's own request, made before anyone waits, is kept for the first ask.
+        page.evaluateScript("ask(top); wait()")
+        #expect(text("next.join('|')") == "https://athome.example/watch/1")
+        // A second ask waits for the next request; a third takes its place, and the second answers "".
+        page.evaluateScript("wait(); wait()")
+        #expect(text("next.length") == "2" && text("next[1]") == "")
+        // The next video without a new request: its `encrypted` event counts, in the frame that asked.
+        page.evaluateScript("frame.dispatchEvent({ type: 'encrypted' })")
+        #expect(text("next.length") == "2", "the frame never asked for Widevine: its encrypted media isn't a request")
+        page.evaluateScript("top.location.href = 'https://athome.example/watch/2'; top.dispatchEvent({ type: 'encrypted' })")
+        #expect(text("next.length") == "3" && text("next[2]") == "https://athome.example/watch/2")
+        page.evaluateScript("ask(frame); wait(); frame.dispatchEvent({ type: 'encrypted' }); wait()")
+        #expect(text("next.length") == "5" && text("top.__cra.drmN") == "4")
+        // Encrypted media on a page that never asked for Widevine (FairPlay, Clear Key) is nobody's request.
+        let other = try framedPage()
+        other.evaluateScript("wait(); top.dispatchEvent({ type: 'encrypted' }); frame.dispatchEvent({ type: 'encrypted' })")
+        #expect(other.evaluateScript("next.length").toString() == "0" && !other.evaluateScript("top.__cra.drm === true").toBool())
+    }
+
     /// The scripts run in a JavaScript engine against stand-ins for the page.
     @Test func theTimeIsThePlayingVideos() throws {
         func time(_ videos: String) throws -> Double {

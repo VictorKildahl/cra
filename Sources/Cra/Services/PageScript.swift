@@ -15,14 +15,11 @@ import Foundation
 ///   names Cra. Chromium pages don't get it: Chromium routes their handlers itself
 ///   (`Cra.mediaSession`, like Arc), which also finds a handler the page registered before a
 ///   wrapper could be in place (the first page of a new tab).
-/// - `drm`: the page asked for Widevine (navigator.requestMediaKeySystemAccess): the Site Control
-///   Center then offers to play the site in Safari's engine (docs/protected-media.md). A wrapper in
-///   the page's world tells this world through the same per-launch event name.
-/// - `drmNext()`: a promise that settles the next time the page asks, with its address then
-///   (`protectedVideoRequest`), so a mixed site's page (YouTube) tells Cra when it starts a
-///   protected video instead of being asked. A page that asked once counts each `encrypted`
-///   media event as asking again: a player that changes videos without a navigation may keep
-///   the key system it got and not ask for it twice.
+/// - `drm`, `drmNext()`: the page asked for Widevine (navigator.requestMediaKeySystemAccess), in
+///   any of its frames: the Site Control Center then offers to play the site in Safari's engine,
+///   and a mixed site's page (YouTube) is asked about its protected video
+///   (docs/protected-media.md). The scripts and how a frame's request reaches the top frame are
+///   CraCore's `WidevineSignal`, on the same per-launch event name.
 /// - `lt`: the top frame's long tasks (50 ms or more) for the performance recorder (GitHub #91):
 ///   a count, the total and the last 100 durations, which Cra reads and resets for the visible
 ///   tab every few seconds. No attribution, no addresses; the observer only runs when a long
@@ -50,48 +47,24 @@ enum PageScript {
     """
 
     /// The page's world, in both engines: the Widevine request wrapper.
-    static let mainWorld = """
-    (() => {
-      const proto = window.Navigator?.prototype, request = proto?.requestMediaKeySystemAccess;
-      if (!request) return;
-      Object.defineProperty(proto, 'requestMediaKeySystemAccess', { configurable: true, writable: true,
-        value: { requestMediaKeySystemAccess(keySystem, configs) {
-          if (String(keySystem).startsWith('com.widevine')) dispatchEvent(new CustomEvent('\(channel)d'));
-          return request.call(this, keySystem, configs);
-        } }.requestMediaKeySystemAccess });
-    })();
-    """
+    static let mainWorld = WidevineSignal.pageWorld(channel: channel)
 
     /// Asked in Cra's isolated world of a mixed site's Chromium page, and left waiting: it answers
-    /// with the page's address the next time the page asks for Widevine, or with "" when a later
-    /// ask takes its place. A page that navigates away ends it with an error.
-    static let protectedVideoRequest = "window.__cra?.drmNext?.() ?? ''"
+    /// with the page's address the next time the page asks for Widevine, in any frame.
+    static let protectedVideoRequest = WidevineSignal.nextRequest
 
     /// Cra's isolated world.
     static let isolatedWorld = """
     (() => {
       if (window.__cra) return;
-      const cra = window.__cra = { typed: new Map(), volume: 1, handlers: [], drmN: 0, drmSeen: 0 };
+      const cra = window.__cra = { typed: new Map(), volume: 1, handlers: [] };
       addEventListener('play', e => { if (cra.volume < 1 && e.target instanceof HTMLMediaElement) e.target.volume = cra.volume; }, true);
       addEventListener('input', e => {
         const t = e.isTrusted && e.composedPath()[0];
         if (t instanceof Element) cra.typed.set(t, location.href);
       }, true);
       addEventListener('\(channel)r', e => { cra.handlers = String(e.detail || '').split(',').filter(Boolean); });
-      const asked = () => { cra.drm = true; cra.drmN++; cra.drmTell?.(); };
-      addEventListener('\(channel)d', asked);
-      addEventListener('encrypted', () => { if (cra.drm) asked(); }, true);
-      cra.drmNext = () => new Promise(done => {
-        cra.drmStop?.();
-        cra.drmStop = () => done('');
-        cra.drmTell = () => {
-          if (cra.drmN <= cra.drmSeen) return;
-          cra.drmSeen = cra.drmN;
-          cra.drmTell = cra.drmStop = null;
-          done(location.href);
-        };
-        cra.drmTell();
-      });
+      \(WidevineSignal.isolatedWorld(channel: channel))
       cra.send = action => dispatchEvent(new CustomEvent('\(channel)', { detail: action }));
       cra.query = () => (cra.send('?'), cra.handlers);
       if (window.top === window) try {
