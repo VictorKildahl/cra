@@ -65,6 +65,13 @@ enum TestGesture {
                                               pressure: type == .otherMouseDown ? 1 : 0)?.cgEvent else { continue }
             cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
             guard let e = NSEvent(cgEvent: cg) else { continue }
+            // Where the event goes once it is a CGEvent and back: Nightly's runner opened no link with it while this Mac
+            // does (split-middle-click-pane), so the readout says which window and point AppKit routes it to.
+            if type == .otherMouseDown {
+                let target = NSApp.window(withWindowNumber: e.windowNumber)
+                let hit = target?.contentView?.superview?.hitTest(e.locationInWindow).map { String(describing: Swift.type(of: $0)) } ?? "nothing"
+                CraLog.note("middle click event: window \(e.windowNumber) (asked \(window.windowNumber)) at \(Int(e.locationInWindow.x)),\(Int(e.locationInWindow.y)) (asked \(Int(point.x)),\(Int(point.y))) button \(e.buttonNumber), hits \(hit); screen point \(Int(cg.location.x)),\(Int(cg.location.y))")
+            }
             NSApp.postEvent(e, atStart: false)
         }
     }
