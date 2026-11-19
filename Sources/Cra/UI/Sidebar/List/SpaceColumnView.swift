@@ -1801,28 +1801,21 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             Self.liveCalendarMenu(m, url: url, profilePath: store.profilePath(item: id), store: store)
             m.addItem(.separator())
         }
-        MenuItems.add(m, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) } }
-        MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
-        // Arc's favorite menu has Mute after Rename… (Unmute on a muted tab), as a tab's menu does (#387).
-        if let t = item.tab {
-            MenuItems.add(m, action: "muteTab", title: t.muted ? "Unmute" : "Mute") {
-                store.setMuted(id, !t.muted)
-                actions.performAction("muteTab:\(id)")
-            }
-        }
-        if let t = item.tab, t.liveItemURL == nil {
-            SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
-        }
+        // Arc 1.173.1's favorite menu, read live 19 Nov 2026 (#600): Copy Link, Share ▸ | Change Icon…,
+        // Rename…, Mute, Customize Page… (open), Edit Pinned Page ▸ | Add/Open in Split View, Duplicate,
+        // Move to ▸ | Close Tab (open), Remove Favorite. Cra keeps Use Site Icon and Tile Color ▸, which
+        // have no other way in, by Change Icon….
+        guard let t = item.tab else { return m }
+        let open = store.isSelected(id, window: ui.windowID)
         MenuItems.add(m, action: "copyURL", title: "Copy Link") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(item.tab?.url ?? "", forType: .string)
+            NSPasteboard.general.setString(CleanURL.withoutTrackers(t.url), forType: .string)
         }
-        if let t = item.tab, t.url != t.savedURL {
-            MenuItems.add(m, action: "resetTab", title: "Back to Pinned Page") { actions.resetPinnedTab(id) }
-        }
+        let web = URL(string: CleanURL.withoutTrackers(t.url)).flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }
+        if let web { SharePicker.addMenu(to: m, url: web) }
         m.addItem(.separator())
         MenuItems.add(m, "Change Icon…") { [weak self] in self?.pickIcon() }
-        if let key = item.tab?.customIconKey {
+        if let key = t.customIconKey {
             MenuItems.add(m, "Use Site Icon") {
                 store.setCustomIcon(nil, for: id)
                 favicons.removeCustomIcon(key)
@@ -1844,15 +1837,34 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             guard let grid else { return }
             store.setTileColor(tileColor, for: grid.spaceFavoriteIDs())
         }
-        // Arc 1.173.1's favorite menu has a section of Open in Split View, Duplicate and Move to ›; Cra's
-        // has Duplicate and, on a shared favorite, Move to ›. The copy is a Today tab of the page, in
-        // the background (#600).
+        MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
+        SidebarMenus.muteItem(m, id, t, ui: ui, store: store, actions: actions)
+        if open, web?.host != nil { MenuItems.add(m, "Customize Page…") { actions.performAction("newBoost") } }
+        if t.liveItemURL == nil {
+            SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
+        }
         m.addItem(.separator())
+        if open {
+            MenuItems.add(m, action: "addSplitView", title: "Add Split View") { actions.performAction("addSplitView") }
+        } else if store.selectedTabID(window: ui.windowID) != nil {
+            MenuItems.add(m, "Open in Split View") { actions.performAction("openInSplit:\(id.uuidString)") }
+        }
+        // The copy is a Today tab of the page, in the background, as in Arc.
         MenuItems.add(m, action: "duplicateTab", title: "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
         Self.moveToProfile(m, id, store)
         m.addItem(.separator())
-        MenuItems.add(m, action: "closeTab", title: "Close") { actions.closeTab(id) }
-        MenuItems.add(m, "Archive") { store.archiveTab(id, reason: .manual) }
+        if open || ui.loadedTabIDs.contains(id) {
+            MenuItems.add(m, action: "closeTab", title: "Close Tab") { actions.closeTab(id) }
+        }
+        // Arc deletes the favorite. A shared one goes as before; a space's own goes to the archive,
+        // where Library can bring it back.
+        MenuItems.add(m, "Remove Favorite") {
+            if store.profileList(ofItem: id) != nil {
+                store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) }
+            } else {
+                store.archiveTab(id, reason: .manual)
+            }
+        }
         return m
     }
 

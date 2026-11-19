@@ -1078,6 +1078,22 @@ Duplicate pressed over AX, StorableSidebar.json read after each.
 - [O live] The copy never opens: duplicating the open tab or the open split leaves the original open, the copy in
   the background. (Tabs ▸ Duplicate Tab from the menu bar was not tried; Cra's opens its copy.)
 - Cra (#600): SidebarStore.duplicateTab/duplicateSplit do the same, from the tab, favorite and split menus.
+- [O live] Tab menus (AX rows, ⌥ alternates found by two rows sharing one frame):
+  - Today tab: Copy Link, Share ▸ (AirDrop, Mail, Notes) | Change Icon…, Rename…, Mute (dimmed unless the page
+    plays), Customize Page… (open tab only) | Open in Split View (Add Split View on the open tab), Duplicate,
+    Move to ▸ (spaces, ──, New Space…) | Archive Tab (⌥ Archive Other Tabs), Archive Tabs Below (⌥ Archive Tabs
+    Above), each dimmed with nothing to archive.
+  - Pinned tab: the same to Mute, then Customize Page… (open), Edit Pinned Page ▸ (Replace Pinned URL with Current,
+    dimmed on the pinned page; Edit…) | split row, Duplicate, Move to ▸ | Remove Pin. Remove Pin archives the tab
+    (StorableArchiveItems, reason manual). No Close row on an open pinned tab.
+  - Favorite: as a pinned tab, Move to ▸ is Profile ▸, and the last section is Close Tab (open only), Remove Favorite.
+  - The menu bar has no Duplicate: Tabs is New Tab…, Pin/Unpin Tab, Open Little Arc or Peek in…, New Folder… |
+    Next Tab, Previous Tab, Reveal Tab in Sidebar | Clear Today, Reset all tabs in this Space. The command bar's
+    Duplicate Current Tab leaves the copy in the background, right after the original.
+- Cra (#600, Victor: menus 1:1 with Arc): SidebarMenus.tab and the favorite tile's menu follow these rows. Cra keeps
+  Use Site Icon, Use Page Title and Tile Color ▸, which have no other way in; Pin/Unpin Tab, Add to Favorites, Move
+  to Folder ▸, New Folder with Tab, Back to Pinned Page and Close and Keep Pinned are gone (⌘D, drag, the menu bar,
+  ⌘W). Tabs ▸ Duplicate Tab and its command-bar row leave the copy in the background.
 
 ### Clear cookies / cache (Arc 1.171, 30 Oct)
 - [O] Command bar: "clear" lists Clear Cache and Refresh (selected, above the typed row), then "clear", then

@@ -739,7 +739,7 @@
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::shortcutsPressTheirButtons  b2c01bed9702
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::springsAreArcsInCoreAnimationTerms  5be9f378ea04
 #386   Tests/Scenarios/picked-tabs-split.scenario  cd33102969a4
-#387   Tests/Scenarios/favorite-mute.scenario  7b04a5025ba3
+#387   Tests/Scenarios/favorite-mute.scenario  db8d9c42c4be
 #387   Tests/Scenarios/muted-tab-restores.scenario  84b90b5d2da8
 #391   Tests/DockedWindowAccessibilityTests.swift::attachingNoWindowIsHarmless  a7281f64456f
 #391   Tests/DockedWindowAccessibilityTests.swift::movesFindsTheBrowserWindow  b7cbb5a23a9d
@@ -1230,8 +1230,10 @@
 #599   Packages/CraCore/Tests/CraCoreTests/LittleBarRowsTests.swift::littleWindowLoadsOpenTabsAndArchivedPagesInPlace  3db7ce838adc
 #599   Packages/CraCore/Tests/CraCoreTests/LittleWindowLinksTests.swift::newTabLinkLoadsInTheWindow  80fbb6cec90e
 #599   Tests/Scenarios/little-window-stays.scenario  f152fd5a1638
-#600   Tests/Scenarios/favorite-duplicate.scenario  736dc0e98bd5
-#600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  cff08d15294f
+#600   Tests/Scenarios/favorite-duplicate.scenario  1382602330ad
+#600   Tests/Scenarios/tab-menu-arc.scenario  6476ea9bdc4a
+#600   Tests/StoreTests.swift::archiveTabsAboveAndOthers  ba0f7add3191
+#600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  63a22561dc03
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceKeepsOtherSpacesPinnedTabs  0a684ba0fd54
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceReopensTheTabClosedHere  fb422863c018
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceSettingIsOffByDefaultAndSaved  84ce8a563ddd

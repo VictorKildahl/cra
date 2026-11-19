@@ -86,9 +86,9 @@ gains "New Profile".
 
 | Where | Arc items Cra lacks |
 |---|---|
-| Today tab | all done (Share ▸, Change Icon…, Open in Split View, Archive Tabs Below) |
-| Pinned tab | Edit Pinned Page ▸ (Cra lists them flat on purpose, PR #55), Remove Pin (Share ▸, Change Icon… and Add Split View done) |
-| Favorite | Share ›, Open in Split View (Duplicate done, GitHub #600: as in Arc 1.173.1, a Today tab of the page where new tabs go, in the background) |
+| Today tab | all done, in Arc 1.173.1's order (GitHub #600): Customize Page… opens the site's Boost editor; Archive Other Tabs and Archive Tabs Above are the ⌥ rows. Cra keeps Use Page Title and Use Site Icon (no other way in) |
+| Pinned tab | all done, in Arc 1.173.1's order (GitHub #600): Edit Pinned Page ▸ is Arc's submenu again (it was flat from PR #55), Remove Pin archives the tab as Arc's does |
+| Favorite | all done, in Arc 1.173.1's order (GitHub #600) except Share ▸ (http pages only) and Move to ▸ Profile (shared favorites only). Remove Favorite archives a space's own favorite (Arc deletes it; Library brings Cra's back). Cra keeps Tile Color ▸ and Use Site Icon |
 | Split | Share Split View…, Change Icon…, Archive Tabs Below (Duplicate done, GitHub #600: the whole split right after it, orientation and sizes kept, in the background) |
 | Space header / empty sidebar | Share Space… (*skip*), New Folder, Manage Spaces…, Delete Space (check order) |
 | Folder | Paste as New Tab, Move to ▸, Duplicate, Turn "…" into Space, Copy All Links, and Arc's order (New Nested Folder… is Cra's New Folder Inside). Share Folder… done (GitHub #357): Arc stored the folder on arc.net; Cra's crabrowser.app/folder link carries it after the # (FolderShareLink), so nothing is stored and the server never sees it. Same toast, "Copied Folder URL", after Arc's "Send this Folder to anyone" warning (AppDialog.shareLink, #356) |

@@ -864,7 +864,8 @@ final class SidebarStore {
     /// Arc's Duplicate (#600, checked in Arc 1.173.1): a copy of the tab's page right after it, in
     /// the same list (a pinned tab's copy is pinned), left in the background. A favorite's copy is a
     /// Today tab where new tabs go, and a split pane's copy goes right below its split, not into it as
-    /// one pane more. `select` opens the copy, as Tabs ▸ Duplicate Tab does.
+    /// one pane more. Every Duplicate, the menu bar's and the command bar's too, leaves it in the
+    /// background, as Arc's do; `select` opens it (the folder preview's).
     @discardableResult
     func duplicateTab(_ id: UUID, window: UUID? = nil, select: Bool = false) -> SidebarItem? {
         guard let it = items[id], let t = it.tab, var parent = it.parentID else { return nil }
@@ -2515,6 +2516,37 @@ final class SidebarStore {
               spaces[sid]?.todayContainerID == parent,
               let rows = items[parent]?.children, let i = rows.firstIndex(of: id) else { return }
         for row in rows[(i + 1)...] {
+            guard let r = items[row] else { continue }
+            for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
+        }
+    }
+
+    /// Arc 1.173.1's ⌥ row under Archive Tabs Below: every Today row over this one (#600).
+    func archiveTabsAbove(_ id: UUID) {
+        guard let (rows, i) = todayRows(around: id) else { return }
+        archiveRows(rows[..<i])
+    }
+
+    /// Arc 1.173.1's ⌥ row under Archive Tab: every Today row but this one (#600).
+    func archiveOtherTabs(_ id: UUID) {
+        guard let (rows, i) = todayRows(around: id) else { return }
+        archiveRows(rows[..<i] + rows[(i + 1)...])
+    }
+
+    /// Whether Archive Tabs Above / Below have rows to archive (Arc dims the row otherwise).
+    func hasTodayTabs(above id: UUID) -> Bool { todayRows(around: id).map { $0.index > 0 } ?? false }
+    func hasTodayTabs(below id: UUID) -> Bool { todayRows(around: id).map { $0.index < $0.rows.count - 1 } ?? false }
+
+    /// The Today rows and the index of `id`'s row, for a Today tab (or a split in Today); nil otherwise.
+    private func todayRows(around id: UUID) -> (rows: [UUID], index: Int)? {
+        let row = splitContaining(id)?.id ?? id
+        guard let parent = items[row]?.parentID, let sid = spaceID(ofItem: row), spaces[sid]?.todayContainerID == parent,
+              let rows = items[parent]?.children, let i = rows.firstIndex(of: row) else { return nil }
+        return (rows, i)
+    }
+
+    private func archiveRows<C: Collection>(_ rows: C) where C.Element == UUID {
+        for row in Array(rows) {
             guard let r = items[row] else { continue }
             for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
         }

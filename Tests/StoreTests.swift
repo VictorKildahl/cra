@@ -91,6 +91,7 @@ enum StoreTests {
         tornOffTabMovesToABlankWindow()
         tornOffTabKeepsItsProfile()
         archiveTabsBelow()
+        archiveTabsAboveAndOthers()
         numberedSidebarItems()
         clearTodayKeepsSelectedAndPlaying()
         allFoldersExpanded()
@@ -2348,8 +2349,8 @@ enum StoreTests {
     /// the copy goes right after the original, in the same list (a pinned tab's copy is pinned), and
     /// stays in the background. A favorite's copy is a Today tab where new tabs go, not a favorite. A
     /// split comes back whole: each pane's page in order, its orientation and sizes. Duplicate on one
-    /// pane of a split puts a copy of that page below the split, not a pane more inside it. Tabs ▸
-    /// Duplicate Tab opens its copy (`select`).
+    /// pane of a split puts a copy of that page below the split, not a pane more inside it. `select`
+    /// opens the copy (the folder preview's Duplicate).
     @MainActor
     private static func duplicateFavoritesAndSplits() {
         let store = AppComposition(clock: ManualScheduler()).store
@@ -2379,7 +2380,7 @@ enum StoreTests {
         expect(store.children(of: space.pinnedContainerID).map(\.id).suffix(2) == [pinned.id, pinnedCopy.id] && store.isPinned(pinnedCopy.id),
                "a pinned tab's copy is pinned, right after it")
         guard let opened = store.duplicateTab(open.id, select: true) else { return expect(false, "Duplicate Tab duplicates") }
-        expect(store.selectedTabID == opened.id, "Tabs ▸ Duplicate Tab opens its copy")
+        expect(store.selectedTabID == opened.id, "select opens the copy (the folder preview's Duplicate)")
 
         let left = store.createTab(url: "https://example.com/left", title: "Left", in: sid)
         let right = store.createTab(url: "https://example.com/right", title: "Right", in: sid)
@@ -3354,6 +3355,36 @@ enum StoreTests {
                "and land in the archive")
         store.archiveTabsBelow(pinned.id)
         expect(store.item(pinned.id) != nil, "a pinned tab archives nothing below it (Arc offers it on Today tabs only)")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    // promise: #600
+    /// Arc 1.173.1's Today tab menu has two ⌥ rows: Archive Tabs Above (under Archive Tabs Below)
+    /// archives every Today row over the one clicked, Archive Other Tabs (under Archive Tab) every
+    /// Today row but it. Pinned tabs and favorites stay.
+    @MainActor
+    private static func archiveTabsAboveAndOthers() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Above", emoji: "⬆️").id
+        let today = store.space(sid)!.todayContainerID
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false, parent: today, index: 0)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false, parent: today, index: 1)
+        let c = store.createTab(url: "https://c.example/", in: sid, select: false, parent: today, index: 2)
+        let d = store.createTab(url: "https://d.example/", in: sid, select: false, parent: today, index: 3)
+        let e = store.createTab(url: "https://e.example/", in: sid, select: false, parent: today, index: 4)
+        let split = store.createSplit(with: [a.id, b.id])!
+        let pinned = store.createTab(url: "https://p.example/", in: sid, pinned: true, select: false)
+        expect(store.children(of: today).map(\.id) == [split.id, c.id, d.id, e.id], "set up: a split and three tabs in Today")
+        expect(store.hasTodayTabs(above: c.id) && !store.hasTodayTabs(above: split.id), "the split counts as a row above c, and nothing is above the split")
+        store.archiveTabsAbove(d.id)
+        expect(store.children(of: today).map(\.id) == [d.id, e.id], "Archive Tabs Above archives the split and the tab over it")
+        expect(!store.hasTodayTabs(above: d.id) && store.hasTodayTabs(below: d.id), "nothing is above it now, one tab is below")
+        store.archiveOtherTabs(e.id)
+        expect(store.children(of: today).map(\.id) == [e.id] && store.item(pinned.id) != nil,
+               "Archive Other Tabs leaves only it in Today, and the pinned tab")
+        store.archiveTabsAbove(pinned.id)
+        store.archiveOtherTabs(pinned.id)
+        expect(store.item(pinned.id) != nil && store.children(of: today).map(\.id) == [e.id], "a pinned tab archives nothing")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 

@@ -784,12 +784,42 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// For test hooks: a menu's rows, "|" between rows, "──" for a separator, "▸" after a submenu,
-    /// " (off)" after a dimmed row.
+    /// " (off)" after a dimmed row, " ⌥" after a row ⌥ shows in place of the one before it.
     static func menuReadout(_ menu: NSMenu) -> String {
         menu.items.map { item -> String in
             if item.isSeparatorItem { return "──" }
-            return item.title + (item.submenu != nil ? " ▸" : "") + (item.isEnabled ? "" : " (off)")
+            return item.title + (item.submenu != nil ? " ▸" : "") + (item.isEnabled ? "" : " (off)") + (item.isAlternate ? " ⌥" : "")
         }.joined(separator: "|")
+    }
+
+    /// `cra://debug?tabMenu=<n>`: logs the menu a right-click on the focused space's n-th listed tab
+    /// opens, nothing picked (rows as menuReadout writes them, then its Edit Pinned Page and Move to
+    /// submenus). `run` picks a row by title, in a submenu too, and logs the space's pinned and Today
+    /// rows (page queries) and the open tab (#600).
+    func testTabMenu(_ n: Int, label: String, run: String?) {
+        func rows(in v: NSView) -> [TabRowView] {
+            (v as? TabRowView).map { [$0] } ?? v.subviews.flatMap { rows(in: $0) }
+        }
+        let listed = store.listedTabIDs(in: focusedSpaceID)
+        guard listed.indices.contains(n - 1),
+              let row = window?.contentView.flatMap(rows(in:))?.first(where: { $0.model?.id == listed[n - 1] })
+        else { CraLog.note("tab menu \(label): no row \(n)"); return }
+        sidebarUI.clearPicks()
+        guard let menu = row.contextMenu(at: .zero) else { CraLog.note("tab menu \(label): no menu"); return }
+        CraLog.note("tab menu \(label): \(Self.menuReadout(menu))")
+        for item in menu.items where item.submenu != nil && ["Edit Pinned Page", "Move to"].contains(item.title) {
+            CraLog.note("tab menu \(label) \(item.title): \(Self.menuReadout(item.submenu!))")
+        }
+        let all = menu.items + menu.items.flatMap { $0.submenu?.items ?? [] }
+        guard let run, let item = all.first(where: { $0.title == run }), let owner = item.menu else { return }
+        owner.performActionForItem(at: owner.index(of: item))
+        guard let space = store.space(focusedSpaceID) else { return }
+        let query = { (id: UUID) in self.store.item(id)?.tab.flatMap { URL(string: $0.url)?.query } ?? "-" }
+        let list = { (container: UUID) in
+            self.store.children(of: container).map { $0.isSplit ? $0.children.map(query).joined(separator: "+") : query($0.id) }.joined(separator: " ")
+        }
+        let open = store.selectedTabID(window: windowID).map(query) ?? "-"
+        CraLog.note("tab menu \(label) ran \(run): pinned: \(list(space.pinnedContainerID)) today: \(list(space.todayContainerID)) open: \(open)")
     }
 
     /// `cra://debug?spaceMenu=<label>`: logs the menu a right-click on the open space's header
