@@ -127,7 +127,7 @@ enum CaptureOverlayTests {
             default: view.mouseUp(with: event)
             }
         }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        spin { panel.firstResponder is NSTextView }
         expect(panel.firstResponder is NSTextView, "the Send To field holds the keyboard once the menu shows")
         for (c, code) in [("a", UInt16(0)), ("v", 9), ("x", 7), ("z", 6)] {
             _ = view.performKeyEquivalent(with: key(c, code: code, modifiers: .command, in: panel))
@@ -286,7 +286,7 @@ enum CaptureOverlayTests {
         let stack = [row("A", title, inline: true), row("H3", CGRect(x: 40, y: 220, width: 300, height: 20)), row("DIV", card)]
         fixture.mainBrowser.reply(to: isolated, with: #"{"result":{"value":{"view":{"w":900,"h":770},"stack":["# + stack.joined(separator: ",") + "]}}}")
         // The overlay takes the answer on the main queue.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        spin { overlay.pickedElement == card }
         expect(overlay.pickedElement == card, "the pointer on a title lights Arc's choice, its card")
         view.flagsChanged(with: option(true))
         expect(overlay.pickedElement == title, "holding Option lights the title line itself")
@@ -324,6 +324,17 @@ enum CaptureOverlayTests {
             fatalError("The capture's pixels cannot be read")
         }
         expect(color.redComponent > 0.95 && color.blueComponent < 0.05, "capture contains Peek's red page, not the main page's blue pixels")
+    }
+
+    /// Runs the main run loop until `condition` holds, for at most `timeout` seconds. A fixed 0.1 s was too short
+    /// under Nightly's sanitizers (4-10 of these checks failed there, none on a Mac); the expect after it still fails
+    /// when the condition never comes.
+    @MainActor
+    private static func spin(timeout: TimeInterval = 5, until condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

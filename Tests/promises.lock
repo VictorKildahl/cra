@@ -881,7 +881,7 @@
 #450   Tests/Scenarios/about-chromium-no-update-check.scenario  b1bdfdccbe87
 #451   Packages/CraCore/Tests/CraCoreTests/ContentCaptureTests.swift::optionPicksTheTitleLineItself  b348425e499d
 #451   Packages/CraCore/Tests/CraCoreTests/ContentCaptureTests.swift::optionSkipsSpecksAndThePageButNotShadowRoots  baf32437d361
-#451   Tests/CaptureOverlayTests.swift::checkOptionPicksDeeper  189b361c0f85
+#451   Tests/CaptureOverlayTests.swift::checkOptionPicksDeeper  976a91a769a7
 #451   Tests/Scenarios/capture-pick.scenario  ba7b97eb1e40
 #452   Tests/PolicyTests.swift::defaultBrowserPicker  ea5c3e09748a
 #455   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::materialFollowsTheSpacesAppearance  9fdd8d37a5ca
