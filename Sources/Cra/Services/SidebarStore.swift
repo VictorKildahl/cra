@@ -1274,13 +1274,14 @@ final class SidebarStore {
     /// Add an existing tab as a pane of a split (Arc: onDropSidebarItem). A
     /// pinned or favorite tab stays where it is; a Today copy becomes the pane.
     /// A split already holding its most panes takes nothing (#498): Arc's four, or eight with
-    /// "More than four panes in a split" on (`splitPaneLimit`).
-    func addToSplit(_ splitID: UUID, tabID: UUID, at index: Int?) {
+    /// "More than four panes in a split" on (`splitPaneLimit`), unless the tab takes the place of
+    /// one of its panes (`replacing`, a drop on a pane), which leaves right after.
+    func addToSplit(_ splitID: UUID, tabID: UUID, at index: Int?, replacing: UUID? = nil) {
         guard var split = items[splitID], split.isSplit, var tab = items[tabID], tab.isTab, tab.parentID != splitID else {
             if let i = index, let sp = items[splitID], sp.children.firstIndex(of: tabID) != nil { moveWithinSplit(splitID, tabID: tabID, to: i) }
             return
         }
-        guard split.children.count < splitPaneLimit else { return }
+        guard split.children.count < splitPaneLimit || replacing.map(split.children.contains) == true else { return }
         let previousAskProfiles = askProfileOwnership(of: [tabID])
         defer { notifyAskProfileChanges(previousAskProfiles) }
         let from = tab.parentID

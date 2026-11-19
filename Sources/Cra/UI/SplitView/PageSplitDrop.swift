@@ -125,8 +125,12 @@ final class PageSplitDrop: PageDropTarget {
         case .tab(let id):
             guard !panes.contains(id), store.item(id)?.isTab == true else { return nil }
             if let split = store.splitContaining(anchor) {
-                store.addToSplit(split.id, tabID: id, at: index)
-                guard let s = store.splitContaining(anchor), let p = store.paneID(for: id, in: s) else { return nil }
+                // A full split takes the tab only in a pane's place (#419): it refused, and the pane the
+                // tab had once opened (paneID's activeTabBeforeCreationID) was taken for the new one and
+                // replaced, so the split lost a pane. Only a pane that wasn't there before is the drop's.
+                let before = Set(split.children)
+                store.addToSplit(split.id, tabID: id, at: index, replacing: replaced)
+                guard let s = store.splitContaining(anchor), let p = store.paneID(for: id, in: s), !before.contains(p) else { return nil }
                 pane = p
             } else {
                 var order = panes
