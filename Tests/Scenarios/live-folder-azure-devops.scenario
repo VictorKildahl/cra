@@ -1,0 +1,13 @@
+# The bundled Azure DevOps live folder loads in the app next to GitHub, GitLab and Jira: its plug-in
+# describes itself in the sandboxed host, its icon resolves, and "New Azure DevOps Live Folder" is a
+# command the bar finds (#542). What the plug-in asks Azure DevOps and how it reads the answers is
+# LiveFolderProviderTests.azureDevOps.
+# promise: #542
+budget rss=900
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+wait 2
+cra://commandbar?query=azure devops
+wait 1
+cra://debug?commandBarRows=azure
+expect-log Cra command bar rows azure: open=1 .*New Azure DevOps Live Folder

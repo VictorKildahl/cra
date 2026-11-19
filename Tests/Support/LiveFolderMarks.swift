@@ -8,3 +8,4 @@ private func pluginMark(_ name: String) -> NSImage {
 
 enum GitHubMark { static let image = pluginMark("github") }
 enum GitLabMark { static let image = pluginMark("gitlab") }
+enum AzureDevOpsMark { static let image = pluginMark("azure-devops") }

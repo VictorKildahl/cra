@@ -1114,6 +1114,8 @@
 #539   Tests/Scenarios/little-window-screenshot-pick.scenario  a4df2e9bd27b
 #540   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::aPageInFullScreenHasNoBar  a35e4af16d57
 #540   Tests/Scenarios/little-window-fullscreen-bar.scenario  68c2b18c5237
+#542   Tests/LiveFolderProviderTests.swift::azureDevOps  0d42712d01b7
+#542   Tests/Scenarios/live-folder-azure-devops.scenario  8a12a260ea63
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::anotherSpaceIsNamed  6d3b818e11aa
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::hiddenSidebarSaysSo  f40706666c21
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::sidebarOutShowsTheRowInstead  bafff498f7e3

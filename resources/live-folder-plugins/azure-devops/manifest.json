@@ -1,0 +1,14 @@
+{
+  "id": "cra.azure-devops",
+  "name": "Azure DevOps",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "main.js",
+  "sessionSetting": "server",
+  "command": {
+    "title": "New Azure DevOps Live Folder",
+    "description": "Add a folder that fills itself with your Azure DevOps pull requests.",
+    "triggers": ["live folder", "pull requests", "azure devops"]
+  },
+  "sessionOrigins": []
+}
