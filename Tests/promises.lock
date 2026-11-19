@@ -1187,6 +1187,11 @@
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
 #590   Tests/Scenarios/view-history.scenario  d890566954b5
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aFolderInsideItselfStillEnds  fb81215fc153
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aPageListedTwiceShowsOnce  f4ca1fa04528
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::macTabsComeFromItsSyncedSpaces  2102b05a769d
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::mergesAndFiltersRecentTabs  427408879f3f
+#591   iOS/CraUITests/BrowserTests.swift::testRecentTabsShowUnderTheEmptyField  6bf1170efbe9
 #600   Tests/Scenarios/favorite-duplicate.scenario  4b7556dbe875
 #600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  0a0e8c8ca9e8
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceKeepsOtherSpacesPinnedTabs  0a684ba0fd54

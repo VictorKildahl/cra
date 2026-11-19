@@ -1617,3 +1617,35 @@ final class AppleIntelligenceTests: BrowserTestCase {
         XCTAssertFalse(app.buttons["browse-for-me"].exists)
     }
 }
+
+final class RecentTabsTests: BrowserTestCase {
+    // promise: #591
+    func testRecentTabsShowUnderTheEmptyField() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-recent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sidebar = SpacesTests.macSidebar.replacingOccurrences(of: "2026-11-17T10:00:00Z", with: "2099-11-17T10:00:00Z")
+        try Data(sidebar.utf8).write(to: folder.appendingPathComponent("sidebar.json"))
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", folder.path])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.page("Second") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-search"].tap()
+        let firstRow = app.descendants(matching: .any)["suggestion-0"]
+        let secondRow = app.descendants(matching: .any)["suggestion-1"]
+        XCTAssertTrue(firstRow.staticTexts["Inbox"].waitForExistence(timeout: 10))
+        XCTAssertTrue(secondRow.staticTexts["First"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.scrollViews["suggestion-list"].staticTexts["Second"].exists)
+        keep("recent-tabs")
+        secondRow.tap()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(firstRow.staticTexts["Inbox"].waitForExistence(timeout: 10))
+        firstRow.tap()
+        waitForPage("Inbox")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-2"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["tab-card-3"].exists)
+    }
+}

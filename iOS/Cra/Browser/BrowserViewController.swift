@@ -124,6 +124,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         center.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         Self.saveFakeShareForTest()
         center.addObserver(self, selector: #selector(performLaunchAction), name: LaunchAction.notification, object: nil)
+        center.addObserver(self, selector: #selector(faviconsChanged), name: FaviconStore.didChange, object: nil)
 
         ContentBlocker.shared.prepare()
         BlockLists.shared.set(addresses: settings.value.customBlocklists)
@@ -338,6 +339,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.setRows([])
             sheet.offersBrowseForMe = BrowseForMe.isOffered
             sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
+            updateRecentTabs()
+            SyncedSidebar.hasSpaces { [weak self] _ in
+                guard let self, self.isSearching, self.sheet.text.isEmpty else { return }
+                self.updateRecentTabs()
+            }
             sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
                                                             hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
             sheet.isHidden = false
@@ -362,6 +368,22 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if !keyboardDroveLayout {
             animateChrome(duration: 0.35, options: .curveEaseInOut)
         }
+    }
+
+    private func updateRecentTabs() {
+        let mac: SidebarDocument?
+        if case .spaces(let document) = SyncedSidebar.sheet.opening { mac = document } else { mac = nil }
+        let rows = MobileRecentTabs.rows(phone: store.tabs, selected: store.selected?.id, mac: mac)
+        for row in rows where row.source == .mac && favicons.icon(for: row.url) == nil {
+            favicons.fetchFromHomePage(for: row.url)
+        }
+        sheet.setRecentTabs(rows.map { ($0, favicons.icon(for: $0.url)) })
+    }
+
+    /// A Mac tab's icon, asked of its site, arrived while the recent tabs show.
+    @objc private func faviconsChanged() {
+        guard isSearching, sheet.text.isEmpty else { return }
+        updateRecentTabs()
     }
 
     func searchSheet(_ sheet: SearchSheet, didChangeText text: String) {
@@ -407,6 +429,19 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row) {
         noteSearched()
         open(MobileSuggestions.destination(for: row, engine: settings.value.search, browsesForMe: searchesWithBrowseForMe))
+    }
+
+    func searchSheet(_ sheet: SearchSheet, didPickRecentTab row: MobileRecentTabs.Row) {
+        switch row.source {
+        case .phone(let id):
+            store.select(id)
+            guard let tab = store.selected else { return }
+            show(tab)
+            setSearching(false)
+            refreshTabStack()
+        case .mac:
+            open(row.url)
+        }
     }
 
     func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site) {
