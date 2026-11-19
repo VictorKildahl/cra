@@ -122,6 +122,97 @@ struct ProtectedVideosTests {
         #expect(!ProtectedMediaSites(isEnabled: false).holds(page, at: film))
     }
 
+    // MARK: Fandango at Home
+
+    /// The film the report was about: its play page, with the page it came from.
+    let fandangoFilm = "https://athome.fandango.com/content/browse/play/7236/PURCHASED_CONTENT?returnUrl=%252Fcontent%252Fbrowse%252Fdetails%252FTotal-Recall%252F7236"
+
+    /// Fandango at Home (Vudu) didn't move by itself, and turned on by hand it arrived in WebKit
+    /// signed out, where its play page reloads without end. It is a mixed site: the film's page
+    /// asks, moves alone and takes the session along.
+    @Test func fandangoAtHomeIsMixed() throws {
+        let site = try #require(sites.mixedSite(for: fandangoFilm))
+        #expect(site.name == "Fandango at Home" && site.host == "athome.fandango.com")
+        #expect(sites.engine(for: fandangoFilm) == .chromium)
+        #expect(sites.mixedSite(for: "https://athome.fandango.com/")?.host == "athome.fandango.com")
+        // The ticket shop and look-alikes are not it.
+        for other in ["https://www.fandango.com/", "https://fandango.com/", "https://athome.fandango.com.evil.example/",
+                      "https://notathome.fandango.com/"] {
+            #expect(sites.mixedSite(for: other) == nil, "\(other)")
+        }
+        // The page is asked about like YouTube's, and Always is the site's.
+        let pages = Pages(sites)
+        #expect(pages.requested(tab, fandangoFilm, ProtectedMediaChoices()) == .asks)
+        #expect(pages.prompt(tab, fandangoFilm)?.site.name == "Fandango at Home")
+        let always = ProtectedMediaChoices().switchingProtectedVideos(true, on: site)
+        #expect(always.protectedVideos == ["athome.fandango.com"] && always.added.isEmpty)
+        #expect(pages.requested(UUID(), fandangoFilm, always) == .switches)
+        // Its other pages ask for Widevine too (the front page does, with nothing playing): only a
+        // play or live page is asked about or moved, with Always as well, and gets no row for asking.
+        for browse in ["https://athome.fandango.com/", "https://athome.fandango.com/content/browse/details/Total-Recall/7236",
+                       "https://athome.fandango.com/content/browse/playlist", "https://athome.fandango.com/content/account/login"] {
+            #expect(!sites.playsVideo(at: browse), "\(browse)")
+            #expect(pages.requested(UUID(), browse, ProtectedMediaChoices()) == .nothing, "\(browse)")
+            #expect(pages.requested(UUID(), browse, always) == .nothing, "\(browse)")
+            let other = UUID()
+            _ = pages.requested(other, browse, ProtectedMediaChoices())
+            #expect(pages.prompt(other, browse) == nil && pages.row(other, browse, .chromium, drm: true, ProtectedMediaChoices()) == nil)
+        }
+        #expect(sites.playsVideo(at: fandangoFilm) && sites.playsVideo(at: "https://athome.fandango.com/content/browse/live/123/456"))
+        // YouTube names no paths: any of its pages that asks is asked about. Off a mixed site: false.
+        #expect(sites.playsVideo(at: "https://www.youtube.com/") && !sites.playsVideo(at: "https://www.netflix.com/watch/1"))
+        // Turned on whole with the old switch (as it was tried first): a whole-site entry again.
+        let whole = ProtectedMediaSites(extraHosts: ["athome.fandango.com"])
+        #expect(whole.mixedSite(for: fandangoFilm) == nil && whole.engine(for: fandangoFilm) == .webKit)
+    }
+
+    @Test func fandangoPageIsItsPlayPath() {
+        let key = "athome.fandango.com/content/browse/play/7236/PURCHASED_CONTENT"
+        #expect(sites.pageKey(for: fandangoFilm) == key)
+        // The query (where to go back to) isn't the film.
+        #expect(sites.pageKey(for: "https://athome.fandango.com/content/browse/play/7236/PURCHASED_CONTENT") == key)
+        #expect(sites.pageKey(for: "https://athome.fandango.com/content/browse/play/7236/PURCHASED_CONTENT/?returnUrl=x&t=1") == key)
+        #expect(sites.pageKey(for: "https://athome.fandango.com/content/browse/play/9999/PURCHASED_CONTENT") != key)
+
+        let page = SwitchedPage(site: "athome.fandango.com", key: key, how: .once)
+        // The film and the site's own sign-in stay in WebKit, so a sign-in comes back to its cookies.
+        for stays in [fandangoFilm, "https://athome.fandango.com/content/browse/play/7236/PURCHASED_CONTENT?x=1",
+                      "https://athome.fandango.com/content/account/login?type=vudu_auth&url=https%3A%2F%2Fathome.fandango.com%2F"] {
+            #expect(sites.holds(page, at: stays), "\(stays)")
+        }
+        // The shop's other pages get Chromium and its extensions back; the cookie host is not a
+        // sign-in host, so nothing else on fandango.com keeps the page.
+        for leaves in ["https://athome.fandango.com/content/browse/details/Total-Recall/7236", "https://athome.fandango.com/",
+                       "https://athome.fandango.com/content/browse/play/9999/PURCHASED_CONTENT", "https://www.fandango.com/",
+                       "https://athome.fandango.com/content/accounting"] {
+            #expect(!sites.holds(page, at: leaves), "\(leaves)")
+        }
+    }
+
+    /// Its session is in cookies on ".fandango.com" (names are base64 of "myvudu.sessionKey" and
+    /// the like): they go along, or the page arrives signed out.
+    @Test func fandangoSessionCookiesAreCopied() throws {
+        let site = try #require(sites.mixedSite(for: fandangoFilm))
+        #expect(ProtectedVideoHandoff.cookieDomains(for: site) == ["athome.fandango.com", "fandango.com"])
+        let answer = """
+        {"cookies":[
+          {"name":"bXl2dWR1LnNlc3Npb25LZXk%3D","value":"k","domain":".fandango.com","path":"/","expires":1900000000,"httpOnly":false,"secure":true,"session":false},
+          {"name":"PIM-SESSION-ID","value":"p","domain":".fandango.com","path":"/","expires":-1,"session":true},
+          {"name":"muxData","value":"m","domain":"athome.fandango.com","path":"/","expires":1900000000,"session":false},
+          {"name":"zf","value":"z","domain":".athome.fandango.com","path":"/","expires":1900000000,"session":false},
+          {"name":"other","value":"1","domain":".notfandango.com","path":"/","expires":1900000000,"session":false},
+          {"name":"evil","value":"1","domain":"fandango.com.evil.example","path":"/","expires":1900000000,"session":false},
+          {"name":"SID","value":"g","domain":".google.com","path":"/","expires":1900000000,"session":false}
+        ]}
+        """
+        let cookies = ProtectedVideoHandoff.cookies(fromProtocolAnswer: answer, for: site, now: Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(cookies.map(\.name) == ["bXl2dWR1LnNlc3Npb25LZXk%3D", "PIM-SESSION-ID", "muxData", "zf"])
+        #expect(cookies.first?.domain == ".fandango.com" && cookies.first?.isSecure == true)
+        // YouTube's copy is unchanged by the new field.
+        let youTube = try #require(sites.mixedSite(for: film))
+        #expect(youTube.cookieHosts.isEmpty && !youTube.pathNamesVideo)
+    }
+
     // MARK: Asking, Once, Always
 
     @Test func asksOnceAndOnlyOnMixedSites() {

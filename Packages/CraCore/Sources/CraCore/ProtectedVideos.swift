@@ -99,9 +99,10 @@ public struct ProtectedVideoPages: Equatable, Sendable {
 
     public init() {}
 
-    /// A Chromium page of `tab` at `url` asked for Widevine.
+    /// A Chromium page of `tab` at `url` asked for Widevine. Nothing happens on a page where its
+    /// site plays no video (`MixedMediaSite.videoPaths`), with Always too.
     public mutating func widevineRequested(tab: UUID, url: String, sites: ProtectedMediaSites, choices: ProtectedMediaChoices) -> Step {
-        guard let site = sites.mixedSite(for: url), let key = sites.pageKey(for: url) else { return .nothing }
+        guard let site = sites.mixedSite(for: url), sites.playsVideo(at: url), let key = sites.pageKey(for: url) else { return .nothing }
         asked[tab] = key
         if choices.switchesProtectedVideos(on: site) {
             waiting[tab] = nil
@@ -324,10 +325,11 @@ public enum ProtectedVideoHandoff {
         """
     }
 
-    /// The cookie domains that go with a page of `site`: its own and where it signs in.
+    /// The cookie domains that go with a page of `site`: its own, where it signs in, and any
+    /// other that holds its session.
     public static func cookieDomains(for site: MixedMediaSite) -> [String] {
         var seen = Set<String>()
-        return ([site.host] + site.signInHosts).filter { seen.insert($0).inserted }
+        return ([site.host] + site.signInHosts + site.cookieHosts).filter { seen.insert($0).inserted }
     }
 
     /// The cookies to copy from Chromium's answer to Network.getAllCookies (`json`): those of the

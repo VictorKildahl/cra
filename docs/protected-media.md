@@ -97,6 +97,19 @@ few that play a bought film. So YouTube is a **mixed site** (`ProtectedMediaSite
 `youtube.com` and its subdomains, without `music.youtube.com`), and the engine is chosen per
 page. `ProtectedVideoPages` (CraCore, `ProtectedVideos.swift`) holds the rules, with tests:
 
+**Fandango at Home** (Vudu, `athome.fandango.com`) is a mixed site too, for another reason: it
+has to arrive in WebKit signed in. Turned on whole with the Safari's Engine switch it arrived
+signed out, and its play page then sends itself to `/content/account/login` and reloads, about
+twice a second without end (19 Nov 2026; a plain `WKWebView` outside Cra does the same, and
+Chromium lands on the sign-in page). As a mixed site the film's page asks, moves alone and takes
+the session along. Its entry differs from YouTube's in three ways. The play path is the video
+(`/content/browse/play/<id>/<kind>`; its `returnUrl` isn't, `pathNamesVideo`). Its session is
+in cookies on `.fandango.com`, which is also Fandango's ticket shop, so that host's cookies are
+copied without a switched page staying in WebKit there (`cookieHosts`). And only its play and
+live pages are asked about (`videoPaths`): its front page asks for Widevine twice with nothing
+playing, signed out too, and would otherwise get the prompt. A signed-out Chromium page is sent
+to sign in before it plays, so it isn't moved.
+
 - **When Cra asks:** a Chromium page of a mixed site that asks for Widevine, in any frame. The page tells Cra
   itself: PageScript's `drmNext()` in Cra's world is a promise Cra leaves waiting in the page
   (`BrowserManager.watchProtectedVideo`), which settles when the page calls
@@ -267,10 +280,9 @@ its own and never writes the daily Cra's. They are read at launch. A test instan
   tab in WebKit. A download from a WebKit page lands in Downloads.
 - Still by hand, with real accounts: Spotify plays track after track, Netflix and Disney+ play,
   and sign-in through Google or Apple comes back signed in. Peek from a pinned WebKit tab.
-- Fandango at Home itself was only looked at signed out in a test copy (19 Nov 2026: the frame
-  asks, the top frame doesn't). That the switch shows there now, and that a film plays in
-  Safari's engine once it is on, is still to be seen with an account.
-- Never tried, because it takes a YouTube account that owns a film: that the film asks for
-  Widevine in the top frame so the prompt shows, that YouTube serves Safari's engine more than
-  480p, that Google keeps the copied session signed in under Safari's user agent (and doesn't
-  sign the Chromium one out), and that the film resumes at its time from `&t=`.
+- Fandango at Home, with an account (19 Nov 2026): before it was a mixed site, the frame's
+  request showed the switch, and the switch turned on by hand gave the reload loop above. As a
+  mixed site, a bought film's play page asked, moved signed in and played in Safari's engine.
+- YouTube, with an account that owns a film (19 Nov 2026): the film's page moved to Safari's
+  engine with its sign-in (71 cookies copied) and played. Not looked at one by one: the quality
+  it offers there, that the Chromium session stays signed in, and the resume from `&t=`.

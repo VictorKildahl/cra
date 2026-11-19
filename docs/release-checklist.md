@@ -283,10 +283,11 @@ built release app with a test profile. Note anything that fails in the release's
 - **#298:** in a tab on a DRM service (it opens in WebKit, docs/protected-media.md), Option-click a
   link: it opens as a split pane beside the page, as it does in any other tab (that scenario's
   posted click never reaches a WebKit page behind other windows).
-- **A player in a frame** (docs/protected-media.md; widevine-in-a-frame.scenario has a fixture, not
-  the site): open athome.fandango.com, start a film or a trailer that plays protected, and open the
-  Site Control Center: Settings has Safari's Engine, Off. Turned on, the page reopens in WebKit and
-  the film plays.
+- **Fandango at Home** (docs/protected-media.md; a mixed site whose player is a frame, which
+  widevine-in-a-frame.scenario and protected-video-prompt.scenario show on fixtures, not the site):
+  signed in to athome.fandango.com in Chromium, play a film you own. The toast offers Safari's
+  engine with Once and Always. Once: the play page opens in WebKit signed in and the film plays,
+  with no reloading. Back on the film's details page the tab is Chromium's again.
 - **Protected videos on YouTube** (docs/protected-media.md; it takes an account that owns a
   film, which protected-video-prompt.scenario's fixture can't stand in for): signed in to YouTube
   in Chromium, open a bought film. The toast offers Safari's engine with Once and Always. Once: the

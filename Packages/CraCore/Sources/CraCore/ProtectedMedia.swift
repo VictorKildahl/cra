@@ -21,29 +21,48 @@ public struct MixedMediaSite: Equatable, Sendable {
     /// Hosts under `host` that are left alone ("music.youtube.com").
     public var excludedHosts: [String]
     /// The query items that name the video ("v" of /watch?v=…): with the path they are the page.
-    /// Empty: the whole query is.
+    /// Empty: the whole query is, unless `pathNamesVideo`.
     public var videoParameters: [String]
+    /// The path alone names the video ("/content/browse/play/7236/PURCHASED_CONTENT"): no query
+    /// item makes it another page.
+    public var pathNamesVideo: Bool
+    /// Where the site's videos play ("/content/browse/play"): only a page under one of these is
+    /// asked about or moved. Empty: any page of the site. For a site whose other pages ask for
+    /// Widevine too (Fandango at Home's front page does, twice, with nothing playing).
+    public var videoPaths: [String]
     /// Where the site signs in ("google.com"): their cookies are copied with the site's, and a
     /// switched page stays in WebKit there, so a sign-in comes back to the same cookies.
     public var signInHosts: [String]
     /// The site's own sign-in addresses ("/signin", where Google's sign-in lands on YouTube).
     public var signInPaths: [String]
+    /// Other hosts whose cookies hold the site's session (Fandango at Home keeps it on
+    /// ".fandango.com"): copied with the site's own, but a switched page doesn't stay in WebKit
+    /// for them as it does for `signInHosts`.
+    public var cookieHosts: [String]
     /// The query item that starts the video at a time ("t" of &t=90s), nil when the site has none.
     public var timeParameter: String?
 
     public init(host: String, name: String? = nil, excludedHosts: [String] = [], videoParameters: [String] = [],
-                signInHosts: [String] = [], signInPaths: [String] = [], timeParameter: String? = nil) {
+                pathNamesVideo: Bool = false, videoPaths: [String] = [], signInHosts: [String] = [], signInPaths: [String] = [],
+                cookieHosts: [String] = [], timeParameter: String? = nil) {
         self.host = host
         self.name = name ?? host
         self.excludedHosts = excludedHosts
         self.videoParameters = videoParameters
+        self.pathNamesVideo = pathNamesVideo
+        self.videoPaths = videoPaths
         self.signInHosts = signInHosts
         self.signInPaths = signInPaths
+        self.cookieHosts = cookieHosts
         self.timeParameter = timeParameter
     }
 
     func covers(_ h: String) -> Bool {
         (h == host || h.hasSuffix("." + host)) && !excludedHosts.contains { h == $0 || h.hasSuffix("." + $0) }
+    }
+
+    func playsVideo(path: String) -> Bool {
+        videoPaths.isEmpty || videoPaths.contains { path == $0 || path.hasPrefix($0 + "/") }
     }
 
     func signsIn(host h: String, path: String) -> Bool {
@@ -126,10 +145,23 @@ public struct ProtectedMediaSites: Equatable, Sendable {
     /// at 480p in a Chromium without Verified Media Path. YouTube Music is left out: its player
     /// isn't known to need it. Sign-in goes through Google and lands on accounts.youtube.com and
     /// /signin; consent.youtube.com is the cookie question.
+    ///
+    /// Fandango at Home (Vudu): a shop whose films ask for Widevine in a player frame of the play
+    /// page (/content/browse/play/<id>/<kind>, which is the video; its returnUrl isn't). Its
+    /// session is in cookies on ".fandango.com", which is also Fandango's ticket shop, so those
+    /// are copied without the page staying in WebKit there. It has to arrive signed in: signed
+    /// out, the play page in WebKit sends itself to /content/account/login and reloads, twice a
+    /// second without end (19 Nov 2026, also in a plain WKWebView), where Chromium lands on the
+    /// sign-in page. A signed-out Chromium page is sent to sign in before it plays, so it isn't
+    /// asked about. Its routes for a video are play/<id>/<kind> and live/…; other pages ask for
+    /// Widevine too (the front page, signed out, with nothing playing), hence `videoPaths`.
     public static let defaultMixedSites: [MixedMediaSite] = [
         MixedMediaSite(host: "youtube.com", name: "YouTube", excludedHosts: ["music.youtube.com"], videoParameters: ["v"],
                        signInHosts: ["google.com", "accounts.youtube.com", "consent.youtube.com"], signInPaths: ["/signin"],
                        timeParameter: "t"),
+        MixedMediaSite(host: "athome.fandango.com", name: "Fandango at Home", pathNamesVideo: true,
+                       videoPaths: ["/content/browse/play", "/content/browse/live"],
+                       signInPaths: ["/content/account"], cookieHosts: ["fandango.com"]),
     ]
 
     /// Off: every page is Chromium's, as before.
@@ -178,6 +210,13 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         return mixedSites.first { $0.covers(host) }
     }
 
+    /// Whether the page at `url` is one its mixed site plays videos on (`videoPaths`): the only
+    /// pages whose request for Widevine is acted on. False off a mixed site.
+    public func playsVideo(at url: String) -> Bool {
+        guard let site = mixedSite(for: url) else { return false }
+        return site.playsVideo(path: URLComponents(string: url.trimmingCharacters(in: .whitespaces))?.path ?? "")
+    }
+
     /// What makes a page of a mixed site that page and no other: the site, the path and the query
     /// items that name the video ("youtube.com/watch?v=abc"; a time, a playlist or a fragment don't
     /// make it another page). nil off a mixed site.
@@ -185,7 +224,8 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         guard let site = mixedSite(for: url), let c = URLComponents(string: url.trimmingCharacters(in: .whitespaces)) else { return nil }
         var path = c.percentEncodedPath
         while path.hasSuffix("/") { path.removeLast() }
-        let items = (c.queryItems ?? []).filter { site.videoParameters.isEmpty || site.videoParameters.contains($0.name) }
+        let items = (site.pathNamesVideo ? [] : c.queryItems ?? [])
+            .filter { site.videoParameters.isEmpty || site.videoParameters.contains($0.name) }
             .map { "\($0.name)=\($0.value ?? "")" }.sorted()
         return site.host + path + (items.isEmpty ? "" : "?" + items.joined(separator: "&"))
     }
