@@ -139,6 +139,8 @@ enum BrowsingDataClear {
 }
 enum TabSwitcherMetrics { static let thumbnail = NSSize(width: 320, height: 200) }
 enum HitchMonitor { static func mark(_ event: String) {} }
+/// A committed page lets its own redirect to another app ask once again (#560); no sheets here.
+@MainActor enum AppLinkPrompt { static func pageLoaded(_ browser: CraBrowser) {} }
 enum EmbeddedPages {
     static var viewsByHost: [ObjectIdentifier: [NSView]] = [:]
     static func isHost(_ window: NSWindow) -> Bool { viewsByHost[ObjectIdentifier(window)] != nil }

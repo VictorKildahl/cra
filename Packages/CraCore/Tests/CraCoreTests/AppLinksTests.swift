@@ -39,18 +39,24 @@ struct AppLinksTests {
 
     // Slack's "Launching…" page after a browser sign-in redirects to slack: with no click; a
     // Chromium page dropped it, and there is no button to click instead.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/560")) func aPagesOwnRedirectAsksOncePerPage() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/560")) func aPagesOwnRedirectAsksOncePerPageLoad() {
         var guarded = AppLinks.RedirectGuard()
-        let slack = "https://acme.slack.com/ssb/redirect"
-        let spotify = "https://open.spotify.com/album/1"
+        enum Step { case redirect, click, load }
         let asked = [
-            (false, slack),   // the page's first redirect asks
-            (false, slack),   // a second gets nothing
-            (true, slack),    // a click always asks
-            (false, slack),   // and doesn't renew the redirect's question
-            (false, spotify), // the next page asks again
-            (false, slack),   // and so does coming back
-        ].map { guarded.mayAsk(userGesture: $0.0, page: $0.1) }
-        #expect(asked == [true, false, true, false, true, true])
+            Step.redirect, // the page's first redirect asks
+            .redirect,     // a second gets nothing (history.pushState included: it is no load)
+            .click,        // a click always asks
+            .redirect,     // and doesn't renew the redirect's question
+            .load,         // the next page, or this one reloaded,
+            .redirect,     // asks again
+            .redirect,     // once
+        ].compactMap { step -> Bool? in
+            switch step {
+            case .load: guarded.pageLoaded(); return nil
+            case .click: return guarded.mayAsk(userGesture: true)
+            case .redirect: return guarded.mayAsk(userGesture: false)
+            }
+        }
+        #expect(asked == [true, false, true, false, true, false])
     }
 }

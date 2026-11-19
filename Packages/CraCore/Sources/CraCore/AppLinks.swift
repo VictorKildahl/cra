@@ -32,19 +32,23 @@ public enum AppLinks {
 
     /// Chrome's flood guard for a page's own redirect to another app (Slack's "Launching…" page
     /// after a sign-in, Spotify's "open in the app" on a first visit): a click asks every time;
-    /// without one, a page asks once, then gets nothing until another page loads. One per tab.
-    /// WebKit pages keep their own (`askedForAppOnThisPage`) and always arrive here as clicked.
+    /// without one, a page asks once, then gets nothing until a page loads again (another page,
+    /// or this one reloaded: Chrome's Reload button lets it ask again). history.pushState is not
+    /// a load, so a page can't buy itself more questions with it. One per tab, in both engines.
     public struct RedirectGuard: Sendable {
-        /// The page that has had its one question without a click.
-        private var askedOn: String?
+        /// This load has had its one question without a click.
+        private var asked = false
 
         public init() {}
 
-        /// Whether a request from `page` (its address) may ask "Open <app>?".
-        public mutating func mayAsk(userGesture: Bool, page: String) -> Bool {
+        /// A page committed in the main frame (a new page, or a reload): it may ask once again.
+        public mutating func pageLoaded() { asked = false }
+
+        /// Whether a request to open another app may ask "Open <app>?".
+        public mutating func mayAsk(userGesture: Bool) -> Bool {
             if userGesture { return true }
-            if askedOn == page { return false }
-            askedOn = page
+            if asked { return false }
+            asked = true
             return true
         }
     }
