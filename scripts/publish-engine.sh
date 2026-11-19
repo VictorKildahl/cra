@@ -13,6 +13,9 @@ FW="$ROOT/src/out/Cra_$CPU/Cra.app/Contents/Frameworks/Cra Framework.framework"
 [ -d "$FW" ] || { echo "No engine at $FW; run scripts/build-chromium.sh" >&2; exit 1; }
 built="$(cat "$ROOT/.cra-tag" 2>/dev/null || true)"
 [ -z "$built" ] || [ "$built" = "$ENGINE_VERSION" ] || { echo "The tree is Chrome $built, fetch-engine.sh pins $ENGINE_VERSION" >&2; exit 1; }
+# No engine goes out with a page hook nothing tests (docs/web-features.md).
+python3 -I scripts/web-features.py --chromium "$ROOT/src" ||
+  { echo "Not published: map the new page hooks in Tests/web-features.tsv first" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 ASSET="$WORK/cra_framework_${CPU}.tar.xz"

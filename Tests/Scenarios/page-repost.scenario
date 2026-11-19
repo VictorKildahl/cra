@@ -1,0 +1,42 @@
+# promise: web-page-repost
+# web-features: reloading a page a form posted to. Chrome asks before it sends the form again ("Confirm Form
+# Resubmission"), a tab-modal dialog it hangs on its Browser's window: on the engine a never-seen 1 pt strip
+# along Cra's window (#346), so it has to come up over the page (cra-page-dialogs.patch), and its Continue has
+# to post again. Cancel keeps the page and sends nothing.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=repost
+expect-log GET /features.html\?n=repost
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(order.submit(),'ordered')","userGesture":true}
+expect-log POST /echo 8 bytes
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page '+document.title"}
+expect-log "value":"page posted 8 bytes"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.marker='kept','marked')"}
+expect-log "value":"marked"
+
+# Reload (⌘R): the question over the page; Cancel sends nothing.
+cra://action/reload
+wait 2
+cra://debug?pageDialogs=repost
+expect-log page dialog repost: chrome [0-9]{3,}x[0-9]{2,} at=page front=1 .*buttons=.*Cancel
+cra://debug?pageDialogs=repost-cancel&press=Cancel
+expect-log page dialogs repost-cancel: pressed Cancel
+wait 1
+cra://debug?pageDialogs=repost-gone
+expect-log page dialogs repost-gone: n=0
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after cancel '+window.marker"}
+expect-log "value":"after cancel kept"
+
+# Again, and Continue: the form goes again.
+cra://action/reload
+wait 2
+cra://debug?pageDialogs=repost-again&press=Continue
+expect-log page dialogs repost-again: pressed Continue
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after continue '+window.marker+' '+document.title"}
+expect-log "value":"after continue undefined posted 8 bytes"
+reject-log fault:

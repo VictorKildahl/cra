@@ -1,0 +1,25 @@
+# promise: web-page-print-frame
+# web-features: printing from a frame of another site (a shop's receipt, a ticket in an embed). The frame runs
+# in a process of its own, and Chrome's print preview has to open over Cra's page as for the page's own Print
+# button (page-print-button, #574): sized and placed from the page, not from the never-seen 1 pt strip that
+# holds the page in Chrome's Browser (#346), which once made it 1000 x 3 pt.
+budget rss=1000 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=frame
+expect-log GET /features.html\?n=frame
+wait 2
+# localhost is another site than 127.0.0.1: its own renderer process.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"frame('http://localhost:'+location.port+'/print-frame.html')"}
+expect-log GET /print-frame.html
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'frame said '+said.join(',')"}
+expect-log "value":"frame said frame:loaded"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"framePrint()","userGesture":true}
+expect-log "value":"frame print asked"
+wait 4
+cra://debug?pageDialogs=frame-print
+expect-log page dialog frame-print: chrome [0-9]{3,}x[0-9]{3,} at=page front=1
+reject-log page dialog frame-print: .* at=sliver
+reject-log fault:

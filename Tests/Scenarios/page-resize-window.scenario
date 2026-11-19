@@ -1,0 +1,28 @@
+# promise: web-page-resize-window
+# web-features: a page's window.resizeTo and moveTo (old sites, some players). In a tab they do nothing, as in
+# Chrome and Arc: Chrome moves only a popup's window. On the engine every page's Browser has a window of its
+# own, never seen, a 1 pt strip along Cra's window (#346): a call that moved or sized that window would put
+# the page's dialogs and pickers somewhere else. Cra's window and the strip stay as they were.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=resize
+expect-log GET /features.html\?n=resize
+wait 2
+cra://debug?chromeWindows=before
+expect-log chrome windows before: seen=0 of [0-9]+ \(BrowserNativeWidgetWindow on a0\.0 1200x1 parent=Cra\.CraWindow
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(resizeTo(500,400),moveTo(10,10),resizeBy(-100,-100),moveBy(40,40),'resized '+outerWidth+'x'+outerHeight)","userGesture":true}
+expect-log "value":"resized 
+wait 1
+cra://debug?windowState=after
+expect-log window state after: main0 .*card=328,10,10,10
+cra://debug?chromeWindows=after
+expect-log chrome windows after: seen=0 of [0-9]+ \(BrowserNativeWidgetWindow on a0\.0 1200x1 parent=Cra\.CraWindow
+# A dialog still comes up over the page afterwards.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(setTimeout(()=>alert('still here'),0),'alert asked')"}
+wait 1
+cra://debug?pageDialogs=after-resize
+expect-log page dialog after-resize: chrome [0-9]+x[0-9]+ at=page front=1 text=.*still here
+cra://debug?pageDialogs=after-resize-ok&press=OK
+reject-log fault:

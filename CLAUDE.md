@@ -64,6 +64,11 @@ run the classes a change touches, and the whole suite in halves.
    gets the test that proves it, tagged with its issue. On the iPhone that is both: the decision
    in CraCore `Mobile/` with a `.bug` test, and the UI test with `// promise: #<n>` above it.
    Nothing is done, or pushed, without its tests; the reply on the issue names the test.
+8. **What pages ask the browser for keeps working.** Uploads, print, dialogs, prompts and choosers broke in
+   0.1.49 (#571, #574) because Chrome read its never-seen window and nothing tried them.
+   [docs/web-features.md](docs/web-features.md) maps every way a page reaches its browser to its test
+   (`Tests/web-features.tsv`). A change to how Cra hosts pages runs `scripts/scenario.sh web-features` first; a
+   new page feature gets its row and scenario; `scripts/release.sh` won't release a build that fails them.
 
 ## Known exceptions
 

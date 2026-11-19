@@ -32,7 +32,13 @@ case "\$1 \$2" in
     if [ "\$5" = "--json" ]; then echo v0.1.46; fi ;;
   "release download")  # download -R <repo> <tag> -p <pattern> -D <dir> --clobber
     tag="\$5"; pattern="\$7"; dest="\$9"
-    if [ "\$tag" = v0.1.46 ]; then cp "$ROOT/Tests/Fixtures/Appcast/newest.xml" "\$dest/\$pattern"
+    # The promoted release's web features (scripts/release.sh): WEB_FEATURES=passed (default), failed or none.
+    if [ "\$pattern" = web-features-arm64.txt ]; then
+      case "\${WEB_FEATURES:-passed}" in
+        none) exit 1 ;;
+        *) printf 'passed 61, skipped 0, failed 0\nresult: %s\n' "\${WEB_FEATURES:-passed}" > "\$dest/\$pattern" ;;
+      esac
+    elif [ "\$tag" = v0.1.46 ]; then cp "$ROOT/Tests/Fixtures/Appcast/newest.xml" "\$dest/\$pattern"
     else cp "$ROOT/Tests/Fixtures/Appcast/stable.xml" "\$dest/\$pattern"; fi ;;
   "release upload")
     echo "kept before upload: \$(grep -vc '^#' "$REPO_COPY/scripts/feed-counts.tsv")" >> "$LOG" ;;
@@ -89,4 +95,15 @@ check "other work in the checkout stays staged and uncommitted" "$(git -C "$REPO
 "$REPO_COPY/scripts/promote.sh" 0.1.43 > /dev/null
 check "a second promotion adds to the earlier counts" "$(counts)" "$EXPECTED$EXPECTED"
 check "and commits them too" "$(commits)" 3
+
+# Stable takes only a release whose web features passed (docs/web-features.md).
+: > "$LOG"
+WEB_FEATURES=failed "$REPO_COPY/scripts/promote.sh" 0.1.43 > /dev/null 2>&1 && refused=no || refused=yes
+check "a release that failed its web features isn't promoted" "$refused" yes
+check "nor is anything uploaded for it" "$(grep -c '^release upload' "$LOG" || true)" 0
+WEB_FEATURES=none "$REPO_COPY/scripts/promote.sh" 0.1.43 > /dev/null 2>&1 && refused=no || refused=yes
+check "a release whose web features never ran isn't promoted" "$refused" yes
+check "and no commit is made" "$(commits)" 3
+WEB_FEATURES=none CRA_PROMOTE_UNTESTED="from before the check" "$REPO_COPY/scripts/promote.sh" 0.1.43 > /dev/null
+check "CRA_PROMOTE_UNTESTED promotes it anyway" "$(commits)" 4
 exit $FAILED

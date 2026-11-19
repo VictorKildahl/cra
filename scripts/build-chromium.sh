@@ -48,6 +48,9 @@ EOF
 
 apply() {
   "$REPO/engine/chromium/apply.sh" "$ROOT/src"
+  # Every way a page reaches its browser in this Chrome has a test, or a reason it needs none (docs/web-features.md):
+  # a new Chrome's new page hook stops here until someone decides.
+  python3 -I "$REPO/scripts/web-features.py" --chromium "$ROOT/src"
 }
 
 gen() {

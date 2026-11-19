@@ -66,6 +66,11 @@ git push origin v0.1.0
 #    that check-ins from it reach Phantom's "Cra installs" site (release-checklist.md, "Install count").
 ```
 
+While Apple notarizes, `release.sh` runs the web features (`scripts/scenario.sh web-features`: file pickers,
+print, dialogs, prompts, choosers) on the release's own build, and stops the release when one fails
+([web-features.md](web-features.md)). The result goes into the release as `web-features-arm64.txt`;
+`scripts/promote.sh` makes only a release whose file says `result: passed` Stable.
+
 Clips come after the tag, not before: the build and Apple's check run while they're recorded. The
 clip hook checks the website push, not the tag (see "Clips in the release notes").
 
@@ -379,7 +384,9 @@ ships the pinned engine anyway, for an urgent fix while the new one builds; in C
 
 To move to a new Chrome stable: `CHROMIUM_TAG=<version> scripts/build-chromium.sh sync`, then `apply`; a patch
 that no longer applies is rebased in `engine/chromium/patches` (`apply.sh` names it), then `gen` and `build` for
-each CPU, the scenarios on the new build, `publish-engine.sh` and the new pin.
+each CPU, the scenarios on the new build (`scripts/scenario.sh web-features` first), `publish-engine.sh` and the new
+pin. `build-chromium.sh apply` and `publish-engine.sh` stop when the new Chrome has a page hook
+(`WebContentsDelegate` method) that `Tests/web-features.tsv` doesn't map ([web-features.md](web-features.md)).
 
 `CRA_ENGINE=cef` still builds and releases on CEF (Cra's own CEF build: `scripts/build-cef.sh`,
 `scripts/cef-patches`, `scripts/publish-cef.sh`, `scripts/fetch-cef.sh`, and CEF's own release checks).

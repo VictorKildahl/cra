@@ -8,6 +8,7 @@
 #
 #   scripts/scenario.sh fifty-tabs        one scenario
 #   scripts/scenario.sh all               every scenario, one after another
+#   scripts/scenario.sh web-features      the web features' scenarios (Tests/web-features.tsv), a release's gate
 #
 # CRA_APP (default build/Cra.app) picks the build; CRA_FLAGS (FeatureFlags) is passed on, so
 # CRA_FLAGS=backdrop=material runs the NSVisualEffectView path. Scenarios marked
@@ -96,7 +97,45 @@ if [ "${1:-}" = "all" ]; then
   echo "Failed: ${failed[*]}"; exit 1
 fi
 
-NAME="${1:?usage: scripts/scenario.sh <name>|all}"
+# web-features: every scenario Tests/web-features.tsv names (docs/web-features.md), what scripts/release.sh runs on
+# a release's build. Those that run without the screen go CRA_LANES at a time (default 3), the screen ones one by
+# one after them (CRA_SCENARIO_SCREEN=1). build/scenarios/web-features.txt says how it went, with the engine.
+if [ "${1:-}" = "web-features" ]; then
+  names=$(python3 -I scripts/web-features.py --scenarios) || exit 2
+  mkdir -p build/scenarios
+  REPORT=build/scenarios/web-features.txt
+  RESULTS="$(mktemp /tmp/cra-web-features.XXXXXX)"
+  quiet=() screen=()
+  for n in $names; do
+    if grep -q '^requires screen' "Tests/Scenarios/$n.scenario"; then screen+=("$n"); else quiet+=("$n"); fi
+  done
+  run_one() { "$1" "$2" > "build/scenarios/$2.out" 2>&1; echo "$2 $?" >> "$3"; }
+  export -f run_one
+  printf '%s\n' ${quiet[@]+"${quiet[@]}"} | xargs -P "${CRA_LANES:-3}" -I{} bash -c 'run_one "$0" "$1" "$2"' "$0" {} "$RESULTS"
+  for n in ${screen[@]+"${screen[@]}"}; do run_one "$0" "$n" "$RESULTS"; done
+  failed=() skipped=() passed=()
+  while read -r n code; do
+    if [ "$code" != 0 ]; then failed+=("$n")
+    elif grep -q ': skipped' "build/scenarios/$n.out"; then skipped+=("$n")
+    else passed+=("$n"); fi
+  done < "$RESULTS"
+  rm -f "$RESULTS"
+  APP_FOR_REPORT="${CRA_APP:-$ROOT/build/Cra.app}"
+  {
+    echo "web features on $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_FOR_REPORT/Contents/Info.plist" 2>/dev/null || echo '?')" \
+         "($(cat "$APP_FOR_REPORT/Contents/Frameworks/Cra Framework.framework/Versions/Current/Resources/Info.plist" 2>/dev/null | plutil -extract CFBundleShortVersionString raw - 2>/dev/null || echo 'engine ?'), $(uname -m))"
+    echo "passed ${#passed[@]}, skipped ${#skipped[@]} (they take the screen), failed ${#failed[@]}"
+    [ ${#failed[@]} -eq 0 ] || echo "failed: ${failed[*]}"
+    [ ${#skipped[@]} -eq 0 ] || echo "skipped: ${skipped[*]}"
+    [ ${#failed[@]} -eq 0 ] && echo "result: passed" || echo "result: failed"
+  } > "$REPORT"
+  cat "$REPORT"
+  for n in ${failed[@]+"${failed[@]}"}; do echo "--- $n"; grep -E '✗' "build/scenarios/$n.out"; done
+  [ ${#failed[@]} -eq 0 ]
+  exit
+fi
+
+NAME="${1:?usage: scripts/scenario.sh <name>|all|web-features}"
 FILE="Tests/Scenarios/$NAME.scenario"
 [ -f "$FILE" ] || { echo "No scenario $FILE"; exit 2; }
 # The app's executable: Cra, or CraEngine for a build on Chrome's own framework (CRA_ENGINE=chromium).
@@ -202,6 +241,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # The install check-in is three short fields: logged whole, so a scenario can expect its id.
         shown = " " + " ".join(body.decode("utf-8", "replace").split()) if self.path.endswith("/checkin") else ""
         print(f"POST {self.path} {len(body)} bytes {kind}{shown}", flush=True)
+        # /echo: a form that posts and gets a page back (an order, a search), the page a reload asks about.
+        if self.path.startswith("/echo"):
+            text = body.decode("utf-8", "replace")
+            page = f"<title>posted {len(body)} bytes</title>{text}".encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+            return
         os.makedirs(sys.argv[3], exist_ok=True)
         name = self.path.strip("/").replace("/", "-")
         open(os.path.join(sys.argv[3], f"{name}-{len(os.listdir(sys.argv[3])) + 1}.json"), "wb").write(body)

@@ -78,6 +78,17 @@ class PromisesTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("4 tests pinned for 1 issues and 3 crash fixes, unchanged", result.stdout)
 
+    def test_a_web_feature_scenario_is_locked_and_counted(self):
+        self.write("Tests/Scenarios/page-repost.scenario", "# promise: web-page-repost\n" + SCENARIO.split("\n", 1)[1])
+        lock = self.lock()
+        self.assertRegex(lock, r"(?m)^web-page-repost +Tests/Scenarios/page-repost\.scenario  [0-9a-f]{12}$")
+        result = self.run_script()
+        self.assertIn("5 tests pinned for 1 issues and 3 crash fixes and 1 web features, unchanged", result.stdout)
+        self.write("Tests/Scenarios/page-repost.scenario", "# promise: web-page-repost\ncra://open?url=${PAGE}\n")
+        result = self.run_script()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("web-page-repost Tests/Scenarios/page-repost.scenario changed", result.stdout)
+
     def test_an_issue_line_keeps_its_old_format(self):
         lock = self.lock()
         self.assertRegex(lock, r"(?m)^#155   Packages/CraCore/Tests/CraCoreTests/PerfTests\.swift::themeFollowsMacOS  [0-9a-f]{12}$")
@@ -116,7 +127,7 @@ class PromisesTests(unittest.TestCase):
                 self.write("Tests/Scenarios/fedcm.scenario", SCENARIO.replace("crash-fedcm-dialog", tag))
                 result = self.run_script("--update")
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("names no issue (#n) or crash ID", result.stdout + result.stderr)
+                self.assertIn("names no issue (#n), crash ID", result.stdout + result.stderr)
 
     def test_a_crash_promise_nothing_calls_stops_the_check(self):
         self.write("Tests/StoreTests.swift", HARNESS.replace("static func main() { zenFaviconSize() }", "static func main() {}"))

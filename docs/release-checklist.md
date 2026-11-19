@@ -380,6 +380,19 @@ built release app with a test profile. Note anything that fails in the release's
   Present now shows Chrome's picker over the page (after macOS's Screen Recording prompt the first
   time), and Cancel ends it; on webauthn.io, Register shows Chrome's passkey dialog over the page,
   then Touch ID; a site that asks for a client certificate shows the certificate picker over the page.
+- **Web features without a scenario** (docs/web-features.md: macOS's own prompts or a real site; each
+  line names its row in Tests/web-features.tsv):
+  - web feature: screen share picker. On meet.google.com, Present now ▸ A window shows the picker over
+    the page and shares the window picked; Stop sharing ends it.
+  - web feature: passkey with Touch ID. On webauthn.io, Register and then Authenticate each show the
+    passkey sheet over the page and take Touch ID.
+  - web feature: client certificate. On a site that asks for one (badssl.com's client certificate
+    page), the certificate picker shows over the page, and Cancel shows the site's error.
+  - web feature: Bluetooth chooser. On a Web Bluetooth demo (googlechrome.github.io/samples/web-bluetooth),
+    Scan asks macOS for Bluetooth the first time, then shows Chrome's chooser on Cra's window; Cancel
+    tells the page no device was picked.
+  - web feature: SaveFrame. Open a PDF (any link to one) and press the viewer's Save button: the file
+    saves as a download (or into the save panel with Ask Where to Save Each File on) and shows in the bin.
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
   downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
   Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
