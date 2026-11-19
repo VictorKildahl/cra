@@ -1241,6 +1241,8 @@
 #577   Packages/CraCore/Tests/CraCoreTests/FindCommandTests.swift::findCommandsAreTheBarsToAnswer  cf4d50b13e64
 #577   Tests/Scenarios/little-window-find.scenario  c625f6c437bb
 #578   Tests/Scenarios/extension-normal-window.scenario  eb942cee6d0d
+#580   Packages/CraCore/Tests/CraCoreTests/EaselTextBoxTests.swift::longTextWidensThenWrapsAndReturnStartsALine  7499188a4995
+#580   Tests/EaselCanvasTests.swift::longText  bb1d30ef94bc
 #581   Tests/Scenarios/little-window-mission-control.scenario  9c0af64b7751
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c

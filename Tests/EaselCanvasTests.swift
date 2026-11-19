@@ -60,8 +60,10 @@ enum EaselCanvasTests {
         secondEditor.deleteBackward(nil)
         precondition(sheet.document.items.count == 1 && field.superview === sheet, "deleting characters while editing keeps the block")
         precondition(!sheet.control(field, textView: secondEditor, doCommandBy: #selector(NSResponder.moveLeft(_:))), "ordinary editing commands stay with the text editor")
-        precondition(sheet.control(field, textView: secondEditor, doCommandBy: #selector(NSResponder.insertNewline(_:))), "Enter finishes editing")
-        precondition(window.firstResponder === sheet, "Enter returns focus to the canvas")
+        precondition(sheet.control(field, textView: secondEditor, doCommandBy: #selector(NSResponder.insertNewline(_:))), "Return is the text box's")
+        precondition(window.firstResponder === secondEditor && secondEditor.string.hasSuffix("\n"), "Return starts a new line and typing goes on (#580)")
+        precondition(sheet.control(field, textView: secondEditor, doCommandBy: #selector(NSResponder.cancelOperation(_:))), "Escape finishes editing")
+        precondition(window.firstResponder === sheet, "Escape returns focus to the canvas")
         click(NSPoint(x: 600, y: 400))
         precondition(pill.isHidden, "clicking empty canvas clears the text selection")
         click(NSPoint(x: 220, y: 240))
@@ -101,8 +103,52 @@ enum EaselCanvasTests {
         sheet.tool = .pointer
         objectsAndHistory(sheet, window) { makeMouse($0, $1, clicks: $2) }
         drawingAndMenus(window)
+        longText()
         window.close()
         print("Easel canvas: selection, movement, editing and deletion passed")
+    }
+
+    // promise: #580
+    /// A long text widens its box up to 560 pt, then wraps and grows down; Return adds a line; a box saved
+    /// by older Cra as one 240 pt line is fitted to its text when the easel opens (#580: "…hover over" lost "over").
+    @MainActor
+    static func longText() {
+        let long = String(repeating: "Lorem ipsum dolor sit amet, hover over ", count: 4)
+        let saved = Easel.Item(kind: .text(long, size: 18), frame: .init(x: 40, y: 60, width: 240, height: 26))
+        let sheet = EaselSheetView(document: Easel(items: [saved]))
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = sheet
+        sheet.layoutSubtreeIfNeeded()
+        defer { window.close() }
+        let field = sheet.subviews.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == saved.id.uuidString }!
+        var frame = sheet.document.items[0].frame
+        precondition(frame.width == 560 && frame.height > 2 * 27, "an older box is fitted to its whole text when the easel opens: \(frame)")
+        precondition(field.frame == NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height), "the text field shows the fitted box")
+        precondition(field.cell?.wraps == true && field.cell?.isScrollable == false, "the text wraps in its box instead of scrolling out of it")
+
+        precondition(window.makeFirstResponder(field), "the text box takes the keyboard")
+        guard let editor = field.currentEditor() as? NSTextView else { fatalError("the text box edits") }
+        editor.string = "Short"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        frame = sheet.document.items[0].frame
+        precondition(frame.width == 240 && frame.height == 27, "a short text keeps one 240 pt line: \(frame)")
+        editor.string = "Lorem ipsum dolor sit amet, consectetur"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        frame = sheet.document.items[0].frame
+        precondition(frame.width > 240 && frame.width < 560 && frame.height == 27, "a longer line widens the box on one line: \(frame)")
+        let oneLine = frame.height
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        precondition(sheet.control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))), "Return is the text box's")
+        frame = sheet.document.items[0].frame
+        precondition(sheet.document.items[0].kind == .text("Lorem ipsum dolor sit amet, consectetur\n", size: 18), "Return adds a line to the text")
+        precondition(frame.height > oneLine + 15, "the box grows down by the new line: \(frame)")
+        precondition(field.frame.height == frame.height, "the text field grows with it")
+        editor.string = long
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        frame = sheet.document.items[0].frame
+        precondition(frame.width == 560 && frame.height > 2 * 27, "past 560 pt the text wraps and the box grows down: \(frame)")
+        print("Easel canvas: long text widens, wraps and takes Return (#580)")
     }
 
     /// Every kind of item drawn as Arc draws it (pixels checked), the picker's colours, the canvas menu,

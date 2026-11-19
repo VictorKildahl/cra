@@ -202,6 +202,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         colorPicker.isHidden = true
         colorPicker.onPick = { [weak self] shade in self?.setShade(shade) }
         addSubview(colorPicker)
+        // Boxes saved by Cra before #580 are one 240 pt line whatever their text: fit them to it.
+        for i in self.document.items.indices {
+            if case .text(let string, let size) = self.document.items[i].kind {
+                self.document.items[i].frame = fittedTextFrame(self.document.items[i], string: string, size: size)
+            }
+        }
         for item in document.items { if case .text = item.kind { addTextField(for: item) } }
         registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string, .easelSidebarRow])
     }
@@ -1040,6 +1046,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }), case .text(_, let size) = document.items[i].kind else { return }
         commit("Change Font") { $0.items[i].style = ($0.items[i].style ?? .standard).next }
         texts[id]?.font = Self.font(document.items[i].style, size: size, title: false)
+        refitText(id, record: false)
     }
 
     private func resizeSelectedText(by step: Double) {
@@ -1052,10 +1059,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }),
               case .text(let string, let size) = document.items[i].kind else { return }
         let new = min(96, max(10, size + step))
-        let height = ceil(new * 1.45)
+        let frame = fittedTextFrame(document.items[i], string: string, size: new)
         commit("Change Text Size") {
             $0.items[i].kind = .text(string, size: new)
-            $0.items[i].frame.height = height
+            $0.items[i].frame = frame
         }
         texts[id]?.font = Self.font(document.items[i].style, size: new, title: false)
         texts[id]?.frame = rect(document.items[i].frame)
@@ -1073,6 +1080,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         f.font = Self.font(item.style, size: size, title: false)
         f.textColor = .white
         f.placeholderString = "Type something"
+        // Several lines that wrap in the box, as Arc's (#580).
+        f.usesSingleLineMode = false
+        f.cell?.wraps = true
+        f.cell?.isScrollable = false
+        f.lineBreakMode = .byWordWrapping
+        f.maximumNumberOfLines = 0
         f.delegate = self
         f.identifier = NSUserInterfaceItemIdentifier(item.id.uuidString)
         f.frame = rect(item.frame)
@@ -1091,10 +1104,20 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard commandSelector == #selector(NSResponder.cancelOperation(_:)) || commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
-        window?.makeFirstResponder(self)
-        titlePicked = false
-        return true
+        var key = EaselTextKey(command: NSStringFromSelector(commandSelector))
+        // The title is one line: Return ends it.
+        if control === title, key == .newline { key = .finish }
+        switch key {
+        case .pass: return false
+        case .newline:
+            // A text box's Return and ⇧Return start a line (#580).
+            textView.insertNewlineIgnoringFieldEditor(nil)
+            return true
+        case .finish:
+            window?.makeFirstResponder(self)
+            titlePicked = false
+            return true
+        }
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -1105,12 +1128,37 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         }
         guard let id = f.identifier.flatMap({ UUID(uuidString: $0.rawValue) }),
               let i = document.items.firstIndex(where: { $0.id == id }), case .text(_, let size) = document.items[i].kind else { return }
-        let width = max(240, ceil(f.intrinsicContentSize.width) + 8)
+        // An editable field has no intrinsic width, so the box stayed 240 pt and cut the rest off (#580).
+        let frame = fittedTextFrame(document.items[i], string: f.stringValue, size: size)
         commit(record: false) {
             $0.items[i].kind = .text(f.stringValue, size: size)
-            $0.items[i].frame.width = width
+            $0.items[i].frame = frame
         }
-        f.frame.size.width = width
+        f.frame = rect(frame)
+        placeSizePill()
+    }
+
+    /// `item`'s frame fitted to `string` at `size` in its font: as wide as its longest line up to Easel's
+    /// widest text, then wrapped, and as tall as its lines (#580).
+    private func fittedTextFrame(_ item: Easel.Item, string: String, size: Double) -> Easel.Rect {
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font(item.style, size: size, title: false)]
+        let longest = string.components(separatedBy: "\n").map { ($0 as NSString).size(withAttributes: attrs).width }.max() ?? 0
+        // A last empty line counts: it is where the caret is after Return.
+        let measured = (string.isEmpty || string.hasSuffix("\n") ? string + " " : string) as NSString
+        return Easel.fittedText(item.frame, longestLine: Double(longest), size: size) { width in
+            let bounds = NSSize(width: width - Easel.textPadding, height: .greatestFiniteMagnitude)
+            return Double(measured.boundingRect(with: bounds, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs).height) + 4
+        }
+    }
+
+    /// The text box `id` fitted to its text again, after its font changed.
+    private func refitText(_ id: UUID, record: Bool) {
+        guard let i = document.items.firstIndex(where: { $0.id == id }), case .text(let string, let size) = document.items[i].kind else { return }
+        let frame = fittedTextFrame(document.items[i], string: string, size: size)
+        guard frame != document.items[i].frame else { return }
+        commit(record: record) { $0.items[i].frame = frame }
+        texts[id]?.frame = rect(frame)
+        placeSizePill()
     }
 
     override func resetCursorRects() {
