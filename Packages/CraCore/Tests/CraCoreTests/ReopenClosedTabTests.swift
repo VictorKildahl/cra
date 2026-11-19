@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 struct ReopenClosedTabTests {
-    @Test func reopenClosedPinnedTabWhenNoArchivedTabs() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/566")) func reopenClosedPinnedTabWhenNoArchivedTabs() {
         let p1 = UUID()
         let now = Date()
         let closedPinned = [ReopenClosedTab.ClosedPinnedTab(id: p1, url: "https://youtube.com/watch?v=abc", title: "Video", closedAt: now)]
@@ -19,7 +19,7 @@ struct ReopenClosedTabTests {
         #expect(decision?.remainingPeek == nil)
     }
 
-    @Test func reopensMostRecentBetweenPinnedAndArchived() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/566")) func reopensMostRecentBetweenPinnedAndArchived() {
         let p1 = UUID()
         let t1 = UUID()
         let t1Date = Date(timeIntervalSince1970: 100)
@@ -43,7 +43,7 @@ struct ReopenClosedTabTests {
         #expect(decision2?.restoration == .archived(t1))
     }
 
-    @Test func reopensArchivedTabWhenNewerThanPinned() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/566")) func reopensArchivedTabWhenNewerThanPinned() {
         let p1 = UUID()
         let t1 = UUID()
         let p1Date = Date(timeIntervalSince1970: 100)

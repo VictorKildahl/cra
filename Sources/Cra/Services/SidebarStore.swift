@@ -2201,6 +2201,22 @@ final class SidebarStore {
         if closedPinnedTabs.count > 50 { closedPinnedTabs.removeLast(closedPinnedTabs.count - 50) }
     }
 
+    /// ⌘W or the minus on pinned tab `id` (Close and Keep Pinned): every pane of its split goes
+    /// back to its pinned page. When it was the open tab, the pages the panes were on go on the
+    /// stack ⇧⌘T takes from, so they come back where they were and not at home (#566). Returns
+    /// the panes, for the windows to unload.
+    @discardableResult
+    func closePinnedTab(_ id: UUID, wasOpen: Bool) -> [UUID] {
+        let panes = paneTabIDs(for: id)
+        let pages = panes.map { p in ReopenClosedTab.PaneState(id: p, url: items[p]?.tab?.url, title: items[p]?.tab?.savedTitle) }
+        for p in panes { _ = resetPinnedTab(p) }
+        if wasOpen {
+            let page = pages.first { $0.id == id } ?? pages.first
+            recordClosedPinnedTab(id, url: page?.url, title: page?.title, paneStates: pages)
+        }
+        return panes
+    }
+
     func forgetClosedPinnedTab(_ id: UUID) {
         closedPinnedTabs.removeAll { $0.id == id }
     }

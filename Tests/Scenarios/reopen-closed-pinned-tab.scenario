@@ -1,0 +1,27 @@
+# promise: #566
+# ⌘W on the open pinned tab (Close and Keep Pinned) unloads it and takes it back to its pinned
+# page; ⇧⌘T right after brings it back at the page it had gone on to, with its back list (h2), and
+# before the Today tab archived ahead of it. ⇧⌘T again brings that one back. Arc 1.173.1 does the
+# same (docs/arc-reverse-engineering.md, "Restore Last Closed Tab after Close and Keep Pinned").
+# The order is ReopenClosedTab (CraCore); the store's half is StoreTests.reopenClosedPinnedTabs.
+budget rss=600 stalls50=8
+cra://open?url=${PAGE}?n=today
+wait 3
+cra://action/closeTab
+wait 1
+cra://open?url=${PAGE}?n=home
+wait 3
+cra://action/pinTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.search='?n=away'"}
+wait 3
+cra://action/closeTab
+wait 2
+cra://action/reopenClosedTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search+' h'+history.length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=away h2"
+cra://action/reopenClosedTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search+' h'+history.length"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=today h1"

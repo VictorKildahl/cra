@@ -1520,6 +1520,25 @@ so test pages must not use it). Live HID clicks and hovers at 1x, plus a static 
 - [O live, 100 fps] The minus makes the row jump to scale 0.9 at once and spring back to 1 in ~0.24 s without
   overshoot (left edge 10 px in at 1x, back by 1.11 s): a critically damped spring, ω ≈ 14 (stiffness 196, damping 28).
 
+### Restore Last Closed Tab after Close and Keep Pinned (Arc 1.173.1, 19 Nov 2026, GitHub #566)
+Offline Arc on a fake home (one space, nothing pinned, network denied but loopback), driven over AX menus and
+posted keys only, pages on `pin.lvh.me:47139` from a local server that logs every request; each page's title
+carries `history.length`.
+- [O live] A Today tab T opened, then page A opened and pinned (Tabs ▸ Pin Tab); A walked on to B by itself
+  (title "B h=2"). T archived (File ▸ Archive Tab), then ⌘W on the open pinned tab: the window showed nothing,
+  the row stayed, back on its pinned page ("A h=1"). The File menu says "Close Tab" for a pinned tab and
+  "Archive Tab" for a Today tab.
+- [O live] File ▸ Restore Last Closed Tab (⇧⌘T) then selected the pinned tab and loaded B (a new GET /b), title
+  "B h=2": the page it was on, with its back list, not its pinned page. Restore again brought back T ("T h=1"),
+  archived before it. So a pinned tab closed while open goes on the same stack as archived tabs and Peeks, newest
+  first.
+- [U] Not measured: a pinned tab closed from the background (the minus on a row that isn't open), a pinned split,
+  and whether the stack survives a relaunch.
+- Cra (#566): SidebarStore.closePinnedTab records the panes' pages when the closed tab was the open one;
+  reopenLastClosed picks among closed pinned tabs, the archive and a closed Peek (ReopenClosedTab, CraCore) and
+  puts the pages back; the tab's saved back list (PageHistory, #273) opens with it because it ends on that page.
+  In memory only: a relaunch forgets closed pinned tabs.
+
 ### Pressing a sidebar row (Arc 1.172.1, 11 Nov 2026, static: method lists and disassembly)
 
 - [O] Rows: `SidebarBouncyClickCell.performBounceAnimation(isPressedIn:)` on `SelectableCellView` (tabs, splits,
