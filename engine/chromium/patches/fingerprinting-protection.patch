@@ -560,3 +560,29 @@ new file mode 100644
 +}
 +
 +}  // namespace blink
+diff --git a/third_party/blink/renderer/core/exported/web_settings_impl.cc b/third_party/blink/renderer/core/exported/web_settings_impl.cc
+--- a/third_party/blink/renderer/core/exported/web_settings_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_settings_impl.cc
+@@ -659,6 +659,10 @@ void WebSettingsImpl::SetCookieEnabled(bool enabled) {
+   dev_tools_emulator_->SetCookieEnabled(enabled);
+ }
+ 
++void WebSettingsImpl::SetCraFingerprintingSeed(uint64_t seed) {
++  settings_->SetCraFingerprintingSeed(seed);
++}
++
+ void WebSettingsImpl::SetAllowCustomScrollbarInMainFrame(bool enabled) {
+   settings_->SetAllowCustomScrollbarInMainFrame(enabled);
+ }
+diff --git a/third_party/blink/renderer/core/exported/web_settings_impl.h b/third_party/blink/renderer/core/exported/web_settings_impl.h
+--- a/third_party/blink/renderer/core/exported/web_settings_impl.h
++++ b/third_party/blink/renderer/core/exported/web_settings_impl.h
+@@ -75,6 +75,8 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
+   void SetAutoZoomFocusedEditableToLegibleScale(bool) override;
+   void SetClobberUserAgentInitialScaleQuirk(bool) override;
+   void SetCookieEnabled(bool) override;
++  // Cra: fingerprinting protection seed, 0 when off (settings.json5's craFingerprintingSeed).
++  void SetCraFingerprintingSeed(uint64_t);
+   void SetCaretBrowsingEnabled(bool) override;
+   void SetDNSPrefetchingEnabled(bool) override;
+   void SetDOMPasteAllowed(bool) override;
