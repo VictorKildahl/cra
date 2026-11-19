@@ -3244,7 +3244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let url = LiveCalendarClient.shared.nextCall()?.meetingURL { main.sidebarActions.openURL(url) } else { NSSound.beep() }
         // A pane has no row of its own: its split's name is edited.
         case "renameTab": main.sidebarUI.renamingID = current.map { store.splitContaining($0)?.id ?? $0 }
-        case "duplicateTab": if let c = current { store.duplicateTab(c, window: main.windowID) }
+        case "duplicateTab": if let c = current { store.duplicateTab(c, window: main.windowID, select: true) }
         case "resetTab": if let c = current { main.resetPinnedTab(c) }
         case "muteTab":
             if let c = current, let t = store.item(c)?.tab {

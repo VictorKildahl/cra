@@ -861,25 +861,34 @@ final class SidebarStore {
         return true
     }
 
-    /// A copy of the tab's page right after it, in the same list (a favorite's copy is a favorite),
-    /// opened. A split's pane is copied below its split, not into it as one pane more (#600).
+    /// Arc's Duplicate (#600, checked in Arc 1.173.1): a copy of the tab's page right after it, in
+    /// the same list (a pinned tab's copy is pinned), left in the background. A favorite's copy is a
+    /// Today tab where new tabs go, and a split pane's copy goes right below its split, not into it as
+    /// one pane more. `select` opens the copy, as Tabs ▸ Duplicate Tab does.
     @discardableResult
-    func duplicateTab(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
+    func duplicateTab(_ id: UUID, window: UUID? = nil, select: Bool = false) -> SidebarItem? {
         guard let it = items[id], let t = it.tab, var parent = it.parentID else { return nil }
+        let space = spaceID(ofItem: id, window: window)
+        if isFavorite(id) { return createTab(url: t.url, title: t.savedTitle, in: space, select: select, window: window) }
         var after = id
         if let split = items[parent], split.isSplit, let outer = split.parentID { (after, parent) = (split.id, outer) }
         let idx = (items[parent]?.children.firstIndex(of: after) ?? 0) + 1
-        return createTab(url: t.url, title: t.savedTitle, in: spaceID(ofItem: id), pinned: false,
-                         select: true, parent: parent, index: idx, window: window)
+        return createTab(url: t.url, title: t.savedTitle, in: space, pinned: false,
+                         select: select, parent: parent, index: idx, window: window)
     }
 
-    /// Arc's Duplicate on a split's menu (#600): a new split right after this one, in the same list,
-    /// with a new tab for each pane's page in order, its orientation and sizes, opened on the pane
-    /// the original had focused.
+    /// Arc's Duplicate on a split's menu (#600, Arc 1.173.1): a new split right after this one, in the
+    /// same list, with a new tab for each pane's page in order, its orientation and sizes, left in the
+    /// background. A favorite split's copy goes to Today where new tabs go, as a favorite tab's does.
     @discardableResult
     func duplicateSplit(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
-        guard let original = items[id], let data = original.split, let parent = original.parentID,
-              let at = items[parent]?.children.firstIndex(of: id) else { return nil }
+        guard let original = items[id], let data = original.split, var parent = original.parentID,
+              var at = items[parent]?.children.firstIndex(of: id).map({ $0 + 1 }) else { return nil }
+        if isFavorite(id) {
+            let space = spaceID(ofItem: id, window: window).flatMap { spaces[$0] } ?? focusedSpace(window: window)
+            parent = space.todayContainerID
+            at = settings.newTabsAtTop ? 0 : (items[parent]?.children.count ?? 0)
+        }
         var split = SidebarItem.split(parent: parent)
         split.title = original.title
         var copies: [UUID: UUID] = [:]
@@ -887,22 +896,26 @@ final class SidebarStore {
             guard let t = items[pane]?.tab else { continue }
             var copy = SidebarItem.tab(t.url, title: t.savedTitle, parent: split.id)
             copy.title = items[pane]?.title
-            copy.data = .tab({ var c = TabData(url: t.url, title: t.savedTitle); c.faviconKey = t.faviconKey; return c }())
+            copy.isUnread = true
+            copy.data = .tab({
+                var c = TabData(url: t.url, title: t.savedTitle)
+                c.faviconKey = t.faviconKey
+                c.timeLastActiveAt = clock.now
+                return c
+            }())
             items[copy.id] = copy
             split.children.append(copy.id)
             copies[pane] = copy.id
         }
-        guard !split.children.isEmpty else { return nil }
+        guard !split.children.isEmpty, items[parent] != nil else { return nil }
         var s = SplitData()
         s.orientation = data.orientation
         s.widthFactors = Dictionary(uniqueKeysWithValues: data.widthFactors.compactMap { k, v in copies[k].map { ($0, v) } })
         s.focusTabID = data.focusTabID.flatMap { copies[$0] } ?? split.children.first
-        s.timeLastActiveAt = clock.now
         split.data = .split(s)
         items[split.id] = split
-        items[parent]!.children.insert(split.id, at: at + 1)
+        items[parent]!.children.insert(split.id, at: min(at, items[parent]!.children.count))
         touch()
-        selectTab(s.focusTabID, window: window)
         return items[split.id]
     }
 

@@ -825,12 +825,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let id = tiles[n - 1].itemID
         let page = app.runtime(for: id).map { $0.browser.isAudioMuted() ? "muted" : "unmuted" } ?? "not loaded"
         CraLog.note("favorite menu \(label) ran \(run): saved=\(store.item(id)?.tab?.muted == true ? "muted" : "unmuted") page=\(page)")
-        // The space's favorites after the row ran, a split as its panes' pages joined by +, and the open one (#600).
+        // The space's favorites and Today after the row ran, a split as its panes' pages joined by +, and the open tab (#600).
         guard let space = store.space(focusedSpaceID) else { return }
         let query = { (id: UUID) in self.store.item(id)?.tab.flatMap { URL(string: $0.url)?.query } ?? "-" }
-        let favorites = store.children(of: space.favoritesContainerID).map { $0.isSplit ? $0.children.map(query).joined(separator: "+") : query($0.id) }
+        let list = { (container: UUID) in
+            self.store.children(of: container).map { $0.isSplit ? $0.children.map(query).joined(separator: "+") : query($0.id) }.joined(separator: " ")
+        }
         let open = store.selectedTabID(window: windowID).map(query) ?? "-"
-        CraLog.note("favorite menu \(label) favorites: \(favorites.joined(separator: " ")) open: \(open)")
+        CraLog.note("favorite menu \(label) favorites: \(list(space.favoritesContainerID)) today: \(list(space.todayContainerID)) open: \(open)")
     }
 
     /// For test hooks: runs `action` and returns what it put on the clipboard ("-" for nothing, line

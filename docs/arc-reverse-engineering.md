@@ -1068,6 +1068,17 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   the menu follows Arc's minus Share/Change Icon (Duplicate added 19 Nov, #600), pinning makes each pane's page its home, and a new
   pane in a pinned split takes its first page as home.
 
+### Duplicate (Arc 1.173.1, live, 19 Nov 2026, issue #600)
+Offline Arc (fake home, see "One space") with a copy of a real sidebar; menus opened with a HID right-click,
+Duplicate pressed over AX, StorableSidebar.json read after each.
+- [O live] A Today tab: the copy goes right after it in Today. A pinned tab: the copy is pinned, right after it.
+- [O live] A favorite: the copy is a Today tab at the top of Today (where new tabs go), not a favorite.
+- [O live] A split: a new split right after it, new tabs for the panes in order, same `layoutOrientation` and
+  `itemWidthFactors`, `focusItemID` nil. A favorite split was not tried; Cra sends its copy to Today too.
+- [O live] The copy never opens: duplicating the open tab or the open split leaves the original open, the copy in
+  the background. (Tabs ▸ Duplicate Tab from the menu bar was not tried; Cra's opens its copy.)
+- Cra (#600): SidebarStore.duplicateTab/duplicateSplit do the same, from the tab, favorite and split menus.
+
 ### Clear cookies / cache (Arc 1.171, 30 Oct)
 - [O] Command bar: "clear" lists Clear Cache and Refresh (selected, above the typed row), then "clear", then
   Clear Cookies and Refresh; "clear cook" puts Clear Cookies and Refresh first; both rows use a trash glyph.

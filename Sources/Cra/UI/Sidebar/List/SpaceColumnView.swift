@@ -1813,7 +1813,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         if let t = item.tab, t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
         }
-        // Arc's favorite menu has Duplicate after Edit Pinned Page ›: a favorite of the same page, after it (#600).
+        // Arc's favorite menu has Duplicate after Edit Pinned Page ›: a Today tab of the page, in the background (#600).
         if item.tab != nil {
             MenuItems.add(m, action: "duplicateTab", title: "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
         }

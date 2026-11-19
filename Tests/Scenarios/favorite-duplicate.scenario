@@ -1,7 +1,8 @@
 # promise: #600
 # Arc's Duplicate on a favorite's menu and on a split's menu (GitHub #600): the tab rows' menu had it,
-# the favorite tile's and the split's did not. A favorite's copy is a favorite of the same page right
-# after it; a split's copy is the whole split right after it, opened on the pane focused in the original.
+# the favorite tile's and the split's did not. As in Arc 1.173.1 (checked live 19 Nov), a favorite's
+# copy is a Today tab where new tabs go, not another favorite, and a favorite split's copy is a Today
+# split; the copies stay in the background, so the open tab stays open.
 budget rss=700 stalls50=10
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
 
@@ -19,10 +20,10 @@ wait 1
 cra://debug?favoriteMenu=1&label=tab
 expect-log favorite menu tab: Remove from Favorites\|Rename…\|Mute\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Duplicate\|Copy Link\|
 cra://debug?favoriteMenu=1&label=tab-copy&run=Duplicate
-expect-log favorite menu tab-copy favorites: n=fav n=fav n=left\+n=right open: n=fav$
+expect-log favorite menu tab-copy favorites: n=fav n=left\+n=right today: n=fav open: n=right$
 wait 1
 
-cra://debug?favoriteMenu=3&label=split
+cra://debug?favoriteMenu=2&label=split
 expect-log favorite menu split: Remove from Favorites\|──\|Separate All Tabs\|.*\|Rename…\|──\|Duplicate\|Move to ▸\|
-cra://debug?favoriteMenu=3&label=split-copy&run=Duplicate
-expect-log favorite menu split-copy favorites: n=fav n=fav n=left\+n=right n=left\+n=right open: n=right$
+cra://debug?favoriteMenu=2&label=split-copy&run=Duplicate
+expect-log favorite menu split-copy favorites: n=fav n=left\+n=right today: n=left\+n=right n=fav open: n=right$
