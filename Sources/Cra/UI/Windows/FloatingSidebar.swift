@@ -294,6 +294,27 @@ final class FloatingSidebarController {
         return true
     }
 
+    /// A swipe is bringing the Library in under the sidebar: it goes back toward the window's edge by
+    /// `distance` as the Library comes (LibrarySwipe.floatingRetreat), and out again when the swipe
+    /// turns back.
+    func retreat(_ distance: CGFloat) {
+        guard isShown, panel != nil, dock == nil else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for l in [slider.layer, shadowView.layer] { l?.removeAnimation(forKey: Self.slideKey) }
+        var f = slideFrame(shown: true)
+        f.origin.x += side == .right ? distance : -distance
+        slider.frame = f
+        CATransaction.commit()
+        placeShadow()
+    }
+
+    /// How far it has gone back, for a scenario.
+    var retreatReadout: Int {
+        guard isShown, panel != nil else { return 0 }
+        return Int(abs(slideFrame(shown: true).minX - slider.frame.minX).rounded())
+    }
+
     /// An empty window's hidden sidebar is held open (SidebarPresentation.heldOpen, GitHub #483): it comes
     /// out straight to its floating place, without the edge reveal's spring, as Arc's does when the window
     /// has no tab. The hover reveal is `show`.
