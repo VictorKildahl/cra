@@ -1985,6 +1985,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // pageWindows=<label>: the page windows Chromium has shown, how many it showed away from every
             // Cra window on screen, and how many macOS animates in and out (#354).
             if let label = dict["pageWindows"] { CraLog.note("page windows \(label): \(CraCEFRuntime.pageWindowsReadout)"); return }
+            // hostBrowserView=<label>: whether Chrome finds the browser element of each profile's hidden Browser, which
+            // its Settings looked for; hostBrowserViewHidden=1|0 takes it away (and back), as on the Mac where Clear
+            // browsing data's Cancel crashed Cra 0.1.50 (crash-clear-browsing-data-cancel).
+            if let label = dict["hostBrowserView"] { CraLog.note("host browser view \(label): \(CraCEFRuntime.pageHostBrowserViewReadout)"); return }
+            if let hidden = dict["hostBrowserViewHidden"] { CraCEFRuntime.setPageHostBrowserViewsHidden(hidden == "1"); return }
             // chromeWindows=<label>: Chromium's own windows (its tab strip and toolbar) a user could see,
             // on screen and not see-through, each named (#472).
             if let label = dict["chromeWindows"] {

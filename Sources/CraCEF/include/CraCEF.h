@@ -565,6 +565,12 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// them it showed off every Cra window that was on screen, and how many macOS animates in and out
 /// (GitHub #354), for cra://debug?pageWindows=.
 @property (class, nonatomic, readonly) NSString *pageWindowsReadout;
+/// "element=<0|1> shown=<0|1>" per profile's hidden Browser on the engine: whether Chrome finds the browser element its
+/// Settings look for, for cra://debug?hostBrowserView=. "no engine" on CEF.
+@property (class, nonatomic, readonly) NSString *pageHostBrowserViewReadout;
+/// Scenarios only: hides (or shows again) each hidden Browser's view, so Chrome finds no browser element, as on the
+/// Mac where Clear browsing data's Cancel crashed. Does nothing on CEF.
++ (void)setPageHostBrowserViewsHidden:(BOOL)hidden;
 + (NSString *)chromiumVersion;
 + (NSString *)cefVersion;
 /// YES when the browser-level DevTools pipe is up (it needs fds 3/4 free at start-up).

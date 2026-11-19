@@ -141,6 +141,11 @@
 #include "ui/views/controls/webview/cra_hosted_page.h"
 #include "ui/compositor/compositor.h"
 #include "ui/views/widget/widget.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
+#include "ui/base/interaction/element_tracker.h"
+#include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -3604,6 +3609,52 @@ bool HandleDebugMethod(content::WebContents* contents,
 + (NSString*)pageWindowsReadout {
   return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_page_windows_shown,
                                     (long)g_page_windows_away, (long)g_page_windows_animated];
+}
+// The view Chrome's Settings find as the page's browser window (kBrowserViewElementId), in a profile's hidden Browser.
+views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
+  views::Widget* widget =
+      views::Widget::GetWidgetForNativeWindow(browser->GetWindow()->GetNativeWindow());
+  std::vector<views::View*> queue = {widget ? widget->GetRootView() : nullptr};
+  while (!queue.empty()) {
+    views::View* view = queue.back();
+    queue.pop_back();
+    if (!view) {
+      continue;
+    }
+    if (view->GetProperty(views::kElementIdentifierKey) == kBrowserViewElementId) {
+      return view;
+    }
+    for (views::View* child : view->children()) {
+      queue.push_back(child);
+    }
+  }
+  return nullptr;
+}
+// "element=<0|1> shown=<0|1>" per profile's hidden Browser: whether Chrome finds its browser element, which its
+// Settings CHECKed for (Clear browsing data's Cancel crashed Cra 0.1.50 without it), for cra://debug?hostBrowserView=.
++ (NSString*)pageHostBrowserViewReadout {
+  NSMutableArray<NSString*>* hosts = [NSMutableArray array];
+  for (auto& [profile, host] : Hosts()) {
+    BrowserWindowInterface* browser = host->browser();
+    if (!browser) {
+      continue;
+    }
+    ui::TrackedElement* element = ui::ElementTracker::GetElementTracker()->GetUniqueElement(
+        kBrowserViewElementId, BrowserElements::From(browser)->GetContext());
+    views::View* view = PageHostBrowserView(browser);
+    [hosts addObject:[NSString stringWithFormat:@"element=%d shown=%d", element ? 1 : 0,
+                                                (view && view->GetVisible()) ? 1 : 0]];
+  }
+  return hosts.count ? [hosts componentsJoinedByString:@"; "] : @"no host";
+}
+// Scenarios only: every hidden Browser's view out of sight, so Chrome finds no browser element for its pages, the
+// state a Mac was in when Clear browsing data's Cancel crashed (crash-clear-browsing-data-cancel).
++ (void)setPageHostBrowserViewsHidden:(BOOL)hidden {
+  for (auto& [profile, host] : Hosts()) {
+    if (views::View* view = host->browser() ? PageHostBrowserView(host->browser()) : nullptr) {
+      view->SetVisible(!hidden);
+    }
+  }
 }
 + (BOOL)hasBrowserDevTools {
   return g_cdp_write_fd >= 0;

@@ -1,0 +1,38 @@
+# promise: crash-clear-browsing-data-cancel
+# Cancel in Chrome's Clear browsing data (Cra ▸ Clear Browsing Data…) closes it, and Delete data with History
+# ticked deletes it, with Cra still running. Cra 0.1.50 crashed on both (SIGTRAP, CHECK(browser_element) in
+# settings_clear_browsing_data_handler.cc): Chrome's Settings send an event to the page's browser window, which on
+# the engine is a profile's hidden Browser, and CHECKed that Chrome finds it as an element. On a Mac where it
+# didn't (twice, seconds after Cra opened, 19 Nov) Cra quit at once. cra-browser-element-checks.patch skips the
+# event then, as Chrome's other senders do; it only feeds Chrome's in-product help, which Cra doesn't show.
+# hostBrowserViewHidden takes the element away first, so the run is in the state that crashed whatever made it.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://action/clearBrowsingData
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href"}
+expect-log "value":"chrome://settings/clearBrowserData"
+cra://debug?hostBrowserView=open
+expect-log host browser view open: element=1 shown=1$
+cra://debug?hostBrowserViewHidden=1
+wait 0.5
+cra://debug?hostBrowserView=gone
+expect-log host browser view gone: element=0 shown=0$
+
+# Cancel, as the dialog's button sends it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(chrome.send('recordClearBrowsingDataCancelled'),'cancelled')"}
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after cancel'"}
+expect-log "value":"after cancel"
+
+# Delete data, History ticked (the last hour), as the dialog's button sends it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(chrome.send('clearBrowsingData',['cra-delete',['browser.clear_data.browsing_history'],0]),'deleted')"}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after delete'"}
+expect-log "value":"after delete"
+cra://debug?hostBrowserViewHidden=0
+wait 0.5
+cra://debug?hostBrowserView=back
+expect-log host browser view back: element=1 shown=1$
+reject-log fault:

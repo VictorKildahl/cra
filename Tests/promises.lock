@@ -1182,6 +1182,7 @@
 #574   Tests/Scenarios/page-print-button.scenario  4095f14bad8f
 #574   Tests/Scenarios/page-save-password.scenario  ef5590d50ccd
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
+crash-clear-browsing-data-cancel Tests/Scenarios/clear-browsing-data-cancel.scenario  3b19c444be85
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
 crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7f012c9cd01
 crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::aPinSavedTwiceShowsOnce  1b99e50cdb2f

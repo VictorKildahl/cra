@@ -1,0 +1,36 @@
+diff --git a/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc b/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc
+index c30225a..f8a11fc 100644
+--- a/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc
++++ b/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc
+@@ -88,7 +88,12 @@ void NotifyBrowserViewCustomEvent(tabs::TabInterface* tab,
+   ui::TrackedElement* const browser_element =
+       ui::ElementTracker::GetElementTracker()->GetUniqueElement(
+           kBrowserViewElementId, context);
+-  CHECK(browser_element);
++  // Cra: a page in Cra's window belongs to a Browser whose own window is never seen, so its BrowserView
++  // isn't a tracked element while that window is out of sight. These events only feed Chrome's
++  // in-product help, which Cra doesn't show: skip them rather than crash (Cancel in Clear browsing data).
++  if (!browser_element) {
++    return;
++  }
+   ui::ElementTracker::GetFrameworkDelegate()->NotifyCustomEvent(browser_element,
+                                                                 event_type);
+ }
+diff --git a/chrome/browser/ui/webui/settings/settings_utils.cc b/chrome/browser/ui/webui/settings/settings_utils.cc
+index 352e594..f923235 100644
+--- a/chrome/browser/ui/webui/settings/settings_utils.cc
++++ b/chrome/browser/ui/webui/settings/settings_utils.cc
+@@ -50,7 +50,12 @@ void MaybeNotifySettingsCustomEvent(content::WebUI* web_ui,
+   ui::TrackedElement* const browser_element =
+       ui::ElementTracker::GetElementTracker()->GetUniqueElement(
+           kBrowserViewElementId, context);
+-  CHECK(browser_element);
++  // Cra: a page in Cra's window belongs to a Browser whose own window is never seen, so its BrowserView
++  // isn't a tracked element while that window is out of sight. These events only feed Chrome's
++  // in-product help, which Cra doesn't show: skip them rather than crash (Cancel in Clear browsing data).
++  if (!browser_element) {
++    return;
++  }
+   ui::ElementTracker::GetFrameworkDelegate()->NotifyCustomEvent(browser_element,
+                                                                 event_type);
+ }
