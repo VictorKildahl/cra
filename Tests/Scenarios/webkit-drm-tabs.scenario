@@ -134,9 +134,13 @@ cra://open?url=${PAGE}?n=front
 wait 2
 cra://debug?sleepTabs=1
 expect-log tab sleep unloads localhost
-cra://action/nextTab
+# The sleeper by name: the next tab after "front" depends on the tabs earlier steps left, and on Nightly's runners
+# it was another page. Then asked again until the reopened WebKit page answers.
+cra://debug?selectTab=n=sleeper
 wait 3
-cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+pace 1
+repeat 10 cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+pace 0.5
 expect-log Cra cdp Runtime.evaluate .*"value":"Fixture sleeper,false"
 cra://action/closeTab
 wait 2

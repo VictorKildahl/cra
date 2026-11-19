@@ -97,6 +97,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManager(findAction action: CraFindAction)
     func browserManager(download: CraDownloadInfo)
     func browserManager(fullscreen: Bool, tabID: UUID)
+    /// Arc's toast for what a page took (its full screen, the pointer): ExclusiveAccessNotice.
+    func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID)
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView?
     /// A DevTools pane appeared or closed; the shell decides whether to show the dock.
     func browserManagerDevToolsChanged()
@@ -592,6 +594,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     func browser(_ browser: CraBrowser, didCreateHostWindow window: NSWindow) {
         delegate?.browserManagerPageWindowsChanged(focus: tabID(of: browser) == visibleTabID)
     }
+
+    /// The tab whose page `loadBehind` is making, while it makes it.
+    private var makingBehind: UUID?
+
+    /// Makes the page of `tabID`, a tab opened behind the page in front, hidden until its tab is shown, so a
+    /// video on it waits (#552; Arc 1.173.1, and Chromium's own ⌘-click tabs).
+    @discardableResult
+    private func loadBehind(_ tabID: UUID) -> TabRuntime? {
+        makingBehind = tabID
+        defer { makingBehind = nil }
+        return ensureRuntime(for: tabID)
+    }
+
+    /// Only a page `loadBehind` makes starts hidden. Every other page starts shown, as Chromium makes it:
+    /// a tab in front or selected later, an agent's tab that is never shown, a spare (the tab that takes it
+    /// asks again, as it takes it).
+    func browserStartsHidden(_ browser: CraBrowser) -> Bool { makingBehind != nil }
 
     func unload(_ tabID: UUID) {
         // CEF closes asynchronously. Retire ownership first so reopening the tab
@@ -1698,6 +1717,17 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         delegate?.browserManager(fullscreen: fullscreen, tabID: id)
     }
 
+    /// Each tab's notices from Chrome (full screen, pointer and keyboard locks): ExclusiveAccessNotices.
+    private var exclusiveAccessNotices: [UUID: ExclusiveAccessNotices] = [:]
+
+    func browser(_ browser: CraBrowser, exclusiveAccessNotice notice: CraExclusiveAccessNotice, force: Bool) {
+        guard let id = tabID(of: browser), let notice = ExclusiveAccessNotice(rawValue: notice.rawValue) else { return }
+        var notices = exclusiveAccessNotices[id] ?? ExclusiveAccessNotices()
+        let toast = notices.update(notice, force: force, inLittleWindow: false)
+        exclusiveAccessNotices[id] = notice == .none ? nil : notices
+        if let toast { delegate?.browserManager(exclusiveAccessToast: toast, tabID: id) }
+    }
+
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {
         if background, middleClickAddsPane(url, in: browser) { return }
         openLinkTab(url, from: tabID(of: browser), inBackground: background)
@@ -1766,7 +1796,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
                                   parent: slot?.parent, index: slot?.index, window: windowID, referrer: source)
         if background {
             store.markUnread(tab.id, true)
-            ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
+            loadBehind(tab.id)  // load it so the title and favicon fill in
             delegate?.browserManagerOpenedInBackground(tab.id)
         }
     }

@@ -80,6 +80,9 @@ final class ExtensionStore {
     nonisolated static func importExtension(_ ext: ImportableExtension, profiles: Set<String>?) throws {
         let existed = isInstalled(id: ext.id)
         try importExtension(ext)
+        // Imported again: the store may take it now (#491).
+        var refusals = loadRefusals()
+        if refusals.forget(folder: ext.id) { saveRefusals(refusals) }
         var scopes = loadProfiles()
         scopes.add(folder: ext.id, profiles: profiles, folderExisted: existed)
         try saveProfiles(scopes)
@@ -298,6 +301,9 @@ final class ExtensionStore {
         }
     }
 
+    /// Set once a quit is confirmed: an install it cuts short says nothing about the store (#491).
+    @ObservationIgnored var isQuitting = false
+
     /// Extension IDs asked of the store in a profile this session ("<profile>/<id>"), each once.
     @ObservationIgnored private var webStoreAsked: Set<String> = []
 
@@ -306,16 +312,31 @@ final class ExtensionStore {
     /// The store's version may not ask for more permissions than the copy the person picked.
     func installFromWebStore(using browser: CraBrowser, profile: String) {
         let scopes = Self.loadProfiles()
+        let refused = Self.loadRefusals()
         let live = Self.extensionSettings(inProfile: profile)
         for copy in Self.webStoreCopies() where !webStoreAsked.contains("\(profile)/\(copy.folder)") {
+            if refused.isRefused(folder: copy.folder, inProfile: profile), scopes.loads(folder: copy.folder, inProfile: profile),
+               !WebStoreInstalls.isStoreInstall(settings: live[copy.folder] as? [String: Any]) {
+                webStoreAsked.insert("\(profile)/\(copy.folder)")
+                CraLog.note("extension \(copy.folder): the Web Store refused it in \(profile) before; it stays the imported copy there")
+                continue
+            }
             guard !WebStoreInstalls.pendingProfiles(folder: copy.folder, extensionID: copy.folder, scopes: scopes,
-                                                    profiles: [profile], settings: { _ in live }).isEmpty,
+                                                    profiles: [profile], settings: { _ in live }, refused: refused).isEmpty,
                   let params = try? JSONSerialization.data(withJSONObject: ["id": copy.folder, "manifest": copy.manifest]) else { continue }
             webStoreAsked.insert("\(profile)/\(copy.folder)")
             CraLog.note("extension \(copy.folder): installing from the Web Store in \(profile)")
             browser.sendDevToolsMethod("Cra.installFromWebStore", params: String(decoding: params, as: UTF8.self)) { [weak self] _, error in
                 DispatchQueue.main.async {
-                    if let error { CraLog.note("extension \(copy.folder): Web Store install in \(profile) failed (\(error)); it keeps loading from its folder") }
+                    if let error {
+                        CraLog.note("extension \(copy.folder): Web Store install in \(profile) failed (\(error)); it keeps loading from its folder")
+                        // The store's no stands: later launches don't download it again (#491). A quit cutting
+                        // the install short is no answer.
+                        if self?.isQuitting != true {
+                            var refusals = Self.loadRefusals()
+                            if refusals.refuse(folder: copy.folder, inProfile: profile) { Self.saveRefusals(refusals) }
+                        }
+                    }
                     self?.reload()
                 }
             }
@@ -325,6 +346,25 @@ final class ExtensionStore {
     // MARK: Profiles of the Extensions/ folders (GitHub #131)
 
     nonisolated private static var profilesFile: URL { AppPaths.file("extension-profiles.json") }
+
+    // MARK: Store refusals (GitHub #491)
+
+    nonisolated private static var refusalsFile: URL { AppPaths.file("web-store-refused.json") }
+
+    nonisolated static func loadRefusals() -> WebStoreRefusals {
+        guard let data = try? Data(contentsOf: refusalsFile) else { return WebStoreRefusals() }
+        return (try? JSONDecoder().decode(WebStoreRefusals.self, from: data)) ?? WebStoreRefusals()
+    }
+
+    nonisolated private static func saveRefusals(_ refusals: WebStoreRefusals) {
+        do {
+            if refusals.profiles.isEmpty {
+                if FileManager.default.fileExists(atPath: refusalsFile.path) { try FileManager.default.removeItem(at: refusalsFile) }
+            } else {
+                try JSONEncoder().encode(refusals).write(to: refusalsFile, options: .atomic)
+            }
+        } catch { CraLog.note("extension store refusals: could not save (\(error.localizedDescription))") }
+    }
 
     nonisolated static func loadProfiles() -> ExtensionProfiles {
         guard let data = try? Data(contentsOf: profilesFile) else { return ExtensionProfiles() }

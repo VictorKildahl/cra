@@ -1,0 +1,33 @@
+# promise: web-page-share-picker
+# web-features: a page's Share button (navigator.share: a news article, a photo). Chrome shows macOS's share
+# picker from the page's own view, where the pointer is, and the page waits until it is closed. It never reads
+# the Browser's never-seen window (a 1 pt strip along Cra's window since #346), and this keeps that so: the
+# picker comes up in front (where the pointer is, so maybe beside the page), and closing it tells the page the share was cancelled. It takes the screen: the
+# picker floats where the real pointer is.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=share
+expect-log GET /features.html\?n=share
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('share',navigator.share({title:'Fixture',url:location.href}))","userGesture":true}
+expect-log "value":"share asked"
+wait 2
+cra://debug?pageDialogs=share
+expect-log page dialog share: popover [0-9]{3,}x[0-9]{3,} at=[a-z]+ front=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'share '+state.share"}
+expect-log "value":"share waiting"
+# A click outside it closes it, as the pointer's does.
+cra://debug?clickAt=500,700
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'share closed '+state.share"}
+expect-log "value":"share closed AbortError"
+reject-log fault:

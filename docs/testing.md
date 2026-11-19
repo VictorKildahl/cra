@@ -127,6 +127,7 @@ one. Every launch checks the sidebar and logs a fault for each broken link.
     scripts/scenario.sh fifty-tabs      # one
     scripts/scenario.sh all             # every one, about 6 minutes
     CRA_SCENARIO_SHARD=2/4 scripts/scenario.sh all   # every 4th from the 2nd (Nightly runs 4 per backdrop)
+    scripts/scenario.sh web-features    # what pages ask the browser for: a release's gate
 
 A scenario (`Tests/Scenarios/*.scenario`) is a list of `cra://` commands plus a few
 directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `snapshot`, `seed`, `env`,
@@ -134,6 +135,11 @@ directives (`wait`, `repeat`, `budget`, `helpers`, `relaunch`, `expect-log`, `sn
 folder, behind your windows (`CRA_TEST_BACKGROUND`), with the fixture pages served from
 127.0.0.1. Logs, hitch log and snapshots land in `build/scenarios/<name>/`. Adding a journey
 is a text file; the invariants come for free.
+
+`web-features` runs the scenarios `Tests/web-features.tsv` names: every way a page reaches its browser (file
+pickers, print, dialogs, permission prompts, device choosers, full screen, sharing, payments, passkeys), each
+tested over Cra's own windows rather than Chrome's never-seen one. Every release runs them on its own build and
+stops on a failure; [web-features.md](web-features.md) has the map, the gates and the readouts.
 
 The `extension-link-context`, `extension-peek-context`, `extension-little-window-context`
 and `extension-split-window-context` scenarios check password-manager context. A content

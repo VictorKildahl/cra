@@ -295,6 +295,24 @@ final class BlockingTests: BrowserTestCase {
         XCTAssertNotEqual(card.label, "script-stopped")
     }
 
+    // promise: #570
+    /// Manga sites' pop-up ads (#570) load from Monetag's loader and zone scripts, on domains that
+    /// change every few days. This page asks for both from domains no list has; Cra's filters stop
+    /// them by their path, before any network, and the menu counts both. Without the filters the
+    /// two requests go out, fail on hosts that don't exist, and nothing is counted.
+    func testAnAdLoaderFromAnUnlistedDomainIsStoppedByItsPath() {
+        let page = "data:text/html,<meta name=viewport content='width=device-width'><title>Manga</title><h1>Manga</h1>"
+            + "<script src='https://cra-test-570-loader.com/btag.min.js'></script>"
+            + "<script src='https://qwertyuiopcra.net/5/9357427/'></script>"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        waitForPage("Manga")
+        app.buttons["bar-menu"].tap()
+        let footer = app.buttons["menu-reload-without-blockers"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 10))
+        XCTAssertEqual(footer.value as? String, "Cra scrubbed 2 trackers")
+        keep("ad-loader-blocked")
+    }
+
     // promise: #507
     /// An added list blocks from the first page after launch (#507): its kept copy in the data
     /// folder is compiled before that page loads, even when the list can't be fetched again
@@ -1615,5 +1633,37 @@ final class AppleIntelligenceTests: BrowserTestCase {
         field.typeText("pizza ovens")
         XCTAssertTrue(app.staticTexts["pizza ovens"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["browse-for-me"].exists)
+    }
+}
+
+final class RecentTabsTests: BrowserTestCase {
+    // promise: #591
+    func testRecentTabsShowUnderTheEmptyField() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-recent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sidebar = SpacesTests.macSidebar.replacingOccurrences(of: "2026-11-17T10:00:00Z", with: "2099-11-17T10:00:00Z")
+        try Data(sidebar.utf8).write(to: folder.appendingPathComponent("sidebar.json"))
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", folder.path])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.page("Second") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-search"].tap()
+        let firstRow = app.descendants(matching: .any)["suggestion-0"]
+        let secondRow = app.descendants(matching: .any)["suggestion-1"]
+        XCTAssertTrue(firstRow.staticTexts["Inbox"].waitForExistence(timeout: 10))
+        XCTAssertTrue(secondRow.staticTexts["First"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.scrollViews["suggestion-list"].staticTexts["Second"].exists)
+        keep("recent-tabs")
+        secondRow.tap()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(firstRow.staticTexts["Inbox"].waitForExistence(timeout: 10))
+        firstRow.tap()
+        waitForPage("Inbox")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-2"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["tab-card-3"].exists)
     }
 }

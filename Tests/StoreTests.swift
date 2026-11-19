@@ -91,6 +91,8 @@ enum StoreTests {
         tornOffTabMovesToABlankWindow()
         tornOffTabKeepsItsProfile()
         archiveTabsBelow()
+        archiveTabsAboveAndOthers()
+        splitIconAndReset()
         numberedSidebarItems()
         clearTodayKeepsSelectedAndPlaying()
         allFoldersExpanded()
@@ -2344,10 +2346,12 @@ enum StoreTests {
     }
 
     // promise: #600
-    /// Arc's Duplicate on a favorite's menu and on a split's menu (#600): the copy goes right after
-    /// the original, in the same list, and opens. A split comes back whole: each pane's page, in
-    /// order, with its orientation, sizes and focused pane. Duplicate Tab on one pane of a split
-    /// puts a copy of that page below the split instead of a pane more inside it.
+    /// Arc's Duplicate on a tab's, a favorite's and a split's menu (#600), checked in Arc 1.173.1:
+    /// the copy goes right after the original, in the same list (a pinned tab's copy is pinned), and
+    /// stays in the background. A favorite's copy is a Today tab where new tabs go, not a favorite. A
+    /// split comes back whole: each pane's page in order, its orientation and sizes. Duplicate on one
+    /// pane of a split puts a copy of that page below the split, not a pane more inside it. `select`
+    /// opens the copy (the folder preview's Duplicate).
     @MainActor
     private static func duplicateFavoritesAndSplits() {
         let store = AppComposition(clock: ManualScheduler()).store
@@ -2357,37 +2361,52 @@ enum StoreTests {
         let other = store.createTab(url: "https://example.com/other", title: "Other", in: sid, select: false)
         store.addToFavorites(mail.id, in: sid)
         store.addToFavorites(other.id, in: sid)
+        let open = store.createTab(url: "https://example.com/open", title: "Open", in: sid)
         guard let copy = store.duplicateTab(mail.id) else { return expect(false, "a favorite duplicates") }
-        expect(store.children(of: space.favoritesContainerID).map(\.id) == [mail.id, copy.id, other.id],
-               "a favorite's copy is the favorite right after it (#600)")
-        expect(copy.tab?.url == "https://example.com/mail" && store.selectedTabID == copy.id, "on the same page, and open")
+        expect(store.children(of: space.favoritesContainerID).map(\.id) == [mail.id, other.id],
+               "a favorite's copy is no favorite (#600)")
+        expect(store.children(of: space.todayContainerID).first?.id == copy.id && copy.tab?.url == "https://example.com/mail",
+               "it is a Today tab of the same page, where new tabs go, as in Arc")
+        expect(store.selectedTabID == open.id, "and it stays in the background")
+        expect(store.item(copy.id)?.isUnread == false && store.item(copy.id)?.tab?.timeLastActiveAt == nil,
+               "saved read, with no unread dot, and not among ⌃Tab's recent tabs, as Arc saves its copies")
+
+        guard let tabCopy = store.duplicateTab(open.id) else { return expect(false, "a tab duplicates") }
+        let today = store.children(of: space.todayContainerID).map(\.id)
+        expect(today.firstIndex(of: tabCopy.id) == today.firstIndex(of: open.id).map { $0 + 1 } && store.selectedTabID == open.id,
+               "a Today tab's copy is right after it, and the open tab stays open")
+        expect(store.item(tabCopy.id)?.isUnread == false, "with no unread dot")
+        let pinned = store.createTab(url: "https://example.com/pinned", in: sid, pinned: true, select: false)
+        guard let pinnedCopy = store.duplicateTab(pinned.id) else { return expect(false, "a pinned tab duplicates") }
+        expect(store.children(of: space.pinnedContainerID).map(\.id).suffix(2) == [pinned.id, pinnedCopy.id] && store.isPinned(pinnedCopy.id),
+               "a pinned tab's copy is pinned, right after it")
+        guard let opened = store.duplicateTab(open.id, select: true) else { return expect(false, "Duplicate Tab duplicates") }
+        expect(store.selectedTabID == opened.id, "select opens the copy (the folder preview's Duplicate)")
 
         let left = store.createTab(url: "https://example.com/left", title: "Left", in: sid)
         let right = store.createTab(url: "https://example.com/right", title: "Right", in: sid)
-        let after = store.createTab(url: "https://example.com/after", in: sid, select: false)
         guard let split = store.createSplit(with: [left.id, right.id]) else { return expect(false, "the split is made") }
         store.flipSplitOrientation(split.id)
         store.setSplitWidthFactors(split.id, [left.id: 0.7, right.id: 0.3])
         store.selectTab(right.id)
         guard let twin = store.duplicateSplit(split.id), let twinData = twin.split else { return expect(false, "a split duplicates (#600)") }
-        let today = store.children(of: space.todayContainerID).map(\.id)
-        expect(today.firstIndex(of: twin.id) == today.firstIndex(of: split.id).map { $0 + 1 } && today.contains(after.id),
-               "the split's copy goes right after it in Today")
+        let rows = store.children(of: space.todayContainerID).map(\.id)
+        expect(rows.firstIndex(of: twin.id) == rows.firstIndex(of: split.id).map { $0 + 1 }, "the split's copy goes right after it")
         let panes = twin.children.compactMap { store.item($0)?.tab?.url }
         expect(panes == ["https://example.com/left", "https://example.com/right"] && Set(twin.children).isDisjoint(with: [left.id, right.id]),
                "with a new tab for each pane's page, in order")
         expect(twinData.orientation == .vertical && twinData.widthFactors[twin.children[0]] == 0.7 && twinData.widthFactors[twin.children[1]] == 0.3,
                "the split's orientation and sizes come along")
-        expect(twinData.focusTabID == twin.children[1] && store.selectedTabID == twin.children[1],
-               "and it opens on the pane the original had focused")
-        expect(store.item(split.id)?.children == [left.id, right.id], "the original split keeps its panes")
+        expect(store.selectedTabID == right.id && store.item(split.id)?.children == [left.id, right.id],
+               "the original split stays open with its panes")
+        expect(twin.children.allSatisfy { store.item($0)?.isUnread == false && store.item($0)?.tab?.timeLastActiveAt == nil },
+               "its panes are saved read too")
 
         guard let paneCopy = store.duplicateTab(left.id) else { return expect(false, "a pane duplicates") }
-        expect(store.item(split.id)?.children == [left.id, right.id] && store.splitContaining(paneCopy.id) == nil,
-               "Duplicate Tab on a split's pane leaves the split as it was")
-        let rows = store.children(of: space.todayContainerID).map(\.id)
-        expect(rows.firstIndex(of: paneCopy.id) == rows.firstIndex(of: split.id).map { $0 + 1 } && paneCopy.tab?.url == "https://example.com/left",
-               "and puts the page's copy right below the split")
+        let after = store.children(of: space.todayContainerID).map(\.id)
+        expect(store.item(split.id)?.children == [left.id, right.id] && store.splitContaining(paneCopy.id) == nil
+               && after.firstIndex(of: paneCopy.id) == after.firstIndex(of: split.id).map { $0 + 1 },
+               "Duplicate on a split's pane leaves the split as it was and puts the page's copy right below it")
 
         let pinnedLeft = store.createTab(url: "https://example.com/pl", in: sid, pinned: true, select: false)
         let pinnedRight = store.createTab(url: "https://example.com/pr", in: sid, pinned: true, select: false)
@@ -2395,6 +2414,11 @@ enum StoreTests {
               let pinnedTwin = store.duplicateSplit(pinnedSplit.id) else { return expect(false, "a pinned split duplicates") }
         expect(store.children(of: space.pinnedContainerID).map(\.id).suffix(2) == [pinnedSplit.id, pinnedTwin.id]
                && pinnedTwin.children.allSatisfy(store.isPinned), "a pinned split's copy is pinned, right after it")
+
+        store.addToFavorites(pinnedSplit.id, in: sid)
+        guard store.isFavorite(pinnedSplit.id), let favoriteTwin = store.duplicateSplit(pinnedSplit.id) else { return expect(false, "a favorite split duplicates") }
+        expect(store.children(of: space.todayContainerID).first?.id == favoriteTwin.id && !store.isFavorite(favoriteTwin.id),
+               "a favorite split's copy is a Today split, as a favorite tab's is")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
@@ -3332,6 +3356,61 @@ enum StoreTests {
                "and land in the archive")
         store.archiveTabsBelow(pinned.id)
         expect(store.item(pinned.id) != nil, "a pinned tab archives nothing below it (Arc offers it on Today tabs only)")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    // promise: #600
+    /// Arc 1.173.1's Today tab menu has two ⌥ rows: Archive Tabs Above (under Archive Tabs Below)
+    /// archives every Today row over the one clicked, Archive Other Tabs (under Archive Tab) every
+    /// Today row but it. Pinned tabs and favorites stay.
+    @MainActor
+    private static func archiveTabsAboveAndOthers() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Above", emoji: "⬆️").id
+        let today = store.space(sid)!.todayContainerID
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false, parent: today, index: 0)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false, parent: today, index: 1)
+        let c = store.createTab(url: "https://c.example/", in: sid, select: false, parent: today, index: 2)
+        let d = store.createTab(url: "https://d.example/", in: sid, select: false, parent: today, index: 3)
+        let e = store.createTab(url: "https://e.example/", in: sid, select: false, parent: today, index: 4)
+        let split = store.createSplit(with: [a.id, b.id])!
+        let pinned = store.createTab(url: "https://p.example/", in: sid, pinned: true, select: false)
+        expect(store.children(of: today).map(\.id) == [split.id, c.id, d.id, e.id], "set up: a split and three tabs in Today")
+        expect(store.hasTodayTabs(above: c.id) && !store.hasTodayTabs(above: split.id), "the split counts as a row above c, and nothing is above the split")
+        store.archiveTabsAbove(d.id)
+        expect(store.children(of: today).map(\.id) == [d.id, e.id], "Archive Tabs Above archives the split and the tab over it")
+        expect(!store.hasTodayTabs(above: d.id) && store.hasTodayTabs(below: d.id), "nothing is above it now, one tab is below")
+        store.archiveOtherTabs(e.id)
+        expect(store.children(of: today).map(\.id) == [e.id] && store.item(pinned.id) != nil,
+               "Archive Other Tabs leaves only it in Today, and the pinned tab")
+        store.archiveTabsAbove(pinned.id)
+        store.archiveOtherTabs(pinned.id)
+        expect(store.item(pinned.id) != nil && store.children(of: today).map(\.id) == [e.id], "a pinned tab archives nothing")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    // promise: #600
+    /// Arc 1.173.1's split menu: Change Icon… gives the split an emoji or a glyph, Reset Name and
+    /// Icon takes the name and the icon away, and Duplicate keeps both.
+    @MainActor
+    private static func splitIconAndReset() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Icons", emoji: "🧩").id
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false)
+        guard let split = store.createSplit(with: [a.id, b.id]) else { return expect(false, "the split is made") }
+        store.setSplitIcon(split.id, .emoji("😀"))
+        expect(store.item(split.id)?.split?.icon == .emoji("😀") && store.item(split.id)?.title == nil, "the split takes an emoji")
+        store.rename(split.id, to: "Work")
+        guard let twin = store.duplicateSplit(split.id) else { return expect(false, "the split duplicates") }
+        expect(twin.split?.icon == .emoji("😀") && twin.title == "Work", "its copy keeps the icon and the name")
+        store.setSplitIcon(split.id, .symbol("star.fill"))
+        expect(store.item(split.id)?.split?.icon == .symbol("star.fill"), "a glyph replaces the emoji")
+        store.resetSplitNameAndIcon(split.id)
+        expect(store.item(split.id)?.split?.icon == SpaceIcon.none && store.item(split.id)?.title == nil,
+               "Reset Name and Icon takes both away")
+        store.setSplitIcon(a.id, .emoji("🙃"))
+        expect(store.item(a.id)?.split == nil, "a tab takes no split icon")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 

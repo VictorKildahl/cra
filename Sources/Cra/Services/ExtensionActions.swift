@@ -219,11 +219,18 @@ final class ExtensionActions {
         guard let p = try? JSONSerialization.jsonObject(with: Data(params.utf8)) as? [String: Any],
               let info = p["targetInfo"] as? [String: Any], let target = info["targetId"] as? String,
               let url = (info["url"] as? String).flatMap(URL.init(string:)), url.scheme == "chrome-extension",
-              let id = url.host, url.fragment == nil,
-              let popup = ExtensionStore.shared.entries.first(where: { $0.extensionID == id })?.popupPath,
-              url.path == "/" + popup.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
-              seenPopupTargets.insert(target).inserted, !placingOwnPopup,
-              let anchor = defaultAnchor(id) else { return }
+              let id = url.host, url.fragment == nil, info["type"] as? String != "service_worker" else { return }
+        guard let entry = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else {
+            // For scenarios: a page of an extension Cra hasn't listed yet can't be told to be its popup.
+            if url.path.hasSuffix(".html"), !seenPopupTargets.contains(target) { CraLog.note("extension popup \(id): not listed yet") }
+            return
+        }
+        guard let popup = entry.popupPath, url.path == "/" + popup.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+              seenPopupTargets.insert(target).inserted, !placingOwnPopup else { return }
+        guard let anchor = defaultAnchor(id) else {
+            CraLog.note("extension popup \(id): no place to show it from")
+            return
+        }
         placePopup(appearingAfter: WindowSnapshot(), anchor: anchor)
     }
 

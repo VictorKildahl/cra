@@ -839,4 +839,8 @@ bool PageSession::AllowUnsafeOperations() {
   return true;
 }
 
+bool PageSession::MayPauseRenderer() {
+  return false;
+}
+
 }  // namespace cra

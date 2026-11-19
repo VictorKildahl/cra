@@ -861,25 +861,54 @@ final class SidebarStore {
         return true
     }
 
-    /// A copy of the tab's page right after it, in the same list (a favorite's copy is a favorite),
-    /// opened. A split's pane is copied below its split, not into it as one pane more (#600).
+    /// Arc's Duplicate (#600, checked in Arc 1.173.1): a copy of the tab's page right after it, in
+    /// the same list (a pinned tab's copy is pinned), left in the background. A favorite's copy is a
+    /// Today tab where new tabs go, and a split pane's copy goes right below its split, not into it as
+    /// one pane more. Every Duplicate, the menu bar's and the command bar's too, leaves it in the
+    /// background, as Arc's do; `select` opens it (the folder preview's).
     @discardableResult
-    func duplicateTab(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
+    func duplicateTab(_ id: UUID, window: UUID? = nil, select: Bool = false) -> SidebarItem? {
         guard let it = items[id], let t = it.tab, var parent = it.parentID else { return nil }
-        var after = id
-        if let split = items[parent], split.isSplit, let outer = split.parentID { (after, parent) = (split.id, outer) }
-        let idx = (items[parent]?.children.firstIndex(of: after) ?? 0) + 1
-        return createTab(url: t.url, title: t.savedTitle, in: spaceID(ofItem: id), pinned: false,
-                         select: true, parent: parent, index: idx, window: window)
+        let space = spaceID(ofItem: id, window: window)
+        let copy: SidebarItem
+        if isFavorite(id) {
+            copy = createTab(url: t.url, title: t.savedTitle, in: space, select: select, window: window)
+        } else {
+            var after = id
+            if let split = items[parent], split.isSplit, let outer = split.parentID { (after, parent) = (split.id, outer) }
+            let idx = (items[parent]?.children.firstIndex(of: after) ?? 0) + 1
+            copy = createTab(url: t.url, title: t.savedTitle, in: space, pinned: false,
+                             select: select, parent: parent, index: idx, window: window)
+        }
+        guard !select else { return copy }
+        markDuplicateRead(copy.id)
+        return items[copy.id]
     }
 
-    /// Arc's Duplicate on a split's menu (#600): a new split right after this one, in the same list,
-    /// with a new tab for each pane's page in order, its orientation and sizes, opened on the pane
-    /// the original had focused.
+    /// Arc saves a duplicate read and never visited (isUnread false, no timeLastActiveAt): no unread
+    /// dot, and not among ⌃Tab's recent tabs, unlike a tab a link opens in the background.
+    private func markDuplicateRead(_ id: UUID) {
+        guard var it = items[id], var t = it.tab else { return }
+        t.timeLastActiveAt = nil
+        it.data = .tab(t)
+        it.isUnread = false
+        items[id] = it
+        touch()
+    }
+
+    /// Arc's Duplicate on a split's menu (#600, Arc 1.173.1): a new split right after this one, in the
+    /// same list, with a new tab for each pane's page in order, its orientation and sizes, left in the
+    /// background and saved read. A favorite split's copy goes to Today where new tabs go, as a
+    /// favorite tab's does.
     @discardableResult
     func duplicateSplit(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
-        guard let original = items[id], let data = original.split, let parent = original.parentID,
-              let at = items[parent]?.children.firstIndex(of: id) else { return nil }
+        guard let original = items[id], let data = original.split, var parent = original.parentID,
+              var at = items[parent]?.children.firstIndex(of: id).map({ $0 + 1 }) else { return nil }
+        if isFavorite(id) {
+            let space = spaceID(ofItem: id, window: window).flatMap { spaces[$0] } ?? focusedSpace(window: window)
+            parent = space.todayContainerID
+            at = settings.newTabsAtTop ? 0 : (items[parent]?.children.count ?? 0)
+        }
         var split = SidebarItem.split(parent: parent)
         split.title = original.title
         var copies: [UUID: UUID] = [:]
@@ -887,22 +916,27 @@ final class SidebarStore {
             guard let t = items[pane]?.tab else { continue }
             var copy = SidebarItem.tab(t.url, title: t.savedTitle, parent: split.id)
             copy.title = items[pane]?.title
-            copy.data = .tab({ var c = TabData(url: t.url, title: t.savedTitle); c.faviconKey = t.faviconKey; return c }())
+            copy.data = .tab({
+                var c = TabData(url: t.url, title: t.savedTitle)
+                c.faviconKey = t.faviconKey
+                c.activeTabBeforeCreationID = selectedTabID(window: window)
+                return c
+            }())
             items[copy.id] = copy
             split.children.append(copy.id)
             copies[pane] = copy.id
         }
-        guard !split.children.isEmpty else { return nil }
+        guard !split.children.isEmpty, items[parent] != nil else { return nil }
         var s = SplitData()
         s.orientation = data.orientation
+        s.emoji = data.emoji
+        s.symbol = data.symbol
         s.widthFactors = Dictionary(uniqueKeysWithValues: data.widthFactors.compactMap { k, v in copies[k].map { ($0, v) } })
         s.focusTabID = data.focusTabID.flatMap { copies[$0] } ?? split.children.first
-        s.timeLastActiveAt = clock.now
         split.data = .split(s)
         items[split.id] = split
-        items[parent]!.children.insert(split.id, at: at + 1)
+        items[parent]!.children.insert(split.id, at: min(at, items[parent]!.children.count))
         touch()
-        selectTab(s.focusTabID, window: window)
         return items[split.id]
     }
 
@@ -1371,6 +1405,21 @@ final class SidebarStore {
     func separateAll(_ splitID: UUID) {
         guard let split = items[splitID], split.isSplit else { return }
         for id in split.children.reversed() { separateFromSplit(id) }
+    }
+
+    /// Arc's Change Icon… on a split (#600): an emoji or a glyph, or `.none` to take it away.
+    func setSplitIcon(_ splitID: UUID, _ icon: SpaceIcon) {
+        guard var split = items[splitID], var s = split.split else { return }
+        s.icon = icon
+        split.data = .split(s)
+        items[splitID] = split
+        touch()
+    }
+
+    /// Arc's Reset Name and Icon: the split shows its panes again.
+    func resetSplitNameAndIcon(_ splitID: UUID) {
+        setSplitIcon(splitID, .none)
+        rename(splitID, to: nil)
     }
 
     func setSplitWidthFactors(_ splitID: UUID, _ factors: [UUID: Double]) {
@@ -2484,6 +2533,37 @@ final class SidebarStore {
               spaces[sid]?.todayContainerID == parent,
               let rows = items[parent]?.children, let i = rows.firstIndex(of: id) else { return }
         for row in rows[(i + 1)...] {
+            guard let r = items[row] else { continue }
+            for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
+        }
+    }
+
+    /// Arc 1.173.1's ⌥ row under Archive Tabs Below: every Today row over this one (#600).
+    func archiveTabsAbove(_ id: UUID) {
+        guard let (rows, i) = todayRows(around: id) else { return }
+        archiveRows(rows[..<i])
+    }
+
+    /// Arc 1.173.1's ⌥ row under Archive Tab: every Today row but this one (#600).
+    func archiveOtherTabs(_ id: UUID) {
+        guard let (rows, i) = todayRows(around: id) else { return }
+        archiveRows(rows[..<i] + rows[(i + 1)...])
+    }
+
+    /// Whether Archive Tabs Above / Below have rows to archive (Arc dims the row otherwise).
+    func hasTodayTabs(above id: UUID) -> Bool { todayRows(around: id).map { $0.index > 0 } ?? false }
+    func hasTodayTabs(below id: UUID) -> Bool { todayRows(around: id).map { $0.index < $0.rows.count - 1 } ?? false }
+
+    /// The Today rows and the index of `id`'s row, for a Today tab (or a split in Today); nil otherwise.
+    private func todayRows(around id: UUID) -> (rows: [UUID], index: Int)? {
+        let row = splitContaining(id)?.id ?? id
+        guard let parent = items[row]?.parentID, let sid = spaceID(ofItem: row), spaces[sid]?.todayContainerID == parent,
+              let rows = items[parent]?.children, let i = rows.firstIndex(of: row) else { return nil }
+        return (rows, i)
+    }
+
+    private func archiveRows<C: Collection>(_ rows: C) where C.Element == UUID {
+        for row in Array(rows) {
             guard let r = items[row] else { continue }
             for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
         }

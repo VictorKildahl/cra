@@ -1,0 +1,62 @@
+# promise: web-page-fullscreen-keyboard-lock
+# web-features: a page's own full screen in a main window's tab (a video's or a game's full-screen button,
+# requestFullscreen) and its keyboard lock (navigator.keyboard.lock: a cloud desktop or a game keeps Esc and
+# the shortcuts). Cra's window takes the page full screen (cra-fullscreen-status.patch). Under the keyboard lock
+# a press of Esc is the page's and full screen stays; without it Esc leaves full screen (Chrome's exclusive
+# access takes Esc before Cra's keys, cra-keys.patch) and the window comes back. Chrome's "Press Esc to exit full
+# screen" notice hung on its never-seen Browser window (#346); Cra shows Arc's toast instead
+# (cra-exclusive-access-notice.patch): "To exit full screen, press ⎋.", under the lock too. As in Arc 1.173, a press
+# under the lock offers the next ("[⎋] again to exit fullscreen"), and that one leaves full screen.
+# little-window-fullscreen has a Little Window's.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=full
+expect-log GET /features.html\?n=full
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.documentElement.requestFullscreen().then(()=>navigator.keyboard.lock()).then(()=>'entered locked')","awaitPromise":true,"userGesture":true}
+expect-log "value":"entered locked"
+wait 3
+cra://debug?windowState=full
+expect-log window state full: main0 fullscreen=1
+expect-log page notice: To exit full screen, press ⎋\.$
+# Under the keyboard lock, Esc is the page's: it hears it, and full screen stays.
+cra://debug?key=%1B,53,0&page=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'locked escape '+said.join(',')+' '+!!document.fullscreenElement"}
+expect-log "value":"locked escape fullscreen:on,key:Escape true"
+expect-log page notice: ⎋ again to exit fullscreen$
+# Unlocked, Esc leaves full screen.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(navigator.keyboard.unlock(),'unlocked')"}
+expect-log "value":"unlocked"
+cra://debug?key=%1B,53,0&page=1
+wait 3
+cra://debug?windowState=left
+expect-log window state left: main0 fullscreen=0 visible=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'full '+said.join(',')"}
+expect-log "value":"full fullscreen:on,key:Escape,fullscreen:off"
+
+# Locked again: the first press is the page's and offers the next; the next leaves full screen.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(said.length=0,document.documentElement.requestFullscreen().then(()=>navigator.keyboard.lock()).then(()=>'locked again'))","awaitPromise":true,"userGesture":true}
+expect-log "value":"locked again"
+wait 3
+cra://debug?windowState=again
+expect-log window state again: main0 fullscreen=1
+cra://debug?key=%1B,53,0&page=1
+wait 0.5
+cra://debug?key=%1B,53,0&page=1
+wait 3
+cra://debug?windowState=twice
+expect-log window state twice: main0 fullscreen=0 visible=1
+expect-log page notice: Esc again leaves full screen$
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'twice '+said.join(',')"}
+expect-log "value":"twice fullscreen:on,key:Escape,fullscreen:off"
+reject-log fault:

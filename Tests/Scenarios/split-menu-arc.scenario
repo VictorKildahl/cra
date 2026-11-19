@@ -1,0 +1,33 @@
+# promise: #600
+# A split's right-click menu is Arc 1.173.1's, read live 19 Nov 2026 (Victor: menus 1:1 with Arc): Share Split
+# View… | Separate All Tabs, Add Tab…, Convert to Vertical Split View | Tab Options and a submenu per pane
+# (Separate from Split View | Share ▸, Mute, Copy Link, Copy link as Markdown | Archive Item) | Change Icon…,
+# Rename… | Duplicate, Move to ▸ (spaces, New Space…) | in Today Archive Item with Archive Other Tabs under ⌥
+# and Archive Tabs Below with Archive Tabs Above under ⌥; pinned, Archive Item and Close while it's open.
+budget rss=800 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=other
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=left
+cra://action/addSplitView
+cra://navigate?url=${PAGE}?n=right
+wait 1
+
+# Today: the open split on top, n=other under it.
+cra://debug?splitMenu=1&label=today
+expect-log split menu today: Share Split View…\|──\|Separate All Tabs\|Add Tab…\|Convert to Vertical Split View\|──\|Tab Options \(off\)\|Fixture left ▸\|Fixture right ▸\|──\|Change Icon…\|Rename…\|──\|Duplicate\|Move to ▸\|──\|Archive Item\|Archive Other Tabs ⌥\|Archive Tabs Below\|Archive Tabs Above \(off\) ⌥$
+expect-log split menu today Fixture left: Separate from Split View\|──\|Share ▸\|Mute \(off\)\|Copy Link\|Copy link as Markdown\|──\|Archive Item$
+expect-log split menu today Move to: .*Personal\|──\|New Space…$
+
+# Duplicate puts the whole split right after it, in the background; Archive Other Tabs leaves the split.
+cra://debug?splitMenu=1&label=dup&run=Duplicate
+expect-log split menu dup ran Duplicate: pinned: +today: n=left\+n=right n=left\+n=right n=other open: n=right$
+cra://debug?splitMenu=1&label=others&run=Archive Other Tabs
+expect-log split menu others ran Archive Other Tabs: pinned: +today: n=left\+n=right open: n=right$
+
+# Pinned with Pin Tab while it's open: Archive Item and Close, no Today rows.
+cra://action/pinTab
+wait 1
+cra://debug?splitMenu=1&label=pinned
+expect-log split menu pinned: Share Split View…\|──\|.*\|Change Icon…\|Rename…\|──\|Duplicate\|Move to ▸\|──\|Archive Item\|Close$

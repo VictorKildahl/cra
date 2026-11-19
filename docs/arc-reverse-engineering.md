@@ -1068,6 +1068,46 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   the menu follows Arc's minus Share/Change Icon (Duplicate added 19 Nov, #600), pinning makes each pane's page its home, and a new
   pane in a pinned split takes its first page as home.
 
+### Duplicate (Arc 1.173.1, live, 19 Nov 2026, issue #600)
+Offline Arc (fake home, see "One space") with a copy of a real sidebar; menus opened with a HID right-click,
+Duplicate pressed over AX, StorableSidebar.json read after each.
+- [O live] A Today tab: the copy goes right after it in Today. A pinned tab: the copy is pinned, right after it.
+- [O live] A favorite: the copy is a Today tab at the top of Today (where new tabs go), not a favorite.
+- [O live] A split: a new split right after it, new tabs for the panes in order, same `layoutOrientation` and
+  `itemWidthFactors`, `focusItemID` nil. A favorite split was not tried; Cra sends its copy to Today too.
+- [O live] The copy never opens: duplicating the open tab or the open split leaves the original open, the copy in
+  the background. (Tabs ▸ Duplicate Tab from the menu bar was not tried; Cra's opens its copy.)
+- Cra (#600): SidebarStore.duplicateTab/duplicateSplit do the same, from the tab, favorite and split menus.
+- [O live] Tab menus (AX rows, ⌥ alternates found by two rows sharing one frame):
+  - Today tab: Copy Link, Share ▸ (AirDrop, Mail, Notes) | Change Icon…, Rename…, Mute (dimmed unless the page
+    plays), Customize Page… (open tab only) | Open in Split View (Add Split View on the open tab), Duplicate,
+    Move to ▸ (spaces, ──, New Space…) | Archive Tab (⌥ Archive Other Tabs), Archive Tabs Below (⌥ Archive Tabs
+    Above), each dimmed with nothing to archive.
+  - Pinned tab: the same to Mute, then Customize Page… (open), Edit Pinned Page ▸ (Replace Pinned URL with Current,
+    dimmed on the pinned page; Edit…) | split row, Duplicate, Move to ▸ | Remove Pin. Remove Pin archives the tab
+    (StorableArchiveItems, reason manual). No Close row on an open pinned tab.
+  - Favorite: as a pinned tab, Move to ▸ is Profile ▸, and the last section is Close Tab (open only), Remove Favorite.
+  - The menu bar has no Duplicate: Tabs is New Tab…, Pin/Unpin Tab, Open Little Arc or Peek in…, New Folder… |
+    Next Tab, Previous Tab, Reveal Tab in Sidebar | Clear Today, Reset all tabs in this Space. The command bar's
+    Duplicate Current Tab leaves the copy in the background, right after the original.
+- Cra (#600, Victor: menus 1:1 with Arc): SidebarMenus.tab and the favorite tile's menu follow these rows. Cra keeps
+  Use Site Icon, Use Page Title and Tile Color ▸, which have no other way in; Pin/Unpin Tab, Add to Favorites, Move
+  to Folder ▸, New Folder with Tab, Back to Pinned Page and Close and Keep Pinned are gone (⌘D, drag, the menu bar,
+  ⌘W). Tabs ▸ Duplicate Tab and its command-bar row leave the copy in the background.
+- [O live] A tab in a pinned folder has the pinned tab's menu, row for row.
+- [O live] Split menu (Today, open): Share Split View… | Separate All Tabs, Add Tab…, Convert to Vertical Split View |
+  Tab Options (dimmed header), a submenu per pane (Separate from Split View | Share ▸, Mute, Copy Link, Copy link as
+  Markdown | Archive Item) | Change Icon…, Rename… | Duplicate, Move to ▸ (spaces, ──, New Space…) | Archive Item
+  (⌥ Archive Other Tabs), Archive Tabs Below (⌥ Archive Tabs Above). Pinned and open: the last section is Archive
+  Item, Close. With a name or an icon, Reset Name and Icon comes before Change Icon….
+- [O live] Change Icon… on a split opens the Emoji / Icon picker under the row; picking 😀 turned the row into one
+  row "😀 2 Tabs" and saved `splitView.customInfo.iconType = {emoji: 128512, emoji_v2: "😀"}`; the picker then
+  shows a trash button.
+- [O live] Share Split View… shows the share warning sheet: "Send this Split View to anyone, on any browser.",
+  "Anyone with this link can view your Split View. …", Cancel / Copy Link to Split View (offline, no link made).
+- Cra (#600): SidebarMenus.split follows these rows; SplitData.emoji/symbol hold the icon (SpaceIconPicker without
+  its Image tab); the share link is FolderShareLink's, toast "Copied Folder URL".
+
 ### Clear cookies / cache (Arc 1.171, 30 Oct)
 - [O] Command bar: "clear" lists Clear Cache and Refresh (selected, above the typed row), then "clear", then
   Clear Cookies and Refresh; "clear cook" puts Clear Cookies and Refresh first; both rows use a trash glyph.

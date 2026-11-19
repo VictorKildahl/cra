@@ -1,0 +1,30 @@
+# promise: web-page-eyedropper
+# web-features: a page's colour picker that samples the screen (a design tool's eyedropper: new
+# EyeDropper().open()). Chrome opens macOS's colour sampler through its Browser's window (OpenEyeDropper),
+# which on the engine is never seen (a 1 pt strip along Cra's window, #346): the sampler has to open and wait
+# for a pick, not turn the page down at once, and the page has to be able to call it off. It takes the screen:
+# the sampler's loupe follows the real pointer.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=eye
+expect-log GET /features.html\?n=eye
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"abortable('eye',s=>new EyeDropper().open({signal:s}))","userGesture":true}
+expect-log "value":"eye asked"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'eye '+state.eye"}
+expect-log "value":"eye waiting"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"abort('eye')"}
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'eye closed '+state.eye"}
+expect-log "value":"eye closed AbortError"
+reject-log fault:

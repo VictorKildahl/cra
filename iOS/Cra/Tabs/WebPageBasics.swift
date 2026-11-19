@@ -77,13 +77,52 @@ extension WebPage: WKDownloadDelegate {
     /// the tab a blank white page.
     func answerLoadFailure(_ error: Error) {
         let failure = error as NSError
-        let answer = MobileLoadFailure.answer(domain: failure.domain, code: failure.code)
+        let url = (failure.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+            ?? (failure.userInfo[NSURLErrorFailingURLStringErrorKey] as? String).flatMap(URL.init(string:))
+        // Another app's address (mailto: and the like) that got through to WebKit says nothing.
+        let answer = MobileLoadFailure.answer(domain: failure.domain, code: failure.code, address: url?.absoluteString)
         if answer == .nothing || (answer == .certificateWarning && offerCertificateBypass(for: failure)) { return }
-        guard let url = (failure.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
-                ?? (failure.userInfo[NSURLErrorFailingURLStringErrorKey] as? String).flatMap(URL.init(string:)) else { return }
+        guard let url else { return }
         // At the failing address, so the address shows it and Reload tries it again.
+        errorPageAddress = url
         webView.loadSimulatedRequest(URLRequest(url: url),
                                      responseHTML: MobileLoadFailure.page(host: url.host ?? url.absoluteString, message: failure.localizedDescription))
+    }
+
+    /// iOS 26.5's WebKit answers an address it refuses (a restricted port, an address of only
+    /// zeros) with an empty about:blank instead of failing: answer it as the 103 a newer WebKit
+    /// fails it with (`MobileLoadFailure.isRefusedAsBlank`). A load the tab starts is answered
+    /// before that (`answerRefusal(of:)`); this is left for going back or forward to one.
+    func answerRefusalShownAsBlank(requested: URL?) {
+        guard let requested, let committed = webView.url?.absoluteString,
+              MobileLoadFailure.isRefusedAsBlank(requested: requested.absoluteString, committed: committed) else { return }
+        answerRefusal(of: requested)
+    }
+
+    /// The error page for an address WebKit refuses, with the 103 a newer WebKit fails it with.
+    func answerRefusal(of url: URL) {
+        answerLoadFailure(NSError(domain: MobileLoadFailure.webKitErrorDomain, code: MobileLoadFailure.restrictedPortCode, userInfo: [
+            NSURLErrorFailingURLErrorKey: url, NSLocalizedDescriptionKey: MobileLoadFailure.restrictedPortMessage,
+        ]))
+    }
+
+    // MARK: Other apps' addresses
+
+    /// To the app that handles it (`MobileExternalLinks`). iOS asks before a call itself. With no
+    /// app for it, nothing happens and the page stays as it is.
+    func openInApp(_ url: URL) {
+        UIApplication.shared.open(url)
+    }
+
+    /// A page that sent itself to another app's address without a tap: Safari's question first.
+    /// Nothing if the page isn't on screen, or if the question is already up (a page repeating
+    /// the redirect gets one question).
+    func askToOpenInApp(_ url: URL, app: String?) {
+        guard let presenter, !(presenter is UIAlertController) else { return }
+        let alert = UIAlertController(title: MobileExternalLinks.question(app: app), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: MobileExternalLinks.cancelButton, style: .cancel))
+        alert.addAction(UIAlertAction(title: MobileExternalLinks.openButton, style: .default) { [weak self] _ in self?.openInApp(url) })
+        presenter.present(alert, animated: true)
     }
 
     /// A page whose certificate can't be verified: say so, and let the user go on if they insist
@@ -128,23 +167,31 @@ extension WebPage: WKDownloadDelegate {
 
     func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo) async -> UIContextMenuConfiguration? {
         guard let url = elementInfo.linkURL else { return nil }
+        let items = MobileLinkMenu.items(incognito: isIncognito)
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
-            UIMenu(children: [
-                UIAction(title: "Open", image: UIImage(systemName: "arrow.up.right")) { _ in self?.webView.load(URLRequest(url: url)) },
-                UIAction(title: "Open in New Tab", image: UIImage(systemName: "plus.square.on.square")) { _ in
-                    guard let self else { return }
-                    self.delegate?.webPage(self, openInNewTab: url)
-                },
-                UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in
-                    UIPasteboard.general.string = CleanURL.withoutTrackers(url.absoluteString)
-                },
-                UIAction(title: "Share...", image: UIImage(systemName: "square.and.arrow.up")) { _ in
-                    guard let self, let presenter = self.presenter else { return }
-                    let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                    share.popoverPresentationController?.sourceView = self.webView
-                    presenter.present(share, animated: true)
-                },
-            ])
+            UIMenu(children: items.map { item in
+                UIAction(title: item.title, image: UIImage(systemName: item.symbol)) { _ in self?.linkMenu(picked: item, url: url) }
+            })
+        }
+    }
+
+    private func linkMenu(picked item: MobileLinkMenu.Item, url: URL) {
+        switch item {
+        case .open:
+            webView.load(URLRequest(url: url))
+        case .openInNewTab:
+            delegate?.webPage(self, openInNewTab: url)
+        case .openInBackgroundTab:
+            delegate?.webPage(self, openInBackground: url)
+        case .openInIncognito:
+            delegate?.webPage(self, openInIncognito: url)
+        case .copyLink:
+            UIPasteboard.general.string = CleanURL.withoutTrackers(url.absoluteString)
+        case .share:
+            guard let presenter else { return }
+            let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            share.popoverPresentationController?.sourceView = webView
+            presenter.present(share, animated: true)
         }
     }
 }

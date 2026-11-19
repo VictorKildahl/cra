@@ -1,0 +1,53 @@
+# promise: web-page-save-pickers
+# web-features: the other file pickers. A page's Save and folder pickers open over Cra's window and wait for
+# an answer: showSaveFilePicker (a web editor's Save As), showDirectoryPicker (a photo uploader's folder) and
+# an <input webkitdirectory> (a whole folder at once). Chrome opens them only over a big enough window and for
+# its Browser's active tab, and #571 showed what happens when it measures the never-seen window instead: every
+# picker turned down at once, with nothing on screen. upload-picker has the open picker and the plain input.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=save
+expect-log GET /features.html\?n=save
+wait 2
+
+# showSaveFilePicker: a sheet, still waiting while it is up, AbortError once it is closed.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('save',showSaveFilePicker({suggestedName:'notes.txt'}))","userGesture":true}
+expect-log "value":"save asked"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'save '+state.save"}
+expect-log "value":"save waiting"
+cra://debug?windowState=save
+expect-log window state save: main0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'save closed '+state.save"}
+expect-log "value":"save closed AbortError"
+
+# showDirectoryPicker: the same.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('dir',showDirectoryPicker())","userGesture":true}
+expect-log "value":"dir asked"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'dir '+state.dir"}
+expect-log "value":"dir waiting"
+cra://debug?windowState=dir
+expect-log window state dir: main0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'dir closed '+state.dir"}
+expect-log "value":"dir closed AbortError"
+
+# <input webkitdirectory>: a folder picker, cancelled only when it is closed.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(folder.click(),'folder asked')","userGesture":true}
+expect-log "value":"folder asked"
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'folder answered '+said.filter(s=>s.startsWith('folder')).length"}
+expect-log "value":"folder answered 0"
+cra://debug?windowState=folder
+expect-log window state folder: main0 .* sheet=1
+cra://debug?endSheets=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'folder closed '+said.join(',')"}
+expect-log "value":"folder closed .*folder:cancel"
+reject-log fault:

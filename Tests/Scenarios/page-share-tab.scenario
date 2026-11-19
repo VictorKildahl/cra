@@ -1,0 +1,26 @@
+# promise: web-page-share-tab
+# web-features: a page asks to share its own tab (getDisplayMedia with preferCurrentTab: a slide deck, a
+# meeting's "present this tab"). Chrome asks "Allow … to see this tab?" in a tab-modal dialog it hangs on its
+# Browser's window, a never-seen 1 pt strip along Cra's window since 0.1.49 (#346): it has to come up over the
+# page (cra-page-dialogs.patch), and Cancel has to tell the page no. (Sharing a screen or a window opens
+# macOS's picker and asks for Screen Recording: docs/release-checklist.md.)
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=present
+expect-log GET /features.html\?n=present
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('display',navigator.mediaDevices.getDisplayMedia({preferCurrentTab:true,video:true}))","userGesture":true}
+expect-log "value":"display asked"
+wait 2
+cra://debug?pageDialogs=share-tab
+expect-log page dialog share-tab: chrome [0-9]{3,}x[0-9]{3,} at=page front=1 text=Allow http://127\.0\.0\.1:[0-9]+ to see this tab\?.* buttons=Cancel\|Allow
+cra://debug?pageDialogs=share-tab-cancel&press=Cancel
+expect-log page dialogs share-tab-cancel: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'display '+state.display"}
+expect-log "value":"display NotAllowedError"
+cra://debug?pageDialogs=share-tab-gone
+expect-log page dialogs share-tab-gone: n=0
+reject-log fault:

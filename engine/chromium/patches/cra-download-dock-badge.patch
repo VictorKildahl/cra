@@ -1,0 +1,48 @@
+diff --git a/chrome/browser/download/download_status_updater.cc b/chrome/browser/download/download_status_updater.cc
+--- a/chrome/browser/download/download_status_updater.cc
++++ b/chrome/browser/download/download_status_updater.cc
+@@ -50,6 +50,16 @@
+ const char WasInProgressData::kKey[] =
+   "DownloadItem DownloadStatusUpdater WasInProgressData";
+ 
++// Cra: whether the Dock tile counts a download. Chrome's download UI shows neither a transient download nor a
++// Web Store install's own CRX download, and Cra's downloads list doesn't either; the tile counted them, so an
++// imported extension's store reinstall put a download on Cra's Dock icon at every launch that no list had
++// (GitHub #491).
++bool CraShowsOnDock(const download::DownloadItem* item) {
++  return !item->IsTransient() &&
++         item->GetDownloadSource() !=
++             download::DownloadSource::EXTENSION_INSTALLER;
++}
++
+ }  // anonymous namespace
+ 
+ DownloadStatusUpdater::DownloadStatusUpdater() = default;
+@@ -69,7 +79,8 @@
+       content::DownloadManager::DownloadVector items;
+       notifier->GetManager()->GetAllDownloads(&items);
+       for (download::DownloadItem* item : items) {
+-        if (item->GetState() == download::DownloadItem::IN_PROGRESS) {
++        if (item->GetState() == download::DownloadItem::IN_PROGRESS &&
++            CraShowsOnDock(item)) {
+           ++*download_count;
+           if (item->GetTotalBytes() <= 0) {
+             // There may or may not be more data coming down this pipe.
+@@ -104,7 +115,7 @@
+   // TODO(benjhayden): Use the Observer interface to distinguish between
+   // historical and started downloads.
+   if (item->GetState() == download::DownloadItem::IN_PROGRESS &&
+-      !item->IsTransient()) {
++      CraShowsOnDock(item)) {
+     UpdateAppIconDownloadProgress(item);
+     new WasInProgressData(item);
+   }
+@@ -115,7 +126,7 @@
+ void DownloadStatusUpdater::OnDownloadUpdated(content::DownloadManager* manager,
+                                               download::DownloadItem* item) {
+   if (item->GetState() == download::DownloadItem::IN_PROGRESS &&
+-      !item->IsTransient()) {
++      CraShowsOnDock(item)) {
+     // If the item was interrupted/cancelled and then resumed/restarted, then
+     // set WasInProgress so that UpdateAppIconDownloadProgress() will be called
+     // when it completes.

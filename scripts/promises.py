@@ -17,6 +17,11 @@ few lowercase words naming the crash (Cra's crash reports have no number a reade
     // promise: crash-zen-favicon-size                       a harness func or an iPhone UI test
     # promise: crash-fedcm-dialog                            a scenario
 
+A web feature's scenario (docs/web-features.md: what a page asks its browser for, and whose break reached users
+in 0.1.49 without an issue to name) is pinned under a web ID, `web-` and the feature:
+
+    # promise: web-page-repost                               a scenario
+
 Tests/promises.lock records each such test with its issue and a hash of its code (comments and
 whitespace left out). A tagged test that changes, is renamed or is deleted fails this check, and so
 does a new one, until the lock is updated:
@@ -41,8 +46,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 LOCK = ROOT / "Tests" / "promises.lock"
 SOURCES = ["Packages/CraCore/Tests", "Tests", "iOS/CraUITests"]
 ISSUE = re.compile(r"github\.com/VictorKildahl/cra/issues/(\d+)")
-CRASH = r"crash-[a-z0-9]+(?:-[a-z0-9]+)*"
-# A promise's ID: an issue ("#155") or a crash report's fix ("crash-fedcm-dialog").
+CRASH = r"(?:crash|web)-[a-z0-9]+(?:-[a-z0-9]+)*"
+# A promise's ID: an issue ("#155"), a crash report's fix ("crash-fedcm-dialog") or a web feature ("web-page-repost").
 TAG = re.compile(r"#\d+|" + CRASH)
 CRASH_BUG = re.compile(r'\.bug\(\s*id:\s*"(' + CRASH + r')"')
 HEADER = """\
@@ -155,7 +160,7 @@ def promises(rev=None):
         marks = list(MARK.finditer(s))
         for loose in LOOSE.finditer(s):
             if not MARK.fullmatch(loose.group(0)):
-                sys.exit(f"promises: {rel}: `{loose.group(0).strip()}` names no issue (#n) or crash ID (crash-a-b)")
+                sys.exit(f"promises: {rel}: `{loose.group(0).strip()}` names no issue (#n), crash ID (crash-a-b) or web ID (web-a-b)")
         if rel.endswith(".scenario"):
             # The whole journey is the promise; `#` lines are comments.
             body = re.sub(r"^\s*#.*$", "", s, flags=re.M)
@@ -195,7 +200,8 @@ def promises(rev=None):
 
 def pinned(ids) -> str:
     issues = sum(1 for i in ids if i.startswith("#"))
-    return f"{issues} issues and {len(ids) - issues} crash fixes"
+    web = sum(1 for i in ids if i.startswith("web-"))
+    return f"{issues} issues and {len(ids) - issues - web} crash fixes" + (f" and {web} web features" if web else "")
 
 
 def read_lock(rev=None):

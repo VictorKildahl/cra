@@ -110,6 +110,14 @@ public enum MobileSuggestions {
         text.split { !$0.isLetter && !$0.isNumber }.map(String.init)
     }
 
+    /// One page whatever its scheme, "www.", trailing slash or fragment; an address that isn't a
+    /// web page is its own key.
+    static func pageKey(_ address: String) -> String {
+        guard let url = URL(string: address), let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = url.host?.lowercased(), !host.isEmpty else { return address }
+        return pageKey(url, host: host)
+    }
+
     /// One page whatever its scheme, "www.", trailing slash or fragment.
     private static func pageKey(_ url: URL, host: String) -> String {
         var path = url.path

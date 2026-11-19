@@ -167,7 +167,11 @@ final class ShinyToast {
         let capWidth = keyCap.map { measure($0.keys, Self.capFont) + 2 * Self.capPadding }
         let afterWidth = keyCap.map { measure($0.after, Self.font) } ?? 0
         let lead = measure(text, Self.font)
-        let textWidth = capWidth.map { lead + Self.capGap + $0 + Self.capGap + afterWidth } ?? lead
+        // A cap that starts the toast (Arc's "[⎋] again to exit fullscreen") sits as far in from the pill's left edge as
+        // from its top and bottom, with no gap before it.
+        // capLead: from the text's start (`padding` in) to the cap.
+        let capLead = lead > 0 ? lead + Self.capGap : (Self.height - Self.capHeight) / 2 - Self.padding
+        let textWidth = capWidth.map { capLead + $0 + Self.capGap + afterWidth } ?? lead
         let buttonWidth = glyph != nil ? Self.glyphButton.width
             : action.map { ceil(($0.title as NSString).size(withAttributes: [.font: Self.buttonFont]).width) + 2 * Self.buttonPadding }
         let height = glyph != nil ? Self.glyphHeight : Self.height
@@ -199,7 +203,7 @@ final class ShinyToast {
         if let keyCap, let capWidth {
             label.alignmentMode = .left
             label.frame = CGRect(x: Self.padding, y: (height - lineHeight) / 2, width: lead, height: lineHeight)
-            cap.frame = CGRect(x: Self.padding + lead + Self.capGap, y: (height - Self.capHeight) / 2, width: capWidth, height: Self.capHeight)
+            cap.frame = CGRect(x: Self.padding + capLead, y: (height - Self.capHeight) / 2, width: capWidth, height: Self.capHeight)
             cap.backgroundColor = colors.text.withAlphaComponent(0.1).cgColor
             let capLine = ceil(Self.capFont.ascender - Self.capFont.descender)
             capLabel.frame = CGRect(x: cap.frame.minX, y: (height - capLine) / 2, width: capWidth, height: capLine)

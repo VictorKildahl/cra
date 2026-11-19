@@ -103,6 +103,36 @@ import Testing
         #expect(r.ownParts == 1)
     }
 
+    /// The readout names other apps' windows over it by owner and layer, and leaves out see-through ones, ones
+    /// elsewhere on screen and Cra's own: on Nightly's runners something covered the window (#533).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/533")) func summaryNamesWhatIsOverIt() {
+        var finder = Self.info(501, pid: Self.other, CGRect(x: 0, y: 25, width: 1728, height: 1092))
+        finder["kCGWindowOwnerName"] = "Finder"
+        finder["kCGWindowLayer"] = NSNumber(value: 3)
+        var clear = Self.info(502, pid: Self.other, Self.main, alpha: 0)
+        clear["kCGWindowOwnerName"] = "Clear"
+        var away = Self.info(503, pid: Self.other, CGRect(x: 5000, y: 0, width: 100, height: 100))
+        away["kCGWindowOwnerName"] = "Away"
+        let r = WindowCoverage.read(window: Self.info(87008, pid: Self.pid, Self.main),
+                                    inFront: [Self.info(Self.host, pid: Self.pid, Self.main, alpha: 0), finder, clear, away],
+                                    pid: Self.pid, isOwnPart: { $0 == Self.host })
+        #expect(r.overlapping == ["Finder@3"])
+        #expect(r.summary == "on screen, 4 in front (1 own parts, 2 see-through), covered, over it: Finder@3")
+    }
+
+    /// The Dock's window spans its display at layer 20 and is clear apart from the Dock: on Nightly's runners it was the
+    /// only other window over Cra's, which counted as covered and sent its video to Picture in Picture (#533).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/533")) func theDocksWindowCoversNothing() {
+        var dock = Self.info(601, pid: Self.other, CGRect(x: 0, y: 0, width: 1728, height: 1117))
+        dock["kCGWindowOwnerName"] = "Dock"
+        dock["kCGWindowLayer"] = NSNumber(value: 20)
+        let r = WindowCoverage.read(window: Self.info(87008, pid: Self.pid, Self.main),
+                                    inFront: [Self.info(Self.host, pid: Self.pid, Self.main, alpha: 0), dock],
+                                    pid: Self.pid, isOwnPart: { $0 == Self.host })
+        #expect(!r.covered)
+        #expect(r.overlapping.isEmpty)
+    }
+
     /// Another of Cra's own browser windows is in front, not a part of this one: it covers like any app.
     @Test func anotherCraWindowCovers() {
         let r = WindowCoverage.read(window: Self.info(87008, pid: Self.pid, Self.main),

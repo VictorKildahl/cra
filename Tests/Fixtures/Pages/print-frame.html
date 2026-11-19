@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Print frame</title>
+<!-- A frame from another site that prints itself (a shop's receipt widget, a ticket in an embed), for the
+     page-print-frame scenario. It answers its parent so the scenario can tell it loaded and printed. -->
+<p>Receipt in a frame</p>
+<script>
+  parent.postMessage('loaded', '*');
+  addEventListener('message', function (e) {
+    if (e.data == 'print') setTimeout(function () { print(); parent.postMessage('printed', '*'); }, 0);
+  });
+</script>

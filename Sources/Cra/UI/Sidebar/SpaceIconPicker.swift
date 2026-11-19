@@ -10,6 +10,8 @@ struct SpaceIconPicker: View {
     let currentSymbol: String?
     /// The user's own picture (Space.iconImage), if that is the space's icon (not in Arc).
     var currentImage: Data? = nil
+    /// The Image tab (a space's own picture, not in Arc). A split's picker has Arc's two tabs (#600).
+    var showsImage: Bool = true
     let onPick: (String) -> Void
     let onPickSymbol: (String) -> Void
     var onPickImage: (Data) -> Void = { _ in }
@@ -28,11 +30,11 @@ struct SpaceIconPicker: View {
                 Picker("", selection: $tab) {
                     Text("Emoji").tag(0)
                     Text("Icon").tag(1)
-                    Text("Image").tag(2)
+                    if showsImage { Text("Image").tag(2) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 160)
+                .frame(width: showsImage ? 160 : 108)
                 Button(action: onRemove) {
                     Image(systemName: "trash").font(.system(size: 14, weight: .regular))
                 }

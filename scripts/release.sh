@@ -61,6 +61,21 @@ for ARCH in $ARCHS; do
     scripts/package.sh "$APP"
   fi
 
+  # The web features (docs/web-features.md): file pickers, print, dialogs, prompts and choosers on this build, in
+  # the background while Apple notarizes it. 0.1.49 shipped with every upload button dead (#571) and print preview
+  # 3 pt tall (#574) because nothing tried them. On a copy (stapling writes into the app), for this Mac's CPU
+  # (the other CPU's app is the same code). CRA_SKIP_WEB_FEATURES="<why>" releases without it; say why in the notes.
+  WEB_FEATURES_PID=""
+  if [ "$ARCH" = "$(uname -m)" ] && [ -z "${CRA_SKIP_WEB_FEATURES:-}" ]; then
+    rm -rf build/web-features && mkdir -p build/web-features
+    ditto "$APP" build/web-features/Cra.app
+    CRA_APP="$PWD/build/web-features/Cra.app" CRA_BUDGETS=report scripts/scenario.sh web-features \
+      > build/web-features/run.log 2>&1 &
+    WEB_FEATURES_PID=$!
+  elif [ -n "${CRA_SKIP_WEB_FEATURES:-}" ]; then
+    echo "web features skipped: $CRA_SKIP_WEB_FEATURES" | tee "build/dist/web-features-$ARCH.txt"
+  fi
+
   if [ "$IDENTITY" != "-" ]; then
     # One submission per CPU: the DMG, whose ticket covers the app inside it. Stapled to the DMG
     # and to the app (macOS checks the app inside the DMG online, as for most apps).
@@ -73,6 +88,22 @@ for ARCH in $ARCHS; do
     echo "Gatekeeper accepts $APP"
   else
     echo "Ad-hoc build: not notarized. Set CRA_SIGN_IDENTITY and notary credentials for a distributable build." >&2
+  fi
+  if [ -n "$WEB_FEATURES_PID" ]; then
+    echo "Waiting for the web features on $ARCH (build/web-features/run.log)"
+    if wait "$WEB_FEATURES_PID"; then WEB_FEATURES=0; else WEB_FEATURES=1; fi
+    cp build/scenarios/web-features.txt "build/dist/web-features-$ARCH.txt"
+    cat "build/dist/web-features-$ARCH.txt"
+    # Never left registered next to the installed Cra.
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+      -u build/web-features/Cra.app 2>/dev/null || true
+    rm -rf build/web-features/Cra.app
+    if [ "$WEB_FEATURES" != 0 ]; then
+      tail -40 build/web-features/run.log >&2
+      echo "Release stopped: a web feature is broken on this build (docs/web-features.md)." >&2
+      echo "Fix it, or CRA_SKIP_WEB_FEATURES=\"<why>\" to release anyway and say so in the notes." >&2
+      exit 1
+    fi
   fi
   SUFFIX_LOWER="$(echo "$SUFFIX" | tr '[:upper:]' '[:lower:]')"
   export CRA_STABLE_FEED="$STABLE_DIR/appcast$SUFFIX_LOWER.xml"

@@ -1,0 +1,37 @@
+# promise: #552
+# A link opened in a background tab loads there, but its video starts only when the tab is shown, as in Arc 1.173.1:
+# a ⌘-click (Chromium makes that page hidden) and Open Link in New Tab (Cra makes the page; on 0.1.49 it started
+# shown and played behind the page). With spare pages on, the menu's tab takes a spare and hides it before it loads;
+# CRA_SPARE_PAGES=0 makes the page itself.
+budget rss=900 stalls50=20
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "openLinksInForeground": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"const a=document.createElement('a');a.id='video-link';a.href='${ORIGIN}/background-video.html?linked';a.textContent='Video';a.style='position:fixed;inset:0;z-index:99999';document.body.appendChild(a);'video link ready'"}
+expect-log video link ready
+cra://debug?clickAt=760,400&mods=1048576
+expect-log POST /linked-loaded-hidden
+wait 2
+cra://debug?selectedTab=beforeVideo
+expect-log selected tab beforeVideo: \S+n=source$
+reject-log POST /linked-playing-
+cra://debug?selectTab=background-video.html?linked
+expect-log POST /linked-playing-visible
+
+# The right-click menu asks Cra to create the page, using a spare if ready.
+cra://debug?selectTab=n=source
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('video-link').href='${ORIGIN}/background-video.html?menu';'menu link ready'"}
+expect-log menu link ready
+cra://debug?nextPageMenuCommand=IDC_CONTENT_CONTEXT_OPENLINKNEWTAB
+expect-log Cra next page menu command IDC_CONTENT_CONTEXT_OPENLINKNEWTAB: set
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":300,"y":300,"button":"right","buttons":2,"clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":300,"y":300,"button":"right","buttons":0,"clickCount":1}
+expect-log POST /menu-loaded-hidden
+wait 2
+cra://debug?selectedTab=beforeMenu
+expect-log selected tab beforeMenu: \S+n=source$
+reject-log POST /menu-playing-
+cra://debug?selectTab=background-video.html?menu
+expect-log POST /menu-playing-visible

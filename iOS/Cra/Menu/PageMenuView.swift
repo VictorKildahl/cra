@@ -6,6 +6,8 @@ protocol PageMenuDelegate: AnyObject {
     func pageMenuGoForward()
     func pageMenuReload()
     func pageMenuCopyLink()
+    /// The address in the capsule: edit it in the search sheet (#572).
+    func pageMenuEditAddress()
     func pageMenu(didPick tile: MobilePageMenu.Tile)
     func pageMenu(didPick row: MobilePageMenu.Row)
     func pageMenuZoom(up: Bool)
@@ -72,6 +74,12 @@ final class PageMenuView: UIView {
         hostLabel.textAlignment = .center
         hostLabel.lineBreakMode = .byTruncatingTail
         hostLabel.accessibilityIdentifier = "menu-host"
+        hostLabel.accessibilityHint = "Edits the address"
+        // A tap on the address edits it, as the reporter of #572 expected.
+        hostLabel.isUserInteractionEnabled = true
+        hostLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(addressTapped)))
+        // Still read as the page's site (UIKit would make a tappable label a button).
+        hostLabel.accessibilityTraits = .staticText
         capsule.addSubview(hostLabel)
 
         for tile in MobilePageMenu.tiles(canSummarize: state.canSummarize) {
@@ -229,6 +237,7 @@ final class PageMenuView: UIView {
     @objc private func forwardTapped() { delegate?.pageMenuGoForward() }
     @objc private func reloadTapped() { delegate?.pageMenuReload() }
     @objc private func linkTapped() { delegate?.pageMenuCopyLink() }
+    @objc private func addressTapped() { delegate?.pageMenuEditAddress() }
     @objc private func withoutBlockersTapped() { delegate?.pageMenuReloadWithoutBlockers() }
 }
 

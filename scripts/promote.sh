@@ -18,6 +18,23 @@ REPO=VictorKildahl/cra
 LATEST="$(gh release view -R "$REPO" --json tagName -q .tagName)"
 NEWEST="${LATEST#v}"
 gh release view -R "$REPO" "v$VERSION" --json tagName >/dev/null || { echo "No release v$VERSION" >&2; exit 1; }
+
+# Stable gets only a build whose web features passed (docs/web-features.md): release.sh ran them on it and put
+# web-features-arm64.txt in the release. CRA_PROMOTE_UNTESTED="<why>" promotes one without (a release from before
+# the check, an emergency); say why in the commit.
+if [ -z "${CRA_PROMOTE_UNTESTED:-}" ]; then
+  GATE="$(mktemp -d /tmp/cra-promote-gate.XXXXXX)"
+  if ! gh release download -R "$REPO" "v$VERSION" -p "web-features-arm64.txt" -D "$GATE" --clobber 2>/dev/null; then
+    echo "Cra $VERSION has no web-features-arm64.txt: its web features were never run (CRA_PROMOTE_UNTESTED=\"<why>\")" >&2
+    rm -rf "$GATE"; exit 1
+  fi
+  cat "$GATE/web-features-arm64.txt"
+  grep -qx "result: passed" "$GATE/web-features-arm64.txt" ||
+    { echo "Cra $VERSION failed its web features: not promoted" >&2; rm -rf "$GATE"; exit 1; }
+  rm -rf "$GATE"
+else
+  echo "Promoting without web features: $CRA_PROMOTE_UNTESTED"
+fi
 if [ "$(printf '%s\n%s\n' "$VERSION" "$NEWEST" | sort -V | tail -1)" != "$NEWEST" ]; then
   echo "Cra $VERSION is newer than the latest release ($NEWEST)" >&2
   exit 1

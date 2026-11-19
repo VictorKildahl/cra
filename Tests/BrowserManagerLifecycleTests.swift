@@ -218,6 +218,7 @@ enum BrowserManagerLifecycleTests {
         await pageProbeCase()
         await pageEngineCase()
         await backgroundTabToastCase()
+        backgroundPageStartsHiddenCase()
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
         permissionPopoverStepsAsideCase()
@@ -634,6 +635,59 @@ enum BrowserManagerLifecycleTests {
         manager.browser(page, requestsNewTabWithURL: "cra://action/nextTab", inBackground: true)
         expect(observer.backgroundTabs.count == 2, "a cra:// link opens nothing, so nothing is said")
         manager.closeAll()
+    }
+
+    // promise: #552
+    /// A link opened behind the page (Open Link in New Tab with links opening in the background) gets a page
+    /// that starts hidden, so its video waits until its tab is shown, as in Arc 1.173.1 (Chromium's ⌘-click
+    /// already makes such a page hidden). Every other page starts shown, as Chromium makes it: a tab shown
+    /// in front, a link opened in front, a tab an agent opens without showing it, and a spare made ahead.
+    /// A background tab that takes a spare has it hidden before it loads.
+    @MainActor
+    private static func backgroundPageStartsHiddenCase() {
+        SparePages.shared.dropAll()
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let source = store.createTab(url: "https://example.test/source").id
+        manager.show(source, focus: false)
+        let page = manager.runtime(for: source)!.browser
+        expect(!page.startedHidden, "a tab shown in front starts shown")
+        func tab(_ url: String) -> UUID? { store.items.values.first { $0.tab?.url == url }?.id }
+        func opened(_ url: String) -> CraBrowser? { tab(url).flatMap { manager.runtime(for: $0)?.browser } }
+
+        manager.browser(page, requestsNewTabWithURL: "https://example.test/behind", inBackground: true)
+        let behind = opened("https://example.test/behind")
+        expect(behind?.startedHidden == true && behind?.takenURL == nil, "Open Link in New Tab behind the page makes its page hidden")
+
+        clock.advance(by: SparePage.refillDelay)
+        manager.browser(page, requestsNewTabWithURL: "https://example.test/behind-spare", inBackground: true)
+        let spared = opened("https://example.test/behind-spare")
+        expect(spared?.takenURL == "https://example.test/behind-spare" && spared?.startedHidden == true,
+               "a background link that takes a spare hides it before it loads")
+
+        clock.advance(by: SparePage.refillDelay)
+        manager.browser(page, requestsNewTabWithURL: "https://example.test/front", inBackground: false)
+        let front = tab("https://example.test/front")
+        expect(front != nil, "a link opened in front makes a tab")
+        if let front { manager.show(front, focus: true) }
+        let frontPage = front.flatMap { manager.runtime(for: $0)?.browser }
+        expect(frontPage?.takenURL == "https://example.test/front" && frontPage?.startedHidden == false,
+               "a link opened in front takes the spare shown")
+
+        clock.advance(by: SparePage.refillDelay)
+        let spare = SparePages.shared.take(profilePath: nil)
+        expect(spare != nil && spare?.startedHidden == false, "a spare is made shown: the tab that takes it decides")
+        spare?.close()
+
+        let agent = store.createTab(url: "https://example.test/agent", select: false).id
+        expect(manager.ensureRuntime(for: agent)?.browser.startedHidden == false,
+               "a tab whose page is made without being shown (an agent's tab_open) starts shown")
+        let restored = store.createTab(url: "https://example.test/restored").id
+        manager.show(restored, focus: true)
+        expect(manager.runtime(for: restored)?.browser.startedHidden == false, "a restored tab selected later starts shown")
+        manager.closeAll()
+        SparePages.shared.dropAll()
     }
 
     /// DRM services open in WebKit (ProtectedMediaSites); a popup keeps its opener's engine; a
@@ -2465,6 +2519,7 @@ private final class Observer: BrowserManagerDelegate {
     func browserManager(findAction action: CraFindAction) { findActions.append(action) }
     func browserManager(download: CraDownloadInfo) { onDownload?(download) }
     func browserManager(fullscreen: Bool, tabID: UUID) {}
+    func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }
     func browserManagerDevToolsChanged() {}
     func browserManagerDevToolsPageBoundsChanged() {}

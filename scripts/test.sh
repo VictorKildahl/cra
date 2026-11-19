@@ -18,6 +18,8 @@ suite "CraCore" swift test --package-path Packages/CraCore
 suite "Shipped-issue tests" scripts/promises.py
 suite "Shipped-issue lock" python3 Tests/test_promises.py
 suite "Engine element checks" python3 Tests/test_element_checks.py
+suite "Web features map" python3 -I scripts/web-features.py
+suite "Web features check" python3 Tests/test_web_features.py
 if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
   suite "Ask on Page DOM" scripts/test-ask-on-page-content.sh
@@ -60,6 +62,7 @@ if [ "${1:-}" != core ]; then
   suite "Theme noise" scripts/test-theme-noise.sh
   suite "Chromium window corners" scripts/test-chromium-window-corners.sh
   suite "Picture in Picture corners" scripts/test-pip-corners.sh
+  suite "Picture in Picture overlay" scripts/test-pip-overlay.sh
   suite "Music notes pixels" scripts/test-music-notes.sh
   suite "Live folder plugins" scripts/test-live-folder-plugins.sh
   suite "Key bindings" scripts/test-key-bindings.sh

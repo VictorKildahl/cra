@@ -1,0 +1,36 @@
+# promise: web-page-device-choosers
+# web-features: the other device choosers, as page-device-chooser has WebUSB's (#574): WebHID (a game pad's or
+# a headset's settings page) and Web Serial (a microcontroller's flasher, a 3D printer). Chrome shows each in a
+# chooser anchored to its Browser's window, a never-seen 1 pt strip along Cra's window since 0.1.49 (#346):
+# it has to show on Cra's window, big enough to use, and Cancel has to tell the page no device was picked.
+# (Bluetooth asks macOS for Bluetooth first: docs/release-checklist.md.)
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=devices
+expect-log GET /features.html\?n=devices
+wait 2
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('hid',navigator.hid.requestDevice({filters:[]}).then(d=>{if(!d.length)throw {name:'none picked'}}))","userGesture":true}
+expect-log "value":"hid asked"
+wait 2
+cra://debug?pageDialogs=hid
+expect-log page dialog hid: chrome [0-9]{3,}x[0-9]{2,} at=(page|window) front=1 .*buttons=.*Cancel
+cra://debug?pageDialogs=hid-cancel&press=Cancel
+expect-log page dialogs hid-cancel: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'hid '+state.hid"}
+expect-log "value":"hid none picked"
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('serial',navigator.serial.requestPort())","userGesture":true}
+expect-log "value":"serial asked"
+wait 2
+cra://debug?pageDialogs=serial
+expect-log page dialog serial: chrome [0-9]{3,}x[0-9]{2,} at=(page|window) front=1 .*buttons=.*Cancel
+cra://debug?pageDialogs=serial-cancel&press=Cancel
+expect-log page dialogs serial-cancel: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'serial '+state.serial"}
+expect-log "value":"serial NotFoundError"
+reject-log fault:

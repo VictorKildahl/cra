@@ -1,0 +1,29 @@
+# promise: #581
+# A Little Window picked in Mission Control or App Exposé comes to the front of Cra's windows and
+# stays there, also an older one behind a newer Little Window and the browser window. Picking one
+# makes it key and moves Chrome's hidden window to its page, which once made the browser window rise
+# over a Little Window (#500), so the order is read after the page has taken the focus.
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?externalURL=${PAGE}?n=older
+wait 2
+cra://debug?externalURL=${PAGE}?n=newer
+wait 2
+cra://debug?littleOrder=start
+expect-log little order start: little1 little0 main0
+
+# The older one, behind the newer Little Window.
+cra://debug?littleKey=0
+wait 2
+cra://debug?littleOrder=older
+expect-log little order older: little0 little1 main0
+
+# The newer one again.
+cra://debug?littleKey=1
+wait 2
+cra://debug?littleOrder=newer
+expect-log little order newer: little1 little0 main0

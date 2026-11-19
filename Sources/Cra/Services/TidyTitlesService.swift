@@ -23,7 +23,14 @@ final class TidyTitlesService {
     /// Arc 1.171, two 120 fps recordings (4 Nov 2026): the rename started ~1 s after the pin (its
     /// server's round trip; Cra's model answers in ~0.5 s, so it waits the rest), the sweep and
     /// sparkles ran 0.55 s, and the subtitle left 3.1 s after that.
-    static let delayAfterPin: TimeInterval = 1.0
+    /// A test copy with the fake model (CRA_TIDY_FAKE_MODEL=1) can take longer (CRA_TIDY_TITLES_DELAY, seconds), so a
+    /// scenario's rename lands inside it on a slow machine: on Nightly's runners the pin, the rename editor and its
+    /// keys took over a second, and the generated name came first.
+    static let delayAfterPin: TimeInterval = {
+        guard TidyTabsService.fakeModel,
+              let delay = ProcessInfo.processInfo.environment["CRA_TIDY_TITLES_DELAY"].flatMap(Double.init), delay > 0 else { return 1.0 }
+        return delay
+    }()
     static let sweep: TimeInterval = 0.55
     static let subtitleShown: TimeInterval = 3.65
     static let subtitle = "Double-click to rename"

@@ -1,0 +1,35 @@
+# promise: #600
+# A tab's right-click menu is Arc 1.173.1's, read live 19 Nov 2026 (Victor: menus 1:1 with Arc): Copy Link,
+# Share ▸ | Change Icon…, Rename…, Mute (dimmed while silent), Customize Page… on the open tab, Edit Pinned
+# Page ▸ on a pinned one | Add Split View on the open tab, Open in Split View on another, Duplicate, Move to ▸
+# (spaces, ✓ on its own, New Space…) | Remove Pin on a pinned tab; on Today Archive Tab with Archive Other Tabs
+# under ⌥, and Archive Tabs Below with Archive Tabs Above under ⌥, dimmed when there is nothing to archive.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=pin
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/pinTab
+cra://open?url=${PAGE}?n=a
+cra://open?url=${PAGE}?n=b
+cra://open?url=${PAGE}?n=c
+wait 1
+
+# Listed: the pinned tab, then Today's c (open), b, a.
+cra://debug?tabMenu=1&label=pinned
+expect-log tab menu pinned: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Mute \(off\)\|Edit Pinned Page ▸\|──\|Open in Split View\|Duplicate\|Move to ▸\|──\|Remove Pin$
+expect-log tab menu pinned Edit Pinned Page: Replace Pinned URL with Current \(off\)\|Edit…$
+expect-log tab menu pinned Move to: .*Personal\|──\|New Space…$
+cra://debug?tabMenu=2&label=open
+expect-log tab menu open: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Mute \(off\)\|Customize Page…\|──\|Add Split View\|Duplicate\|Move to ▸\|──\|Archive Tab\|Archive Other Tabs ⌥\|Archive Tabs Below\|Archive Tabs Above \(off\) ⌥$
+cra://debug?tabMenu=4&label=last
+expect-log tab menu last: .*\|Archive Tab\|Archive Other Tabs ⌥\|Archive Tabs Below \(off\)\|Archive Tabs Above ⌥$
+
+# The rows do what Arc's do: Duplicate copies b right after it in the background, Archive Other Tabs
+# leaves only a in Today, Remove Pin archives the pinned tab.
+cra://debug?tabMenu=3&label=dup&run=Duplicate
+expect-log tab menu dup ran Duplicate: pinned: n=pin today: n=c n=b n=b n=a open: n=c$
+cra://debug?tabMenu=5&label=others&run=Archive Other Tabs
+expect-log tab menu others ran Archive Other Tabs: pinned: n=pin today: n=a open: \S+$
+cra://debug?tabMenu=1&label=unpin&run=Remove Pin
+expect-log tab menu unpin ran Remove Pin: pinned: +today: n=a open: \S+$

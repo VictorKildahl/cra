@@ -1,0 +1,28 @@
+# promise: web-extension-open-popup
+# web-features: an extension opens its own popup (chrome.action.openPopup(): 1Password's inline menu, a
+# shortcut's popup). Chrome opens it only in the active window, and asked the page's Browser window, which on
+# the engine is never seen and never active: every call failed ("Could not find an active browser window",
+# or for a given window "Cannot show popup for an inactive window"). cra-extension-popup-window.patch asks Cra
+# whether the page's own window is the one in use, and the popup comes up in Cra's popup frame
+# (ExtensionPopupWindow), as one from the extension's button does. Both forms: the current window and the
+# page's window by id. It takes the screen: Cra has to be the app in use.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+extension ${FIXTURES}/OpenPopupExtension
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=front
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?activate=1
+wait 1
+cra://open?url=${PAGE}?n=open-popup
+expect-log GET /page\.html\?n=openpopup-open-popup-opened
+expect-log extension popup shown
+cra://dismiss
+wait 1
+cra://open?url=${PAGE}?n=open-popup-window
+expect-log GET /page\.html\?n=openpopup-open-popup-window-opened
+cra://dismiss
+reject-log openpopup-[a-z-]*-error
+reject-log fault:

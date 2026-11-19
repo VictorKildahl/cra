@@ -1,0 +1,54 @@
+# promise: web-page-permission-prompts
+# web-features: what a page asks permission for, beyond camera, microphone and MIDI (permission-card,
+# permission-doubled-request): notifications, location, windows on every display, a link kind of its own
+# (registerProtocolHandler) and several downloads at once. Each asks in Arc's card over the page (#371), and
+# Not Now answers it: the page hears "no" and the next one asks. Chrome would ask in a bubble on its Browser's
+# window, never seen on the engine (a 1 pt strip since #346): cra-permission-tabs.patch hands every request
+# to Cra.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+home
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=permissions
+expect-log GET /features.html\?n=permissions
+wait 2
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('notify',Notification.requestPermission().then(r=>{if(r!='granted')throw {name:r}}))","userGesture":true}
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to show notifications$
+cra://debug?permissionCard=Not%20Now
+expect-log permission card: .*notifications \(232x[0-9]+ at 12,12 on the page; key window unchanged\); pressed Not Now
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'notify '+state.notify"}
+expect-log "value":"notify denied"
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"geolocation()","userGesture":true}
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to use your location$
+cra://debug?permissionCard=Not%20Now
+expect-log permission card: .*location \(232x[0-9]+ at 12,12 on the page; key window unchanged\); pressed Not Now
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'geolocation '+state.geolocation"}
+expect-log "value":"geolocation denied1"
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('screens',window.getScreenDetails())","userGesture":true}
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to manage windows on all your displays$
+cra://debug?permissionCard=Not%20Now
+expect-log permission card: .*all your displays \(232x[0-9]+ at 12,12 on the page; key window unchanged\); pressed Not Now
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'screens '+state.screens"}
+expect-log "value":"screens NotAllowedError"
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"protocolHandler()","userGesture":true}
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to open a kind of link, like email or calendar links$
+cra://debug?permissionCard=Not%20Now
+expect-log permission card: .*calendar links \(232x[0-9]+ at 12,12 on the page; key window unchanged\); pressed Not Now
+
+# Two downloads without a click between them: the first saves, the second asks.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"twoDownloads()","userGesture":true}
+expect-log permission card: http://127\.0\.0\.1:[0-9]+/? wants to download multiple files$
+cra://debug?permissionCard=Not%20Now
+expect-log permission card: .*multiple files \(232x[0-9]+ at 12,12 on the page; key window unchanged\); pressed Not Now
+wait 1
+cra://debug?permissionCard=1
+expect-log permission card: none
+reject-log fault:

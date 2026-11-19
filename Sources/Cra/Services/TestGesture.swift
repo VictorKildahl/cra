@@ -110,6 +110,59 @@ enum TestGesture {
         }
     }
 
+    /// A trackpad gesture's phase, as the window server numbers it (CGGesturePhase, CGScrollPhase).
+    enum TrackpadPhase: Int64 {
+        case began = 1, changed = 2, ended = 4, cancelled = 8, mayBegin = 128
+    }
+
+    /// A trackpad pinch on a window, its events made the way the window server makes them and
+    /// routed as a trackpad's were in a probe (19 Nov 2026): the scrolls of the fingers to the view
+    /// under `point` (the window's `sendEvent`), the magnify events addressed to the window through
+    /// the app (`NSApp.sendEvent`, its event monitors first). The order is one a trackpad can send:
+    /// two fingers touch down (a scroll and a magnify that may begin), then one magnify per step of
+    /// `steps` (0.1 is 10 % apart) between its beginning and its end, and only as the fingers lift
+    /// is the touch-down's scroll cancelled (#573). AppKit hands events only to a window that is
+    /// ordered in.
+    static func pinch(_ steps: [CGFloat], at point: NSPoint, in window: NSWindow) {
+        let magnify = { (phase: TrackpadPhase, m: Double) in
+            if let e = trackpadMagnify(phase, by: m, at: point, to: window) { NSApp.sendEvent(e) }
+        }
+        trackpadScroll(.mayBegin, at: point).map(window.sendEvent)
+        magnify(.mayBegin, 0)
+        magnify(.began, 0)
+        for m in steps { magnify(.changed, Double(m)) }
+        magnify(.ended, 0)
+        trackpadScroll(.cancelled, at: point).map(window.sendEvent)
+    }
+
+    /// A trackpad magnify at a point of a window: a gesture event (type 29) of the zoom kind
+    /// (IOHIDEventType 8), which AppKit reads as `.magnify`. Made here it has no window, and AppKit
+    /// keeps its location as is, so it is placed where `point` is in the window's coordinates.
+    /// `to`: addressed to that window as the window server addresses it (the event's window).
+    static func trackpadMagnify(_ phase: TrackpadPhase, by magnification: Double = 0, at point: NSPoint, to window: NSWindow? = nil) -> NSEvent? {
+        guard let e = CGEvent(source: nil), let gesture = CGEventType(rawValue: 29) else { return nil }
+        e.type = gesture
+        e.setIntegerValueField(CGEventField(rawValue: 110)!, value: 8)                    // the gesture's kind: zoom
+        e.setIntegerValueField(CGEventField(rawValue: 132)!, value: phase.rawValue)       // its phase
+        e.setDoubleValueField(CGEventField(rawValue: 113)!, value: magnification)         // its magnification
+        if let window { e.setIntegerValueField(CGEventField(rawValue: 51)!, value: Int64(window.windowNumber)) }   // its window
+        return event(e, at: point)
+    }
+
+    /// Two fingers on the trackpad that don't move: a continuous scroll with no deltas.
+    static func trackpadScroll(_ phase: TrackpadPhase, at point: NSPoint) -> NSEvent? {
+        guard let e = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 0, wheel2: 0, wheel3: 0) else { return nil }
+        e.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        e.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase.rawValue)
+        return event(e, at: point)
+    }
+
+    private static func event(_ e: CGEvent, at point: NSPoint) -> NSEvent? {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        e.location = CGPoint(x: point.x, y: top - point.y)
+        return NSEvent(cgEvent: e)
+    }
+
     /// Opens the menu a click (or a right-click) at a point of the window would open, without
     /// the pointer: the hit view gets the mouse-down, or the nearest view with a menu(for:)
     /// pops its menu. The menu tracks until Esc or a pick, so tests read it through AX.

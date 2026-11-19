@@ -376,9 +376,11 @@ enum AskOnPageLocalModel {
             let draft = AskOnPage.fixtureDraft(question: fitted.question, source: fitted.source, echoed: fakeEchoes)
             fakeEchoes = AskOnPagePrompt.echoesPrompt(draft.answer ?? "") ? fakeEchoes + 1 : 0
             update(.init(excerpts: draft.excerpts, answer: nil))
-            // About a token every 20 ms, as the on-device model streams a long answer.
+            // About a token every 20 ms, as the on-device model streams a long answer, in at most about 100 steps: in 5
+            // characters at a time a long summary took a thousand, past 50 s on Nightly's runners, and its
+            // scenario saw it unfinished. 100 in 2 s still outpace the card's ten redraws a second.
             let answer = draft.answer ?? ""
-            for end in stride(from: 5, to: answer.count, by: 5) {
+            for end in stride(from: 5, to: answer.count, by: max(5, answer.count / 100)) {
                 try await Task.sleep(for: .milliseconds(20))
                 update(.init(excerpts: draft.excerpts, answer: String(answer.prefix(end))))
             }

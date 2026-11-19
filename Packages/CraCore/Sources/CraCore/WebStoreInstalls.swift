@@ -12,7 +12,8 @@ import Foundation
 /// the folder stops loading there from the next launch, and the folder goes when no profile
 /// loads it any more (never while Chromium runs, which may still read it). A copy
 /// the store doesn't take (offline, delisted, asks for more permissions) keeps loading from
-/// the folder; the next launch asks again.
+/// the folder. Once the store has said no in a profile, later launches don't ask there again
+/// (WebStoreRefusals, #491): each ask downloads the CRX, a file on the Dock icon at every launch.
 public enum WebStoreInstalls {
     /// The update URL the Web Store writes into every manifest it serves.
     public static let storeUpdateURL = "https://clients2.google.com/service/update2/crx"
@@ -53,12 +54,14 @@ public enum WebStoreInstalls {
     }
 
     /// The profiles a Web Store copy in `folder` still loads in from the folder, where Chromium
-    /// has no store install of it yet, in `profiles` order.
+    /// has no store install of it yet and the store hasn't refused it (#491), in `profiles` order.
     public static func pendingProfiles(folder: String, extensionID: String, scopes: ExtensionProfiles,
-                                       profiles: [String], settings: (String) -> [String: Any]) -> [String] {
+                                       profiles: [String], settings: (String) -> [String: Any],
+                                       refused: WebStoreRefusals = WebStoreRefusals()) -> [String] {
         profiles.filter { profile in
             scopes.loads(folder: folder, inProfile: profile)
                 && !isStoreInstall(settings: settings(profile)[extensionID] as? [String: Any])
+                && !refused.isRefused(folder: folder, inProfile: profile)
         }
     }
 
@@ -83,5 +86,47 @@ extension ExtensionProfiles {
         }
         folders[folder] = remaining.sorted()
         return false
+    }
+}
+
+/// The Web Store copies the store refused to install, by profile (web-store-refused.json, #491):
+/// `{"Default": ["<id>", …]}`. A refused copy keeps loading from its folder there and isn't asked
+/// for again, since every ask downloads its CRX. Importing the extension again clears it.
+public struct WebStoreRefusals: Codable, Equatable, Sendable {
+    public var profiles: [String: [String]]
+
+    public init(profiles: [String: [String]] = [:]) {
+        self.profiles = profiles
+    }
+
+    public func isRefused(folder: String, inProfile profile: String) -> Bool { profiles[profile]?.contains(folder) ?? false }
+
+    /// The store said no to `folder` in `profile`. True when that is new.
+    @discardableResult
+    public mutating func refuse(folder: String, inProfile profile: String) -> Bool {
+        guard !isRefused(folder: folder, inProfile: profile) else { return false }
+        profiles[profile] = ((profiles[profile] ?? []) + [folder]).sorted()
+        return true
+    }
+
+    /// `folder` imported again: every profile may ask the store once more. True when anything changed.
+    @discardableResult
+    public mutating func forget(folder: String) -> Bool {
+        var changed = false
+        for (profile, folders) in profiles where folders.contains(folder) {
+            let rest = folders.filter { $0 != folder }
+            profiles[profile] = rest.isEmpty ? nil : rest
+            changed = true
+        }
+        return changed
+    }
+
+    public init(from decoder: Decoder) throws {
+        profiles = try decoder.singleValueContainer().decode([String: [String]].self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(profiles)
     }
 }

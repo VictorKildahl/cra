@@ -1,0 +1,36 @@
+# promise: web-page-hung
+# web-features: a page that stops answering (a runaway script). Chrome offers to stop it in its "Page
+# Unresponsive" dialog, a tab-modal dialog it hangs on its Browser's window: on the engine a never-seen strip
+# along Cra's window (#346), so it has to come up over the page (cra-page-dialogs.patch) with its buttons.
+# Chrome waits for input the page doesn't answer: a click sent to the page alone, through DevTools. Wait takes
+# the dialog down; closing the tab ends the page (Exit page would count as a page crash in every scenario).
+# Chrome shows it only while the page's window is the active one (asking from behind another app is rude), and
+# Cra's own DevTools session on every page kept it away entirely (cra-page-hung.patch). It takes the screen:
+# Cra has to be in front.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40 maxstall=1500
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=hung
+expect-log GET /features.html\?n=hung
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"hang()"}
+expect-log "value":"hanging"
+wait 1
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":600,"y":500,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":600,"y":500,"button":"left","clickCount":1}
+wait 20
+cra://debug?pageDialogs=hung
+expect-log page dialog hung: chrome [0-9]{3,}x[0-9]{2,} at=page front=1 .*buttons=.*Wait
+cra://debug?pageDialogs=hung-wait&press=Wait
+expect-log page dialogs hung-wait: pressed Wait
+wait 1
+cra://debug?pageDialogs=hung-gone
+expect-log page dialogs hung-gone: n=0
+cra://action/closeTab
+wait 2
+reject-log fault:

@@ -56,6 +56,9 @@ class PageSession : public content::DevToolsAgentHostClient {
   bool IsTrusted() override;
   bool MayReadLocalFiles() override;
   bool AllowUnsafeOperations() override;
+  // Cra's page scripts never pause the page: a page that stops answering still gets Chrome's "Page Unresponsive"
+  // (patches/cra-page-hang.patch).
+  bool MayPauseRenderer() override;
 
  private:
   void Answer(int id, NSString* result, NSString* error);

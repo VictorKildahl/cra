@@ -69,3 +69,8 @@ webstore-installer-own-install.patch
 cra-file-picker-window.patch
 cra-page-dialogs.patch
 cra-browser-element-checks.patch
+cra-page-hang.patch
+cra-payments-window.patch
+cra-download-dock-badge.patch
+cra-exclusive-access-notice.patch
+cra-extension-popup-window.patch

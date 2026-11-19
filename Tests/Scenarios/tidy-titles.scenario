@@ -2,6 +2,8 @@
 # supplies deterministic two-field answers; model quality is a separate release check.
 home
 env CRA_TIDY_FAKE_MODEL=1
+# The generated name waits 3 s after a pin, not the app's 1 s, so the rename below lands first on a slow runner.
+env CRA_TIDY_TITLES_DELAY=3
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "tidyTabTitles": true}
 seed windows.json {"sidebarWidth": 300}
 budget rss=800 stalls50=30
@@ -11,7 +13,7 @@ expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 cra://debug?pageJS=document.title='Synthetic Alpha - Test Host'
 wait 0.5
 cra://action/pinTab
-wait 1.3
+wait 3.3
 expect-log Tidy Tab Titles: renamed a pinned tab \(27 → 15 characters\)
 cra://open?url=${PAGE}?n=observer
 cra://debug?suggest=Synthetic%20Alpha
@@ -32,7 +34,7 @@ cra://key?chars=a&cmd=1
 cra://key?chars=My%20Manual%20Name
 cra://key?chars=%0D
 pace 0.2
-wait 1.3
+wait 3.3
 cra://open?url=${PAGE}?n=third
 cra://debug?suggest=My%20Manual%20Name
 expect-log Cra suggest My Manual Name .*rows=.* My Manual Name \S*n=observer
@@ -48,7 +50,7 @@ cra://action/manageSpaces
 cra://action/newWindow
 cra://debug?windowSize=900x700
 pace 0.2
-wait 1.3
+wait 3.3
 expect-log Tidy Tab Titles: renamed a pinned tab \(28 → 16 characters\)
 cra://debug?browserWindows=after-pin
 expect-log browser windows after-pin: count=2

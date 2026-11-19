@@ -1,0 +1,164 @@
+# Every way a page reaches its browser, and what tests it (docs/web-features.md, scripts/web-features.py).
+# kind	name	how: scenarios a,b | checklist | n/a: why	what a page does
+delegate	OpenURLFromTab	scenarios new-tab-link-shows,middle-click-page,page-windows-open-on-cra,background-tab-autoplay	a link or form that opens or navigates (target=_blank, ⌘-click)
+delegate	ShouldAllowRendererInitiatedCrossProcessNavigation	n/a: Chrome's own navigation policy, nothing shown	a page navigating itself to another site
+delegate	NavigationStateChanged	scenarios page-console,back-forward-menu	the title, address and loading state Cra shows for a page
+delegate	VisibleSecurityStateChanged	n/a: Cra shows no padlock of Chrome's; HTTPS-only is https-only-toggle's	a page's security state
+delegate	AddNewContents	scenarios page-windows-open-on-cra,blocked-popups,page-popup-closes	window.open and a page's popups, as Cra tabs
+delegate	ActivateContents	scenarios extension-window-focus,page-popup-closes	window.focus() and a notification click bringing a page forward
+delegate	IsContentsActive	n/a: only Chrome's own tab strip asks	whether a page is its window's active tab
+delegate	LoadingStateChanged	scenarios background-tab-shows,page-console	a page starting and finishing a load
+delegate	CloseContents	scenarios page-popup-closes	window.close() from a page
+delegate	SetContentsBounds	scenarios page-resize-window	window.resizeTo, moveTo, resizeBy, moveBy
+delegate	UpdateTargetURL	scenarios devtools-link-hover	the link under the pointer, in Cra's status line
+delegate	ContentsMouseEvent	n/a: Chrome's status bubble only	the pointer moving over a page
+delegate	ContentsZoomChange	n/a: ⌘+ and ⌘- are Cra's commands; a pinch zoom never comes here on a Mac	Ctrl+wheel zoom
+delegate	CanOverscrollContent	n/a: Aura only; a Mac's swipe is swipe-back's	overscroll navigation
+delegate	ShouldSuppressDialogs	scenarios page-dialogs	whether a page may show alert, confirm and prompt
+delegate	ShouldPreserveAbortedURLs	n/a: Chrome's address bar only	a stopped load's address
+delegate	DidAddMessageToConsole	scenarios page-console	a page's console messages
+delegate	BeforeUnloadFired	scenarios page-dialog-leave-site	"Leave site?" and "Reload site?" (beforeunload)
+delegate	ShouldFocusLocationBarByDefault	n/a: Cra's command bar decides focus	focus after a new tab
+delegate	SetFocusToLocationBar	n/a: Cra's command bar decides focus	focus to the address bar
+delegate	ShouldFocusPageAfterCrash	n/a: Chrome's sad tab only	focus after a page crash
+delegate	ShouldResumeRequestsForCreatedWindow	n/a: Chrome's own popup bookkeeping, no UI	a new window's first requests
+delegate	TakeFocus	scenarios find-bar-focus	Tab leaving the page into the browser's UI
+delegate	CanDownload	scenarios page-permission-prompts,download-actions	a download, and several at once ("Download multiple files?")
+delegate	HandleContextMenu	scenarios page-menu-shows,page-menu-no-reading-mode	a right click: Arc's page menu
+delegate	PreHandleDragUpdate	scenarios drop-link,split-drop	a drag over a page
+delegate	PreHandleDragExit	scenarios drop-link,split-drop	a drag leaving a page
+delegate	HandleDragEnded	scenarios drop-link	a drag ending on a page
+delegate	PreHandleKeyboardEvent	scenarios shortcut-priority,native-window-shortcuts	a key before the page: Cra's shortcuts
+delegate	PreHandleMouseEvent	n/a: Chrome's own window gestures, none on a Mac	a click before the page
+delegate	PreHandleGestureEvent	n/a: touch screens only	a touch gesture
+delegate	HandleKeyboardEvent	scenarios shortcut-priority	a key the page left: Cra's shortcuts
+delegate	CanDragEnter	scenarios drop-link	whether a drag may enter a page
+delegate	ShowRepostFormWarningDialog	scenarios page-repost	"Confirm Form Resubmission" on reloading a page a form posted to
+delegate	OnGoToEntryOffset	scenarios swipe-back,back-forward-menu	history.back() and the back and forward lists
+delegate	IsWebContentsCreationOverridden	scenarios page-windows-open-on-cra	a page's new window, taken by Cra
+delegate	CreateCustomWebContents	scenarios page-windows-open-on-cra	a page's new window, made by Cra
+delegate	WebContentsCreated	scenarios page-windows-open-on-cra,page-popup-closes	a page's new window, its opener kept
+delegate	PrerenderWebContentsCreated	n/a: Chrome's preloading, no UI	a prerendered page
+delegate	PrerenderWebContentsReleased	n/a: Chrome's preloading, no UI	a prerendered page let go
+delegate	RendererUnresponsive	scenarios page-hung	"Page Unresponsive": a page whose script never ends
+delegate	RendererResponsive	scenarios page-hung	a hung page answering again
+delegate	GetJavaScriptDialogManager	scenarios page-dialogs,page-dialog-split	alert, confirm, prompt
+delegate	OpenColorChooser	scenarios page-pickers	<input type=color> (macOS's colour panel)
+delegate	OpenEyeDropper	scenarios page-eyedropper	new EyeDropper().open()
+delegate	RunFileChooser	scenarios upload-picker,upload-picker-after-focus	<input type=file>
+delegate	UseFileChooserForFileSystemAccess	scenarios upload-picker,page-save-pickers	showOpenFilePicker, showSaveFilePicker, showDirectoryPicker
+delegate	EnumerateDirectory	scenarios page-save-pickers	<input type=file webkitdirectory>
+delegate	CreateSmsPrompt	n/a: Android only	WebOTP (navigator.credentials.get otp)
+delegate	GetCanResize	n/a: installed web apps' windows only	a web app's window controls
+delegate	GetIsAlwaysOnTopPopup	n/a: installed web apps' windows only	an always-on-top popup
+delegate	CanUseWindowingControls	n/a: installed web apps' windows only	window.minimize() and friends
+delegate	MinimizeFromWebAPI	n/a: installed web apps' windows only	window.minimize()
+delegate	MaximizeFromWebAPI	n/a: installed web apps' windows only	window.maximize()
+delegate	RestoreFromWebAPI	n/a: installed web apps' windows only	window.restore()
+delegate	SetResizableFromWebAPI	n/a: installed web apps' windows only	window.setResizable()
+delegate	GetWindowShowState	n/a: installed web apps' windows only	display-state media queries
+delegate	CanEnterFullscreenModeForTab	scenarios page-fullscreen-keyboard-lock,little-window-fullscreen	requestFullscreen
+delegate	EnterFullscreenModeForTab	scenarios page-fullscreen-keyboard-lock,little-window-fullscreen	requestFullscreen
+delegate	FullscreenStateChangedForTab	scenarios page-fullscreen-keyboard-lock	a page's full screen changing
+delegate	ExitFullscreenModeForTab	scenarios page-fullscreen-keyboard-lock,little-window-fullscreen	exitFullscreen and Esc
+delegate	IsFullscreenForTabOrPending	scenarios page-fullscreen-keyboard-lock,little-window-fullscreen-bar	document.fullscreenElement
+delegate	GetFullscreenState	scenarios page-fullscreen-keyboard-lock	a page's full screen, as Cra shows it
+delegate	GetDisplayMode	n/a: installed web apps only (display-mode media query)	@media (display-mode)
+delegate	GetApplicationContext	n/a: installed web apps only	an app's context
+delegate	GetProtocolHandlerSecurityLevel	scenarios page-permission-prompts	registerProtocolHandler's allowed schemes
+delegate	RegisterProtocolHandler	scenarios page-permission-prompts	navigator.registerProtocolHandler
+delegate	UnregisterProtocolHandler	n/a: no prompt: it only forgets a handler	navigator.unregisterProtocolHandler
+delegate	FindMatchRectsReply	n/a: Android only	find-in-page match rectangles
+delegate	UpdatePreferredSize	scenarios extension-popup-shown	an extension popup sizing itself
+delegate	ResizeDueToAutoResize	scenarios extension-popup-shown	an extension popup sizing itself
+delegate	RequestPointerLock	scenarios page-pointer-lock	element.requestPointerLock()
+delegate	LostPointerLock	scenarios page-pointer-lock	a page's pointer lock ending
+delegate	IsWaitingForPointerLockPrompt	scenarios page-pointer-lock	a pointer lock waiting on its prompt
+delegate	AllowKeyboardLockForInnerContents	n/a: guest views only	keyboard lock in an embedded guest
+delegate	RequestKeyboardLock	scenarios page-fullscreen-keyboard-lock	navigator.keyboard.lock()
+delegate	CancelKeyboardLockRequest	scenarios page-fullscreen-keyboard-lock	navigator.keyboard.unlock()
+delegate	RequestMediaAccessPermission	scenarios permission-doubled-request,page-share-tab	getUserMedia, getDisplayMedia
+delegate	ProcessSelectAudioOutput	n/a: selectAudioOutput isn't shipped in Chrome 158	navigator.mediaDevices.selectAudioOutput
+delegate	CheckMediaAccessPermission	scenarios permission-doubled-request	whether a page may use the camera or microphone
+delegate	GetTitleForMediaControls	scenarios player-follows-session	the title in macOS's Now Playing
+delegate	CreateAudioStreamBrokerFactory	n/a: Chrome's audio plumbing, no UI	audio streams
+delegate	ShouldBlockMediaRequest	n/a: Chrome's preloading, no UI	media in a prerendered page
+delegate	SetOverlayMode	n/a: Android only	video overlays
+delegate	GetSizeForNewRenderView	n/a: Chrome's own sizing, no UI	a new page's first size
+delegate	GuestSaveFrame	n/a: guest views only	saving a guest's frame
+delegate	SaveFrame	checklist	the PDF viewer's Save button (an unchanged PDF), and Save Page As
+delegate	OnDidBlockNavigation	scenarios blocked-popups	a blocked popup or redirect
+delegate	PassiveInsecureContentFound	n/a: Chrome's own policy: http images on https pages load, no UI	mixed content
+delegate	ShouldAllowRunningInsecureContent	n/a: Chrome's own policy: blocked, no UI	mixed scripts
+delegate	SetTopControlsShownRatio	n/a: Android only	browser controls
+delegate	GetTopControlsHeight	n/a: Android only	browser controls
+delegate	GetTopControlsMinHeight	n/a: Android only	browser controls
+delegate	GetBottomControlsHeight	n/a: Android only	browser controls
+delegate	GetBottomControlsMinHeight	n/a: Android only	browser controls
+delegate	ShouldAnimateBrowserControlsHeightChanges	n/a: Android only	browser controls
+delegate	DoBrowserControlsShrinkRendererSize	n/a: Android only	browser controls
+delegate	GetVirtualKeyboardHeight	n/a: Android only	the on-screen keyboard
+delegate	OnlyExpandTopControlsAtPageTop	n/a: Android only	browser controls
+delegate	SetTopControlsGestureScrollInProgress	n/a: Android only	browser controls
+delegate	PrintCrossProcessSubframe	scenarios page-print-frame	print() from a frame of another site
+delegate	CapturePaintPreviewOfSubframe	n/a: Chrome's paint previews, never used by Cra	paint previews
+delegate	IsDocumentPictureInPictureBlockedBySystem	scenarios pip-document-window	documentPictureInPicture.requestWindow
+delegate	EnterPictureInPicture	scenarios pip-document-window,pip-double-click,meet-auto-picture-in-picture	video.requestPictureInPicture()
+delegate	GetWindowBoundsInScreen	scenarios upload-picker,pip-document-window	the window a page's picker or PiP window is measured against
+delegate	ExitPictureInPicture	scenarios pip-leave-tab	document.exitPictureInPicture()
+delegate	UpdateUserGestureCarryoverInfo	n/a: Android only	a gesture carried into a new tab
+delegate	ShouldAllowLazyLoad	n/a: Chrome's loading policy, no UI	loading=lazy
+delegate	IsBackForwardCacheSupported	n/a: Chrome's caching, no UI	back/forward cache
+delegate	IsPrerender2Supported	n/a: Chrome's preloading, no UI	speculation rules
+delegate	AllowedPrerenderingCount	n/a: Chrome's preloading, no UI	speculation rules
+delegate	ShouldOverrideUserAgentForPreloading	n/a: Chrome's preloading, no UI	speculation rules
+delegate	ShouldAllowPartialParamMismatchOfPrerender2	n/a: Chrome's preloading, no UI	speculation rules
+delegate	ShouldShowStaleContentOnEviction	n/a: Android only	evicted pages
+delegate	GetInstalledWebappGeolocationContext	n/a: Android only	location for installed web apps
+delegate	IsPrivileged	n/a: Chrome's own WebUI pages only	privileged pages
+delegate	DidChangeCloseSignalInterceptStatus	n/a: Android only (CloseWatcher and the back button)	CloseWatcher
+delegate	DraggableRegionsChanged	n/a: installed web apps' title bars only	app-region: drag
+delegate	ShouldUseInstancedSystemMediaControls	n/a: installed web apps only	media controls per app
+delegate	MaybeCopyContentAreaAsBitmap	n/a: Android only	back gesture screenshots
+delegate	MaybeCopyContentAreaAsHardwareBuffer	n/a: Android only	back gesture screenshots
+delegate	MaybeCopyContentAreaAsBitmapSync	n/a: Android only	back gesture screenshots
+delegate	GetBackForwardTransitionFallbackUXInternalPageIcon	n/a: Android only	back gesture animation
+delegate	DidBackForwardTransitionAnimationChange	n/a: Android only	back gesture animation
+delegate	GetBackForwardTransitionFallbackUXConfig	n/a: Android only	back gesture animation
+delegate	GetSavedRelatedApplications	n/a: installed web apps only	navigator.getInstalledRelatedApps
+delegate	GetResponsibleWebContents	n/a: Chrome's own bookkeeping, no UI	the page responsible for another
+delegate	IsPictureInPictureEnabled	scenarios pip-double-click	whether a video may go Picture in Picture
+delegate	IsImmersivePlaybackEnabled	n/a: XR headsets only	immersive playback
+delegate	RequestImmersivePlaybackConfirmation	n/a: XR headsets only	immersive playback
+delegate	OnAttached	n/a: Chrome's own tab strip bookkeeping	a page joining a Browser
+delegate	OnDetaching	n/a: Chrome's own tab strip bookkeeping	a page leaving a Browser
+feature	notification permission	scenarios page-permission-prompts	Notification.requestPermission
+feature	location permission	scenarios page-permission-prompts	navigator.geolocation
+feature	camera and microphone permission	scenarios permission-doubled-request,permission-element-system-denied	getUserMedia, <permission> element
+feature	MIDI permission	scenarios permission-card	navigator.requestMIDIAccess
+feature	window management permission	scenarios page-permission-prompts	window.getScreenDetails
+feature	permission waits for its tab	scenarios permission-waits-for-its-tab	a background tab's request
+feature	HTTP sign-in	scenarios page-dialog-sign-in	a page behind HTTP Basic, Digest or NTLM
+feature	password save	scenarios page-save-password	"Save password?" after a sign-in form
+feature	select menu	scenarios page-pickers	<select>
+feature	date picker	scenarios page-pickers	<input type=date>
+feature	print preview	scenarios page-print-button,page-print-frame	window.print()
+feature	USB chooser	scenarios page-device-chooser	navigator.usb.requestDevice
+feature	HID chooser	scenarios page-device-choosers	navigator.hid.requestDevice
+feature	serial chooser	scenarios page-device-choosers	navigator.serial.requestPort
+feature	Bluetooth chooser	checklist	navigator.bluetooth.requestDevice (asks macOS for Bluetooth first)
+feature	screen share picker	checklist	getDisplayMedia for a screen or a window (macOS's picker and Screen Recording)
+feature	tab share prompt	scenarios page-share-tab	getDisplayMedia({preferCurrentTab: true})
+feature	payment sheet	scenarios page-payment	PaymentRequest.show()
+feature	security key dialog	scenarios page-webauthn	navigator.credentials.get with a security key
+feature	passkey with Touch ID	checklist	navigator.credentials.create/get with a platform passkey (macOS's own sheet)
+feature	client certificate	checklist	a site asking for a TLS client certificate
+feature	share picker	scenarios page-share-picker	navigator.share
+feature	FedCM sign-in	scenarios fedcm-sign-in-dialog	navigator.credentials.get({identity})
+feature	external app link	scenarios external-app-links	mailto:, zoommtg: and other apps' links
+feature	downloads	scenarios download-actions,download-history-quiet,download-stuck-bin	a link that downloads, <a download>
+feature	translate	scenarios translate	a page in another language
+feature	infobars	scenarios debugger-infobar	Chrome's bars over a page
+feature	extension dialogs	scenarios extension-popup-shown,extension-window-focus	an extension's popup and windows
+feature	extension popup from the extension	scenarios extension-open-popup	chrome.action.openPopup(): an extension opening its own popup (1Password's inline menu)
+feature	full screen and pointer notices	scenarios page-fullscreen-keyboard-lock,page-pointer-lock,little-window-fullscreen	Chrome's exclusive-access notice for a page's full screen, pointer lock and keyboard lock, as Arc's toast

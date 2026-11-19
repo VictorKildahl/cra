@@ -1,0 +1,24 @@
+! Title: Cra ad filters
+! Cra's own rules (MIT, like the rest of Cra), in Adblock Plus syntax, for ads a domain list
+! can't keep up with: networks that serve the same loader from new domains every few days. The
+! iPhone compiles them into its Block Ads rule list (CraCore's FilterList). GitHub #570.
+!
+! Monetag (PropellerAds): In-Page Push ("Anna has sent (7) photos"), "The file is ready to
+! download" and other overlays, and pop-unders, on manga and streaming sites. The loader keeps
+! its path while its host changes (aqle3.com/btag.min.js on readopm.com and readonepiece.com).
+/btag.min.js$script,third-party
+/tag.min.js?z=$script,third-party
+/pfe/current/*$script,third-party
+! The multitag: https://<8 to 15 letters>.com or .net, then /tag.min.js or /<n>/tag.min.js.
+/^https:\/\/[a-z]{8,15}\.(com|net)\/([0-9]{1,3}\/)?tag\.min\.js/$script,third-party
+! Zone scripts: https://<host>/<400|401|5|50|500>/<zone of 6 to 8 digits>, as
+! chagnougroalry.net/5/9357427/ on readonepiece.com.
+/^https:\/\/[0-9a-z-]{5,15}\.(com|net|tv|xyz)\/(400|401|5|50|500)\/[0-9]{6,8}/$script,xmlhttprequest,third-party
+! Hosts seen serving them on readopm.com and readonepiece.com (#570), and Monetag's own.
+||aqle3.com^
+||pubadx.one^
+||chagnougroalry.net^
+||sootoarathus.net^
+||neiperevolved.com^
+||yakanorby.com^
+||monetag.com^$third-party

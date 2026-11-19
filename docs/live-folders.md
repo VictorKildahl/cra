@@ -137,6 +137,11 @@ session permissions and the provider API are documented in [Live folder plugins]
   pull request was moved into the folder without a duplicate; no fetch for 2.5 minutes in the background,
   one within a second of the window taking focus.
 - Not verified: the review trigger (`#pullrequestreview-` anchor) with a real review.
+- Organisation SSO (19 Nov 2026, Victor's session with jysk-dev's SAML lapsed): `/pulls` with the JSON headers
+  lists pull requests but never the organisations waiting for SSO; the `/pulls` HTML page has them in its
+  layout's `sso.sso_organizations[].login` (what Arc reads) and the search JSON in `protected_org_logins`. The
+  plugin read only those two keys from the JSON answers, so a folder with pull requests from elsewhere showed
+  no key (#521). It now reads the `/pulls` page once per refresh when no answer named them.
 
 ## GitLab live folders (Cra only; contributed by STRENCH0, #223)
 

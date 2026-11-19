@@ -522,6 +522,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         quitRequests.answered(quit: quits)
         guard quits else { return .terminateCancel }
+        // A Web Store install the quit cuts short isn't the store's answer (#491).
+        ExtensionStore.shared.isQuitting = true
         // Little Windows are not in the sidebar; keep their pages in the Library.
         for w in littleWindows { w.archivePage() }
         for w in mainWindows { w.saveFrameNow() }
@@ -1293,7 +1295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags, in: roots, window: w)
                 } else {
                     // The ⌘T bar, while it is open, has the keyboard; target=find sends it to the find bar's panel.
-                    let target = dict["target"] == "find" ? main.debugFindPanel : main.openCommandPanel
+                    let target = dict["target"] == "find" ? main.debugFindPanel
+                        : dict["target"] == "littleFind" ? littleWindows.last?.finder.debugPanel : main.openCommandPanel
                     TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: target ?? w)
                 }
                 return
@@ -1676,8 +1679,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
+            // littleKey=<n>: the nth Little Window (oldest first) picked as Mission Control picks one (#581);
+            // littleOrder=<label>: Cra's browser and Little Windows, front to back, as the window server has them.
+            if let n = dict["littleKey"].flatMap(Int.init), littleWindows.indices.contains(n) { littleWindows[n].debugPick(); return }
+            if let label = dict["littleOrder"] {
+                var names: [Int: String] = [:]
+                for (i, m) in mainWindows.enumerated() { if let w = m.window { names[w.windowNumber] = "main\(i)" } }
+                for (i, l) in littleWindows.enumerated() where !l.isPeek { if let w = l.window { names[w.windowNumber] = "little\(i)" } }
+                let order = (NSWindow.windowNumbers(options: []) ?? []).compactMap { names[$0.intValue] }
+                CraLog.note("little order \(label): \(order.joined(separator: " "))")
+                return
+            }
+            // littleRow=<text>&typed=<text>: the newest Little Window's ⌘L bar picks the row for that page (#599).
+            if let address = dict["littleRow"] { littleWindows.last?.debugPickRow(containing: address, typed: dict["typed"] ?? ""); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).
             if let step = dict["littleMenu"] { littleWindows.last?.debugMenu(step); return }
+            // littleFind=<label>: the newest Little Window's (or Peek's) find bar: shown, where on its page,
+            // the keys, the search and the page's count (#577). key=…&target=littleFind types into it.
+            // littleFindQuery=<text>: that text in its field, as typed (each change searches).
+            if let q = dict["littleFindQuery"] { littleWindows.last?.finder.overlay.findQuery = q; return }
+            if let label = dict["littleFind"] { CraLog.note(littleWindows.last?.finder.readout(label) ?? "little find \(label): no window"); return }
             // littleCard=<step>: the newest Little Window's card, see debugCardStep (#337).
             if let step = dict["littleCard"] { littleWindows.last?.debugCardStep(step); return }
             // littleToolbar=<command>: the newest Little Window's floating toolbar, see debugToolbar (#435).
@@ -1990,6 +2011,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // browsing data's Cancel crashed Cra 0.1.50 (crash-clear-browsing-data-cancel).
             if let label = dict["hostBrowserView"] { CraLog.note("host browser view \(label): \(CraCEFRuntime.pageHostBrowserViewReadout)"); return }
             if let hidden = dict["hostBrowserViewHidden"] { CraCEFRuntime.setPageHostBrowserViewsHidden(hidden == "1"); return }
+            // appWindows=<label>: every window of Cra's on screen, front to back, by class, size and parent: what
+            // a page's feature put up when no other readout knows its window (the share picker, web features).
+            if let label = dict["appWindows"] {
+                for w in (NSWindow.windowNumbers(options: []) ?? []).compactMap({ NSApp.window(withWindowNumber: $0.intValue) })
+                where w.isVisible && w.alphaValue > 0 {
+                    CraLog.note("app window \(label): \(NSStringFromClass(type(of: w))) \(Int(w.frame.width))x\(Int(w.frame.height)) at \(Int(w.frame.minX)),\(Int(w.frame.minY)) level=\(w.level.rawValue) parent=\(w.parent.map { NSStringFromClass(type(of: $0)) } ?? "-")")
+                }
+                CraLog.note("app windows \(label): done")
+                return
+            }
             // chromeWindows=<label>: Chromium's own windows (its tab strip and toolbar) a user could see,
             // on screen and not see-through, each named (#472).
             if let label = dict["chromeWindows"] {
@@ -2594,6 +2625,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let target = dict["window"] == "incognito" ? mainWindows.last(where: \.isIncognito) : main
                 guard let target else { CraLog.note("space menu \(label): no window"); return }
                 target.testSpaceMenu(label: label)
+                return
+            }
+            // tabMenu=<n>[&label=][&run=<row>]: the n-th listed tab's menu, see testTabMenu (#600).
+            if let n = dict["tabMenu"].flatMap(Int.init) {
+                main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"])
+                return
+            }
+            // splitMenu=<n>[&label=][&run=<row>]: the n-th split row's menu, from the top (#600).
+            if let n = dict["splitMenu"].flatMap(Int.init) {
+                main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"], split: true)
                 return
             }
             // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387).
@@ -3250,6 +3291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let url = LiveCalendarClient.shared.nextCall()?.meetingURL { main.sidebarActions.openURL(url) } else { NSSound.beep() }
         // A pane has no row of its own: its split's name is edited.
         case "renameTab": main.sidebarUI.renamingID = current.map { store.splitContaining($0)?.id ?? $0 }
+        // Arc's Duplicate Current Tab (command bar) leaves the copy in the background too (#600).
         case "duplicateTab": if let c = current { store.duplicateTab(c, window: main.windowID) }
         case "resetTab": if let c = current { main.resetPinnedTab(c) }
         case "muteTab":

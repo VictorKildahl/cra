@@ -8,6 +8,10 @@ protocol WebPageDelegate: AnyObject {
     func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool)
     /// A link that asked for a new window.
     func webPage(_ page: WebPage, openInNewTab url: URL)
+    /// "Open in Background Tab" on a link: a tab in the row, the page stays on screen (#572).
+    func webPage(_ page: WebPage, openInBackground url: URL)
+    /// "Open in Incognito" on a link: a new private tab, shown (#572).
+    func webPage(_ page: WebPage, openInIncognito url: URL)
     /// WebKit keeps the original navigation (including POST and window.opener) in this view.
     func webPage(_ page: WebPage, createPopupWith configuration: WKWebViewConfiguration, request: URLRequest) -> WKWebView?
     func webPageDidClose(_ page: WebPage)
@@ -19,6 +23,8 @@ protocol WebPageDelegate: AnyObject {
 final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, WKScriptMessageHandler {
     let tabID: UUID
     let webView: WKWebView
+    /// The tab is incognito: its links open incognito too.
+    let isIncognito: Bool
     /// The page that opened this one as a popup. Weak: the store keeps an open tab's page
     /// (`TabStore.changed()` keeps a private popup's openers), and a closed or archived opener
     /// must not keep running off screen. WebKit then gives the popup a null `window.opener`.
@@ -48,9 +54,15 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// Requests the blockers stopped on the page now showing.
     private(set) var blockedCount = 0
     private var countedHosts = Set<String>()
+    /// The address the main frame last asked for, to tell WebKit's empty about:blank for an
+    /// address it refuses from a page (`answerRefusalShownAsBlank`).
+    private var requestedURL: URL?
+    /// The address the error page is being put up at: its own navigation is let through.
+    var errorPageAddress: URL?
 
     init(tab: MobileTab, configuration supplied: WKWebViewConfiguration? = nil, opener: WebPage? = nil) {
         tabID = tab.id
+        isIncognito = tab.isIncognito
         self.opener = opener
         webKitOwnsInitialNavigation = supplied != nil
         let configuration = supplied ?? WKWebViewConfiguration()
@@ -121,7 +133,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     /// Reports the address of every request that fails, from every frame. Requests stopped by a
     /// block rule fail like any other; `userContentController(_:didReceive:)` keeps the ones
-    /// whose host is on the list.
+    /// a list or a filter covers.
     private static let failedRequestScript = """
     (() => {
       const report = url => { try { window.webkit.messageHandlers.craBlocked.postMessage(String(url)); } catch (e) {} };
@@ -143,8 +155,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     """
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard unblockedSite == nil, let address = message.body as? String, let host = URL(string: address)?.host,
-              ContentBlocker.shared.stops(host: host, with: siteOptions(webView.url?.host)),
+        guard unblockedSite == nil, let address = message.body as? String,
+              ContentBlocker.shared.stops(url: address, onPage: webView.url?.host, with: siteOptions(webView.url?.host)),
               countedHosts.insert(address).inserted else { return }
         blockedCount += 1
         changed()
@@ -193,7 +205,34 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             if navigationAction.navigationType == .linkActivated { delegate?.webPage(self, openInNewTab: url) }
             return decisionHandler(.cancel, preferences)
         }
+        // The error page itself, at the address that failed: not answered again.
+        let isErrorPage = navigationAction.request.url != nil && navigationAction.request.url == errorPageAddress
+        if isErrorPage { errorPageAddress = nil }
+        if let url = navigationAction.request.url, !isErrorPage {
+            // mailto:, tel:, an app's own scheme: to that app, before WebKit fails it with -1002.
+            // No target frame is a new window, which the page's main frame is asking for.
+            let tapped = navigationAction.navigationType == .linkActivated || navigationAction.navigationType == .formSubmitted
+            switch MobileExternalLinks.answer(address: url.absoluteString, isMainFrame: navigationAction.targetFrame?.isMainFrame ?? true,
+                                              isUserGesture: tapped) {
+            case .load: break
+            case .stay: return decisionHandler(.cancel, preferences)
+            case .open:
+                decisionHandler(.cancel, preferences)
+                return openInApp(url)
+            case .ask(let app):
+                decisionHandler(.cancel, preferences)
+                return askToOpenInApp(url, app: app)
+            }
+            // An address WebKit refuses: the error page now, rather than after the empty
+            // about:blank iOS 26.5's WebKit commits for it, which Back then landed on.
+            if MobileLoadFailure.answersBeforeLoading(url.absoluteString, isMainFrame: navigationAction.targetFrame?.isMainFrame == true,
+                                                      isBackForward: navigationAction.navigationType == .backForward) {
+                decisionHandler(.cancel, preferences)
+                return answerRefusal(of: url)
+            }
+        }
         if navigationAction.targetFrame?.isMainFrame == true {
+            requestedURL = navigationAction.request.url
             applyBlocking(for: navigationAction.request.url)
         }
         // "Open App Links in... Native App": a tapped link to another site goes to its app when
@@ -221,6 +260,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         countedHosts = []
         isTranslated = false
         changed()
+        answerRefusalShownAsBlank(requested: requestedURL)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

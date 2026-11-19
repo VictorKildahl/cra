@@ -89,6 +89,21 @@ inline PageIsFullscreenHook g_page_is_fullscreen = nullptr;
 using TargetURLHook = bool (*)(content::WebContents* contents, const GURL& url);
 inline TargetURLHook g_target_url = nullptr;
 
+// Whether a page of Cra's is in the window the user is in: Cra the active app and the page's view in its key
+// window. -1 for a page that isn't Cra's, which keeps Chrome's answer (its Browser's window, which for Cra's
+// pages is never seen and never active), else 0 or 1. PaymentRequest.show() asks it
+// (patches/cra-payments-window.patch), and chrome.action.openPopup() (patches/cra-extension-popup-window.patch).
+using PageWindowActiveHook = int (*)(content::WebContents* contents);
+inline PageWindowActiveHook g_page_window_active = nullptr;
+
+// The exclusive-access notice Chrome decided for a page ("Press Esc to exit full screen", "Press Esc to show your
+// cursor", "Press and hold Esc"), which it hangs on its Browser's never-seen window: Cra shows it over the page
+// (patches/cra-exclusive-access-notice.patch). `type` is Chrome's ExclusiveAccessBubbleType (0: none);
+// `contents` is the page holding full screen or a lock, or null; `force_update`: show it again even if unchanged.
+// True when the page is Cra's and Cra says it: Chrome's own bubble then stays away.
+using ExclusiveAccessNoticeHook = bool (*)(content::WebContents* contents, int type, bool force_update);
+inline ExclusiveAccessNoticeHook g_exclusive_access_notice = nullptr;
+
 // Whether a page is one of Cra's. Its DevTools never dock into Chrome's window: they open in a DevTools window
 // of their own, which Cra's layer takes over (patches/cra-devtools.patch).
 using IsCraPageHook = bool (*)(const content::WebContents* contents);

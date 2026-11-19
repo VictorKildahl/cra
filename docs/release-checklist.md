@@ -313,8 +313,13 @@ built release app with a test profile. Note anything that fails in the release's
 - **#534:** on a trackpad, pinch the PiP open and closed, with Cra in front and with another app in
   front: it follows the fingers smoothly in the video's shape, stops where an edge drag does at its
   smallest and at the screen's edges, a window in a corner grows out of it, and a two-finger swipe
-  still throws it. Next to Arc's, check where it grows from. The scenario drives the pinch code;
-  only real fingers show that the magnify events reach the window.
+  still throws it. Next to Arc's, check where it grows from. **#573:** rest two fingers on the
+  trackpad first, then pinch: it resizes as well, with Cra in front and with another app in
+  front, and `pip: pinched` shows in cra.log. The overlay harness and the scenario hand AppKit the
+  events in an order a trackpad can send (scroll and magnify that may begin, the pinch, the
+  scroll's cancel at the lift) and the magnify through the app's event monitor; synthetic gestures
+  posted through the window server didn't reach a background app at all, so only real fingers show
+  that a trackpad's do.
 - **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the
@@ -387,6 +392,22 @@ built release app with a test profile. Note anything that fails in the release's
   Present now shows Chrome's picker over the page (after macOS's Screen Recording prompt the first
   time), and Cancel ends it; on webauthn.io, Register shows Chrome's passkey dialog over the page,
   then Touch ID; a site that asks for a client certificate shows the certificate picker over the page.
+- **Web features without a scenario** (docs/web-features.md: macOS's own prompts or a real site; each
+  line names its row in Tests/web-features.tsv):
+  - web feature: screen share picker. On meet.google.com, Present now ▸ A window shows the picker over
+    the page and shares the window picked; Stop sharing ends it.
+  - web feature: passkey with Touch ID. On webauthn.io, Register and then Authenticate each show the
+    passkey sheet over the page and take Touch ID.
+  - web feature: client certificate. On a site that asks for one (badssl.com's client certificate
+    page), the certificate picker shows over the page, and Cancel shows the site's error.
+  - web feature: Bluetooth chooser. On a Web Bluetooth demo (googlechrome.github.io/samples/web-bluetooth),
+    Scan asks macOS for Bluetooth the first time, then shows Chrome's chooser on Cra's window; Cancel
+    tells the page no device was picked.
+  - Keyboard lock: on a page that goes full screen and locks the keyboard (keyboard-lock.glitch.me, or Chrome
+    Remote Desktop's full screen), a press of Esc stays with the page, and holding Esc for two seconds leaves full
+    screen. (`page-fullscreen-keyboard-lock` presses it; a scenario can't hold a key.)
+  - web feature: SaveFrame. Open a PDF (any link to one) and press the viewer's Save button: the file
+    saves as a download (or into the save panel with Ask Where to Save Each File on) and shows in the bin.
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
   downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
   Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
@@ -430,6 +451,14 @@ built release app with a test profile. Note anything that fails in the release's
 - **#536:** on a TestFlight build, sign in to a site with a passkey saved in iCloud Keychain and
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in
   completes. The simulator only reaches the sheet (it has no Face ID enrolled or passkeys saved).
+
+- **#570:** with the default settings, open `https://ww7.readopm.com/read-manga/` and
+  `https://ww13.readonepiece.com/` and wait half a minute on each: no "Anna has sent (7) photos",
+  "The file is ready to download" or "Something Amazing Awaits!" overlay, tapping the page opens no
+  ad tab, and the page menu counts what was scrubbed. "Reload without ad blockers" brings the ads
+  back. Needs the real sites (their ad hosts change every few days) and a network that doesn't
+  filter them: the Mac this was built on resolves both to a DNS sinkhole. CraCore's FilterListTests
+  and the UI test `testAnAdLoaderFromAnUnlistedDomainIsStoppedByItsPath` pin the rules themselves.
 
 ## Not pinned yet
 

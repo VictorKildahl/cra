@@ -54,19 +54,24 @@ public enum WindowCoverage {
     /// One window as `CGWindowListCopyWindowInfo` describes it (keys `kCGWindowNumber`,
     /// `kCGWindowOwnerPID`, `kCGWindowBounds`, `kCGWindowAlpha`, `kCGWindowIsOnscreen`). The list leaves
     /// out `kCGWindowIsOnscreen` for a window that isn't on screen, and the alpha of none is 1.
+    /// `owner` (`kCGWindowOwnerName`) and `layer` (`kCGWindowLayer`) only name a window in a readout.
     public struct Listed: Sendable, Equatable {
         public var number: Int
         public var ownerPID: Int32
         public var frame: CGRect
         public var alpha: Double
         public var onScreen: Bool
+        public var owner: String
+        public var layer: Int
 
-        public init(number: Int, ownerPID: Int32, frame: CGRect, alpha: Double, onScreen: Bool) {
+        public init(number: Int, ownerPID: Int32, frame: CGRect, alpha: Double, onScreen: Bool, owner: String = "", layer: Int = 0) {
             self.number = number
             self.ownerPID = ownerPID
             self.frame = frame
             self.alpha = alpha
             self.onScreen = onScreen
+            self.owner = owner
+            self.layer = layer
         }
 
         public init?(_ info: [String: Any]) {
@@ -79,6 +84,8 @@ public enum WindowCoverage {
             frame = CGRect(x: x, y: y, width: w, height: h)
             alpha = Self.double(info["kCGWindowAlpha"]) ?? 1
             onScreen = info["kCGWindowIsOnscreen"] as? Bool ?? false
+            owner = info["kCGWindowOwnerName"] as? String ?? ""
+            layer = Self.int(info["kCGWindowLayer"]) ?? 0
         }
 
         private static func int(_ v: Any?) -> Int? { (v as? NSNumber)?.intValue ?? (v as? Int) }
@@ -93,20 +100,28 @@ public enum WindowCoverage {
         public var inFront: Int
         public var ownParts: Int
         public var seeThrough: Int
+        /// Other apps' windows in front that overlap it and can be seen, as "Owner@layer", for the readout:
+        /// on Nightly's runners Cra's window was covered while a scenario expected nothing in front (#533).
+        public var overlapping: [String]
 
-        public init(covered: Bool, onScreen: Bool, inFront: Int, ownParts: Int, seeThrough: Int) {
+        public init(covered: Bool, onScreen: Bool, inFront: Int, ownParts: Int, seeThrough: Int, overlapping: [String] = []) {
             self.covered = covered
             self.onScreen = onScreen
             self.inFront = inFront
             self.ownParts = ownParts
             self.seeThrough = seeThrough
+            self.overlapping = overlapping
         }
 
         public var summary: String {
             guard onScreen else { return "not on screen, covered" }
-            return "on screen, \(inFront) in front (\(ownParts) own parts, \(seeThrough) see-through), \(covered ? "covered" : "not covered")"
+            let others = overlapping.isEmpty ? "" : ", over it: \(overlapping.joined(separator: " "))"
+            return "on screen, \(inFront) in front (\(ownParts) own parts, \(seeThrough) see-through), \(covered ? "covered" : "not covered")\(others)"
         }
     }
+
+    /// The Dock's process, as `kCGWindowOwnerName` names it (not localized).
+    static let dockOwner = "Dock"
 
     /// `window`: the window's own entry, nil when the window server has none (then it counts as out of
     /// sight, as macOS said). `inFront`: the on-screen windows above it. `isOwnPart` is asked only for
@@ -116,11 +131,16 @@ public enum WindowCoverage {
         guard let own = window.flatMap(Listed.init) else {
             return Reading(covered: true, onScreen: false, inFront: 0, ownParts: 0, seeThrough: 0)
         }
-        let above = inFront.compactMap(Listed.init).map { w in
-            Above(frame: w.frame, alpha: w.alpha, isOwnPart: w.ownerPID == pid && isOwnPart(w.number))
+        let listed = inFront.compactMap(Listed.init)
+        let above = listed.map { w in
+            // The Dock's window spans its whole display and is clear apart from the Dock itself: on Nightly's runners
+            // it was over Cra's window, which then counted as covered and sent its video away (#533). It covers nothing.
+            Above(frame: w.frame, alpha: w.owner == dockOwner ? 0 : w.alpha, isOwnPart: w.ownerPID == pid && isOwnPart(w.number))
         }
+        let overlapping = listed.filter { $0.ownerPID != pid && $0.alpha > 0 && $0.owner != dockOwner && $0.frame.intersects(own.frame) }
+            .map { "\($0.owner.isEmpty ? "pid \($0.ownerPID)" : $0.owner)@\($0.layer)" }
         return Reading(covered: isCovered(frame: own.frame, onScreen: own.onScreen, above: above), onScreen: own.onScreen,
                        inFront: above.count, ownParts: above.filter(\.isOwnPart).count,
-                       seeThrough: above.filter { $0.alpha <= 0 }.count)
+                       seeThrough: above.filter { $0.alpha <= 0 }.count, overlapping: overlapping)
     }
 }

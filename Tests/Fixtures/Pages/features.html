@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Web features fixture</title>
+<!-- The web features whose browser side Chrome hangs on its Browser's window, for the web-features scenarios
+     (docs/web-features.md): pickers, prompts, choosers, locks, sharing, printing from a frame, a form that posts.
+     On the engine that window is never seen (a 1 pt strip along Cra's window since 0.1.49, #346), and each of
+     these has to work over Cra's page instead. Every answer lands in `said`, which a scenario reads. -->
+<style>
+  body { margin: 0; padding: 24px; font: 14px -apple-system, sans-serif; }
+  input, iframe, form { display: block; margin: 12px 0; }
+  #lock { width: 300px; height: 120px; background: #ddd; }
+</style>
+<form id="order" method="post" action="/echo">
+  <input name="item" value="tea">
+  <button>Order</button>
+</form>
+<input id="folder" type="file" webkitdirectory>
+<div id="lock">pointer lock target</div>
+<script>
+  var said = [];
+  // A promise's outcome, kept under `kind`: "kind:ok" or "kind:<error name>". Until then `state[kind]` is
+  // "waiting", so a scenario can tell a picker that is still up from one that was turned down at once.
+  var state = {};
+  function settle(kind, promise) {
+    state[kind] = 'waiting';
+    promise.then(function (v) { state[kind] = 'ok'; said.push(kind + ':ok'); },
+                 function (e) { state[kind] = e.name; said.push(kind + ':' + e.name); });
+    return kind + ' asked';
+  }
+  var aborts = {};
+  function abortable(kind, start) {
+    var c = new AbortController();
+    aborts[kind] = c;
+    return settle(kind, start(c.signal));
+  }
+  function abort(kind) { aborts[kind].abort(); return kind + ' aborted'; }
+
+  // Permission prompts, each from a timer, so the scenario's own call returns at once.
+  function geolocation() {
+    return settle('geolocation', new Promise(function (ok, no) {
+      navigator.geolocation.getCurrentPosition(ok, function (e) { no({ name: 'denied' + e.code }); });
+    }));
+  }
+  // A protocol handler: Chrome asks with a permission request of its own.
+  function protocolHandler() {
+    navigator.registerProtocolHandler('web+crafixture', location.origin + '/page.html?handled=%s');
+    return 'protocol asked';
+  }
+  // Two downloads without a click in between: the second asks "Download multiple files?".
+  function twoDownloads() {
+    ['one', 'two'].forEach(function (n, i) {
+      setTimeout(function () {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([n], { type: 'text/plain' }));
+        a.download = 'multi-' + n + '.txt';
+        document.body.appendChild(a);
+        a.click();
+      }, i * 300);
+    });
+    return 'downloads asked';
+  }
+  // Busy for good: the renderer stops answering input, and Chrome offers to stop the page.
+  function hang() { setTimeout(function () { for (;;) {} }, 0); return 'hanging'; }
+  // A cross-site frame that prints itself when told to.
+  function frame(src) {
+    var f = document.createElement('iframe');
+    f.id = 'printer';
+    f.src = src;
+    f.width = 400; f.height = 200;
+    document.body.appendChild(f);
+    return 'frame added';
+  }
+  function framePrint() { document.getElementById('printer').contentWindow.postMessage('print', '*'); return 'frame print asked'; }
+  addEventListener('message', function (e) { if (typeof e.data == 'string') said.push('frame:' + e.data); });
+  // A popup of the page's own that closes itself, and the opener it focuses on the way out.
+  var popup = null;
+  function openPopup(url) { popup = window.open(url, 'crapopup'); return popup ? 'popup opened' : 'popup blocked'; }
+  document.addEventListener('pointerlockchange', function () { said.push('pointerlock:' + (document.pointerLockElement ? 'on' : 'off')); });
+  document.addEventListener('fullscreenchange', function () { said.push('fullscreen:' + (document.fullscreenElement ? 'on' : 'off')); });
+  // Esc reaching the page: under a keyboard lock it does; otherwise Chrome takes it to end a lock or full screen.
+  addEventListener('keydown', function (e) { if (e.key == 'Escape') said.push('key:Escape'); });
+  folder.addEventListener('cancel', function () { said.push('folder:cancel'); });
+</script>

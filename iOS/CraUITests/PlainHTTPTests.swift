@@ -36,4 +36,55 @@ final class PlainHTTPTests: BrowserTestCase {
                       "the error names the host and the reason")
         keep("load-failed")
     }
+
+    /// GitHub #568, follow-up: an address WebKit refuses itself still opened as a blank white
+    /// page. Port 1 is on WebKit's restricted list; iOS 26.5's WebKit answers it with an empty
+    /// about:blank, a newer one with WebKitErrorDomain 103, and both must say so.
+    // promise: #568
+    func testAnAddressWebKitRefusesSaysSo() {
+        launch(["-CraOpenURL", "http://127.0.0.1:1/", "-CraSearch", "NO"])
+        waitForPage("This page couldn’t load")
+        XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "127.0.0.1: ")).firstMatch.exists,
+                      "the error names the host and the reason")
+        keep("load-refused")
+    }
+
+    /// GitHub #568, follow-up: iOS 26.5's WebKit commits an empty about:blank for an address it
+    /// refuses, and the error page came after it, so Back from the error page has to skip that
+    /// blank and land on the page before. The address is typed into the tab: a link to it does
+    /// nothing at all (WebKit drops it in the page before the app hears of it).
+    // promise: #568
+    func testBackFromARefusedAddressReturnsToThePageBefore() {
+        let base = ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765"
+        launch(["-CraOpenURL", base + "/before-refused", "-CraSearch", "NO"])
+        waitForPage("Before Refused")
+        app.buttons["bar-menu"].tap()
+        let host = app.staticTexts["menu-host"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("http://127.0.0.1:1/\n")
+        waitForPage("This page couldn’t load")
+        // Reload tries the address again and the error page comes back in its place, not after it.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-reload"].waitForExistence(timeout: 5))
+        app.buttons["menu-reload"].tap()
+        XCTAssertFalse(host.waitForExistence(timeout: 2))
+        waitForPage("This page couldn’t load")
+        app.buttons["bar-menu"].tap()
+        let back = app.buttons["menu-back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        XCTAssertTrue(back.isEnabled, "nothing to go back to")
+        back.tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertFalse(host.waitForExistence(timeout: 2))
+        waitForPage("Before Refused")
+        XCTAssertFalse(app.webViews.staticTexts["This page couldn’t load"].exists)
+        // One Back is the whole way: the page before is the first in the tab.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        XCTAssertFalse(back.isEnabled, "a blank page or a second error page sits between")
+        keep("refused-back")
+    }
 }

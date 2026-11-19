@@ -1,0 +1,28 @@
+# promise: web-page-payment
+# web-features: a checkout's PaymentRequest (Google Pay and the shops' own payment apps). Chrome shows its
+# payment sheet only for a page in the active window, and asked its Browser's window, which on the engine is
+# never seen and never active: every show() was turned down at once as from a background tab ("AbortError:
+# Cannot show PaymentRequest UI in a preview page or a background tab"). cra-payments-window.patch asks Cra
+# whether the page's own window is the one in use. The fixture's payment method has no app (a 404), so the page
+# gets Chrome's real answer, NotSupportedError, once it gets that far.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=pay
+expect-log GET /features.html\?n=pay
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(new PaymentRequest([{supportedMethods:location.origin+'/no-pay'}],{total:{label:'Tea',amount:{currency:'USD',value:'1'}}}).show().then(()=>window.pay='shown',e=>window.pay=e.name+': '+e.message),'pay asked')","userGesture":true}
+expect-log "value":"pay asked"
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'pay '+window.pay"}
+expect-log "value":"pay NotSupportedError
+reject-log "value":"pay AbortError
+reject-log fault:

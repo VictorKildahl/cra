@@ -250,6 +250,16 @@ struct ModelFixtureTests {
         #expect(loaded.loads(folder: "some-folder", inProfile: "Profile 9"))
     }
 
+    /// web-store-refused.json (#491): the Web Store copies the store refused, by profile.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/491"))
+    func webStoreRefusalsLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("web-store-refused.json", as: WebStoreRefusals.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        #expect(loaded.isRefused(folder: "aeblfdkhhhdcdjpifhhbdiojplfjncoa", inProfile: "Default"))
+        #expect(!loaded.isRefused(folder: "aeblfdkhhhdcdjpifhhbdiojplfjncoa", inProfile: "Profile 9"))
+    }
+
     // MARK: What the old shapes turn into
 
     @Test func legacySidebarGetsWhatTheStoreRepairsFrom() throws {

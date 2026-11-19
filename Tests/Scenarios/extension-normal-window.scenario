@@ -1,0 +1,19 @@
+# promise: #578
+# An extension makes a normal window on about:blank and goes on using the id windows.create gave it back, as
+# BrowserSkill's Agent Window does (#578). Cra never shows Chrome's normal windows: their pages become Cra tabs
+# and the window closes. It closed a window with nothing in it too, so the extension's id named no window:
+# windows.get and tabs.create on it failed and windows.getAll never listed it (engine -27 answered
+# get-missing-listed-false-tab-error-query-0-remove-error-removed-true, onRemoved from Cra's own close). Now a
+# window with only a blank page stays, unseen, as on the CEF bridge, and works as in Chrome until the extension
+# closes it. A normal window on a page
+# still becomes a Cra tab (adopted-closed, and `back` reads it as the selected tab).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+extension ${FIXTURES}/NormalWindowExtension
+cra://open?url=${PAGE}?n=normal-window
+expect-log GET /page\.html\?n=normal-window-
+expect-log GET /page\.html\?n=in-window
+expect-log GET /page\.html\?n=normal-window-get-ok-listed-true-tab-ok-query-2-remove-ok-removed-true-adopted-closed
+cra://debug?back=adopted
+expect-log back adopted: selected=.*page\.html\?n=adopted
+reject-log fault:

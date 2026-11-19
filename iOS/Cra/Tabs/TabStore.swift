@@ -50,6 +50,15 @@ final class TabStore {
         changed()
     }
 
+    /// "Open in Background Tab": a tab at the end of the row, not shown. An incognito one waits
+    /// unseen while the private session goes on (`MobileTabsDocument.addInBackground`).
+    func addInBackground(url: String, incognito: Bool) -> MobileTab {
+        let tab = MobileTab(url: url, lastActive: now(), isIncognito: incognito)
+        document.addInBackground(tab)
+        changed()
+        return tab
+    }
+
     func select(_ id: UUID) {
         document.select(id, now: now())
         changed()
@@ -57,6 +66,9 @@ final class TabStore {
 
     /// The tab row's tabs: incognito tabs are never in it.
     var rowTabs: [MobileTab] { document.rowTabs }
+
+    /// The tab switcher's cards: the row, and on a private page the private tabs waiting unseen.
+    var switcherTabs: [MobileTab] { document.switcherTabs }
 
     /// Where a flick up on the tab button goes: the tab looked at before this one.
     var previousTab: MobileTab? { document.previousTab }

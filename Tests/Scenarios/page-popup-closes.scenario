@@ -1,0 +1,26 @@
+# promise: web-page-popup-closes
+# web-features: a page's own popup that closes itself (a sign-in or payment window: window.open, then
+# window.close() when done) and its opener left as it was. Chrome closes a page through its Browser (its
+# CloseContents), on the engine the never-seen one: the page has to go from Cra too, and its opener has to see
+# it closed.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=opener
+expect-log GET /features.html\?n=opener
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"openPopup('/page.html?n=signin')","userGesture":true}
+expect-log "value":"popup opened"
+expect-log GET /page.html\?n=signin
+wait 2
+# The popup is a tab in front now: it closes itself, as a sign-in window does when it's done.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'popup has opener '+!!window.opener+' at '+location.search"}
+expect-log "value":"popup has opener true at \?n=signin"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(setTimeout(()=>window.close(),0),'closing')"}
+expect-log "value":"closing"
+wait 2
+# The opener is in front again, and sees its popup closed.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'popup closed '+popup.closed+' at '+location.search"}
+expect-log "value":"popup closed true at \?n=opener"
+reject-log fault:

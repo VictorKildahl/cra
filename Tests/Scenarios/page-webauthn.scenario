@@ -1,0 +1,33 @@
+# promise: web-page-webauthn
+# web-features: a page's passkey or security key sign-in (navigator.credentials.get: GitHub, Google, a bank).
+# Chrome asks in a tab-modal dialog it hangs on its Browser's window, on the engine a never-seen 1 pt strip
+# along Cra's window (#346): it has to come up over the page (cra-page-dialogs.patch), and Cancel has to tell
+# the page no. A request for a USB security key keeps it to Chrome's own dialog (Touch ID and iCloud Keychain
+# raise macOS's own: docs/release-checklist.md). WebAuthn needs a secure origin: localhost, here not the
+# run's DRM host.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+env CRA_WEBKIT_HOSTS=none.invalid
+cra://open?url=${WEBKIT}/features.html?n=passkey
+expect-log GET /features.html\?n=passkey
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('key',navigator.credentials.get({publicKey:{challenge:new Uint8Array(32),allowCredentials:[{type:'public-key',id:new Uint8Array(16),transports:['usb']}],userVerification:'discouraged',timeout:60000}}))","userGesture":true}
+expect-log "value":"key asked"
+wait 3
+cra://debug?pageDialogs=key
+expect-log page dialog key: chrome [0-9]{3,}x[0-9]{3,} at=page front=1 .*buttons=.*Cancel
+cra://debug?pageDialogs=key-cancel&press=Cancel
+expect-log page dialogs key-cancel: pressed Cancel
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'key '+state.key"}
+expect-log "value":"key NotAllowedError"
+reject-log fault:

@@ -56,9 +56,9 @@ enum SidebarMenus {
 
     /// Arc asks before it makes a share link (AppDialog.shareLink): Copy Link to Folder goes on,
     /// Cancel or Escape stops; ticking "Never show me this again." and going on skips it from then on.
-    private static func confirmShare(over window: NSWindow?, _ share: @escaping () -> Void) {
+    private static func confirmShare(over window: NSWindow?, kind: String = "Folder", _ share: @escaping () -> Void) {
         guard !UserDefaults.standard.bool(forKey: skipsShareWarningKey), let window = window ?? AppDialog.parentWindow else { share(); return }
-        let dialog = AppDialog.shareLink()
+        let dialog = AppDialog.shareLink(kind: kind)
         dialog.present(over: window) { response in
             guard response == .alertFirstButtonReturn else { return }
             if dialog.isSuppressed { UserDefaults.standard.set(true, forKey: skipsShareWarningKey) }
@@ -77,91 +77,103 @@ enum SidebarMenus {
 
     // MARK: Tabs
 
+    /// Arc 1.173.1's tab menu, read live 19 Nov 2026 (#600), on Today, pinned and folder rows:
+    /// Copy Link, Share ▸ | Change Icon…, Rename…, Mute, Customize Page… (the open tab), Edit Pinned
+    /// Page ▸ (pinned) | Add/Open in Split View, Duplicate, Move to ▸ | Archive Tab (⌥ Archive Other
+    /// Tabs), Archive Tabs Below (⌥ Archive Tabs Above) on Today, Remove Pin on a pinned tab.
+    /// Cra keeps Use Site Icon and Use Page Title, which have no other way in, beside their rows.
     static func tab(_ m: TabRowModel, list: SpaceListView) -> NSMenu {
         let store = list.store, ui = list.ui, actions = list.actions
         let id = m.id
         let menu = menu()
         if list.closeGroup(for: id).count > 1 { return picked(ui.group(for: id, in: store), clicked: id, list: list) }
         guard let item = store.item(id), let tab = item.tab else { return menu }
-        if m.pinned {
-            add(menu, action: "pinTab", "Unpin Tab") { store.unpinTab(id) }
-        } else {
-            add(menu, action: "pinTab", "Pin Tab") {
-                store.withPinningWindow(ui.windowID) { store.pinTab(id) }
-            }
-        }
-        if store.isFavorite(id) {
-            add(menu, action: "favoriteTab", "Remove from Favorites") {
-                store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) }
-            }
-        } else {
-            add(menu, action: "favoriteTab", "Add to Favorites") { store.addToFavorites(id) }
-        }
+        let open = store.isSelected(id, window: ui.windowID)
+        add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
+        let web = URL(string: CleanURL.withoutTrackers(tab.url)).flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }
+        if let web { SharePicker.addMenu(to: menu, url: web) }
         menu.addItem(.separator())
-        // Arc's Today and pinned tab menus: Change Icon…, as Favorites have it.
-        let favicons = list.favicons
+        changeIconItems(menu, id, title: item.displayTitle, custom: tab.customIconKey, store: store, favicons: list.favicons)
+        add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
+        if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
+        muteItem(menu, id, tab, ui: ui, store: store, actions: actions)
+        if open, web?.host != nil { add(menu, "Customize Page…") { actions.performAction("newBoost") } }
+        if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
+        menu.addItem(.separator())
+        // Arc: "Add Split View" on the open tab, "Open in Split View" on any other.
+        if open {
+            add(menu, action: "addSplitView", "Add Split View") { actions.performAction("addSplitView") }
+        } else if store.selectedTabID(window: ui.windowID) != nil, store.spaceID(ofItem: id) == store.focusedSpaceID(window: ui.windowID) {
+            add(menu, "Open in Split View") { actions.performAction("openInSplit:\(id.uuidString)") }
+        }
+        add(menu, action: "duplicateTab", "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
+        moveToItems(menu, [id], list: list)
+        menu.addItem(.separator())
+        if m.pinned {
+            // Arc's Remove Pin archives the tab (StorableArchiveItems, reason manual).
+            add(menu, "Remove Pin") { store.archiveTab(id, reason: .manual) }
+        } else {
+            let archive = add(menu, action: "closeTab", "Archive Tab") { actions.closeTab(id) }
+            alternate(add(menu, "Archive Other Tabs", enabled: store.hasTodayTabs(above: id) || store.hasTodayTabs(below: id)) {
+                store.archiveOtherTabs(id)
+            }, of: archive)
+            let below = add(menu, "Archive Tabs Below", enabled: store.hasTodayTabs(below: id)) { store.archiveTabsBelow(id) }
+            alternate(add(menu, "Archive Tabs Above", enabled: store.hasTodayTabs(above: id)) { store.archiveTabsAbove(id) }, of: below)
+        }
+        return menu
+    }
+
+    /// Change Icon… (an image file for the tab), and Use Site Icon while it has one: Arc's row, and
+    /// Cra's way back from it.
+    static func changeIconItems(_ menu: NSMenu, _ id: UUID, title: String, custom: String?, store: SidebarStore, favicons: FaviconCache) {
         add(menu, "Change Icon…") {
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.image]
             panel.prompt = "Use Icon"
-            panel.message = "Choose an image for \(item.displayTitle)."
+            panel.message = "Choose an image for \(title)."
             guard panel.runModal() == .OK, let url = panel.url else { return }
             guard let key = favicons.importCustomIcon(from: url) else { NSSound.beep(); return }
             let old = store.item(id)?.tab?.customIconKey
             store.setCustomIcon(key, for: id)
             if let old { favicons.removeCustomIcon(old) }
         }
-        if let key = tab.customIconKey {
+        if let custom {
             add(menu, "Use Site Icon") {
                 store.setCustomIcon(nil, for: id)
-                favicons.removeCustomIcon(key)
+                favicons.removeCustomIcon(custom)
             }
         }
-        add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
-        if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
-        if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
-        // Arc: "Add Split View" on the open tab, "Open in Split View" on any other.
-        if store.isSelected(id, window: ui.windowID) {
-            add(menu, action: "addSplitView", "Add Split View") { actions.performAction("addSplitView") }
-        } else if store.selectedTabID(window: ui.windowID) != nil, store.spaceID(ofItem: id) == store.focusedSpaceID(window: ui.windowID) {
-            add(menu, "Open in Split View") { actions.performAction("openInSplit:\(id.uuidString)") }
-        }
-        add(menu, action: "duplicateTab", "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
-        add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
-        if let url = URL(string: CleanURL.withoutTrackers(tab.url)), url.scheme?.hasPrefix("http") == true {
-            SharePicker.addMenu(to: menu, url: url)
-        }
-        add(menu, action: "muteTab", tab.muted ? "Unmute" : "Mute") {
+    }
+
+    /// Mute / Unmute. Arc dims Mute while the tab makes no sound (#600): it is on while the page
+    /// plays, and Unmute while the tab is muted.
+    static func muteItem(_ menu: NSMenu, _ id: UUID, _ tab: TabData, ui: SidebarUIState, store: SidebarStore, actions: SidebarActions) {
+        add(menu, action: "muteTab", tab.muted ? "Unmute" : "Mute", enabled: tab.muted || ui.audibleTabIDs.contains(id)) {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
         }
-        if m.pinned, m.navigatedAway {
-            menu.addItem(.separator())
-            add(menu, action: "resetTab", "Back to Pinned Page") { actions.resetPinnedTab(id) }
-        }
-        menu.addItem(.separator())
-        let spaces = submenu(menu, "Move to Space")
+    }
+
+    /// Arc's ⌥ row: shown in place of `primary` while ⌥ is held.
+    private static func alternate(_ item: NSMenuItem, of primary: NSMenuItem) {
+        item.keyEquivalent = primary.keyEquivalent
+        item.keyEquivalentModifierMask = primary.keyEquivalentModifierMask.union(.option)
+        item.isAlternate = true
+    }
+
+    /// Arc's Move to ▸: every space, ✓ on the tab's own, ──, New Space… (which takes the tabs along).
+    private static func moveToItems(_ menu: NSMenu, _ ids: [UUID], list: SpaceListView) {
+        let store = list.store, ui = list.ui, actions = list.actions
+        let sub = submenu(menu, "Move to")
+        let own = ids.first.flatMap { store.spaceID(ofItem: $0) }
         for s in store.orderedSpaces {
-            add(spaces, SpaceMenuTitle.plain(s.labeled), enabled: !store.isInSpace(id, s.id)) {
-                store.moveTab(id, toSpace: s.id, window: ui.windowID)
+            add(sub, SpaceMenuTitle.plain(s.labeled), on: s.id == own) {
+                guard s.id != own else { return }
+                for id in ids { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
             }
         }
-        folderItems(menu, [id], list: list)
-        menu.addItem(.separator())
-        if m.pinned {
-            if store.isSelected(id, window: ui.windowID) || ui.loadedTabIDs.contains(id) {
-                add(menu, action: "closeTab", "Close and Keep Pinned") { actions.closeTab(id) }
-            }
-            add(menu, "Archive Tab") { store.archiveTab(id, reason: .manual) }
-        } else {
-            add(menu, action: "closeTab", "Archive") { actions.closeTab(id) }
-            // Arc's Today tab menu: Archive Tab, Archive Tabs Below.
-            if let parent = item.parentID, let rows = store.item(parent)?.children, rows.last != id,
-               store.spaceID(ofItem: id).flatMap(store.space)?.todayContainerID == parent {
-                add(menu, "Archive Tabs Below") { store.archiveTabsBelow(id) }
-            }
-        }
-        return menu
+        sub.addItem(.separator())
+        add(sub, "New Space…") { actions.newSpaceWith(ids) }
     }
 
     /// The menu on a tab that is one of several picked with ⌘/⇧-click (#356): Arc's rows for every
@@ -250,31 +262,12 @@ enum SidebarMenus {
         return menu
     }
 
-    /// The pinned URL's items on pinned tabs and favorites (#54), beside Rename… since they edit
-    /// the same item. Arc puts them in an Edit Pinned Page submenu; Cra lists them flat, as
-    /// Anoninz suggested on PR #55. Replace is greyed out while the tab is on its pinned page.
+    /// Arc's Edit Pinned Page ▸ on pinned tabs and favorites: Replace Pinned URL with Current (dim
+    /// while the tab is on its pinned page) and Edit… (#54; flat rows from PR #55 until #600).
     static func pinnedURLItems(_ menu: NSMenu, _ id: UUID, navigatedAway: Bool, store: SidebarStore, actions: SidebarActions) {
-        add(menu, "Edit Pinned URL…") { actions.editPinnedURL(id) }
-        add(menu, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
-    }
-
-    /// Move to Folder / New Folder for this tab, or for every picked tab.
-    private static func folderItems(_ menu: NSMenu, _ ids: [UUID], list: SpaceListView) {
-        let store = list.store, ui = list.ui
-        let folders = store.children(of: store.focusedSpace(window: ui.windowID).pinnedContainerID).filter { $0.isFolder && !$0.isLiveFolder }
-        if !folders.isEmpty {
-            let sub = submenu(menu, ids.count > 1 ? "Move \(ids.count) Tabs to Folder" : "Move to Folder")
-            for f in folders {
-                add(sub, f.title ?? "Folder", enabled: !ids.allSatisfy { store.item($0)?.parentID == f.id }) {
-                    store.withPinningWindow(ui.windowID) { store.moveItems(ids, to: f.id, index: nil) }
-                }
-            }
-        }
-        add(menu, ids.count > 1 ? "New Folder with \(ids.count) Tabs" : "New Folder with Tab") {
-            store.withPinningWindow(ui.windowID) {
-                ui.renamingID = store.createFolder(with: ids).id
-            }
-        }
+        let sub = submenu(menu, "Edit Pinned Page")
+        add(sub, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
+        add(sub, "Edit…") { actions.editPinnedURL(id) }
     }
 
     // MARK: Folders
@@ -453,18 +446,34 @@ enum SidebarMenus {
         }
     }
 
-    /// Arc 1.171's split menu, item for item where Cra has the feature (no Share or Change Icon).
-    /// It is pinned by dragging it into Pinned or with Pin Tab (⌘D), not from here.
+    /// Arc 1.173.1's split menu, read live 19 Nov 2026 (#600): Share Split View… | Separate All Tabs,
+    /// Add Tab…, Convert to Vertical/Horizontal Split View | Tab Options, a submenu per pane | Reset
+    /// Name and Icon (named or with an icon), Change Icon…, Rename… | Duplicate, Move to ▸ | in Today
+    /// Archive Item (⌥ Archive Other Tabs) and Archive Tabs Below (⌥ Archive Tabs Above), pinned
+    /// Archive Item and Close while it's open. It is pinned with Pin Tab (⌘D) or by dragging.
     static func split(_ m: SplitRowModel, list: SpaceListView) -> NSMenu {
-        split(m.id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: list.store, ui: list.ui, actions: list.actions)
+        split(m.id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: list.store, ui: list.ui, actions: list.actions,
+              window: list.window, changeIcon: { [weak list] in list?.showSplitIconPicker(m.id) })
     }
 
-    /// A split's menu, from its sidebar row or its favorite tile.
+    /// A split's menu, from its sidebar row or its favorite tile. `changeIcon` shows the icon picker
+    /// where the split is drawn; a favorite tile has no such row.
     static func split(_ id: UUID, panes: [(id: UUID, title: String)], open: Bool, store: SidebarStore, ui: SidebarUIState,
-                      actions: SidebarActions, leading: (NSMenu) -> Void = { _ in }) -> NSMenu {
+                      actions: SidebarActions, window: NSWindow? = nil, changeIcon: (() -> Void)? = nil,
+                      leading: (NSMenu) -> Void = { _ in }) -> NSMenu {
         let menu = menu()
         leading(menu)
         let children = panes.map(\.id)
+        // Arc stores the split on arc.net; Cra's link carries the panes after its #, as Share Folder… does.
+        let link = FolderShareLink.url(for: FolderShareLink.picked(children.compactMap(store.item)))
+        add(menu, "Share Split View…", enabled: link != nil) {
+            guard let link else { return }
+            confirmShare(over: window, kind: "Split View") {
+                copy(link)
+                actions.showToast("Copied Folder URL")
+            }
+        }
+        menu.addItem(.separator())
         add(menu, "Separate All Tabs") { store.separateAll(id) }
         // Arc greys it out while the split is closed (no pane to add next to).
         add(menu, action: "addSplitView", "Add Tab…", enabled: open && children.count < store.splitPaneLimit) {
@@ -480,14 +489,16 @@ enum SidebarMenus {
         menu.addItem(.separator())
         note(menu, "Tab Options")
         for c in panes {
-            paneItems(submenu(menu, c.title), c.id, store: store, actions: actions)
+            paneItems(submenu(menu, c.title), c.id, store: store, ui: ui, actions: actions)
         }
         menu.addItem(.separator())
-        // Arc's way back to the panes from a renamed split.
-        if store.item(id)?.title != nil { add(menu, "Reset Name and Icon") { store.rename(id, to: nil) } }
+        // Arc's way back to the panes from a renamed split or one with an icon.
+        if store.item(id)?.title != nil || store.item(id)?.split?.icon != SpaceIcon.none {
+            add(menu, "Reset Name and Icon") { store.resetSplitNameAndIcon(id) }
+        }
+        if let changeIcon { add(menu, "Change Icon…") { changeIcon() } }
         add(menu, "Rename…") { ui.renamingID = id }
         menu.addItem(.separator())
-        // Arc 1.171: Duplicate, then Move to ▸ (#600).
         add(menu, "Duplicate") { store.duplicateSplit(id, window: ui.windowID) }
         let spaces = submenu(menu, "Move to")
         for s in store.orderedSpaces {
@@ -496,23 +507,38 @@ enum SidebarMenus {
                 if !current { store.moveTab(id, toSpace: s.id, window: ui.windowID) }
             }
         }
+        spaces.addItem(.separator())
+        add(spaces, "New Space…") { actions.newSpaceWith([id]) }
         menu.addItem(.separator())
-        add(menu, "Archive Item") { for c in children { store.archiveTab(c, reason: .manual) } }
+        let archive = add(menu, "Archive Item") { for c in children { store.archiveTab(c, reason: .manual) } }
+        if store.isPinned(id) {
+            if open, let pane = children.first { add(menu, "Close") { actions.closeTab(pane) } }
+        } else if let pane = children.first {
+            alternate(add(menu, "Archive Other Tabs", enabled: store.hasTodayTabs(above: pane) || store.hasTodayTabs(below: pane)) {
+                store.archiveOtherTabs(pane)
+            }, of: archive)
+            let below = add(menu, "Archive Tabs Below", enabled: store.hasTodayTabs(below: pane)) { store.archiveTabsBelow(pane) }
+            alternate(add(menu, "Archive Tabs Above", enabled: store.hasTodayTabs(above: pane)) { store.archiveTabsAbove(pane) }, of: below)
+        }
         return menu
     }
 
-    /// One pane's submenu under "Tab Options" (Arc: childItem(id, …)).
-    private static func paneItems(_ menu: NSMenu, _ id: UUID, store: SidebarStore, actions: SidebarActions) {
+    /// One pane's submenu under "Tab Options" (Arc: childItem(id, …)): Separate from Split View |
+    /// Share ▸, Mute (dimmed while silent), Copy Link, Copy link as Markdown | Archive Item.
+    private static func paneItems(_ menu: NSMenu, _ id: UUID, store: SidebarStore, ui: SidebarUIState, actions: SidebarActions) {
         guard let tab = store.item(id)?.tab else { return }
         // No shortcut glyphs: every pane has this submenu, and the keys act on the focused one.
         add(menu, "Separate from Split View") { store.separateFromSplit(id) }
         menu.addItem(.separator())
-        add(menu, tab.muted ? "Unmute" : "Mute") {
+        if let url = URL(string: CleanURL.withoutTrackers(tab.url)), url.scheme?.hasPrefix("http") == true {
+            SharePicker.addMenu(to: menu, url: url)
+        }
+        add(menu, tab.muted ? "Unmute" : "Mute", enabled: tab.muted || ui.audibleTabIDs.contains(id)) {
             store.setMuted(id, !tab.muted)
             actions.performAction("muteTab:\(id)")
         }
         add(menu, "Copy Link") { copy(tab.url) }
-        add(menu, "Copy Link as Markdown") { copy("[\(store.item(id)?.displayTitle ?? tab.savedTitle)](\(tab.url))") }
+        add(menu, "Copy link as Markdown") { copy("[\(store.item(id)?.displayTitle ?? tab.savedTitle)](\(tab.url))") }
         menu.addItem(.separator())
         add(menu, "Archive Item") { store.archiveTab(id, reason: .manual) }
     }

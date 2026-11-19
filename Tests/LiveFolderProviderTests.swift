@@ -14,6 +14,7 @@ enum LiveFolderProviderTests {
         try gitHubOpenOnlyEdges(github, executable: executable)
         try gitHubMergedSinceLastRefresh(github, executable: executable)
         try gitHubSSOKey(github, executable: executable)
+        try gitHubSSOBesideOtherPullRequests(github, executable: executable)
         try gitLab(gitlab, executable: executable)
         let azure = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/azure-devops"))
         try azureDevOps(azure, executable: executable)
@@ -320,6 +321,47 @@ enum LiveFolderProviderTests {
         signedOut.lastError = .notSignedIn
         check(signedOut.alert == .signIn(help: "Sign back in to GitHub.", url: "https://github.com/login?return_to=%2Fpulls")
               && signedOut.alert?.symbol == "exclamationmark.triangle", "signed out shows the triangle, even with an organisation behind SSO")
+    }
+
+    // promise: #521
+    /// The pulls page's JSON lists pull requests but never which organisations wait for SSO; GitHub
+    /// says that in the page itself (pullsDashboardSurfaceLayoutRoute's `sso_organizations`, which Arc
+    /// reads) and in its search's `protected_org_logins`. With pull requests from elsewhere in the folder
+    /// the search never ran, so a lapsed organisation SSO showed no key while its pull requests asked
+    /// for a sign-in when opened (GitHub #521, 0.1.49). Answers shaped like GitHub's on 19 Nov 2026.
+    private static func gitHubSSOBesideOtherPullRequests(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        let pulls = #"{"meta":{"title":"Pull requests"},"payload":{"pullsDashboardSurfaceContentRoute":{"results":["#
+            + #"{"number":7,"title":"Elsewhere","permalink":"https://github.com/me/tool/pull/7","repoNameWithOwner":"me/tool","#
+            + #""author":{"displayLogin":"me"},"state":"OPEN","isDraft":false,"mergedAt":null,"createdAt":"2026-11-18T12:00:00Z"}],"#
+            + #""pageInfo":{"currentPage":1,"totalPages":1,"totalCount":1},"error":null}}}"#
+        func page(_ organisations: String) -> String {
+            #"<html><meta name="user-login" content="me"><script type="application/json" data-target="react-app.embeddedData">"#
+                + #"{"payload":{"pullsDashboardSurfaceLayoutRoute":{"sso":{"sso_organizations":"# + organisations
+                + #","current_sso_orgs_match_dismissed_cookie":false}}},"appPayload":{"sso_organizations":"# + organisations + "}}</script></html>"
+        }
+        let acme = #"[{"id":"1","login":"acme","name":"Acme","avatar_url":"https://avatars.githubusercontent.com/u/1?s=60&v=4"}]"#
+        func read(_ organisations: String) throws -> (LiveFolderPluginSnapshot, [LiveFolderPluginRequest]) {
+            var requests: [LiveFolderPluginRequest] = []
+            let snapshot = try refresh(github, executable: executable, origins: ["https://github.com"], filters: ["authored"],
+                                       groups: ["acme/app", "me/tool"]) { request in
+                requests.append(request)
+                let json = request.headers?["Accept"] == "application/json"
+                return LiveFolderPluginResponse(status: 200, url: request.url, body: json ? pulls : page(organisations))
+            }.get()
+            return (snapshot, requests)
+        }
+
+        let (lapsed, requests) = try read(acme)
+        check(lapsed.items.map(\.title) == ["Elsewhere"], "the pull requests that do load stay in the folder")
+        check(lapsed.warning == "Login with SSO to unlock this folder", "an organisation waiting for SSO puts the key on the folder")
+        check(lapsed.actions == [.init(title: "Sign In to acme with SSO…", url: "https://github.com/orgs/acme/sso")],
+              "and a click goes to its SSO page")
+        check(lapsed.preservedGroups == ["acme/app"], "its pull requests already in the folder are kept")
+        check(requests.count == 2 && requests[1].url == "https://github.com/pulls" && requests[1].headers?["Accept"] != "application/json",
+              "one read of the pulls page itself, after the search")
+
+        let (healthy, _) = try read("[]")
+        check(healthy.warning == nil && healthy.actions.isEmpty, "no organisation waiting, no key")
     }
 
     // MARK: GitLab

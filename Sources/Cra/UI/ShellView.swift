@@ -991,6 +991,8 @@ final class ShellView: NSView {
         }
         return "toolbar \(command): floats=\(floatingCard != nil ? 1 : 0) out=\(toolbarTracker.shown ? 1 : 0) "
             + "inset=\(Int(card?.barInset ?? 0)) page=\(Int(card?.webArea.frame.height ?? 0))/\(Int(card?.bounds.height ?? 0)) "
+            // How much of the card the page doesn't fill, whatever the window's size (a runner's screen gave 771, not 780).
+            + "short=\(Int((card?.bounds.height ?? 0) - (card?.webArea.frame.height ?? 0))) "
             + "barHidden=\(card?.toolbarInSight == true ? 0 : 1) polling=\(toolbarPoll != nil ? 1 : 0) "
             + "hangs=\(card.map(somethingHangsFromToolbar) == true ? 1 : 0) focus=\(toolbarHasFocus ? 1 : 0)"
     }
@@ -1273,7 +1275,10 @@ final class ShellView: NSView {
     /// floating sidebar docking in place rides on this slide, so both move on one clock.
     func animateSidebar(visible: Bool, floating: Bool, fullscreen: Bool, width: CGFloat, duration: TimeInterval = SidebarMotion.duration,
                         alongside: ((Double) -> Void)? = nil, completion: (() -> Void)? = nil) {
-        // A slide still running is replaced: what rode along with it finishes now, once.
+        // A slide still running is replaced: what rode along with it finishes now, once, after its readout, so a
+        // dock that ends this way still says how far the page moved (on a slow machine the next slide came first,
+        // and sidebar-dock-floating's "page moved 0 pt" went missing).
+        if sidebarSlide != nil { endSlideReadout() }
         finishSlideCompanions()
         slideAlongside = alongside
         slideCompletion = completion

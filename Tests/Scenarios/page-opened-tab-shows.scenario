@@ -1,0 +1,34 @@
+# promise: #597
+# A tab a page opens in front (target=_blank with rel=noopener, as x.com's t.co links are) shows its
+# page: in its card, not hidden, drawing frames. On 0.1.45 such a tab was selected, but its page waited
+# in the window's hidden parking view at the parking view's size, and cra.log's probe said
+# "view=1211x903 hidden window=on screen", frameRate=0 (GitHub #597, the same cause as #469). Here the
+# link goes to a shortener on another site that sends the tab on to a third, with the reporter's link
+# settings: Peek links to other sites on, Peek in every tab off, Open links in foreground off.
+budget rss=900 stalls50=30
+pace 0.5
+arg --host-resolver-rules=MAP short.example 127.0.0.1, MAP landing.example 127.0.0.1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "peekLinksToOtherSites": true, "peekInEveryTab": false, "openLinksInForeground": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+
+# The link, clicked: short.example answers and sends the new tab on to landing.example. Its page
+# replaces itself before it finishes loading, so the step checks its request, not a "loaded" line.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='http://short.example:'+location.port+'/page.html?go='+encodeURIComponent('http://landing.example:'+location.port+'/page.html?n=landed'),a.target='_blank',a.rel='noopener noreferrer',a.textContent='link',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
+expect-log shown: \(no page\), page not created yet
+expect-log GET /page\.html\?go=
+expect-log GET /page\.html\?n=landed
+expect-log loaded landing\.example \(HTTP 200\)
+
+# The probe Cra logs a moment after the page loads (the reporter's readout): visible, in a view
+# nothing hides. Without BrowserManager.waitsForItsPane it read "view=942x780 hidden window=on screen",
+# 32 pt taller than the card's 942x748 as in the report; on today's engine the page itself still says
+# visible and counts frames there, so the view's state and pageDrawn's inCard are what catch it.
+expect-log page landing\.example: .*visibility=visible .*view=[0-9]+x[0-9]+ window=
+reject-log page landing\.example: .* hidden window=
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{let n=0;const t0=performance.now();const f=()=>{n++;if(performance.now()-t0<1000)requestAnimationFrame(f);else r('opened tab '+location.host.split(':')[0]+' '+document.visibilityState+' frames:'+n)};requestAnimationFrame(f);setTimeout(()=>r('opened tab '+location.host.split(':')[0]+' '+document.visibilityState+' frames:0'),3000)})","awaitPromise":true}
+expect-log opened tab landing\.example visible frames:[1-9]
+cra://debug?pageDrawn=landed
+expect-log page drawn landed: inCard=1 drawn=1
