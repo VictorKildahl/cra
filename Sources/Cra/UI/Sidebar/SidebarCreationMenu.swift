@@ -179,8 +179,12 @@ final class SidebarCreationMenuController {
             }
             return event
         }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated { self?.close() }
+        // A click in another app closes it, as in Arc. Not in a test copy behind other apps (CRA_TEST_BACKGROUND):
+        // those clicks are the person's at the Mac, never meant for it, and closed a scenario's menu mid-test.
+        if ProcessInfo.processInfo.environment["CRA_TEST_BACKGROUND"] != "1" {
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+                MainActor.assumeIsolated { self?.close() }
+            }
         }
         let center = NotificationCenter.default
         for name in [NSWindow.willCloseNotification, NSWindow.willMoveNotification, NSWindow.didResizeNotification] {

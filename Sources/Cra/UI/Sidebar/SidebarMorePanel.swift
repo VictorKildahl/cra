@@ -68,9 +68,13 @@ final class SidebarMorePanel: NSPanel {
             }
             return nil
         } as Any)
-        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor in self?.dismiss() }
-        } as Any)
+        // A click in another app dismisses it; not in a test copy behind other apps (CRA_TEST_BACKGROUND), whose
+        // other apps' clicks are the person's at the Mac.
+        if !HitchMonitor.background {
+            monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                Task { @MainActor in self?.dismiss() }
+            } as Any)
+        }
         NotificationCenter.default.addObserver(self, selector: #selector(parentChanged), name: NSWindow.didResignKeyNotification, object: parent)
         NotificationCenter.default.addObserver(self, selector: #selector(parentChanged), name: NSWindow.willCloseNotification, object: parent)
     }
