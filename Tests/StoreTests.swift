@@ -2366,11 +2366,14 @@ enum StoreTests {
         expect(store.children(of: space.todayContainerID).first?.id == copy.id && copy.tab?.url == "https://example.com/mail",
                "it is a Today tab of the same page, where new tabs go, as in Arc")
         expect(store.selectedTabID == open.id, "and it stays in the background")
+        expect(store.item(copy.id)?.isUnread == false && store.item(copy.id)?.tab?.timeLastActiveAt == nil,
+               "saved read, with no unread dot, and not among ⌃Tab's recent tabs, as Arc saves its copies")
 
         guard let tabCopy = store.duplicateTab(open.id) else { return expect(false, "a tab duplicates") }
         let today = store.children(of: space.todayContainerID).map(\.id)
         expect(today.firstIndex(of: tabCopy.id) == today.firstIndex(of: open.id).map { $0 + 1 } && store.selectedTabID == open.id,
                "a Today tab's copy is right after it, and the open tab stays open")
+        expect(store.item(tabCopy.id)?.isUnread == false, "with no unread dot")
         let pinned = store.createTab(url: "https://example.com/pinned", in: sid, pinned: true, select: false)
         guard let pinnedCopy = store.duplicateTab(pinned.id) else { return expect(false, "a pinned tab duplicates") }
         expect(store.children(of: space.pinnedContainerID).map(\.id).suffix(2) == [pinned.id, pinnedCopy.id] && store.isPinned(pinnedCopy.id),
@@ -2394,6 +2397,8 @@ enum StoreTests {
                "the split's orientation and sizes come along")
         expect(store.selectedTabID == right.id && store.item(split.id)?.children == [left.id, right.id],
                "the original split stays open with its panes")
+        expect(twin.children.allSatisfy { store.item($0)?.isUnread == false && store.item($0)?.tab?.timeLastActiveAt == nil },
+               "its panes are saved read too")
 
         guard let paneCopy = store.duplicateTab(left.id) else { return expect(false, "a pane duplicates") }
         let after = store.children(of: space.todayContainerID).map(\.id)

@@ -1205,8 +1205,8 @@
 #591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::macTabsComeFromItsSyncedSpaces  2102b05a769d
 #591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::mergesAndFiltersRecentTabs  427408879f3f
 #591   iOS/CraUITests/BrowserTests.swift::testRecentTabsShowUnderTheEmptyField  6bf1170efbe9
-#600   Tests/Scenarios/favorite-duplicate.scenario  a8024c6eebdf
-#600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  4c556c34e293
+#600   Tests/Scenarios/favorite-duplicate.scenario  736dc0e98bd5
+#600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  cff08d15294f
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceKeepsOtherSpacesPinnedTabs  0a684ba0fd54
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceReopensTheTabClosedHere  fb422863c018
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceSettingIsOffByDefaultAndSaved  84ce8a563ddd

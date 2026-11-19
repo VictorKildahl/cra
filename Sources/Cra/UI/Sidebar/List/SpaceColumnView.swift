@@ -1813,10 +1813,6 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         if let t = item.tab, t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
         }
-        // Arc's favorite menu has Duplicate after Edit Pinned Page ›: a Today tab of the page, in the background (#600).
-        if item.tab != nil {
-            MenuItems.add(m, action: "duplicateTab", title: "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
-        }
         MenuItems.add(m, action: "copyURL", title: "Copy Link") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.tab?.url ?? "", forType: .string)
@@ -1848,6 +1844,11 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             guard let grid else { return }
             store.setTileColor(tileColor, for: grid.spaceFavoriteIDs())
         }
+        // Arc 1.173.1's favorite menu has a section of Open in Split View, Duplicate and Move to ›; Cra's
+        // has Duplicate and, on a shared favorite, Move to ›. The copy is a Today tab of the page, in
+        // the background (#600).
+        m.addItem(.separator())
+        MenuItems.add(m, action: "duplicateTab", title: "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
         Self.moveToProfile(m, id, store)
         m.addItem(.separator())
         MenuItems.add(m, action: "closeTab", title: "Close") { actions.closeTab(id) }

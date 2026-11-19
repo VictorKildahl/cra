@@ -869,17 +869,36 @@ final class SidebarStore {
     func duplicateTab(_ id: UUID, window: UUID? = nil, select: Bool = false) -> SidebarItem? {
         guard let it = items[id], let t = it.tab, var parent = it.parentID else { return nil }
         let space = spaceID(ofItem: id, window: window)
-        if isFavorite(id) { return createTab(url: t.url, title: t.savedTitle, in: space, select: select, window: window) }
-        var after = id
-        if let split = items[parent], split.isSplit, let outer = split.parentID { (after, parent) = (split.id, outer) }
-        let idx = (items[parent]?.children.firstIndex(of: after) ?? 0) + 1
-        return createTab(url: t.url, title: t.savedTitle, in: space, pinned: false,
-                         select: select, parent: parent, index: idx, window: window)
+        let copy: SidebarItem
+        if isFavorite(id) {
+            copy = createTab(url: t.url, title: t.savedTitle, in: space, select: select, window: window)
+        } else {
+            var after = id
+            if let split = items[parent], split.isSplit, let outer = split.parentID { (after, parent) = (split.id, outer) }
+            let idx = (items[parent]?.children.firstIndex(of: after) ?? 0) + 1
+            copy = createTab(url: t.url, title: t.savedTitle, in: space, pinned: false,
+                             select: select, parent: parent, index: idx, window: window)
+        }
+        guard !select else { return copy }
+        markDuplicateRead(copy.id)
+        return items[copy.id]
+    }
+
+    /// Arc saves a duplicate read and never visited (isUnread false, no timeLastActiveAt): no unread
+    /// dot, and not among ⌃Tab's recent tabs, unlike a tab a link opens in the background.
+    private func markDuplicateRead(_ id: UUID) {
+        guard var it = items[id], var t = it.tab else { return }
+        t.timeLastActiveAt = nil
+        it.data = .tab(t)
+        it.isUnread = false
+        items[id] = it
+        touch()
     }
 
     /// Arc's Duplicate on a split's menu (#600, Arc 1.173.1): a new split right after this one, in the
     /// same list, with a new tab for each pane's page in order, its orientation and sizes, left in the
-    /// background. A favorite split's copy goes to Today where new tabs go, as a favorite tab's does.
+    /// background and saved read. A favorite split's copy goes to Today where new tabs go, as a
+    /// favorite tab's does.
     @discardableResult
     func duplicateSplit(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
         guard let original = items[id], let data = original.split, var parent = original.parentID,
@@ -896,11 +915,10 @@ final class SidebarStore {
             guard let t = items[pane]?.tab else { continue }
             var copy = SidebarItem.tab(t.url, title: t.savedTitle, parent: split.id)
             copy.title = items[pane]?.title
-            copy.isUnread = true
             copy.data = .tab({
                 var c = TabData(url: t.url, title: t.savedTitle)
                 c.faviconKey = t.faviconKey
-                c.timeLastActiveAt = clock.now
+                c.activeTabBeforeCreationID = selectedTabID(window: window)
                 return c
             }())
             items[copy.id] = copy
