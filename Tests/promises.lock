@@ -1154,7 +1154,7 @@
 #557   Packages/CraCore/Tests/CraCoreTests/FolderPeekTests.swift::closingAFolderOnItsTabKeepsTheTabAfterAnotherIsPicked  3ad20a437ad4
 #557   Tests/StoreTests.swift::folderPeekAfterClosing  8a03d5d820bc
 #560   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aPagesOwnRedirectAsksOncePerPageLoad  c95f209d3ba8
-#560   Tests/Scenarios/external-app-links.scenario  41a4c12ac485
+#560   Tests/Scenarios/external-app-links.scenario  4b533008a1de
 #563   Tests/Scenarios/page-menu-no-reading-mode.scenario  48887b488f2f
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aCertificateFailureStillAsksAndAStoppedLoadSaysNothing  1db90d7ec6e9
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aNetworkFailureShowsAnErrorPage  a7fefa2b6d10

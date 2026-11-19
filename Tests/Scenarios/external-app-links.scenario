@@ -26,6 +26,20 @@ expect-log page localhost can't open macappstore: \(no click\)
 cra://debug?cdp=Runtime.evaluate&params={"expression":"String(window.open('cra://action/closeTab'))"}
 expect-log page localhost can't open cra: \(refused\)
 
+# Chromium, in a tab: the page's own redirect (no click) asks once per page load (#560). The
+# first goes through (tabapp1: has no app), a second gets nothing, and a reload asks again.
+cra://open?url=${PAGE}?n=tab
+expect-log GET /page\.html\?n=tab HTTP
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(location.href='tabapp1:x')"}
+expect-log page 127\.0\.0\.1 wants tabapp1:, no app opens it
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(location.href='tabapp2:x')"}
+expect-log page 127\.0\.0\.1 can't open tabapp2: \(no click\)
+cra://debug?cdp=Page.reload&params={}
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(location.href='tabapp3:x')"}
+expect-log page 127\.0\.0\.1 wants tabapp3:, no app opens it
+
 # Chromium, in a Little Window (the main window's question is still up): the same.
 cra://open?url=${PAGE}?n=little&little=1
 wait 3
