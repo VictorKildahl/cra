@@ -1180,6 +1180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["findBar"] { CraLog.note(main.debugFindBar(label)); return }
             // chromiumDialogs=1: the Chromium dialogs showing and where (#349); chromiumDialogs=<button>: that
             // read, then the button with that title pressed (#484).
+            // chromiumDialogMove=x,y: the dialog showing moved there, as Chromium moved one off every screen on
+            // Nightly's runner (its main display at the top left, Cra's window on the display below).
+            if let p = dict["chromiumDialogMove"]?.split(separator: ",").compactMap({ Double($0) }), p.count == 2 {
+                CraLog.note(ChromiumDialogs.move(to: NSPoint(x: p[0], y: p[1])))
+                return
+            }
             if let button = dict["chromiumDialogs"] {
                 CraLog.note(ChromiumDialogs.readout())
                 if button != "1" { CraLog.note(ChromiumDialogs.press(button)) }

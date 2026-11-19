@@ -56,6 +56,13 @@ enum ChromiumDialogs {
         return "Chromium dialog press \(title): no such button"
     }
 
+    /// For scenarios: the dialog showing moved to `origin`, as Chromium moves it.
+    static func move(to origin: NSPoint) -> String {
+        guard let w = framed.allObjects.first(where: \.isVisible) else { return "Chromium dialog move: none showing" }
+        w.setFrameOrigin(origin)
+        return "Chromium dialog moved to \(Int(origin.x)),\(Int(origin.y))"
+    }
+
     private static func button(_ title: String, in element: Any?, depth: Int) -> NSAccessibilityProtocol? {
         guard depth < 40, let e = element as? NSAccessibilityProtocol else { return nil }
         if e.accessibilityRole() == .button, e.accessibilityTitle() == title || e.accessibilityLabel() == title { return e }
@@ -79,11 +86,15 @@ enum ChromiumDialogs {
             w.standardWindowButton(button)?.isHidden = true
         }
         place(w, over: owner)
-        NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: w, queue: .main) { note in
-            // The install prompt grows when it shows a field: it stays centred under the bar.
-            MainActor.assumeIsolated {
-                guard let w = note.object as? NSWindow, let parent = w.parent else { return }
-                place(w, over: parent)
+        // The install prompt grows when it shows a field: it stays centred under the bar. Chromium also moves the
+        // dialog on its own after it shows (on Nightly's runner, with Cra's window on the display below the main one,
+        // to x 0 at the main display's top, off every screen): it goes back over its window. Nobody else moves it.
+        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: w, queue: .main) { note in
+                MainActor.assumeIsolated {
+                    guard let w = note.object as? NSWindow, let parent = w.parent else { return }
+                    place(w, over: parent)
+                }
             }
         }
         // Attached once Chromium's own ordering is done: addChildWindow orders it again.

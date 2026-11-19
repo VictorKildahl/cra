@@ -1,0 +1,18 @@
+# Chromium moves a window-modal dialog of its own (here the prompt to remove an extension) after it shows: on
+# Nightly's runner, with Cra's window on the display below the main one, a second later it sat centred on x 0 at
+# the main display's top, off every screen, and nobody could answer it. Cra keeps it over its window: moved, it
+# goes back. chromiumDialogMove makes that same move; nobody else moves the dialog (it can't be dragged).
+budget rss=600
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.uninstall('${EXTENSION_ID}',{showConfirmDialog:true}).catch(()=>0);'asked'","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*asked
+expect-log Chromium dialog [0-9]+ shown over window
+cra://debug?chromiumDialogMove=-224,944
+expect-log Chromium dialog moved to -224,944
+wait 1
+cra://debug?chromiumDialogs=Cancel
+expect-log Chromium dialogs: frame=\{\{.*\}\} over=\{\{.*\}\} onScreen=true titleBarHidden=true
+expect-log Chromium dialog pressed Cancel
