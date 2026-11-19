@@ -10,6 +10,7 @@
 		C0A000000000000000000030 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A000000000000000000031 /* CraCore */; };
 		C0A000000000000000000052 /* domains.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000050 /* domains.txt */; };
 		C0A000000000000000000053 /* NOTICE.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000051 /* NOTICE.txt */; };
+		C0A000000000000000000056 /* filters.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000055 /* filters.txt */; };
 		C0A0000000000000000000B1 /* CraShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000B0 /* CraShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C0A0000000000000000000B9 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000B8 /* CraCore */; };
 		C0A0000000000000000000A1 /* CraWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000A0 /* CraWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -60,6 +61,7 @@
 		C0A000000000000000000005 /* Support */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Support; sourceTree = "<group>"; };
 		C0A000000000000000000050 /* domains.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = domains.txt; path = ../resources/blocklist/domains.txt; sourceTree = "<group>"; };
 		C0A000000000000000000051 /* NOTICE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = NOTICE.txt; path = ../resources/blocklist/NOTICE.txt; sourceTree = "<group>"; };
+		C0A000000000000000000055 /* filters.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = filters.txt; path = ../resources/blocklist/filters.txt; sourceTree = "<group>"; };
 		C0A0000000000000000000A0 /* CraWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A0000000000000000000B0 /* CraShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -139,6 +141,7 @@
 			children = (
 				C0A000000000000000000050 /* domains.txt */,
 				C0A000000000000000000051 /* NOTICE.txt */,
+				C0A000000000000000000055 /* filters.txt */,
 			);
 			name = Blocklist;
 			sourceTree = "<group>";
@@ -304,6 +307,7 @@
 			files = (
 				C0A000000000000000000052 /* domains.txt in Resources */,
 				C0A000000000000000000053 /* NOTICE.txt in Resources */,
+				C0A000000000000000000056 /* filters.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

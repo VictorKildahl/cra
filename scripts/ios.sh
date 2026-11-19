@@ -96,9 +96,11 @@ case "$command" in
     export TEST_RUNNER_CRA_POPUP_TEST_BASE_URL="$base"
     TEST_RUNNER_CRA_UNTRUSTED_TEST_URL="$(sed -n 's#^Untrusted fixtures: \(https://.*\)$#\1#p' "$server_log")"
     export TEST_RUNNER_CRA_UNTRUSTED_TEST_URL
+    # One simulator: parallel testing clones it per worker, which loads the Mac and has left a
+    # run waiting for a runner that never launched.
     xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Debug \
       -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$DERIVED" \
-      -resultBundlePath "$DERIVED/test.xcresult" \
+      -resultBundlePath "$DERIVED/test.xcresult" -parallel-testing-enabled NO \
       ${only[@]+"${only[@]}"} test 2>&1 |
       grep -E "error|Test Case .*(passed|failed)|Executed|TEST (SUCCEEDED|FAILED)|BUILD FAILED" || true
     # The screenshots the tests attached, as build/ios/test-screens/<name>.png.

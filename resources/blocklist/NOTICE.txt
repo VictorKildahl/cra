@@ -8,6 +8,11 @@ names removed) and with entries dropped when a parent domain is already listed,
 because Cra blocks a listed domain together with its subdomains. Fetched
 2026-10-25.
 
+filters.txt is Cra's own (MIT License, like the rest of Cra): a few rules in
+Adblock Plus syntax for ad networks that move to new domains faster than a
+domain list can follow. The iPhone blocks them under Block Ads. No third-party
+list is copied into it.
+
 1. AdAway default blocklist
    Source:  https://github.com/AdAway/adaway.github.io/blob/master/hosts.txt
             (file at commit 7b5368f03b35ec74e3984a8958494c6b88aa256b)

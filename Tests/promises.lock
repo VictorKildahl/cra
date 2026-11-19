@@ -1170,6 +1170,13 @@
 #569   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aCertificateExceptionIsForOneHost  6c56d8489ca7
 #569   iOS/CraUITests/CertificateTests.swift::testContinueAnywayOpensThePageAndTheWarningStaysGone  76d9fa9240b7
 #569   iOS/CraUITests/CertificateTests.swift::testGoBackClosesTheWarningAndLeavesThePageUnloaded  f9084acee64c
+#570   Packages/CraCore/Tests/CraCoreTests/FilterListTests.swift::blockAdsCarriesTheFiltersAndCountsWhatTheyStop  a60c9333d58d
+#570   Packages/CraCore/Tests/CraCoreTests/FilterListTests.swift::blockAdsListCompilesInWebKit  8e615044c65a
+#570   Packages/CraCore/Tests/CraCoreTests/FilterListTests.swift::crasFiltersStopTheMangaSitesAdsOnAnyDomain  1508b7e94dac
+#570   Packages/CraCore/Tests/CraCoreTests/FilterListTests.swift::hidingRulesBecomeDisplayNone  8f01062e0ff0
+#570   Packages/CraCore/Tests/CraCoreTests/FilterListTests.swift::networkRulesMatchAsInAdblockPlus  39708654de74
+#570   Packages/CraCore/Tests/CraCoreTests/FilterListTests.swift::rulesAreWebKitsSubset  e7c252fded4d
+#570   iOS/CraUITests/BrowserTests.swift::testAnAdLoaderFromAnUnlistedDomainIsStoppedByItsPath  cc6a07dc5b4c
 #571   Tests/Scenarios/upload-picker-after-focus.scenario  16ab596cf4bd
 #571   Tests/Scenarios/upload-picker.scenario  c92bdec94797
 #572   Packages/CraCore/Tests/CraCoreTests/MobileLinkMenuTests.swift::aBackgroundTabJoinsTheRowUnseen  3b5597a4f374

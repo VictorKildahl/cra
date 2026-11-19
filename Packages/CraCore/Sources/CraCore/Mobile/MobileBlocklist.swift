@@ -93,3 +93,25 @@ public struct MobileBlocklist {
         return names
     }
 }
+
+extension MobileBlocklist {
+    /// WebKit stops compiling a rule list at 150,000 rules.
+    public static let maxRulesPerList = 150_000
+
+    /// The Block Ads rule list: Cra's ad domains, then its filters (#570), whose exceptions come last
+    /// and so apply to the domains too.
+    public static func adsRulesJSON(domains: [String], filters: FilterList) -> String {
+        let domainRules = rulesJSON(blocking: domains)
+        let filterRules = filters.contentRulesJSON()
+        if filterRules.isEmpty { return domainRules }
+        if domains.isEmpty { return "[" + filterRules + "]" }
+        return String(domainRules.dropLast()) + "," + filterRules + "]"
+    }
+
+    /// Whether a request for `url` on a page of `pageHost` is stopped: its host is listed and the
+    /// switch for its kind is on, or Block Ads is on and a filter stops it.
+    public func stops(url: String, onPage pageHost: String?, with options: MobileSiteOptions, filters: FilterList) -> Bool {
+        guard let host = URL(string: url)?.host else { return false }
+        return stops(host: host, with: options) || (options.blockAds && filters.blocks(url: url, onPage: pageHost))
+    }
+}

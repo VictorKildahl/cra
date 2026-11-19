@@ -295,6 +295,24 @@ final class BlockingTests: BrowserTestCase {
         XCTAssertNotEqual(card.label, "script-stopped")
     }
 
+    // promise: #570
+    /// Manga sites' pop-up ads (#570) load from Monetag's loader and zone scripts, on domains that
+    /// change every few days. This page asks for both from domains no list has; Cra's filters stop
+    /// them by their path, before any network, and the menu counts both. Without the filters the
+    /// two requests go out, fail on hosts that don't exist, and nothing is counted.
+    func testAnAdLoaderFromAnUnlistedDomainIsStoppedByItsPath() {
+        let page = "data:text/html,<meta name=viewport content='width=device-width'><title>Manga</title><h1>Manga</h1>"
+            + "<script src='https://cra-test-570-loader.com/btag.min.js'></script>"
+            + "<script src='https://qwertyuiopcra.net/5/9357427/'></script>"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        waitForPage("Manga")
+        app.buttons["bar-menu"].tap()
+        let footer = app.buttons["menu-reload-without-blockers"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 10))
+        XCTAssertEqual(footer.value as? String, "Cra scrubbed 2 trackers")
+        keep("ad-loader-blocked")
+    }
+
     // promise: #507
     /// An added list blocks from the first page after launch (#507): its kept copy in the data
     /// folder is compiled before that page loads, even when the list can't be fetched again

@@ -126,7 +126,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     /// Reports the address of every request that fails, from every frame. Requests stopped by a
     /// block rule fail like any other; `userContentController(_:didReceive:)` keeps the ones
-    /// whose host is on the list.
+    /// a list or a filter covers.
     private static let failedRequestScript = """
     (() => {
       const report = url => { try { window.webkit.messageHandlers.craBlocked.postMessage(String(url)); } catch (e) {} };
@@ -148,8 +148,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     """
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard unblockedSite == nil, let address = message.body as? String, let host = URL(string: address)?.host,
-              ContentBlocker.shared.stops(host: host, with: siteOptions(webView.url?.host)),
+        guard unblockedSite == nil, let address = message.body as? String,
+              ContentBlocker.shared.stops(url: address, onPage: webView.url?.host, with: siteOptions(webView.url?.host)),
               countedHosts.insert(address).inserted else { return }
         blockedCount += 1
         changed()

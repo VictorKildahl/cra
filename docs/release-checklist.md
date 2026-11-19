@@ -424,6 +424,14 @@ built release app with a test profile. Note anything that fails in the release's
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in
   completes. The simulator only reaches the sheet (it has no Face ID enrolled or passkeys saved).
 
+- **#570:** with the default settings, open `https://ww7.readopm.com/read-manga/` and
+  `https://ww13.readonepiece.com/` and wait half a minute on each: no "Anna has sent (7) photos",
+  "The file is ready to download" or "Something Amazing Awaits!" overlay, tapping the page opens no
+  ad tab, and the page menu counts what was scrubbed. "Reload without ad blockers" brings the ads
+  back. Needs the real sites (their ad hosts change every few days) and a network that doesn't
+  filter them: the Mac this was built on resolves both to a DNS sinkhole. CraCore's FilterListTests
+  and the UI test `testAnAdLoaderFromAnUnlistedDomainIsStoppedByItsPath` pin the rules themselves.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into

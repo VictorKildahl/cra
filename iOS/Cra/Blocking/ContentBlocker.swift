@@ -1,13 +1,16 @@
 import CraCore
 import WebKit
 
-/// Arc Search's always-on blocking: ads and trackers by the Mac app's domain list, cookie
-/// banners by their containers. WebKit compiles each into a rule list once and keeps it; a page
+/// Arc Search's always-on blocking: ads and trackers by the Mac app's domain list, ads also by
+/// Cra's filters (paths that stay when an ad network changes domains, #570), cookie banners by
+/// their containers. WebKit compiles each into a rule list once and keeps it; a page
 /// gets the lists its site's switches ask for (`MobileBlocklist.ruleLists(for:)`).
 final class ContentBlocker {
     static let shared = ContentBlocker()
 
     private(set) var list = MobileBlocklist(text: "")
+    /// Cra's filters (resources/blocklist/filters.txt), compiled into the Block Ads list.
+    private(set) var filters = FilterList(text: "")
     /// The domains of the lists added in Default Site Settings ▸ Block Lists (#507), blocked as ads.
     private(set) var added = MobileBlocklist(text: "")
     /// How many rule lists the added domains were compiled into (MobileBlocklist.customChunks).
@@ -28,10 +31,12 @@ final class ContentBlocker {
         guard list.domains.isEmpty, let url = Bundle.main.url(forResource: "domains", withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return }
         list = MobileBlocklist(text: text)
-        // The list's size in the name, so a new list is compiled afresh.
-        let version = "v1-\(list.domains.count)"
+        let filterText = Bundle.main.url(forResource: "filters", withExtension: "txt").flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+        filters = FilterList(text: filterText)
+        // The list's size and the filters' hash in the name, so a new list is compiled afresh.
+        let version = "v2-\(list.domains.count)-\(CustomBlocklist.cacheFileName(for: filterText).dropLast(4))"
         let sources: [(String, () -> String)] = [
-            (MobileBlocklist.Kind.ads.rawValue, { [list] in MobileBlocklist.rulesJSON(blocking: list.domains(of: .ads)) }),
+            (MobileBlocklist.Kind.ads.rawValue, { [list, filters] in MobileBlocklist.adsRulesJSON(domains: list.domains(of: .ads), filters: filters) }),
             (MobileBlocklist.Kind.trackers.rawValue, { [list] in MobileBlocklist.rulesJSON(blocking: list.domains(of: .trackers)) }),
             ("cookie-banners", { MobileBlocklist.cookieBannerRulesJSON() }),
         ]
@@ -60,6 +65,13 @@ final class ContentBlocker {
             guard let self else { return }
             self.readiness.ownListsCompiled()
             self.releaseWaiting()
+            // Lists an earlier version of Cra compiled are never looked up again.
+            let current = sources.map { "cra-\($0.0)-\(version)" }
+            store.getAvailableContentRuleListIdentifiers { names in
+                for name in names ?? [] where name.hasPrefix("cra-") && !name.hasPrefix("cra-custom-") && !current.contains(name) {
+                    store.removeContentRuleList(forIdentifier: name) { _ in }
+                }
+            }
         }
     }
 
@@ -90,9 +102,12 @@ final class ContentBlocker {
         }
     }
 
-    /// Whether a request to `host` is stopped on a site with `options`, by Cra's list or an added one.
-    func stops(host: String, with options: MobileSiteOptions) -> Bool {
-        list.stops(host: host, with: options) || (options.blockAds && added.blocks(host: host))
+    /// Whether a request for `url` on a page of `pageHost` is stopped on a site with `options`: by
+    /// Cra's list, its filters or an added list.
+    func stops(url: String, onPage pageHost: String?, with options: MobileSiteOptions) -> Bool {
+        if list.stops(url: url, onPage: pageHost, with: options, filters: filters) { return true }
+        guard options.blockAds, let host = URL(string: url)?.host else { return false }
+        return added.blocks(host: host)
     }
 
     /// Compiles the added lists' domains into rule lists of their own, which pages get from their
