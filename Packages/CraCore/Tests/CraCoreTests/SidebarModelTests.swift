@@ -38,6 +38,25 @@ struct SidebarModelTests {
         #expect(container.id == id && container.container?.spaceID == Self.space)
     }
 
+    /// Arc 1.173.1's Change Icon… on a split (#600): an emoji or an Icon-tab glyph, saved with the
+    /// split and only when set, so a split without one saves as before and older files load.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/600"))
+    func splitIcon() throws {
+        var split = SplitData()
+        #expect(split.icon == .none)
+        split.icon = .emoji("😀")
+        #expect(split.emoji == "😀" && split.symbol == nil && split.icon == .emoji("😀"))
+        split.icon = .symbol("star.fill")
+        #expect(split.emoji == nil && split.symbol == "star.fill" && split.icon == .symbol("star.fill"))
+        let saved = try JSONEncoder().encode(split)
+        #expect(try JSONDecoder().decode(SplitData.self, from: saved) == split)
+        split.icon = .none
+        let plain = try #require(String(data: JSONEncoder().encode(split), encoding: .utf8))
+        #expect(!plain.contains("emoji") && !plain.contains("symbol"), "no icon writes nothing new")
+        let old = Data(#"{"orientation":"vertical","widthFactors":[]}"#.utf8)
+        #expect(try JSONDecoder().decode(SplitData.self, from: old).icon == .none)
+    }
+
     @Test func iconKeyPrefersTheUsersPick() {
         var tab = TabData(url: "https://example.com", title: "E")
         #expect(tab.iconKey == "example.com")

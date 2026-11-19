@@ -120,6 +120,9 @@ public enum WindowCoverage {
         }
     }
 
+    /// The Dock's process, as `kCGWindowOwnerName` names it (not localized).
+    static let dockOwner = "Dock"
+
     /// `window`: the window's own entry, nil when the window server has none (then it counts as out of
     /// sight, as macOS said). `inFront`: the on-screen windows above it. `isOwnPart` is asked only for
     /// this process's windows, by window number.
@@ -130,9 +133,11 @@ public enum WindowCoverage {
         }
         let listed = inFront.compactMap(Listed.init)
         let above = listed.map { w in
-            Above(frame: w.frame, alpha: w.alpha, isOwnPart: w.ownerPID == pid && isOwnPart(w.number))
+            // The Dock's window spans its whole display and is clear apart from the Dock itself: on Nightly's runners
+            // it was over Cra's window, which then counted as covered and sent its video away (#533). It covers nothing.
+            Above(frame: w.frame, alpha: w.owner == dockOwner ? 0 : w.alpha, isOwnPart: w.ownerPID == pid && isOwnPart(w.number))
         }
-        let overlapping = listed.filter { $0.ownerPID != pid && $0.alpha > 0 && $0.frame.intersects(own.frame) }
+        let overlapping = listed.filter { $0.ownerPID != pid && $0.alpha > 0 && $0.owner != dockOwner && $0.frame.intersects(own.frame) }
             .map { "\($0.owner.isEmpty ? "pid \($0.ownerPID)" : $0.owner)@\($0.layer)" }
         return Reading(covered: isCovered(frame: own.frame, onScreen: own.onScreen, above: above), onScreen: own.onScreen,
                        inFront: above.count, ownParts: above.filter(\.isOwnPart).count,

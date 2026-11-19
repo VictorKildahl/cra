@@ -56,6 +56,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var enteredFullscreenForContent = false
     /// The tab whose page (a video) is in element fullscreen.
     private var contentFullscreenTab: UUID?
+    /// Esc in a page's full screen while the page holds the keyboard (Arc: "[⎋] again to exit fullscreen").
+    private var keyboardLockEscape = KeyboardLockEscape()
+    /// A page's notice that came while the window was still going full screen: shown once it is there.
+    private var pendingNoticeToast: ExclusiveAccessNotice.Toast?
     private var lastSidebarVisible = true
     /// The theme the window's root views were made with.
     private var shownTheme: SpaceTheme?
@@ -516,7 +520,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // menu bar's do: under the extension's toolbar button, else at the card's right end.
         // Arc puts every popup in one place, whatever opened it.
         ExtensionActions.shared.watchPopups { [weak app] id in
-            guard let main = app?.main, let window = main.window, let key = NSApp.keyWindow, key === window || key.parent === window else { return nil }
+            // The window in use is Cra's main window or one of its children at any depth: a popup Chrome opens
+            // (chrome.action.openPopup()) is key itself, a child of the page's host strip, a child of the window.
+            guard let main = app?.main, let window = main.window, var key = NSApp.keyWindow else { return nil }
+            while key !== window {
+                guard let parent = key.parent else { return nil }
+                key = parent
+            }
             return main.extensionPopupAnchor(id)
         }
         // Chromium's install and removal prompts come without a parent window (#349): they hang
@@ -800,19 +810,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// opens, nothing picked (rows as menuReadout writes them, then its Edit Pinned Page and Move to
     /// submenus). `run` picks a row by title, in a submenu too, and logs the space's pinned and Today
     /// rows (page queries) and the open tab (#600).
-    func testTabMenu(_ n: Int, label: String, run: String?) {
-        func rows(in v: NSView) -> [TabRowView] {
-            (v as? TabRowView).map { [$0] } ?? v.subviews.flatMap { rows(in: $0) }
+    func testTabMenu(_ n: Int, label: String, run: String?, split: Bool = false) {
+        let kind = split ? "split menu" : "tab menu"
+        func rows(in v: NSView) -> [SidebarRowView] {
+            if let r = v as? TabRowView, !split { return [r] }
+            if let r = v as? SplitRowView, split, !r.isHiddenOrHasHiddenAncestor { return [r] }
+            return v.subviews.flatMap { rows(in: $0) }
         }
-        let listed = store.listedTabIDs(in: focusedSpaceID)
-        guard listed.indices.contains(n - 1),
-              let row = window?.contentView.flatMap(rows(in:))?.first(where: { $0.model?.id == listed[n - 1] })
-        else { CraLog.note("tab menu \(label): no row \(n)"); return }
+        let found = window?.contentView.flatMap(rows(in:)) ?? []
+        let row: SidebarRowView?
+        if split {
+            // The n-th split row from the top of the list.
+            let splits = found.compactMap { $0 as? SplitRowView }.sorted { $0.convert($0.bounds, to: nil).maxY > $1.convert($1.bounds, to: nil).maxY }
+            row = splits.indices.contains(n - 1) ? splits[n - 1] : nil
+        } else {
+            let listed = store.listedTabIDs(in: focusedSpaceID)
+            row = listed.indices.contains(n - 1) ? found.first { ($0 as? TabRowView)?.model?.id == listed[n - 1] } : nil
+        }
+        guard let row else { CraLog.note("\(kind) \(label): no row \(n)"); return }
         sidebarUI.clearPicks()
-        guard let menu = row.contextMenu(at: .zero) else { CraLog.note("tab menu \(label): no menu"); return }
-        CraLog.note("tab menu \(label): \(Self.menuReadout(menu))")
-        for item in menu.items where item.submenu != nil && ["Edit Pinned Page", "Move to"].contains(item.title) {
-            CraLog.note("tab menu \(label) \(item.title): \(Self.menuReadout(item.submenu!))")
+        guard let menu = row.contextMenu(at: .zero) else { CraLog.note("\(kind) \(label): no menu"); return }
+        CraLog.note("\(kind) \(label): \(Self.menuReadout(menu))")
+        for item in menu.items where item.submenu != nil && (["Edit Pinned Page", "Move to"].contains(item.title) || split) {
+            CraLog.note("\(kind) \(label) \(item.title): \(Self.menuReadout(item.submenu!))")
         }
         let all = menu.items + menu.items.flatMap { $0.submenu?.items ?? [] }
         guard let run, let item = all.first(where: { $0.title == run }), let owner = item.menu else { return }
@@ -823,7 +843,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.store.children(of: container).map { $0.isSplit ? $0.children.map(query).joined(separator: "+") : query($0.id) }.joined(separator: " ")
         }
         let open = store.selectedTabID(window: windowID).map(query) ?? "-"
-        CraLog.note("tab menu \(label) ran \(run): pinned: \(list(space.pinnedContainerID)) today: \(list(space.todayContainerID)) open: \(open)")
+        CraLog.note("\(kind) \(label) ran \(run): pinned: \(list(space.pinnedContainerID)) today: \(list(space.todayContainerID)) open: \(open)")
     }
 
     /// `cra://debug?spaceMenu=<label>`: logs the menu a right-click on the open space's header
@@ -1472,6 +1492,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.contentFullscreen = fullscreen
         floatingSidebar?.sidebarVisibilityChanged()
         contentFullscreenTab = fullscreen ? tabID : nil
+        if !fullscreen {
+            keyboardLockEscape.reset()
+            pendingNoticeToast = nil
+        }
+        // Arc's "To exit full screen, press ⎋." Cra takes a page full screen itself (cra-fullscreen-status.patch),
+        // so Chrome's own notice for it never comes; it shows once the window is full screen.
+        if fullscreen, let toast = ExclusiveAccessNotice.fullscreen.toast(inLittleWindow: false) {
+            if window.styleMask.contains(.fullScreen) { showNoticeToast(toast) } else { pendingNoticeToast = toast }
+        }
         if fullscreen, !window.styleMask.contains(.fullScreen) {
             enteredFullscreenForContent = true
             window.toggleFullScreen(nil)
@@ -1479,6 +1508,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             enteredFullscreenForContent = false
             window.toggleFullScreen(nil)
         }
+    }
+
+    /// Arc's toast for what the page took: "To exit full screen, press ⎋." or "Your cursor is hidden…", over
+    /// the page it is about (docs/web-features.md). In the middle of going full screen it waits for the window.
+    func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID) {
+        guard let window, browsers.visibleTabIDs.contains(tabID) || contentFullscreenTab == tabID else { return }
+        if contentFullscreenTab == tabID, !window.styleMask.contains(.fullScreen) {
+            pendingNoticeToast = toast
+            return
+        }
+        showNoticeToast(toast)
+    }
+
+    private func showNoticeToast(_ toast: ExclusiveAccessNotice.Toast) {
+        CraLog.note("page notice: \(toast.text)")
+        showToast(toast.text)
     }
 
     /// CEF owns the DevTools window (embedding in our NSView trips a Chromium CHECK on macOS).
@@ -2351,9 +2396,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Chrome's own handling never got it here: the video stayed fullscreen.
         // Not under the page's keyboard lock: a press is the page's, and holding Esc leaves (Chrome does that).
         if event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
-           let id = contentFullscreenTab, let browser = browsers.runtime(for: id)?.browser, !browser.holdsEscapeKey {
-            browser.exitFullscreen()
-            return true
+           let id = contentFullscreenTab, let browser = browsers.runtime(for: id)?.browser {
+            guard browser.holdsEscapeKey else {
+                browser.exitFullscreen()
+                return true
+            }
+            // Under the page's keyboard lock (Arc): a press is the page's and offers the next; that one leaves.
+            if event.isARepeat { return false }
+            switch keyboardLockEscape.press(at: event.timestamp, offerTime: ShinyToast.visibleFor) {
+            case .exitFullscreen:
+                CraLog.note("page notice: Esc again leaves full screen")
+                browser.exitFullscreen()
+                return true
+            case .offerAgain:
+                CraLog.note("page notice: \(KeyboardLockEscape.againKeys) \(KeyboardLockEscape.againText)")
+                showToast("", keyCap: (KeyboardLockEscape.againKeys, KeyboardLockEscape.againText))
+                return false
+            }
         }
         return app.handleReservedKey(event)
     }
@@ -5495,6 +5554,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.needsLayout = true
         // Remembered for the next launch (#426), unless a page's video took the window there.
         if !enteredFullscreenForContent { store.updateWindow(windowID) { $0.fullScreen = true } }
+        if let toast = pendingNoticeToast {
+            pendingNoticeToast = nil
+            showNoticeToast(toast)
+        }
         runAfterFullScreen()
     }
     func windowDidFailToEnterFullScreen(_ window: NSWindow) { runAfterFullScreen() }

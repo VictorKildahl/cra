@@ -44,6 +44,32 @@ public enum MobileLoadFailure {
         }
     }
 
+    /// WebKit's 101, CannotShowURL: what WebKit says for an address it has no way to load.
+    public static let cannotShowURLCode = 101
+
+    /// The answer for a failed load of `address`. Another app's address (mailto:, tel:, a custom
+    /// scheme) that WebKit can't load (-1002 "unsupported URL", or WebKit's 101) says nothing and
+    /// the page stays: it goes to its app before WebKit sees it (`MobileExternalLinks`), and this
+    /// keeps the error page away should one get through (TestFlight 1086 showed "mailto:…:
+    /// unsupported URL" in place of the page). On an http(s) address, or without one, the
+    /// answer is the code's.
+    public static func answer(domain: String, code: Int, address: String?) -> Answer {
+        let unsupported = (domain == NSURLErrorDomain && code == NSURLErrorUnsupportedURL)
+            || (domain == webKitErrorDomain && code == cannotShowURLCode)
+        if unsupported, let address, MobileExternalLinks.goesOut(address) { return .nothing }
+        return answer(domain: domain, code: code)
+    }
+
+    /// A main-frame load to an address WebKit refuses gets the error page before WebKit tries it.
+    /// iOS 26.5's WebKit commits an empty about:blank for it (`isRefusedAsBlank`), so the error
+    /// page answered after the fact came after that blank in the history, and Back landed on it.
+    /// Going back or forward is left to WebKit (the page may come from its cache), with the
+    /// blank-page answer behind it. A link in a page to such an address never gets here: WebKit
+    /// drops it in the page.
+    public static func answersBeforeLoading(_ address: String, isMainFrame: Bool, isBackForward: Bool) -> Bool {
+        isMainFrame && !isBackForward && webKitRefuses(address)
+    }
+
     /// WebKit's 103, CannotUseRestrictedPort, with WebKit's own description (WebErrors.cpp
     /// `blockedError`). It covers an address of only zeros as well as a restricted port.
     public static let restrictedPortCode = 103

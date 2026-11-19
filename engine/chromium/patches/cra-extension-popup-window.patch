@@ -1,0 +1,97 @@
+diff -ruN a/chrome/browser/extensions/api/extension_action/extension_action_api.cc b/chrome/browser/extensions/api/extension_action/extension_action_api.cc
+--- a/chrome/browser/extensions/api/extension_action/extension_action_api.cc	2026-11-19 16:43:39
++++ b/chrome/browser/extensions/api/extension_action/extension_action_api.cc	2026-11-19 16:43:39
+@@ -18,12 +18,14 @@
+ #include "base/metrics/histogram_functions.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
+ #include "chrome/browser/extensions/browser_window_util.h"
+ #include "chrome/browser/extensions/extension_action_dispatcher.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/tab_list/tab_list_interface.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/extensions/extension_popup_types.h"
+ #include "chrome/browser/ui/extensions/extensions_container.h"
+ #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+@@ -107,6 +109,18 @@
+   return true;
+ }
+ 
++// Cra (docs/web-features.md in the Cra repository): whether `browser`'s window is the one in use. Cra shows a
++// page in its own window while the page's Browser keeps a window that is never seen and never active, so
++// chrome.action.openPopup() always failed ("inactive window"); Cra answers for its pages.
++bool CraWindowIsActive(BrowserWindowInterface& browser) {
++  if (browser.GetWindow()->IsActive()) {
++    return true;
++  }
++  tabs::TabInterface* tab = browser.GetActiveTabInterface();
++  return cra::g_page_window_active && tab &&
++         cra::g_page_window_active(tab->GetContents()) == 1;
++}
++
+ // Returns the browser that is active in the given `profile`, optionally
+ // also checking the incognito profile.
+ BrowserWindowInterface* FindActiveBrowserWindow(Profile& profile,
+@@ -114,7 +128,27 @@
+   BrowserWindowInterface* browser = GetLastActiveBrowserWithProfile(
+       profile,
+       /*include_incognito_or_parent=*/check_incognito_profile);
+-  return browser && browser->GetWindow()->IsActive() ? browser : nullptr;
++  if (browser && CraWindowIsActive(*browser)) {
++    return browser;
++  }
++  // Cra: its Browsers are never activated, so the last active one is the oldest; the one whose page is in
++  // Cra's window in use is the active one.
++  BrowserWindowInterface* cra_active = nullptr;
++  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++      [&](BrowserWindowInterface* candidate) {
++        Profile* candidate_profile = candidate->GetProfile();
++        const bool matches =
++            candidate_profile == &profile ||
++            (check_incognito_profile &&
++             candidate_profile->GetOriginalProfile() ==
++                 profile.GetOriginalProfile());
++        if (matches && CraWindowIsActive(*candidate)) {
++          cra_active = candidate;
++          return false;
++        }
++        return true;
++      });
++  return cra_active;
+ }
+ 
+ // Returns true if the given `extension` has an active popup on the active tab
+@@ -562,7 +596,7 @@
+     }
+   }
+ 
+-  if (!browser->GetWindow()->IsActive()) {
++  if (!CraWindowIsActive(*browser)) {
+     return RespondNow(Error(kOpenPopupInactiveWindow));
+   }
+ 
+diff -ruN a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+--- a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc	2026-11-19 16:43:39
++++ b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc	2026-11-19 16:43:39
+@@ -959,7 +959,17 @@
+ 
+ bool ExtensionsToolbarDesktop::CanShowToolbarActionPopupForAPICall(
+     const ToolbarActionsModel::ActionId& action_id) {
+-  return !popped_out_action_ && browser_->GetWindow()->IsActive();
++  // Cra (docs/web-features.md in the Cra repository): this Browser's window is never active; Cra answers for the
++  // page in its own window, so chrome.action.openPopup() reaches Cra's popup frame (ExtensionPopupWindow).
++  if (popped_out_action_) {
++    return false;
++  }
++  if (browser_->GetWindow()->IsActive()) {
++    return true;
++  }
++  tabs::TabInterface* tab = browser_->GetActiveTabInterface();
++  return cra::g_page_window_active && tab &&
++         cra::g_page_window_active(tab->GetContents()) == 1;
+ }
+ 
+ void ExtensionsToolbarDesktop::ToggleExtensionsMenu() {

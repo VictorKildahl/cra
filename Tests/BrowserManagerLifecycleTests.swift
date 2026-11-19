@@ -2530,6 +2530,7 @@ private final class Observer: BrowserManagerDelegate {
     func browserManager(findAction action: CraFindAction) { findActions.append(action) }
     func browserManager(download: CraDownloadInfo) { onDownload?(download) }
     func browserManager(fullscreen: Bool, tabID: UUID) {}
+    func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }
     func browserManagerDevToolsChanged() {}
     func browserManagerDevToolsPageBoundsChanged() {}

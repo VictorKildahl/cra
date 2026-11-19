@@ -101,6 +101,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManager(findAction action: CraFindAction)
     func browserManager(download: CraDownloadInfo)
     func browserManager(fullscreen: Bool, tabID: UUID)
+    /// Arc's toast for what a page took (its full screen, the pointer): ExclusiveAccessNotice.
+    func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID)
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView?
     /// A DevTools pane appeared or closed; the shell decides whether to show the dock.
     func browserManagerDevToolsChanged()
@@ -1720,6 +1722,17 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let id = tabID(of: browser) else { return }
         delegate?.browserManager(fullscreen: fullscreen, tabID: id)
+    }
+
+    /// Each tab's notices from Chrome (full screen, pointer and keyboard locks): ExclusiveAccessNotices.
+    private var exclusiveAccessNotices: [UUID: ExclusiveAccessNotices] = [:]
+
+    func browser(_ browser: CraBrowser, exclusiveAccessNotice notice: CraExclusiveAccessNotice, force: Bool) {
+        guard let id = tabID(of: browser), let notice = ExclusiveAccessNotice(rawValue: notice.rawValue) else { return }
+        var notices = exclusiveAccessNotices[id] ?? ExclusiveAccessNotices()
+        let toast = notices.update(notice, force: force, inLittleWindow: false)
+        exclusiveAccessNotices[id] = notice == .none ? nil : notices
+        if let toast { delegate?.browserManager(exclusiveAccessToast: toast, tabID: id) }
     }
 
     func browser(_ browser: CraBrowser, requestsNewTabWithURL url: String, inBackground background: Bool) {

@@ -24,6 +24,6 @@ expect-log favorite menu tab-copy favorites: n=fav n=left\+n=right today: n=fav 
 wait 1
 
 cra://debug?favoriteMenu=2&label=split
-expect-log favorite menu split: Remove from Favorites\|──\|Separate All Tabs\|.*\|Rename…\|──\|Duplicate\|Move to ▸\|
+expect-log favorite menu split: Remove from Favorites\|──\|Share Split View…\|──\|Separate All Tabs\|.*\|Rename…\|──\|Duplicate\|Move to ▸\|──\|Archive Item
 cra://debug?favoriteMenu=2&label=split-copy&run=Duplicate
 expect-log favorite menu split-copy favorites: n=fav n=left\+n=right today: n=left\+n=right n=fav open: n=right$

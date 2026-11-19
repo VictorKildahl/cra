@@ -44,3 +44,5 @@ cra://debug?fullscreen=0
 wait 3
 cra://debug?windowState=windowed
 expect-log window state windowed: main0 fullscreen=0 visible=1 onSpace=1 layout=0 sidebarUI=0 lightsHidden=0 lights=1.0,1.0,1.0
+# Little Arc says nothing about a page's full screen (Arc 1.173): no notice here.
+reject-log page notice: To exit full screen

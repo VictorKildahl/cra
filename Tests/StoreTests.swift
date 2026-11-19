@@ -92,6 +92,7 @@ enum StoreTests {
         tornOffTabKeepsItsProfile()
         archiveTabsBelow()
         archiveTabsAboveAndOthers()
+        splitIconAndReset()
         numberedSidebarItems()
         clearTodayKeepsSelectedAndPlaying()
         allFoldersExpanded()
@@ -3385,6 +3386,31 @@ enum StoreTests {
         store.archiveTabsAbove(pinned.id)
         store.archiveOtherTabs(pinned.id)
         expect(store.item(pinned.id) != nil && store.children(of: today).map(\.id) == [e.id], "a pinned tab archives nothing")
+        expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    // promise: #600
+    /// Arc 1.173.1's split menu: Change Icon… gives the split an emoji or a glyph, Reset Name and
+    /// Icon takes the name and the icon away, and Duplicate keeps both.
+    @MainActor
+    private static func splitIconAndReset() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Icons", emoji: "🧩").id
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false)
+        guard let split = store.createSplit(with: [a.id, b.id]) else { return expect(false, "the split is made") }
+        store.setSplitIcon(split.id, .emoji("😀"))
+        expect(store.item(split.id)?.split?.icon == .emoji("😀") && store.item(split.id)?.title == nil, "the split takes an emoji")
+        store.rename(split.id, to: "Work")
+        guard let twin = store.duplicateSplit(split.id) else { return expect(false, "the split duplicates") }
+        expect(twin.split?.icon == .emoji("😀") && twin.title == "Work", "its copy keeps the icon and the name")
+        store.setSplitIcon(split.id, .symbol("star.fill"))
+        expect(store.item(split.id)?.split?.icon == .symbol("star.fill"), "a glyph replaces the emoji")
+        store.resetSplitNameAndIcon(split.id)
+        expect(store.item(split.id)?.split?.icon == SpaceIcon.none && store.item(split.id)?.title == nil,
+               "Reset Name and Icon takes both away")
+        store.setSplitIcon(a.id, .emoji("🙃"))
+        expect(store.item(a.id)?.split == nil, "a tab takes no split icon")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
     }
 

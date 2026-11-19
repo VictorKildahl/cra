@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
-(PasskeyTests), a plain-http page (PlainHTTPTests) and, given a certificate, the same pages over
+(PasskeyTests), a plain-http page and one to come back to from a refused address (PlainHTTPTests),
+links and a script redirect to other apps' addresses (ExternalLinkTests) and, given a certificate, the same pages over
 HTTPS with that certificate, which the simulator can't verify (CertificateTests). No external
 requests."""
 import argparse
@@ -78,6 +79,20 @@ function createPasskey() {
             # A plain-http page (PlainHTTPTests), opened by a domain name: iOS's App Transport
             # Security lets IP addresses and plain `localhost` through, but not `cra.localhost`.
             self.page('<title>Plain HTTP Fixture</title><h1>Plain HTTP Fixture</h1>')
+        elif url.path == '/before-refused':
+            # A page to come back to from the error page of an address WebKit refuses (port 1).
+            self.page('<title>Before Refused</title><h1>Before Refused</h1>')
+        elif url.path == '/schemes':
+            # Links to addresses another app handles (ExternalLinkTests). The simulator has no Mail
+            # or Phone app, so mailto: and tel: find no app; Messages takes sms:.
+            self.page('<title>Scheme Links</title><h1>Scheme Links</h1>'
+                      '<p><a href="mailto:fixture@cra.test">Write an email</a></p>'
+                      '<p><a href="tel:+4512345678">Call the fixture</a></p>'
+                      '<p><a href="sms:+4512345678">Text the fixture</a></p>')
+        elif url.path == '/scheme-redirect':
+            # A script sends the page to a mailto: address with no tap.
+            self.page('<title>Scheme Redirect</title><h1>Scheme Redirect</h1>'
+                      "<script>setTimeout(() => { location.href = 'mailto:fixture@cra.test'; }, 300);</script>")
         elif url.path == '/untrusted':
             self.page('<title>Untrusted Fixture</title><h1>Untrusted Fixture</h1>')
         elif url.path == '/checkout':

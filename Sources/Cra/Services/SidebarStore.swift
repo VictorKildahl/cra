@@ -929,6 +929,8 @@ final class SidebarStore {
         guard !split.children.isEmpty, items[parent] != nil else { return nil }
         var s = SplitData()
         s.orientation = data.orientation
+        s.emoji = data.emoji
+        s.symbol = data.symbol
         s.widthFactors = Dictionary(uniqueKeysWithValues: data.widthFactors.compactMap { k, v in copies[k].map { ($0, v) } })
         s.focusTabID = data.focusTabID.flatMap { copies[$0] } ?? split.children.first
         split.data = .split(s)
@@ -1403,6 +1405,21 @@ final class SidebarStore {
     func separateAll(_ splitID: UUID) {
         guard let split = items[splitID], split.isSplit else { return }
         for id in split.children.reversed() { separateFromSplit(id) }
+    }
+
+    /// Arc's Change Icon… on a split (#600): an emoji or a glyph, or `.none` to take it away.
+    func setSplitIcon(_ splitID: UUID, _ icon: SpaceIcon) {
+        guard var split = items[splitID], var s = split.split else { return }
+        s.icon = icon
+        split.data = .split(s)
+        items[splitID] = split
+        touch()
+    }
+
+    /// Arc's Reset Name and Icon: the split shows its panes again.
+    func resetSplitNameAndIcon(_ splitID: UUID) {
+        setSplitIcon(splitID, .none)
+        rename(splitID, to: nil)
     }
 
     func setSplitWidthFactors(_ splitID: UUID, _ factors: [UUID: Double]) {

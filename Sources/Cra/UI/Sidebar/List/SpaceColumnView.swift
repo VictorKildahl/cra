@@ -1788,7 +1788,8 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let store = grid.store, ui = grid.ui, actions = grid.actions, favicons = grid.favicons
         let id = itemID
         if item.isSplit, let m = model {
-            return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions) {
+            return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions,
+                                      window: window) {
                 MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) } }
                 Self.moveToProfile($0, id, store)
                 $0.addItem(.separator())

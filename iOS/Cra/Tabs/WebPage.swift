@@ -57,6 +57,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// The address the main frame last asked for, to tell WebKit's empty about:blank for an
     /// address it refuses from a page (`answerRefusalShownAsBlank`).
     private var requestedURL: URL?
+    /// The address the error page is being put up at: its own navigation is let through.
+    var errorPageAddress: URL?
 
     init(tab: MobileTab, configuration supplied: WKWebViewConfiguration? = nil, opener: WebPage? = nil) {
         tabID = tab.id
@@ -202,6 +204,32 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         if let url = navigationAction.request.url, url.scheme == "cra-browse" {
             if navigationAction.navigationType == .linkActivated { delegate?.webPage(self, openInNewTab: url) }
             return decisionHandler(.cancel, preferences)
+        }
+        // The error page itself, at the address that failed: not answered again.
+        let isErrorPage = navigationAction.request.url != nil && navigationAction.request.url == errorPageAddress
+        if isErrorPage { errorPageAddress = nil }
+        if let url = navigationAction.request.url, !isErrorPage {
+            // mailto:, tel:, an app's own scheme: to that app, before WebKit fails it with -1002.
+            // No target frame is a new window, which the page's main frame is asking for.
+            let tapped = navigationAction.navigationType == .linkActivated || navigationAction.navigationType == .formSubmitted
+            switch MobileExternalLinks.answer(address: url.absoluteString, isMainFrame: navigationAction.targetFrame?.isMainFrame ?? true,
+                                              isUserGesture: tapped) {
+            case .load: break
+            case .stay: return decisionHandler(.cancel, preferences)
+            case .open:
+                decisionHandler(.cancel, preferences)
+                return openInApp(url)
+            case .ask(let app):
+                decisionHandler(.cancel, preferences)
+                return askToOpenInApp(url, app: app)
+            }
+            // An address WebKit refuses: the error page now, rather than after the empty
+            // about:blank iOS 26.5's WebKit commits for it, which Back then landed on.
+            if MobileLoadFailure.answersBeforeLoading(url.absoluteString, isMainFrame: navigationAction.targetFrame?.isMainFrame == true,
+                                                      isBackForward: navigationAction.navigationType == .backForward) {
+                decisionHandler(.cancel, preferences)
+                return answerRefusal(of: url)
+            }
         }
         if navigationAction.targetFrame?.isMainFrame == true {
             requestedURL = navigationAction.request.url

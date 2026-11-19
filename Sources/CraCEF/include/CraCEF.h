@@ -14,6 +14,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CraBrowser;
 
+/// Chrome's notice for a page's full screen or locks (its ExclusiveAccessBubbleType, which Chrome hangs on a window
+/// Cra's pages never show): Cra shows it over the page (docs/web-features.md).
+typedef NS_ENUM(NSInteger, CraExclusiveAccessNotice) {
+    CraExclusiveAccessNoticeNone = 0,
+    CraExclusiveAccessNoticeFullscreen = 1,             // a page's full screen: press Esc to leave
+    CraExclusiveAccessNoticeFullscreenPointerLock = 2,  // the pointer locked in full screen
+    CraExclusiveAccessNoticePointerLock = 3,            // the pointer locked: press Esc to show it
+    CraExclusiveAccessNoticeKeyboardLock = 4,           // full screen under a keyboard lock: press and hold Esc
+    CraExclusiveAccessNoticeBrowserFullscreen = 5,      // the browser's own full screen (not Cra's)
+    CraExclusiveAccessNoticeExtensionFullscreen = 6,    // an extension's full screen
+};
+
 typedef NS_ENUM(NSInteger, CraFindAction) {
     CraFindActionShow = 0,
     CraFindActionNext = 1,
@@ -136,6 +148,9 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 /// page in front (#552). Asked as the page is made and as a tab takes a spare; without it, pages start shown.
 - (BOOL)browserStartsHidden:(CraBrowser *)browser;
 
+/// Chrome's notice for this page's full screen or locks, or None when it ends; `force`: show it again even when
+/// it hasn't changed (the page asked again). Cra shows it as Arc's toast.
+- (void)browser:(CraBrowser *)browser exclusiveAccessNotice:(CraExclusiveAccessNotice)notice force:(BOOL)force;
 /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.
 - (void)browser:(CraBrowser *)browser requestsWindowWithURL:(NSString *)url kind:(CraLinkWindow)kind;
 /// The page's context menu: Open Link in Split View, a pane beside this page (#257). Without it

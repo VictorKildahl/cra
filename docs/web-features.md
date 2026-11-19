@@ -17,6 +17,8 @@ window. Chrome's code for what a page asks often reads that `Browser` window, an
 | A split's right-pane alert over the left pane (#574) | the window's middle | engine -27, `cra-page-dialogs.patch` |
 | Every `PaymentRequest.show()` turned down as from a background tab | whether the window is active (never) | `cra-payments-window.patch` |
 | No "Page Unresponsive" for a hung page, ever | any DevTools session on the page (Cra's page scripts keep one on every page) | `cra-page-hang.patch` |
+| `chrome.action.openPopup()` always failed ("inactive window") | whether the window is active (never) | `cra-extension-popup-window.patch` |
+| Chrome's pointer-lock bubble at the top of Cra's window, none for a page's full screen (Arc: its toasts only) | the window's bubble; full screen is Cra's | Arc's toast: the pointer's from `cra-exclusive-access-notice.patch` (Chrome's bubble gets NONE), full screen's from Cra's own |
 
 Chromium's own suites (`browser_tests`, `interactive_ui_tests`) and other browsers' tests (CEF's `ceftests`,
 Electron's specs, Brave's filtered upstream suites, Web Platform Tests) were looked at on 19 Nov 2026. None would
@@ -80,12 +82,19 @@ screen ones one by one (`CRA_SCENARIO_SCREEN=1`); without it they're listed as s
 
 ## Known, not fixed here
 
-Other Chrome code asks whether the `Browser` window is active and always hears no: `chrome.action.openPopup()`
-fails with "inactive window", and `GlobalBrowserCollection::GetActiveBrowser()` is always empty (autofill's card
-bubbles, tab discarding's "focused tab"). The share picker opens at the pointer, as in Chrome, which can be
-beside the page.
+Other Chrome code asks whether the `Browser` window is active and always hears no. `GlobalBrowserCollection::
+GetActiveBrowser()` is always empty: autofill's Google Pay card bubbles (virtual card enrollment, offers, a filled
+card's details) never show, and tab discarding has no "focused tab". Making the hidden window report Cra's
+window's state everywhere would also wake Chrome's own toolbar bubbles (downloads, translate) anchored to that
+never-seen strip, so only the callers that matter get Cra's answer (`cra::g_page_window_active`): payments,
+`chrome.action.openPopup()`. The share picker opens at the pointer, as in Chrome, which can be beside the page.
 
-Chrome's exclusive-access notices ("Press Esc to show your cursor", "Press Esc to exit full screen", "Press and
-hold Esc") hang on the never-seen `Browser` window, so a page's pointer lock and full screen show none. Esc itself
-works: Chrome takes it before Cra's keys (`page-pointer-lock`, `page-fullscreen-keyboard-lock`). Whether Cra
-should show the notices is an Arc question: check Arc on a pointer-lock page and a video's full screen first.
+## Notices (Arc 1.173.1, measured 19 Nov 2026)
+
+Chrome decides the notice for a page's locks and hands it over (`cra-exclusive-access-notice.patch`); a page's
+full screen is Cra's own (`cra-fullscreen-status.patch`), so Cra says that one itself as it takes the window full
+screen. Either way it is Arc's toast (CraCore `ExclusiveAccessNotice`): "To exit full screen, press ⎋." in a browser window (none in a Little Window, as in
+Little Arc), "Your cursor is hidden. Press 'esc' to show cursor." for a pointer lock. Under a page's keyboard lock
+Arc shows the same full-screen toast; a press of Esc is the page's and Arc offers the next ("[⎋] again to exit
+fullscreen"), which leaves full screen (`KeyboardLockEscape`). Arc's toast has "Edit the shortcut" there; Cra's Esc
+isn't a shortcut you can change, so it has no button.

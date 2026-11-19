@@ -2,8 +2,9 @@
 # web-features: a page that takes the pointer (a 3D model viewer, a browser game: requestPointerLock). The lock
 # has to take, and Esc has to give the pointer back whatever the page does: Chrome's exclusive access takes Esc
 # before Cra's own keys (cra-keys.patch), and nothing may change that order. The page can let go itself too.
-# Chrome's "Press Esc to show your cursor" notice hangs on its never-seen Browser window (#346) and isn't seen:
-# docs/web-features.md, "Known". It takes the screen: the lock holds the real pointer for a moment.
+# Chrome's "Press Esc to show your cursor" notice hung on its never-seen Browser window (#346); Cra shows Arc's
+# toast instead (cra-exclusive-access-notice.patch): "Your cursor is hidden. Press 'esc' to show cursor.".
+# It takes the screen: the lock holds the real pointer for a moment.
 requires screen
 # Cra has to come to the front to have a key window; a page only takes focus in a key window.
 env CRA_TEST_BACKGROUND=0
@@ -23,6 +24,12 @@ expect-log "value":"lock asked"
 wait 1
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'lock '+said.join(',')"}
 expect-log "value":"lock pointerlock:on"
+expect-log page notice: Your cursor is hidden\. Press 'esc' to show cursor\.$
+# Arc shows only its toast: Chrome's own bubble ("<site> – to show your cursor, press esc") came up at the top of
+# Cra's window as well.
+cra://debug?pageDialogs=lockbubble
+expect-log page dialogs lockbubble:
+reject-log page dialog lockbubble: .*show your cursor
 # Esc, as the keyboard sends it to the page: the pointer comes back, and the page never sees the key.
 cra://debug?key=%1B,53,0&page=1
 wait 1
