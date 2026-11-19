@@ -130,8 +130,9 @@ return {
     },
     // Opening, creating or reviewing a pull request refreshes the folder, as Dia's GitHub folder does.
     pageChanged(input) {
-        const base = serverOf(input.settings) + "/";
-        const onServer = input.url.startsWith(base);
+        // Organization and collection names ignore case: dev.azure.com/Acme is dev.azure.com/acme.
+        const base = (serverOf(input.settings) + "/").toLowerCase();
+        const onServer = input.url.toLowerCase().startsWith(base);
         return {state: input.state ?? {}, refreshAfter: onServer ? [2] : [], checkSignIn: onServer};
     }
 };

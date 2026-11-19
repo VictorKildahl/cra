@@ -402,6 +402,9 @@ enum LiveFolderProviderTests {
 
     // MARK: Azure DevOps
 
+    /// Azure DevOps pull requests through the space's own session (#542): yours and the ones still
+    /// waiting for your vote, across the organization, never an empty folder on a sign-in page.
+    // promise: #542
     private static func azureDevOps(_ azure: LiveFolderPluginPackage, executable: URL) throws {
         let org = "https://dev.azure.com/acme"
         let origins = ["https://dev.azure.com"]
@@ -458,6 +461,14 @@ enum LiveFolderProviderTests {
         check(snapshot.items.first?.group == "Web Shop/checkout" && snapshot.items.first?.subtitle == "Sam" && snapshot.items.first?.createdAt != nil,
               "repository group, author and date")
         check(snapshot.items.first?.title == "PR 7", "the pull request's title")
+
+        // With Review Requests alone, a pull request you opened yourself stays out even when you're on it.
+        let reviewOnly = try refresh(filters: ["review"]) { request in
+            LiveFolderPluginResponse(status: 200, url: request.url, body: request.url.hasSuffix("/connectionData") ? connection
+                : body([pull(3, by: me, votes: [(me, 0)]), pull(4), pull(5, votes: [(other, 10), (me, 0)])]))
+        }.get()
+        check(reviewOnly.items.map(\.url) == [org + "/Web%20Shop/_git/checkout/pullrequest/4", org + "/Web%20Shop/_git/checkout/pullrequest/5"],
+              "review requests leave out your own: \(reviewOnly.items.map(\.url))")
 
         // A project's default repository has the project's name: the group is that name once.
         let named = try refresh(filters: ["authored"]) { request in
@@ -516,7 +527,8 @@ enum LiveFolderProviderTests {
         let signIn = json(try invoke(azure, "signIn", input: ["settings": ["server": org + "/Shop"], "state": [:]], origins: [], executable: executable))
         check(signIn["url"] as? String == org && signIn["failureURL"] as? String == org + "/_pulls", "sign in at the organization")
         check(signIn["instanceLabel"] as? String == "Azure DevOps (dev.azure.com/acme)", "the instance label")
-        for (url, refreshes) in [(org + "/Shop/_git/checkout/pullrequest/7", true), ("https://dev.azure.com/acme-other/x", false),
+        for (url, refreshes) in [(org + "/Shop/_git/checkout/pullrequest/7", true), ("https://dev.azure.com/ACME/Shop/_pulls", true),
+                                 ("https://dev.azure.com/acme-other/x", false),
                                  ("https://example.com/", false)] {
             let changed = json(try invoke(azure, "pageChanged", input: ["url": url, "previousURL": "", "settings": ["server": org], "state": [:]],
                                           origins: [], executable: executable))

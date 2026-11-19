@@ -188,7 +188,7 @@ enum FolderGlyphTests {
     @MainActor
     private static func liveFolderArtwork() {
         let glyph = makeGlyph()
-        for artwork in [GitHubMark.image, GitLabMark.image] {
+        for artwork in [GitHubMark.image, GitLabMark.image, AzureDevOpsMark.image] {
             expect(artwork.isTemplate, "live folder marks use the folder's ink")
             show(glyph, emblem: FolderEmblem(image: artwork, coloring: .template))
             let mark = imageLayer(in: glyph.layer!)!
