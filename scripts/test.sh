@@ -62,6 +62,7 @@ if [ "${1:-}" != core ]; then
   suite "Theme noise" scripts/test-theme-noise.sh
   suite "Chromium window corners" scripts/test-chromium-window-corners.sh
   suite "Picture in Picture corners" scripts/test-pip-corners.sh
+  suite "Picture in Picture overlay" scripts/test-pip-overlay.sh
   suite "Music notes pixels" scripts/test-music-notes.sh
   suite "Live folder plugins" scripts/test-live-folder-plugins.sh
   suite "Key bindings" scripts/test-key-bindings.sh

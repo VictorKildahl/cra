@@ -1096,6 +1096,7 @@
 #533   Tests/Scenarios/pip-window-covered.scenario  34732af6a587
 #533   Tests/Scenarios/pip-window-minimised.scenario  21d21ee9e121
 #533   Tests/Scenarios/window-coverage-own-parts.scenario  618bc5a688e5
+#534   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aPinchOnItsOwn  f315f556310d
 #534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::aWindowInACornerGrowsOutOfIt  acafc2788db3
 #534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::apartGrowsTogetherShrinksAroundTheCentre  c2730a3dfd72
 #534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::eventsCompound  db4543a96012
@@ -1194,6 +1195,12 @@
 #572   iOS/CraUITests/LinkMenuTests.swift::testAPrivateBackgroundTabWaitsInTheRow  0afc7b692cc1
 #572   iOS/CraUITests/LinkMenuTests.swift::testAPrivateTabsLinksStayPrivate  de3270f2fc1c
 #572   iOS/CraUITests/LinkMenuTests.swift::testTheMenusAddressIsEditedInThisTab  8dde1c42c286
+#573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aLostEndDoesntStrandTheWindow  a0bb37bd00af
+#573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aPinchAfterRestingFingersResizes  c9e5ac139e62
+#573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aPinchThatStartsWithAChangeTakesTheWindow  ab5064e702c4
+#573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::restingFingersThatSwipeStillSwipe  53dc04fcf91b
+#573   Tests/PictureInPictureOverlayTests.swift::aPinchAfterRestingFingersResizes  8c5b29291f70
+#573   Tests/PictureInPictureOverlayTests.swift::aPinchTheAppIsHandedResizes  a28056c5f60b
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::aBubbleOverTheSidebarIsOnTheWindow  3770d4c4f881
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::anAlertOverThePageIsOnThePage  39da5a1e7e35
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::elsewhereIsOff  208002bd0a23

@@ -306,8 +306,13 @@ built release app with a test profile. Note anything that fails in the release's
 - **#534:** on a trackpad, pinch the PiP open and closed, with Cra in front and with another app in
   front: it follows the fingers smoothly in the video's shape, stops where an edge drag does at its
   smallest and at the screen's edges, a window in a corner grows out of it, and a two-finger swipe
-  still throws it. Next to Arc's, check where it grows from. The scenario drives the pinch code;
-  only real fingers show that the magnify events reach the window.
+  still throws it. Next to Arc's, check where it grows from. **#573:** rest two fingers on the
+  trackpad first, then pinch: it resizes as well, with Cra in front and with another app in
+  front, and `pip: pinched` shows in cra.log. The overlay harness and the scenario hand AppKit the
+  events in an order a trackpad can send (scroll and magnify that may begin, the pinch, the
+  scroll's cancel at the lift) and the magnify through the app's event monitor; synthetic gestures
+  posted through the window server didn't reach a background app at all, so only real fingers show
+  that a trackpad's do.
 - **#246:** a YouTube video's PiP shows no Chrome strip (site icon, host, dark top band) at any
   point, also in the first seconds; with the pointer away it is the bare video. On hover: Back to
   Tab on the left (with its words from 400 pt wide), the host centred and whole, Close on the

@@ -184,6 +184,10 @@ to Markdown or `docs/` alone runs nothing.
 - `scripts/test-pip-corners.sh`: the Picture in Picture hover controls in a transparent window like the
   overlay, read back through the window server: shown, the dark layer stays inside the window's 6 pt
   corners at every size class (#463).
+- `scripts/test-pip-overlay.sh`: the Picture in Picture overlay window and view over a stand-in for
+  Chromium's window (transparent and click-through), handed trackpad events made as the window server
+  makes them: a pinch resizes it also after the fingers rest first, and also when its magnify events
+  come through the app's event monitors rather than the view (#573).
 - `scripts/test-theme-noise.sh`: the theme's grain over the main window (`ThemeNoiseView`) is a pattern
   Core Animation tiles, with no window-sized backing store, and shows the grain the drawn view did at 1x and 2x.
 - `scripts/test-music-notes.sh`: the production note sprites over fixed white and black backgrounds

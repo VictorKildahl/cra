@@ -274,14 +274,13 @@ final class PictureInPictureChrome {
         }
     }
 
-    /// `cra://debug?pipPinch=<m>[,<m>…]`: a trackpad pinch on the window, one magnification
-    /// event per value (0.1 is 10 % apart), between its touch-down and lift (#534).
+    /// `cra://debug?pipPinch=<m>[,<m>…]`: a trackpad pinch on the window's middle, one magnify
+    /// event per value (0.1 is 10 % apart), routed by AppKit with the trackpad's touch-down and
+    /// lift around it (`TestGesture.pinch`, #534). Until 0.1.50 this called the pinch's code
+    /// straight, so it passed while a real pinch did nothing (#573).
     func debugPinch(_ steps: [CGFloat]) {
         for o in overlays.values {
-            guard let view = o.contentView as? PictureInPictureOverlayView else { continue }
-            view.beginPinch()
-            steps.forEach(view.pinched(by:))
-            view.endPinch()
+            TestGesture.pinch(steps, at: NSPoint(x: o.frame.width / 2, y: o.frame.height / 2), in: o)
         }
     }
 
@@ -556,7 +555,30 @@ final class PictureInPictureOverlayView: NSView {
             stopLink()
             swipe = nil
             flight = nil
+            pinch = nil
+            fingers.reset()
             releasePointer()
+            magnifyMonitor.map(NSEvent.removeMonitor)
+            magnifyMonitor = nil
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, magnifyMonitor == nil else { return }
+        // A trackpad's magnify comes to this window, but AppKit doesn't always hand it on to the
+        // view: in a probe (19 Nov 2026), magnify events the window server addressed to a panel
+        // that can't become key, the pointer in its middle, reached the app's event monitors and
+        // never the view's `magnify(with:)`, while the scrolls of the same fingers did; a 0.1.49
+        // PiP didn't resize under them either (#573). So the overlay takes them where AppKit sends
+        // events on, before that dispatch.
+        magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
+            let taken = MainActor.assumeIsolated {
+                guard let self, let window = self.window, event.window === window else { return false }
+                self.magnify(with: event)
+                return true
+            }
+            return taken ? nil : event
         }
     }
 
@@ -585,6 +607,7 @@ final class PictureInPictureOverlayView: NSView {
         }
         land()
         swipe = nil
+        fingers.reset()
         pressedOn = Self.display(holding: target.frame)
         pressedSize = target.frame.size
         releasePointer()
@@ -760,29 +783,66 @@ final class PictureInPictureOverlayView: NSView {
     // MARK: Pinch to resize (Arc, #534)
 
     private var pinch: PictureInPicturePinch?
+    /// Takes the trackpad's magnify events addressed to this window (`viewDidMoveToWindow`).
+    private var magnifyMonitor: Any?
+    /// Which of the two-finger gestures has the window (`PictureInPictureFingers`).
+    private var fingers = PictureInPictureFingers()
 
     /// Two fingers pinching on the trackpad resize the window, as Arc's do: apart larger, together
     /// smaller, in the video's shape, inside the limits of an edge resize
-    /// (`PictureInPicturePinch`). Not while a press or a swipe has the window.
+    /// (`PictureInPicturePinch`). Not while a press has it, or a swipe that has moved it. Fingers
+    /// resting on the trackpad before the pinch (a scroll that may begin) don't keep it from the
+    /// pinch: in 0.1.49 they did, and a real pinch did nothing (#573).
     override func magnify(with event: NSEvent) {
-        switch event.phase {
-        case .began, .mayBegin: beginPinch()
-        case .changed: pinched(by: event.magnification)
-        case .ended, .cancelled: endPinch()
-        default:
-            // A magnify without phases (none comes from a trackpad today) is one step.
+        guard gesture == nil else { return }
+        switch fingers.magnify(Self.phase(event), swipeMoved: swipe?.hasMoved ?? false) {
+        case .startPinch(let fromSwipe):
+            if fromSwipe { dropSwipe() }
+            endPinch()   // one whose end never came
+            beginPinch()
+            pinched(by: event.magnification)
+        case .pinch:
+            pinched(by: event.magnification)
+        case .endPinch:
+            endPinch()
+        case .pinchOnce(let fromSwipe):
+            if fromSwipe { dropSwipe() }
             beginPinch(); pinched(by: event.magnification); endPinch()
+        case .ignore, .startSwipe, .swipe, .endSwipe:
+            break
         }
     }
 
-    func beginPinch() {
-        guard gesture == nil, swipe == nil, let target else { return }
+    private static func phase(_ event: NSEvent) -> PictureInPictureFingers.Phase {
+        switch event.phase {
+        case .mayBegin: .mayBegin
+        case .began: .began
+        case .changed, .stationary: .changed
+        case .ended: .ended
+        case .cancelled: .cancelled
+        default: .none
+        }
+    }
+
+    /// Resting fingers had the window for a swipe that never moved it; the pinch takes it over,
+    /// and nothing is thrown.
+    private func dropSwipe() {
+        guard swipe != nil else { return }
+        swipe = nil
+        releasePointer()
+        pressedOn = nil
+        pressedSize = nil
+        if flight == nil { stopLink() }
+    }
+
+    private func beginPinch() {
+        guard gesture == nil, let target else { return }
         land()
         pinch = PictureInPicturePinch(frame: target.frame)
         pressedOn = nil
     }
 
-    func pinched(by magnification: CGFloat) {
+    private func pinched(by magnification: CGFloat) {
         guard let target else { return }
         if pinch == nil { beginPinch() }
         guard var p = pinch else { return }
@@ -798,7 +858,7 @@ final class PictureInPictureOverlayView: NSView {
         give(frame, to: target)
     }
 
-    func endPinch() {
+    private func endPinch() {
         guard let p = pinch else { return }
         pinch = nil
         guard let target, p.scale != 1 else { return }
@@ -825,20 +885,22 @@ final class PictureInPictureOverlayView: NSView {
     /// left out: the flight is the momentum. Scroll events only record where the fingers are;
     /// `tick` shows the window there, a frame at a time (see `PictureInPictureThrow.origin(at:)`).
     override func scrollWheel(with event: NSEvent) {
-        guard gesture == nil, pinch == nil, let target, event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
+        guard gesture == nil, let target, event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
         let t = event.timestamp
-        switch event.phase {
-        case .mayBegin, .began:
+        // While a pinch has the window its scrolls go nowhere, the touch-down's late end included.
+        switch fingers.scroll(Self.phase(event)) {
+        case .startSwipe:
+            endPinch()   // one whose end never came
             beginSwipe(target, event)
-        case .changed:
+        case .swipe:
             if swipe == nil { beginSwipe(target, event) }
             // The window goes where the fingers go: with natural scrolling the deltas already
             // follow them, without it they're the other way round.
             let toFingers: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
             _ = swipe?.move(dx: toFingers * event.scrollingDeltaX, dy: -toFingers * event.scrollingDeltaY, at: t)
-        case .ended, .cancelled:
+        case .endSwipe:
             endSwipe(target, event)
-        default:
+        case .ignore, .startPinch, .pinch, .endPinch, .pinchOnce:
             break
         }
     }
@@ -876,6 +938,7 @@ final class PictureInPictureOverlayView: NSView {
             MainActor.assumeIsolated {
                 guard let self, let target = self.target, self.swipe != nil else { return }
                 CraLog.note("pip: swipe lifted over another window")
+                self.fingers.reset()
                 self.endSwipe(target, e)
             }
         }
