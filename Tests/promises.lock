@@ -1057,6 +1057,7 @@
 #520   Tests/Scenarios/peek-escape-closes.scenario  39370bce7341
 #520   Tests/Scenarios/peek-escape-page-uses-it.scenario  3f003979cc73
 #521   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::singleSignOnShowsAKeyAndSignedOutAWarning  e523aa0032fa
+#521   Tests/LiveFolderProviderTests.swift::gitHubSSOBesideOtherPullRequests  0dc0efc40994
 #521   Tests/LiveFolderProviderTests.swift::gitHubSSOKey  275f1e1d6edc
 #521   Tests/Scenarios/live-folder-sso-key.scenario  334b5a8d69af
 #522   Tests/Scenarios/sidebar-hover-third-space-fullscreen.scenario  3a6bdebc0588
