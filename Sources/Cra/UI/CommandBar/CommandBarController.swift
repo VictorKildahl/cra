@@ -44,6 +44,7 @@ final class CommandBarController {
     private(set) var openedPrefill: String?
     /// Rows that open or change under a still pointer don't take the selection from the top row (#382).
     @ObservationIgnored private var hoverGate = HoverGate()
+    @ObservationIgnored private var searchEngineWatcher: DispatchSourceFileSystemObject?
 
     unowned let engine: SuggestionEngine
     unowned let store: SidebarStore
@@ -78,6 +79,8 @@ final class CommandBarController {
 
     func open(mode: CommandBarMode, prefill: String?) {
         engine.resetIndex()
+        searchEngineWatcher?.cancel()
+        searchEngineWatcher = engine.watchSearchEngines { [weak self] in self?.relist() }
         self.mode = mode
         scope = nil
         openedPrefill = prefill
@@ -130,7 +133,7 @@ final class CommandBarController {
         previewText = nil
     }
 
-    /// The search engine answered: list again, keeping the selected row where it still is.
+    /// Search suggestions or engines changed: list again, keeping the selected row where it still is.
     private func relist() {
         guard scope == nil else { return }
         let selectedID = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex].id : nil
@@ -341,6 +344,8 @@ final class CommandBarController {
         guard isOpen else { return }
         isOpen = false
         scope = nil
+        searchEngineWatcher?.cancel()
+        searchEngineWatcher = nil
         engine.resetIndex()
         onClose()
     }

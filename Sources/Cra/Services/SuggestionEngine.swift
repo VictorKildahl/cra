@@ -223,8 +223,16 @@ final class SuggestionEngine {
 
     private var enginesRead: (default: ChromiumSearchEngine, keywords: [ChromiumSearchEngine])?
 
+    func watchSearchEngines(onChange: @escaping @MainActor () -> Void) -> DispatchSourceFileSystemObject? {
+        SearchEngines.shared.watchKeywords(profilePath: store.profilePath(space: store.focusedSpaceID)) { [weak self] in
+            guard let self, let previous = self.enginesRead else { return }
+            self.enginesRead = nil
+            if self.engines != previous { onChange() }
+        }
+    }
+
     /// Chromium's, in the window's space's profile (an incognito window's are its Default's),
-    /// read when the bar opens. The default is the space's own engine where it has one (#306).
+    /// cached while the bar is open. The default is the space's own engine where it has one (#306).
     private var engines: (default: ChromiumSearchEngine, keywords: [ChromiumSearchEngine]) {
         if let enginesRead { return enginesRead }
         let space = store.focusedSpaceID
