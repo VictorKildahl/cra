@@ -7,7 +7,7 @@ import SwiftUI
 /// (#306), and Create Space and Cancel at the bottom. It edits the window's draft and makes
 /// nothing itself.
 @MainActor
-final class SpaceCreationView: NSView, NSTextFieldDelegate {
+final class SpaceCreationView: NSView, NSTextFieldDelegate, NSPopoverDelegate {
     private let store: SidebarStore
     private let ui: SidebarUIState
     private let actions: SidebarActions
@@ -32,6 +32,8 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
     private let cancel = NSButton(title: "Cancel", target: nil, action: nil)
     private let card = NSView()
     private let cardIcon = EmojiLabel.sidebar(size: SpaceCreationAnimation.cardIcon)
+    /// A symbol or picture icon on the card, where an emoji goes in `cardIcon`.
+    private let cardImage = CALayer()
     private let glow = CAGradientLayer()
     private var iconPopover: NSPopover?
     private var creating = false
@@ -101,6 +103,8 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         card.layer?.shadowOffset = CGSize(width: 0, height: -2)
         cardIcon.alignment = .center
         card.addSubview(cardIcon)
+        cardImage.contentsGravity = .resizeAspect
+        card.layer?.addSublayer(cardImage)
         card.isHidden = true
         glow.type = .radial
         glow.startPoint = CGPoint(x: 0.5, y: 0.5)
@@ -279,14 +283,14 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         host.preferredContentSize = NSSize(width: 272, height: 272)
         popover.contentViewController = host
         popover.contentSize = NSSize(width: 272, height: 272)
+        popover.delegate = self
         iconPopover = popover
-        NotificationCenter.default.addObserver(forName: NSPopover.didCloseNotification, object: popover, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.iconPopover = nil }
-        }
         popover.show(relativeTo: iconButton.bounds, of: iconButton, preferredEdge: .minY)
     }
 
     func closeIconPicker() { iconPopover?.performClose(nil) }
+
+    func popoverDidClose(_ notification: Notification) { iconPopover = nil }
 
     // MARK: The profile
 
@@ -393,12 +397,26 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         // spring and turns over on the way, the picture's top edge going away first.
         let rest = A.cardFrame(in: bounds.size)
         let way = rest.midY - picture.frame.midY
+        let side = A.cardIcon
+        var image: NSImage?
+        cardIcon.stringValue = ""
         switch icon {
         case .emoji(let e): cardIcon.stringValue = e
-        default: cardIcon.stringValue = ""
+        case .symbol(let s):
+            image = NSImage(systemSymbolName: s, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: side * 0.8, weight: .medium).applying(.init(hierarchicalColor: .black)))
+        case .image(let d): image = NSImage(data: d)
+        case .none: break
         }
         card.frame = rest
         cardIcon.frame = card.bounds.insetBy(dx: 0, dy: (card.bounds.height - 46) / 2)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let scale = window?.backingScaleFactor ?? 2
+        cardImage.contentsScale = scale
+        cardImage.contents = image?.layerContents(forContentsScale: scale)
+        cardImage.frame = CGRect(x: ((rest.width - side) / 2).rounded(), y: ((rest.height - side) / 2).rounded(), width: side, height: side)
+        CATransaction.commit()
         card.isHidden = false
         card.layer?.opacity = 0
         /// A view's layer is anchored at its corner: this stretches it to `height` and turns it about
@@ -446,7 +464,14 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate {
         pulse.beginTime = now + A.glow.lowerBound
         pulse.duration = (A.glow.upperBound - A.glow.lowerBound) * 2
         glow.add(pulse, forKey: "pulse")
-        CraLog.note("space creation plays: the cards drop \(Int(way.rounded())) pt and turn over, \(frames + 1) frames")
+        let face: String
+        switch icon {
+        case .emoji(let e): face = e
+        case .symbol(let s): face = image == nil ? "empty" : s
+        case .image: face = image == nil ? "empty" : "image"
+        case .none: face = "empty"
+        }
+        CraLog.note("space creation plays: the cards drop \(Int(way.rounded())) pt and turn over, \(frames + 1) frames, card=\(face)")
         DispatchQueue.main.asyncAfter(deadline: .now() + A.done) { done() }
     }
 

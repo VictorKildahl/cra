@@ -3813,7 +3813,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         done?(id)
     }
 
-    /// Scenario hook: the page's state, or one step on it (`type:<name>`, `icon:<emoji>`, `theme:<n>`,
+    /// Scenario hook: the page's state, or one step on it (`type:<name>`, `icon:<emoji>`, `symbol:<name>`, `theme:<n>`,
     /// `profile:<n>`, `engine:<keyword>`, `create`, `cancel`, `tip:<profile|search>`, `swipe:<points>`, `lift`).
     func debugSpaceCreation(_ step: String) {
         let sidebar = shell.sidebarHost as? SidebarView
@@ -3821,6 +3821,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         switch parts.first {
         case "type": sidebar?.debugTypeSpaceName(parts.count > 1 ? parts[1] : "")
         case "icon": sidebarUI.spaceCreation?.icon = parts.count > 1 ? .emoji(parts[1]) : .none
+        case "symbol": sidebarUI.spaceCreation?.icon = parts.count > 1 ? .symbol(parts[1]) : .none
         case "theme":
             if let origin = creationOrigin, sidebarUI.spaceCreation != nil {
                 let theme = SpaceColorPresets.newSpaceTheme(index: Int(parts.count > 1 ? parts[1] : "") ?? 0)

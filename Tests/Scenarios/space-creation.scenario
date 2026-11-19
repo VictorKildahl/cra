@@ -59,7 +59,7 @@ cra://debug?spaceCreation=engine:duckduckgo.com
 expect-log space creation engine:duckduckgo.com: .* engine=DuckDuckGo layout=wide searchGlyph=18 create=on
 cra://debug?spaceCreation=create
 # The picture drops to the card's place on Arc's spring and turns over on the way.
-expect-log space creation plays: the cards drop [0-9]+ pt and turn over, 236 frames
+expect-log space creation plays: the cards drop [0-9]+ pt and turn over, 236 frames, card=🧳
 wait 3
 expect-log space creation made "Travel" on Default, theme chosen, search duckduckgo\.com
 cra://debug?spaceCreation=state
@@ -92,3 +92,15 @@ cra://debug?spaceCreation=type:Later
 expect-log space creation type:Later: name="Later" .* create=on
 cra://debug?spaceCreation=cancel
 expect-log space creation cancel: none
+# A symbol for an icon comes round on the card too, not a blank card.
+cra://action/toggleSidebar
+wait 1
+cra://action/newSpace
+cra://debug?spaceCreation=type:Stars
+cra://debug?spaceCreation=symbol:star.fill
+cra://debug?spaceCreation=theme:2
+expect-log space creation theme:2: name="Stars" keys=[01] icon=star\.fill
+cra://debug?spaceCreation=create
+expect-log space creation plays: the cards drop [0-9]+ pt and turn over, 236 frames, card=star\.fill
+wait 3
+expect-log space creation made "Stars" on Default, theme chosen
