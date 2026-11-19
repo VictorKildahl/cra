@@ -91,6 +91,50 @@ struct MobileLoadFailureTests {
         #expect(!MobileLoadFailure.isRefusedAsBlank(requested: "http://127.0.0.1:1/", committed: "http://127.0.0.1:1/"))
     }
 
+    /// Regression in TestFlight 1086: a mailto: or tel: link reached WebKit, which failed it with
+    /// -1002 "unsupported URL", and the error page replaced the page ("mailto:…: unsupported
+    /// URL"). Such addresses go to their app before WebKit sees them (MobileExternalLinks); should
+    /// one still fail, nothing shows and the page stays. -1002 on an http(s) address, and on what
+    /// the web view loads itself, is still a page that can't load.
+    @Test(.bug(id: "crash-1086-external-schemes"))
+    func anUnsupportedAddressOfAnotherAppSaysNothing() {
+        for address in ["mailto:fixture@cra.test", "tel:+4512345678", "sms:+4512345678", "facetime:+4512345678",
+                        "maps:?q=Copenhagen", "itms-apps://apps.apple.com/app/id1", "itms-appss://apps.apple.com/app/id1",
+                        "spotify:track:1"] {
+            #expect(MobileLoadFailure.answer(domain: NSURLErrorDomain, code: NSURLErrorUnsupportedURL, address: address) == .nothing, "\(address)")
+            // WebKit's own CannotShowURL for the same address.
+            #expect(MobileLoadFailure.answer(domain: "WebKitErrorDomain", code: 101, address: address) == .nothing, "\(address)")
+        }
+        for address in ["https://example.com/", "http://cra.localhost/plain", "data:text/html,x", "about:blank"] {
+            #expect(MobileLoadFailure.answer(domain: NSURLErrorDomain, code: NSURLErrorUnsupportedURL, address: address) == .errorPage, "\(address)")
+            #expect(MobileLoadFailure.answer(domain: "WebKitErrorDomain", code: 101, address: address) == .errorPage, "\(address)")
+        }
+        // Without an address the answer is the code's alone, and other failures of another app's
+        // address are unchanged.
+        #expect(MobileLoadFailure.answer(domain: NSURLErrorDomain, code: NSURLErrorUnsupportedURL, address: nil) == .errorPage)
+        #expect(MobileLoadFailure.answer(domain: NSURLErrorDomain, code: NSURLErrorCancelled, address: "mailto:x@y.z") == .nothing)
+        #expect(MobileLoadFailure.answer(domain: NSURLErrorDomain, code: NSURLErrorCannotFindHost, address: "https://x.invalid/") == .errorPage)
+        #expect(MobileLoadFailure.answer(domain: NSURLErrorDomain, code: NSURLErrorServerCertificateUntrusted, address: "https://x/") == .certificateWarning)
+    }
+
+    /// GitHub #568, follow-up: iOS 26.5's WebKit commits an empty about:blank for an address it
+    /// refuses, the error page came after it, and Back from the error page landed on that blank.
+    /// A main-frame load to such an address now gets the error page before WebKit tries it, so the
+    /// blank is never in the history. Going back or forward to it is left to WebKit (the page
+    /// may come from its cache), with the blank-page answer behind it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/568"))
+    func aRefusedAddressIsAnsweredBeforeWebKitLoadsIt() {
+        for address in ["http://127.0.0.1:1/", "http://0.0.0.0:18799/", "https://127.0.0.1:5061/"] {
+            #expect(MobileLoadFailure.answersBeforeLoading(address, isMainFrame: true, isBackForward: false), "\(address)")
+            #expect(!MobileLoadFailure.answersBeforeLoading(address, isMainFrame: true, isBackForward: true), "\(address)")
+            // A frame's refused load stays WebKit's: the page around it shows.
+            #expect(!MobileLoadFailure.answersBeforeLoading(address, isMainFrame: false, isBackForward: false), "\(address)")
+        }
+        for address in ["http://127.0.0.1:4/", "https://example.com/", "about:blank", "mailto:x@y.z"] {
+            #expect(!MobileLoadFailure.answersBeforeLoading(address, isMainFrame: true, isBackForward: false), "\(address)")
+        }
+    }
+
     /// The page names the host and the system's reason, as Cra for Mac's WebKit tabs do, and
     /// escapes both.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/568"))
