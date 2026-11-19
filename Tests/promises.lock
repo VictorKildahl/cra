@@ -1143,6 +1143,8 @@
 #550   Tests/FloatingSidebarTests.swift::theShadowStaysUnderTheSidebar  831fdb6d0b6c
 #550   Tests/Scenarios/floating-sidebar-shadow.scenario  a59106d5ba21
 #551   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::leavingCraKeepsTheBarOpen  d0842a6daad8
+#552   Tests/BrowserManagerLifecycleTests.swift::backgroundPageStartsHiddenCase  73da894a6e15
+#552   Tests/Scenarios/background-tab-autoplay.scenario  5098e801868b
 #554   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::aSplitIsOneCardWithItsPanes  66e2b892d639
 #554   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::theSplitOnScreenLeadsAndTakesItsNewestPanesTime  4c437f980621
 #554   Packages/CraCore/Tests/CraCoreTests/RecentTabOrderTests.swift::unshownPanesFollowTheirSplit  6d787990b8f6

@@ -2128,6 +2128,11 @@ bool HandleDebugMethod(content::WebContents* contents,
   return self;
 }
 
+// Whether the app wants this page to start hidden: a tab opened behind the page in front (#552).
+- (BOOL)startsHidden {
+  return [_delegate respondsToSelector:@selector(browserStartsHidden:)] && [_delegate browserStartsHidden:self];
+}
+
 - (void)createPageInProfile:(Profile*)profile {
   // Quitting: Chrome is closing every Browser, and the app may still ask for a page as tabs lose theirs.
   if (_isClosed || g_quitting) {
@@ -2136,13 +2141,11 @@ bool HandleDebugMethod(content::WebContents* contents,
   if (_isIncognito) {
     profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   }
-  // Before its first show, Chromium trusts the creation-time visibility even if
-  // the container is hidden. Start tabs hidden so Chromium defers media until
-  // the user sees them. Spare pages are only taken by tabs.
+  // Until a page is first shown, Chromium keeps the visibility it was made with, whatever Cra's container
+  // does. A tab opened behind the page in front starts hidden, so its video waits until it is shown (#552);
+  // every other page starts shown. A spare is made shown: the tab that takes it asks (takeSpareWithURL:).
   content::WebContents::CreateParams params(profile);
-  params.initially_hidden = _isSpare ||
-      ([_delegate respondsToSelector:@selector(browserStartsHidden:)] &&
-       [_delegate browserStartsHidden:self]);
+  params.initially_hidden = !_isSpare && [self startsHidden];
   if (_isSpare) {
     // Made now, while nothing waits on it; it goes in a tab strip when a tab takes it (takeSpareWithURL:).
     _spareProfile = profile;
@@ -2768,6 +2771,11 @@ bool HandleDebugMethod(content::WebContents* contents,
   if (_spareContents && _spareProfile && !g_quitting) {
     Profile* profile = _spareProfile;
     _spareProfile = nullptr;
+    // A background tab's spare is hidden before it loads, as a page made hidden is (#552). Chromium ignores a
+    // hidden container until a page is first shown, so it is told directly; showing the tab shows it.
+    if ([self startsHidden]) {
+      _spareContents->WasHidden();
+    }
     [self insertContents:std::move(_spareContents) profile:profile];
   }
   // Taken before its profile loaded: createPageInProfile: makes it as a tab's page.

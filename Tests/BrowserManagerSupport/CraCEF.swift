@@ -9,10 +9,13 @@ public protocol CraBrowserDelegate: AnyObject {
     func browser(_ browser: CraBrowser, didChangeURL url: String)
     func browser(_ browser: CraBrowser, didChangeTitle title: String)
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool)
+    /// CraCEF.h's optional browserStartsHidden: (#552).
+    func browserStartsHidden(_ browser: CraBrowser) -> Bool
 }
 
 extension CraBrowserDelegate {
     public func browser(_ browser: CraBrowser, didUpdateDownload download: CraDownloadInfo) {}
+    public func browserStartsHidden(_ browser: CraBrowser) -> Bool { false }
 }
 public final class CraDownloadInfo { public init() {} }
 
@@ -65,7 +68,12 @@ open class CraBrowser {
         self.delegate = delegate
         isIncognito = incognito
         self.profilePath = profilePath
+        // As the engine's bridge: a page (not a popup host, which waits for its popup) asks as it is made.
+        if url != nil { startedHidden = delegate?.browserStartsHidden(self) ?? false }
     }
+
+    /// Whether the page was made hidden, or a spare it took was hidden before it loaded (browserStartsHidden, #552).
+    public private(set) var startedHidden = false
 
     /// The saved back and forward list the page was made with (Cra.restoreHistory's params).
     public private(set) var restoredHistory: [String: Any]?
@@ -84,6 +92,7 @@ open class CraBrowser {
     }
     public func takeSpare(withURL url: String, history: [String: Any]?) {
         isSpare = false
+        startedHidden = delegate?.browserStartsHidden(self) ?? false
         takenURL = url
         currentURL = url
         restoredHistory = history

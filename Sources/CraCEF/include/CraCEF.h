@@ -132,7 +132,8 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 - (void)browserDidReceiveFocus:(CraBrowser *)browser;
 - (void)browserDidClose:(CraBrowser *)browser;
 @optional
-/// A Chromium tab starts hidden until its container is shown in a window.
+/// Whether the page being made starts hidden, so its video waits until it is shown: a tab opened behind the
+/// page in front (#552). Asked as the page is made and as a tab takes a spare; without it, pages start shown.
 - (BOOL)browserStartsHidden:(CraBrowser *)browser;
 
 /// The page's context menu: Open Link in New Window, Little Window or Incognito Window.

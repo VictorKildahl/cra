@@ -1,6 +1,6 @@
 # Every way a page reaches its browser, and what tests it (docs/web-features.md, scripts/web-features.py).
 # kind	name	how: scenarios a,b | checklist | n/a: why	what a page does
-delegate	OpenURLFromTab	scenarios new-tab-link-shows,middle-click-page,page-windows-open-on-cra	a link or form that opens or navigates (target=_blank, ⌘-click)
+delegate	OpenURLFromTab	scenarios new-tab-link-shows,middle-click-page,page-windows-open-on-cra,background-tab-autoplay	a link or form that opens or navigates (target=_blank, ⌘-click)
 delegate	ShouldAllowRendererInitiatedCrossProcessNavigation	n/a: Chrome's own navigation policy, nothing shown	a page navigating itself to another site
 delegate	NavigationStateChanged	scenarios page-console,back-forward-menu	the title, address and loading state Cra shows for a page
 delegate	VisibleSecurityStateChanged	n/a: Cra shows no padlock of Chrome's; HTTPS-only is https-only-toggle's	a page's security state

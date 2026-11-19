@@ -593,7 +593,22 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         delegate?.browserManagerPageWindowsChanged(focus: tabID(of: browser) == visibleTabID)
     }
 
-    func browserStartsHidden(_ browser: CraBrowser) -> Bool { true }
+    /// The tab whose page `loadBehind` is making, while it makes it.
+    private var makingBehind: UUID?
+
+    /// Makes the page of `tabID`, a tab opened behind the page in front, hidden until its tab is shown, so a
+    /// video on it waits (#552; Arc 1.173.1, and Chromium's own ⌘-click tabs).
+    @discardableResult
+    private func loadBehind(_ tabID: UUID) -> TabRuntime? {
+        makingBehind = tabID
+        defer { makingBehind = nil }
+        return ensureRuntime(for: tabID)
+    }
+
+    /// Only a page `loadBehind` makes starts hidden. Every other page starts shown, as Chromium makes it:
+    /// a tab in front or selected later, an agent's tab that is never shown, a spare (the tab that takes it
+    /// asks again, as it takes it).
+    func browserStartsHidden(_ browser: CraBrowser) -> Bool { makingBehind != nil }
 
     func unload(_ tabID: UUID) {
         // CEF closes asynchronously. Retire ownership first so reopening the tab
@@ -1758,7 +1773,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                                   parent: slot?.parent, index: slot?.index, window: windowID, referrer: source)
         if background {
             store.markUnread(tab.id, true)
-            ensureRuntime(for: tab.id)  // load it so the title and favicon fill in
+            loadBehind(tab.id)  // load it so the title and favicon fill in
             delegate?.browserManagerOpenedInBackground(tab.id)
         }
     }
