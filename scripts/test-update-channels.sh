@@ -17,6 +17,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# CI checks out no vendor/: the pinned Sparkle comes down here (a few MB, checked against its hash).
+scripts/fetch-sparkle.sh >/dev/null
 xcrun swiftc -swift-version 5 Tests/UpdateFeedCheck.swift -F vendor/sparkle -framework Sparkle \
   -Xlinker -rpath -Xlinker "$ROOT/vendor/sparkle" -o "$DIR/feedcheck" 2>&1 | grep -v warning || true
 mkdir -p "$DIR/feed"
