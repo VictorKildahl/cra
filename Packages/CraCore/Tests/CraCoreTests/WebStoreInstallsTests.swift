@@ -61,4 +61,27 @@ struct WebStoreInstallsTests {
         #expect(gone)
         #expect(listed.folders.isEmpty)
     }
+
+    /// The store refused a copy in a profile: later launches don't ask for it there (each ask downloads
+    /// its CRX, a file on the Dock icon at every launch); other profiles still do, and importing it
+    /// again lets every profile ask once more.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/491"))
+    func aRefusedCopyIsNotAskedForAgain() {
+        let profiles = ["Default", "Profile 1"]
+        var refused = WebStoreRefusals()
+        let first = refused.refuse(folder: id, inProfile: "Default")
+        let again = refused.refuse(folder: id, inProfile: "Default")
+        #expect(first && !again, "the second is already noted")
+        let pending = WebStoreInstalls.pendingProfiles(folder: id, extensionID: id, scopes: ExtensionProfiles(),
+                                                       profiles: profiles, settings: { _ in [:] }, refused: refused)
+        #expect(pending == ["Profile 1"])
+        #expect(refused.isRefused(folder: id, inProfile: "Default") && !refused.isRefused(folder: id, inProfile: "Profile 1"))
+        let forgot = refused.forget(folder: id)
+        #expect(forgot)
+        #expect(refused == WebStoreRefusals(), "an empty list, and the file goes")
+        #expect(WebStoreInstalls.pendingProfiles(folder: id, extensionID: id, scopes: ExtensionProfiles(),
+                                                 profiles: profiles, settings: { _ in [:] }, refused: refused) == profiles)
+        let forgotAgain = refused.forget(folder: id)
+        #expect(!forgotAgain)
+    }
 }

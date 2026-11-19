@@ -978,9 +978,12 @@
 #490   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::arcPalettesFollowTheColoursSaturation  97f12ede4f23
 #490   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::greensOfDifferentSaturationGetTheirOwnSelection  577c40ad2567
 #491   Packages/CraCore/Tests/CraCoreTests/DownloadListTests.swift::stuckDownloadDoesNotHoldTheBin  8c802f518e5c
+#491   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::webStoreRefusalsLoadAsRecorded  f644bcb44c99
+#491   Packages/CraCore/Tests/CraCoreTests/WebStoreInstallsTests.swift::aRefusedCopyIsNotAskedForAgain  e7fbd2feb226
 #491   Tests/Scenarios/download-stuck-bin.scenario  e637c2ea6541
 #491   Tests/Scenarios/web-store-install-dock-badge.scenario  8c36c7ab7f42
 #491   Tests/Scenarios/web-store-install-quit-guards.scenario  a2954a23204f
+#491   Tests/Scenarios/web-store-install-refused-once.scenario  fd5e5e2353fc
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::floatsOverAPeeksPageUnderItsOwnSwitch  6e7279f4e6a7
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::offByDefaultAndKeptInSettingsJSON  f0565ab13475
 #493   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::theStripIsTheCardsTopEdge  17c35a231c12

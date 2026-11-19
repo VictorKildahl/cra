@@ -1,0 +1,19 @@
+# promise: #491
+# An imported extension the Web Store won't install (delisted, or its store version asks for more than the copy)
+# was asked for again at the first page of every launch. Each ask downloads its CRX, which showed as a file on Cra's
+# Dock icon and over the sidebar's downloads every day (GitHub #491, 19 Nov 2026: "every time I close and reopen
+# Cra"). Once the store has said no in a profile, the extension stays the imported copy there and later launches
+# don't ask; importing it again clears that. Here the store answers 404, and the relaunch's first page asks nothing.
+budget rss=700
+extension ${FIXTURES}/WebStoreCopy/${WEB_STORE_COPY_ID}
+arg --apps-gallery-download-url=${ORIGIN}/missing/%s.crx
+cra://open?url=${PAGE}?n=store
+expect-log extension ${WEB_STORE_COPY_ID}: installing from the Web Store in Default
+expect-log GET /missing/
+expect-log Web Store install in Default failed
+wait 1
+relaunch
+cra://open?url=${PAGE}?n=relaunched
+expect-log GET /page.html\?n=relaunched
+wait 3
+expect-log extension ${WEB_STORE_COPY_ID}: the Web Store refused it in Default before; it stays the imported copy there

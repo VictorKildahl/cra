@@ -522,6 +522,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         quitRequests.answered(quit: quits)
         guard quits else { return .terminateCancel }
+        // A Web Store install the quit cuts short isn't the store's answer (#491).
+        ExtensionStore.shared.isQuitting = true
         // Little Windows are not in the sidebar; keep their pages in the Library.
         for w in littleWindows { w.archivePage() }
         for w in mainWindows { w.saveFrameNow() }
