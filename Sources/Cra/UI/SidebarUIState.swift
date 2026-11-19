@@ -51,6 +51,8 @@ final class SidebarUIState {
     var recentDownload: RecentDownload?
     /// The Library button's view, where download flights land.
     @ObservationIgnored weak var libraryAnchor: NSView?
+    /// The downloads list over the bottom of the tab list, for `cra://debug?downloadsTray` (#575).
+    @ObservationIgnored weak var downloadsTray: NSView?
     /// Arc's downloads list over the bottom of the sidebar, open while the Library
     /// button (or the list) is hovered.
     var downloadsListOpen = false

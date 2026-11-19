@@ -1,0 +1,18 @@
+# Hovering the Library button lists the recent downloads at the bottom of the tab list, but the
+# now-playing cards and the What's New banner can stand between the button and the list. On the way
+# up to a download the pointer left the button, hadn't reached the list, and the list closed under it
+# (GitHub #575). While the list is open, its hover reaches down to the Library button, and a press on
+# the way up still goes to what is there (the player, the banner), not to the list.
+# promise: #575
+home
+budget rss=600 stalls50=5
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished from a data: address
+cra://debug?downloads=1
+wait 1
+cra://debug?downloadsTray=open
+expect-log downloads tray open: open=true reach=[1-9][0-9]* holds=true press=[A-Z]
+cra://debug?downloads=0

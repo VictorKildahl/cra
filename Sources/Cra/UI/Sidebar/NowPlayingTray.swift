@@ -123,6 +123,16 @@ final class NowPlayingTrayView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         observe()
+        observeDownloadsList()
+    }
+
+    /// The downloads list opening over the cards' room keeps them resting; closed, a pointer still
+    /// over them opens them (#575).
+    private func observeDownloadsList() {
+        observeChanges(of: { [ui] in ui.downloadsListOpen }) { [weak self] _ in
+            guard let self, let window else { return }
+            setHovered(overStack(convert(window.mouseLocationOutsideOfEventStream, from: nil)))
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -266,7 +276,7 @@ final class NowPlayingTrayView: NSView {
     }
 
     private func setHovered(_ hovered: Bool) {
-        let want = hovered && !order.isEmpty
+        let want = NowPlayingHover.opens(overCards: hovered, cards: order.count, downloadsListOpen: ui.downloadsListOpen)
         guard want != expanded else { return }
         expanded = want
         if !want { drawerID = nil }

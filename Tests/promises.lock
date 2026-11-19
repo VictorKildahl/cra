@@ -1235,6 +1235,9 @@
 #574   Tests/Scenarios/page-pickers.scenario  7521785768d2
 #574   Tests/Scenarios/page-print-button.scenario  4095f14bad8f
 #574   Tests/Scenarios/page-save-password.scenario  ef5590d50ccd
+#575   Packages/CraCore/Tests/CraCoreTests/DownloadsTrayHoverTests.swift::cardsStayRestingUnderAnOpenDownloadsList  0ae91bb6d69a
+#575   Packages/CraCore/Tests/CraCoreTests/DownloadsTrayHoverTests.swift::theWayUpFromTheButtonKeepsTheListOpen  41b3a7c02dca
+#575   Tests/Scenarios/downloads-tray-reach.scenario  1f62cea3ed78
 #577   Packages/CraCore/Tests/CraCoreTests/FindCommandTests.swift::findCommandsAreTheBarsToAnswer  cf4d50b13e64
 #577   Tests/Scenarios/little-window-find.scenario  c625f6c437bb
 #578   Tests/Scenarios/extension-normal-window.scenario  eb942cee6d0d

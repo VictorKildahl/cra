@@ -444,7 +444,10 @@ final class SidebarView: NSView {
         creationHost?.frame = NSRect(origin: .zero, size: creationFrame.size).offsetBy(dx: creationPull * b.width, dy: 0)
         let rows = DownloadHistory.shared.recent.count
         let trayH = DownloadsTrayMetrics.listHeight(rows: rows) + 4
-        trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH)
+        // Down to the Library button: the way up to the list from there keeps it open (#575).
+        let libraryTop = dock.frame.minY + (dockH - SpaceDockView.librarySide) / 2
+        trayHost.reach = max(0, libraryTop - pager.frame.maxY)
+        trayHost.frame = NSRect(x: 0, y: pager.frame.maxY - trayH, width: b.width, height: trayH + trayHost.reach)
         // A strip at the column's right edge, as tall as the column.
         newSpacePlus.frame = NSRect(x: b.width - NewSpaceSwipe.stripWidth, y: 0, width: NewSpaceSwipe.stripWidth, height: b.height)
         updateTrayMask(open: ui.downloadsListOpen, rows: rows)
@@ -1153,6 +1156,8 @@ final class TranslateLineButton: NSView {
 /// space. Widths and what each cell draws come from CraCore's SpaceDock.
 final class SpaceDockView: NSView {
     static let cell = CGSize(width: 34, height: 32)
+    /// The Library button at the dock's left end, a square this wide.
+    static let librarySide: CGFloat = 28
     private let store: SidebarStore
     private let ui: SidebarUIState
     private let actions: SidebarActions
@@ -1356,7 +1361,7 @@ final class SpaceDockView: NSView {
     override func layout() {
         super.layout()
         let h = bounds.height
-        library.frame = NSRect(x: 0, y: (h - 28) / 2, width: 28, height: 28)
+        library.frame = NSRect(x: 0, y: (h - Self.librarySide) / 2, width: Self.librarySide, height: Self.librarySide)
         plus.frame = NSRect(x: bounds.width - plus.size.width, y: (h - plus.size.height) / 2,
                             width: plus.size.width, height: plus.size.height)
         // A narrower sidebar can squeeze the dock into dots.

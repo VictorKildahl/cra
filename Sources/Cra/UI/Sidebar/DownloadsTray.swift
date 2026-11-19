@@ -35,11 +35,18 @@ final class DownloadsTrayView: NSView {
     private var rows: [DownloadsTrayRowView] = []
     private var shownOpen = false
     private var ticker: Timer?
+    /// How far the view reaches below the rows, down to the Library button's top: while the list is
+    /// open, a pointer crossing the player or the banner on its way up keeps it open (#575). It
+    /// takes no clicks there; they go to what is under it.
+    var reach: CGFloat = 0 { didSet { if reach != oldValue { needsLayout = true } } }
+    /// The rows' part of the view.
+    private var listRect: NSRect { NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - reach)) }
 
     init(ui: SidebarUIState) {
         self.ui = ui
         super.init(frame: .zero)
         wantsLayer = true
+        ui.downloadsTray = self
         observe()
     }
 
@@ -122,7 +129,10 @@ final class DownloadsTrayView: NSView {
 
     // MARK: Pointer
 
-    override func hitTest(_ point: NSPoint) -> NSView? { shownOpen ? super.hitTest(point) : nil }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard shownOpen, let superview, listRect.contains(convert(point, from: superview)) else { return nil }
+        return super.hitTest(point)
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -130,9 +140,27 @@ final class DownloadsTrayView: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { setHovered(ui.downloadsListOpen) }
-    override func mouseMoved(with event: NSEvent) { setHovered(ui.downloadsListOpen) }
+    override func mouseEntered(with event: NSEvent) { setHovered(holds(convert(event.locationInWindow, from: nil))) }
+    override func mouseMoved(with event: NSEvent) { setHovered(holds(convert(event.locationInWindow, from: nil))) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
+
+    /// Whether the pointer at `p` (in this view) keeps the list open: only an open list holds one.
+    private func holds(_ p: NSPoint) -> Bool {
+        ui.downloadsListOpen && DownloadsTrayHover.holds(p, list: listRect, buttonTop: bounds.height, open: true)
+    }
+
+    /// For `cra://debug?downloadsTray`: where the list's hover reaches while it is open, and what a press
+    /// on the way up from the Library button lands on, as the window's hit test finds it (#575).
+    var hoverReadout: String {
+        guard let window, let root = window.contentView?.superview, !isHidden, reach > 0 else { return "rows only" }
+        let mid = NSPoint(x: bounds.midX, y: listRect.maxY + reach / 2)
+        let atButton = NSPoint(x: bounds.midX, y: bounds.height - 1)
+        let inWindow = convert(mid, to: nil)
+        let hit = root.hitTest(root.superview?.convert(inWindow, from: nil) ?? inWindow)
+        let holdsMid = DownloadsTrayHover.holds(mid, list: listRect, buttonTop: bounds.height, open: true)
+        let holdsButton = DownloadsTrayHover.holds(atButton, list: listRect, buttonTop: bounds.height, open: true)
+        return "reach=\(Int(reach.rounded())) holds=\(holdsMid && holdsButton) press=\(hit === self || hit?.isDescendant(of: self) == true ? "the list" : hit.map { String(describing: type(of: $0)) } ?? "nothing")"
+    }
 
     private func setHovered(_ h: Bool) {
         guard ui.downloadsListHovered != h else { return }
