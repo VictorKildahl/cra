@@ -80,6 +80,7 @@ enum StoreTests {
         pinHook()
         dropOnPinnedTabSplits()
         reopenClosedTabs()
+        reopenClosedPinnedTabs()
         windowsShareTheSidebar()
         settingsSync()
         syncLeavesBlankWindowsOnTheirMac()
@@ -2233,6 +2234,60 @@ enum StoreTests {
         expect(store.reopenLastArchived()?.id == first.id && store.selectedTabID == first.id, "again: the one closed before it")
         expect(store.reopenLastArchived()?.id == pinned.id && store.isPinned(pinned.id)
                && store.children(of: space.pinnedContainerID).map(\.id) == [pinned.id], "a pinned tab comes back pinned")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #566
+    /// ⇧⌘T after ⌘W on the open pinned tab (Close and Keep Pinned) brings the tab back at the page
+    /// it was on, not at its pinned page (#566), taking turns with archived tabs by when each
+    /// closed. A pinned split comes back with every pane where it was.
+    @MainActor
+    private static func reopenClosedPinnedTabs() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        store.clearArchive()  // what earlier tests archived (and saved) would come back first
+        let sid = store.createSpace(title: "Pinned Undo", emoji: "📌").id
+        let pinned = store.createTab(url: "https://example.com/pinned", title: "Home", in: sid, pinned: true, select: false)
+        let today = store.createTab(url: "https://example.com/today", in: sid)
+
+        store.archiveTab(today.id, reason: .manual)
+        clock.advance(by: 60)
+        store.selectTab(pinned.id)
+        store.updateTab(pinned.id, url: "https://example.com/pinned/video", title: "Video")
+        store.closePinnedTab(pinned.id, wasOpen: true)
+        store.selectTab(nil)
+        expect(store.item(pinned.id)?.tab?.url == "https://example.com/pinned",
+               "⌘W puts the pinned tab back on its pinned page")
+
+        expect(store.reopenLastClosed() != nil && store.selectedTabID == pinned.id
+               && store.item(pinned.id)?.tab?.url == "https://example.com/pinned/video"
+               && store.item(pinned.id)?.tab?.savedTitle == "Video",
+               "⇧⌘T brings back the pinned tab closed last at the page it was on (#566)")
+        expect(store.item(pinned.id)?.tab?.savedURL == "https://example.com/pinned" && store.isPinned(pinned.id),
+               "and its pinned page stays what it was")
+        expect(store.reopenLastClosed() == .archived(today.id) && store.selectedTabID == today.id,
+               "⇧⌘T again brings back the tab archived before it")
+
+        // A pinned tab closed from the background isn't on the stack: only the open one is.
+        store.updateTab(pinned.id, url: "https://example.com/pinned/elsewhere")
+        store.closePinnedTab(pinned.id, wasOpen: false)
+        expect(store.reopenLastClosed() == nil, "a pinned tab closed in the background leaves nothing to reopen")
+
+        // A pinned split closes as one and comes back with each pane on its page.
+        let left = store.createTab(url: "https://example.com/left", in: sid, pinned: true, select: false)
+        let right = store.createTab(url: "https://example.com/right", in: sid, pinned: true, select: false)
+        guard store.createSplit(with: [left.id, right.id], inPlace: true) != nil, store.isPinned(left.id) else { return expect(false, "the split is made") }
+        store.selectTab(right.id)
+        store.updateTab(left.id, url: "https://example.com/left/deep")
+        store.updateTab(right.id, url: "https://example.com/right/deep")
+        let panes = store.closePinnedTab(right.id, wasOpen: true)
+        store.selectTab(nil)
+        expect(Set(panes) == [left.id, right.id] && store.item(left.id)?.tab?.url == "https://example.com/left",
+               "⌘W on a pinned split takes every pane home")
+        store.reopenLastClosed()
+        expect(store.selectedTabID == right.id && store.item(left.id)?.tab?.url == "https://example.com/left/deep"
+               && store.item(right.id)?.tab?.url == "https://example.com/right/deep",
+               "⇧⌘T brings the split back with both panes where they were")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 

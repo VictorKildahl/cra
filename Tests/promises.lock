@@ -1156,6 +1156,11 @@
 #560   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aPagesOwnRedirectAsksOncePerPageLoad  c95f209d3ba8
 #560   Tests/Scenarios/external-app-links.scenario  4b533008a1de
 #563   Tests/Scenarios/page-menu-no-reading-mode.scenario  48887b488f2f
+#566   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::reopenClosedPinnedTabWhenNoArchivedTabs  5f3839da7243
+#566   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::reopensArchivedTabWhenNewerThanPinned  278ff4a2849c
+#566   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::reopensMostRecentBetweenPinnedAndArchived  ea3b9d5c18be
+#566   Tests/Scenarios/reopen-closed-pinned-tab.scenario  0fb8f4756430
+#566   Tests/StoreTests.swift::reopenClosedPinnedTabs  3275e3774b72
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aCertificateFailureStillAsksAndAStoppedLoadSaysNothing  1db90d7ec6e9
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aNetworkFailureShowsAnErrorPage  a7fefa2b6d10
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::theErrorPageNamesTheHostAndTheReason  1985a3c83c37

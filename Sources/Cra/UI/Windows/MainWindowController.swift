@@ -2703,8 +2703,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // A pinned split closes as one: every pane unloads and goes back to its page.
             let panes = store.paneTabIDs(for: id)
             let wasSelected = selectedTabID.map(panes.contains) ?? false
-            for p in panes {
-                _ = store.resetPinnedTab(p)
+            for p in store.closePinnedTab(id, wasOpen: wasSelected) {
                 for w in app.mainWindows { w.browsers.unload(p); w.dropPeeks(from: p) }
             }
             // Arc goes back to the tab shown before this one if its page is still loaded, and

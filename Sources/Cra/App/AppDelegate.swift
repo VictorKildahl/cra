@@ -3136,13 +3136,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "closeWindow": main.window?.performClose(nil)
         case "reopenClosedTab":
             guard !main.isIncognito else { break }  // incognito tabs leave nothing to restore
-            // Arc: a Peek closed after the last archived tab comes back, over the tab it came from.
-            if let peek = main.closedPeek, peek.at > store.archive.first?.archivedAt ?? .distantPast {
+            // Arc: ⇧⌘T brings back the tab closed last, whether pinned, archived or a closed Peek.
+            let peek = main.closedPeek.map { ReopenClosedTab.ClosedPeek(url: $0.url, tabID: $0.tabID, closedAt: $0.at) }
+            let outcome = store.reopenLastClosed(in: main.windowID, peek: peek)
+            if case .peek(let url, let tabID)? = outcome {
                 main.closedPeek = nil
-                if let id = peek.tabID, store.item(id) != nil { store.selectTab(id, window: main.windowID) }
-                openPeek(url: peek.url, over: main, fromTab: peek.tabID)
-            } else {
-                store.reopenLastArchived()
+                if let tabID, store.item(tabID) != nil { store.selectTab(tabID, window: main.windowID) }
+                openPeek(url: url, over: main, fromTab: tabID)
             }
         case "copyURL":
             // Arc: "Copy the current tab's URL without trackers"; with tabs picked in the sidebar,
