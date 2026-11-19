@@ -1,0 +1,26 @@
+# An imported extension's Web Store install downloads its CRX through Chrome's downloads. Since engine -18 Cra keeps
+# it out of its own lists and guards (web-store-install-quit-guards), but Chromium's badge on the Dock tile still
+# counted every download in progress: on 0.1.50 the first page of each launch put a download on Cra's Dock icon that
+# no list showed (GitHub #491, 19 Nov 2026). Here the store sends 64 KB of the CRX and then nothing, so the install
+# is still downloading when the badge is read. A download the person starts next is on the badge, alone: the
+# readout's count is real, and the install's download is still not in it.
+# promise: #491
+home
+budget rss=600
+extension ${FIXTURES}/WebStoreCopy/${WEB_STORE_COPY_ID}
+arg --apps-gallery-download-url=${TRICKLE}/%s.crx
+cra://open?url=${PAGE}?n=store
+expect-log extension ${WEB_STORE_COPY_ID}: installing from the Web Store in Default
+wait 3
+reject-log Web Store install in Default failed
+cra://debug?dockTile=installing
+expect-log dock tile installing: .*downloads=0$
+cra://open?url=${TRICKLE}/trickle.bin
+wait 2
+cra://debug?downloadState=started
+expect-log download state started: running=true
+cra://debug?dockTile=downloading
+expect-log dock tile downloading: view=DockTileView .*downloads=1$
+cra://debug?download=cancel
+expect-log download control: cancel
+wait 1

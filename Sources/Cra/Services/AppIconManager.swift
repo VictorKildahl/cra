@@ -184,9 +184,9 @@ final class AppIconManager {
     /// What the Dock tile (and the ⌘-Tab switcher) gets while Cra runs, for
     /// cra://debug?dockTile (#319): "view=none" while the Dock draws the bundle's icon itself,
     /// else the tile's content view and whether its drawing is nearer the picked icon or the
-    /// bundle's.
+    /// bundle's; then the downloads on Chromium's badge (#491).
     func dockTileReadout() -> String {
-        guard let view = NSApp.dockTile.contentView else { return "view=none" }
+        guard let view = NSApp.dockTile.contentView else { return "view=none downloads=0" }
         let px = 32
         let drawn = Self.pixels(px) { rect in
             guard view.bounds.width > 0, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
@@ -200,7 +200,10 @@ final class AppIconManager {
             a.isEmpty || a.count != b.count ? Int.max : zip(a, b).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) } / a.count
         }
         let toPicked = distance(drawn, picked), toBundle = distance(drawn, bundle)
-        return "view=\(type(of: view)) draws=\(toPicked < toBundle ? "picked" : "bundle") (\(toPicked) vs \(toBundle))"
+        // downloads: the count on Chromium's badge, 0 while its view isn't on the tile. A Web Store
+        // install's CRX download, which no list shows, must not be one (#491).
+        let downloads = ChromiumDockTile.isChromiumView(view) ? (view.value(forKey: "downloads") as? Int ?? 0) : 0
+        return "view=\(type(of: view)) draws=\(toPicked < toBundle ? "picked" : "bundle") (\(toPicked) vs \(toBundle)) downloads=\(downloads)"
     }
 
     private static func pixels(_ px: Int, _ draw: (NSRect) -> Void) -> [UInt8] {
