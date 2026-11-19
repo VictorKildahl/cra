@@ -1,0 +1,39 @@
+diff -ruN a/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc b/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc
+--- a/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc	2026-11-19 16:40:31
++++ b/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc	2026-11-19 16:40:31
+@@ -11,6 +11,7 @@
+ #include "base/metrics/histogram_functions.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/app_mode/app_mode_utils.h"
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+ #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+@@ -145,6 +146,27 @@
+ void ExclusiveAccessManager::UpdateBubble(
+     ExclusiveAccessBubbleHideCallback first_hide_callback,
+     bool force_update) {
++  // Cra (docs/web-features.md in the Cra repository): for a page of Cra's, Cra says this notice ("Press Esc to
++  // show your cursor" and the rest) as Arc does, with its toast, for the type Chrome decided here. Chrome's own
++  // bubble then stays away (NONE runs the callback as not shown): Arc shows only its toast, and Chrome's came up
++  // at the top of Cra's window as well.
++  if (cra::g_exclusive_access_notice) {
++    content::WebContents* tab = fullscreen_controller_.exclusive_access_tab();
++    if (!tab) {
++      tab = pointer_lock_controller_.exclusive_access_tab();
++    }
++    if (!tab) {
++      tab = keyboard_lock_controller_.exclusive_access_tab();
++    }
++    if (cra::g_exclusive_access_notice(tab, GetExclusiveAccessExitBubbleType(),
++                                       force_update)) {
++      exclusive_access_context_->UpdateExclusiveAccessBubble(
++          {.origin = GetExclusiveAccessBubbleOrigin(),
++           .type = EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE},
++          std::move(first_hide_callback));
++      return;
++    }
++  }
+   exclusive_access_context_->UpdateExclusiveAccessBubble(
+       {.origin = GetExclusiveAccessBubbleOrigin(),
+        .type = GetExclusiveAccessExitBubbleType(),

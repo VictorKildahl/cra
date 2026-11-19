@@ -159,6 +159,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private(set) var browser: CraBrowser?
     /// The page (a video) is in element fullscreen; the shell drops the bar for it.
     private var pageFullscreen = false { didSet { shell.pageFullscreen = pageFullscreen } }
+    /// Chrome's notices for this window's page (ExclusiveAccessNotice): Little Arc says only that the pointer is hidden.
+    private var exclusiveAccessNotices = ExclusiveAccessNotices()
+    /// Esc in the page's full screen while the page holds the keyboard (Arc: "[⎋] again to exit fullscreen").
+    private var keyboardLockEscape = KeyboardLockEscape()
     private let shell: LittleShellView
     /// The page's permission cards up (#371); each asks until it is answered or the window closes.
     private var permissionCards: [PermissionPopover] = []
@@ -1782,10 +1786,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     /// The toast sits 8 pt under the window's top, over the toolbar (Arc's Little Arc).
-    func showToast(_ text: String, action: ShinyToast.Action? = nil) {
+    func showToast(_ text: String, keyCap: (keys: String, after: String)? = nil, action: ShinyToast.Action? = nil) {
         guard let window, let content = window.contentView else { return }
         slowResponseShown = false
-        toast.show(text, action: action, page: content.convert(content.bounds, to: nil), in: window, colors: LittlePalette.toast)
+        toast.show(text, keyCap: keyCap, action: action, page: content.convert(content.bounds, to: nil), in: window,
+                   colors: LittlePalette.toast)
     }
 
     /// The Peek's user closes (its Close button, ⌘W, Esc, a click outside) go through here. A Peek on
@@ -2106,10 +2111,19 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let window else { return }
         pageFullscreen = fullscreen
+        if !fullscreen { keyboardLockEscape.reset() }
         syncFloatingBar()
         // Only a full-screen-primary window gets a full-screen Space of its own (#277: not while it opens).
         if fullscreen, !isPeek { window.collectionBehavior.insert(.fullScreenPrimary) }
         if fullscreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+    }
+
+    /// Arc's toast for what the page took (Little Arc: only the pointer, "Your cursor is hidden…").
+    func browser(_ browser: CraBrowser, exclusiveAccessNotice notice: CraExclusiveAccessNotice, force: Bool) {
+        guard browser === self.browser, let notice = ExclusiveAccessNotice(rawValue: notice.rawValue),
+              let toast = exclusiveAccessNotices.update(notice, force: force, inLittleWindow: true) else { return }
+        CraLog.note("page notice: \(toast.text)")
+        showToast(toast.text)
     }
 
     /// A Shift-clicked link opens in this window: Arc's Little Arc has no Peek of its own, so its
@@ -2337,9 +2351,23 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
     func browser(_ browser: CraBrowser, handleKeyEvent event: NSEvent) -> Bool {
         // Escape leaves the page's element fullscreen, as in the main window (not under the page's keyboard lock).
-        if pageFullscreen, !browser.holdsEscapeKey, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
-            browser.exitFullscreen()
-            return true
+        if pageFullscreen, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
+            guard browser.holdsEscapeKey else {
+                browser.exitFullscreen()
+                return true
+            }
+            // Under the page's keyboard lock (Arc): a press is the page's and offers the next; that one leaves.
+            if event.isARepeat { return false }
+            switch keyboardLockEscape.press(at: event.timestamp, offerTime: ShinyToast.visibleFor) {
+            case .exitFullscreen:
+                CraLog.note("page notice: Esc again leaves full screen")
+                browser.exitFullscreen()
+                return true
+            case .offerAgain:
+                CraLog.note("page notice: \(KeyboardLockEscape.againKeys) \(KeyboardLockEscape.againText)")
+                showToast("", keyCap: (KeyboardLockEscape.againKeys, KeyboardLockEscape.againText))
+                return false
+            }
         }
         // Esc in a Peek goes to the page first; after one the page kept, the next is Cra's and closes (#520).
         if isPeek, !closingPeek, PeekEscapePresses.isEscape(keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) {

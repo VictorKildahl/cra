@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Open Popup Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: on a page opened with ?n=open-popup it calls chrome.action.openPopup() (?n=open-popup-window: for that page's window), as 1Password's inline menu does, then asks the fixture server for page.html?n=openpopup-<request>-<result>.",
+  "host_permissions": ["http://127.0.0.1/*"],
+  "action": { "default_popup": "popup.html", "default_title": "Cra Open Popup Fixture" },
+  "background": { "service_worker": "worker.js" },
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["content.js"] }]
+}

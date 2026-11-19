@@ -1092,6 +1092,21 @@ int PageWindowActive(content::WebContents* contents) {
   return NSApp.isActive && window.isKeyWindow ? 1 : 0;
 }
 
+// Chrome's exclusive-access notice for a page (cra_engine_hooks.h, g_exclusive_access_notice). Chrome's types
+// are CraExclusiveAccessNotice's values.
+bool ExclusiveAccessNotice(content::WebContents* contents, int type, bool force_update) {
+  CraBrowser* browser = contents ? BrowserFor(contents) : nil;
+  if (!browser) {
+    return false;
+  }
+  if ([browser.delegate respondsToSelector:@selector(browser:exclusiveAccessNotice:force:)]) {
+    [browser.delegate browser:browser
+        exclusiveAccessNotice:static_cast<CraExclusiveAccessNotice>(type)
+                        force:force_update];
+  }
+  return true;
+}
+
 // The link under the pointer, for Cra's status line ("" when none).
 bool TargetURL(content::WebContents* contents, const GURL& url) {
   CraBrowser* browser = BrowserFor(contents);
@@ -1881,6 +1896,7 @@ void RunReadyBlocks() {
   g_target_url = &TargetURL;
   g_is_cra_page = &IsCraPage;
   g_page_window_active = &PageWindowActive;
+  g_exclusive_access_notice = &ExclusiveAccessNotice;
   g_block_request = &BlockRequest;
   g_page_menu_built = &BuildArcMenu;
   g_page_menu_command = &PageMenuCommand;
