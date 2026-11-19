@@ -1,3 +1,4 @@
+# promise: #560
 # A link or window.open to another app's scheme (spotify:, zoommtg:) opens no tab: the page that
 # asked shows "Open <app>?" and macOS opens the app, as in Arc (GitHub #207, Spotify's "Open in
 # Desktop app"). macappstore: has an app on every Mac and is asked about (Chrome opens mailto:
@@ -25,6 +26,20 @@ expect-log page localhost can't open macappstore: \(no click\)
 cra://debug?cdp=Runtime.evaluate&params={"expression":"String(window.open('cra://action/closeTab'))"}
 expect-log page localhost can't open cra: \(refused\)
 
+# Chromium, in a tab: the page's own redirect (no click) asks once per page load (#560). The
+# first goes through (tabapp1: has no app), a second gets nothing, and a reload asks again.
+cra://open?url=${PAGE}?n=tab
+expect-log GET /page\.html\?n=tab HTTP
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(location.href='tabapp1:x')"}
+expect-log page 127\.0\.0\.1 wants tabapp1:, no app opens it
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(location.href='tabapp2:x')"}
+expect-log page 127\.0\.0\.1 can't open tabapp2: \(no click\)
+cra://debug?cdp=Page.reload&params={}
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(location.href='tabapp3:x')"}
+expect-log page 127\.0\.0\.1 wants tabapp3:, no app opens it
+
 # Chromium, in a Little Window (the main window's question is still up): the same.
 cra://open?url=${PAGE}?n=little&little=1
 wait 3
@@ -34,6 +49,25 @@ expect-log page 127\.0\.0\.1 asks to open .* for macappstore:
 cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(a=>(a.href='macappstore://apps.apple.com/app/id1?n=cblank',a.target='_blank',document.body.append(a),a.click(),'clicked'))(document.createElement('a'))","userGesture":true}
 expect-log Cra cdp Runtime.evaluate .*"value":"clicked"
 expect-log page 127\.0\.0\.1 asks for .* again, already asking
+# The page's own redirect (no click) asks once per page load, as in WebKit: Slack's
+# "Launching…" page after a browser sign-in has no button to click instead. The first reaches the
+# question (still up, so "already asking"); a second gets nothing.
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(location.href='x-apple.systempreferences:com.apple.preference?n=credirect1')"}
+expect-log page 127\.0\.0\.1 asks for System Settings again, already asking
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(location.href='x-apple.systempreferences:com.apple.preference?n=credirect2')"}
+expect-log page 127\.0\.0\.1 can't open x-apple\.systempreferences: \(no click\)
+# history.pushState is no new page: the page can't buy itself another question with it.
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(history.pushState(null,'','?n=pushed'),String(location.href='pushedapp:x'))"}
+expect-log page 127\.0\.0\.1 can't open pushedapp: \(no click\)
+# A reload is a new load (Chrome's Reload button lets a page ask again): one question again,
+# which goes through (reloadedapp: has no app).
+cra://debug?cdp=Page.reload&target=little&params={}
+expect-log GET /[^ ]*\?n=pushed HTTP
+wait 1
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(location.href='reloadedapp:x')"}
+expect-log page 127\.0\.0\.1 wants reloadedapp:, no app opens it
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"String(location.href='againapp:x')"}
+expect-log page 127\.0\.0\.1 can't open againapp: \(no click\)
 wait 1
 cra://debug?checkStore=1
 reject-log opens a page for macappstore:

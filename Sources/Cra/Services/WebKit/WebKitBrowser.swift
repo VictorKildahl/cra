@@ -29,8 +29,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var closed = false
     private var pageClosedItself = false
     private var committed = false
-    /// The page's own navigation to another app's address asked already (decidePolicyFor).
-    private var askedForAppOnThisPage = false
+    /// The page's own navigation to another app's address asks once per load (decidePolicyFor).
+    private var appRedirects = AppLinks.RedirectGuard()
     private var lastStatus = 0
     private var lastLoadingState: [Bool] = []
     private var observations: [NSKeyValueObservation] = []
@@ -363,9 +363,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             // to it opens) asks once per page it loads, from the main frame, as Chrome's flood
             // guard lets it.
             let click = action.navigationType == .linkActivated
-            let redirect = !click && action.targetFrame?.isMainFrame == true && !askedForAppOnThisPage
-            if redirect { askedForAppOnThisPage = true }
-            AppLinkPrompt.handle(url.absoluteString, from: self, userGesture: click || redirect)
+            let asks = click || (action.targetFrame?.isMainFrame == true && appRedirects.mayAsk(userGesture: false))
+            AppLinkPrompt.handle(url.absoluteString, from: self, userGesture: asks)
             return decisionHandler(.cancel, preferences)
         }
         guard action.navigationType == .linkActivated else { return decisionHandler(.allow, preferences) }
@@ -402,7 +401,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        askedForAppOnThisPage = false
+        appRedirects.pageLoaded()
         setCommitted(true)
     }
 

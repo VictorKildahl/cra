@@ -1961,7 +1961,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         syncSlowResponse(browser)
     }
 
-    func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) { syncSlowResponse(browser) }
+    func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) {
+        if committed { AppLinkPrompt.pageLoaded(browser) }
+        syncSlowResponse(browser)
+    }
 
     /// As in a browser window (MainWindowController.syncSlowResponse): ten seconds without the
     /// page's first response puts it in the toast, with Stop Loading. `reporting`: the page whose

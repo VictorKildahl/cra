@@ -1515,6 +1515,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
 
     /// The window's loading bar pulses until the page commits, then sweeps (LoadingIndicator).
     func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) {
+        if committed { AppLinkPrompt.pageLoaded(browser) }
         guard let id = tabID(of: browser) else { return }
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
