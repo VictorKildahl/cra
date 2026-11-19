@@ -232,7 +232,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        _ = offerCertificateBypass(for: error)
+        answerLoadFailure(error)
         delegate?.webPage(self, didFinishLoading: false)
     }
 
