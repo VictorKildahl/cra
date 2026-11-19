@@ -1424,3 +1424,30 @@ struct MobileAITests {
         #expect(MobileAI.prompt(for: .preparing)?.opensSettings == false)
     }
 }
+
+struct MobileRecentTabsTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func mergesAndFiltersRecentTabs() {
+        let selected = MobileTab(url: "https://selected.example", title: "Selected", lastActive: Date(timeIntervalSince1970: 5))
+        let phone = MobileTab(url: "https://phone.example", title: "Phone", lastActive: Date(timeIntervalSince1970: 4))
+        let privateTab = MobileTab(url: "https://private.example", lastActive: Date(timeIntervalSince1970: 9), isIncognito: true)
+        func mac(_ url: String, _ title: String, _ date: Double?) -> SidebarItem {
+            var item = SidebarItem.tab(url, title: title, parent: nil)
+            if case .tab(var tab) = item.data {
+                tab.timeLastActiveAt = date.map(Date.init(timeIntervalSince1970:))
+                item.data = .tab(tab)
+            }
+            return item
+        }
+        var renamed = mac("https://rename.example", "Saved", 8)
+        renamed.title = "Renamed"
+        var document = SidebarDocument.fresh()
+        document.items += [renamed, mac("https://saved.example", "Saved", 7), mac("https://host.example/path", "", 6),
+                           mac("https://host.example/path", "Old", 1), mac(selected.url, "Selected duplicate", 20),
+                           mac(phone.url, "Phone duplicate", 19), mac("https://undated.example", "Undated", nil), mac("", "Empty", 21)]
+        let rows = MobileRecentTabs.rows(phone: [selected, phone, privateTab], selected: selected.id, mac: document, limit: 10)
+        #expect(rows.map(\.title) == ["Renamed", "Saved", "host.example", "Phone"])
+        #expect(rows.last?.source == .phone(phone.id))
+        #expect(MobileRecentTabs.rows(phone: [selected, phone], selected: selected.id, mac: document, limit: 2).count == 2)
+        #expect(MobileRecentTabs.rows(phone: [selected, phone], selected: selected.id, mac: nil).map(\.title) == ["Phone"])
+    }
+}

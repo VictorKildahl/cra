@@ -31,6 +31,10 @@ public enum MobileSpaces {
         public var rows: [Row]
     }
 
+    static func tabTitle(item: SidebarItem, tab: TabData) -> String {
+        item.title ?? (tab.savedTitle.isEmpty ? (URL(string: tab.url)?.host ?? tab.url) : tab.savedTitle)
+    }
+
     /// Every Space in the Mac's order, with its pinned tabs and folders, then its Today tabs, as
     /// Arc Search lists them: favorites left out, folders shut unless listed in `openFolders`
     /// (the sidebar keeps no open state; Arc Search opens one on a tap). Blank-window spaces are
@@ -46,7 +50,7 @@ public enum MobileSpaces {
                 guard let item = items[id] else { return [] }
                 switch item.data {
                 case .tab(let tab):
-                    let title = item.title ?? (tab.savedTitle.isEmpty ? (URL(string: tab.url)?.host ?? tab.url) : tab.savedTitle)
+                    let title = tabTitle(item: item, tab: tab)
                     return [Row(id: id, kind: .tab(url: tab.url), title: title, depth: depth)]
                 case .folder:
                     let open = openFolders.contains(id)

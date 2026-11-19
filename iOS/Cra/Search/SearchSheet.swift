@@ -6,6 +6,7 @@ protocol SearchSheetDelegate: AnyObject {
     /// The keyboard's Go key.
     func searchSheet(_ sheet: SearchSheet, didSubmit text: String)
     func searchSheet(_ sheet: SearchSheet, didPick row: MobileSuggestions.Row)
+    func searchSheet(_ sheet: SearchSheet, didPickRecentTab row: MobileRecentTabs.Row)
     func searchSheet(_ sheet: SearchSheet, didPickFavorite site: MobileFavorites.Site)
     func searchSheet(_ sheet: SearchSheet, didAskToBrowseFor row: MobileSuggestions.Row)
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet)
@@ -57,6 +58,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     var siteIcon: (String) -> UIImage? = { _ in nil }
     /// The favorites shown under the field while it is empty, with their icons.
     private var favorites: [(MobileFavorites.Site, UIImage?)] = []
+    private var recentTabs: [(MobileRecentTabs.Row, UIImage?)] = []
     /// Sample questions for someone new, in place of favorites while there are none.
     private var starters: [MobileSuggestions.Row] = []
     /// A favorite being dragged to a new place (TapSmart: favorites can be dragged to reorder):
@@ -170,6 +172,11 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         showRows()
     }
 
+    func setRecentTabs(_ rows: [(MobileRecentTabs.Row, UIImage?)]) {
+        recentTabs = rows
+        showRows()
+    }
+
     private var showsFavorites: Bool { text.isEmpty && !isIncognito }
     /// Starter questions stand where favorites go, when there are none.
     private var showsStarters: Bool { showsFavorites && favorites.isEmpty && !starters.isEmpty }
@@ -189,8 +196,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
 
     private func showRows() {
-        let count = showsFavorites ? min(favorites.count, rowsInView) : rows.count
-        list.isScrollEnabled = !showsFavorites && count > 1
+        let favoriteCount = min(favorites.count, rowsInView)
+        let count = showsFavorites ? (showsStarters ? min(starters.count, rowsInView) : favoriteCount + recentTabs.count) : rows.count
+        list.isScrollEnabled = showsFavorites ? !showsStarters && count > rowsInView : count > 1
         list.contentSize = CGSize(width: list.bounds.width, height: showsFavorites ? CGFloat(count) * MobileSearchSheet.rowHeight
             : MobileSuggestions.Scroll.contentHeight(count: count, rowHeight: MobileSearchSheet.rowHeight, visibleHeight: list.bounds.height))
         for (index, view) in rowViews.enumerated() {
@@ -207,6 +215,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
             view.emphasizesChip = false
             if showsFavorites, index < min(favorites.count, rowsInView) {
                 view.configure(favorite: favorites[index].0, icon: favorites[index].1)
+                view.isHidden = false
+            } else if showsFavorites, index - favoriteCount < recentTabs.count {
+                let recent = recentTabs[index - favoriteCount]
+                view.configure(site: recent.0.title, icon: recent.1)
                 view.isHidden = false
             } else if !showsFavorites, index < rows.count {
                 if case .site(let url) = rows[index].kind {
@@ -227,8 +239,11 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
             return delegate?.searchSheet(self, didPick: starters[index]) ?? ()
         }
         if showsFavorites {
-            guard index < favorites.count else { return }
-            return delegate?.searchSheet(self, didPickFavorite: favorites[index].0) ?? ()
+            let favoriteCount = min(favorites.count, rowsInView)
+            if index < favoriteCount { return delegate?.searchSheet(self, didPickFavorite: favorites[index].0) ?? () }
+            let recentIndex = index - favoriteCount
+            guard recentIndex < recentTabs.count else { return }
+            return delegate?.searchSheet(self, didPickRecentTab: recentTabs[recentIndex].0) ?? ()
         }
         guard index < rows.count else { return }
         delegate?.searchSheet(self, didPick: rows[index])
@@ -314,7 +329,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
 
     func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-        guard scrollView === list else { return }
+        guard scrollView === list, !showsFavorites else { return }
         targetContentOffset.pointee.y = MobileSuggestions.Scroll.restingOffset(targetContentOffset.pointee.y, rowHeight: MobileSearchSheet.rowHeight, count: rows.count)
     }
 
