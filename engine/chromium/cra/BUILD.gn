@@ -46,6 +46,8 @@ source_set("core") {
     "//components/find_in_page:find_in_page",
     "//components/infobars/content",
     "//components/infobars/core",
+    "//chrome/browser/ui/tab_sharing",
+    "//chrome/browser/ui/views/tab_sharing",
     "//components/favicon/content:content",
     "//chrome/browser/picture_in_picture:picture_in_picture",
     "//chrome/browser/translate:translate",

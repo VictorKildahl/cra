@@ -102,6 +102,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView?
     /// A DevTools pane appeared or closed; the shell decides whether to show the dock.
     func browserManagerDevToolsChanged()
+    /// A call's tab sharing changed on one of the pages (CraBrowser.isBeingShared, canShareInstead).
+    func browserManagerTabSharingChanged()
     /// Chrome's docked frontend moved its page placeholder (streamed while its splitter is dragged).
     func browserManagerDevToolsPageBoundsChanged()
     /// Chrome-style hosting: page windows appeared/changed; the shell re-attaches and orders them.
@@ -1218,6 +1220,11 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         guard let id = tabID(of: browser) else { return }
         log(id, capturing ? "uses the camera or microphone" : "stopped using the camera and microphone")
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    func browserDidChangeTabSharing(_ browser: CraBrowser) {
+        guard tabID(of: browser) != nil else { return }
+        delegate?.browserManagerTabSharingChanged()
     }
 
     func browser(_ browser: CraBrowser, didChangeAudible audible: Bool) {

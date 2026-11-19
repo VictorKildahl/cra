@@ -1,0 +1,46 @@
+# promise: web-page-shared-tab-marks
+# web-features: a call shares a tab (getDisplayMedia; Google Meet's "Present a tab"). Arc rings the shared tab's row
+# and its page in yellow, and hovering another tab offers "Share this tab instead" (X DM 19 Nov 2026, a recording of
+# Arc 1.173 with Meet). Chrome keeps the state in its TabSharingUI, which draws its blue border and its bars in the
+# Browser's never-seen window, so the engine tells Cra (CraBrowser.isBeingShared, canShareInstead, shareInstead).
+# The page shares itself here (preferCurrentTab), so no macOS picker or Screen Recording prompt comes up.
+budget rss=1000 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=other
+expect-log GET /features.html\?n=other
+cra://open?url=${ORIGIN}/features.html?n=present
+expect-log GET /features.html\?n=present
+wait 2
+cra://debug?tabSharing=none
+expect-log tab sharing none: shared= instead= rows= buttons= cards= selected=\S+n=present$
+cra://debug?cdp=Runtime.evaluate&params={"expression":"navigator.mediaDevices.getDisplayMedia({preferCurrentTab:true,video:true}).then(s=>{window.__shared=s;state.display='ok'},e=>{state.display=e.name});'display asked'","userGesture":true}
+expect-log "value":"display asked"
+wait 2
+cra://debug?pageDialogs=share-tab-allow&press=Allow
+expect-log page dialogs share-tab-allow: pressed Allow
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'display '+state.display"}
+expect-log "value":"display ok"
+# The page shares itself: its row and its card are yellow, and the other tab can take over.
+cra://debug?tabSharing=self
+expect-log tab sharing self: shared=\S+n=present instead=\S+n=other rows=\S+n=present buttons= cards=\S+n=present selected=\S+n=present$
+# Hovering the shared tab offers nothing; hovering the other tab shows "Share this tab instead".
+cra://debug?tabSharing=hover-shared&hover=n=present
+expect-log tab sharing hover-shared: \S+ \S+ rows=\S+n=present buttons= cards=
+cra://debug?tabSharing=hover-other&hover=n=other
+expect-log tab sharing hover-other: \S+ \S+ rows=\S+n=present buttons=\S+n=other cards=
+# A click on it: the call shares that tab, which shows, and the marks follow it. Chrome offers the calling tab back,
+# since the page preferred it.
+cra://debug?tabSharing=switched&hover=n=other&press=1
+expect-log tab sharing switched: shared=\S+n=other instead=\S+n=present rows=\S+n=other buttons= cards=\S+n=other pressed=1 selected=\S+n=other$
+# The call ends: every mark goes.
+cra://action/previousTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"setTimeout(()=>window.__shared.getTracks().forEach(t=>t.stop()),0);'stopping'"}
+expect-log "value":"stopping"
+wait 2
+cra://debug?tabSharing=stopped
+expect-log tab sharing stopped: shared= instead= rows= buttons= cards= selected=\S+n=present$
+reject-log fault:

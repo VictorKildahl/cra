@@ -119,6 +119,8 @@ final class PaneCardView: NSView {
         }
     }
     private let ring = FocusRingView()
+    /// `cra://debug?tabSharing`: the card shows the yellow ring of a page a call shares.
+    var showsSharedRing: Bool { focusRing == .systemYellow }
     /// Arc's shadow under a page card (GitHub #178): a sibling behind the card in its superview,
     /// on the card's frame and alpha. The window's card with no tab casts it too, as Arc's does (CraCore
     /// CardVeil). Off for an empty pane's card and square cards.

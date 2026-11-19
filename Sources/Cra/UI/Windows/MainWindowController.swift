@@ -438,6 +438,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.closeLibrary()
         }
         sidebarActions.resetPinnedTab = { [weak self] id in self?.resetPinnedTab(id) }
+        sidebarActions.shareTabInstead = { [weak self] id in self?.shareTabInstead(id) }
         sidebarActions.separatePinnedTab = { [weak self] id in self?.separatePinnedTab(id) }
         sidebarActions.editPinnedURL = { [weak self] id in self?.editPinnedURL(id) }
         sidebarActions.showToast = { [weak self] text in self?.showToast(text) }
@@ -956,6 +957,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if loaded != sidebarUI.loadedTabIDs { sidebarUI.loadedTabIDs = loaded }
         let capturing = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isCapturingMedia }.keys })
         if capturing != sidebarUI.capturingTabIDs { sidebarUI.capturingTabIDs = capturing }
+        syncTabSharing()
         let audible = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.browser.isAudible }.keys })
         if audible != sidebarUI.audibleTabIDs { sidebarUI.audibleTabIDs = audible }
         let soundPlaying = Set(app.mainWindows.flatMap { $0.browsers.runtimes.filter { $0.value.soundPlaying }.keys })
@@ -2096,6 +2098,69 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// DevToolsClient): its window spans the pane's body under the page, which is laid
     /// over the placeholder it reports. Alloy pages keep the shell's own split with CEF's
     /// window on the right, for the focused tab only.
+    /// Arc's "Share this tab instead": the call shares the tab and the tab shows, as when Arc's button is clicked.
+    /// The page may live in another window (it was last shown there).
+    func shareTabInstead(_ id: UUID) {
+        let page = app.mainWindows.lazy.compactMap { $0.browsers.runtime(for: id)?.browser }.first
+        guard page?.shareInstead() == true else { return }
+        store.selectTab(id, window: windowID)
+    }
+
+    /// `cra://debug?tabSharing=<label>`: the tabs shared and switchable, the rows ringed in yellow, the rows showing
+    /// "Share this tab instead", the cards ringed in yellow and the selected tab, each by URL. `hover` first hovers the
+    /// row of the tab whose URL contains it, as the pointer would; `press` then clicks that row's button, and the
+    /// readout waits for Chrome to switch.
+    func tabSharingReadout(_ label: String, hover: String?, press: Bool, done: @escaping (String) -> Void) {
+        func url(_ id: UUID) -> String {
+            app.mainWindows.lazy.compactMap { $0.browsers.runtime(for: id)?.browser.currentURL }.first ?? id.uuidString
+        }
+        func list(_ ids: some Sequence<UUID>) -> String { ids.map(url).sorted().joined(separator: ",") }
+        func rows() -> [TabRowView] {
+            (window?.contentView.map { Self.views(TabRowView.self, in: $0) } ?? []).filter { !$0.isHiddenOrHasHiddenAncestor }
+        }
+        var pressed = false
+        if let part = hover {
+            guard let row = rows().first(where: { $0.model.map { url($0.id).contains(part) } ?? false }) else {
+                done("tab sharing \(label): no row at \(part)"); return
+            }
+            row.list?.debugHover(row)
+            if press { pressed = row.pressShareInsteadButton() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (pressed ? 1 : 0.2)) { [weak self] in
+            guard let self else { return }
+            self.syncTabSharing()
+            self.window?.contentView?.layoutSubtreeIfNeeded()
+            let shown = rows()
+            let ringedRows = shown.filter(\.showsSharedRing).compactMap { $0.model?.id }
+            let buttons = shown.filter(\.showsShareInsteadButton).compactMap { $0.model?.id }
+            let ringedCards = self.shell.paneCards.filter(\.showsSharedRing).map(\.tabID)
+            let selected = self.store.selectedTabID(window: self.windowID).map(url) ?? "-"
+            done("tab sharing \(label): shared=\(list(self.sidebarUI.sharedTabIDs)) instead=\(list(self.sidebarUI.shareInsteadTabIDs))"
+                 + " rows=\(list(ringedRows)) buttons=\(list(buttons)) cards=\(list(ringedCards))"
+                 + (press ? " pressed=\(pressed ? 1 : 0)" : "") + " selected=\(selected)")
+        }
+    }
+
+    private static func views<T: NSView>(_ type: T.Type, in view: NSView) -> [T] {
+        (view as? T).map { [$0] } ?? view.subviews.flatMap { views(type, in: $0) }
+    }
+
+    /// Sharing spans windows: a call in one window can switch to a tab another window's sidebar lists.
+    func browserManagerTabSharingChanged() {
+        for w in app.mainWindows { w.syncTabSharing() }
+    }
+
+    /// The tabs calls share and the ones they can switch to, for the sidebar rows and the page cards
+    /// (TabSharing). Each set is assigned only when it changed (syncSidebarUI).
+    func syncTabSharing() {
+        let pages = app.mainWindows.flatMap { $0.browsers.runtimes }
+        let shared = Set(pages.filter { $0.value.browser.isBeingShared }.map { $0.key })
+        let instead = Set(pages.filter { $0.value.browser.canShareInstead }.map { $0.key })
+        if shared != sidebarUI.sharedTabIDs { sidebarUI.sharedTabIDs = shared }
+        if instead != sidebarUI.shareInsteadTabIDs { sidebarUI.shareInsteadTabIDs = instead }
+        if shared != shell.sharedTabIDs { shell.sharedTabIDs = shared }
+    }
+
     func browserManagerDevToolsChanged() {
         BoostEditorController.shared.devToolsChanged()
         guard let window else { return }

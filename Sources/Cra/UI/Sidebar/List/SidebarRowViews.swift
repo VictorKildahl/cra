@@ -831,6 +831,10 @@ struct TabRowModel: Equatable {
     var selected: Bool
     var highlighted: Bool
     var capturing: Bool
+    /// A call shares the tab (TabSharing): Arc's yellow ring on the row.
+    var shared: Bool = false
+    /// A call shares another tab and can switch to this one: "Share this tab instead" on hover.
+    var canShareInstead: Bool = false
     /// An MCP agent works in the tab: its face sits where the close button shows on hover.
     var agent: Bool = false
     var audible: Bool
@@ -859,6 +863,18 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     private var renameField: NSTextField?
     private var accessories: [NSView] = []
     private var focusRing: FocusRingLayer?
+    /// Arc's ring round a tab a call shares (TabSharing): 2 pt systemYellow along the fill's edge.
+    private var sharedRing: CALayer?
+    /// `cra://debug?tabSharing`: the row shows the yellow ring.
+    var showsSharedRing: Bool { sharedRing != nil && sharedRing?.isHidden == false }
+    /// `cra://debug?tabSharing`: the row shows "Share this tab instead".
+    private(set) var showsShareInsteadButton = false
+    /// `cra://debug?tabSharing=…&press=1`: the button's own action, as a click on it runs it. NO when it isn't shown.
+    func pressShareInsteadButton() -> Bool {
+        guard showsShareInsteadButton else { return false }
+        shareInsteadButton.action()
+        return true
+    }
     private let slash = SidebarSlashView(frame: NSRect(origin: .zero, size: SidebarSlashView.size))
     /// The pointer is on the favicon of a pinned tab away from its page (Arc's icon region):
     /// a click there goes back, and the line under the name says so.
@@ -924,6 +940,22 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
                 r.zPosition = 10
                 layer?.addSublayer(r)
                 focusRing = r
+            }
+        }
+        if m.shared != (sharedRing != nil) {
+            sharedRing?.removeFromSuperlayer()
+            sharedRing = nil
+            if m.shared {
+                let r = CALayer()
+                r.borderWidth = TabSharing.ringWidth
+                r.borderColor = NSColor.systemYellow.cgColor
+                r.cornerRadius = CraMetrics.rowCorner
+                r.cornerCurve = .continuous
+                r.actions = ["bounds": NSNull(), "position": NSNull()]
+                r.frame = fillRect
+                r.zPosition = 9  // under the keyboard's ring
+                layer?.addSublayer(r)
+                sharedRing = r
             }
         }
         rebuildAccessories()
@@ -1241,6 +1273,14 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
     }()
     /// Arc's close button: a 24 pt square (TabCellView, GitHub #139).
     private static let closeSize: CGFloat = 24
+    /// Arc's "Share this tab instead", against the close button while a call can switch to the tab (TabSharing).
+    private lazy var shareInsteadButton: SidebarGlyphButton = {
+        SidebarGlyphButton(symbol: TabSharing.shareInsteadSymbol, size: Self.closeSize, iconSize: 13,
+                           help: TabSharing.shareInsteadHelp, colors: colors) { [weak self] in
+            guard let self, let m = self.model, let list = self.list else { return }
+            list.actions.shareTabInstead(m.id)
+        }
+    }()
     private var closeKind: SidebarClose.Button?
 
     private func rebuildAccessories() {
@@ -1268,6 +1308,12 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         if m.unread && !m.selected && !isHovered {
             unreadDot.layer?.backgroundColor = colors.textPrimary.withAlphaComponent(0.55).cgColor
             shown.append(unreadDot)
+        }
+        showsShareInsteadButton = TabSharing.showsShareInstead(hovered: isHovered, editing: m.editing,
+                                                               canShareInstead: m.canShareInstead, shared: m.shared)
+        if showsShareInsteadButton {
+            shareInsteadButton.colors = colors
+            shown.append(shareInsteadButton)
         }
         // Arc hides the button while the pointer is on the icon of a tab it can take back.
         if isHovered && !m.editing && !overIcon {
@@ -1324,7 +1370,8 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         // The unread dot and a peek badge are centred where the close button shows on hover, which
         // is also under a live folder's refresh button (FolderRowView, Arc lines them up too).
         let trailing = TabRowTrailing.layout(rowWidth: bounds.width, textX: x, controls: accessories.map {
-            TabRowTrailing.Control(width: $0.frame.width, slot: $0 === unreadDot || $0 === peekBadge || $0 === agentFace ? Self.closeSize : nil)
+            TabRowTrailing.Control(width: $0.frame.width, slot: $0 === unreadDot || $0 === peekBadge || $0 === agentFace ? Self.closeSize : nil,
+                                   gapAfter: $0 === shareInsteadButton ? 0 : TabRowTrailing.controlGap)
         })
         for (v, vx) in zip(accessories, trailing.controlX) {
             let s = v.frame.size
@@ -1345,6 +1392,7 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
             f.frame = NSRect(x: x - SidebarText.inset, y: (h - fh) / 2, width: max(0, bounds.width - 6 - x + SidebarText.inset), height: fh)
         }
         focusRing?.frame = fillRect
+        sharedRing?.frame = fillRect
         refreshRegion()
     }
 

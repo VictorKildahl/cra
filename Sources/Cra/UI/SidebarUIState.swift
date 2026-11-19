@@ -28,6 +28,9 @@ final class SidebarUIState {
     var loadedTabIDs: Set<UUID> = []
     /// Tabs using the camera or microphone (Arc's recording indicator).
     var capturingTabIDs: Set<UUID> = []
+    /// The tabs calls share (Arc's yellow ring, TabSharing), and the ones a call can switch to instead.
+    var sharedTabIDs: Set<UUID> = []
+    var shareInsteadTabIDs: Set<UUID> = []
     /// Tabs an MCP agent works in (MCPServer, MCPAgentPresence.lingers after its last call): a face on the row.
     var agentTabIDs: Set<UUID> = []
     /// Recently audible tabs, held for 2 s after sound stops so the speaker stays steady.
@@ -249,6 +252,8 @@ final class SidebarActions {
     var closeLibrary: () -> Void = {}
     var restoreArchived: (UUID) -> Void = { _ in }
     var resetPinnedTab: (UUID) -> Void = { _ in }
+    /// Arc's "Share this tab instead" on a row (TabSharing): the call shares that tab, which shows.
+    var shareTabInstead: (UUID) -> Void = { _ in }
     var separatePinnedTab: (UUID) -> Void = { _ in }
     var editPinnedURL: (UUID) -> Void = { _ in }
     var openURL: (String) -> Void = { _ in }

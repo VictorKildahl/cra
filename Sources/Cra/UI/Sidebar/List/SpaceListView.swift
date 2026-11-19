@@ -239,6 +239,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         let renaming = ui.renamingID
         let focusID = ui.keyboardFocusID
         let capturing = ui.capturingTabIDs
+        let shared = ui.sharedTabIDs
+        let shareInstead = ui.shareInsteadTabIDs
         let agents = ui.agentTabIDs
         let audible = ui.audibleTabIDs
         let refreshing = LiveFolderManager.shared.refreshing
@@ -327,7 +329,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     icon: img, flipIcon: flip, liveIcon: liveIcon,
                     editing: renaming == item.id, selected: selected,
                     highlighted: picks.isEmpty ? selected && !placeholder : picks.contains(item.id),
-                    capturing: capturing.contains(item.id), agent: agents.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
+                    capturing: capturing.contains(item.id), shared: shared.contains(item.id),
+                    canShareInstead: shareInstead.contains(item.id), agent: agents.contains(item.id), audible: audible.contains(item.id), muted: tab.muted, unread: item.isUnread,
                     navigatedAway: navigatedAway,
                     focusRing: focusID == item.id, developerMode: developerMode, peeked: peeked,
                     homeIcon: homeImg, homeFlipIcon: homeFlip,

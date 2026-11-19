@@ -1200,6 +1200,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                                                 press: dict["press"], fill: dict["fill"].map { $0.components(separatedBy: ",") }))
                 return
             }
+            // tabSharing=<label>[&hover=<part of a tab's URL>[&press=1]]: what calls share and Arc's marks for it
+            // (TabSharing). hover hovers that tab's row as the pointer would; press clicks the "Share this tab instead"
+            // it shows.
+            if let label = dict["tabSharing"] {
+                main.tabSharingReadout(label, hover: dict["hover"], press: dict["press"] == "1") { CraLog.note($0) }
+                return
+            }
             if let label = dict["switcherWindows"] {
                 CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }

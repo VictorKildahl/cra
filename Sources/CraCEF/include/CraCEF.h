@@ -189,6 +189,9 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 - (void)browser:(CraBrowser *)browser requestsFindAction:(CraFindAction)action;
 /// The page started or stopped using the camera or microphone.
 - (void)browser:(CraBrowser *)browser didChangeMediaCapture:(BOOL)capturing;
+/// A call's tab sharing changed for the page (`isBeingShared`, `canShareInstead`): it started or stopped being
+/// the tab a page shares (getDisplayMedia), or the call can now switch to it.
+- (void)browserDidChangeTabSharing:(CraBrowser *)browser;
 /// Chromium dropped the page's permission request before Cra answered it (the page navigated or
 /// closed, or a newer request replaced it): its sheet should go, and its completion does nothing.
 - (void)browserWithdrewPermissionRequest:(CraBrowser *)browser;
@@ -389,6 +392,13 @@ CRA_EXPORT @interface CraBrowser : NSObject
 @property (nonatomic, readonly) BOOL isPictureInPicturePlaying;
 /// The page is using the camera or microphone, as Chrome's tab recording indicator counts it.
 @property (nonatomic, readonly) BOOL isCapturingMedia;
+/// The page is the tab a call shares (Chrome's tab capture: getDisplayMedia, or casting the tab). Arc rings
+/// it in yellow, in the sidebar and around the page.
+@property (nonatomic, readonly) BOOL isBeingShared;
+/// A call shares another tab and can switch to this one (Chrome's "Share this tab instead").
+@property (nonatomic, readonly) BOOL canShareInstead;
+/// Makes the call share this page instead of the tab it shares. NO when it can't (`canShareInstead`).
+- (BOOL)shareInstead;
 /// The page is playing sound, in any frame (Chromium's audible state). Like Chrome's tab
 /// speaker it stays YES for 2 s after the page goes quiet. Muting the tab doesn't change it.
 @property (nonatomic, readonly) BOOL isAudible;

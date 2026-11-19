@@ -109,6 +109,8 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
+#include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
+#include "chrome/browser/ui/views/tab_sharing/tab_capture_contents_border_helper.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/permissions/cra_permission_tabs.h"
 #include "content/public/browser/cra_live_connection.h"
@@ -180,6 +182,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageSoundPlaying:(BOOL)playing;
 - (void)dropSpareContents;
 - (void)pageInfoBarsChanged;
+- (void)pageTabSharingChanged;
 - (void)pagePictureInPictureTime;
 @property(nonatomic) BOOL inPageFullscreen;
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
@@ -347,6 +350,7 @@ class PageObserver : public content::WebContentsObserver,
   PageObserver(content::WebContents* contents, CraBrowser* owner)
       : content::WebContentsObserver(contents), owner_(owner) {
     WatchInfoBars();
+    WatchTabCapture();
     if (auto* favicons = favicon::ContentFaviconDriver::FromWebContents(contents)) {
       favicons->AddObserver(this);
       favicons_ = favicons;
@@ -453,6 +457,7 @@ class PageObserver : public content::WebContentsObserver,
 
   void DidStartNavigation(content::NavigationHandle* handle) override {
     WatchInfoBars();
+    WatchTabCapture();
     if (handle->IsInPrimaryMainFrame() && !handle->IsSameDocument()) {
       [owner_ pageStartedNavigation:handle];
     }
@@ -507,6 +512,30 @@ class PageObserver : public content::WebContentsObserver,
     manager->RemoveObserver(this);
     infobars_ = nullptr;
   }
+
+  // The tab a call shares (TabSharingUIViews tells the shared tab's TabCaptureContentsBorderHelper, which Chrome
+  // makes with the tab's features): Arc rings it in yellow. Chrome's blue border would go in its never-shown window.
+  // A page that moves to another Browser gets a new helper, so the subscription follows the current one.
+  void WatchTabCapture() {
+    auto* helper = TabCaptureContentsBorderHelper::FromWebContents(web_contents());
+    uintptr_t id = reinterpret_cast<uintptr_t>(helper);
+    if (!helper || id == capture_helper_) {
+      return;
+    }
+    capture_helper_ = id;
+    // Unretained: the subscription is this observer's, and ends with it.
+    capture_subscription_ =
+        helper->AddOnTabCaptureChangeCallback(base::BindRepeating(&PageObserver::TabCaptureChanged, base::Unretained(this)));
+    if (helper->IsTabCapturing()) {
+      [owner_ pageTabSharingChanged];
+    }
+  }
+  void TabCaptureChanged(bool border_shown) { [owner_ pageTabSharingChanged]; }
+
+ private:
+  // The helper subscribed to, by address only: it belongs to the tab's features and may go first.
+  uintptr_t capture_helper_ = 0;
+  base::CallbackListSubscription capture_subscription_;
 };
 
 // A Browser's window that holds Cra's pages: never seen, never clicked, never captured, never key or main (keys
@@ -2496,6 +2525,7 @@ bool HandleDebugMethod(content::WebContents* contents,
 }
 
 // Chrome's bars changed: told once the manager is done changing (a bar's press removes it from inside the call).
+// A call's tab sharing bars come and go with it, so the sharing state is told too.
 - (void)pageInfoBarsChanged {
   __weak CraBrowser* weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
@@ -2504,6 +2534,57 @@ bool HandleDebugMethod(content::WebContents* contents,
       [page.delegate browser:page didChangeInfoBars:page.infoBars];
     }
   });
+  [self pageTabSharingChanged];
+}
+
+// Told once Chrome is done changing: TabSharingUIViews swaps every tab's bar while it switches the shared tab.
+- (void)pageTabSharingChanged {
+  __weak CraBrowser* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    CraBrowser* page = weakSelf;
+    if (page && [page.delegate respondsToSelector:@selector(browserDidChangeTabSharing:)]) {
+      [page.delegate browserDidChangeTabSharing:page];
+    }
+  });
+}
+
+- (BOOL)isBeingShared {
+  auto* helper = _contents ? TabCaptureContentsBorderHelper::FromWebContents(_contents) : nullptr;
+  return helper && helper->IsTabCapturing();
+}
+
+// The page's tab sharing bar, when its "Share this tab instead" button is there and enabled. TabSharingUIViews puts
+// one on every tab a call could switch to (same profile, not the shared tab, not blocked by policy).
+static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents) {
+  auto* manager = contents ? infobars::ContentInfoBarManager::FromWebContents(contents) : nullptr;
+  if (!manager) {
+    return nullptr;
+  }
+  for (infobars::InfoBar* bar : manager->infobars()) {
+    infobars::InfoBarDelegate* delegate = bar->delegate();
+    if (!delegate || delegate->GetIdentifier() != infobars::InfoBarDelegate::TAB_SHARING_INFOBAR_DELEGATE) {
+      continue;
+    }
+    auto* sharing = static_cast<TabSharingInfoBarDelegate*>(delegate);
+    if ((sharing->GetButtons() & TabSharingInfoBarDelegate::kShareThisTabInstead) &&
+        sharing->IsButtonEnabled(TabSharingInfoBarDelegate::kShareThisTabInstead)) {
+      return sharing;
+    }
+  }
+  return nullptr;
+}
+
+- (BOOL)canShareInstead {
+  return ShareInsteadBar(_contents) != nullptr;
+}
+
+- (BOOL)shareInstead {
+  TabSharingInfoBarDelegate* bar = ShareInsteadBar(_contents);
+  if (!bar) {
+    return NO;
+  }
+  bar->ShareThisTabInstead();  // Chrome's button: TabSharingUIViews::StartSharing, then new bars on every tab.
+  return YES;
 }
 
 - (NSArray<NSDictionary<NSString*, id>*>*)infoBars {

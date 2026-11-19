@@ -3150,6 +3150,19 @@ static BOOL g_makingSpare = NO;
     return NO;
 }
 
+// Tab sharing lives in Chrome's TabSharingUI, which CEF has no tab strip for: a CEF page is never marked.
+- (BOOL)isBeingShared {
+    return NO;
+}
+
+- (BOOL)canShareInstead {
+    return NO;
+}
+
+- (BOOL)shareInstead {
+    return NO;
+}
+
 - (void)audibleChanged:(BOOL)audible {
     NSUInteger change = ++_audibleChanges;
     if ([self.delegate respondsToSelector:@selector(browser:didChangeSoundPlaying:)])

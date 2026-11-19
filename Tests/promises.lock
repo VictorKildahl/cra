@@ -1314,4 +1314,5 @@ web-page-resize-window Tests/Scenarios/page-resize-window.scenario  ded4382ff8dc
 web-page-save-pickers Tests/Scenarios/page-save-pickers.scenario  a0a74518ce03
 web-page-share-picker Tests/Scenarios/page-share-picker.scenario  24eeea592355
 web-page-share-tab Tests/Scenarios/page-share-tab.scenario  df5fb132612d
+web-page-shared-tab-marks Tests/Scenarios/page-shared-tab-marks.scenario  fe7fe9addc2b
 web-page-webauthn Tests/Scenarios/page-webauthn.scenario  cdc887b7e2c2

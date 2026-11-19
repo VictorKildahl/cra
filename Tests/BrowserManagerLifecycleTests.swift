@@ -2432,6 +2432,7 @@ private final class Observer: BrowserManagerDelegate {
     func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }
     func browserManagerDevToolsChanged() {}
+    func browserManagerTabSharingChanged() {}
     func browserManagerDevToolsPageBoundsChanged() {}
     func browserManagerPageWindowsChanged(focus: Bool) { onPageWindowsChanged?() }
     func browserManagerHandleKey(_ event: NSEvent) -> Bool { false }

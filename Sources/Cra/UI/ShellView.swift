@@ -585,13 +585,20 @@ final class ShellView: NSView {
         }
     }
 
+    /// The tabs calls share (TabSharing): their cards are ringed in yellow.
+    var sharedTabIDs: Set<UUID> = [] { didSet { if sharedTabIDs != oldValue { updateFocusRings() } } }
+
     /// Arc rings the focused pane while the window shows several; one pane fills the window
-    /// unmarked. A page in full screen has no card around it.
+    /// unmarked, unless a call shares it (TabSharing.paneRing). A page in full screen has no card around it.
     private func updateFocusRings() {
-        let ringed = paneCards.count > 1 && !contentFullscreen
         let ringID = dropReplaceID ?? focusedPaneID
         for c in paneCards {
-            let ring = ringed && c.tabID == ringID ? focusRingColor : nil
+            let ring: NSColor? = switch TabSharing.paneRing(panes: paneCards.count, focused: c.tabID == ringID,
+                                                            shared: sharedTabIDs.contains(c.tabID), fullscreen: contentFullscreen) {
+            case .none: nil
+            case .focus: focusRingColor
+            case .shared: .systemYellow
+            }
             if c.focusRing != ring { c.focusRing = ring }
         }
     }
