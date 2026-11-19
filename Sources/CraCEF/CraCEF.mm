@@ -3002,6 +3002,7 @@ static BOOL g_makingSpare = NO;
 - (void)reloadIgnoringCache { if (_browser) _browser->ReloadIgnoreCache(); }
 - (void)stopLoading { if (_browser) _browser->StopLoad(); }
 - (void)exitFullscreen { if (_browser) _browser->GetHost()->ExitFullscreen(true); }
+- (BOOL)holdsEscapeKey { return NO; }
 
 - (NSArray<NSDictionary<NSString*, id>*>*)infoBars { return @[]; }  // Chrome draws its own bars in CEF's views
 - (void)infoBar:(NSInteger)identifier action:(NSString*)action {}

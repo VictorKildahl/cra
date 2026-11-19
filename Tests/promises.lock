@@ -1231,10 +1231,17 @@ crash-web-store-install-after-tab-closes Tests/Scenarios/web-store-install-after
 crash-webstore-install-double-report Tests/Scenarios/web-store-install-copy-reloads.scenario  bb32e7100ecc
 crash-zen-favicon-size Tests/StoreTests.swift::zenFaviconSize  ede0eb368f2a
 web-page-device-choosers Tests/Scenarios/page-device-choosers.scenario  fd1b9474d982
+web-page-eyedropper Tests/Scenarios/page-eyedropper.scenario  733b52654bc6
+web-page-fullscreen-keyboard-lock Tests/Scenarios/page-fullscreen-keyboard-lock.scenario  1e2ad3e621f3
+web-page-hung Tests/Scenarios/page-hung.scenario  6898b10a3250
+web-page-payment Tests/Scenarios/page-payment.scenario  45bf03c08871
 web-page-permission-prompts Tests/Scenarios/page-permission-prompts.scenario  178769e3e2b2
+web-page-pointer-lock Tests/Scenarios/page-pointer-lock.scenario  33eb1a2026e4
 web-page-popup-closes Tests/Scenarios/page-popup-closes.scenario  02d1ef71e3da
 web-page-print-frame Tests/Scenarios/page-print-frame.scenario  63cf39432113
 web-page-repost Tests/Scenarios/page-repost.scenario  78d802860dd4
 web-page-resize-window Tests/Scenarios/page-resize-window.scenario  ded4382ff8dc
 web-page-save-pickers Tests/Scenarios/page-save-pickers.scenario  a0a74518ce03
+web-page-share-picker Tests/Scenarios/page-share-picker.scenario  24eeea592355
 web-page-share-tab Tests/Scenarios/page-share-tab.scenario  df5fb132612d
+web-page-webauthn Tests/Scenarios/page-webauthn.scenario  cdc887b7e2c2

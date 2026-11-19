@@ -1,3 +1,4 @@
+# promise: web-page-pointer-lock
 # web-features: a page that takes the pointer (a 3D model viewer, a browser game: requestPointerLock). The lock
 # has to take, and Esc has to give the pointer back whatever the page does: Chrome's exclusive access takes Esc
 # before Cra's own keys (cra-keys.patch), and nothing may change that order. The page can let go itself too.

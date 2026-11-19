@@ -324,6 +324,10 @@ CRA_EXPORT @interface CraBrowser : NSObject
 - (void)stopLoading;
 /// Leaves element fullscreen (a video), as Esc does.
 - (void)exitFullscreen;
+/// The page holds the keyboard with Esc in it (navigator.keyboard.lock() in full screen: a cloud desktop, a game).
+/// A press of Esc is then the page's, and only holding it leaves full screen, which Chrome does itself (its
+/// KeyboardLockController). NO on CEF and in WebKit.
+@property (nonatomic, readonly) BOOL holdsEscapeKey;
 - (void)setFocused:(BOOL)focused;
 /// Chrome's bars over the page, top first: `id` (NSNumber), `message`, `ok` and `cancel` (button titles, when the
 /// bar has them), `link` (its link's title, when it has one) and `closeable` (an NSNumber: it has a ✕). Empty on

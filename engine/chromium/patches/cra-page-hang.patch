@@ -1,0 +1,144 @@
+diff -ruN a/content/browser/devtools/devtools_agent_host_impl.cc b/content/browser/devtools/devtools_agent_host_impl.cc
+--- a/content/browser/devtools/devtools_agent_host_impl.cc	2026-11-19 09:34:23
++++ b/content/browser/devtools/devtools_agent_host_impl.cc	2026-11-19 09:34:58
+@@ -380,6 +380,15 @@
+   return !sessions_.empty();
+ }
+ 
++bool DevToolsAgentHostImpl::HasSessionThatMayPauseRenderer() {
++  for (DevToolsSession* session : sessions_) {
++    if (session->GetClient() && session->GetClient()->MayPauseRenderer()) {
++      return true;
++    }
++  }
++  return false;
++}
++
+ void DevToolsAgentHostImpl::InspectElement(RenderFrameHost* frame_host,
+                                            int x,
+                                            int y) {}
+diff -ruN a/content/browser/devtools/devtools_agent_host_impl.h b/content/browser/devtools/devtools_agent_host_impl.h
+--- a/content/browser/devtools/devtools_agent_host_impl.h	2026-11-19 09:34:21
++++ b/content/browser/devtools/devtools_agent_host_impl.h	2026-11-19 09:34:58
+@@ -49,6 +49,8 @@
+   void DispatchProtocolMessage(DevToolsAgentHostClient* client,
+                                base::span<const uint8_t> message) override;
+   bool IsAttached() override;
++  // Cra: whether one of its sessions' clients may pause the renderer (DevToolsAgentHostClient::MayPauseRenderer).
++  bool HasSessionThatMayPauseRenderer();
+   void InspectElement(RenderFrameHost* frame_host, int x, int y) override;
+   std::string GetId() override;
+   std::string CreateIOStreamFromData(
+diff -ruN a/content/browser/devtools/render_frame_devtools_agent_host.cc b/content/browser/devtools/render_frame_devtools_agent_host.cc
+--- a/content/browser/devtools/render_frame_devtools_agent_host.cc	2026-11-19 09:34:24
++++ b/content/browser/devtools/render_frame_devtools_agent_host.cc	2026-11-19 09:34:58
+@@ -290,6 +290,15 @@
+ }
+ 
+ // static
++bool RenderFrameDevToolsAgentHost::IsDebuggerThatMayPauseAttached(
++    WebContents* web_contents) {
++  FrameTreeNode* node =
++      static_cast<WebContentsImpl*>(web_contents)->GetPrimaryFrameTree().root();
++  RenderFrameDevToolsAgentHost* host = node ? FindAgentHost(node) : nullptr;
++  return host && host->HasSessionThatMayPauseRenderer();
++}
++
++// static
+ void RenderFrameDevToolsAgentHost::AddAllAgentHosts(
+     DevToolsAgentHost::List* result) {
+   for (WebContentsImpl* wc : WebContentsImpl::GetAllWebContents()) {
+diff -ruN a/content/browser/devtools/render_frame_devtools_agent_host.h b/content/browser/devtools/render_frame_devtools_agent_host.h
+--- a/content/browser/devtools/render_frame_devtools_agent_host.h	2026-11-19 09:34:23
++++ b/content/browser/devtools/render_frame_devtools_agent_host.h	2026-11-19 09:34:58
+@@ -44,6 +44,8 @@
+   static bool WasEverAttachedToAnyFrame();
+ 
+   static bool IsDebuggerAttached(WebContents* web_contents);
++  // Cra: IsDebuggerAttached, counting only clients that may pause the renderer.
++  static bool IsDebuggerThatMayPauseAttached(WebContents* web_contents);
+ 
+   static void AddAllAgentHosts(DevToolsAgentHost::List* result);
+ 
+diff -ruN a/content/browser/devtools/web_contents_devtools_agent_host.cc b/content/browser/devtools/web_contents_devtools_agent_host.cc
+--- a/content/browser/devtools/web_contents_devtools_agent_host.cc	2026-11-19 09:34:26
++++ b/content/browser/devtools/web_contents_devtools_agent_host.cc	2026-11-19 09:34:58
+@@ -158,6 +158,13 @@
+ }
+ 
+ // static
++bool WebContentsDevToolsAgentHost::IsDebuggerThatMayPauseAttached(
++    WebContents* web_contents) {
++  WebContentsDevToolsAgentHost* host = FindAgentHost(web_contents);
++  return host && host->HasSessionThatMayPauseRenderer();
++}
++
++// static
+ void WebContentsDevToolsAgentHost::AddAllAgentHosts(
+     DevToolsAgentHost::List* result) {
+   auto* delegate = DevToolsManager::GetInstance()->delegate();
+diff -ruN a/content/browser/devtools/web_contents_devtools_agent_host.h b/content/browser/devtools/web_contents_devtools_agent_host.h
+--- a/content/browser/devtools/web_contents_devtools_agent_host.h	2026-11-19 09:34:25
++++ b/content/browser/devtools/web_contents_devtools_agent_host.h	2026-11-19 09:34:58
+@@ -27,6 +27,8 @@
+       WebContents* web_contents);
+ 
+   static bool IsDebuggerAttached(WebContents* web_contents);
++  // Cra: IsDebuggerAttached, counting only clients that may pause the renderer.
++  static bool IsDebuggerThatMayPauseAttached(WebContents* web_contents);
+ 
+   WebContentsDevToolsAgentHost(const WebContentsDevToolsAgentHost&) = delete;
+   WebContentsDevToolsAgentHost& operator=(const WebContentsDevToolsAgentHost&) =
+diff -ruN a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+--- a/content/browser/web_contents/web_contents_impl.cc	2026-11-19 09:34:57
++++ b/content/browser/web_contents/web_contents_impl.cc	2026-11-19 09:34:58
+@@ -78,6 +78,7 @@
+ #include "content/browser/device_posture/device_posture_provider_impl.h"
+ #include "content/browser/devtools/protocol/page_handler.h"
+ #include "content/browser/devtools/render_frame_devtools_agent_host.h"
++#include "content/browser/devtools/web_contents_devtools_agent_host.h"
+ #include "content/browser/display_cutout/display_cutout_host_impl.h"
+ #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
+ #include "content/browser/dom_storage/session_storage_namespace_handle_impl.h"
+@@ -6549,7 +6550,11 @@
+ 
+   // TODO(pfeldman): Fix this to only return true if the renderer is *actually*
+   // sitting on a breakpoint. https://crbug.com/684202
+-  return DevToolsAgentHost::IsDebuggerAttached(this);
++  // Cra (docs/web-features.md in the Cra repository): only a client that may pause the renderer keeps the dialog
++  // away. Cra attaches a session of its own to every page (its page scripts), which never pauses it: with any
++  // session counted, no page in Cra ever got "Page Unresponsive", and a runaway page could only be closed.
++  return RenderFrameDevToolsAgentHost::IsDebuggerThatMayPauseAttached(this) ||
++         WebContentsDevToolsAgentHost::IsDebuggerThatMayPauseAttached(this);
+ }
+ 
+ ui::AXMode WebContentsImpl::GetAccessibilityMode() {
+diff -ruN a/content/public/browser/devtools_agent_host_client.cc b/content/public/browser/devtools_agent_host_client.cc
+--- a/content/public/browser/devtools_agent_host_client.cc	2026-11-19 09:34:20
++++ b/content/public/browser/devtools_agent_host_client.cc	2026-11-19 09:34:58
+@@ -20,6 +20,10 @@
+   return true;
+ }
+ 
++bool DevToolsAgentHostClient::MayPauseRenderer() {
++  return true;
++}
++
+ // File access is allowed by default, only restricted clients that represent
+ // not entirely trusted protocol peers override this to false.
+ bool DevToolsAgentHostClient::MayReadLocalFiles() {
+diff -ruN a/content/public/browser/devtools_agent_host_client.h b/content/public/browser/devtools_agent_host_client.h
+--- a/content/public/browser/devtools_agent_host_client.h	2026-11-19 09:34:19
++++ b/content/public/browser/devtools_agent_host_client.h	2026-11-19 09:34:58
+@@ -57,6 +57,11 @@
+   // manipulate browser altogether.
+   virtual bool IsTrusted();
+ 
++  // Cra: whether this client may hold the page's renderer, on a breakpoint or a pause, so a page that stops
++  // answering is taken for the debugger's doing and Chrome's "Page Unresponsive" dialog stays away. True for
++  // DevTools and every debugger; an embedder's own page sessions that never pause it say false.
++  virtual bool MayPauseRenderer();
++
+   // Returns true if the client is allowed to read local files over the
+   // protocol. Example would be exposing file content to the page under debug.
+   virtual bool MayReadLocalFiles();

@@ -28,6 +28,7 @@ source_set("core") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/permissions/system",
     "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/exclusive_access",
     "//chrome/browser/ui/tabs:tab_strip",
     "//content/public/browser",
     "//extensions/common",

@@ -71,6 +71,8 @@
 #include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
@@ -1072,6 +1074,15 @@ int PageIsFullscreen(const content::WebContents* contents) {
   return browser ? (browser.inPageFullscreen ? 1 : 0) : -1;
 }
 
+// Whether a page of Cra's is in the window the user is in (cra_engine_hooks.h, g_page_window_active).
+int PageWindowActive(content::WebContents* contents) {
+  if (!BrowserFor(contents)) {
+    return -1;
+  }
+  NSWindow* window = contents->GetNativeView().GetNativeNSView().window;
+  return NSApp.isActive && window.isKeyWindow ? 1 : 0;
+}
+
 // The link under the pointer, for Cra's status line ("" when none).
 bool TargetURL(content::WebContents* contents, const GURL& url) {
   CraBrowser* browser = BrowserFor(contents);
@@ -1845,6 +1856,7 @@ void RunReadyBlocks() {
   g_page_is_fullscreen = &PageIsFullscreen;
   g_target_url = &TargetURL;
   g_is_cra_page = &IsCraPage;
+  g_page_window_active = &PageWindowActive;
   g_block_request = &BlockRequest;
   g_page_menu_built = &BuildArcMenu;
   g_page_menu_command = &PageMenuCommand;
@@ -2864,6 +2876,19 @@ bool HandleDebugMethod(content::WebContents* contents,
   if (_contents) {
     _contents->ExitFullscreen(/*will_cause_resize=*/true);
   }
+}
+// The page holds the keyboard with Esc in it: Chrome's KeyboardLockController of the Browser that holds the page.
+- (BOOL)holdsEscapeKey {
+  if (!_contents) {
+    return NO;
+  }
+  auto it = Hosts().find(Profile::FromBrowserContext(_contents->GetBrowserContext()));
+  if (it == Hosts().end() || IsClosing(it->second->browser())) {
+    return NO;
+  }
+  ExclusiveAccessManager* manager = ExclusiveAccessManager::From(it->second->browser());
+  KeyboardLockController* lock = manager ? manager->keyboard_lock_controller() : nullptr;
+  return lock && lock->exclusive_access_tab() == _contents && lock->RequiresPressAndHoldEscToExit();
 }
 #pragma mark DevTools
 

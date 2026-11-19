@@ -1,3 +1,4 @@
+# promise: web-page-payment
 # web-features: a checkout's PaymentRequest (Google Pay and the shops' own payment apps). Chrome shows its
 # payment sheet only for a page in the active window, and asked its Browser's window, which on the engine is
 # never seen and never active: every show() was turned down at once as from a background tab ("AbortError:

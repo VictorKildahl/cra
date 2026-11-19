@@ -1,3 +1,4 @@
+# promise: web-page-eyedropper
 # web-features: a page's colour picker that samples the screen (a design tool's eyedropper: new
 # EyeDropper().open()). Chrome opens macOS's colour sampler through its Browser's window (OpenEyeDropper),
 # which on the engine is never seen (a 1 pt strip along Cra's window, #346): the sampler has to open and wait

@@ -1,3 +1,4 @@
+# promise: web-page-share-picker
 # web-features: a page's Share button (navigator.share: a news article, a photo). Chrome shows macOS's share
 # picker from the page's own view, where the pointer is, and the page waits until it is closed. It never reads
 # the Browser's never-seen window (a 1 pt strip along Cra's window since #346), and this keeps that so: the

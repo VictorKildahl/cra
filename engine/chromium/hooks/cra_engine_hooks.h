@@ -89,6 +89,13 @@ inline PageIsFullscreenHook g_page_is_fullscreen = nullptr;
 using TargetURLHook = bool (*)(content::WebContents* contents, const GURL& url);
 inline TargetURLHook g_target_url = nullptr;
 
+// Whether a page of Cra's is in the window the user is in: Cra the active app and the page's view in its key
+// window. -1 for a page that isn't Cra's, which keeps Chrome's answer (its Browser's window, which for Cra's
+// pages is never seen and never active), else 0 or 1. PaymentRequest.show() asks it
+// (patches/cra-payments-window.patch).
+using PageWindowActiveHook = int (*)(content::WebContents* contents);
+inline PageWindowActiveHook g_page_window_active = nullptr;
+
 // Whether a page is one of Cra's. Its DevTools never dock into Chrome's window: they open in a DevTools window
 // of their own, which Cra's layer takes over (patches/cra-devtools.patch).
 using IsCraPageHook = bool (*)(const content::WebContents* contents);

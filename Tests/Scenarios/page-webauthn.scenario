@@ -1,3 +1,4 @@
+# promise: web-page-webauthn
 # web-features: a page's passkey or security key sign-in (navigator.credentials.get: GitHub, Google, a bank).
 # Chrome asks in a tab-modal dialog it hangs on its Browser's window, on the engine a never-seen 1 pt strip
 # along Cra's window (#346): it has to come up over the page (cra-page-dialogs.patch), and Cancel has to tell

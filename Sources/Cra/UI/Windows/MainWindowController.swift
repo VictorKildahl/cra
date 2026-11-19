@@ -2206,8 +2206,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func browserManagerHandleKey(_ event: NSEvent) -> Bool {
         // Chrome: Escape leaves a page's element fullscreen, before the page sees the key.
         // Chrome's own handling never got it here: the video stayed fullscreen.
+        // Not under the page's keyboard lock: a press is the page's, and holding Esc leaves (Chrome does that).
         if event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
-           let id = contentFullscreenTab, let browser = browsers.runtime(for: id)?.browser {
+           let id = contentFullscreenTab, let browser = browsers.runtime(for: id)?.browser, !browser.holdsEscapeKey {
             browser.exitFullscreen()
             return true
         }

@@ -1,3 +1,4 @@
+# promise: web-page-fullscreen-keyboard-lock
 # web-features: a page's own full screen in a main window's tab (a video's or a game's full-screen button,
 # requestFullscreen) and its keyboard lock (navigator.keyboard.lock: a cloud desktop or a game keeps Esc and
 # the shortcuts). Cra's window takes the page full screen (cra-fullscreen-status.patch). Under the keyboard lock

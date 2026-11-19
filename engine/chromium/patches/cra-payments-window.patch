@@ -1,0 +1,29 @@
+diff -ruN a/chrome/browser/payments/chrome_payment_request_delegate.cc b/chrome/browser/payments/chrome_payment_request_delegate.cc
+--- a/chrome/browser/payments/chrome_payment_request_delegate.cc	2026-11-19 09:34:27
++++ b/chrome/browser/payments/chrome_payment_request_delegate.cc	2026-11-19 09:35:43
+@@ -18,6 +18,7 @@
+ #include "chrome/browser/autofill/personal_data_manager_factory.h"
+ #include "chrome/browser/autofill/validation_rules_storage_factory.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
+ #include "chrome/browser/net/system_network_context_manager.h"
+ #include "chrome/browser/payments/payment_request_display_manager_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -181,6 +182,17 @@
+   auto* rfh = content::RenderFrameHost::FromID(frame_routing_id_);
+   if (!FrameSupportsPayments(rfh))
+     return false;
++
++  // Cra (docs/web-features.md in the Cra repository): a page Cra shows in its own window is in the active window
++  // when that window is, as Cra decides. Its Browser's window is never seen and never active, so every
++  // PaymentRequest.show() was turned down as from a background tab (AbortError).
++  if (cra::g_page_window_active) {
++    const int active = cra::g_page_window_active(
++        content::WebContents::FromRenderFrameHost(rfh));
++    if (active >= 0) {
++      return active == 1;
++    }
++  }
+ 
+   BrowserWindowInterface* browser =
+       GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(

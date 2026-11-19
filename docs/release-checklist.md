@@ -391,6 +391,9 @@ built release app with a test profile. Note anything that fails in the release's
   - web feature: Bluetooth chooser. On a Web Bluetooth demo (googlechrome.github.io/samples/web-bluetooth),
     Scan asks macOS for Bluetooth the first time, then shows Chrome's chooser on Cra's window; Cancel
     tells the page no device was picked.
+  - Keyboard lock: on a page that goes full screen and locks the keyboard (keyboard-lock.glitch.me, or Chrome
+    Remote Desktop's full screen), a press of Esc stays with the page, and holding Esc for two seconds leaves full
+    screen. (`page-fullscreen-keyboard-lock` presses it; a scenario can't hold a key.)
   - web feature: SaveFrame. Open a PDF (any link to one) and press the viewer's Save button: the file
     saves as a download (or into the save panel with Ask Where to Save Each File on) and shows in the bin.
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it

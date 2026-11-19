@@ -2259,8 +2259,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
     }
     func browser(_ browser: CraBrowser, handleKeyEvent event: NSEvent) -> Bool {
-        // Escape leaves the page's element fullscreen, as in the main window.
-        if pageFullscreen, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
+        // Escape leaves the page's element fullscreen, as in the main window (not under the page's keyboard lock).
+        if pageFullscreen, !browser.holdsEscapeKey, event.keyCode == 53, event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
             browser.exitFullscreen()
             return true
         }
