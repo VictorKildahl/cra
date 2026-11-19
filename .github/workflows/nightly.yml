@@ -9,6 +9,11 @@ on:
     - cron: "17 2 * * *"
     - cron: "41 3 * * 1"
   workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Only these scenarios (space-separated names), in each backdrop's first job; empty runs all"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -38,9 +43,16 @@ jobs:
       - name: Build (release, ad-hoc signed)
         run: scripts/build.sh
 
+      # GitHub's macOS runners have one small 1x screen, where a scenario's 1200x800 window doesn't fit; the
+      # scenarios run on a virtual 1440x900 Retina display instead (scripts/test-display.sh).
+      - name: Test display
+        run: scripts/test-display.sh
+
       - name: Scenarios
         env:
           CRA_FLAGS: backdrop=${{ matrix.backdrop }}
+          CRA_TEST_SCREEN: Cra Test Display
+          ONLY: ${{ github.event.inputs.scenarios }}
           CRA_SCENARIO_SCREEN: "1"
           # Budgets and snapshots were set on a Mac; on this VM they go in the summary, and only
           # what the app does fails the job (scripts/scenario.sh).
@@ -57,7 +69,15 @@ jobs:
           # at start-up, 3–6 Nov) whatever the scenario; one throwaway run first, so the start-up
           # budget measures Cra, not the runner's cold disk.
           scripts/scenario.sh solid-spaces > /dev/null 2>&1 || true
-          scripts/scenario.sh all
+          if [ -n "$ONLY" ]; then
+            # A run by hand for a few scenarios: the first job of each backdrop runs them, the others nothing.
+            [ "${{ matrix.shard }}" = 1 ] || exit 0
+            failed=()
+            for s in $ONLY; do scripts/scenario.sh "$s" || failed+=("$s"); done
+            [ ${#failed[@]} -eq 0 ] || { echo "Failed: ${failed[*]}"; exit 1; }
+          else
+            scripts/scenario.sh all
+          fi
 
       - name: Keep logs
         if: always()
