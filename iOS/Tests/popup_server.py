@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
-(PasskeyTests) and a plain-http page (PlainHTTPTests). No external requests."""
+(PasskeyTests), a plain-http page (PlainHTTPTests) and, given a certificate, the same pages over
+HTTPS with that certificate, which the simulator can't verify (CertificateTests). No external
+requests."""
 import argparse
 import html
+import ssl
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -74,6 +78,8 @@ function createPasskey() {
             # A plain-http page (PlainHTTPTests), opened by a domain name: iOS's App Transport
             # Security lets IP addresses and plain `localhost` through, but not `cra.localhost`.
             self.page('<title>Plain HTTP Fixture</title><h1>Plain HTTP Fixture</h1>')
+        elif url.path == '/untrusted':
+            self.page('<title>Untrusted Fixture</title><h1>Untrusted Fixture</h1>')
         elif url.path == '/checkout':
             self.page('<title>POST lost</title><h1>POST lost</h1><p>Unexpected GET</p>')
         else:
@@ -100,7 +106,17 @@ function createPasskey() {
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=18765)
+    parser.add_argument('--tls-cert', help='a self-signed certificate (PEM) to serve HTTPS with')
+    parser.add_argument('--tls-key', help="that certificate's private key (PEM)")
+    parser.add_argument('--tls-port', type=int, default=18766)
     options = parser.parse_args()
+    if options.tls_cert:
+        secure = ThreadingHTTPServer(('127.0.0.1', options.tls_port), PopupHandler)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(options.tls_cert, options.tls_key)
+        secure.socket = context.wrap_socket(secure.socket, server_side=True)
+        threading.Thread(target=secure.serve_forever, daemon=True).start()
+        print(f'Untrusted fixtures: https://127.0.0.1:{secure.server_port}/untrusted', flush=True)
     server = ThreadingHTTPServer(('127.0.0.1', options.port), PopupHandler)
     print(f'Popup fixtures: http://127.0.0.1:{server.server_port}/source', flush=True)
     server.serve_forever()

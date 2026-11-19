@@ -861,11 +861,49 @@ final class SidebarStore {
         return true
     }
 
-    func duplicateTab(_ id: UUID) -> SidebarItem? {
-        guard let it = items[id], let t = it.tab, let parent = it.parentID else { return nil }
-        let idx = (items[parent]?.children.firstIndex(of: id) ?? 0) + 1
+    /// A copy of the tab's page right after it, in the same list (a favorite's copy is a favorite),
+    /// opened. A split's pane is copied below its split, not into it as one pane more (#600).
+    @discardableResult
+    func duplicateTab(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
+        guard let it = items[id], let t = it.tab, var parent = it.parentID else { return nil }
+        var after = id
+        if let split = items[parent], split.isSplit, let outer = split.parentID { (after, parent) = (split.id, outer) }
+        let idx = (items[parent]?.children.firstIndex(of: after) ?? 0) + 1
         return createTab(url: t.url, title: t.savedTitle, in: spaceID(ofItem: id), pinned: false,
-                         select: true, parent: parent, index: idx)
+                         select: true, parent: parent, index: idx, window: window)
+    }
+
+    /// Arc's Duplicate on a split's menu (#600): a new split right after this one, in the same list,
+    /// with a new tab for each pane's page in order, its orientation and sizes, opened on the pane
+    /// the original had focused.
+    @discardableResult
+    func duplicateSplit(_ id: UUID, window: UUID? = nil) -> SidebarItem? {
+        guard let original = items[id], let data = original.split, let parent = original.parentID,
+              let at = items[parent]?.children.firstIndex(of: id) else { return nil }
+        var split = SidebarItem.split(parent: parent)
+        split.title = original.title
+        var copies: [UUID: UUID] = [:]
+        for pane in original.children {
+            guard let t = items[pane]?.tab else { continue }
+            var copy = SidebarItem.tab(t.url, title: t.savedTitle, parent: split.id)
+            copy.title = items[pane]?.title
+            copy.data = .tab({ var c = TabData(url: t.url, title: t.savedTitle); c.faviconKey = t.faviconKey; return c }())
+            items[copy.id] = copy
+            split.children.append(copy.id)
+            copies[pane] = copy.id
+        }
+        guard !split.children.isEmpty else { return nil }
+        var s = SplitData()
+        s.orientation = data.orientation
+        s.widthFactors = Dictionary(uniqueKeysWithValues: data.widthFactors.compactMap { k, v in copies[k].map { ($0, v) } })
+        s.focusTabID = data.focusTabID.flatMap { copies[$0] } ?? split.children.first
+        s.timeLastActiveAt = clock.now
+        split.data = .split(s)
+        items[split.id] = split
+        items[parent]!.children.insert(split.id, at: at + 1)
+        touch()
+        selectTab(s.focusTabID, window: window)
+        return items[split.id]
     }
 
     // MARK: Import helpers
@@ -2236,6 +2274,16 @@ final class SidebarStore {
     func reopenLastClosed(in windowID: UUID? = nil, peek: ReopenClosedTab.ClosedPeek? = nil) -> ReopenClosedTab.Restoration? {
         let w = self.window(windowID).id
         let currentSelected = selectedTabID(window: w)
+        // #601, not in Arc: only what was closed in the window's space, which ⇧⌘T then stays in.
+        // An archived tab counts by the space it was closed from; a pinned tab or a Peek's tab by
+        // the space that lists it now (a shared favorite is in every space on its profile).
+        let here = focusedSpaceID(window: w)
+        let archivedFrom = Dictionary(archive.map { ($0.id, $0.sourceSpaceID) }, uniquingKeysWith: { a, _ in a })
+        let isInCurrentSpace: ((UUID) -> Bool)? = settings.reopenClosedTabCurrentSpaceOnly ? { [weak self] id in
+            guard let self else { return false }
+            if let from = archivedFrom[id] { return from == here }
+            return isInSpace(id, here)
+        } : nil
         guard let decision = ReopenClosedTab.next(
             closedPinned: closedPinnedTabs,
             closedPeek: peek,
@@ -2244,7 +2292,8 @@ final class SidebarStore {
                 guard let self else { return false }
                 return items[id] != nil && isPinned(id)
             },
-            isTabSelected: { id in id == currentSelected }
+            isTabSelected: { id in id == currentSelected },
+            isInCurrentSpace: isInCurrentSpace
         ) else { return nil }
 
         closedPinnedTabs = decision.remainingPinned

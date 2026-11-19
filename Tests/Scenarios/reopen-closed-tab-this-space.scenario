@@ -1,0 +1,31 @@
+# promise: #601
+# Settings ▸ Tabs "Reopen tabs from this Space only" (#601, not in Arc). The issue's steps: Tab 1
+# closed in Home, Tab 2 closed in Work, back to Home, ⇧⌘T. Arc switches to Work for Tab 2 (and so
+# does Cra with the switch off, ReopenClosedTabTests); with it on, Tab 1 comes back in Home and the
+# window stays there. ⇧⌘T again finds nothing closed in Home and stays put. The decision is
+# ReopenClosedTab (CraCore); the store's half is StoreTests.reopenClosedTabInThisSpaceOnly.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "reopenClosedTabCurrentSpaceOnly": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=keep-home
+wait 2
+cra://open?url=${PAGE}?n=tab1
+wait 3
+cra://action/closeTab
+wait 1
+cra://open?url=${PAGE}?n=keep-work&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://open?url=${PAGE}?n=tab2&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://action/closeTab
+wait 1
+cra://action/previousSpace
+wait 2
+cra://action/reopenClosedTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"page:\?n=tab1"
+cra://action/reopenClosedTab
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'again:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"again:\?n=tab1"

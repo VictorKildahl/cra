@@ -962,11 +962,20 @@ struct MobileDownloadsTests {
         #expect(try JSONDecoder().decode(MobileDownloads.self, from: saved) == downloads)
     }
 
-    @Test func aCertificateExceptionIsForOneHost() {
+    /// GitHub #569: Continue Anyway allows the host the warning named, and only that host, for
+    /// the rest of the run. (The load failing again after Continue Anyway was App Transport
+    /// Security, which a web view's trust answer can't override; CertificateTests pins that in the app.)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/569"))
+    func aCertificateExceptionIsForOneHost() {
         var exceptions = MobileCertificateExceptions()
+        #expect(!exceptions.allows("self-signed.example"))
         exceptions.allow("Self-Signed.Example")
         #expect(exceptions.allows("self-signed.example"))
+        #expect(exceptions.allows("SELF-SIGNED.EXAMPLE"))
         #expect(!exceptions.allows("other.example"))
+        #expect(!exceptions.allows("www.self-signed.example"), "a subdomain is another host")
+        exceptions.allow("self-signed.example")
+        #expect(exceptions.hosts == ["self-signed.example"])
     }
 }
 

@@ -150,4 +150,74 @@ struct ReopenClosedTabTests {
         )
         #expect(decision == nil)
     }
+
+    // MARK: Only this Space (#601, not in Arc)
+
+    /// The issue's steps: Tab 1 closed in Space A, then Tab 2 in Space B, then ⇧⌘T back in Space A.
+    /// Arc (and Cra by default) switches to Space B for Tab 2; with Only this Space it's Tab 1.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/601")) func onlyThisSpaceReopensTheTabClosedHere() {
+        let tab1 = UUID(), tab2 = UUID()
+        let archived = [
+            ReopenClosedTab.ArchivedTab(id: tab2, archivedAt: Date(timeIntervalSince1970: 200)),
+            ReopenClosedTab.ArchivedTab(id: tab1, archivedAt: Date(timeIntervalSince1970: 100)),
+        ]
+        let arc = ReopenClosedTab.next(closedPinned: [], closedPeek: nil, archived: archived)
+        #expect(arc?.restoration == .archived(tab2), "by default, the tab closed last in any Space, as in Arc")
+
+        let here = ReopenClosedTab.next(closedPinned: [], closedPeek: nil, archived: archived, isInCurrentSpace: { $0 == tab1 })
+        #expect(here?.restoration == .archived(tab1))
+    }
+
+    /// A pinned tab closed in another Space stays on the stack for when you go back there.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/601")) func onlyThisSpaceKeepsOtherSpacesPinnedTabs() {
+        let here = UUID(), there = UUID()
+        let stack = [
+            ReopenClosedTab.ClosedPinnedTab(id: there, url: "https://example.com/there", closedAt: Date(timeIntervalSince1970: 300)),
+            ReopenClosedTab.ClosedPinnedTab(id: here, url: "https://example.com/here", closedAt: Date(timeIntervalSince1970: 200)),
+        ]
+        let decision = ReopenClosedTab.next(
+            closedPinned: stack, closedPeek: nil,
+            archived: [ReopenClosedTab.ArchivedTab(id: there, archivedAt: Date(timeIntervalSince1970: 250))],
+            isInCurrentSpace: { $0 == here }
+        )
+        #expect(decision?.restoration == .pinned(id: here, url: "https://example.com/here", title: nil, paneStates: []))
+        #expect(decision?.remainingPinned.map(\.id) == [there])
+    }
+
+    /// A Peek closed over a tab in another Space, or with no tab, isn't this Space's.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/601")) func onlyThisSpaceSkipsAnotherSpacesPeek() {
+        let here = UUID(), there = UUID()
+        let peek = ReopenClosedTab.ClosedPeek(url: "https://example.com/peek", tabID: there, closedAt: Date(timeIntervalSince1970: 300))
+        let decision = ReopenClosedTab.next(
+            closedPinned: [], closedPeek: peek,
+            archived: [ReopenClosedTab.ArchivedTab(id: here, archivedAt: Date(timeIntervalSince1970: 100))],
+            isInCurrentSpace: { $0 == here }
+        )
+        #expect(decision?.restoration == .archived(here))
+        #expect(decision?.remainingPeek == peek, "the Peek is still there for its own Space")
+
+        let loose = ReopenClosedTab.ClosedPeek(url: "https://example.com/peek", tabID: nil, closedAt: Date(timeIntervalSince1970: 300))
+        #expect(ReopenClosedTab.next(closedPinned: [], closedPeek: loose, archived: [], isInCurrentSpace: { _ in true }) == nil)
+    }
+
+    /// Nothing closed in this Space: ⇧⌘T does nothing rather than leave the Space.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/601")) func onlyThisSpaceWithNothingClosedHereStays() {
+        let there = UUID()
+        let decision = ReopenClosedTab.next(
+            closedPinned: [ReopenClosedTab.ClosedPinnedTab(id: there, closedAt: Date())],
+            closedPeek: nil,
+            archived: [ReopenClosedTab.ArchivedTab(id: UUID(), archivedAt: Date())],
+            isInCurrentSpace: { _ in false }
+        )
+        #expect(decision == nil)
+    }
+
+    /// Settings ▸ Tabs ▸ "Reopen tabs from this Space only": off by default (Arc), and kept.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/601")) func onlyThisSpaceSettingIsOffByDefaultAndSaved() throws {
+        let older = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        #expect(!older.reopenClosedTabCurrentSpaceOnly)
+        var on = AppSettings()
+        on.reopenClosedTabCurrentSpaceOnly = true
+        #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(on)).reopenClosedTabCurrentSpaceOnly)
+    }
 }

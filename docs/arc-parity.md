@@ -61,6 +61,7 @@ Arc's actions (Settings ▸ Shortcuts, 106 rows) that Cra has no action for:
 | Reveal Tab in Sidebar (Tabs) / Reveal Current Tab | ⌃Space | done |
 | Reset all tabs in this Space (Tabs) | — | done |
 | View Archive… / Clear Archive (Archive menu) | — | done |
+| View History (Archive menu) | ⌘Y | done | Chromium's History page in a new tab of the space in use, so its profile's history (GitHub #590, `HistoryPage`). Arc 1.172's MainMenu.nib: action `viewHistory`, selector `showAllHistory:`. Until #590 Cra's ⌘Y opened the archive, which is View Archive… |
 | Collapse All Folders / Expand All Folders | — | done |
 | Next Tab / Previous Tab, second binding | ⌘} / ⌘{ | done |
 | Go Back / Go Forward, second binding | ⌘← / ⌘→ | done | Bound since the first build; as in Chrome they act only when the page leaves the key alone (a text field keeps ⌘← for the line start). |
@@ -87,6 +88,8 @@ gains "New Profile".
 |---|---|
 | Today tab | all done (Share ▸, Change Icon…, Open in Split View, Archive Tabs Below) |
 | Pinned tab | Edit Pinned Page ▸ (Cra lists them flat on purpose, PR #55), Remove Pin (Share ▸, Change Icon… and Add Split View done) |
+| Favorite | Share ›, Open in Split View (Duplicate done, GitHub #600: a favorite of the same page right after it) |
+| Split | Share Split View…, Change Icon…, Archive Tabs Below (Duplicate done, GitHub #600: the whole split right after it, orientation and sizes kept) |
 | Space header / empty sidebar | Share Space… (*skip*), New Folder, Manage Spaces…, Delete Space (check order) |
 | Folder | Paste as New Tab, Move to ▸, Duplicate, Turn "…" into Space, Copy All Links, and Arc's order (New Nested Folder… is Cra's New Folder Inside). Share Folder… done (GitHub #357): Arc stored the folder on arc.net; Cra's crabrowser.app/folder link carries it after the # (FolderShareLink), so nothing is stored and the server never sees it. Same toast, "Copied Folder URL", after Arc's "Send this Folder to anyone" warning (AppDialog.shareLink, #356) |
 | Toolbar address | Share ▸ (in the Site Control Center), Disable Shared Quotes (arc.net); the rest done. Blocked pop-ups (GitHub #357): Arc keeps Chromium's list (hasBlockedPopUp, showBlockedPopups) but its button wasn't seen yet; Cra shows Chrome's crossed-out window before the sliders, or "Pop-ups Blocked" under the sidebar's address, with Chrome's list and Always Allow as a menu |

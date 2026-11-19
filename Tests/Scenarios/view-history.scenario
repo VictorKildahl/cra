@@ -1,0 +1,29 @@
+# promise: #590
+# Archive ▸ View History (⌘Y) is Chromium's History page in a new tab of the space in use, so it
+# lists that profile's history, as in Arc (its menu item runs showAllHistory:). Cra's ⌘Y opened the
+# Library's archive of closed tabs from every profile instead; that is View Archive… now.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=history
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+cra://action/viewArchive
+wait 3
+cra://debug?browserWindows=history
+expect-log Cra browser windows history: kind=normal .*tabs=\[[^]]*chrome://history[^]]*\] open=chrome://history .*active=1 library=-
+
+# The archive is still one menu row away.
+cra://action/showArchive
+wait 1
+cra://debug?browserWindows=archive
+expect-log Cra browser windows archive: kind=normal .*library=archive
+
+# From an incognito window the page opens in the normal window, as Chrome keeps it out of incognito.
+cra://action/newIncognitoWindow
+wait 2
+cra://action/viewArchive
+wait 3
+cra://debug?browserWindows=incognito
+expect-log Cra browser windows incognito: kind=normal .*open=chrome://history .*active=1
+expect-log Cra browser windows incognito: kind=incognito .*tabs=\[\] open=- .*active=0
