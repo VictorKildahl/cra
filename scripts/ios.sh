@@ -74,10 +74,16 @@ case "$command" in
     rm -rf "$DERIVED/test.xcresult" "$DERIVED/test-screens"
     # PopupTests posts forms to a local fixture server (a data: page can't take a POST). It
     # takes a free port, so parallel runs don't collide; the simulator shares the Mac's loopback.
+    # CertificateTests reach it over HTTPS with a certificate made for this run, which nothing trusts.
     server_log="$(mktemp "${TMPDIR:-/tmp}/cra-popup-server.XXXXXX")"
-    python3 -I iOS/Tests/popup_server.py --port 0 > "$server_log" 2>&1 &
+    tls_dir="$(mktemp -d "${TMPDIR:-/tmp}/cra-untrusted-tls.XXXXXX")"
+    trap 'rm -rf "$tls_dir"' EXIT
+    openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=cra.localhost" \
+      -addext "subjectAltName=DNS:cra.localhost,IP:127.0.0.1" -keyout "$tls_dir/key.pem" -out "$tls_dir/cert.pem" >/dev/null 2>&1
+    python3 -I iOS/Tests/popup_server.py --port 0 --tls-port 0 \
+      --tls-cert "$tls_dir/cert.pem" --tls-key "$tls_dir/key.pem" > "$server_log" 2>&1 &
     server=$!
-    trap 'kill "$server" 2>/dev/null || true; rm -f "$server_log"' EXIT
+    trap 'kill "$server" 2>/dev/null || true; rm -f "$server_log"; rm -rf "$tls_dir"' EXIT
     base=""
     for _ in $(seq 100); do
       base="$(sed -n 's#^Popup fixtures: \(http://[^/]*\)/source$#\1#p' "$server_log")"
@@ -88,6 +94,8 @@ case "$command" in
     [ -n "$base" ] || { cat "$server_log" >&2; echo "popup fixture server didn't start" >&2; exit 1; }
     # xcodebuild hands TEST_RUNNER_-prefixed variables to the UI test runner, without the prefix.
     export TEST_RUNNER_CRA_POPUP_TEST_BASE_URL="$base"
+    TEST_RUNNER_CRA_UNTRUSTED_TEST_URL="$(sed -n 's#^Untrusted fixtures: \(https://.*\)$#\1#p' "$server_log")"
+    export TEST_RUNNER_CRA_UNTRUSTED_TEST_URL
     xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Debug \
       -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$DERIVED" \
       -resultBundlePath "$DERIVED/test.xcresult" \

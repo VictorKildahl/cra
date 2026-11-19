@@ -1167,6 +1167,9 @@
 #568   Tests/PolicyTests.swift::iPhoneWebContentLoadsHTTP  929c5de9a58a
 #568   iOS/CraUITests/PlainHTTPTests.swift::testAPageThatCantLoadSaysSo  cd070c9d7e8f
 #568   iOS/CraUITests/PlainHTTPTests.swift::testAPlainHTTPPageLoads  891ae35f0a31
+#569   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aCertificateExceptionIsForOneHost  6c56d8489ca7
+#569   iOS/CraUITests/CertificateTests.swift::testContinueAnywayOpensThePageAndTheWarningStaysGone  76d9fa9240b7
+#569   iOS/CraUITests/CertificateTests.swift::testGoBackClosesTheWarningAndLeavesThePageUnloaded  f9084acee64c
 #571   Tests/Scenarios/upload-picker-after-focus.scenario  16ab596cf4bd
 #571   Tests/Scenarios/upload-picker.scenario  c92bdec94797
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::aBubbleOverTheSidebarIsOnTheWindow  3770d4c4f881
