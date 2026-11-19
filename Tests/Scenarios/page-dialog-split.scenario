@@ -1,0 +1,27 @@
+# promise: #574
+# A page's alert in the right pane of a split shows over that pane, not over the window's middle. Chrome
+# places a page's dialogs against its Browser's own window, which on the engine is never seen: a strip
+# along the top of Cra's window (#346), so each dialog was centred on the whole window, over whichever
+# pane was there, whoever asked. cra-page-dialogs.patch places it over the page that asked.
+budget rss=1000 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/dialogs.html?n=pane-other
+expect-log GET /dialogs.html\?n=pane-other
+cra://open?url=${ORIGIN}/dialogs.html?n=pane-shown
+expect-log GET /dialogs.html\?n=pane-shown
+wait 2
+cra://debug?dropSplit=n=pane-other&x=0.97&y=0.5
+expect-log dropSplit: split horizontal .*n=pane-shown \| .*n=pane-other open=.*n=pane-other
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('alert')+' in '+location.search"}
+expect-log "value":"alert asked in \?n=pane-other"
+wait 1
+cra://debug?pageDialogs=split
+expect-log page dialog split: chrome [0-9]+x[0-9]+ at=page front=1 text=.*Alert from the page
+cra://debug?pageDialogs=split-ok&press=OK
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'said '+said.join(',')"}
+expect-log "value":"said alert:undefined"
+reject-log fault:

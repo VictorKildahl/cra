@@ -1,0 +1,32 @@
+# promise: #550
+# The floating sidebar's shadow lies right under it, in a window and in full screen. Its shadow is drawn
+# in a panel of its own under the sidebar's; a shadow off by 5 pt left a strip of bare page between
+# the sidebar's top edge and the shadow, a halo the page's colour (#550, macOS 27.2 full screen).
+# Readout: the shadow body's left, bottom, right and top edges against the sidebar's, then how far
+# below the window's top the sidebar rests (Arc: 5 pt, in full screen too).
+# It takes over a Space, so it runs only with CRA_SCENARIO_SCREEN=1 (CI).
+requires screen
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=main
+expect-log GET \S*\?n=main
+wait 2
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?windowState=windowed
+expect-log window state windowed: main0 fullscreen=0 .* floating=left 5 shadow=0,0,0,0 top 5
+cra://debug?floatingSidebar=0
+wait 1
+
+cra://debug?fullscreen=1
+wait 3
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?windowState=full
+expect-log window state full: main0 fullscreen=1 .* floating=left 5 shadow=0,0,0,0 top 5
+cra://debug?floatingSidebar=0
+wait 1
+cra://debug?fullscreen=0
+wait 3

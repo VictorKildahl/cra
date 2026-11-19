@@ -1,14 +1,18 @@
 import AppKit
 
-/// A press on Arc's title-bar stand-ins (the toolbar, its URL, the sidebar's top strip): a
-/// click acts, a drag past 3 pt moves the browser window. In the floating sidebar the press
+/// A press on Arc's title-bar stand-ins (the toolbar, its URL, the sidebar's top strip) and on the
+/// sidebar's empty space (#547): a click acts, a drag past 3 pt moves the browser window. The
+/// drag's start is logged with `source`, for scenarios. In the floating sidebar the press
 /// lands in its child panel, and `performDrag` there tears the panel off the window, so the
 /// browser window is moved by hand instead (the panel follows it as a child window).
 @MainActor
 struct WindowDragGesture {
+    let source: String
     private var press: NSEvent?
     private var dragging = false
     private var lastMouse = NSPoint.zero
+
+    init(source: String) { self.source = source }
 
     mutating func begin(_ event: NSEvent) {
         press = event
@@ -21,6 +25,7 @@ struct WindowDragGesture {
             guard hypot(event.locationInWindow.x - press.locationInWindow.x,
                         event.locationInWindow.y - press.locationInWindow.y) > 3 else { return }
             dragging = true
+            CraLog.note("window drag from \(source)")
             guard window.parent != nil else {
                 // A panel the sidebar has left meanwhile is no browser window.
                 if !(window is NSPanel) { window.performDrag(with: press) }

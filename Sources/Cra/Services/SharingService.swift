@@ -2,10 +2,12 @@ import AppKit
 import Foundation
 
 /// Settings ▸ Privacy ▸ Data, and onboarding's "Help improve Cra" row (CraCore Sharing): the
-/// daily usage stats and the crash reports, posted to crabrowser.app. Nothing goes out unless the
-/// user turned it on, except a crash report they chose to send from the dialog. Only the
-/// released app reports (Sharing.mayReport); CRA_SHARING_ENDPOINT=http://127.0.0.1:<port> points
-/// a test copy at a local server. docs/sharing.md lists every field.
+/// daily usage stats and the crash reports, posted to crabrowser.app. Neither goes out unless the
+/// user turned it on, except a crash report they chose to send from the dialog. Apart from those,
+/// the daily check-in (CraCore InstallCheckIn: the install id, version and chip) always goes, so
+/// crabrowser.app can count users. Only the released app reports (Sharing.mayReport);
+/// CRA_SHARING_ENDPOINT=http://127.0.0.1:<port> points a test copy at a local server.
+/// docs/sharing.md lists every field.
 @MainActor
 final class SharingService {
     static let shared = SharingService()
@@ -42,10 +44,14 @@ final class SharingService {
         CraLog.note("sharing: stats \(store.settings.shareUsageStats ? "on" : "off"), crash reports \(store.settings.crashReports.rawValue)")
         // After the windows and pages have settled, and again every few hours for a Mac left running.
         clock.after(30) { [weak self] in
+            self?.sendCheckInIfDue()
             self?.checkCrashReports()
             self?.sendStatsIfDue()
         }
-        repeating = clock.every(6 * 3600) { [weak self] in self?.sendStatsIfDue() }
+        repeating = clock.every(6 * 3600) { [weak self] in
+            self?.sendCheckInIfDue()
+            self?.sendStatsIfDue()
+        }
         // Turned on while Cra runs (onboarding's row, Settings ▸ Privacy): today's report now, not
         // in six hours. The first read is the launch value, which the check above covers.
         var launched = false
@@ -57,16 +63,41 @@ final class SharingService {
         }
     }
 
+    // MARK: - Install count
+
+    private static var arch: String {
+        #if arch(arm64)
+        "arm64"
+        #else
+        "x86_64"
+        #endif
+    }
+
+    private static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?" }
+
+    /// Once per UTC day, whatever the sharing settings: the install id (made on the first check-in
+    /// and kept in sharing.json), the version and the chip.
+    func sendCheckInIfDue(force: Bool = false) {
+        guard mayReport, force || InstallCheckIn.isDue(lastSent: state.checkInSentAt, now: clock.now) else { return }
+        let id = InstallCheckIn.installID(in: &state)
+        file.save(state)
+        let checkIn = InstallCheckIn(id: id, version: Self.version, arch: Self.arch)
+        post(checkIn.json(), to: Sharing.checkInURL(base: endpointBase)) { [weak self] ok in
+            guard let self else { return }
+            CraLog.note("sharing: check-in \(ok ? "sent" : "not sent")")
+            if ok {
+                state.checkInSentAt = clock.now
+                file.save(state)
+            }
+        }
+    }
+
     // MARK: - Usage stats
 
     func currentStats() -> UsageStats? {
         guard let store else { return nil }
         let info = Bundle.main.infoDictionary
-        #if arch(arm64)
-        let arch = "arm64"
-        #else
-        let arch = "x86_64"
-        #endif
+        let arch = Self.arch
         return UsageStats(id: UUID(), version: info?["CFBundleShortVersionString"] as? String ?? "?",
                           build: info?["CFBundleVersion"] as? String ?? "?",
                           os: ProcessInfo.processInfo.operatingSystemVersion, arch: arch,

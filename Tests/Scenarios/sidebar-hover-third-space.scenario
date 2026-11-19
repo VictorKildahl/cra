@@ -1,0 +1,40 @@
+# promise: #522
+# Information about a tab from another space came up when the pointer rested in the middle of the
+# page, in full screen with the sidebar shown, once the window was back on its first space (#522). The
+# spaces sit side by side on a strip beside the sidebar: on a 1440-point window the third space's list
+# and tiles lie two sidebar widths in, under the middle of the page, and their tracking areas reached
+# over it, as the next space's did for #527 (sidebar-hover-other-space, sidebar-tip-other-space). Only
+# the space shown takes the pointer, wherever on the strip the others are, after a switch away and back.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002","A0000000-0000-0000-0000-000000000003"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000003","title":"Play","emoji":"🎲","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000031","pinnedContainerID":"C0000000-0000-0000-0000-000000000032","todayContainerID":"C0000000-0000-0000-0000-000000000033","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":["E0000000-0000-0000-0000-000000000011"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":["E0000000-0000-0000-0000-000000000021"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000031","children":["E0000000-0000-0000-0000-000000000031"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000003"}}}}},{"id":"C0000000-0000-0000-0000-000000000032","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000003"}}}}},{"id":"C0000000-0000-0000-0000-000000000033","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000003"}}}}},{"id":"E0000000-0000-0000-0000-000000000011","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:9/?n=homefav","savedTitle":"Homefav"}}}},{"id":"E0000000-0000-0000-0000-000000000021","parentID":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:9/?n=workfav","savedTitle":"Workfav"}}}},{"id":"E0000000-0000-0000-0000-000000000031","parentID":"C0000000-0000-0000-0000-000000000031","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:9/?n=playfav","savedTitle":"Playfav"}}}}]}
+cra://debug?windowSize=1440x900
+cra://open?url=${PAGE}?n=home-a
+cra://open?url=${PAGE}?n=work-a&space=A0000000-0000-0000-0000-000000000002&background=1
+cra://open?url=${PAGE}?n=play-a&space=A0000000-0000-0000-0000-000000000003&background=1
+wait 2
+# To the third space and back to the first, as in the report.
+cra://action/space3
+wait 1
+cra://action/space1
+wait 1
+# The shown space's row and tile take the pointer.
+cra://debug?pointerOn=home-a&label=home-row
+expect-log pointer on home-row: in window=1 hovered=.*home-a tip=1
+cra://debug?pointerOn=Homefav&tile=1&label=home-tile
+expect-log pointer on home-tile: in window=1 hovered=Homefav tip=1
+# The third space's lie under the middle of the page.
+cra://debug?pointerOn=play-a&label=third-row
+expect-log pointer on third-row: in window=1 hovered=none tip=0
+cra://debug?pointerOn=Playfav&tile=1&label=third-tile
+expect-log pointer on third-tile: in window=1 hovered=none tip=0
+# And the second's, beside the sidebar.
+cra://debug?pointerOn=work-a&label=second-row
+expect-log pointer on second-row: in window=1 hovered=none tip=0
+cra://action/toggleSidebar
+wait 1
+# With the sidebar hidden the strip moves left, and the third space's list stays under the page.
+cra://debug?pointerOn=play-a&label=hidden-third-row
+expect-log pointer on hidden-third-row: in window=1 hovered=none tip=0
+cra://debug?pointerOn=Playfav&tile=1&label=hidden-third-tile
+expect-log pointer on hidden-third-tile: in window=1 hovered=none tip=0

@@ -51,6 +51,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var librarySettleLink: CADisplayLink?
     /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
     private var swipeKnobReveal: DispatchWorkItem?
+    /// Whether a touch over the sidebar hides the lists' knob (#77), or leaves it showing (#544).
+    private var listKnob = ListKnobGate()
     private var enteredFullscreenForContent = false
     /// The tab whose page (a video) is in element fullscreen.
     private var contentFullscreenTab: UUID?
@@ -60,8 +62,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     private var commandBarClosingClick = DismissingClick()
-    /// Set while the bar closes because its panel lost the keys (#429).
-    private var commandBarLostKeys = false
+    /// The window that took the keys from the bar and closed it (#429); nil when the bar closed itself.
+    private var commandBarLostKeysTo: CommandBarClosing.KeyHolder?
     private let toast = ShinyToast()
     /// Each live tab's wait for its first response (GitHub #256), the tab whose notice the toast
     /// shows (nil once another toast took its place), and the check when the next one is due.
@@ -173,6 +175,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // What extensions set for a tab (chrome.action.setIcon with tabId) went with its page.
         browsers.pageClosed = { ExtensionStore.shared.forgetActionTab($0) }
         browsers.delegate = self
+        // A split pane's thumbnail is taken in its place's shape on the split's switcher card (#554).
+        browsers.snapshotAspect = { [weak self] id in
+            guard let self, let split = self.store.item(id)?.parentID.flatMap(self.store.item), split.isSplit,
+                  let pane = split.children.firstIndex(of: id) else { return nil }
+            let factors = SplitPaneLayout.normalizedFactors(ids: split.children, stored: split.split?.widthFactors ?? [:])
+            return SwitcherSplitLayout.paneAspect(in: TabSwitcherMetrics.thumbnail, widths: split.children.map { factors[$0] ?? 0 }, pane: pane)
+        }
         overlay.onFindQueryChange = { [weak self] query in
             guard let self else { return }
             if self.overlay.findVisible, self.askOnPage.findsWhileTyping { self.find(query, forward: true) }
@@ -320,6 +329,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // A Peek keeps to the page area while the sidebar slides in or out under it (#402).
         shell.onSidebarSlideFrame = { [weak self] in self?.peeks.filter { !$0.isParked }.forEach { $0.repositionPeek() } }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.commandBarCraCameBack() }
             Task { @MainActor in self?.refreshMaterialActive(); self?.sidebarUI.appActive = true }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -2693,12 +2703,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// The space's open tabs, the latest first. A pinned tab that was closed (unloaded) isn't
-    /// open: ⌃Tab doesn't list it.
-    private func openRecentTabs(limit: Int, allSpaces: Bool = false) -> [UUID] {
-        let recent = allSpaces ? store.recentTabsInAllSpaces(limit: .max, window: windowID)
-            : store.recentTabs(in: focusedSpaceID, limit: .max, window: windowID)
-        return Array(recent.filter { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }.prefix(limit))
+    /// The space's open tabs, the latest first, a split as one card (#554). A pinned tab that was
+    /// closed (unloaded) isn't open: ⌃Tab doesn't list it, nor a pinned split none of whose panes is open.
+    private func openRecentCards(limit: Int, allSpaces: Bool = false) -> [RecentTabOrder.Card] {
+        let recent = allSpaces ? store.recentCardsInAllSpaces(limit: .max, window: windowID)
+            : store.recentCards(in: focusedSpaceID, limit: .max, window: windowID)
+        return Array(recent.filter { card in
+            card.panes.contains { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
+        }.prefix(limit))
     }
 
     func resetPinnedTab(_ id: UUID) {
@@ -3077,9 +3089,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 self.swipeAxis = .vertical
             }
             // A mouse wheel only ever scrolls.
-            if !event.hasPreciseScrollingDeltas { self.showListKnobs() }
+            if !event.hasPreciseScrollingDeltas { self.listScrolled(event) }
             // The momentum tail of a space swipe belongs to the swipe, not the tab list.
-            if !event.momentumPhase.isEmpty { return self.swipeAxis == .horizontal ? nil : event }
+            if !event.momentumPhase.isEmpty {
+                if self.swipeAxis == .horizontal { return nil }
+                if self.isOverSidebar(event) { self.listScrolled(event) }
+                return event
+            }
             // A wheel turned sideways, or with Shift (which macOS turns sideways), pages
             // between spaces over the sidebar like Arc (issue #93).
             if !event.hasPreciseScrollingDeltas, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
@@ -3101,13 +3117,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     overSidebar = page != .spaces || self.spacesStripAtEnd(event)
                 }
                 self.swipeAxis = overSidebar ? .undecided : .vertical
-                if overSidebar { self.hideListKnobs() }
+                if overSidebar { self.hideListKnobs(at: event.timestamp) }
                 self.swipeX = 0
                 self.swipeY = 0
                 return event
             case .changed:
                 switch self.swipeAxis {
                 case .vertical:
+                    if self.isOverSidebar(event) { self.listScrolled(event) }
                     return event
                 case .undecided:
                     self.swipeX += event.scrollingDeltaX
@@ -3119,7 +3136,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                           // At the Spaces page's end a swipe back along the cards scrolls them.
                           !(self.sidebarUI.libraryPage == .spaces && self.swipeX > 0) else {
                         self.swipeAxis = .vertical
-                        self.showListKnobs()
+                        self.listScrolled(event)
                         return event
                     }
                     self.swipeAxis = .horizontal
@@ -3132,7 +3149,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     return nil
                 }
             case .ended, .cancelled:
-                if self.swipeAxis != .vertical { self.showListKnobs(after: 1) }
+                if self.swipeAxis != .vertical { self.showListKnobs(after: ListKnobGate.shownAfterScroll) }
                 guard self.swipeAxis == .horizontal else { return event }
                 self.endSpaceSwipe()
                 return nil
@@ -3142,17 +3159,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    private func hideListKnobs() {
+    /// Two fingers touched over the sidebar: the knob hides, unless it already shows (#544).
+    private func hideListKnobs(at time: TimeInterval) {
+        listKnob.touched(at: time)
+        guard listKnob.hidden else { return }
         swipeKnobReveal?.cancel()
         swipeKnobReveal = nil
         SidebarScroller.hiddenForSwipe = true
     }
 
-    /// After `delay` seconds: by then the knob AppKit flashed at the touch has faded out.
-    private func showListKnobs(after delay: TimeInterval = 0) {
+    /// A list scrolled, under the fingers, by its momentum or by a wheel: its knob shows.
+    private func listScrolled(_ event: NSEvent) {
         swipeKnobReveal?.cancel()
-        guard delay > 0 else { SidebarScroller.hiddenForSwipe = false; return }
-        let work = DispatchWorkItem { SidebarScroller.hiddenForSwipe = false }
+        swipeKnobReveal = nil
+        listKnob.listScrolled(at: event.timestamp)
+        SidebarScroller.hiddenForSwipe = false
+    }
+
+    /// After `delay` seconds: by then the knob AppKit flashed at the touch has faded out.
+    private func showListKnobs(after delay: TimeInterval) {
+        swipeKnobReveal?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.listKnob.reveal()
+            SidebarScroller.hiddenForSwipe = false
+        }
         swipeKnobReveal = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
@@ -3645,7 +3675,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         tabSwitcher.isDark = dark
         tabSwitcher.highlight = theme.switcherHighlight(dark: dark)
         tabSwitcher.palette = theme.palette
-        tabSwitcher.debugOpen(tabSwitcherItems(allSpaces: allSpaces))
+        let items = tabSwitcherItems(allSpaces: allSpaces)
+        // The cards, for a scenario: a tab by its title, a split as its panes' titles (#554).
+        let cards = items.map { $0.panes.isEmpty ? $0.title : "split(" + $0.panes.map(\.title).joined(separator: " | ") + ")" }
+        CraLog.note("tab switcher: \(items.count) cards: \(cards.joined(separator: ", "))")
+        tabSwitcher.debugOpen(items)
     }
 
     /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
@@ -4138,20 +4172,33 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             tabSwitcher.palette = theme.palette
         }
         tabSwitcher.cycle(delta, event: event) { tabSwitcherItems(allSpaces: allSpaces) }
-        // The page on screen is the freshest thumbnail there is: retake it for its card.
-        guard tabSwitcher.isOpen, let current = browsers.visibleTabID else { return }
-        browsers.captureSnapshot(current) { [weak self] in
-            guard let self else { return }
-            self.tabSwitcher.updateSnapshot(current, self.browsers.runtime(for: current)?.snapshot)
+        // The pages on screen are the freshest thumbnails there are: retake them for their card
+        // (every pane of a split on screen).
+        guard tabSwitcher.isOpen else { return }
+        for current in browsers.visibleTabIDs {
+            browsers.captureSnapshot(current) { [weak self] in
+                guard let self else { return }
+                self.tabSwitcher.updateSnapshot(current, self.browsers.runtime(for: current)?.snapshot)
+            }
         }
     }
 
     private func tabSwitcherItems(allSpaces: Bool) -> [TabSwitcher.Item] {
-        openRecentTabs(limit: TabSwitcherMetrics.maxItems, allSpaces: allSpaces).compactMap { id in
+        openRecentCards(limit: TabSwitcherMetrics.maxItems, allSpaces: allSpaces).compactMap { card in
+            let id = card.opens
             guard let it = store.item(id), let tab = it.tab else { return nil }
             let space = allSpaces ? store.spaceID(ofItem: id, window: windowID).flatMap(store.space) : nil
-            return TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot,
-                                    space: space.map { TabSwitcher.SpaceLabel(title: $0.title, icon: SpaceMenuIcon.image(for: $0)) })
+            var item = TabSwitcher.Item(id: id, title: it.displayTitle, iconKey: tab.iconKey, snapshot: browsers.runtime(for: id)?.snapshot,
+                                        space: space.map { TabSwitcher.SpaceLabel(title: $0.title, icon: SpaceMenuIcon.image(for: $0)) })
+            if card.isSplit {
+                let factors = SplitPaneLayout.normalizedFactors(ids: card.panes, stored: store.item(card.id)?.split?.widthFactors ?? [:])
+                item.panes = card.panes.compactMap { pid in
+                    guard let p = store.item(pid), let t = p.tab else { return nil }
+                    return TabSwitcher.Pane(id: pid, title: p.displayTitle, iconKey: t.iconKey, snapshot: browsers.runtime(for: pid)?.snapshot,
+                                            width: factors[pid] ?? 1 / CGFloat(card.panes.count))
+                }
+            }
+            return item
         }
     }
 
@@ -4240,16 +4287,49 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let panel = commandPanel!
         // Let CommandBarView's fade-out (0.08 s) play before the panel goes away.
         panel.orderOut(nil)
+        panel.level = .floating
         // Lost to another window (a click in window 2 while ⌘L was open in window 1), the keys stay
         // there: taking them back went on sending typing to this window's page (#429).
-        guard commandBarLostKeys else { focusAfterCommandBar(); return }
-        commandBarLostKeys = false
-        panel.keysWent(owns: { [weak self] w in
+        let lostTo = commandBarLostKeysTo
+        commandBarLostKeysTo = nil
+        let closing: CommandBarClosing = lostTo.map { .lostKeys(to: $0) } ?? .byBar
+        if closing.barsWindowTakesKeys { focusAfterCommandBar() }
+    }
+
+    /// Another app came to the front with the bar open: it stays with what was typed (#551, as in Arc),
+    /// below the other app's windows rather than floating over them.
+    private func commandBarWaitsForCra() {
+        if NSApp.isActive { commandPanel.makeKeyAndOrderFront(nil); return }
+        commandPanel.level = .normal
+    }
+
+    /// Cra is in front again: the bar that waited takes the keys back. A click that brought Cra back
+    /// closes it, as any click outside the bar does; the clicked window takes the keys before the
+    /// panel could lose them, so it never hears of that click otherwise.
+    private func commandBarCraCameBack() {
+        guard commandBar.isOpen, let panel = commandPanel else { return }
+        panel.level = .floating
+        if let e = NSApp.currentEvent, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(e.type), e.window !== panel {
+            commandBarLostTheKeys()
+            return
+        }
+        if !panel.isKeyWindow { panel.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The bar's panel lost the keys, or a click went past it: a click in Cra closes the bar, another
+    /// app coming to the front doesn't (CommandBarClosing).
+    private func commandBarLostTheKeys() {
+        let event = NSApp.currentEvent
+        let clickAt = event?.type == .leftMouseDown ? event?.timestamp : nil
+        commandPanel.keysWent(owns: { [weak self] w in
             guard let self else { return false }
             return w === self.window || self.peeks.contains { $0.peekWindows.contains { $0 === w } }
         }, finish: { [weak self] holder in
-            guard let self, !self.commandBar.isOpen, CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
-            self.focusAfterCommandBar()
+            guard let self, self.commandBar.isOpen, !self.commandPanel.isKeyWindow else { return }
+            guard CommandBarClosing.closesBar(lostKeysTo: holder) else { self.commandBarWaitsForCra(); return }
+            self.commandBarClosingClick.panelClosed(byMouseDownAt: clickAt)
+            self.commandBarLostKeysTo = holder
+            self.commandBar.close()
         })
     }
 
@@ -4819,10 +4899,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
             return
         }
-        let event = NSApp.currentEvent
-        commandBarClosingClick.panelClosed(byMouseDownAt: event?.type == .leftMouseDown ? event?.timestamp : nil)
-        commandBarLostKeys = true
-        commandBar.close()
+        commandBarLostTheKeys()
     }
 
     // The sidebar header's toggle moves into the traffic lights' place while they are gone (Arc).

@@ -1,0 +1,31 @@
+# promise: #545
+# Text whose last dot-part is all digits is a search, as in Chrome: "3.14" or "v2.5" typed in ⌘T and
+# sent with Return opens the search engine's results, not https://3.14/ (#545). An address typed the
+# same way still opens as one. The rule is TypedURL.looksLikeURL (TypedURLTests); this checks the
+# command bar's Return goes through it.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "searchEngine": "duckduckgo"}
+cra://open?url=${PAGE}?n=start
+wait 2
+
+cra://commandbar?query=3.14
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+cra://debug?browserWindows=number
+expect-log Cra browser windows number: .*open=https://duckduckgo\.com/\?q=3\.14
+
+cra://commandbar?query=v2.5
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+cra://debug?browserWindows=version
+expect-log Cra browser windows version: .*open=https://duckduckgo\.com/\?q=v2\.5
+
+# An address still opens as one.
+cra://commandbar?query=${PAGE}?n=address
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+cra://debug?browserWindows=address
+expect-log Cra browser windows address: .*open=http://127\.0\.0\.1:[0-9]+/page\.html\?n=address

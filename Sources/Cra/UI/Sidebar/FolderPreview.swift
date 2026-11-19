@@ -25,6 +25,8 @@ final class FolderPreviewController {
     var extended = false
 
     var isOpen: Bool { panel?.isVisible == true && folderID != nil }
+    /// Scenarios: the open preview's content.
+    var preview: FolderPreviewView? { isOpen ? panel?.preview : nil }
 
     /// The list's hovered row changed (nil: the pointer left the rows).
     func hover(_ row: SidebarRowView?, in list: SpaceListView) {
@@ -229,8 +231,8 @@ enum FolderPreviewMetrics {
     static let corner: CGFloat = 10
     static let searchHeight: CGFloat = 48
     /// From the hairline under the search field to the first row.
-    static let listInset: CGFloat = 4
-    static let rowPitch: CGFloat = 45
+    static let listInset = FolderPreviewRows.listInset
+    static let rowPitch = FolderPreviewRows.rowPitch
     static let rowFill: CGFloat = 44
     static let rowCorner: CGFloat = 4
     static let sideInset: CGFloat = 4
@@ -351,6 +353,9 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
     private var items: [FolderPreviewItem] = []
     private var shown: [FolderPreviewItem] = []
     private var selected = 0
+    /// Scenarios: where the pointer rests, in window points, in place of the real one. It stays
+    /// until a scenario closes the preview, so a real pointer reopening it changes nothing.
+    private var debugPointerAt: NSPoint?
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: FolderPreviewMetrics.width, height: 200))
@@ -387,6 +392,8 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
         scroll.autohidesScrollers = true
         scroll.scrollerStyle = .overlay
         scroll.documentView = rowsView
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(listScrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         addSubview(scroll)
         // Arc: "No tabs matching that search 🤔", wrapping the emoji onto a second line.
         empty.stringValue = "No tabs matching that search 🤔"
@@ -429,6 +436,7 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
         self.items = items
         filter()
         scroll.contentView.scroll(to: .zero)
+        refreshHover()
     }
 
     func replaceItems(_ items: [FolderPreviewItem]) {
@@ -458,6 +466,7 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
         for (i, (r, item)) in zip(rows, shown).enumerated() { r.show(item, now: now, selected: i == selected) }
         empty.isHidden = !shown.isEmpty
         needsLayout = true
+        refreshHover()
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -523,11 +532,38 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { FolderPreviewController.shared.pointerEnteredPanel() }
-    override func mouseExited(with event: NSEvent) { FolderPreviewController.shared.pointerLeftPanel() }
+    override func mouseEntered(with event: NSEvent) {
+        FolderPreviewController.shared.pointerEnteredPanel()
+        refreshHover()
+    }
+
+    override func mouseMoved(with event: NSEvent) { refreshHover() }
+
+    override func mouseExited(with event: NSEvent) {
+        FolderPreviewController.shared.pointerLeftPanel()
+        refreshHover()
+    }
+
+    @objc private func listScrolled() { refreshHover() }
+
+    /// Lights the one row under the pointer, if any, and no other. The preview works it out whenever
+    /// the pointer moves or the list scrolls: rows that tracked the pointer themselves stayed lit as
+    /// the list scrolled under a still pointer, several at once (#544).
+    private func refreshHover() {
+        var row: Int?
+        if let w = window, w.isVisible {
+            let clip = scroll.contentView
+            let p = clip.convert(debugPointerAt ?? w.mouseLocationOutsideOfEventStream, from: nil)
+            if p.x >= clip.bounds.minX, p.x < clip.bounds.maxX {
+                row = FolderPreviewRows.row(atY: p.y - clip.bounds.minY, offset: clip.bounds.minY,
+                                            height: clip.bounds.height, count: rows.count)
+            }
+        }
+        for (i, r) in rows.enumerated() { r.isHovered = i == row }
+    }
 
     fileprivate func menu(for row: FolderPreviewRowView) -> NSMenu? {
         guard let i = rows.firstIndex(where: { $0 === row }), shown.indices.contains(i) else { return nil }
@@ -546,14 +582,34 @@ final class FolderPreviewView: NSView, NSTextFieldDelegate {
         MenuItems.add(m, "Archive") { c.archive(item.id) }
         return m
     }
+
+    // MARK: Scenarios
+
+    /// cra://debug?folderPreviewPointer=<n>: the pointer comes to rest on the middle of the nth row.
+    func debugPointer(onRow n: Int) {
+        guard rows.indices.contains(n) else { debugPointerAt = nil; return }
+        debugPointerAt = rows[n].convert(NSPoint(x: rows[n].bounds.midX, y: rows[n].bounds.midY), to: nil)
+        refreshHover()
+    }
+
+    /// cra://debug?folderPreviewScroll=<n>: the list scrolled n rows down, the pointer left where it is.
+    func debugScroll(rows n: Int) {
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: CGFloat(n) * FolderPreviewMetrics.rowPitch))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+
+    /// cra://debug?folderPreviewLit=<label>: the rows the pointer's highlight is on, and how far the
+    /// list is scrolled.
+    var debugLit: [Int] { rows.indices.filter { rows[$0].isHovered } }
+    var debugTop: CGFloat { scroll.contentView.bounds.minY }
 }
 
 private final class FlippedRowsView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// One tab in the preview: favicon, title and "15 hours ago". The pointer draws its own highlight
-/// beside the keyboard's (Arc shows both at once, in the same fill).
+/// One tab in the preview: favicon, title and "15 hours ago". The pointer's highlight (the preview
+/// sets it) shows beside the keyboard's (Arc shows both at once, in the same fill).
 final class FolderPreviewRowView: NSView {
     private weak var preview: FolderPreviewView?
     private let fill = CALayer()
@@ -563,7 +619,7 @@ final class FolderPreviewRowView: NSView {
     private let badge = CALayer()
     private var itemID: UUID?
     var isSelected = false { didSet { if isSelected != oldValue { refresh() } } }
-    private var isHovered = false { didSet { if isHovered != oldValue { refresh() } } }
+    var isHovered = false { didSet { if isHovered != oldValue { refresh() } } }
 
     init(preview: FolderPreviewView) {
         self.preview = preview
@@ -620,15 +676,6 @@ final class FolderPreviewRowView: NSView {
         title.frame = NSRect(x: m.textX - SidebarText.inset, y: top, width: right - m.textX + 2 * SidebarText.inset, height: th)
         age.frame = NSRect(x: m.textX - SidebarText.inset, y: top + th, width: right - m.textX + 2 * SidebarText.inset, height: ah)
     }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     override func mouseUp(with event: NSEvent) {
         guard let id = itemID, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }

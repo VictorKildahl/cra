@@ -2371,6 +2371,13 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   a tab is created: tabs there carry it equal to `createdAt` to the microsecond. Cra stamps a tab opened with
   `select: false` when it opens and keeps the window's current tab first (`SidebarStore.recentTabs`), scenario
   `tab-switcher-background-tab`.
+- **A split is one card** ([O live] Arc 1.172, 18 Nov 2026, 2× capture of a Blank Window with Delta, Gamma and an
+  Alpha | Beta split; issue #554). The switcher lists sidebar items: StorableSidebar.json gives a split its own
+  `timeLastActiveAt`. The thumbnail's rectangle becomes a frame filled #161616 (selected or not), each pane's own
+  thumbnail inside it 4 pt from its edges and 4 pt apart, as wide as the pane's share (146 + 145 px for 50/50),
+  corners ≈ 4.5. The row under it has only each pane's favicon, centred under its pane: no titles. Cra:
+  `RecentTabOrder.cards`, `SwitcherSplitLayout`; a split pane's thumbnail is taken in its place's shape
+  (`BrowserManager.snapshotAspect`); scenario `tab-switcher-split`.
 - **Keys:** ⌃Tab opens on card 1 and moves on; ⇧Tab, ← and → move too. All of them wrap at both ends. Releasing ⌃
   switches, Esc cancels (the tab stays). A tap (⌃ up 0.13 s after Tab) switches with no panel; the panel appeared
   0.18–0.26 s after the key, so there is a short show delay.
@@ -3491,9 +3498,21 @@ that waits 3 s before answering and then serves a page whose image takes 5 s.
   until the new page commits, as Chromium treats it as a new navigation.
 - Cra: LoadingIndicator (CraCore) has the numbers and the phase rule. CraBrowser.hasCommittedLoad is NO from each
   main-frame navigation (OnBeforeBrowse, not redirects) until OnLoadStart. LoadingIndicatorView draws it with Core
-  Animation; a tab coming to the front shows its own state at once, without the widening or the finish. With no
-  margin (edge to edge, fullscreen) there is no bar; on light themes it is black at the same opacities. It slides
-  with the card when the sidebar hides or shows.
+  Animation; a tab coming to the front shows its own state at once, without the widening or the finish. On light
+  themes it is black at the same opacities. It slides with the card when the sidebar hides or shows.
+- [O] Where the card fills the screen (Arc 1.172.2, 18 Nov 2026, GitHub #548): live Arc, a Blank Window over AX,
+  a reload of a local page that answers after 3 s and holds an image for 5 s, 2x window captures at 1–7 s. The bar
+  is in the same rows in every layout, 6–13 px (3–7 pt) below the window's top edge, 256 px wide, centred over the
+  card: in a window with the sidebar shown or hidden and in full screen with the sidebar shown it is in the 10 pt
+  margin; in full screen with the sidebar hidden (card fills the screen) it lies over the card's top, on the
+  toolbar, white at the same opacities over Arc's dark blue bar. Arc keeps the toolbar while the sidebar is hidden
+  (View ▸ Hide Toolbar left it there), so its bar is never over the page itself.
+- Cra (#548): CraCore `LoadingIndicator.frame(window:card:)` keeps it in the top 10 pt of the window over the
+  card's middle whatever the card does, and hides it only for a page in element full screen (not measured in
+  Arc). Cra can hide or float the toolbar with the card filling the window (edge to edge, full screen), so the bar
+  can lie on the page: `LoadingIndicator.lightInk(on:)` takes the ink from what is under it (margin: the theme;
+  toolbar or page: dark ink over a colour above 0.6 luminance, the toolbar's own rule). `cra://debug?windowState`
+  reports `loading=x,y,WxH ink= shown= phase=`; the `loading-bar-edge-to-edge` and `loading-bar-full-screen` scenarios check it.
 
 ## A long wait for the first response (Arc 1.172.1, 8 Nov 2026, issue #256, offline copy)
 Offline Arc (fake home, network limited to localhost), a new tab opened over AppleScript (`make new tab with
@@ -4350,7 +4369,8 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   #161C2F ring with no clearance, the capture menu 10 pt right of the ring, top level with it; its own place stays
   grey. On a 1688 × 963 pt page a 160 × 100 pt image's ring ran 623.5…791.5 pt, the 273 pt menu 801.5…1074.5.
 - Cra: Chromium 156 shows the same menu once cef-patches/context-menu-embedded-view.patch lets it show in Cra's
-  window. CraCEF's MakeArcMenu drops the QR code and video-frame search items, joins Translate to Save As…'s group,
+  window. CraCEF's MakeArcMenu drops the QR code and video-frame search items (the engine's BuildArcMenu also
+  Chrome's "Open in reading mode" and "Listen to this page", which Arc lacks, #563), joins Translate to Save As…'s group,
   puts Search first for a selection, turns Lens's "Search Image with Google" into "Search Google for Image", adds
   Open Link in Little Window and Capture Image… (ContentCapture.liftedLayout), and opens New Window / Incognito /
   Inspect in Cra's own windows and DevTools. Items Chromium has words for read in Chromium's language, as Arc's do

@@ -535,6 +535,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func settleSwitcher(_ switcher: TabSwitcherView) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        SyncedSidebar.readAhead()
         offerSyncCard(in: switcher)
         UIView.animate(spring: MobileMotion.tabRowSettle) {
             switcher.expansion = 0
@@ -671,6 +672,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         model.sharePromptSeen = { [weak self] in self?.settings.value.hasSeenSharePrompt ?? true }
         model.markSharePromptSeen = { [weak self] in self?.settings.update { $0.hasSeenSharePrompt = true } }
         model.showShareGuide = { [weak self] closed in self?.showShareGuide(closed: closed) }
+        model.showLastRead()
         let sheet = UIHostingController(rootView: SpacesView(model: model))
         sheet.view.backgroundColor = .clear
         CardSheet.present(sheet, from: topPresenter)

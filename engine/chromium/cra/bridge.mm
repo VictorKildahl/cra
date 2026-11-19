@@ -1172,9 +1172,11 @@ void BuildArcMenu(content::WebContents* contents, const content::ContextMenuPara
       model->InsertItemAt(at + 1, kMenuOpenLinkLittleWindow, u"Open Link in Little Window");
     }
   }
+  // Arc has no reading mode rows; Chrome's open its side panel in the page's hidden Chrome window (#563).
   for (int id : {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, IDC_CONTENT_CONTEXT_OPENLINKINPROFILE,
                  IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
-                 IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME, IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME}) {
+                 IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME, IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME,
+                 IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE, IDC_CONTENT_CONTEXT_LISTEN_TO_THIS_PAGE}) {
     while (std::optional<size_t> at = model->GetIndexOfCommandId(id)) {
       model->RemoveItemAt(*at);
     }
@@ -2572,7 +2574,15 @@ bool HandleDebugMethod(content::WebContents* contents,
          finalUpdate:result.final_update()];
 }
 
+// The page took focus: a click into it, or its window became key again. It becomes Chrome's active tab too, as
+// Cra's own focusing makes it: Chrome opens a page's file picker only for its Browser's active tab
+// (WebContentsImpl::RunFileChooser asks IsContentsActive) and closes one whose page stops being it. A click back
+// into a page from a Little Window's, or from another window's, left Chrome's active tab on that other page, and
+// every upload button (X's media button) did nothing. Only in the key window: the page the user is in.
 - (void)pageFocused {
+  if (_container.window.isKeyWindow) {
+    [self makeChromeActiveTab];
+  }
   [_delegate browserDidReceiveFocus:self];
 }
 

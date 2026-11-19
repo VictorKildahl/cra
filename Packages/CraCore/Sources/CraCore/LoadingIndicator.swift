@@ -1,5 +1,6 @@
 /// Arc's loading indicator, a bar at the top middle of the window chrome, in the margin above the
-/// page card. Measured from a screen recording of Arc 1.171, 2 Nov 2026 (60 fps, 1.4 px per pt):
+/// page card, or over the card's top where it fills the window (LoadingIndicatorPlacement, #548).
+/// Measured from a screen recording of Arc 1.171, 2 Nov 2026 (60 fps, 1.4 px per pt):
 /// - Waiting: the request is out and no response has committed. A 48 pt pill fades in over 0.7 s,
 ///   out over 0.65 s and stays off for 0.25 s, at 75 % white.
 /// - Loading: the page committed. The pill widens to a 130 pt track at 18 % white, and a 76 %

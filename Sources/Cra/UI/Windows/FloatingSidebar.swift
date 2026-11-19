@@ -88,11 +88,29 @@ final class FloatingSidebarController {
     deinit {
         poll?.invalidate()
         activation.forEach(NotificationCenter.default.removeObserver)
+        panelMoves.forEach(NotificationCenter.default.removeObserver)
         displayOptions.map(NSWorkspace.shared.notificationCenter.removeObserver)
     }
 
     private var poll: Timer?
     private var activation: [NSObjectProtocol] = []
+    /// Either panel moved or resized while on the window: the shadow and the window's outline follow (#550).
+    private var panelMoves: [NSObjectProtocol] = []
+
+    private func followMoves(of p: NSWindow) {
+        for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+            panelMoves.append(NotificationCenter.default.addObserver(forName: name, object: p, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.panelMoved() }
+            })
+        }
+    }
+
+    private func panelMoved() {
+        // While it docks the shadow stays put and fades; staging places it before the panels attach.
+        guard dock == nil, let p = panel, p.parent === window else { return }
+        clipToWindow()
+        placeShadow()
+    }
     /// Reduce transparency changes the panel's lift (GitHub #156).
     private var displayOptions: NSObjectProtocol?
 
@@ -233,15 +251,16 @@ final class FloatingSidebarController {
         let current = p.convertToScreen(slider.frame)
         // One panel holds both places, so each frame only moves the sidebar inside it.
         let room = current.union(docked).intersection(window.frame)
+        let from = current.offsetBy(dx: -room.minX, dy: -room.minY)
+        // Set first: the shadow stays where it is while it fades, not re-placed by the panel's resize.
+        dock = (from, docked.offsetBy(dx: -room.minX, dy: -room.minY), transitionGeneration)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for l in [slider.layer, shadowView.layer] { l?.removeAnimation(forKey: Self.slideKey) }
         p.setFrame(room, display: false)
         clipToWindow()
-        let from = current.offsetBy(dx: -room.minX, dy: -room.minY)
         slider.frame = from
         CATransaction.commit()
-        dock = (from, docked.offsetBy(dx: -room.minX, dy: -room.minY), transitionGeneration)
         return true
     }
 
@@ -395,8 +414,8 @@ final class FloatingSidebarController {
     }
 
     private func makeShadowPanel() -> NSPanel {
-        let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 600),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let p = FloatingSidebarShadowPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 600),
+                                           styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
@@ -409,19 +428,19 @@ final class FloatingSidebarController {
         shadowView.wantsLayer = true
         content.addSubview(shadowView)
         shadowCutout.fillRule = .evenOdd
+        followMoves(of: p)
         return p
     }
 
-    /// The shadow follows the sidebar's frame, inside the shadow panel.
+    /// The shadow follows the sidebar's frame, inside the shadow panel: from where both panels really
+    /// are, so a panel moved by anyone but the controller still has the shadow under the sidebar (#550).
     private func placeShadow() {
         let s = slider.frame, pad = Metrics.shadowPad
-        // The shadow panel starts lower than the sidebar's by its room below, as far as the window lets it,
-        // and on the right further left by its room there.
-        let below = panelFrame.minY - shadowPanelFrame.minY
-        let beside = panelFrame.minX - shadowPanelFrame.minX
+        let sidebarOrigin = panel?.frame.origin ?? panelFrame.origin
+        let shadowOrigin = shadowPanel?.frame.origin ?? shadowPanelFrame.origin
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        shadowView.frame = NSRect(x: s.minX + beside, y: s.minY + below, width: s.width, height: s.height)
+        shadowView.frame = s.offsetBy(dx: sidebarOrigin.x - shadowOrigin.x, dy: sidebarOrigin.y - shadowOrigin.y)
         if let l = shadowView.layer {
             l.shadowColor = NSColor.black.cgColor
             l.shadowOpacity = Metrics.shadowOpacity
@@ -558,6 +577,7 @@ final class FloatingSidebarController {
             reposition()
         }
         resizeHandle.onEnd = { [weak self] in self?.shell.resizeHandle.onEnd?() }
+        followMoves(of: p)
         return p
     }
 
@@ -738,6 +758,18 @@ final class FloatingSidebarController {
         return "none"
     }
 
+    /// For `cra://debug?windowState`: where the shadow's body lies against the sidebar on screen, its left,
+    /// bottom, right and top edges' distance from the sidebar's (`0,0,0,0` under it), then how far below the
+    /// window's top the sidebar rests, e.g. `0,0,0,0 top 5` (#550); `-` while it is in.
+    var shadowReadout: String {
+        guard isShown, let p = panel, p.parent === window, let s = shadowPanel else { return "-" }
+        let body = p.convertToScreen(slider.convert(slider.bounds, to: nil))
+        let cast = s.convertToScreen(shadowView.convert(shadowView.bounds, to: nil))
+        let d = [cast.minX - body.minX, cast.minY - body.minY, cast.maxX - body.maxX, cast.maxY - body.maxY]
+        return d.map { String(format: "%g", ($0 * 2).rounded() / 2) }.joined(separator: ",")
+            + String(format: " top %g", ((window.frame.maxY - body.maxY) * 2).rounded() / 2)
+    }
+
     /// Window moved or resized while floating.
     func reposition() {
         guard isShown, let p = panel else { return }
@@ -752,7 +784,19 @@ final class FloatingSidebarController {
     }
 }
 
-final class FloatingSidebarPanel: NSPanel {
+/// The sidebar's panels rest where the controller puts them, inside the browser window. AppKit's
+/// constraint keeps a window clear of the menu bar: it moves a panel 5 pt in from the screen's bottom and
+/// 10 pt shorter than the screen (the sidebar's in full screen) down 5 pt, and leaves the full-height
+/// shadow panel. On macOS 27.2 the full-screen sidebar rested 10 pt from the top with its shadow 5 pt
+/// above it, and the page showed between them as a halo (#550); 26.7 never asks for the constraint.
+class FloatingSidebarPanelBase: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+/// Carries the sidebar's shadow under the sidebar's panel, letting clicks through.
+final class FloatingSidebarShadowPanel: FloatingSidebarPanelBase {}
+
+final class FloatingSidebarPanel: FloatingSidebarPanelBase {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     /// Keep the stand-in traffic lights in colour, like the window's (CraWindow).

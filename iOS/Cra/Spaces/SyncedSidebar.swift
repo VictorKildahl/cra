@@ -5,13 +5,11 @@ import Foundation
 /// folder in its iCloud Documents container (Settings ▸ General ▸ Sync there); the phone reads
 /// it from the same container. `-CraSyncDir <folder>` points a test at a folder instead.
 enum SyncedSidebar {
-    enum State {
-        case spaces(SidebarDocument)
-        /// iCloud is there but the Mac has not synced anything into it yet.
-        case nothingSynced
-        /// No iCloud on this phone, or this build may not use it.
-        case unavailable
-    }
+    typealias State = MobileSpacesSheet.Read
+
+    /// What the last reads found, so the Spaces sheet opens on it while it reads again (#556).
+    /// Main thread only.
+    static var sheet = MobileSpacesSheet()
 
     private static var folder: URL? {
         if let path = LaunchOptions.value("CraSyncDir") {
@@ -27,14 +25,18 @@ enum SyncedSidebar {
     /// it, then it is downloaded) and it is read once it arrives, giving up after 30 seconds:
     /// iOS doesn't fetch another device's files until an app asks.
     static func load(_ done: @escaping (State) -> Void) {
+        let finish = { (state: State) in
+            sheet.remember(state, askedICloud: true)
+            done(state)
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             let state = read()
             DispatchQueue.main.async {
-                guard case .nothingSynced = state, LaunchOptions.value("CraSyncDir") == nil else { return done(state) }
+                guard case .nothingSynced = state, LaunchOptions.value("CraSyncDir") == nil else { return finish(state) }
                 ICloudFetch.shared.fetch(SettingsSync.sidebarName, timeout: 30) {
                     DispatchQueue.global(qos: .userInitiated).async {
                         let again = read()
-                        DispatchQueue.main.async { done(again) }
+                        DispatchQueue.main.async { finish(again) }
                     }
                 }
             }
@@ -48,10 +50,21 @@ enum SyncedSidebar {
         DispatchQueue.global(qos: .utility).async {
             let state = read()
             DispatchQueue.main.async {
+                sheet.remember(state, askedICloud: false)
                 if case .spaces = state { done(true) } else { done(false) }
             }
         }
     }
+
+    /// Reads the Mac's Spaces ahead of the sheet's first opening, which then shows them at once
+    /// (#556). Called as the tab row, which holds the Spaces button, comes up.
+    static func readAhead() {
+        guard sheet.opening == nil, !readingAhead else { return }
+        readingAhead = true
+        hasSpaces { _ in readingAhead = false }
+    }
+
+    private static var readingAhead = false
 
     /// A made-up Mac sidebar for tests and screenshots: "Personal" with a pinned tab, a folder
     /// holding one, and a Today tab; and an empty "Play".
@@ -79,6 +92,8 @@ enum SyncedSidebar {
     }
 
     private static func read() -> State {
+        // `-CraSyncDelay <seconds>`: a read as slow as a phone's iCloud can be, for a test.
+        if let delay = LaunchOptions.value("CraSyncDelay").flatMap(Double.init) { Thread.sleep(forTimeInterval: delay) }
         if LaunchOptions.value("CraSyncDir") == "demo" { return .spaces(demo()) }
         guard let folder else { return .unavailable }
         let file = folder.appendingPathComponent(SettingsSync.sidebarName)

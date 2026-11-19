@@ -40,6 +40,15 @@ final class SpaceColumnView: NSView {
 
     override var isFlipped: Bool { true }
 
+    // A press between the favorites, the header and the list (or in the favorites' gaps, which pass
+    // it on) moves the window once it moves 3 pt, as the list's empty space does (#547).
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    private var press = WindowDragGesture(source: "sidebar column")
+    override func mouseDown(with event: NSEvent) { press.begin(event) }
+    override func mouseDragged(with event: NSEvent) { press.drag(event) }
+    override func mouseUp(with event: NSEvent) { _ = press.finish() }
+
     private func relayout(animated: Bool) {
         guard animated, window != nil else { needsLayout = true; return }
         NSAnimationContext.runAnimationGroup { ctx in

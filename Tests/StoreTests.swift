@@ -60,6 +60,7 @@ enum StoreTests {
         folderSymbols()
         moveTabToSpace()
         folderPeek()
+        folderPeekAfterClosing()
         collapsedPinnedPeek()
         closeSuccessor()
         favoritesEmptyState()
@@ -98,6 +99,7 @@ enum StoreTests {
         backToReferrer()
         recentTabsTakeBackgroundTabs()
         recentTabsInAllSpacesGoBack()
+        recentCardsKeepSplitsWhole()
         incognitoSpaceKeepsItsContext()
         print("Store: \(checks) checks passed")
     }
@@ -1811,6 +1813,37 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
+    // promise: #557
+    /// The steps of #557: a tab open inside an open folder, the folder closed, another tab picked. The
+    /// tab stays listed under the closed folder, as in Arc; opening the folder or ⌘W takes it out.
+    @MainActor
+    private static func folderPeekAfterClosing() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let folder = store.createFolder(named: "tools", in: store.focusedSpace.pinnedContainerID)
+        let pdf = store.createTab(url: "https://example.org/pdf", pinned: true, select: false, parent: folder.id)
+        let cobalt = store.createTab(url: "https://example.org/cobalt", pinned: true, select: false, parent: folder.id)
+        let elsewhere = store.createTab(url: "https://example.net/", select: false)
+        store.setExpanded(folder.id, true)
+        store.selectTab(pdf.id)
+        expect(store.peekedTabs(in: folder.id).isEmpty, "an open folder keeps nothing to peek")
+
+        store.setExpanded(folder.id, false)
+        expect(store.peekedTabs(in: folder.id).map(\.id) == [pdf.id], "closing it keeps only the open tab in sight")
+        store.selectTab(elsewhere.id)
+        expect(store.peekedTabs(in: folder.id).map(\.id) == [pdf.id], "picking a tab outside it keeps the tab there (Arc)")
+        expect(!store.isExpanded(folder.id) && !store.peekedTabs(in: folder.id).contains { $0.id == cobalt.id },
+               "the folder stays closed and its other tabs stay hidden")
+
+        store.setExpanded(folder.id, true)
+        store.setExpanded(folder.id, false)
+        expect(store.peekedTabs(in: folder.id).isEmpty, "opening and closing it while another tab is open drops the peek")
+        store.selectTab(pdf.id)
+        store.selectTab(elsewhere.id)
+        _ = store.resetPinnedTab(pdf.id)
+        expect(store.peekedTabs(in: folder.id).isEmpty, "closing the tab (⌘W) takes it out")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
     /// A collapsed pinned section keeps the pinned tab you were last on in sight once you pick a
     /// favorite or a Today tab (Arc's peekedPinnedSidebarItemID; X DM 6 Nov 2026: Reddit vanished
     /// from under the space name as soon as YouTube was picked).
@@ -3295,6 +3328,34 @@ enum StoreTests {
         clock.advance(by: 1)
         store.selectTab(link.id)
         expect(store.recentTabs(in: sid, limit: .max) == [link.id, source.id, older.id], "on it, the next tab is the one it came from")
+    }
+
+    // promise: #554
+    /// ⌃Tab with a split (#554): the split is one card with its panes in order, not a card per
+    /// pane, and picking it goes back to the pane used last.
+    @MainActor
+    private static func recentCardsKeepSplitsWhole() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let sid = store.createSpace(title: "Splits", emoji: "🪟").id
+        let left = store.createTab(url: "https://example.com/left", in: sid)
+        clock.advance(by: 1)
+        let right = store.createTab(url: "https://example.com/right", in: sid)
+        clock.advance(by: 1)
+        guard let split = store.createSplit(with: [left.id, right.id]) else { return expect(false, "two tabs make a split") }
+        clock.advance(by: 1)
+        store.selectTab(right.id)
+        clock.advance(by: 1)
+        let solo = store.createTab(url: "https://example.com/solo", in: sid)
+        clock.advance(by: 1)
+        store.selectTab(solo.id)
+        let cards = store.recentCards(in: sid, limit: .max)
+        expect(cards.map(\.id) == [solo.id, split.id], "the split is one card after the tab on screen")
+        expect(cards.last?.panes == [left.id, right.id] && cards.last?.isSplit == true, "holding both panes in pane order")
+        expect(store.recentTabs(in: sid, limit: .max) == [solo.id, right.id], "a tap goes to the pane used last")
+        clock.advance(by: 1)
+        store.selectTab(right.id)
+        expect(store.recentCards(in: sid, limit: .max).map(\.id) == [split.id, solo.id], "on the split, the next card is the tab it came from")
     }
 
     /// Every store in this process loads what earlier tests' stores saved to the one data folder, with

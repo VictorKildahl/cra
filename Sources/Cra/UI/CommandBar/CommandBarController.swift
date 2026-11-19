@@ -348,9 +348,9 @@ final class CommandBarController {
 
 /// Borderless floating panel that can take keyboard focus.
 final class CommandBarPanel: NSPanel {
-    /// The panel lost the keys and that closed the bar: tells `finish` which window holds them (#429).
-    /// A click says at once, so a click on the bar's own window still focuses its page before the
-    /// click lands; anything else (⌘`, the Window menu) is read once AppKit has handed the keys over.
+    /// The panel lost the keys: tells `finish` which window holds them, which decides whether the bar
+    /// closes (#551) and where the keys go (#429). A click says at once, so a click on the bar's own
+    /// window still closes the bar and focuses its page before the click lands; anything else (⌘`, the Window menu) is read once AppKit has handed the keys over.
     /// `owns` is true for the bar's window and the windows that belong to it (its page, its Peek).
     @MainActor
     func keysWent(owns: @escaping (NSWindow) -> Bool, finish: @escaping (CommandBarClosing.KeyHolder) -> Void) {

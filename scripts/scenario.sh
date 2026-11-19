@@ -50,7 +50,8 @@
 #                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   requires screen
 #   port <n>                   serve ${PAGE} on a fixed port (snapshots show the address)
-# The fixture server answers an address with ?delay=<s> (or &delay=<s>) that many seconds late.
+# The fixture server answers an address with ?delay=<s> (or &delay=<s>) that many seconds late, and /auth with an
+# HTTP sign-in (401 Basic) until the browser sends a user name and password.
 # ${FIXTURES}, ${ORIGIN} (that server's http://127.0.0.1:<port>, which also answers a POST with 204,
 # logs it to server.log and keeps its body in posts/), ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
 # for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
@@ -161,7 +162,26 @@ class Server(http.server.ThreadingHTTPServer):
 class Handler(http.server.SimpleHTTPRequestHandler):
     # ?delay=<s> anywhere in the address: the answer (a page, or a 404) comes that many seconds late.
     def do_GET(self):
-        import re, time
+        import base64, html, re, time
+        # /auth: a page behind a user name and password (HTTP Basic), as a router or an intranet asks for one:
+        # 401 until the browser sends credentials, then a page titled with the user it signed in as.
+        if self.path.startswith("/auth"):
+            sent = self.headers.get("Authorization", "")
+            if not sent.startswith("Basic "):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", "Basic realm=\"Cra fixture\"")
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<title>needs sign-in</title>401")
+                return
+            user = base64.b64decode(sent[6:]).decode("utf-8", "replace").split(":", 1)[0]
+            body = f"<title>signed in as {html.escape(user)}</title>ok".encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         m = re.search(r"[?&]delay=([0-9.]+)", self.path)
         if m:
             time.sleep(float(m.group(1)))
@@ -171,7 +191,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         kind = self.headers.get("Content-Type")
-        print(f"POST {self.path} {len(body)} bytes {kind}", flush=True)
+        # The install check-in is three short fields: logged whole, so a scenario can expect its id.
+        shown = " " + " ".join(body.decode("utf-8", "replace").split()) if self.path.endswith("/checkin") else ""
+        print(f"POST {self.path} {len(body)} bytes {kind}{shown}", flush=True)
         os.makedirs(sys.argv[3], exist_ok=True)
         name = self.path.strip("/").replace("/", "-")
         open(os.path.join(sys.argv[3], f"{name}-{len(os.listdir(sys.argv[3])) + 1}.json"), "wb").write(body)

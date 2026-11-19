@@ -10,6 +10,19 @@ struct CommandBarClosingTests {
         #expect(!CommandBarClosing.lostKeys(to: .otherWindow).barsWindowTakesKeys)
     }
 
+    /// GitHub #551: ⌘T, some typing, another app and back: the bar was gone with what was typed.
+    /// Arc 1.173.1 (measured 18 Nov 2026) keeps it open, its text kept and its field focused again.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/551"))
+    func leavingCraKeepsTheBarOpen() {
+        #expect(!CommandBarClosing.closesBar(lostKeysTo: .none))
+    }
+
+    /// A click on the bar's window or another Cra window still closes it.
+    @Test func aClickInCraClosesTheBar() {
+        #expect(CommandBarClosing.closesBar(lostKeysTo: .barsWindow))
+        #expect(CommandBarClosing.closesBar(lostKeysTo: .otherWindow))
+    }
+
     /// A pick or Escape hands the keys back to the window's page, as before.
     @Test func closedByTheBarFocusesItsWindow() {
         #expect(CommandBarClosing.byBar.barsWindowTakesKeys)

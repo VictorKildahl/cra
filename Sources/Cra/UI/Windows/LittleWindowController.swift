@@ -86,15 +86,13 @@ enum LittleMetrics {
 }
 
 /// Arc renders Little Arc with the default profile's dark palette whatever the
-/// focused space's theme is (observed with the light "Victor" space focused).
+/// focused space's theme is (observed with the light "Victor" space focused; kept for #549).
 enum LittlePalette {
-    /// The strip, left to right: one gradient in every space (the same pixels after switching spaces).
-    /// Arc 1.172.1, 10 Nov 2026, window captures at 2x, pixels read along the strip's top edge of a
-    /// 1185 pt window: #242438 at the left end, #26243A, #292839 and #2C2439 between, #312339 at the
-    /// right. The values wobble by a few units rather than rise, so two stops stay within them; 1.168's
-    /// flat #0C091C is gone (#329).
-    static let stripLeft = NSColor(srgbRed: 0x24 / 255, green: 0x24 / 255, blue: 0x38 / 255, alpha: 1)
-    static let stripRight = NSColor(srgbRed: 0x31 / 255, green: 0x23 / 255, blue: 0x39 / 255, alpha: 1)
+    /// The strip, left to right: one gradient in every space (CraCore LittleStripTones, #329 #549).
+    /// The measured values wobble by a few units rather than rise, so two stops stay within them;
+    /// 1.168's flat #0C091C is gone (#329).
+    static let stripLeft = NSColor(LittleStripTones.stripLeft)
+    static let stripRight = NSColor(LittleStripTones.stripRight)
     /// The address pill is a lighter wash over the strip (about #38394A on the left, #43394B on the
     /// right, which is white at 9–10 %), so it follows the gradient. The hover is not measured.
     static let pill = Color.white.opacity(0.09)
@@ -144,9 +142,11 @@ enum LittlePalette {
 
     /// The space name in "Open in Victor": the target theme's light foreground
     /// (Arc: semanticColorPalette.dark.foregroundPrimary; Victor → #FCEDBC).
-    static func spaceName(_ theme: SpaceTheme) -> Color {
-        let theme = theme.shown
-        return Color(hex: theme.accent ?? theme.colors.first ?? "#FFFFFF").blendedToward(.white, 0.72)
+    static func spaceName(_ theme: SpaceTheme) -> Color { Color(tones(theme).spaceName) }
+
+    /// The strip's colours for the space "Open in" names (CraCore LittleStripTones).
+    static func tones(_ theme: SpaceTheme) -> LittleStripTones {
+        LittleStripTones(target: theme, systemDark: SystemAppearance.shared.isDark)
     }
 }
 
@@ -208,8 +208,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private var commandPanel: CommandBarPanel!
     private var commandHost: CommandBarView!
     private var commandBarOpenedAt = Date.distantPast
-    /// Set while the bar closes because its panel lost the keys (#429).
-    private var commandBarLostKeys = false
+    /// The window that took the keys from the bar and closed it (#429); nil when the bar closed itself.
+    private var commandBarLostKeysTo: CommandBarClosing.KeyHolder?
     private var commandObserving = false
     private var popup: LittlePopupPanel?
     /// The "Open in" menu last closed because Cra lost the keyboard to another app (cra://debug?littleMenu).
@@ -357,6 +357,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandPanel.delegate = self
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.commandBarCraCameBack() }
+        }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
         commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .profiles) }
         commandBar.onNoticeLearnMore = { [weak self] in self?.app.openInNormalWindow(MainWindowController.privacyPage) }
@@ -1259,7 +1262,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let bar = commandBar
         // Not tied to self: the window may be closing (promotion), and the panel must still go.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
-            if !bar.isOpen { panel.orderOut(nil) }
+            if !bar.isOpen { panel.orderOut(nil); panel.level = .floating }
         }
         guard window?.isVisible == true else { return }
         // Once the bar has closed, the toolbar it held out may go (#435).
@@ -1273,16 +1276,44 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             return
         }
         // Lost to another window, the keys stay there (#429).
-        guard commandBarLostKeys else { window?.makeKeyAndOrderFront(nil); focusPage(); return }
-        commandBarLostKeys = false
-        panel.keysWent(owns: { [weak self] w in
+        let lostTo = commandBarLostKeysTo
+        commandBarLostKeysTo = nil
+        let closing: CommandBarClosing = lostTo.map { .lostKeys(to: $0) } ?? .byBar
+        guard closing.barsWindowTakesKeys else { return }
+        window?.makeKeyAndOrderFront(nil)
+        focusPage()
+    }
+
+    /// Another app came to the front with the bar open: it stays with what was typed (#551, as in Arc),
+    /// below the other app's windows rather than floating over them.
+    private func commandBarWaitsForCra() {
+        if NSApp.isActive { commandPanel.makeKeyAndOrderFront(nil); return }
+        commandPanel.level = .normal
+    }
+
+    /// Cra is in front again: the bar that waited takes the keys back. A click that brought Cra back
+    /// closes it, as any click outside the bar does (MainWindowController.commandBarCraCameBack).
+    private func commandBarCraCameBack() {
+        guard commandBar.isOpen, !isCard, window?.isVisible == true, let panel = commandPanel else { return }
+        panel.level = .floating
+        if let e = NSApp.currentEvent, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(e.type), e.window !== panel {
+            commandBarLostTheKeys()
+            return
+        }
+        if !panel.isKeyWindow { panel.makeKeyAndOrderFront(nil) }
+    }
+
+    /// The bar's panel lost the keys, or a click went past it: a click in Cra closes the bar, another
+    /// app coming to the front doesn't (CommandBarClosing).
+    private func commandBarLostTheKeys() {
+        commandPanel.keysWent(owns: { [weak self] w in
             guard let self else { return false }
             return w === self.window || w === self.popup || self.peekWindows.contains { $0 === w }
         }, finish: { [weak self] holder in
-            guard let self, !self.commandBar.isOpen, self.window?.isVisible == true,
-                  CommandBarClosing.lostKeys(to: holder).barsWindowTakesKeys else { return }
-            self.window?.makeKeyAndOrderFront(nil)
-            self.focusPage()
+            guard let self, self.commandBar.isOpen, !self.commandPanel.isKeyWindow else { return }
+            guard CommandBarClosing.closesBar(lostKeysTo: holder) else { self.commandBarWaitsForCra(); return }
+            self.commandBarLostKeysTo = holder
+            self.commandBar.close()
         })
     }
 
@@ -1901,8 +1932,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
-        commandBarLostKeys = true
-        commandBar.close()
+        commandBarLostTheKeys()
     }
 
     // MARK: CraBrowserDelegate
@@ -2703,8 +2733,18 @@ final class LittleToolbarView: NSView {
     /// The magnifier, or the open padlock for a page that isn't served over https (#330).
     private let search = NSImageView()
     private var isInsecure = false
-    /// For `cra://debug?littleShown`: the padlock and the pill's text.
-    var debugReadout: String { "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)" }
+    /// For `cra://debug?littleShown`: the strip's gradient ends and the space name's colour as drawn
+    /// (#549), the padlock and the pill's text.
+    var debugReadout: String {
+        func hex(_ c: Any?) -> String {
+            guard let c, CFGetTypeID(c as CFTypeRef) == CGColor.typeID else { return "-" }
+            return NSColor(cgColor: c as! CGColor).map { Color(nsColor: $0).hexString } ?? "-"
+        }
+        let label = openLabel.attributedStringValue
+        let name = label.length > 0 ? label.attribute(.foregroundColor, at: label.length - 1, effectiveRange: nil) as? NSColor : nil
+        return "gradient=\(hex(gradient.colors?.first))-\(hex(gradient.colors?.last)) name=\(name.map { Color(nsColor: $0).hexString } ?? "-") "
+            + "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)"
+    }
     private let urlLabel = NSTextField.sidebarLabel(size: 13)
     private let puzzle = LittleIconView(symbol: "puzzlepiece.extension", size: 15)
     private let link = LittleIconView(symbol: "link", size: 14)
@@ -2726,7 +2766,6 @@ final class LittleToolbarView: NSView {
         self.store = store
         super.init(frame: .zero)
         wantsLayer = true
-        gradient.colors = [LittlePalette.stripLeft.cgColor, LittlePalette.stripRight.cgColor]
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.insertSublayer(gradient, at: 0)
@@ -2803,11 +2842,16 @@ final class LittleToolbarView: NSView {
         profileChip.isHidden = profile == nil
         profileChip.name = profile ?? ""
         profileChip.hovered = hover == .profile
+        let tones = LittlePalette.tones(space.theme)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.colors = [NSColor(tones.left).cgColor, NSColor(tones.right).cgColor]
+        CATransaction.commit()
         let openTitle = SpaceMenuTitle.named(space.title, prefix: "Open in ")
         let text = NSMutableAttributedString(string: "Open in ", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium),
                                                                              .foregroundColor: NSColor(LittlePalette.label)])
         text.append(NSAttributedString(string: openTitle.displayedName, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
-                                                                         .foregroundColor: NSColor(LittlePalette.spaceName(space.theme))]))
+                                                                         .foregroundColor: NSColor(tones.spaceName)]))
         openLabel.attributedStringValue = text
         openButton.toolTip = "Open this page in \(space.title) as a tab (⌘O)"
         openPart.layer?.backgroundColor = hover == .open ? NSColor(LittlePalette.buttonHover).cgColor : nil

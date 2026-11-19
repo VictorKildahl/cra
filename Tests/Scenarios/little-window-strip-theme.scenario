@@ -1,0 +1,21 @@
+# promise: #549
+# The Little Window's strip is Arc's: Little Arc draws the same dark gradient in every space whatever
+# its theme (1.168 with a yellow space focused; 1.172.1, the same pixels after switching spaces, #329).
+# Only the space's name in "Open in <Space>" takes its colour. #549 asked for a green-teal space's
+# theme on the strip; it stays as Arc has it (CraCore LittleStripTones).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Work","emoji":"🚀","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#6E9A72","#2E7A78"],"intensity":0.7,"noise":0.1,"appearance":"light"}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Home","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#F8D558"],"intensity":0.6,"noise":0.1,"appearance":"light"}}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+pace 0.5
+
+# Opened from Work, a green-teal space: Arc's strip, and "Work" in its green.
+cra://debug?externalURL=${PAGE}?n=work
+wait 2
+cra://debug?littleShown=work
+expect-log little shown work: windows=1 space=Work .* gradient=#242438-#312339 name=#D6E3D8 padlock=
+
+# Picked Home, a yellow space: the same strip, and "Home" in its yellow.
+cra://debug?littleCommit=home
+expect-log little commit home: Switch to Home
+cra://debug?littleShown=home
+expect-log little shown home: windows=1 space=Home .* gradient=#242438-#312339 name=#FDF3D0 padlock=

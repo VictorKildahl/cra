@@ -1,0 +1,46 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
+index 7dbf9fb..10baa52 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
++++ b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
+@@ -45,6 +45,8 @@ if (!is_android) {
+       "//components/printing/browser",
+       "//content/public/browser",
+       "//ui/base",
++      "//ui/views",
++      "//ui/views/controls/webview",
+     ]
+     if (use_aura) {
+       deps += [ "//chrome/browser/ui:overscroll_pref_manager" ]
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+index b01fedd..6c7715f 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -125,6 +125,8 @@
+ #include "ui/display/display.h"
+ #include "ui/display/screen.h"
+ #include "ui/display/types/display_constants.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
++#include "ui/views/widget/widget.h"
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+ DEFINE_USER_DATA(BrowserWebContentsDelegate);
+@@ -1085,6 +1087,19 @@ content::WebContents* BrowserWebContentsDelegate::GetResponsibleWebContents(
+ }
+ 
+ std::optional<gfx::Rect> BrowserWebContentsDelegate::GetWindowBoundsInScreen() {
++  // Cra: the window of a Browser that holds a profile's pages (cra_hosted_page.h) is never seen and only a
++  // strip along the top of Cra's window, while each page shows in Cra's own window. Chrome's file pickers ask
++  // for a window of at least 400x300 (WebContentsBasedCanceller::IsWindowTooSmall, crbug.com/479258455), and
++  // took the strip for the page's window: every upload button did nothing. The page in front, where Cra
++  // shows it, stands in for the window (a picker opens only for the active tab).
++  views::Widget* widget =
++      views::Widget::GetWidgetForNativeWindow(window_->GetNativeWindow());
++  if (widget && widget->GetNativeWindowProperty(views::kCraPageHostWindow)) {
++    if (content::WebContents* contents =
++            browser_->GetTabStripModel()->GetActiveWebContents()) {
++      return contents->GetContainerBounds();
++    }
++  }
+   // Note that `GetBounds` here returns the screen coordinate bounds
+   // from the browser widget. This is not to be confused with
+   // `views::View::bounds()` which returns parent-relative bounds.

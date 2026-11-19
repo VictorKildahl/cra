@@ -1,11 +1,13 @@
 #!/bin/bash
 # Makes a release the Stable channel's (GitHub #476, docs/release.md "Channels"):
-#   scripts/promote.sh 0.1.46            rewrite the feeds on the latest release and set scripts/stable-version
+#   scripts/promote.sh 0.1.46            rewrite the feeds on the latest release, set scripts/stable-version and
+#                                        commit it with scripts/feed-counts.tsv (push main afterwards)
 #   scripts/promote.sh 0.1.46 --dry-run  write them to build/promote and upload nothing
 # The latest GitHub release carries the feeds every Cra reads (releases/latest/download/...): appcast.xml
 # (the newest release for engine builds, then Stable) and appcast-stable.xml (Stable alone), each per CPU.
 # Promoting rewrites both from the two releases' own appcasts, so the signatures stay the ones the releases
-# were signed with. Commit scripts/stable-version afterwards: the next release carries Stable forward from it.
+# were signed with. The next release carries Stable forward from scripts/stable-version, so push the commit.
+# Uploading over the feeds starts their download counts over, so their counts go to scripts/feed-counts.tsv first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="${1:?usage: scripts/promote.sh <version> [--dry-run]}"
@@ -33,10 +35,23 @@ for SUFFIX in "" "-intel"; do
     "$WORK/stable/appcast$SUFFIX.xml" "$VERSION"
 done
 
+# Replacing a feed starts its download count over, and those counts are the update checks the daily-users
+# estimate reads: keep them in scripts/feed-counts.tsv before the upload.
+COUNTS="$(CRA_REPO="$REPO" scripts/feed-counts.sh "$LATEST")"
 if [ "$DRY" = "--dry-run" ]; then
-  echo "Dry run: feeds in $OUT, nothing uploaded."
+  printf '%s\n' "$COUNTS"
+  echo "Dry run: feeds in $OUT, nothing uploaded, counts above not kept."
   exit 0
 fi
+printf '%s\n' "$COUNTS" >> scripts/feed-counts.tsv
 gh release upload -R "$REPO" "$LATEST" --clobber "$OUT"/appcast*.xml
 printf '%s\n' "$VERSION" > scripts/stable-version
-echo "Stable is Cra $VERSION (feeds on $LATEST). Commit scripts/stable-version."
+# Committed here, those two files only (a shared checkout may hold other work), so the counts and the
+# Stable version can't be left behind. Pushing stays yours: the next release reads stable-version from main.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git commit -q -m "Stable is Cra $VERSION" -m "scripts/promote.sh: feeds on $LATEST; their download counts before the upload are in scripts/feed-counts.tsv." \
+    -- scripts/stable-version scripts/feed-counts.tsv
+  echo "Stable is Cra $VERSION (feeds on $LATEST), committed as $(git rev-parse --short HEAD). Push main before the next release."
+else
+  echo "Stable is Cra $VERSION (feeds on $LATEST). Commit scripts/stable-version and scripts/feed-counts.tsv."
+fi

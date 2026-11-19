@@ -1,0 +1,24 @@
+# promise: #574
+# A page behind an HTTP user name and password (a router, a printer, an intranet: Basic, Digest, NTLM)
+# shows Chrome's sign-in prompt over the page, and signing in loads it. The prompt hangs on the hidden
+# Browser window, a 1 pt strip along the top of Cra's window since 0.1.49 (#346); #574 asked whether it
+# survived that. It did on engine -25: this keeps it so. (64c8a17b had made CEF Cra leave the prompt to
+# Chrome instead of an error page.) The fixture server's /auth answers 401 until it gets credentials, then
+# names the user in the title.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/auth?n=router
+expect-log "GET /auth\?n=router HTTP/1.1" 401
+wait 2
+cra://debug?pageDialogs=sign-in
+expect-log page dialog sign-in: chrome [0-9]+x[0-9]+ at=page front=1 .*buttons=.*Cancel.* fields=2
+cra://debug?pageDialogs=signed-in&fill=ada,secret&press=Sign%20In
+expect-log page dialogs signed-in: filled 2 of 2
+expect-log page dialogs signed-in: pressed Sign In
+expect-log "GET /auth\?n=router HTTP/1.1" 200
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page '+document.title"}
+expect-log "value":"page signed in as ada"
+reject-log fault:

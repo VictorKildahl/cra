@@ -1,0 +1,62 @@
+diff --git a/extensions/browser/webstore_installer.cc b/extensions/browser/webstore_installer.cc
+--- a/extensions/browser/webstore_installer.cc
++++ b/extensions/browser/webstore_installer.cc
+@@ -56,6 +56,7 @@
+ #include "extensions/common/extension_urls.h"
+ #include "extensions/common/manifest_constants.h"
+ #include "extensions/common/manifest_handlers/shared_module_info.h"
++#include "extensions/common/mojom/manifest.mojom-shared.h"
+ #include "extensions/common/switches.h"
+ #include "extensions/strings/grit/extensions_strings.h"
+ #include "net/base/url_util.h"
+@@ -305,6 +306,14 @@ void WebstoreInstaller::OnExtensionInstalled(
+     bool is_update) {
+   CHECK(ExtensionsBrowserClient::Get()->IsSameContext(browser_context_,
+                                                       browser_context));
++  // Cra: only the store's own install (INTERNAL) is this installer's. A copy of
++  // the same extension loaded from a folder (--load-extension, or that copy
++  // reloading) is not: taking it for one reported success while the download
++  // was still under way, and the download's next step reported a failure on
++  // top (CHECK(failure_callback_), a Cra 0.1.48 crash report).
++  if (extension->location() != mojom::ManifestLocation::kInternal) {
++    return;
++  }
+   if (pending_modules_.empty()) {
+     return;
+   }
+@@ -510,6 +519,12 @@ void WebstoreInstaller::StartDownload(const ExtensionId& extension_id,
+                                       const base::FilePath& file) {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+ 
++  // Cra: the install already ended (ReportSuccess or ReportFailure ran while
++  // the download path was being made): nothing left to download.
++  if (!success_callback_ && !failure_callback_) {
++    return;
++  }
++
+   if (file.empty()) {
+     ReportFailure(kDownloadDirectoryError, FAILURE_REASON_OTHER);
+     return;
+@@ -672,6 +687,11 @@ void WebstoreInstaller::StartCrxInstaller(const DownloadItem& download) {
+ 
+ void WebstoreInstaller::ReportFailure(const std::string& error,
+                                       FailureReason reason) {
++  // Cra: an install reports once; a late second report does nothing (it used
++  // to fail this CHECK and Release() a second time).
++  if (!success_callback_ && !failure_callback_) {
++    return;
++  }
+   CHECK(failure_callback_);
+   std::move(failure_callback_).Run(id_, error, reason);
+   success_callback_ = base::NullCallback();
+@@ -685,6 +705,10 @@ void WebstoreInstaller::ReportFailure(const std::string& error,
+ }
+ 
+ void WebstoreInstaller::ReportSuccess() {
++  // Cra: an install reports once (see ReportFailure).
++  if (!success_callback_ && !failure_callback_) {
++    return;
++  }
+   CHECK(success_callback_);
+   std::move(success_callback_).Run(id_);
+   failure_callback_ = base::NullCallback();

@@ -114,6 +114,46 @@ struct SharingTests {
         #expect(try ModelFixtureTests.decoder.decode(SharingState.self, from: Data("{}".utf8)) == SharingState())
     }
 
+    // MARK: - Install count
+
+    /// Every released Cra checks in once a day with its install id, so crabrowser.app counts each
+    /// Mac once: exact daily, weekly and monthly users. Not a setting: sharing toggles leave it alone.
+    @Test func checkInGoesToCrabrowserApp() {
+        #expect(Sharing.checkInURL(base: nil).absoluteString == "https://crabrowser.app/api/checkin")
+        #expect(Sharing.checkInURL(base: "http://127.0.0.1:9999").absoluteString == "http://127.0.0.1:9999/api/checkin")
+    }
+
+    @Test func theInstallIDIsMadeOnceAndKept() {
+        let first = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+        let second = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+        var state = SharingState()
+        #expect(InstallCheckIn.installID(in: &state, make: { first }) == first.uuidString)
+        #expect(InstallCheckIn.installID(in: &state, make: { second }) == first.uuidString)
+        #expect(state.installID == first.uuidString)
+    }
+
+    /// The id lives in sharing.json beside the stats' date, and a file from before it loads with none.
+    @Test func theInstallIDIsKeptInSharingJSON() throws {
+        let state = SharingState(statsSentAt: nil, crashesSeenUntil: nil,
+                                 installID: "11111111-1111-4111-8111-111111111111", checkInSentAt: Date(timeIntervalSince1970: 86400))
+        #expect(try ModelFixtureTests.roundTrips(state))
+        let old = try ModelFixtureTests.decoder.decode(SharingState.self, from: Data(#"{"statsSentAt": "2026-11-09T08:30:00Z"}"#.utf8))
+        #expect(old.installID == nil)
+        #expect(old.checkInSentAt == nil)
+    }
+
+    /// The id, the version and the chip: nothing about the Mac, its user or how Cra is used.
+    @Test func aCheckInHoldsOnlyTheIDVersionAndChip() throws {
+        let checkIn = InstallCheckIn(id: "11111111-1111-4111-8111-111111111111", version: "0.1.49", arch: "arm64")
+        let json = try #require(JSONSerialization.jsonObject(with: checkIn.json()) as? [String: String])
+        #expect(json == ["id": "11111111-1111-4111-8111-111111111111", "version": "0.1.49", "arch": "arm64"])
+    }
+
+    @Test(arguments: days)
+    func aMacChecksInOnceADay(lastSent: Double?, now: Double, due: Bool) {
+        #expect(InstallCheckIn.isDue(lastSent: lastSent.map { Date(timeIntervalSince1970: $0) }, now: Date(timeIntervalSince1970: now)) == due)
+    }
+
     // MARK: - Usage stats
 
     /// One report per UTC day, so a day's reports count that day's users, per version.

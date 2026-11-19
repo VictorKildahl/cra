@@ -37,6 +37,25 @@ enum TestGesture {
         }
     }
 
+    /// A left-button press at a point of the window, moved by `delta` in `steps` drags and released
+    /// there, through the app's event queue as `click`'s are: the view under the press gets the
+    /// drags, as the pointer's would (a drag on the sidebar's empty space, #547).
+    static func drag(from point: NSPoint, by delta: NSPoint, steps: Int = 4, in window: NSWindow) {
+        let steps = max(steps, 1)
+        var events: [(NSEvent.EventType, NSPoint, Float)] = [(.leftMouseDown, point, 1)]
+        for i in 1...steps {
+            let f = CGFloat(i) / CGFloat(steps)
+            events.append((.leftMouseDragged, NSPoint(x: point.x + delta.x * f, y: point.y + delta.y * f), 1))
+        }
+        events.append((.leftMouseUp, NSPoint(x: point.x + delta.x, y: point.y + delta.y), 0))
+        for (type, at, pressure) in events {
+            guard let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                             pressure: pressure) else { return }
+            NSApp.postEvent(e, atStart: false)
+        }
+    }
+
     /// A middle click (button 2) at a point of the window, through the app's event queue: the window's
     /// event monitors and the view under it get it as they get the mouse's.
     static func middleClick(at point: NSPoint, in window: NSWindow) {
