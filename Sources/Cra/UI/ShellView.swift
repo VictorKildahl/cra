@@ -991,6 +991,8 @@ final class ShellView: NSView {
         }
         return "toolbar \(command): floats=\(floatingCard != nil ? 1 : 0) out=\(toolbarTracker.shown ? 1 : 0) "
             + "inset=\(Int(card?.barInset ?? 0)) page=\(Int(card?.webArea.frame.height ?? 0))/\(Int(card?.bounds.height ?? 0)) "
+            // How much of the card the page doesn't fill, whatever the window's size (a runner's screen gave 771, not 780).
+            + "short=\(Int((card?.bounds.height ?? 0) - (card?.webArea.frame.height ?? 0))) "
             + "barHidden=\(card?.toolbarInSight == true ? 0 : 1) polling=\(toolbarPoll != nil ? 1 : 0) "
             + "hangs=\(card.map(somethingHangsFromToolbar) == true ? 1 : 0) focus=\(toolbarHasFocus ? 1 : 0)"
     }

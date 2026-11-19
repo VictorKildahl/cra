@@ -13,14 +13,14 @@ expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 wait 2
 
 cra://debug?toolbar=start
-expect-log toolbar start: floats=1 out=0 inset=0 page=780/780 barHidden=1 .* focus=0
+expect-log toolbar start: floats=1 out=0 inset=0 page=[0-9]+/[0-9]+ short=0 barHidden=1 .* focus=0
 # A button of the put-away bar gets the focus: out at once, no wait for a pointer.
 cra://debug?toolbar=focus
 expect-log toolbar focus: floats=1 out=1 .* focus=1
 wait 1
 # Out over the page, which keeps its size; the pointer is away and the bar stays.
 cra://debug?toolbar=sample
-expect-log toolbar sample: floats=1 out=1 inset=0 page=780/780 barHidden=0 .* focus=1
+expect-log toolbar sample: floats=1 out=1 inset=0 page=[0-9]+/[0-9]+ short=0 barHidden=0 .* focus=1
 cra://debug?toolbar=stillOut
 expect-log toolbar stillOut: floats=1 out=1 .* focus=1
 # The focus leaves the bar: still out for a moment, then away with the next look at the pointer.
@@ -31,7 +31,7 @@ cra://debug?toolbar=sample
 expect-log toolbar sample: floats=1 out=0 .* focus=0
 wait 0.5
 cra://debug?toolbar=gone
-expect-log toolbar gone: floats=1 out=0 inset=0 page=780/780 barHidden=1 .* focus=0
+expect-log toolbar gone: floats=1 out=0 inset=0 page=[0-9]+/[0-9]+ short=0 barHidden=1 .* focus=0
 
 # A Peek with its bar put away.
 cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
