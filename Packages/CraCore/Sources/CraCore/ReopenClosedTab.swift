@@ -92,26 +92,39 @@ public enum ReopenClosedTab {
     ///   - archived: archived tabs, newest first.
     ///   - isPinnedTabAvailable: whether a pinned tab ID still exists in the sidebar.
     ///   - isTabSelected: whether a tab ID is already currently selected in the window.
+    ///   - isInCurrentSpace: Settings ▸ Tabs ▸ "Reopen tabs from this Space only" (#601, not in Arc):
+    ///     whether a tab ID belongs to the window's space. Given, only this space's closed tabs come
+    ///     back; the others stay for their own space, and with none here nothing is reopened. Nil is
+    ///     Arc's: the tab closed last in any space, switching to it.
     public static func next(
         closedPinned: [ClosedPinnedTab],
         closedPeek: ClosedPeek?,
         archived: [ArchivedTab],
         isPinnedTabAvailable: (UUID) -> Bool = { _ in true },
-        isTabSelected: (UUID) -> Bool = { _ in false }
+        isTabSelected: (UUID) -> Bool = { _ in false },
+        isInCurrentSpace: ((UUID) -> Bool)? = nil
     ) -> Decision? {
+        let inSpace = isInCurrentSpace ?? { _ in true }
         var pinned = closedPinned
-        // Prune pinned tabs that were removed from the sidebar or are already currently selected.
-        while let top = pinned.first {
-            if !isPinnedTabAvailable(top.id) || isTabSelected(top.id) {
-                pinned.removeFirst()
+        // Prune pinned tabs that were removed from the sidebar or are already currently selected,
+        // down to the newest one this space can reopen; another space's stay where they are.
+        var pinnedIndex: Int?
+        var i = 0
+        while i < pinned.count {
+            let entry = pinned[i]
+            if !isPinnedTabAvailable(entry.id) || isTabSelected(entry.id) {
+                pinned.remove(at: i)
+            } else if !inSpace(entry.id) {
+                i += 1
             } else {
+                pinnedIndex = i
                 break
             }
         }
 
-        let pinnedCandidate = pinned.first
-        let peekCandidate = closedPeek
-        let archivedCandidate = archived.first
+        let pinnedCandidate = pinnedIndex.map { pinned[$0] }
+        let peekCandidate = closedPeek.flatMap { peek in isInCurrentSpace == nil || peek.tabID.map(inSpace) == true ? peek : nil }
+        let archivedCandidate = archived.first { inSpace($0.id) }
 
         guard pinnedCandidate != nil || peekCandidate != nil || archivedCandidate != nil else {
             return nil
@@ -121,8 +134,8 @@ public enum ReopenClosedTab {
         let peekDate = peekCandidate?.closedAt ?? .distantPast
         let archivedDate = archivedCandidate?.archivedAt ?? .distantPast
 
-        if pinnedCandidate != nil && pinnedDate >= peekDate && pinnedDate >= archivedDate {
-            let chosen = pinned.removeFirst()
+        if let pinnedIndex, pinnedDate >= peekDate && pinnedDate >= archivedDate {
+            let chosen = pinned.remove(at: pinnedIndex)
             return Decision(
                 restoration: .pinned(id: chosen.id, url: chosen.url, title: chosen.title, paneStates: chosen.paneStates),
                 remainingPinned: pinned,

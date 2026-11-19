@@ -80,6 +80,11 @@ struct TabsPane: View {
                 SettingsToggleRow("Share Favorites across Spaces",
                                   detail: "Spaces on the same profile show the same Favorites, as in Arc. Turning it on combines their Favorites; turning it off gives each Space its own copy.",
                                   isOn: Binding(get: { store.settings.sharedFavorites }, set: { store.setFavoritesShared($0) }))
+                SettingsCardDivider()
+                // GitHub #601, not in Arc: Arc's ⇧⌘T switches to the space of the tab closed last.
+                SettingsToggleRow("Reopen tabs from this Space only",
+                                  detail: "Restore Last Closed Tab (⇧⌘T) brings back the tab you closed last in the Space you’re in, instead of switching to another Space.",
+                                  isOn: $store.settings.reopenClosedTabCurrentSpaceOnly)
             }
 
             SettingsHeader("Memory").padding(.top, 20)

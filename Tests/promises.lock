@@ -1184,6 +1184,13 @@
 #574   Tests/Scenarios/page-pickers.scenario  7521785768d2
 #574   Tests/Scenarios/page-print-button.scenario  4095f14bad8f
 #574   Tests/Scenarios/page-save-password.scenario  ef5590d50ccd
+#601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceKeepsOtherSpacesPinnedTabs  0a684ba0fd54
+#601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceReopensTheTabClosedHere  fb422863c018
+#601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceSettingIsOffByDefaultAndSaved  84ce8a563ddd
+#601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceSkipsAnotherSpacesPeek  fa70d1b29f8a
+#601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceWithNothingClosedHereStays  8c1082fa6684
+#601   Tests/Scenarios/reopen-closed-tab-this-space.scenario  187bee3640c1
+#601   Tests/StoreTests.swift::reopenClosedTabInThisSpaceOnly  2600e34f494e
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-clear-browsing-data-cancel Tests/Scenarios/clear-browsing-data-cancel.scenario  3b19c444be85
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5

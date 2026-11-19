@@ -715,6 +715,10 @@ public struct AppSettings: Codable, Equatable {
     /// GitHub #307, not in Arc: ⌘T searches and lists only the open tabs of the window's space
     /// (`TabSearchScope.commandBarTabs`). Off is Arc's bar, which finds a tab in any space.
     public var commandBarCurrentSpaceOnly: Bool = false
+    /// GitHub #601, not in Arc: ⇧⌘T reopens the tab closed last in the window's space and stays
+    /// there (`ReopenClosedTab.next(isInCurrentSpace:)`). Off is Arc's, which switches to the space
+    /// the tab closed last was in.
+    public var reopenClosedTabCurrentSpaceOnly: Bool = false
     /// Settings ▸ Advanced ▸ Command bar ▸ "Fill the command bar with the site’s color" (not in Arc,
     /// GitHub #457): while Tab's site search is on, the bar takes the site's colour
     /// (`ScopedSearchFill`). Off, the bar stays Arc's: the site only in the pill and a one-second wash.
@@ -1025,6 +1029,7 @@ extension AppSettings {
         calendarMeetingLink = (try? c.decodeIfPresent(CalendarPreview.LinkTiming.self, forKey: .calendarMeetingLink)) ?? .twoMinutes
         searchSuggestions = try c.decodeIfPresent(Bool.self, forKey: .searchSuggestions) ?? true
         commandBarCurrentSpaceOnly = try c.decodeIfPresent(Bool.self, forKey: .commandBarCurrentSpaceOnly) ?? false
+        reopenClosedTabCurrentSpaceOnly = try c.decodeIfPresent(Bool.self, forKey: .reopenClosedTabCurrentSpaceOnly) ?? false
         commandBarSiteColor = try c.decodeIfPresent(Bool.self, forKey: .commandBarSiteColor) ?? false
         editAddressInPlace = try c.decodeIfPresent(Bool.self, forKey: .editAddressInPlace) ?? false
         showSpaceHeaderOnSingleSpace = try c.decodeIfPresent(Bool.self, forKey: .showSpaceHeaderOnSingleSpace) ?? true

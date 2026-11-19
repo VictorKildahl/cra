@@ -2236,6 +2236,16 @@ final class SidebarStore {
     func reopenLastClosed(in windowID: UUID? = nil, peek: ReopenClosedTab.ClosedPeek? = nil) -> ReopenClosedTab.Restoration? {
         let w = self.window(windowID).id
         let currentSelected = selectedTabID(window: w)
+        // #601, not in Arc: only what was closed in the window's space, which ⇧⌘T then stays in.
+        // An archived tab counts by the space it was closed from; a pinned tab or a Peek's tab by
+        // the space that lists it now (a shared favorite is in every space on its profile).
+        let here = focusedSpaceID(window: w)
+        let archivedFrom = Dictionary(archive.map { ($0.id, $0.sourceSpaceID) }, uniquingKeysWith: { a, _ in a })
+        let isInCurrentSpace: ((UUID) -> Bool)? = settings.reopenClosedTabCurrentSpaceOnly ? { [weak self] id in
+            guard let self else { return false }
+            if let from = archivedFrom[id] { return from == here }
+            return isInSpace(id, here)
+        } : nil
         guard let decision = ReopenClosedTab.next(
             closedPinned: closedPinnedTabs,
             closedPeek: peek,
@@ -2244,7 +2254,8 @@ final class SidebarStore {
                 guard let self else { return false }
                 return items[id] != nil && isPinned(id)
             },
-            isTabSelected: { id in id == currentSelected }
+            isTabSelected: { id in id == currentSelected },
+            isInCurrentSpace: isInCurrentSpace
         ) else { return nil }
 
         closedPinnedTabs = decision.remainingPinned

@@ -81,6 +81,7 @@ enum StoreTests {
         dropOnPinnedTabSplits()
         reopenClosedTabs()
         reopenClosedPinnedTabs()
+        reopenClosedTabInThisSpaceOnly()
         windowsShareTheSidebar()
         settingsSync()
         syncLeavesBlankWindowsOnTheirMac()
@@ -2288,6 +2289,56 @@ enum StoreTests {
         expect(store.selectedTabID == right.id && store.item(left.id)?.tab?.url == "https://example.com/left/deep"
                && store.item(right.id)?.tab?.url == "https://example.com/right/deep",
                "⇧⌘T brings the split back with both panes where they were")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #601
+    /// Settings ▸ Tabs ▸ "Reopen tabs from this Space only" (#601, not in Arc). The issue's steps:
+    /// Tab 1 closed in Space A, Tab 2 in Space B, then ⇧⌘T back in Space A. Arc switches to Space B
+    /// for Tab 2, and so does Cra by default; with the switch on, Tab 1 comes back in Space A.
+    @MainActor
+    private static func reopenClosedTabInThisSpaceOnly() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        store.clearArchive()
+        let a = store.createSpace(title: "Reopen A", emoji: "A", focus: true).id
+        let b = store.createSpace(title: "Reopen B", emoji: "B", focus: false).id
+        let pinnedA = store.createTab(url: "https://example.com/a-pinned", in: a, pinned: true, select: false)
+        let tab1 = store.createTab(url: "https://example.com/tab1", in: a)
+        store.archiveTab(tab1.id, reason: .manual)
+        clock.advance(by: 60)
+        store.focusSpace(b)
+        let tab2 = store.createTab(url: "https://example.com/tab2", in: b)
+        store.archiveTab(tab2.id, reason: .manual)
+        clock.advance(by: 60)
+        store.focusSpace(a)
+
+        expect(store.reopenLastClosed() == .archived(tab2.id) && store.focusedSpaceID == b,
+               "by default ⇧⌘T brings back the tab closed last, in its own Space, as in Arc")
+        store.archiveTab(tab2.id, reason: .manual)
+        clock.advance(by: 60)
+        store.focusSpace(a)
+
+        store.settings.reopenClosedTabCurrentSpaceOnly = true
+        expect(store.reopenLastClosed() == .archived(tab1.id) && store.focusedSpaceID == a && store.selectedTabID == tab1.id,
+               "with the switch on, ⇧⌘T brings back the tab closed in this Space and stays in it")
+
+        // A pinned tab closed in B waits for B; A's own comes back first.
+        store.selectTab(pinnedA.id)
+        store.updateTab(pinnedA.id, url: "https://example.com/a-pinned/deep")
+        store.closePinnedTab(pinnedA.id, wasOpen: true)
+        clock.advance(by: 60)
+        store.selectTab(nil)
+        let reopened = store.reopenLastClosed()
+        expect(reopened?.tabID == pinnedA.id && store.item(pinnedA.id)?.tab?.url == "https://example.com/a-pinned/deep"
+               && store.focusedSpaceID == a,
+               "a pinned tab closed in this Space comes back in it")
+        expect(store.reopenLastClosed() == nil && store.focusedSpaceID == a,
+               "with nothing left closed in this Space, ⇧⌘T stays put though Space B has a closed tab")
+        store.focusSpace(b)
+        expect(store.reopenLastClosed() == .archived(tab2.id) && store.focusedSpaceID == b,
+               "and Space B's tab is still there for Space B")
+        store.settings.reopenClosedTabCurrentSpaceOnly = false
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
