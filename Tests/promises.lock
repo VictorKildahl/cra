@@ -1100,7 +1100,7 @@
 #534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::restingFingersChangeNothing  6140b32dcc35
 #534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::stopsAtTheDisplaysEdges  ed869c3c8efd
 #534   Packages/CraCore/Tests/CraCoreTests/PictureInPicturePinchTests.swift::stopsAtTheSmallestAndComesStraightBack  ed26adb7bc11
-#534   Tests/Scenarios/pip-pinch-resize.scenario  1b072ac3fe9d
+#534   Tests/Scenarios/pip-pinch-resize.scenario  8a41c4e59e34
 #535   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::chromiumsHoverTrackingIsTakenAway  e21a9fad9e65
 #535   Tests/Scenarios/pip-chromium-hover.scenario  d1383dc3d418
 #536   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637

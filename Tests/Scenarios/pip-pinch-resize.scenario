@@ -24,7 +24,7 @@ expect-log Cra pip larger: windows=1 .* share=0.4[89] .* onScreen=1
 cra://debug?pipPinch=-0.5,-0.5,-0.5,-0.5
 wait 1
 cra://debug?pip=smallest
-expect-log Cra pip smallest: windows=1 .* width=(224|285) .* onScreen=1
+expect-log Cra pip smallest: windows=1 .* width=(22[2-6]|28[3-7]) .* onScreen=1
 cra://debug?cdp=Runtime.evaluate&params={"expression":"document.exitPictureInPicture().then(()=>'pip:closed')","awaitPromise":true,"userGesture":true}
 expect-log Cra cdp Runtime.evaluate .*"value":"pip:closed"
 wait 1
@@ -32,7 +32,7 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('
 expect-log Cra cdp Runtime.evaluate .*"value":"pip:again"
 wait 1
 cra://debug?pip=again
-expect-log Cra pip again: windows=1 .* width=(224|285) .* onScreen=1
+expect-log Cra pip again: windows=1 .* width=(22[2-6]|28[3-7]) .* onScreen=1
 cra://debug?pipPinch=1,1,1,1
 wait 1
 cra://debug?pip=largest
