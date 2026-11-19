@@ -1065,7 +1065,7 @@ Observed live on a throwaway Today split (example.com | example.org), archived a
   Markdown | Archive Item) | Change Icon…, Rename… | Duplicate, Move to ▸ (spaces with a check on the current
   one, New Space…) | Archive Item, Archive Tabs Below (Today only). No Pin item.
 - Cra (30 Oct): split rows drag as one item, ⌘D pins/unpins the split, ⌘W closes a pinned split as a whole,
-  the menu follows Arc's minus Share/Change Icon/Duplicate, pinning makes each pane's page its home, and a new
+  the menu follows Arc's minus Share/Change Icon (Duplicate added 19 Nov, #600), pinning makes each pane's page its home, and a new
   pane in a pinned split takes its first page as home.
 
 ### Clear cookies / cache (Arc 1.171, 30 Oct)

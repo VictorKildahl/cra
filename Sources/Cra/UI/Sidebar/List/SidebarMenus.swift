@@ -126,7 +126,7 @@ enum SidebarMenus {
         } else if store.selectedTabID(window: ui.windowID) != nil, store.spaceID(ofItem: id) == store.focusedSpaceID(window: ui.windowID) {
             add(menu, "Open in Split View") { actions.performAction("openInSplit:\(id.uuidString)") }
         }
-        add(menu, action: "duplicateTab", "Duplicate") { _ = store.duplicateTab(id) }
+        add(menu, action: "duplicateTab", "Duplicate") { store.duplicateTab(id, window: ui.windowID) }
         add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
         if let url = URL(string: CleanURL.withoutTrackers(tab.url)), url.scheme?.hasPrefix("http") == true {
             SharePicker.addMenu(to: menu, url: url)
@@ -212,7 +212,7 @@ enum SidebarMenus {
                         store.selectTab(store.paneID(for: ids[0], in: split) ?? ids[0], window: ui.windowID)
                     }
                 case "duplicate":
-                    add(menu, title) { for id in ids { _ = store.duplicateTab(id) } }
+                    add(menu, title) { for id in ids { store.duplicateTab(id, window: ui.windowID) } }
                 case "moveTo":
                     // Arc: the spaces, the picks' own checked, then New Space… (which takes them along).
                     let sub = submenu(menu, title)
@@ -487,6 +487,8 @@ enum SidebarMenus {
         if store.item(id)?.title != nil { add(menu, "Reset Name and Icon") { store.rename(id, to: nil) } }
         add(menu, "Rename…") { ui.renamingID = id }
         menu.addItem(.separator())
+        // Arc 1.171: Duplicate, then Move to ▸ (#600).
+        add(menu, "Duplicate") { store.duplicateSplit(id, window: ui.windowID) }
         let spaces = submenu(menu, "Move to")
         for s in store.orderedSpaces {
             let current = store.isInSpace(id, s.id)

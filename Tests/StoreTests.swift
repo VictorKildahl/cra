@@ -82,6 +82,7 @@ enum StoreTests {
         reopenClosedTabs()
         reopenClosedPinnedTabs()
         reopenClosedTabInThisSpaceOnly()
+        duplicateFavoritesAndSplits()
         windowsShareTheSidebar()
         settingsSync()
         syncLeavesBlankWindowsOnTheirMac()
@@ -2339,6 +2340,61 @@ enum StoreTests {
         expect(store.reopenLastClosed() == .archived(tab2.id) && store.focusedSpaceID == b,
                "and Space B's tab is still there for Space B")
         store.settings.reopenClosedTabCurrentSpaceOnly = false
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #600
+    /// Arc's Duplicate on a favorite's menu and on a split's menu (#600): the copy goes right after
+    /// the original, in the same list, and opens. A split comes back whole: each pane's page, in
+    /// order, with its orientation, sizes and focused pane. Duplicate Tab on one pane of a split
+    /// puts a copy of that page below the split instead of a pane more inside it.
+    @MainActor
+    private static func duplicateFavoritesAndSplits() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Duplicates", emoji: "🐑").id
+        guard let space = store.space(sid) else { return expect(false, "the space is made") }
+        let mail = store.createTab(url: "https://example.com/mail", title: "Mail", in: sid, select: false)
+        let other = store.createTab(url: "https://example.com/other", title: "Other", in: sid, select: false)
+        store.addToFavorites(mail.id, in: sid)
+        store.addToFavorites(other.id, in: sid)
+        guard let copy = store.duplicateTab(mail.id) else { return expect(false, "a favorite duplicates") }
+        expect(store.children(of: space.favoritesContainerID).map(\.id) == [mail.id, copy.id, other.id],
+               "a favorite's copy is the favorite right after it (#600)")
+        expect(copy.tab?.url == "https://example.com/mail" && store.selectedTabID == copy.id, "on the same page, and open")
+
+        let left = store.createTab(url: "https://example.com/left", title: "Left", in: sid)
+        let right = store.createTab(url: "https://example.com/right", title: "Right", in: sid)
+        let after = store.createTab(url: "https://example.com/after", in: sid, select: false)
+        guard let split = store.createSplit(with: [left.id, right.id]) else { return expect(false, "the split is made") }
+        store.flipSplitOrientation(split.id)
+        store.setSplitWidthFactors(split.id, [left.id: 0.7, right.id: 0.3])
+        store.selectTab(right.id)
+        guard let twin = store.duplicateSplit(split.id), let twinData = twin.split else { return expect(false, "a split duplicates (#600)") }
+        let today = store.children(of: space.todayContainerID).map(\.id)
+        expect(today.firstIndex(of: twin.id) == today.firstIndex(of: split.id).map { $0 + 1 } && today.contains(after.id),
+               "the split's copy goes right after it in Today")
+        let panes = twin.children.compactMap { store.item($0)?.tab?.url }
+        expect(panes == ["https://example.com/left", "https://example.com/right"] && Set(twin.children).isDisjoint(with: [left.id, right.id]),
+               "with a new tab for each pane's page, in order")
+        expect(twinData.orientation == .vertical && twinData.widthFactors[twin.children[0]] == 0.7 && twinData.widthFactors[twin.children[1]] == 0.3,
+               "the split's orientation and sizes come along")
+        expect(twinData.focusTabID == twin.children[1] && store.selectedTabID == twin.children[1],
+               "and it opens on the pane the original had focused")
+        expect(store.item(split.id)?.children == [left.id, right.id], "the original split keeps its panes")
+
+        guard let paneCopy = store.duplicateTab(left.id) else { return expect(false, "a pane duplicates") }
+        expect(store.item(split.id)?.children == [left.id, right.id] && store.splitContaining(paneCopy.id) == nil,
+               "Duplicate Tab on a split's pane leaves the split as it was")
+        let rows = store.children(of: space.todayContainerID).map(\.id)
+        expect(rows.firstIndex(of: paneCopy.id) == rows.firstIndex(of: split.id).map { $0 + 1 } && paneCopy.tab?.url == "https://example.com/left",
+               "and puts the page's copy right below the split")
+
+        let pinnedLeft = store.createTab(url: "https://example.com/pl", in: sid, pinned: true, select: false)
+        let pinnedRight = store.createTab(url: "https://example.com/pr", in: sid, pinned: true, select: false)
+        guard let pinnedSplit = store.createSplit(with: [pinnedLeft.id, pinnedRight.id], inPlace: true),
+              let pinnedTwin = store.duplicateSplit(pinnedSplit.id) else { return expect(false, "a pinned split duplicates") }
+        expect(store.children(of: space.pinnedContainerID).map(\.id).suffix(2) == [pinnedSplit.id, pinnedTwin.id]
+               && pinnedTwin.children.allSatisfy(store.isPinned), "a pinned split's copy is pinned, right after it")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
