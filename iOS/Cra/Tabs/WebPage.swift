@@ -54,6 +54,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// Requests the blockers stopped on the page now showing.
     private(set) var blockedCount = 0
     private var countedHosts = Set<String>()
+    /// The address the main frame last asked for, to tell WebKit's empty about:blank for an
+    /// address it refuses from a page (`answerRefusalShownAsBlank`).
+    private var requestedURL: URL?
 
     init(tab: MobileTab, configuration supplied: WKWebViewConfiguration? = nil, opener: WebPage? = nil) {
         tabID = tab.id
@@ -201,6 +204,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             return decisionHandler(.cancel, preferences)
         }
         if navigationAction.targetFrame?.isMainFrame == true {
+            requestedURL = navigationAction.request.url
             applyBlocking(for: navigationAction.request.url)
         }
         // "Open App Links in... Native App": a tapped link to another site goes to its app when
@@ -228,6 +232,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         countedHosts = []
         isTranslated = false
         changed()
+        answerRefusalShownAsBlank(requested: requestedURL)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

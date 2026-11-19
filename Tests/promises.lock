@@ -1167,11 +1167,15 @@
 #566   Tests/Scenarios/reopen-closed-pinned-tab.scenario  0fb8f4756430
 #566   Tests/StoreTests.swift::reopenClosedPinnedTabs  3275e3774b72
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aCertificateFailureStillAsksAndAStoppedLoadSaysNothing  1db90d7ec6e9
+#568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aLoadSomethingElseTookOverSaysNothing  88170aff1e27
+#568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aLoadWebKitRefusesShowsTheErrorPage  4771f09bc4fe
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aNetworkFailureShowsAnErrorPage  a7fefa2b6d10
+#568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::aRefusedAddressAnsweredWithABlankPageIsARefusal  04a9f1653120
 #568   Packages/CraCore/Tests/CraCoreTests/MobileLoadFailureTests.swift::theErrorPageNamesTheHostAndTheReason  1985a3c83c37
 #568   Tests/PolicyTests.swift::iPhoneWebContentLoadsHTTP  929c5de9a58a
 #568   iOS/CraUITests/PlainHTTPTests.swift::testAPageThatCantLoadSaysSo  cd070c9d7e8f
 #568   iOS/CraUITests/PlainHTTPTests.swift::testAPlainHTTPPageLoads  891ae35f0a31
+#568   iOS/CraUITests/PlainHTTPTests.swift::testAnAddressWebKitRefusesSaysSo  059ad382c619
 #569   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aCertificateExceptionIsForOneHost  6c56d8489ca7
 #569   iOS/CraUITests/CertificateTests.swift::testContinueAnywayOpensThePageAndTheWarningStaysGone  76d9fa9240b7
 #569   iOS/CraUITests/CertificateTests.swift::testGoBackClosesTheWarningAndLeavesThePageUnloaded  f9084acee64c

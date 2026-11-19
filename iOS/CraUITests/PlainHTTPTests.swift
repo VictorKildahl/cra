@@ -36,4 +36,16 @@ final class PlainHTTPTests: BrowserTestCase {
                       "the error names the host and the reason")
         keep("load-failed")
     }
+
+    /// GitHub #568, follow-up: an address WebKit refuses itself still opened as a blank white
+    /// page. Port 1 is on WebKit's restricted list; iOS 26.5's WebKit answers it with an empty
+    /// about:blank, a newer one with WebKitErrorDomain 103, and both must say so.
+    // promise: #568
+    func testAnAddressWebKitRefusesSaysSo() {
+        launch(["-CraOpenURL", "http://127.0.0.1:1/", "-CraSearch", "NO"])
+        waitForPage("This page couldn’t load")
+        XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "127.0.0.1: ")).firstMatch.exists,
+                      "the error names the host and the reason")
+        keep("load-refused")
+    }
 }

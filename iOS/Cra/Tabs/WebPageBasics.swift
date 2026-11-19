@@ -86,6 +86,17 @@ extension WebPage: WKDownloadDelegate {
                                      responseHTML: MobileLoadFailure.page(host: url.host ?? url.absoluteString, message: failure.localizedDescription))
     }
 
+    /// iOS 26.5's WebKit answers an address it refuses (a restricted port, an address of only
+    /// zeros) with an empty about:blank instead of failing: answer it as the 103 a newer WebKit
+    /// fails it with (`MobileLoadFailure.isRefusedAsBlank`).
+    func answerRefusalShownAsBlank(requested: URL?) {
+        guard let requested, let committed = webView.url?.absoluteString,
+              MobileLoadFailure.isRefusedAsBlank(requested: requested.absoluteString, committed: committed) else { return }
+        answerLoadFailure(NSError(domain: MobileLoadFailure.webKitErrorDomain, code: MobileLoadFailure.restrictedPortCode, userInfo: [
+            NSURLErrorFailingURLErrorKey: requested, NSLocalizedDescriptionKey: MobileLoadFailure.restrictedPortMessage,
+        ]))
+    }
+
     /// A page whose certificate can't be verified: say so, and let the user go on if they insist
     /// (Arc Search 1.12's bypass). Returns whether the warning showed.
     private func offerCertificateBypass(for failure: NSError) -> Bool {
