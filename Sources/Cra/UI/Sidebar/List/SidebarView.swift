@@ -48,6 +48,8 @@ final class SidebarView: NSView {
         return newSpacePlus.debugLine
     }
     private var libraryHost: LibraryView?
+    /// Scenarios (#649): the Library's first download row hovered, its ••• and menu.
+    var debugLibraryDownloadMore: String { libraryHost?.debugDownloadMore() ?? "no library" }
     /// Arc's Create a Space page, over the space's column while one is being made.
     private var creationHost: SpaceCreationView?
     var debugSpaceCreation: String { creationHost?.debugLine ?? "none" }

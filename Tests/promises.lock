@@ -1404,6 +1404,9 @@
 #648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::theSidebarFieldFollowsThePeekOnlyWhileItHasTheAddress  6ff7993bdbfb
 #648   Tests/Scenarios/peek-card-bar-with-toolbar.scenario  a6847ae78beb
 #648   Tests/Scenarios/peek-sidebar-address.scenario  305b71ef5d44
+#649   Packages/CraCore/Tests/CraCoreTests/LibraryShortcutTests.swift::openLibraryTogglesTheLibrary  59f489e68beb
+#649   Packages/CraCore/Tests/CraCoreTests/LibraryShortcutTests.swift::viewDownloadsClosesItsOwnPageAndGoesToItFromAnother  0e661b8011e4
+#649   Tests/Scenarios/library-shortcut-toggle.scenario  f8cdda4a6004
 #650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  a64d7221a346
 #650   iOS/CraUITests/BrowserTests.swift::testPhoneSiteWinsOverSyncedSpace  f3705dffdfb4
 #650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  587d781bccdd

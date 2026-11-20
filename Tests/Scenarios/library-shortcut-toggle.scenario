@@ -1,0 +1,48 @@
+# promise: #649
+# Arc's Library shortcuts are show/hide toggles (the actions their keys run): ⇧⌘L opens the Library and closes it again, ⇧⌘J shows Downloads and
+# closes it again, and from another page it goes to Downloads. A download row shows Arc's ••• on hover, which opens the
+# menu a right-click gives (GitHub #649).
+home
+budget rss=600 stalls50=10
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished
+wait 1
+
+# ⇧⌘J: Downloads, then closed.
+cra://action/viewDownloads
+wait 1
+cra://debug?libraryShown=j1
+expect-log library shown j1: downloads
+cra://debug?libraryMore=row
+expect-log library more row: more=1 menu=Open .*Show in Finder
+cra://action/viewDownloads
+wait 1
+cra://debug?libraryShown=j2
+expect-log library shown j2: closed
+
+# ⇧⌘L: the page last shown, then closed.
+cra://action/openLibrary
+wait 1
+cra://debug?libraryShown=l1
+expect-log library shown l1: downloads
+cra://action/openLibrary
+wait 1
+cra://debug?libraryShown=l2
+expect-log library shown l2: closed
+
+# From another page ⇧⌘J goes to Downloads, and closes it from there.
+cra://action/viewMedia
+wait 1
+cra://debug?libraryShown=media
+expect-log library shown media: media
+cra://action/viewDownloads
+wait 1
+cra://debug?libraryShown=switched
+expect-log library shown switched: downloads
+cra://action/viewDownloads
+wait 1
+cra://debug?libraryShown=j3
+expect-log library shown j3: closed

@@ -1972,10 +1972,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
-            // commandBarRows=<label>: the open command bar's rows, top to bottom, each as kind:address
-            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307), with its
-            // mode and the selected row (#379, #382). An open Little Window's or Peek's bar gets a line
-            // of its own ("<label> peek:").
             // commandBarPick=<text>: the browser window's open bar commits its first row whose address holds
             // <text>, as ↩ on that row does (#645); logs the row's kind.
             if let text = dict["commandBarPick"] {
@@ -1986,6 +1982,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.commandBar.commit(row)
                 return
             }
+            // libraryMore=<label> (#649): the Library's first download row hovered, its ••• and menu.
+            if let label = dict["libraryMore"] {
+                CraLog.note("library more \(label): " + ((main.shell.sidebarHost as? SidebarView)?.debugLibraryDownloadMore ?? "no sidebar"))
+                return
+            }
+            // libraryShown=<label> (#649): the Library's page on screen, or "closed".
+            if let label = dict["libraryShown"] {
+                CraLog.note("library shown \(label): \(main.sidebarUI.libraryPage?.rawValue ?? "closed")")
+                return
+            }
+            // commandBarRows=<label>: the open command bar's rows, top to bottom, each as kind:address
+            // (the title when it has none), so a scenario reads which tabs ⌘T found (#307), with its
+            // mode and the selected row (#379, #382). An open Little Window's or Peek's bar gets a line
+            // of its own ("<label> peek:").
             if let label = dict["commandBarRows"] {
                 func line(_ name: String, _ bar: CommandBarController) {
                     let rows = bar.result.items.map { row -> String in
@@ -3472,10 +3482,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let normal = useNormalWindow()
             _ = store.createTab(url: HistoryPage.url, select: true)
             normal.showWindow(nil)
-        case "viewDownloads": main.showLibrary(.downloads)
-        case "viewMedia": main.showLibrary(.media)
-        case "viewEasels": main.showLibrary(.easels)
-        case "viewBoosts": main.showLibrary(.boosts)
+        // Arc's page shortcuts are show/hide toggles too (LibraryShortcut, #649).
+        case "viewDownloads": main.toggleLibrary(.downloads)
+        case "viewMedia": main.toggleLibrary(.media)
+        case "viewEasels": main.toggleLibrary(.easels)
+        case "viewBoosts": main.toggleLibrary(.boosts)
         case "goBack": main.goBack()
         case "goForward": main.currentBrowser?.goForward()
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }

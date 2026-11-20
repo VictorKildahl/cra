@@ -3288,6 +3288,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
+    /// A page's shortcut (⇧⌘J, View Media…): that page, or the Library closed when it shows that page
+    /// already, as Arc's toggles do (LibraryShortcut, #649).
+    func toggleLibrary(_ page: LibraryPage) {
+        switch LibraryShortcut.step(requested: page, shown: sidebarUI.libraryPage) {
+        case .show: showLibrary(page)
+        case .close: toggleLibrary()
+        }
+    }
+
     /// The Library takes over the sidebar, which widens for its page rail (LibraryView).
     func showLibrary(_ page: LibraryPage) {
         guard hiddenLibrary == nil else { return }
