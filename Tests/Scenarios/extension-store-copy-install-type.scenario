@@ -1,0 +1,27 @@
+# promise: #660
+# A Chrome Web Store extension Cra copied from another browser loads from its folder (--load-extension), but it is a
+# normal install to itself, as it was in that browser: chrome.management.getSelf().installType says "normal". It said
+# "development", and extensions that fetch their settings from their own server by install type got a developer's:
+# VertiTab came up without its toolbars (GitHub #660). A folder without the store's update URL is a developer's own
+# and stays "development".
+budget rss=800 stalls50=10
+extension ${FIXTURES}/StoreCopyExtension
+extension ${FIXTURES}/SidePanelExtension
+cra://open?url=${PAGE}?n=store-copy
+wait 3
+cra://debug?extensionAction=${STORE_COPY_EXTENSION_ID}
+expect-log side panel shows ${STORE_COPY_EXTENSION_ID} in Default
+wait 2
+cra://debug?sidePanelJS=(chrome.management.getSelf().then(v=>window.__i=v.installType).catch(e=>window.__i='ERR '+e.message),'asked')
+wait 1
+cra://debug?sidePanelJS='store-copy:'+window.__i
+expect-log side panel evaluates .* to store-copy:normal$
+cra://debug?extensionAction=${STORE_COPY_EXTENSION_ID}
+wait 1
+cra://debug?extensionAction=${SIDE_PANEL_EXTENSION_ID}
+expect-log side panel shows ${SIDE_PANEL_EXTENSION_ID} in Default
+wait 2
+cra://debug?sidePanelJS=(chrome.management.getSelf().then(v=>window.__i=v.installType).catch(e=>window.__i='ERR '+e.message),'asked')
+wait 1
+cra://debug?sidePanelJS='developer:'+window.__i
+expect-log side panel evaluates .* to developer:development$

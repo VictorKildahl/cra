@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Store Copy Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a Chrome Web Store extension's folder copy (its update_url is the store's), as Cra imports one from another browser.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAimiFME9IaKWuddKDlSkro0/Zx/TezYrf70k1PZObB2USep7jcsYtLhWhneXTo4oJAMZWUoe39kO6mWveN6TXq5O3X9pLbMo3GmiD2yaetj+N991RoiX1XbE/g9HnYxAx59uTfnW3HKWu6XJ6CFYXX0Wdz2O7Tpo5ZgkboChruqyTdHHNtc+8xYynwlk+FyXdxzj3Sc1dEF/1he2LHN5J8IaI+iD+wntg/98+7HqPQpVUZhIcGsBsoFfDa8LWNJtlcm38xid/zHIX9tx+04+UQy3guVxQxGWCGrRTD9IgFgHfMVktHldzBiUdbmi6QVmwTuTwjXPfwxAoOXvajO5fOwIDAQAB",
+  "update_url": "https://clients2.google.com/service/update2/crx",
+  "permissions": [
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cra Store Copy Fixture"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  }
+}

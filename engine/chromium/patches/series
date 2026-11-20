@@ -74,3 +74,4 @@ cra-payments-window.patch
 cra-download-dock-badge.patch
 cra-exclusive-access-notice.patch
 cra-extension-popup-window.patch
+extension-store-copies-install-type.patch

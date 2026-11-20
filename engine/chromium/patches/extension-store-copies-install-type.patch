@@ -1,0 +1,22 @@
+diff --git a/extensions/browser/api/management/management_api.cc b/extensions/browser/api/management/management_api.cc
+index 07e7e01fb5..8fe0805e62 100644
+--- a/extensions/browser/api/management/management_api.cc
++++ b/extensions/browser/api/management/management_api.cc
+@@ -233,9 +233,16 @@ management::ExtensionInfo CreateExtensionInfo(
+       info.install_type = management::ExtensionInstallType::kNormal;
+       break;
+     case ManifestLocation::kUnpacked:
+-    case ManifestLocation::kCommandLine:
+       info.install_type = management::ExtensionInstallType::kDevelopment;
+       break;
++    case ManifestLocation::kCommandLine:
++      // Cra: a Web Store extension Cra copied from another browser loads from its folder (--load-extension), and
++      // was a normal install there. Extensions that ask their server for settings got a developer's (VertiTab's
++      // toolbars, GitHub #660). A folder without the store's update URL is a developer's own, as before.
++      info.install_type = ManifestURL::UpdatesFromGallery(&extension)
++                              ? management::ExtensionInstallType::kNormal
++                              : management::ExtensionInstallType::kDevelopment;
++      break;
+     case ManifestLocation::kExternalPref:
+     case ManifestLocation::kExternalRegistry:
+     case ManifestLocation::kExternalPrefDownload:
