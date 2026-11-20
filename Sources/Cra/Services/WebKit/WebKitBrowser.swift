@@ -671,7 +671,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     /// View ▸ Picture in Picture and the sidebar player's button (after the page's own request failed):
     /// WebKit's toggle, as Safari's menu does it; it needs no user gesture in the page (#585). Leaving a
-    /// tab takes nothing here: BrowserManager asked the page, and the page's no stands.
+    /// tab takes nothing here: BrowserManager asked the page, a video that says `disablePictureInPicture`
+    /// included (Netflix's, PictureInPictureRequest).
     override func requestPictureInPicture(automatic: Bool) {
         MainActor.assumeIsolated {
             guard let web = webView else { return }
@@ -712,6 +713,28 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     override func exitPictureInPicture() {
         runPictureInPicture("if (document.pictureInPictureElement) document.exitPictureInPicture();")
+    }
+
+    /// The system Picture in Picture window's ↖ button: WebKit says so here, before it moves the
+    /// video back into the page, and Safari selects the video's tab at this point. The window's ✕
+    /// doesn't come this way (it pauses the video and puts it back). WebKit's private UI delegate
+    /// call, like the preference that turns Picture in Picture on.
+    @objc(_webViewFullscreenMayReturnToInline:)
+    func webViewFullscreenMayReturnToInline(_ webView: WKWebView) {
+        MainActor.assumeIsolated {
+            guard inPictureInPicture, !closed else { return }
+            (delegate as? WebKitPageDelegate)?.webKitPageReturnsFromPictureInPicture(self)
+        }
+    }
+
+    /// `cra://debug?pipBackToTab=1`: the ↖ button as WebKit reports it. The button itself is in the
+    /// system's window (PIPAgent's, another process), which a scenario can't press.
+    func debugPressPictureInPictureBackToTab() {
+        MainActor.assumeIsolated {
+            guard let web = webView, inPictureInPicture, let ui = web.uiDelegate as? NSObject else { return }
+            let selector = NSSelectorFromString("_webViewFullscreenMayReturnToInline:")
+            if ui.responds(to: selector) { ui.perform(selector, with: web) }
+        }
     }
 
     override func closePictureInPicture() {

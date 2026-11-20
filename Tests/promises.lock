@@ -54,7 +54,7 @@
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::choosingPerSite  ce4dddce6977
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::handoffRules  6eea8116562b
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::servicesOpenInWebKit  1f4f8537772e
-#66    Tests/Scenarios/webkit-drm-tabs.scenario  dbb8c2962c79
+#66    Tests/Scenarios/webkit-drm-tabs.scenario  ecd18e480d10
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::differentTopRatesAreMixed  e6736f0fff82
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::fixedRateDisplayShowsOneRate  7c3babaccb16
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::intervalsBecomeWholeHertz  7fba8a629c39
@@ -1246,8 +1246,16 @@
 #581   Tests/Scenarios/little-window-mission-control.scenario  9c0af64b7751
 #584   Packages/CraCore/Tests/CraCoreTests/AskOnPageRefusalTests.swift::aRefusedAnswerIsAskedAgainInPlainText  974697490f34
 #584   Tests/AskOnPageServiceTests.swift::aRefusedAnswerIsAskedAgainInPlainText  e5c3ccb857c5
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::aWebKitThatRefusesAnOptedOutVideoIsAskedItsOwnWay  3b5385bb653a
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::anAskThatOpensNothingSaysWhy  3fb80bdd0ce4
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::leavingAWebKitTabTakesAnOptedOutVideo  26e6c6cacf7d
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::optedOutVideoIsFoundAndAskedOnAWebKitPage  6e36d2dba50f
+#585   Packages/CraCore/Tests/CraCoreTests/PictureInPictureRequestTests.swift::optedOutVideoIsTakenOnWebKitOnly  15ed00cdf893
 #585   Packages/CraCore/Tests/CraCoreTests/WebKitPictureInPictureTests.swift::askedForItAWebKitTabTogglesPictureInPicture  a5e004a3ef37
+#585   Tests/BrowserManagerLifecycleTests.swift::webKitPictureInPictureBackToTabCase  4c48bae6117d
+#585   Tests/BrowserManagerLifecycleTests.swift::webKitPictureInPictureCase  216532312674
 #585   Tests/Scenarios/webkit-picture-in-picture.scenario  cb6ed6b0b8b9
+#585   Tests/Scenarios/webkit-pip-opted-out.scenario  dfaa5069ce4f
 #588   Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::fandangoAtHomePlaysInWebKit  0d94afb2ccd6
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c

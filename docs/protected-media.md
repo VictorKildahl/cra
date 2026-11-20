@@ -137,6 +137,26 @@ address. A WebKit page signing in on accounts.spotify.com still counts as Spotif
   back to the tab work as for Chromium pages. WebKit has Picture in Picture off for apps other
   than Safari until its `allowsPictureInPictureMediaPlayback` preference is set (without it,
   `requestPictureInPicture()` answers NotSupportedError).
+  View ▸ Picture in Picture takes WebKit's own toggle, as Safari's menu does (`_togglePictureInPicture`,
+  `WebKitPictureInPicture` in CraCore; it did nothing on a WebKit page until #585), and a second ask puts
+  the video back. The sidebar player's button asks the page first and goes on to the same toggle when
+  the page has no video or turns the request down.
+  The system window's ↖ button is its Back to Tab: WebKit reports the press through its private
+  UI delegate call `_webViewFullscreenMayReturnToInline:` (Safari selects the tab there), and Cra
+  selects the tab and brings its window up before the video lands. Until #585 the button did
+  nothing: with the tab still hidden, the window stayed up. The window's ✕ pauses the video and
+  puts it back without selecting anything.
+  **A player that says no:** Netflix's player makes its video with `disablePictureInPicture`
+  (the default in its player script), and Cra's ask skipped such a video, so nothing opened and
+  the log said nothing. WebKit doesn't hold a request to the attribute (macOS 27: both
+  `requestPictureInPicture()` and `webkitSetPresentationMode` open such a video, as Safari's own
+  Enter Picture in Picture does), so on a WebKit page Cra now takes it like any other video:
+  from View ▸ Picture in Picture, from the sidebar player's button, and as its tab is left
+  (`PictureInPictureRequest` in CraCore). The Site Control Center's switch still turns leaving
+  the tab off for a site. A Chromium page's opted-out video is left alone, because Chromium
+  refuses the request. An ask that opens nothing says why in `cra.log` ("has no video for
+  Picture in Picture", "refuses Picture in Picture: …"). A player inside an iframe of a WebKit page isn't reached: WebKit has
+  no way to run the ask in every frame.
 - **Chromium's fullscreen handling**: WebKit takes a fullscreen video to its own fullscreen
   window, as in Safari, and Esc leaves it. That window covers Cra's, so the covered-window
   auto Picture in Picture leaves a WebKit page in its own fullscreen alone
@@ -173,5 +193,12 @@ its own and never writes the daily Cra's. They are read at launch. A test instan
   Spotify, Netflix, Disney+, Max, Apple TV, Apple Music, Prime Video and Tidal open in WebKit with
   no "browser not supported" message. Cookies and storage survive a relaunch, which restores the
   tab in WebKit. A download from a WebKit page lands in Downloads.
+- `scripts/scenario.sh webkit-pip-opted-out` (#585): on a WebKit page whose video says no to
+  Picture in Picture, View ▸ Picture in Picture opens it and a second ask puts it back, and
+  leaving the tab opens it too; the system window's back-to-tab press (`cra://debug?pipBackToTab=1`,
+  as WebKit reports it) brings the tab to the front. `webkit-drm-tabs` keeps its video in the page with the site's
+  automatic Picture in Picture off (it used `disablePictureInPicture` for that until #585).
 - Still by hand, with real accounts: Spotify plays track after track, Netflix and Disney+ play,
   and sign-in through Google or Apple comes back signed in. Peek from a pinned WebKit tab.
+  Netflix's film opens in Picture in Picture from View ▸ Picture in Picture, from the sidebar
+  player's button and when its tab is left.

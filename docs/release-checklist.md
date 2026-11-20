@@ -247,6 +247,13 @@ built release app with a test profile. Note anything that fails in the release's
   address and "Open in": each works on the first click. Capture and scroll: the page moves and
   the grey picture and the lens follow. With another app full screen, ⌥⌘N opens a Little
   Window over it, and doesn't when Settings ▸ Links ▸ "Open Little Window when I press ⌥⌘N in any app" is off.
+- **#585:** signed in to Netflix (it plays in WebKit, docs/protected-media.md), play a film and choose
+  View ▸ Picture in Picture: the film opens in the system's Picture in Picture window, and choosing it
+  again puts it back. Switch tabs while it plays: it opens by itself, and comes home when you go back; press the
+  window's ↖ instead and Cra switches to Netflix's tab, where the film plays on (the button is PIPAgent's, which a
+  scenario can't press); ✕ pauses it without switching. Netflix's
+  player makes its video with `disablePictureInPicture`; the `webkit-pip-opted-out` scenario covers such
+  a video on a fixture, this checks the real player and its FairPlay video.
 - **#357:** play an embedded YouTube video aloud on a blog (the player in an iframe), switch tabs:
   it goes into Picture in Picture. A background test copy can't hand the iframe its key press,
   before or after #357; the pip-leave-tab scenario covers a player in the page itself.

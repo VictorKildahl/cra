@@ -204,6 +204,8 @@ enum BrowserManagerLifecycleTests {
         nowPlayingSkipsUncontrollableSoundCase()
         nowPlayingFollowsMediaSessionCase()
         await leaveVideoTabPictureInPictureCase()
+        await webKitPictureInPictureCase()
+        webKitPictureInPictureBackToTabCase()
         await pictureInPicturePerSiteCase()
         await splitCopySleepsPinnedTabCase()
         await coveredWindowPictureInPictureCase()
@@ -1848,6 +1850,100 @@ enum BrowserManagerLifecycleTests {
             expect(ra.browser.pictureInPictureRequests - before == fallback,
                    "\(label) \(fallback == 1 ? "falls back to" : "does not also get") the page request")
         }
+        manager.closeAll()
+    }
+
+    /// The page's videos (JavaScript object literals) as the look in these Runtime.evaluate params
+    /// finds them: "video" when there is one to ask, "none" otherwise.
+    private static func runLook(_ params: String, videos: String) -> String {
+        let json = try! JSONSerialization.jsonObject(with: Data(params.utf8)) as! [String: Any]
+        let context = JSContext()!
+        context.evaluateScript("var document = {pictureInPictureElement: null, querySelectorAll: () => \(videos)};")
+        return context.evaluateScript(json["expression"] as? String)?.toString() ?? "no reply"
+    }
+
+    /// A service in WebKit whose player made its video with `disablePictureInPicture`, as Netflix's
+    /// does: the sidebar player's Picture in Picture button found no video and did nothing, and a
+    /// WebKit page has no engine request to fall back on (#585). The user's ask takes the video, and
+    /// so does leaving its tab; a Chromium page (where Chromium refuses such a video) leaves it alone.
+    // promise: #585
+    @MainActor
+    private static func webKitPictureInPictureCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.nowPlaying = NowPlaying()
+        let service = store.createTab(url: "https://www.netflix.com/watch/1").id, plain = store.createTab(url: "https://example.test/video").id
+        let webKit = manager.ensureRuntime(for: service)!.browser, chromium = manager.ensureRuntime(for: plain)!.browser
+        expect(webKit is WebKitBrowser && !(chromium is WebKitBrowser), "the service's page is WebKit's, the other Chromium's")
+        let film = "[{disablePictureInPicture: true, readyState: 4, paused: false, ended: false, muted: false, volume: 1, videoWidth: 1920, "
+            + "getBoundingClientRect: () => ({width: 1280, height: 720})}]"
+
+        manager.performNowPlaying(service, .pictureInPicture)
+        expect(runLook(webKit.lastParams, videos: film) == "video", "the player's button finds a WebKit page's video whose player opted out")
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"video"}}"#)
+        await drainMainQueue()
+        expect(webKit.lastParams.contains(#""userGesture":true"#) && webKit.lastParams.contains("webkitSetPresentationMode"),
+               "and asks it, with WebKit's own presentation mode behind the standard request")
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"ok"}}"#)
+        await drainMainQueue()
+
+        manager.performNowPlaying(service, .pictureInPicture)
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+        await drainMainQueue()
+        expect(webKit.pictureInPictureRequests == 1, "a WebKit page whose look finds no video goes on to the tab's own request (WebKit's toggle)")
+        manager.performNowPlaying(service, .pictureInPicture)
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"video"}}"#)
+        await drainMainQueue()
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"NotAllowedError: no gesture"}}"#)
+        await drainMainQueue()
+        expect(webKit.pictureInPictureRequests == 2, "and so does one that turns the page's request down")
+
+        manager.performNowPlaying(plain, .pictureInPicture)
+        expect(runLook(chromium.lastParams, videos: film) == "none", "a Chromium page's opted-out video isn't asked: Chromium would refuse")
+        chromium.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+        await drainMainQueue()
+        expect(chromium.pictureInPictureRequests == 1, "a Chromium page with no video of its own still gets the request in its frames")
+
+        store.settings.autoPictureInPicture = true
+        manager.show(service, focus: false)
+        manager.show(plain, focus: false)
+        expect(webKit.lastParams.contains("})(true, false)") && runLook(webKit.lastParams, videos: film) == "video",
+               "leaving the tab finds the WebKit page's video whose player opted out")
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"video"}}"#)
+        await drainMainQueue()
+        expect(webKit.lastParams.contains("})(true, true)") && webKit.lastParams.contains(#""userGesture":true"#), "and asks it for Picture in Picture")
+        webKit.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"ok"}}"#)
+        await drainMainQueue()
+        manager.show(plain, focus: false)
+        manager.show(service, focus: false)
+        expect(runLook(chromium.lastParams, videos: film) == "none", "leaving a Chromium tab leaves its opted-out video where it is")
+        chromium.reply(to: "Runtime.evaluate", with: #"{"result":{"type":"string","value":"none"}}"#)
+        await drainMainQueue()
+        store.settings.autoPictureInPicture = false
+        manager.closeAll()
+    }
+
+    /// A WebKit page's video is in the system's Picture in Picture window. Its back-to-tab button
+    /// did nothing, because WebKit asks for the page to be shown first and its tab stayed hidden.
+    /// WebKit says when the button is pressed, and the tab is selected as Back to Tab on Cra's own
+    /// window selects a Chromium page's (#585). WebKit moves the video itself.
+    // promise: #585
+    @MainActor
+    private static func webKitPictureInPictureBackToTabCase() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let service = store.createTab(url: "https://www.netflix.com/watch/1").id, other = store.createTab(url: "https://example.test/other").id
+        let webKit = manager.ensureRuntime(for: service)!.browser
+        manager.show(service, focus: false)
+        manager.show(other, focus: false)
+        webKit.isInPictureInPicture = true
+        manager.browser(webKit, didChangePictureInPicture: true)
+        let before = store.selections
+        (manager as WebKitPageDelegate).webKitPageReturnsFromPictureInPicture(webKit)
+        expect(store.selections == before + [service], "the system window's back to tab selects the WebKit page's tab")
+        expect(webKit.isInPictureInPicture, "and leaves moving the video to WebKit, which is doing it")
         manager.closeAll()
     }
 

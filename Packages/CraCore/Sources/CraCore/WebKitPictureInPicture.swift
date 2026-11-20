@@ -5,8 +5,9 @@ import Foundation
 /// answered the request with nothing at all (GitHub #585). Asked by the person (the menu, the
 /// sidebar player's button), it now takes WebKit's own toggle, the one Safari's Picture in Picture
 /// uses, which needs no user gesture in the page and finds the playing video itself. Leaving a tab
-/// (automatic) stays with the page's own request, so a video the page keeps out of Picture in
-/// Picture doesn't pop out over the screen.
+/// (automatic) stays with the page's own request (PictureInPictureRequest), which on a WebKit page
+/// takes a video that says `disablePictureInPicture` too (Netflix's); the Site Control Center's switch
+/// turns leaving the tab off for a site.
 public enum WebKitPictureInPicture: Equatable, Sendable {
     /// WebKit's own Picture in Picture toggle.
     case toggle
