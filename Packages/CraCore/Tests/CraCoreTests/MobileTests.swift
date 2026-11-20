@@ -94,14 +94,15 @@ struct MobileSuggestionsTests {
         a.spaces += blank.spaces
         a.items += blank.items
         let sites = MobileSuggestions.macSites(in: a)
-        #expect(sites.map(\.title) == ["Manga pinned", "Manga folder", "Manga undated"])
-        #expect(sites.map { $0.place?.prefix } == ["Pinned in ", "Pinned in ", "Pinned in "])
-        #expect(sites.map { $0.place?.space } == ["A", "A", "B"])
+        // Today tabs come too (Victor, 20 Nov), newest first with the pinned ones.
+        #expect(sites.map(\.title) == ["Manga today", "Manga pinned", "Manga folder", "Manga undated"])
+        #expect(sites.map { $0.place?.prefix } == ["Today in ", "Pinned in ", "Pinned in ", "Pinned in "])
+        #expect(sites.map { $0.place?.space } == ["B", "A", "A", "B"])
         let phone = MobileSuggestions.Site(title: "Manga phone", url: "https://www.x.example/p/")
         let rows = MobileSuggestions.rows(typed: "manga", completions: [], sites: [phone] + sites, limit: 10)
-        #expect(rows.map(\.text) == ["manga", "Manga phone", "Manga folder"])
+        #expect(rows.map(\.text) == ["manga", "Manga phone", "Manga today"])
         #expect(rows[1].place == nil)
-        #expect(rows[2].place?.space == "A")
+        #expect(rows[2].place?.prefix == "Today in " && rows[2].place?.space == "B")
         let duplicate = MobileSuggestions.rows(typed: "x.example", completions: [], sites: [phone] + sites)
         #expect(duplicate.filter { if case .site = $0.kind { return true }; return false }.count == 1)
         #expect(duplicate[0].place == nil)
@@ -109,7 +110,7 @@ struct MobileSuggestionsTests {
         a.items += extras
         a.items[a.items.firstIndex { $0.id == a.spaces[0].pinnedContainerID }!].children += extras.map(\.id)
         let many = MobileSuggestions.macSites(in: a)
-        #expect(many.count == 5)
+        #expect(many.count == 6)
         #expect(MobileSuggestions.rows(typed: "manga", completions: [], sites: many, limit: 10).count == 3)
     }
 

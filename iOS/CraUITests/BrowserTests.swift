@@ -1292,8 +1292,9 @@ final class SiteMatchTests: BrowserTestCase {
         field.typeText("story")
         let story = app.descendants(matching: .any).matching(NSPredicate(format: "identifier MATCHES 'suggestion-[0-9]+'"))
             .containing(.staticText, identifier: "Story").firstMatch
-        XCTAssertFalse(story.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["In Work"].exists)
+        // The Mac's Today tabs come too, saying so (Victor, 20 Nov).
+        XCTAssertTrue(story.waitForExistence(timeout: 10))
+        XCTAssertTrue(story.staticTexts["Today in Work"].exists)
         app.buttons["search-clear"].tap()
         field.typeText("docs")
         XCTAssertTrue(docs.waitForExistence(timeout: 5))

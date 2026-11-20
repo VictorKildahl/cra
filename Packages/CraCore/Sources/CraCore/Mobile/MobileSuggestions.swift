@@ -50,8 +50,11 @@ public enum MobileSuggestions {
         }
     }
 
+    /// The Mac's tabs that typed search offers (#650): those pinned in each synced Space and its
+    /// Today tabs, newest first, each saying where it lives: "Pinned in <Space>" or "Today in <Space>".
+    /// Arc Search's label for a Today tab was not seen; "Today" is what Cra's sidebar calls them.
     public static func macSites(in document: SidebarDocument) -> [Site] {
-        MobileSpaces.tabsWithPlace(in: document).enumerated().filter { $0.element.pinned && !$0.element.tab.url.isEmpty }.sorted { left, right in
+        MobileSpaces.tabsWithPlace(in: document).enumerated().filter { !$0.element.tab.url.isEmpty }.sorted { left, right in
             switch (left.element.tab.timeLastActiveAt, right.element.tab.timeLastActiveAt) {
             case let (a?, b?): return a == b ? left.offset < right.offset : a > b
             case (_?, nil): return true
@@ -60,7 +63,7 @@ public enum MobileSuggestions {
             }
         }.map { _, entry in
             Site(title: MobileSpaces.tabTitle(item: entry.item, tab: entry.tab), url: entry.tab.url,
-                 place: Place(prefix: "Pinned in ", space: entry.space))
+                 place: Place(prefix: entry.pinned ? "Pinned in " : "Today in ", space: entry.space))
         }
     }
 

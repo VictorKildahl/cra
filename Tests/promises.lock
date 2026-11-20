@@ -1396,9 +1396,9 @@
 #648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::theSidebarFieldFollowsThePeekOnlyWhileItHasTheAddress  6ff7993bdbfb
 #648   Tests/Scenarios/peek-card-bar-with-toolbar.scenario  a6847ae78beb
 #648   Tests/Scenarios/peek-sidebar-address.scenario  305b71ef5d44
-#650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  5985614aa527
+#650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  a64d7221a346
 #650   iOS/CraUITests/BrowserTests.swift::testPhoneSiteWinsOverSyncedSpace  f3705dffdfb4
-#650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  f320b5eaba77
+#650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  587d781bccdd
 #654   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theIncognitoGlyphKeepsItsPlaceOffAndOn  29893e17853f
 #654   iOS/CraUITests/SearchFieldTests.swift::testTheIncognitoGlyphStaysPutWhenSwitchedOn  4c8dbe371fb4
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
