@@ -56,6 +56,9 @@ public enum ShortcutPriority: String, CaseIterable, Codable, Hashable, Sendable 
         "toggleSidebar", "toggleToolbar", "nextTab", "previousTab", "recentTab", "recentTabBackward", "nextSpace", "previousSpace",
         "devTools", "jsConsole", "inspectElement", "viewArchive", "openLibrary", "settings", "clearToday", "newLittleWindow",
         "promoteLittleWindow", "addSplitView", "closeSplitPane", "copyURL", "copyURLMarkdown",
+        // ⌥⌘V: a page that has the keys never hands it back, so Cra takes it first and pastes into a
+        // text field itself (#610, PasteAndGo).
+        "pasteAndGo",
     ] + (1...9).flatMap { ["item\($0)", "space\($0)", "moveTabToSpace\($0)"] })
 }
 

@@ -1329,6 +1329,8 @@
 #609   Packages/CraCore/Tests/CraCoreTests/CommandBarProfileScopeTests.swift::eachProfileSuggestsItsOwn  b5cf5626102c
 #609   Tests/Scenarios/command-bar-profile-scope.scenario  74d24d4274b6
 #609   Tests/StoreTests.swift::visitsRememberTheirProfile  5d9666d4f210
+#610   Packages/CraCore/Tests/CraCoreTests/PasteAndGoTests.swift::opensTheClipboardUnlessTyping  2617bef71028
+#610   Tests/Scenarios/paste-and-go.scenario  fe3adef6d714
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
 #614   Tests/Scenarios/command-bar-whole-archive.scenario  757726fdd663
 #614   Tests/StoreTests.swift::clearTodayArchivesInOnePass  6edf309ca7f0

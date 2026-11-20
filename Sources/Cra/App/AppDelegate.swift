@@ -2538,6 +2538,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // themeEditor=1 opens it; themeEditor=intensity:<0…1> or noise:<0…1> moves its slider or
             // dial as a drag would, and logs how many ticks that played.
+            // pasteAndGo=<text>: ⌥⌘V with that text in place of the clipboard, which a test copy shares with the Mac (#610).
+            if let text = dict["pasteAndGo"] { pasteAndGo(clipboard: text, in: main); return }
+            // setPasteboard=<text>: what ⌥⌘V reads next, on the CRA_TEST_PASTEBOARD board only (#610).
+            if let text = dict["setPasteboard"], ProcessInfo.processInfo.environment["CRA_TEST_PASTEBOARD"] != nil {
+                Self.pasteboard.clearContents()
+                Self.pasteboard.setString(text, forType: .string)
+                return
+            }
             if let step = dict["themeEditor"] {
                 let parts = step.split(separator: ":").map(String.init)
                 guard parts.count == 2, let v = Double(parts[1]) else { main.showSpaceStyleEditor(space: store.focusedSpace); return }
@@ -3207,10 +3215,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return nil
     }
 
+    /// The clipboard ⌥⌘V reads: the Mac's, or with CRA_TEST_PASTEBOARD a named one of the test copy's own,
+    /// so a scenario never touches what the user copied (cra://debug?setPasteboard=).
+    static let pasteboard: NSPasteboard = ProcessInfo.processInfo.environment["CRA_TEST_PASTEBOARD"]
+        .map { NSPasteboard(name: NSPasteboard.Name($0)) } ?? .general
+
+    /// ⌥⌘V: the clipboard as a new tab, an address or a search, or a paste where you type (#610).
+    private func pasteAndGo(clipboard: String?, in main: MainWindowController) {
+        // The key window's field, or with none (Cra in the background) the shown page's.
+        let window = NSApp.keyWindow ?? main.currentBrowser?.hostWindow ?? main.window
+        switch PasteAndGo.outcome(typing: textFieldHasKey(in: window), clipboard: clipboard) {
+        case .paste:
+            CraLog.note("paste and go: pasted into the field")
+            NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+        case .open(let text):
+            CraLog.note("paste and go: \(SuggestionEngine.looksLikeURL(text) ? "address" : "search")")
+            main.sidebarActions.openTyped(text)
+        case .nothing:
+            CraLog.note("paste and go: nothing to open")
+            NSSound.beep()
+        }
+    }
+
     /// A text field, or a page input, has the key: ⌥← moves by word there, and ⌘Z undoes text
     /// rather than the last closed tab. Chromium's page view reports its ui::TextInputType (0 = none).
-    private func textFieldHasKey(_ event: NSEvent) -> Bool {
-        let responder = (event.window ?? NSApp.keyWindow)?.firstResponder
+    private func textFieldHasKey(_ event: NSEvent) -> Bool { textFieldHasKey(in: event.window ?? NSApp.keyWindow) }
+
+    private func textFieldHasKey(in window: NSWindow?) -> Bool {
+        let responder = window?.firstResponder
         if responder is NSText { return true }
         if let view = responder as? NSView, NSStringFromClass(type(of: view)) == "RenderWidgetHostViewCocoa",
            view.responds(to: NSSelectorFromString("textInputType")),
@@ -3453,6 +3485,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.showToast("Copied URL as Markdown")
             }
         case "copyURLQuote": main.copyURLAsQuote()
+        case "pasteAndGo":
+            // Read on the press: the user asked for the paste, so macOS lets it through or asks once.
+            pasteAndGo(clipboard: Self.pasteboard.string(forType: .string), in: main)
         case "savePageAs": main.savePageAs()
         case "captureFullPage": main.captureFullPage()
         case "capturePortrait": main.capturePortrait()
@@ -3773,6 +3808,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         edit.addItem(std("Cut", #selector(NSText.cut(_:)), "x"))
         edit.addItem(std("Copy", #selector(NSText.copy(_:)), "c"))
         edit.addItem(item("copyURL")); edit.addItem(item("copyURLMarkdown")); edit.addItem(item("copyURLQuote"))
+        edit.addItem(item("pasteAndGo"))
         edit.addItem(std("Paste", #selector(NSText.paste(_:)), "v"))
         edit.addItem(std("Paste and Match Style", #selector(pasteAsPlainText(_:)), "v", [.command, .shift]))
         edit.addItem(std("Delete", #selector(NSText.delete(_:))))

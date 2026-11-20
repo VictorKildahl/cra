@@ -198,6 +198,9 @@ final class KeyBindingRegistry {
             KeyAction(id: "copyURLMarkdown", name: "Copy URL as Markdown", section: .edit, shortcuts: [Shortcut("c", cmdOptShift)], triggers: ["markdown"]),
             // Arc: Edit ▸ Copy URL as Quote ⌃⇧⌘C, the selection with a link to it.
             KeyAction(id: "copyURLQuote", name: "Copy URL as Quote", section: .edit, shortcuts: [Shortcut("c", [.command, .shift, .control])], triggers: ["quote", "highlight"]),
+            // Arc 2023's "paste clipboard as new tab" ⌥⌘V, which Arc dropped in March 2024; kept here (#610).
+            KeyAction(id: "pasteAndGo", name: "Paste and Go", section: .edit, shortcuts: [Shortcut("v", cmdOpt)],
+                      triggers: ["paste and go", "paste clipboard", "open clipboard"]),
             KeyAction(id: "find", name: "Find…", section: .edit, shortcuts: [Shortcut("f", cmd)], triggers: ["find", "search page"]),
             KeyAction(id: "findNext", name: "Find Next", section: .edit, shortcuts: [Shortcut("g", cmd)], inCommandBar: false),
             KeyAction(id: "findPrevious", name: "Find Previous", section: .edit, shortcuts: [Shortcut("g", cmdShift)], inCommandBar: false),

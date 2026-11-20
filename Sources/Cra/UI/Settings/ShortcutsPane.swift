@@ -305,6 +305,7 @@ enum ShortcutDescriptions {
         "print": "Print the page.",
         "copyURL": "Copy the page’s URL.",
         "copyURLMarkdown": "Copy the page’s title and URL as a Markdown link.",
+        "pasteAndGo": "Open the copied link as a new tab, or search the copied text. In a text field it just pastes.",
         "find": "Search for text on the page.",
         "findNext": "Jump to the next match.",
         "findPrevious": "Jump to the previous match.",

@@ -2589,9 +2589,7 @@ struct ClipboardPaste: Equatable {
 
     /// The clipboard's text on one line, nil when it holds none.
     @MainActor static func read() -> String? {
-        guard let s = NSPasteboard.general.string(forType: .string) else { return nil }
-        let line = s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return line.isEmpty || line.count > 2048 ? nil : line
+        PasteAndGo.line(NSPasteboard.general.string(forType: .string))
     }
 }
 

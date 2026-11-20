@@ -1,0 +1,34 @@
+# promise: #610
+# ⌥⌘V opens the copied link as a new tab (Arc 2023's "paste clipboard as new tab", kept on Victor's call).
+# The press reaches the page as the keyboard does (cra://debug?key=…&page=1): Cra takes it before the page
+# (a page never hands ⌥⌘V back) and opens the link beside the page. In a page's text field it pastes
+# there and never navigates. The test copy reads a pasteboard of its own (CRA_TEST_PASTEBOARD),
+# never the Mac's clipboard. Text that isn't a link goes to the search engine (PasteAndGoTests).
+budget rss=700 stalls50=10
+port 47610
+env CRA_TEST_PASTEBOARD=cra.scenario.paste-and-go
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=start
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?setPasteboard=http://127.0.0.1:47610/page.html?n=pasted-link
+cra://debug?key=v,9,1572864&page=1
+expect-log paste and go: address
+expect-log GET /page\.html\?n=pasted-link
+wait 1
+# A new tab: the page it was pressed on stays open beside it.
+cra://debug?todayOrder=after
+expect-log today order after: .*n=pasted-link
+expect-log today order after: .*n=start
+# Nothing copied: nothing opens.
+cra://debug?pasteAndGo=%20
+expect-log paste and go: nothing to open
+
+# In a page's text field it pastes there and nothing opens.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.body.insertAdjacentHTML('beforeend','<input id=pgq>');document.getElementById('pgq').focus();'focused'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"focused"
+cra://debug?setPasteboard=http://127.0.0.1:47610/page.html?n=field-link
+cra://debug?key=v,9,1572864&page=1
+expect-log paste and go: pasted into the field
+wait 1
+reject-log GET /page\.html\?n=field-link
