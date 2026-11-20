@@ -1788,6 +1788,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("little order \(label): \(order.joined(separator: " "))")
                 return
             }
+            // appActivated=1: AppKit's didBecomeActive, as when Cra comes forward (Mission Control's pick of a Little
+            // Window, #581); a background test copy is refused the real thing.
+            if dict["appActivated"] != nil { NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp); return }
+            // littleActivation=<label>: whether the newest Little Window is a non-activating panel (its style and AppKit's
+            // own flag, which the WindowServer goes by), and the kind of Space it is on (#581).
+            if let label = dict["littleActivation"], let w = littleWindows.last(where: { !$0.isPeek })?.window {
+                let prevents = (w as? LittleWindow)?.preventsActivation.map { $0 ? "1" : "0" } ?? "?"
+                CraLog.note("little activation \(label): nonactivating=\(w.styleMask.contains(.nonactivatingPanel) ? 1 : 0) prevents=\(prevents) space=\(WindowSpaces.space(of: w))")
+                return
+            }
             // littleRow=<text>&typed=<text>: the newest Little Window's ⌘L bar picks the row for that page (#599).
             if let address = dict["littleRow"] { littleWindows.last?.debugPickRow(containing: address, typed: dict["typed"] ?? ""); return }
             // littleMenu=<step>: the newest Little Window's "Open in" menu, see debugMenu (#331).

@@ -290,6 +290,7 @@
 #180   Tests/StoreTests.swift::dropOnPinnedTabSplits  e363bbd33fb2
 #185   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::developerBarShowsWithTheToolbarHidden  20670c4040fc
 #185   Tests/Scenarios/developer-bar.scenario  7e0621dd18c1
+#186   Packages/CraCore/Tests/CraCoreTests/LittleWindowActivationTests.swift::overAnotherAppsFullScreenItStaysNonActivating  17eaa896719a
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::aMissingFolderFallsBackToDownloads  f5a843595618
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::eachProfileKeepsItsOwn  f394f179f5ba
 #190   Packages/CraCore/Tests/CraCoreTests/DownloadLocationTests.swift::goingBackToTheDefaultDropsTheEntry  96fe0ad9a50b
@@ -1260,6 +1261,8 @@
 #580   Tests/EaselCanvasTests.swift::longText  bb1d30ef94bc
 #580   Tests/EaselCanvasTests.swift::severalItems  a13b537a4e22
 #580   Tests/Scenarios/easel.scenario  6d670e6bd05d
+#581   Packages/CraCore/Tests/CraCoreTests/LittleWindowActivationTests.swift::onADesktopItActivatesCra  0bfeab8e26bd
+#581   Tests/Scenarios/little-window-activates-on-desktop.scenario  6eb6b160a296
 #581   Tests/Scenarios/little-window-mission-control.scenario  9c0af64b7751
 #584   Packages/CraCore/Tests/CraCoreTests/AskOnPageRefusalTests.swift::aRefusedAnswerIsAskedAgainInPlainText  974697490f34
 #584   Tests/AskOnPageServiceTests.swift::aRefusedAnswerIsAskedAgainInPlainText  e5c3ccb857c5

@@ -1,0 +1,23 @@
+# promise: #581
+# A Little Window on a desktop stops being a non-activating panel once Cra comes forward with it. It opens as one, as
+# Little Arc does, so it can come up over another app's full screen (#186), but the WindowServer never counts such a
+# window as Cra's: picked in Mission Control or App Exposé with the browser window on another desktop, Cra came
+# forward and the app the link came from took the front back as Mission Control closed. Cra comes forward as the pick
+# lands, before Mission Control closes, so the window is an ordinary panel by then, AppKit's own flag included
+# (prevents=, what the WindowServer goes by: the style alone changed nothing there). A background copy is refused real
+# activation, so appActivated stands in for it.
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleActivation=opened
+expect-log little activation opened: nonactivating=1 prevents=1 space=desktop
+
+cra://debug?appActivated=1
+wait 1
+cra://debug?littleActivation=forward
+expect-log little activation forward: nonactivating=0 prevents=0 space=desktop

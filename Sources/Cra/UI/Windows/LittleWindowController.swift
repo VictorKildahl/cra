@@ -365,7 +365,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         commandBar.onCommit = { [weak self] s, typed, mode in self?.handleCommit(s, typed: typed, mode: mode) }
         commandBar.onClose = { [weak self] in self?.hideCommandPanel() }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.commandBarCraCameBack() }
+            MainActor.assumeIsolated {
+                self?.settleActivation()
+                self?.commandBarCraCameBack()
+            }
         }
         commandBar.spaceName = { [weak self] id in self?.store.space(id)?.title ?? "" }
         commandBar.onNoticeSettings = { [weak self] in self?.app.showSettingsWindow(on: .profiles) }
@@ -2022,6 +2025,19 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         ChromiumPageFocus.focus(host)
     }
 
+    /// Cra came forward: on a desktop the window stops being a non-activating panel (LittleWindowActivation, #581).
+    /// Picked in Mission Control or App Exposé, Cra comes forward as the pick lands, a moment before Mission Control
+    /// hands the screen back: the WindowServer then sees an ordinary window of Cra's on that desktop and leaves Cra in
+    /// front, also with the browser window on another desktop. Over another app's full screen it stays one (#186).
+    private func settleActivation() {
+        guard let window, !isPeek, window.isVisible, window.styleMask.contains(.nonactivatingPanel),
+              !window.styleMask.contains(.fullScreen) else { return }
+        let space = WindowSpaces.space(of: window)
+        guard !LittleWindowActivation.staysNonActivating(on: space) else { return }
+        (window as? LittleWindow)?.becomeActivating()
+        CraLog.note("little window: an ordinary panel on its \(space)")
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         let w = notification.object as? NSWindow
         if w === window, let host = browser?.hostWindow { ChromiumPageFocus.blur(host) }
@@ -2812,9 +2828,10 @@ final class LittleWindow: NSPanel {
     override func cancelOperation(_ sender: Any?) {
         nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
     }
-    /// A non-activating panel takes clicks without bringing Cra forward; a window brings it.
+    /// A non-activating panel takes clicks without bringing Cra forward; a window brings it. Also once it is an ordinary
+    /// panel on a desktop (#581): a click comes the same way as before then (#641).
     override func sendEvent(_ event: NSEvent) {
-        if styleMask.contains(.nonactivatingPanel), !NSApp.isActive,
+        if styleMask.contains(.nonactivatingPanel) || styleMask.contains(.titled), !NSApp.isActive,
            [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
             NSApp.activate(ignoringOtherApps: true)
             // Cra comes forward on the click, but a non-activating panel isn't raised with it: the window
@@ -2830,6 +2847,25 @@ final class LittleWindow: NSPanel {
             makeKey()
         }
         super.sendEvent(event)
+    }
+
+    /// No longer a non-activating panel (#581). The style mask alone leaves AppKit's own flag, which is what the
+    /// WindowServer goes by: picked in Mission Control, the window still lost the front as Mission Control closed. A
+    /// panel made without the style keeps Cra in front, and so does this one once the flag is off too.
+    func becomeActivating() {
+        styleMask.remove(.nonactivatingPanel)
+        let set = NSSelectorFromString("_setPreventsActivation:")
+        guard responds(to: set) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(method(for: set), to: Setter.self)(self, set, false)
+    }
+
+    /// AppKit's own flag (`_preventsActivation`); nil if AppKit has none.
+    var preventsActivation: Bool? {
+        let get = NSSelectorFromString("_preventsActivation")
+        guard responds(to: get) else { return nil }
+        typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+        return unsafeBitCast(method(for: get), to: Getter.self)(self, get)
     }
 
     /// macOS's corner radius for this window (16 pt on macOS 26, larger than Arc's
