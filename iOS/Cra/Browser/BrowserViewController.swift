@@ -620,6 +620,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if page.webView.url == nil, !page.isBrowsing, !page.webKitOwnsInitialNavigation {
             if let query = MobileBrowseForMe.query(fromTabAddress: tab.url) {
                 browse(for: query, in: page)
+            } else if let history = store.history(for: tab) {
+                // Where the tab was, scrolled as it was, with its back and forward list (#656).
+                page.webView.interactionState = history.state
+                if page.webView.backForwardList.currentItem == nil { page.load(tab.url) }
             } else {
                 page.load(tab.url)
             }

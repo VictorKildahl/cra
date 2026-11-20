@@ -96,6 +96,11 @@ function createPasskey() {
             # No theme-color, a dark background of its own (StatusBandTests, #657).
             self.page('<title>Dark Page</title><style>html,body{background:#123456;color:white}</style>'
                       '<h1>Dark Page</h1>')
+        elif url.path == '/long-article':
+            # A long page to scroll down and find again after the app is closed (PageRestoreTests, #656).
+            self.page('<title>Long Article</title><h1>Long Article</h1>'
+                      + ''.join('<p>Paragraph %d of a long article, with enough words to take a few lines on a phone.</p>' % n
+                                for n in range(1, 121)))
         elif url.path == '/before-refused':
             # A page to come back to from the error page of an address WebKit refuses (port 1).
             self.page('<title>Before Refused</title><h1>Before Refused</h1>')

@@ -8,6 +8,10 @@ final class TabStore {
     private(set) var document: MobileTabsDocument
     private let fileURL: URL
     private let snapshotsURL: URL
+    /// Each tab's place in its page: WKWebView's interactionState (back and forward list, scroll
+    /// position) in a PageHistory, as the Mac keeps its WebKit pages' (#273). A tab whose page is made
+    /// again, after a relaunch or from the archive, opens where it was, as Arc Search does (#656).
+    private let historiesURL: URL
     private var pages: [UUID: WebPage] = [:]
     private var snapshots: [UUID: UIImage] = [:]
     private var saveScheduled = false
@@ -19,6 +23,8 @@ final class TabStore {
         fileURL = directory.appendingPathComponent("tabs.json")
         snapshotsURL = directory.appendingPathComponent("Snapshots", isDirectory: true)
         try? FileManager.default.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
+        historiesURL = directory.appendingPathComponent("PageHistory", isDirectory: true)
+        try? FileManager.default.createDirectory(at: historiesURL, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: fileURL), let loaded = try? JSONDecoder().decode(MobileTabsDocument.self, from: data) {
             document = loaded
         } else {
@@ -94,6 +100,7 @@ final class TabStore {
         pages[id] = nil
         snapshots[id] = nil
         try? FileManager.default.removeItem(at: snapshotFile(id))
+        try? FileManager.default.removeItem(at: historyFile(id))
         changed()
     }
 
@@ -106,6 +113,7 @@ final class TabStore {
         document.archive(id, returningTo: opener?.tabID)
         // Back on its opener, whose archive clock restarts as when it is picked.
         if wasSelected, let opener, document.selected == opener.tabID { document.select(opener.tabID, now: now()) }
+        if let page = pages[id] { saveHistory(of: page) }
         pages[id] = nil
         snapshots[id] = nil
         changed()
@@ -118,7 +126,10 @@ final class TabStore {
 
     func removeArchived(_ ids: Set<UUID>) {
         document.removeArchived(ids)
-        ids.forEach { try? FileManager.default.removeItem(at: snapshotFile($0)) }
+        ids.forEach {
+            try? FileManager.default.removeItem(at: snapshotFile($0))
+            try? FileManager.default.removeItem(at: historyFile($0))
+        }
         changed()
     }
 
@@ -141,6 +152,7 @@ final class TabStore {
         let before = Set(document.tabs.map(\.id))
         guard document.archiveStale(after: after, now: now()) > 0 else { return }
         for id in before.subtracting(document.tabs.map(\.id)) {
+            if let page = pages[id] { saveHistory(of: page) }
             pages[id] = nil
             snapshots[id] = nil
         }
@@ -210,6 +222,35 @@ final class TabStore {
 
     private func snapshotFile(_ id: UUID) -> URL {
         snapshotsURL.appendingPathComponent("\(id.uuidString).jpg")
+    }
+
+    // MARK: Places in pages
+
+    private func historyFile(_ id: UUID) -> URL {
+        historiesURL.appendingPathComponent("\(id.uuidString).json")
+    }
+
+    /// Keeps where `page` is, its scroll position and back and forward list, for when its tab's page is
+    /// made again (#656). Never an incognito tab's.
+    func saveHistory(of page: WebPage) {
+        guard let tab = (document.tabs + document.archived).first(where: { $0.id == page.tabID }), !tab.isIncognito,
+              page.webView.backForwardList.currentItem != nil, let url = page.webView.url?.absoluteString,
+              let state = page.webView.interactionState as? Data,
+              let data = try? JSONEncoder().encode(PageHistory(engine: .webKit, url: url, state: state, savedAt: now())) else { return }
+        try? data.write(to: historyFile(page.tabID), options: .atomic)
+    }
+
+    /// Every page's place: the app is going to the background, where iOS may end it.
+    func saveHistories() {
+        for page in pages.values { saveHistory(of: page) }
+    }
+
+    /// The place to open `tab`'s new page at, when it was saved on the page the tab is on.
+    func history(for tab: MobileTab) -> PageHistory? {
+        guard !tab.isIncognito, let data = try? Data(contentsOf: historyFile(tab.id)),
+              let history = try? JSONDecoder().decode(PageHistory.self, from: data),
+              history.restores(into: .webKit, at: tab.url) else { return nil }
+        return history
     }
 
     // MARK: Saving

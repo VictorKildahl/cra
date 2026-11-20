@@ -52,6 +52,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
+        browser?.store.saveHistories()
         browser?.store.saveNow()
     }
 }
