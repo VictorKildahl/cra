@@ -12,7 +12,12 @@ cra://open?url=${ORIGIN}/features.html?n=save
 expect-log GET /features.html\?n=save
 wait 2
 
+# Each picker asks for a user's click: a DevTools click on the page's empty part comes first. The evaluate's
+# own user gesture alone reached Chrome after the picker's question on a slow runner ("User activation
+# required", Nightly 20 Nov).
 # showSaveFilePicker: a sheet, still waiting while it is up, AbortError once it is closed.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":700,"y":600,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":700,"y":600,"button":"left","clickCount":1}
 cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('save',showSaveFilePicker({suggestedName:'notes.txt'}))","userGesture":true}
 expect-log "value":"save asked"
 wait 2
@@ -26,6 +31,8 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"'save closed '+state.save
 expect-log "value":"save closed AbortError"
 
 # showDirectoryPicker: the same.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":700,"y":600,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":700,"y":600,"button":"left","clickCount":1}
 cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('dir',showDirectoryPicker())","userGesture":true}
 expect-log "value":"dir asked"
 wait 2
@@ -39,6 +46,8 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"'dir closed '+state.dir"}
 expect-log "value":"dir closed AbortError"
 
 # <input webkitdirectory>: a folder picker, cancelled only when it is closed.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":700,"y":600,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":700,"y":600,"button":"left","clickCount":1}
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(folder.click(),'folder asked')","userGesture":true}
 expect-log "value":"folder asked"
 wait 2

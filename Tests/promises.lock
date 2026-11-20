@@ -1326,7 +1326,7 @@ web-page-popup-closes Tests/Scenarios/page-popup-closes.scenario  02d1ef71e3da
 web-page-print-frame Tests/Scenarios/page-print-frame.scenario  63cf39432113
 web-page-repost Tests/Scenarios/page-repost.scenario  78d802860dd4
 web-page-resize-window Tests/Scenarios/page-resize-window.scenario  ded4382ff8dc
-web-page-save-pickers Tests/Scenarios/page-save-pickers.scenario  a0a74518ce03
+web-page-save-pickers Tests/Scenarios/page-save-pickers.scenario  5364ca11eee8
 web-page-share-picker Tests/Scenarios/page-share-picker.scenario  24eeea592355
 web-page-share-tab Tests/Scenarios/page-share-tab.scenario  df5fb132612d
 web-page-shared-tab-marks Tests/Scenarios/page-shared-tab-marks.scenario  fe7fe9addc2b
