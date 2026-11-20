@@ -25,6 +25,22 @@ enum WebKitStores {
         return s
     }
 
+    /// Cookies copied in from the same profile's Chromium (a page moving here for a protected
+    /// video, signed in): into that profile's store, or the incognito session's throwaway one.
+    static func add(_ cookies: [HTTPCookie], profilePath: String?, incognito isIncognito: Bool, done: @escaping @MainActor () -> Void) {
+        guard !cookies.isEmpty else { return done() }
+        let cookieStore = store(profilePath: isIncognito ? nil : profilePath, incognito: isIncognito).httpCookieStore
+        var left = cookies.count
+        for cookie in cookies {
+            cookieStore.setCookie(cookie) {
+                MainActor.assumeIsolated {
+                    left -= 1
+                    if left == 0 { done() }
+                }
+            }
+        }
+    }
+
     /// The last incognito window closed (CraCEFRuntime.endIncognitoSession): the next incognito
     /// page starts with nothing.
     static func endIncognitoSession() { incognito = nil }

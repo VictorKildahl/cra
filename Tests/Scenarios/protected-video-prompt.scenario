@@ -1,0 +1,156 @@
+# Protected videos on a site that is mostly not DRM (YouTube's bought films; ProtectedVideoPages,
+# docs/protected-media.md). The fixture server is reached as 127.0.0.1, which this run lists as
+# such a mixed site, so the journey needs no network and no account. film.html's ask() asks for
+# Widevine as a player starting a protected video does; report() answers "Film <name>, <engine>,
+# time <s>, <cookies>".
+# Covers: no prompt for an ordinary page; the prompt with Once, Always and ✕; Once moving only
+# that page to WebKit with its place in the video and Chromium's cookie; the next page going back
+# to Chromium; ✕ not asking again for that page; Always stored for the site and skipping the
+# prompt; the Site Control Center's row saying what is in force and taking it back; a player in a
+# frame asking for its page.
+# No & in a script: it ends the cra:// query. The clip is silent and never plays.
+env CRA_MIXED_HOSTS=127.0.0.1
+budget rss=900 stalls50=40
+pace 0.5
+
+# An ordinary page of the site: Chromium, no prompt, no row.
+cra://open?url=${ORIGIN}/film.html?n=a
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?protectedVideo=state&step=plain
+expect-log protected video state plain: prompt none, engine chromium, row none, always $
+
+# Signed in (a cookie), 30 seconds into its video, it asks for Widevine: the prompt.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='session=chromium; max-age=3600',at(30)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"at 30"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask()","awaitPromise":true}
+expect-log asked for Widevine on 127\.0\.0\.1: offers Safari's engine
+expect-log protected video prompt shown: Once\|Always\|✕
+cra://debug?protectedVideo=state&step=asked
+expect-log protected video state asked: prompt Once\|Always\|✕, engine chromium, row Off, always $
+
+# Once: this page moves to WebKit, at its address and its place in the video, signed in.
+cra://debug?protectedVideo=Once
+expect-log protected video Once: pressed true
+expect-log copies 1 cookies of 127\.0\.0\.1 to WebKit
+expect-log moves to WebKit for a protected video on 127\.0\.0\.1, once
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Film a, webkit, time 30, session=chromium"
+cra://debug?protectedVideo=state&step=once
+expect-log protected video state once: prompt none, engine webkit, row This Video, always $
+
+# The page moves on without a navigation, as YouTube does to the next video: back to Chromium.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"next('b')"}
+expect-log goes back to Chromium: 127\.0\.0\.1 is no longer the protected video's page
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'b: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"b: Film b, chromium, time 0, session=chromium"
+
+# ✕: this page stays in Chromium, and asking again brings no prompt.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask().then(r=>'b '+r)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"b asked"
+wait 1
+cra://debug?protectedVideo=state&step=asked-b
+expect-log protected video state asked-b: prompt Once\|Always\|✕, engine chromium, row Off, always $
+cra://debug?protectedVideo=close
+expect-log protected video close: pressed true
+expect-log protected video prompt answered: ✕
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask().then(r=>'b again '+r)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"b again asked"
+wait 1
+cra://debug?protectedVideo=state&step=closed-b
+expect-log protected video state closed-b: prompt none, engine chromium, row Off, always $
+
+# Another page of the site asks: the prompt again. Always: it moves, and the site is kept.
+cra://debug?pageJS=location.href='${ORIGIN}/film.html?n=c'
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask().then(r=>'c '+r)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"c asked"
+wait 1
+cra://debug?protectedVideo=state&step=asked-c
+expect-log protected video state asked-c: prompt Once\|Always\|✕, engine chromium, row Off, always $
+cra://debug?protectedVideo=Always
+expect-log protected video Always: pressed true
+expect-log moves to WebKit for a protected video on 127\.0\.0\.1, as always
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'c: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"c: Film c, webkit, time 0, session=chromium"
+cra://debug?protectedVideo=state&step=always
+expect-log protected video state always: prompt none, engine webkit, row Protected Videos, always 127\.0\.0\.1$
+
+# Always is the site's, the page still only its own: a navigation to another one is Chromium's
+# again, where the row says what is in force; when that page asks it moves without a prompt.
+cra://debug?pageJS=location.href='${ORIGIN}/film.html?n=d'
+expect-log goes back to Chromium
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'d: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"d: Film d, chromium, time 0, session=chromium"
+cra://debug?protectedVideo=state&step=always-d
+expect-log protected video state always-d: prompt none, engine chromium, row Protected Videos, always 127\.0\.0\.1$
+cra://debug?pageJS=ask()
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'d moved: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"d moved: Film d, webkit, time 0, session=chromium"
+cra://debug?protectedVideo=state&step=moved-d
+expect-log protected video state moved-d: prompt none, engine webkit, row Protected Videos, always 127\.0\.0\.1$
+
+# The Site Control Center's row on the switched page: it says Protected Videos, and its click takes
+# the choice back and the page to Chromium, which doesn't ask about that page again.
+cra://debug?siteControls=1
+wait 1
+cra://debug?siteControlsRead=1
+expect-log site controls settings: .*Safari’s Engine, Protected Videos
+cra://debug?siteControlsPress=Safari’s Engine, Protected Videos
+expect-log site controls pressed Safari’s Engine, Protected Videos
+expect-log moves to Chromium for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'d back: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"d back: Film d, chromium, time 0, session=chromium"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask().then(r=>'d back '+r)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"d back asked"
+wait 1
+cra://debug?protectedVideo=state&step=back-d
+expect-log protected video state back-d: prompt none, engine chromium, row Off, always $
+
+# The row's Off on a page that asked turns the site's protected videos on, this one first; a
+# page switched Once says This Video, and its click takes only that page back.
+cra://debug?protectedVideo=row
+expect-log protected video row pressed: Off
+wait 3
+cra://debug?protectedVideo=state&step=row-on
+expect-log protected video state row-on: prompt none, engine webkit, row Protected Videos, always 127\.0\.0\.1$
+cra://debug?protectedVideo=row
+expect-log protected video row pressed: Protected Videos
+wait 2
+cra://debug?pageJS=location.href='${ORIGIN}/film.html?n=e'
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask().then(r=>'e '+r)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"e asked"
+wait 1
+cra://debug?protectedVideo=Once
+wait 3
+cra://debug?siteControls=1
+wait 1
+cra://debug?siteControlsRead=1
+expect-log site controls settings: .*Safari’s Engine, This Video
+cra://debug?siteControlsPress=Safari’s Engine, This Video
+expect-log site controls pressed Safari’s Engine, This Video
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'e back: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"e back: Film e, chromium, time 0, session=chromium"
+cra://debug?protectedVideo=state&step=end
+expect-log protected video state end: prompt none, engine chromium, row Off, always $
+
+# The player in a frame of its page (as Fandango at Home's is): the frame's request is its
+# page's, so a mixed site's page with such a player is asked about too.
+cra://debug?pageJS=location.href='${ORIGIN}/frame-player.html?frame=same'
+wait 2
+cra://debug?protectedVideo=state&step=frame-before
+expect-log protected video state frame-before: prompt none, engine chromium, row none, always $
+cra://debug?pageJS=play()
+wait 3
+cra://debug?protectedVideo=state&step=frame
+expect-log protected video state frame: prompt Once\|Always\|✕, engine chromium, row Off, always $
+cra://debug?protectedVideo=close
+cra://debug?checkStore=1

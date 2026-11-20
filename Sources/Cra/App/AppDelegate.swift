@@ -2407,6 +2407,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let mode = dict["switcher"] { main.debugTabSwitcher(allSpaces: mode == "all"); return }
             // The Site Control Center's Safari's Engine switch for the focused page, without the pointer.
             if let v = dict["safariEngine"] { main.debugChooseSafariEngine(v == "on"); return }
+            // The protected video prompt of a mixed site's page: state, Once, Always, close, row.
+            if let step = dict["protectedVideo"] { main.debugProtectedVideo(step, label: dict["step"] ?? ""); return }
             // Script in Cra's isolated world of the focused page: "Cra isolatedJS → <result>" on stdout.
             if let js = dict["isolatedJS"] {
                 let params = String(decoding: (try? JSONSerialization.data(withJSONObject: ["expression": js, "returnByValue": true])) ?? Data(), as: UTF8.self)

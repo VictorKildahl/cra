@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Film fixture</title>
+<style>body { font: 15px -apple-system, sans-serif; margin: 40px; }</style>
+<!-- A page of a site with protected videos among ordinary ones (YouTube's bought films), for
+     Tests/Scenarios/protected-video-prompt.scenario: ?n=<name> names it ("Film <name>").
+     film.mp4 is a silent minute of one colour (ffmpeg color, 160x90, 2 frames a second), so a place in it
+     can be kept across engines; it never plays by itself. It is loaded as a blob, because the
+     fixture server answers no byte ranges and Chromium can't seek a file served that way.
+     at(t) takes the video to t seconds (a promise), ask() asks for Widevine the way a player starting a
+     protected video does, next(name) moves on without a navigation (as YouTube changes videos),
+     report() says where everything is: "Film a, chromium, time 30, session=1". -->
+<h1>Film fixture</h1>
+<video id="v" muted playsinline preload="auto" width="320"></video>
+<script>
+  const v = document.getElementById('v');
+  const name = () => new URLSearchParams(location.search).get('n') || '0';
+  document.title = 'Film ' + name();
+  const loaded = new Promise(done => v.addEventListener('loadedmetadata', done, { once: true }));
+  fetch('film.mp4').then(r => r.blob()).then(b => { v.src = URL.createObjectURL(b); });
+  function at(t) { return loaded.then(() => { v.currentTime = t; return 'at ' + t; }); }
+  function ask() {
+    const config = [{ initDataTypes: ['cenc'], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }] }];
+    return navigator.requestMediaKeySystemAccess('com.widevine.alpha', config).then(() => 'asked', () => 'asked');
+  }
+  function next(n) { history.pushState(null, '', 'film.html?n=' + n); document.title = 'Film ' + name(); return document.title; }
+  function report() {
+    const engine = 'userAgentData' in navigator ? 'chromium' : 'webkit';
+    return [document.title, engine, 'time ' + Math.round(v.currentTime), document.cookie].join(', ');
+  }
+</script>

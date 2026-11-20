@@ -1,0 +1,40 @@
+# promise: #588
+# A player that is a frame of its page (Fandango at Home's player_frame.html) asks for Widevine in
+# that frame, not in the page. The request counts for the page (WidevineSignal,
+# docs/protected-media.md): the Site Control Center offers the Safari's Engine switch, which it
+# never did while only the top frame was asked. frame-player.html's play() adds the frame, on the
+# page's own origin as Fandango's is. No network and no account.
+# Not covered, and not working in Chromium: a player frame from another site, which runs in
+# another process where Cra's page scripts aren't installed (docs/protected-media.md).
+# No & in a script: it ends the cra:// query.
+budget rss=900 stalls50=40
+pace 0.5
+
+# The page itself never asks: nothing is known until its player frame loads.
+cra://open?url=${ORIGIN}/frame-player.html?frame=same
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?isolatedJS=['same before',window.__cra.drm===true].join(' ')
+expect-log Cra isolatedJS → .*"value":"same before false"
+cra://debug?pageJS=play()
+expect-log GET /player-frame\.html
+wait 2
+cra://debug?isolatedJS=['same after',window.__cra.drm===true].join(' ')
+expect-log Cra isolatedJS → .*"value":"same after true"
+# The frame's own message to its page still arrives, and Cra's never shows there.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Framed same, messages ready"
+
+# So the Site Control Center has the switch, and it moves the site to WebKit and back.
+cra://debug?siteControls=1
+wait 1
+cra://debug?siteControlsRead=1
+expect-log site controls settings: .*Safari’s Engine, Off
+cra://debug?siteControlsPress=Safari’s Engine, Off
+expect-log moves to WebKit for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,'userAgentData' in navigator].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Framed same,false"
+cra://debug?safariEngine=off
+expect-log moves to Chromium for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?checkStore=1

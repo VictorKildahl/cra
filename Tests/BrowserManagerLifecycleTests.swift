@@ -219,6 +219,7 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
         await pageProbeCase()
         await pageEngineCase()
+        await protectedVideoCase()
         await backgroundTabToastCase()
         backgroundPageStartsHiddenCase()
         pageHistoryCase()
@@ -784,6 +785,106 @@ enum BrowserManagerLifecycleTests {
 
         // A late request from a page that already moved changes nothing.
         expect(!manager.browser(chromium, handsOffNavigationToURL: "https://www.netflix.com/", method: "GET"), "a retired page can't move its tab again")
+        manager.closeAll()
+    }
+
+    /// A mixed site's page (YouTube) that asks for Widevine (ProtectedVideoPages): the window is told to
+    /// ask; Once moves that page to WebKit with its place in the video and the site's cookies, in its
+    /// pane; the tab's next video goes back to Chromium; with Always the page moves unasked; the Site
+    /// Control Center's row takes it back.
+    @MainActor
+    private static func protectedVideoCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let film = "https://www.youtube.com/watch?v=film1"
+        let tab = store.createTab(url: film).id
+        let other = store.createTab(url: "https://example.test/b").id
+        manager.show([tab, other], focused: other, focus: false)
+        func answer(_ value: String) -> String { #"{"result":{"type":"string","value":"\#(value)"}}"# }
+        func pending(_ browser: CraBrowser, _ method: String) -> Int { browser.replies.filter { $0.method == method }.count }
+        let sites = PageEngines.sites
+
+        // Only a mixed site's Chromium page is asked to tell when it wants Widevine.
+        let plain = manager.runtime(for: other)!.browser
+        plain.navigate(to: "https://example.test/c")
+        expect(pending(plain, "cra:Runtime.evaluate") == 0, "an ordinary site's page isn't asked about Widevine")
+        let chromium = manager.runtime(for: tab)!.browser
+        expect(!(chromium is WebKitBrowser), "a mixed site's page opens in Chromium")
+        chromium.navigate(to: film)
+        expect(pending(chromium, "cra:Runtime.evaluate") == 1 && chromium.lastIsolatedParams.contains("drmNext"),
+               "a mixed site's page is asked to tell when it wants Widevine, and left waiting")
+
+        // It asks: the window is told, and the page is asked for its next request.
+        observer.protectedVideoPrompts = []
+        chromium.reply(to: "cra:Runtime.evaluate", with: answer(film))
+        await drainMainQueue()
+        expect(observer.protectedVideoPrompts == [tab], "the window is told a prompt is due")
+        expect(PageEngines.videoPages.prompt(tab: tab, url: film, incognito: false, sites: sites)?.choices == [.once, .always], "Once and Always")
+        expect(pending(chromium, "cra:Runtime.evaluate") == 1, "the page is asked for the request after this one")
+        expect(manager.runtime(for: tab)?.browser === chromium, "nothing moves before the answer")
+
+        // Once: its place in the video and the site's cookies go along, and the pane keeps its place.
+        chromium.reply(to: "cra:Runtime.evaluate", with: answer(""))  // the waiting ask, taken over
+        manager.switchToSafariEngine(tab, how: .once)
+        manager.switchToSafariEngine(tab, how: .once)
+        expect(pending(chromium, "cra:Runtime.evaluate") == 1 && pending(chromium, "Network.getAllCookies") == 1, "asked once for its time and its cookies")
+        chromium.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"number","value":754.6}}"#)
+        chromium.reply(to: "Network.getAllCookies", with: #"{"cookies":[{"name":"SID","value":"s","domain":".youtube.com","path":"/","expires":-1,"session":true},{"name":"SID","value":"g","domain":".google.com","path":"/","expires":-1,"session":true},{"name":"bank","value":"b","domain":".bank.example","path":"/","expires":-1,"session":true}]}"#)
+        await drainMainQueue()
+        let moved = manager.runtime(for: tab)?.browser
+        expect(moved is WebKitBrowser && moved?.currentURL == film + "&t=754s", "Once opens the page in WebKit at its address and time")
+        expect(WebKitStores.added.last?.cookies.map(\.domain) == [".youtube.com"] && WebKitStores.added.last?.incognito == false,
+               "the site's own cookies are copied to the profile's WebKit store, not Google's or any other site's")
+        expect(chromium.closeRequested && manager.visibleTabIDs == [tab, other] && manager.visibleTabID == other, "the split keeps its panes, order and focus")
+        expect(PageEngines.choices.protectedVideos.isEmpty, "Once keeps nothing for the site")
+        chromium.finishClose()
+
+        // The same video and the sign-in stay; an address typed for the same video stays too.
+        moved!.navigate(to: film + "&t=800s")
+        moved!.navigate(to: "https://accounts.google.com/ServiceLogin?service=youtube")
+        await drainMainQueue()
+        expect(manager.runtime(for: tab)?.browser === moved, "the switched page stays in WebKit for its video and the sign-in")
+        expect(!manager.browser(moved!, handsOffNavigationToURL: film, method: "GET"), "its own address typed again stays in WebKit")
+
+        // The next video (YouTube changes the address without a navigation): back to Chromium, in its pane.
+        moved!.navigate(to: "https://www.youtube.com/watch?v=cat")
+        expect(manager.runtime(for: tab)?.browser === moved, "the page moves a turn later, not inside WebKit's callback")
+        await drainMainQueue()
+        let back = manager.runtime(for: tab)!.browser
+        expect(!(back is WebKitBrowser) && back.currentURL == "https://www.youtube.com/watch?v=cat", "another video is Chromium's again")
+        expect(PageEngines.videoPages.switched[tab] == nil && manager.visibleTabIDs == [tab, other], "the switch was that page's only")
+
+        // Always, kept for the site: the next page that asks moves without a prompt.
+        let youTube = sites.mixedSite(for: film)!
+        PageEngines.switchProtectedVideos(true, on: youTube)
+        back.navigate(to: film)
+        observer.protectedVideoPrompts = []
+        back.reply(to: "cra:Runtime.evaluate", with: answer(film))
+        await drainMainQueue()
+        expect(PageEngines.videoPages.prompt(tab: tab, url: film, incognito: false, sites: sites) == nil, "with Always there is no prompt")
+        back.reply(to: "cra:Runtime.evaluate", with: answer(""))
+        back.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"number","value":-1}}"#)
+        back.fail("Network.getAllCookies", with: "no cookies today")
+        await drainMainQueue()
+        let always = manager.runtime(for: tab)?.browser
+        expect(always is WebKitBrowser && always?.currentURL == film, "with Always the page moves by itself, even when its cookies can't be copied")
+        expect(PageEngines.videoPages.switched[tab]?.how == .always, "it is a page switched for the site's Always")
+
+        // The row turned off on the switched page: back to Chromium, and that page isn't asked about again.
+        PageEngines.switchProtectedVideos(false, on: youTube)
+        manager.returnToChromium(tab)
+        always!.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"number","value":90}}"#)
+        await drainMainQueue()
+        let returned = manager.runtime(for: tab)!.browser
+        expect(!(returned is WebKitBrowser) && returned.currentURL == film + "&t=90s", "turned off, the page is Chromium's again, at its time")
+        returned.navigate(to: film + "&t=90s")
+        returned.reply(to: "cra:Runtime.evaluate", with: answer(film))
+        await drainMainQueue()
+        expect(PageEngines.videoPages.prompt(tab: tab, url: film, incognito: false, sites: sites) == nil && manager.runtime(for: tab)?.browser === returned,
+               "a page taken back isn't asked about again")
+        expect(PageEngines.choices.protectedVideos.isEmpty, "nothing is left of the choice")
         manager.closeAll()
     }
 
@@ -2584,6 +2685,8 @@ private final class Observer: BrowserManagerDelegate {
     func browserManagerPageClosedTab(_ tabID: UUID) { closedTabs.append(tabID) }
     var translationToasts: [String] = []
     func browserManagerTranslationToast(_ tabID: UUID, text: String) { translationToasts.append(text) }
+    var protectedVideoPrompts: [UUID] = []
+    func browserManagerProtectedVideoPromptChanged(_ tabID: UUID) { protectedVideoPrompts.append(tabID) }
     func browserManagerActivationRequested(_ tabID: UUID, byPage: Bool) {
         activatedTabs.append(tabID)
         activatedByPage.append(byPage)

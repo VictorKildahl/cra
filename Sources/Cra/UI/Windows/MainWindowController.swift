@@ -73,6 +73,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// shows (nil once another toast took its place), and the check when the next one is due.
     private var slowResponses: [UUID: SlowResponseNotice] = [:]
     private var slowResponseToastTab: UUID?
+    /// The page whose protected-video prompt this window last showed (its tab and page key), and
+    /// whether the toast still shows it (false once another toast took its place or it was answered).
+    private var protectedVideoPrompt: (tab: UUID, key: String)?
+    private var protectedVideoPromptUp = false
     private var slowResponseCheck: ScheduledWork?
     /// releaseHiddenFrames, HiddenFrameRelease.afterPageChange after the last page change.
     private var frameReleaseAfterChange: ScheduledWork?
@@ -1009,6 +1013,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let window, let browser = browsers.runtime(for: id)?.browser else { return }
         let url = browser.navigatingURL ?? store.item(id)?.tab?.url ?? ""
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+        protectedVideoPromptUp = false
         toast.show(SlowResponseNotice.message(for: url),
                    action: ShinyToast.Action(title: "Stop Loading") { [weak self] in
                        CraLog.note("page \(self?.slowResponseLogHost(id) ?? "") stopped from the notice")
@@ -1040,7 +1045,115 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                   translation: rt.translation, blockedPopups: rt.blockedPopups.waiting.count)
         }
         if nav != sidebarUI.navStates { sidebarUI.navStates = nav }
-        if let id = browsers.visibleTabID, let service = nav[id]?.protectedMedia { tellAboutProtectedMedia(service) }
+        // A page switched for one video was just answered for: no "plays with Safari's engine" toast on top.
+        if let id = browsers.visibleTabID, let service = nav[id]?.protectedMedia, PageEngines.videoPages.switched[id] == nil {
+            tellAboutProtectedMedia(service)
+        }
+        syncProtectedVideoPrompt()
+    }
+
+    // MARK: Protected videos on mixed sites (docs/protected-media.md)
+
+    func browserManagerProtectedVideoPromptChanged(_ tabID: UUID) { syncProtectedVideoPrompt() }
+
+    /// A Chromium page of a mixed site (YouTube) asked for Widevine: while that page is in front
+    /// the toast offers Safari's engine, Once or Always, and its ✕ leaves the page in Chromium.
+    /// It goes with the page (another tab in front, another video) and comes back with it until
+    /// it is answered. Another toast may take its place; the Site Control Center's row still offers it.
+    private func syncProtectedVideoPrompt() {
+        let sites = PageEngines.sites
+        var wanted: (tab: UUID, key: String)?, prompt: ProtectedVideoPrompt?
+        if let id = browsers.visibleTabID, let browser = browsers.runtime(for: id)?.browser, PageEngines.engine(of: browser) == .chromium,
+           let key = sites.pageKey(for: browser.currentURL),
+           let p = PageEngines.videoPages.prompt(tab: id, url: browser.currentURL, incognito: browser.isIncognito, sites: sites) {
+            wanted = (id, key)
+            prompt = p
+        }
+        guard wanted?.tab != protectedVideoPrompt?.tab || wanted?.key != protectedVideoPrompt?.key else { return }
+        if protectedVideoPromptUp {
+            protectedVideoPromptUp = false
+            toast.dismiss()
+        }
+        protectedVideoPrompt = wanted
+        guard let wanted, let prompt, let window, window.isVisible else { return protectedVideoPrompt = nil }
+        let answer = { [weak self] (choice: ProtectedVideoPrompt.Choice?) in
+            ShinyToast.Action(title: choice?.rawValue ?? "", run: { self?.answerProtectedVideo(wanted.tab, choice) }, answers: true)
+        }
+        slowResponseToastTab = nil
+        toast.show(ProtectedVideoPrompt.text, action: prompt.choices.first.map(answer),
+                   second: prompt.choices.count > 1 ? answer(prompt.choices[1]) : nil,
+                   page: shell.webContainer.convert(shell.webContainer.bounds, to: nil), in: window, theme: focusedSpace.theme,
+                   onClose: { [weak self] in self?.answerProtectedVideo(wanted.tab, nil) })
+        protectedVideoPromptUp = true
+        CraLog.note("protected video prompt shown: \(toast.debugButtons)")
+    }
+
+    /// Once: this page moves. Always: the site's protected videos move from now on, this one
+    /// first. nil is the ✕: this page stays in Chromium and isn't asked about again.
+    private func answerProtectedVideo(_ id: UUID, _ choice: ProtectedVideoPrompt.Choice?) {
+        protectedVideoPromptUp = false
+        guard let browser = browsers.runtime(for: id)?.browser else { return }
+        let url = browser.currentURL
+        CraLog.note("protected video prompt answered: \(choice?.rawValue ?? "✕")")
+        switch choice {
+        case nil:
+            PageEngines.videoPages.declining(tab: id, url: url, sites: PageEngines.sites)
+        case .once?:
+            browsers.switchToSafariEngine(id, how: .once)
+        case .always?:
+            if let site = PageEngines.sites.mixedSite(for: url) { PageEngines.switchProtectedVideos(true, on: site) }
+            browsers.switchToSafariEngine(id, how: .always)
+        }
+    }
+
+    /// The Safari's Engine row of the focused page as the Site Control Center would show it,
+    /// `drm` being what a Chromium page off the mixed sites answered about Widevine.
+    private func safariEngineRow(askedForWidevine drm: Bool = false) -> SafariEngineRow? {
+        guard let id = browsers.visibleTabID, let browser = browsers.runtime(for: id)?.browser, !(browser is NativePage) else { return nil }
+        return PageEngines.videoPages.row(tab: id, url: browser.currentURL, engine: PageEngines.engine(of: browser), askedForWidevine: drm,
+                                          sites: PageEngines.sites, choices: PageEngines.choices)
+    }
+
+    /// The row's click. On and Off are the whole site's, as before; the others are a mixed site's.
+    private func pressSafariEngine(_ row: SafariEngineRow, for url: String) {
+        guard let id = browsers.visibleTabID, let browser = browsers.runtime(for: id)?.browser else { return }
+        let sites = PageEngines.sites
+        switch row {
+        case .on: chooseSafariEngine(false, for: url)
+        case .off: chooseSafariEngine(true, for: url)
+        case .protectedVideos:
+            // The switched page's site (the page may be signing in elsewhere), else the address's.
+            let site = PageEngines.videoPages.switched[id].flatMap { page in sites.mixedSites.first { $0.host == page.site } }
+                ?? sites.mixedSite(for: browser.currentURL)
+            if let site { PageEngines.switchProtectedVideos(false, on: site) }
+            browsers.returnToChromium(id)
+        case .thisVideo:
+            browsers.returnToChromium(id)
+        case .videosOff:
+            // An incognito page moves without the site being written down.
+            let how = ProtectedVideoPages.rowSwitch(incognito: browser.isIncognito)
+            if how == .always, let site = sites.mixedSite(for: browser.currentURL) { PageEngines.switchProtectedVideos(true, on: site) }
+            browsers.switchToSafariEngine(id, how: how)
+        }
+    }
+
+    /// Scenario hook: `cra://debug?protectedVideo=state&step=<label>` logs "protected video state
+    /// <label>: prompt Once|Always|✕, engine chromium, row Off, always 127.0.0.1"; `=Once`,
+    /// `=Always` and `=close` press the prompt's buttons as a click would, and `=row` presses the
+    /// row as the Site Control Center does.
+    func debugProtectedVideo(_ step: String, label: String) {
+        if step == "row" {
+            guard let row = safariEngineRow() else { return CraLog.note("protected video row: none") }
+            CraLog.note("protected video row pressed: \(row.state)")
+            return pressSafariEngine(row, for: currentBrowser?.currentURL ?? "")
+        }
+        if step != "state" {
+            let pressed = protectedVideoPromptUp && toast.debugPress(step == "close" ? "✕" : step)
+            return CraLog.note("protected video \(step): pressed \(pressed)")
+        }
+        let engine = currentBrowser.map { PageEngines.engine(of: $0) == .webKit ? "webkit" : "chromium" } ?? "none"
+        CraLog.note("protected video state \(label): prompt \(protectedVideoPromptUp && toast.isShown ? toast.debugButtons : "none"), engine \(engine), "
+            + "row \(safariEngineRow()?.state ?? "none"), always \(PageEngines.choices.protectedVideos.joined(separator: ","))")
     }
 
     // MARK: Split view
@@ -4346,7 +4459,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self?.openTab("chrome://settings/content/siteDetails?site=" + (origin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? origin))
         }
         actions.learnAboutProtectedMedia = { [weak self] in self?.openTab(Self.protectedMediaHelp) }
-        actions.chooseSafariEngine = { [weak self] on in self?.chooseSafariEngine(on, for: url) }
+        actions.pressSafariEngine = { [weak self] row in self?.pressSafariEngine(row, for: url) }
         // Arc's New Boost and the site's boosts (#478), where the page is a website and Boosts are on.
         if store.settings.boostsEnabled, BoostStore.canBoost(url) {
             actions.newBoost = { [weak self] in self?.openBoostEditor() }
@@ -4359,26 +4472,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             actions.manageBoosts = { [weak self] in self?.showLibrary(.boosts) }
         }
         siteControlCenterSpaceID = focusedSpaceID
-        let show = { [weak self] (safariEngine: Bool?) in
+        let show = { [weak self] (safariEngine: SafariEngineRow?) in
             guard let self, let window = self.window, window.isVisible else { return }
             self.siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
                                         profile: self.profileDirectoryName, tab: self.selectedTabID,
                                         protectedMedia: self.browsers.visibleTabID.flatMap { self.sidebarUI.navState(for: $0).protectedMedia },
                                         safariEngine: safariEngine, toggleChecked: true, store: self.store, actions: actions)
         }
-        // The Safari's Engine switch: on for a WebKit page; for a Chromium page only once it asked
-        // for Widevine (PageScript's `drm`), else no switch. Asked in Cra's world; a page that
-        // doesn't answer within 0.3 s opens without it.
+        // The Safari's Engine row (ProtectedVideoPages.row): on for a WebKit page, or what moved it
+        // there for one video; for a mixed site's Chromium page what Cra saw it ask and what was
+        // chosen for the site; for any other Chromium page only once it asked for Widevine
+        // (PageScript's `drm`), else no row. That one is asked in Cra's world; a page that doesn't
+        // answer within 0.3 s opens without it.
         guard let b = currentBrowser, url.hasPrefix("http") else { return show(nil) }
-        if b is WebKitBrowser { return show(true) }
+        if b is WebKitBrowser || PageEngines.sites.mixedSite(for: b.currentURL) != nil { return show(safariEngineRow()) }
         var shown = false
-        let once = { (value: Bool?) in if !shown { shown = true; show(value) } }
+        let once = { [weak self] (drm: Bool) in if !shown { shown = true; show(self?.safariEngineRow(askedForWidevine: drm)) } }
         b.evaluate(inIsolatedWorld: PageScript.world, params: #"{"expression":"window.__cra?.drm === true","returnByValue":true}"#) { result, _ in
             let drm = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
                 .flatMap { $0["result"] as? [String: Any] }?["value"] as? Bool == true
-            DispatchQueue.main.async { once(drm ? false : nil) }
+            DispatchQueue.main.async { once(drm) }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { once(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { once(false) }
     }
 
     func debugChooseSafariEngine(_ on: Bool) {
@@ -5119,6 +5234,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             }
             let page = self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
             self.slowResponseToastTab = nil
+            self.protectedVideoPromptUp = false
             self.toast.show("\(service) plays with Safari's engine",
                             action: ShinyToast.Action(title: "Why?") { [weak self] in self?.showSiteControlsFromTheirButton() },
                             page: page, in: window, theme: self.focusedSpace.theme, onClose: told)
@@ -5134,6 +5250,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
         slowResponseToastTab = nil
+        protectedVideoPromptUp = false
         toast.show(text, keyCap: keyCap, action: action, page: page, in: window, theme: focusedSpace.theme, onTap: onTap)
     }
 
@@ -5183,6 +5300,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func showUpdateToast(_ notice: UpdateNotice) {
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
+        protectedVideoPromptUp = false
         toast.show(notice.title, action: ShinyToast.Action(title: notice.button) { SoftwareUpdater.shared.act(on: notice) },
                    page: page, in: window, theme: focusedSpace.theme, onClose: {})
     }

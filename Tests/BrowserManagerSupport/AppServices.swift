@@ -183,9 +183,21 @@ final class WebKitBrowser: CraBrowser {
     var isContentFullscreen = false
     var serviceName = ""
     var savedInteractionState: Data?
+    /// Where a page that moved here for a protected video seeks to (the real page's user script).
+    var resume: (url: String, seconds: Double)?
     convenience init(frame: NSRect, url: String?, delegate: CraBrowserDelegate?, incognito: Bool, profilePath: String?,
-                     interactionState: Data?) {
+                     interactionState: Data?, resume: (url: String, seconds: Double)? = nil) {
         self.init(frame: frame, url: url, delegate: delegate, incognito: incognito, profilePath: profilePath)
         savedInteractionState = interactionState
+        self.resume = resume
+    }
+}
+/// WebKit's stores (Sources/Cra/Services/WebKit/WebKitStores.swift): here only what was copied in.
+@MainActor
+enum WebKitStores {
+    static var added: [(cookies: [HTTPCookie], profilePath: String?, incognito: Bool)] = []
+    static func add(_ cookies: [HTTPCookie], profilePath: String?, incognito isIncognito: Bool, done: @escaping @MainActor () -> Void) {
+        added.append((cookies, profilePath, isIncognito))
+        done()
     }
 }

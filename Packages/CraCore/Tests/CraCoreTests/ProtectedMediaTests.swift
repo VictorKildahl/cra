@@ -63,17 +63,6 @@ struct ProtectedMediaTests {
         #expect(sites.engine(for: url) == .chromium)
     }
 
-    /// GitHub #588: Fandango at Home's player told Cra's Chromium "Unable to stream at this time. Please
-    /// try a different browser." It plays in WebKit, as Vudu's old address does; the rest of Fandango
-    /// (tickets) stays in Chromium.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/588"))
-    func fandangoAtHomePlaysInWebKit() {
-        #expect(sites.engine(for: "https://athome.fandango.com/content/browse/details/Movie/12345") == .webKit)
-        #expect(sites.engine(for: "https://www.vudu.com/") == .webKit)
-        #expect(sites.engine(for: "https://www.fandango.com/") == .chromium)
-        #expect(sites.serviceName(for: "https://athome.fandango.com/") == "Fandango at Home")
-    }
-
     /// The name the toast and the Site Control Center use.
     @Test func serviceNames() {
         #expect(sites.serviceName(for: "https://open.spotify.com/track/1") == "Spotify")

@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Framed player fixture</title>
+<style>body { font: 15px -apple-system, sans-serif; margin: 40px; } iframe { width: 320px; height: 180px; border: 1px solid #ddd; }</style>
+<!-- A page whose player is a frame (player-frame.html), which is what asks for Widevine; the page
+     itself never does. ?frame=same puts the frame on this page's origin, ?frame=cross on
+     localhost (another site, so another process, which Cra's page scripts don't reach in
+     Chromium); the title is "Framed <kind>". play() adds the frame, report() says what the
+     page's own message listener got: "Framed same, messages ready". -->
+<h1>Framed player fixture</h1>
+<script>
+  const kind = new URLSearchParams(location.search).get('frame') || 'same';
+  document.title = 'Framed ' + kind;
+  const messages = [];
+  addEventListener('message', e => messages.push(String(e.data)));
+  function play() {
+    const frame = document.createElement('iframe');
+    frame.src = (kind === 'cross' ? location.protocol + '//localhost:' + location.port + '/' : '') + 'player-frame.html';
+    document.body.appendChild(frame);
+    return 'playing';
+  }
+  function report() { return document.title + ', messages ' + messages.join(' '); }
+</script>
