@@ -1,0 +1,24 @@
+# promise: #617
+# ⌘T lists a page once: an open tab hides its history row, and a closed tab is one row, not an archived row and
+# a history row (CommandBarDedupe). Each row's dedupe keys are worked out when the bar opens, off the main thread
+# with the rest of its index, no longer on every keystroke; this checks the bar still lists each page once.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=open
+expect-log loaded 127\.0\.0\.1
+cra://open?url=${PAGE}?n=closed
+expect-log loaded 127\.0\.0\.1
+cra://action/closeTab
+cra://open?url=${PAGE}?n=third
+wait 2
+# Both pages are in the history, so each has a history row to hide.
+cra://debug?commandBarTime=zz
+expect-log command bar time: tabs=\d+ history=[2-9]
+
+cra://commandbar?query=fixture
+wait 1
+cra://debug?commandBarRows=dedupe
+expect-log Cra command bar rows dedupe: .*tab:\S+n=open
+expect-log Cra command bar rows dedupe: .*archived:\S+n=closed
+reject-log Cra command bar rows dedupe: .*history:\S+n=open
+reject-log Cra command bar rows dedupe: .*history:\S+n=closed

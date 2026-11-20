@@ -1295,6 +1295,7 @@
 #616   Tests/Scenarios/slept-pages-budget.scenario  70106c2dcee6
 #617   Packages/CraCore/Tests/CraCoreTests/CommandBarRankingTests.swift::theMostRecentSevenAreTheSortedSeven  c025ee0f6307
 #617   Packages/CraCore/Tests/CraCoreTests/CommandBarScoreTests.swift::bytesScoreAsStringsDo  115a9ad0b713
+#617   Tests/Scenarios/command-bar-dedupe.scenario  d5a5b84289c4
 #617   Tests/Scenarios/command-bar-row-details.scenario  9902d60dcadf
 #617   Tests/StoreTests.swift::profileTabsSpaceBySpace  ac6153dfad00
 #618   Packages/CraCore/Tests/CraCoreTests/SidebarChildOrderTests.swift::oneStoredIndexPerChildInOnePass  d4962ed3b593

@@ -1948,15 +1948,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let typed = dict["commandBarTime"] {
                 let engine = main.commandBar.engine
                 engine.resetIndex()
-                var lines: [String] = []
-                for end in 1...max(1, typed.count) {
-                    let q = String(typed.prefix(end))
-                    let start = DispatchTime.now().uptimeNanoseconds
-                    let r = engine.suggestions(for: q, mode: .newTab, currentTabID: nil)
-                    let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
-                    lines.append("\(q)=\(String(format: "%.1f", ms))ms(\(r.items.count))")
+                // prepared=1: the index built as the bar's opening builds it (off the main thread), a second before typing.
+                let prepared = dict["prepared"] == "1"
+                if prepared { engine.prepareIndex() }
+                let run = { [weak self] in
+                    guard let self else { return }
+                    var lines: [String] = []
+                    for end in 1...max(1, typed.count) {
+                        let q = String(typed.prefix(end))
+                        let start = DispatchTime.now().uptimeNanoseconds
+                        let r = engine.suggestions(for: q, mode: .newTab, currentTabID: nil)
+                        let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+                        lines.append("\(q)=\(String(format: "%.1f", ms))ms(\(r.items.count))")
+                    }
+                    CraLog.note("command bar time\(prepared ? " prepared" : ""): tabs=\(self.store.allTabs().count) history=\(self.store.history.count) archive=\(self.store.archive.count) " + lines.joined(separator: " "))
                 }
-                CraLog.note("command bar time: tabs=\(store.allTabs().count) history=\(store.history.count) archive=\(store.archive.count) " + lines.joined(separator: " "))
+                if prepared { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { MainActor.assumeIsolated { run() } } } else { run() }
                 return
             }
             // commandBarDetail=<label>: the main window's bar rows as kind:subtitle, which only the rows shown

@@ -185,26 +185,79 @@ final class SuggestionEngine {
         var archive: [(ArchivedItem, Searchable)] = []
         var history: [(HistoryEntry, Searchable)] = []
         var openURLs: Set<String> = []
+        /// Each row's CommandBarDedupe keys, by its row id: an address parsed once per opening, not per keystroke.
+        var dedupeKeys: [String: [String]] = [:]
     }
 
     private var index: SearchIndex?
 
-    /// Built on the first keystroke after the command bar opens, kept until it closes.
+    /// What the index is made of, read on the main thread: the rows and the text their keys come from.
+    private struct IndexRows {
+        let tabs: [SidebarItem], archive: [ArchivedItem], history: [HistoryEntry]
+        let text: [(title: String, url: String)]
+        /// Each row's id, address and title as its Suggestion has them, for its dedupe keys.
+        let rowIDs: [(id: String, url: String, title: String)]
+    }
+
+    private func indexRows() -> IndexRows {
+        let tabs = commandBarTabs().filter { $0.tab != nil }
+        let archive = Array(store.archive.prefix(400).filter { $0.item.tab != nil })
+        let history = Array(store.history.values)
+        return IndexRows(tabs: tabs, archive: archive, history: history,
+                         text: tabs.map { ($0.displayTitle, $0.tab!.url) } + archive.map { ($0.item.displayTitle, $0.item.tab!.url) }
+                               + history.map { ($0.title, $0.url) },
+                         rowIDs: tabs.map { ("tab:\($0.id)", $0.tab!.url, $0.displayTitle) }
+                               + archive.map { ("arch:\($0.id)", $0.item.tab!.url, $0.item.displayTitle) }
+                               + history.map { ("hist:\($0.url)", $0.url, $0.title.isEmpty ? Self.humanURL($0.url) : $0.title) })
+    }
+
+    /// The index's per-row work, done off the main thread when the bar opens: search keys and dedupe keys.
+    nonisolated private static func rowKeys(_ rows: (text: [(title: String, url: String)], ids: [(id: String, url: String, title: String)]))
+        -> (keys: [Searchable], dedupe: [String: [String]]) {
+        let keys = searchables(rows.text)
+        var dedupe: [String: [String]] = [:]
+        dedupe.reserveCapacity(rows.ids.count)
+        for r in rows.ids { dedupe[r.id] = CommandBarDedupe.keys(id: r.id, url: r.url, title: r.title) }
+        return (keys, dedupe)
+    }
+
+    private static func index(_ rows: IndexRows, keys: (keys: [Searchable], dedupe: [String: [String]])) -> SearchIndex {
+        var i = SearchIndex()
+        i.dedupeKeys = keys.dedupe
+        let keys = keys.keys
+        let t = rows.tabs.count, a = rows.archive.count
+        i.tabs = Array(zip(rows.tabs, keys[0..<t]))
+        i.archive = Array(zip(rows.archive, keys[t..<(t + a)]))
+        i.history = Array(zip(rows.history, keys[(t + a)...]))
+        i.openURLs = Set(rows.tabs.compactMap { $0.tab?.url })
+        return i
+    }
+
+    /// Which opening of the bar an index is for: one built for an earlier opening is dropped.
+    private var indexGeneration = 0
+
+    /// The bar opened: its rows are read now and their keys built off the main thread (on every core), so the
+    /// first keystroke finds the index ready (#617). A keystroke before it is ready builds it then, as before.
+    func prepareIndex() {
+        guard index == nil else { return }
+        let rows = indexRows(), generation = indexGeneration, work = (text: rows.text, ids: rows.rowIDs)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let keys = Self.rowKeys(work)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.indexGeneration == generation, self.index == nil else { return }
+                    self.index = Self.index(rows, keys: keys)
+                }
+            }
+        }
+    }
+
+    /// Built when the bar opens (prepareIndex) or on its first keystroke, kept until it closes.
     private var searchIndex: SearchIndex {
         if let index { return index }
-        var i = SearchIndex()
-        let tabs = commandBarTabs().filter { $0.tab != nil }
-        let archive = store.archive.prefix(400).filter { $0.item.tab != nil }
-        let history = Array(store.history.values)
-        // The rows' text is read here; their keys (lowercasing, words, bytes, the host) are built on every
-        // core at once: at 5,000 tabs that was most of the first keystroke (#617).
-        let keys = Self.searchables(tabs.map { ($0.displayTitle, $0.tab!.url) }
-                                    + archive.map { ($0.item.displayTitle, $0.item.tab!.url) }
-                                    + history.map { ($0.title, $0.url) })
-        i.tabs = Array(zip(tabs, keys[0..<tabs.count]))
-        i.archive = Array(zip(archive, keys[tabs.count..<(tabs.count + archive.count)]))
-        i.history = Array(zip(history, keys[(tabs.count + archive.count)...]))
-        i.openURLs = Set(tabs.compactMap { $0.tab?.url })
+        let rows = indexRows()
+        // The keys (lowercasing, words, bytes, the host) are built on every core at once (#617).
+        let i = Self.index(rows, keys: Self.rowKeys((text: rows.text, ids: rows.rowIDs)))
         index = i
         return i
     }
@@ -212,6 +265,7 @@ final class SuggestionEngine {
     /// The command bar opened or closed: what it searches may have changed since.
     func resetIndex() {
         index = nil
+        indexGeneration &+= 1
         enginesRead = nil
         remote.reset()
     }
@@ -518,7 +572,9 @@ final class SuggestionEngine {
         let rows = items.map { s -> CommandBarDedupe.Row in
             let isCommand: Bool
             if case .command = s.kind { isCommand = true } else { isCommand = false }
-            return CommandBarDedupe.Row(keys: CommandBarDedupe.keys(id: s.id, url: isCommand ? nil : s.url, title: s.title),
+            // A tab's, archived tab's or visited page's keys come from the index (#617).
+            let keys = isCommand ? nil : searchIndex.dedupeKeys[s.id]
+            return CommandBarDedupe.Row(keys: keys ?? CommandBarDedupe.keys(id: s.id, url: isCommand ? nil : s.url, title: s.title),
                                         score: s.score, isOpenTab: s.tabID != nil)
         }
         return CommandBarDedupe.kept(rows).map { kept in

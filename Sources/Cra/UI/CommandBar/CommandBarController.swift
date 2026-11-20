@@ -82,6 +82,8 @@ final class CommandBarController {
 
     func open(mode: CommandBarMode, prefill: String?) {
         engine.resetIndex()
+        // Its keys are built off the main thread while the bar comes up (#617).
+        engine.prepareIndex()
         searchEngineWatcher?.cancel()
         searchEngineWatcher = engine.watchSearchEngines { [weak self] in self?.relist() }
         self.mode = mode
