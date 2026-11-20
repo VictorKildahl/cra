@@ -9,6 +9,10 @@ wait 3
 repeat 6 cra://open?url=${PAGE}?n=${i}
 wait 8
 cra://debug?freezingState=1
+# Chrome freezes background pages one at a time, at its own pace: on a slow runner the quiet page's turn came
+# after the first look (pages opened after it were frozen by then). A second look 10 s later counts too.
+wait 10
+cra://debug?freezingState=2
 expect-log freezing state .*n=quiet title=.*: frozen=true
 expect-log freezing state .*websocket\.html.* title=ws open: frozen=false liveConnection=true
 # The freeze closes the socket some seconds later; the server logs it.
