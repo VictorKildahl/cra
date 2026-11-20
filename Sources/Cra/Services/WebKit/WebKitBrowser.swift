@@ -669,8 +669,45 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
 
     // MARK: Picture in Picture (WebKit's own, the system's floating window)
 
+    /// View ▸ Picture in Picture and the sidebar player's button (after the page's own request failed):
+    /// WebKit's toggle, as Safari's menu does it; it needs no user gesture in the page (#585). Leaving a
+    /// tab takes nothing here: BrowserManager asked the page, and the page's no stands.
     override func requestPictureInPicture(automatic: Bool) {
-        // BrowserManager asked the page first; WebKit has no other way in.
+        MainActor.assumeIsolated {
+            guard let web = webView else { return }
+            let action = WebKitPictureInPicture(automatic: automatic, active: inPictureInPicture || Self.flag(web, "_isPictureInPictureActive"),
+                                                canToggle: Self.flag(web, "_canTogglePictureInPicture"))
+            CraLog.note("WebKit Picture in Picture: \(action) (WebKit: can toggle \(Self.flag(web, "_canTogglePictureInPicture")), active \(Self.flag(web, "_isPictureInPictureActive")))")
+            let toggle = {
+                let sel = NSSelectorFromString("_togglePictureInPicture")
+                guard let m = class_getInstanceMethod(type(of: web), sel) else { return }
+                typealias Fn = @convention(c) (AnyObject, Selector) -> Void
+                unsafeBitCast(method_getImplementation(m), to: Fn.self)(web, sel)
+            }
+            switch action {
+            case .toggle: toggle()
+            case .page:
+                runPictureInPicture("""
+                (() => { if (document.pictureInPictureElement) return;
+                  const area = v => { const r = v.getBoundingClientRect(); return r.width * r.height; };
+                  const v = [...document.querySelectorAll('video')].filter(v => v.readyState >= 1)
+                    .sort((a, b) => ((b.paused ? 0 : 1) - (a.paused ? 0 : 1)) || (area(b) - area(a)))[0];
+                  v?.requestPictureInPicture().catch(() => {}); })()
+                """)
+            case .exit:
+                // The page's document.exitPictureInPicture() never settled here; WebKit's own call ends it.
+                if Self.flag(web, "_isPictureInPictureActive") { toggle() } else { web.closeAllMediaPresentations {} }
+            case .none: break
+            }
+        }
+    }
+
+    /// A WebKit Bool property that isn't public API (nil when this WebKit lacks it: false).
+    private static func flag(_ web: WKWebView, _ name: String) -> Bool {
+        let sel = NSSelectorFromString(name)
+        guard let m = class_getInstanceMethod(type(of: web), sel) else { return false }
+        typealias Fn = @convention(c) (AnyObject, Selector) -> Bool
+        return unsafeBitCast(method_getImplementation(m), to: Fn.self)(web, sel)
     }
 
     override func exitPictureInPicture() {

@@ -1437,8 +1437,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
                 return
             }
             evaluate(true) { [weak browser] answer in
-                if answer == nil || answer == "none" { browser?.requestPictureInPicture(automatic: automatic) }
-                else if let answer, answer != "ok" { NSLog("Cra: Picture in Picture request failed: %@", answer) }
+                if let answer, answer != "ok" { NSLog("Cra: Picture in Picture request failed: %@", answer) }
+                // A WebKit tab runs this without a user gesture, so the page's request fails there; asked
+                // for, its own toggle follows (#585).
+                let follows = browser is WebKitBrowser ? WebKitPictureInPicture.followsPageAnswer(answer, automatic: automatic)
+                                                       : answer == nil || answer == "none"
+                if follows { browser?.requestPictureInPicture(automatic: automatic) }
             }
         }
     }

@@ -1,0 +1,26 @@
+# promise: #585
+# View ▸ Picture in Picture on a WebKit tab (a protected-media service such as Paramount+) did nothing:
+# the tab answered the request with nothing at all. It now takes WebKit's own toggle when WebKit has a
+# video for it, else the page's request (as here), and the same item brings the video back. ${WEBKIT} is the fixture server as localhost, which
+# this run lists as a DRM service. The clip is silent; it is paused before the journey ends.
+budget rss=900 stalls50=40
+pace 0.5
+cra://open?url=${WEBKIT}/media.html
+expect-log loaded localhost \(HTTP 200\)
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.querySelector('video').play().then(()=>'playing:'+('userAgentData' in navigator))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"playing:false"
+cra://action/pictureInPicture
+expect-log WebKit Picture in Picture: (toggle|page)
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,!!document.pictureInPictureElement].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Media enterpictureinpicture,true"
+cra://debug?nowPlaying=state&label=out
+expect-log Cra nowPlaying\[out\] localhost playing=1 .*pip=1
+cra://action/pictureInPicture
+expect-log WebKit Picture in Picture: exit
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.title,!!document.pictureInPictureElement].join()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Media leavepictureinpicture,false"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.pause(),'paused'))(document.querySelector('video'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused"
