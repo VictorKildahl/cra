@@ -17,6 +17,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let pageContainer = PassthroughView()
     /// Darkens the page while it sits pushed back behind the search sheet.
     let pageDim = UIView()
+    /// The band behind the status bar over a page (updateStatusBand), and the colour it shows.
+    let statusBand = UIView()
+    private var statusBandFill: String?
     var pagePushedBack = false
     let dismissArea = UIControl()
     /// Over the home indicator's strip while scrolling has put the bar away: a tap there brings
@@ -93,6 +96,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         pageDim.alpha = 0
         pageDim.isUserInteractionEnabled = false
         pageContainer.addSubview(pageDim)
+        // Over the page, under nothing: pages, the reader and the loading views go in below pageDim.
+        statusBand.isUserInteractionEnabled = false
+        pageContainer.addSubview(statusBand)
         pageContainer.layer.cornerCurve = .continuous
         pageContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
 
@@ -205,7 +211,27 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         layoutChrome()
     }
 
-    override var preferredStatusBarStyle: UIStatusBarStyle { .default }
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        guard !statusBand.isHidden, let fill = statusBandFill else { return .default }
+        return MobileStatusBand.lightContent(fill: fill) ? .lightContent : .darkContent
+    }
+
+    /// The solid band behind the status bar over a page, in the page's colour, as in Arc Search (#657).
+    func updateStatusBand() {
+        let page = shownPage
+        let fill = page.flatMap { MobileStatusBand.fill(themeColor: Palette.hex($0.webView.themeColor, traits: traitCollection),
+                                                        underPage: Palette.hex($0.webView.underPageBackgroundColor, traits: traitCollection)) }
+        let shown = fill != nil && MobileStatusBand.shown(hasPage: page != nil, searching: isSearching, switching: switcher != nil)
+        statusBand.frame = CGRect(x: 0, y: 0, width: pageContainer.bounds.width, height: view.safeAreaInsets.top)
+        if let fill, let rgb = HexColor.components(fill) {
+            statusBand.backgroundColor = UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
+        }
+        if statusBand.isHidden == shown || statusBandFill != fill {
+            statusBand.isHidden = !shown
+            statusBandFill = fill
+            setNeedsStatusBarAppearanceUpdate()
+        }
+    }
 
     // MARK: Layout
 
@@ -219,6 +245,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         switcher?.frame = bounds
         shownPage?.webView.frame = pageContainer.bounds
         pageDim.frame = pageContainer.bounds
+        updateStatusBand()
         let logoSide: CGFloat = 132
         logo.bounds = CGRect(x: 0, y: 0, width: logoSide, height: logoSide)
         logo.center = CGPoint(x: bounds.midX, y: bounds.height * 0.505)
@@ -1131,6 +1158,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func webPageDidChange(_ page: WebPage) {
         if page === shownPage {
+            updateStatusBand()
             refreshMenu()
             // Reader belongs to the page it was opened on.
             if page.isLoading { closeReader() }

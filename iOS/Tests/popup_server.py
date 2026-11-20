@@ -88,6 +88,14 @@ function createPasskey() {
             # A plain-http page (PlainHTTPTests), opened by a domain name: iOS's App Transport
             # Security lets IP addresses and plain `localhost` through, but not `cra.localhost`.
             self.page('<title>Plain HTTP Fixture</title><h1>Plain HTTP Fixture</h1>')
+        elif url.path == '/themed':
+            # A page with a theme-color, long enough to scroll under the status bar (StatusBandTests, #657).
+            self.page('<meta name="theme-color" content="#7F6BAB"><title>Themed</title><h1>Themed</h1>'
+                      '<p style="height:3000px">Long</p>')
+        elif url.path == '/dark-page':
+            # No theme-color, a dark background of its own (StatusBandTests, #657).
+            self.page('<title>Dark Page</title><style>html,body{background:#123456;color:white}</style>'
+                      '<h1>Dark Page</h1>')
         elif url.path == '/before-refused':
             # A page to come back to from the error page of an address WebKit refuses (port 1).
             self.page('<title>Before Refused</title><h1>Before Refused</h1>')

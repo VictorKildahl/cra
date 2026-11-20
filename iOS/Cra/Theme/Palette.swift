@@ -6,6 +6,15 @@ enum Palette {
         UIColor { $0.userInterfaceStyle == .dark ? dark : light }
     }
 
+    /// A colour as `#RRGGBB` in the given appearance, for CraCore's colour rules; nil when it has none.
+    static func hex(_ color: UIColor?, traits: UITraitCollection) -> String? {
+        guard let color else { return nil }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a), a > 0.5 else { return nil }
+        func byte(_ v: CGFloat) -> Int { Int((max(0, min(1, v)) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", byte(r), byte(g), byte(b))
+    }
+
     static func rgb(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {
         UIColor(red: CGFloat((hex >> 16) & 0xff) / 255, green: CGFloat((hex >> 8) & 0xff) / 255,
                 blue: CGFloat(hex & 0xff) / 255, alpha: alpha)

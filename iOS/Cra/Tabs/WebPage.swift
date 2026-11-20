@@ -108,6 +108,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
                 self?.isLoading = view.isLoading
                 self?.changed()
             },
+            // The band behind the status bar takes these colours (MobileStatusBand, #657).
+            webView.observe(\.themeColor) { [weak self] _, _ in self?.changed() },
+            webView.observe(\.underPageBackgroundColor) { [weak self] _, _ in self?.changed() },
         ]
         applyBlocking(for: URL(string: tab.url))
     }
