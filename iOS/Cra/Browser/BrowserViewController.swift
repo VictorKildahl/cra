@@ -383,8 +383,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
         updateRecentTabs()
         SyncedSidebar.hasSpaces { [weak self] _ in
-            guard let self, self.isSearching, self.sheet.text.isEmpty else { return }
-            self.updateRecentTabs()
+            guard let self, self.isSearching else { return }
+            if self.sheet.text.isEmpty { self.updateRecentTabs() }
+            else { self.searchSheet(self.sheet, didChangeText: self.sheet.text) }
         }
         sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
                                                         hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
@@ -404,8 +405,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     /// A Mac tab's icon, asked of its site, arrived while the recent tabs show.
     @objc private func faviconsChanged() {
-        guard isSearching, sheet.text.isEmpty else { return }
-        updateRecentTabs()
+        guard isSearching else { return }
+        if sheet.text.isEmpty { updateRecentTabs() } else { sheet.refreshRows() }
     }
 
     func searchSheet(_ sheet: SearchSheet, didChangeText text: String) {
@@ -413,11 +414,19 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let engine = settings.value.search
         // Incognito keeps what is typed on the phone until Go, and leaves the phone's own pages out.
         let sites = incognitoSearch ? [] : knownSites()
-        sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: sites, limit: MobileSearchSheet.listedRows))
+        showSuggestions(typed: text, completions: [], sites: sites)
         guard !incognitoSearch else { return }
         suggestions.completions(for: text, engine: engine) { [weak self, weak sheet] found in
             guard let self, let sheet, self.isSearching, sheet.text == text else { return }
-            sheet.setRows(MobileSuggestions.rows(typed: text, completions: found, sites: sites, limit: MobileSearchSheet.listedRows))
+            self.showSuggestions(typed: text, completions: found, sites: self.incognitoSearch ? [] : self.knownSites())
+        }
+    }
+
+    private func showSuggestions(typed: String, completions: [String], sites: [MobileSuggestions.Site]) {
+        let rows = MobileSuggestions.rows(typed: typed, completions: completions, sites: sites, limit: MobileSearchSheet.listedRows)
+        sheet.setRows(rows)
+        for row in rows where row.place != nil {
+            if case .site(let url) = row.kind, favicons.icon(for: url) == nil { favicons.fetchFromHomePage(for: url) }
         }
     }
 
@@ -426,7 +435,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private func knownSites() -> [MobileSuggestions.Site] {
         let favoriteSites = favorites.value.sites.map { MobileSuggestions.Site(title: $0.title, url: $0.url) }
         let tabs = (store.rowTabs + store.archived).sorted { $0.lastActive > $1.lastActive }
-        return favoriteSites + tabs.map { MobileSuggestions.Site(title: $0.displayTitle, url: $0.url) }
+        let mac: [MobileSuggestions.Site]
+        if case .spaces(let document) = SyncedSidebar.sheet.opening { mac = MobileSuggestions.macSites(in: document) } else { mac = [] }
+        return favoriteSites + tabs.map { MobileSuggestions.Site(title: $0.displayTitle, url: $0.url) } + mac
     }
 
     /// Browse for Me is the search engine and this device can run it.
@@ -503,8 +514,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             searchSheet(sheet, didChangeText: text)
         } else {
             // An address is not sent to the engine for suggestions until it is changed.
-            sheet.setRows(MobileSuggestions.rows(typed: text, completions: [], sites: incognitoSearch ? [] : knownSites(),
-                                                 limit: MobileSearchSheet.listedRows))
+            showSuggestions(typed: text, completions: [], sites: incognitoSearch ? [] : knownSites())
         }
         DispatchQueue.main.async { [weak self] in self?.sheet.field.selectAll(nil) }
     }

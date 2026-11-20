@@ -159,6 +159,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         showRows()
     }
 
+    func refreshRows() { showRows() }
+
     /// Back to the top, with what was typed in the field.
     private func resetScroll() {
         list.setContentOffset(.zero, animated: false)
@@ -224,7 +226,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                 view.isHidden = false
             } else if !showsFavorites, index < rows.count {
                 if case .site(let url) = rows[index].kind {
-                    view.configure(site: rows[index].text, icon: siteIcon(url))
+                    view.configure(site: rows[index].text, icon: siteIcon(url), place: rows[index].place)
                 } else {
                     view.configure(rows[index])
                 }
@@ -589,6 +591,7 @@ final class SuggestionRowView: UIControl {
 
     private let icon = UIImageView()
     private let label = UILabel()
+    private let placeLabel = UILabel()
     private let chip = UIButton(type: .custom)
     var chipFrame: CGRect { chip.frame }
     private let pin = UIImageView(image: UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .regular)))
@@ -607,6 +610,9 @@ final class SuggestionRowView: UIControl {
         label.lineBreakMode = .byTruncatingTail
         label.isUserInteractionEnabled = false
         addSubview(label)
+        addSubview(placeLabel)
+        placeLabel.isHidden = true
+        placeLabel.lineBreakMode = .byTruncatingTail
 
         chip.setAttributedTitle(NSAttributedString(string: "Browse for Me", attributes: [
             .font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: Palette.primaryText,
@@ -638,7 +644,7 @@ final class SuggestionRowView: UIControl {
     }
 
     /// A page the phone knows: its site icon and title, one line, no "Browse for Me".
-    func configure(site title: String, icon image: UIImage?) {
+    func configure(site title: String, icon image: UIImage?, place: MobileSuggestions.Place? = nil) {
         icon.image = image ?? UIImage(systemName: "globe", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
         icon.contentMode = image == nil ? .center : .scaleAspectFit
         icon.layer.cornerRadius = 4
@@ -649,6 +655,14 @@ final class SuggestionRowView: UIControl {
             .font: SuggestionRowView.textFont, .foregroundColor: Palette.primaryText,
         ])
         label.accessibilityLabel = title
+        placeLabel.isHidden = place == nil
+        if let place {
+            let font = UIFontMetrics(forTextStyle: .caption1).scaledFont(for: .systemFont(ofSize: 13), maximumPointSize: 16)
+            let line = NSMutableAttributedString(string: place.prefix, attributes: [.font: font, .foregroundColor: Palette.secondaryText])
+            line.append(NSAttributedString(string: place.space, attributes: [.font: font, .foregroundColor: Palette.primaryText]))
+            placeLabel.attributedText = line
+            placeLabel.accessibilityLabel = place.prefix + place.space
+        }
         chip.isHidden = true
         pin.isHidden = true
         setNeedsLayout()
@@ -662,6 +676,7 @@ final class SuggestionRowView: UIControl {
         icon.contentMode = .center
         icon.layer.cornerRadius = 0
         isSite = false
+        placeLabel.isHidden = true
         pin.isHidden = true
         // A long suggestion wraps to a second line, as in Arc Search, and is cut after that.
         label.numberOfLines = 2
@@ -687,7 +702,16 @@ final class SuggestionRowView: UIControl {
         chip.frame = CGRect(x: bounds.width - 17.7 - chipSize.width, y: bounds.midY - chipSize.height / 2,
                             width: chipSize.width, height: chipSize.height)
         let right = !pin.isHidden ? pin.frame.minX - 8 : chip.isHidden ? bounds.width - 18 : chip.frame.minX - 10
-        label.frame = CGRect(x: 48.2, y: 0, width: max(0, right - 48.2), height: bounds.height)
+        let width = max(0, right - 48.2)
+        if placeLabel.isHidden {
+            label.frame = CGRect(x: 48.2, y: 0, width: width, height: bounds.height)
+        } else {
+            let titleHeight = SuggestionRowView.textFont.lineHeight
+            let placeHeight = placeLabel.attributedText?.attribute(.font, at: 0, effectiveRange: nil).flatMap { ($0 as? UIFont)?.lineHeight } ?? 16
+            let top = (bounds.height - titleHeight - placeHeight) / 2
+            label.frame = CGRect(x: 48.2, y: top, width: width, height: titleHeight)
+            placeLabel.frame = CGRect(x: 48.2, y: top + titleHeight, width: width, height: placeHeight)
+        }
     }
 
     override var isHighlighted: Bool {

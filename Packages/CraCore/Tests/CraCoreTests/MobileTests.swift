@@ -66,6 +66,53 @@ struct MobileChromeTests {
 }
 
 struct MobileSuggestionsTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/650")) func syncedSpaceSitesKeepTheirPlaceAndPhoneWins() {
+        var a = SidebarDocument.fresh()
+        var b = SidebarDocument.fresh()
+        a.spaces[0].title = "A"
+        b.spaces[0].title = "B"
+        let pinned = MobileRecentTabsTests.mac("https://x.example/p", "Manga pinned", 3)
+        let nested = MobileRecentTabsTests.mac("https://nested.example", "Manga folder", 2)
+        let today = MobileRecentTabsTests.mac("https://today.example", "Manga today", 4)
+        let undated = MobileRecentTabsTests.mac("https://undated.example", "Manga undated", nil)
+        let favorite = MobileRecentTabsTests.mac("https://favorite.example", "Manga favorite", 9)
+        var folder = SidebarItem.folder("Folder", parent: a.spaces[0].pinnedContainerID)
+        folder.children = [nested.id]
+        a.items += [pinned, nested, folder, favorite]
+        a.items[a.items.firstIndex { $0.id == a.spaces[0].pinnedContainerID }!].children = [pinned.id, folder.id]
+        a.items[a.items.firstIndex { $0.id == a.spaces[0].favoritesContainerID }!].children = [favorite.id]
+        b.items += [today, undated]
+        b.items[b.items.firstIndex { $0.id == b.spaces[0].todayContainerID }!].children = [today.id]
+        b.items[b.items.firstIndex { $0.id == b.spaces[0].pinnedContainerID }!].children = [undated.id]
+        a.spaces += b.spaces
+        a.items += b.items
+        var blank = SidebarDocument.fresh()
+        blank.spaces[0].standaloneWindowID = UUID()
+        let hidden = MobileRecentTabsTests.mac("https://hidden.example", "Manga hidden", 10)
+        blank.items.append(hidden)
+        blank.items[blank.items.firstIndex { $0.id == blank.spaces[0].pinnedContainerID }!].children = [hidden.id]
+        a.spaces += blank.spaces
+        a.items += blank.items
+        let sites = MobileSuggestions.macSites(in: a)
+        #expect(sites.map(\.title) == ["Manga pinned", "Manga folder", "Manga undated"])
+        #expect(sites.map { $0.place?.prefix } == ["Pinned in ", "Pinned in ", "Pinned in "])
+        #expect(sites.map { $0.place?.space } == ["A", "A", "B"])
+        let phone = MobileSuggestions.Site(title: "Manga phone", url: "https://www.x.example/p/")
+        let rows = MobileSuggestions.rows(typed: "manga", completions: [], sites: [phone] + sites, limit: 10)
+        #expect(rows.map(\.text) == ["manga", "Manga phone", "Manga folder"])
+        #expect(rows[1].place == nil)
+        #expect(rows[2].place?.space == "A")
+        let duplicate = MobileSuggestions.rows(typed: "x.example", completions: [], sites: [phone] + sites)
+        #expect(duplicate.filter { if case .site = $0.kind { return true }; return false }.count == 1)
+        #expect(duplicate[0].place == nil)
+        let extras = (1...2).map { MobileRecentTabsTests.mac("https://extra\($0).example", "Manga extra", 1) }
+        a.items += extras
+        a.items[a.items.firstIndex { $0.id == a.spaces[0].pinnedContainerID }!].children += extras.map(\.id)
+        let many = MobileSuggestions.macSites(in: a)
+        #expect(many.count == 5)
+        #expect(MobileSuggestions.rows(typed: "manga", completions: [], sites: many, limit: 10).count == 3)
+    }
+
     @Test func emptyFieldHasNoRows() {
         #expect(MobileSuggestions.rows(typed: "  ", completions: ["a"]).isEmpty)
     }

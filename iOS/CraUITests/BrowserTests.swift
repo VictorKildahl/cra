@@ -1273,6 +1273,55 @@ final class EmptyHomeTests: BrowserTestCase {
 }
 
 final class SiteMatchTests: BrowserTestCase {
+    // promise: #650
+    func testSyncedSpaceSitesShowTheirPlaceAndOpen() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-search-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data(SpacesTests.macSidebar.utf8).write(to: folder.appendingPathComponent("sidebar.json"))
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", folder.path])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        field.typeText("docs")
+        let docs = app.descendants(matching: .any).matching(NSPredicate(format: "identifier MATCHES 'suggestion-[0-9]+'"))
+            .containing(.staticText, identifier: "Docs").firstMatch
+        XCTAssertTrue(docs.waitForExistence(timeout: 10))
+        XCTAssertTrue(docs.staticTexts["Pinned in Work"].exists)
+        app.buttons["search-clear"].tap()
+        field.typeText("story")
+        let story = app.descendants(matching: .any).matching(NSPredicate(format: "identifier MATCHES 'suggestion-[0-9]+'"))
+            .containing(.staticText, identifier: "Story").firstMatch
+        XCTAssertFalse(story.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["In Work"].exists)
+        app.buttons["search-clear"].tap()
+        field.typeText("docs")
+        XCTAssertTrue(docs.waitForExistence(timeout: 5))
+        keep("space-site-match")
+        docs.tap()
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["tab-card-2"].exists)
+        XCTAssertEqual(app.buttons["tab-card-1"].label, "docs.example")
+    }
+
+    // promise: #650
+    func testPhoneSiteWinsOverSyncedSpace() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-search-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data(SpacesTests.macSidebar.utf8).write(to: folder.appendingPathComponent("sidebar.json"))
+        launch(["-CraOpenURL", "http://docs.example/", "-CraSearch", "NO", "-CraSyncDir", folder.path])
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 10))
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText("docs")
+        let list = app.scrollViews["suggestion-list"]
+        XCTAssertTrue(list.staticTexts["docs.example"].waitForExistence(timeout: 10))
+        XCTAssertEqual(list.staticTexts.matching(identifier: "docs.example").count, 1)
+        XCTAssertFalse(list.staticTexts["Docs"].exists)
+        XCTAssertFalse(list.staticTexts["Pinned in Work"].exists)
+    }
+
     /// A page the phone has open comes up as a row when its address is typed, above the typed
     /// text, and a tap on it opens it. The address never loads (`.invalid`), so no network.
     func testAnOpenPageIsOfferedWhenItsAddressIsTyped() {
