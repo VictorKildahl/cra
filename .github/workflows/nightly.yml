@@ -92,7 +92,8 @@ jobs:
     if: github.event.inputs.scenarios == ''
     name: Harnesses under ${{ matrix.sanitizer }} sanitizer
     runs-on: macos-26
-    timeout-minutes: 30
+    # Thread sanitizer took 27-28 min on 19-20 Nov and hit 30 on a slower runner with every check passing.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
