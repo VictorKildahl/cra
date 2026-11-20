@@ -5,5 +5,6 @@
 chrome.storage.session.get('settings').then(async ({ settings }) => {
   await fetch(`${settings.origin}/page.html?n=settings-shown-${settings.how}`, { mode: 'no-cors' });
   if (settings.how === 'runtime') chrome.runtime.openOptionsPage();
-  else chrome.runtime.sendMessage('open-options-tab').catch(console.error);
+  // Tampermonkey's Dashboard (#634) closes its popup itself once the worker answers, if Chromium hasn't yet.
+  else chrome.runtime.sendMessage('open-options-tab').then(() => window.close(), console.error);
 });

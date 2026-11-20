@@ -4520,7 +4520,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let host = shell.sidebarHost
         let sidebar = host.window.map { $0.convertToScreen(host.convert(host.bounds, to: nil)) }
         let inSidebar = sidebar.map { anchor.x >= $0.minX && anchor.x <= $0.maxX + 1 } ?? false
+        // Where the frame went (#634): its right edge from the anchor, its top from under the URL field.
+        let frame = ExtensionPopupWindow.shownFrame ?? .zero
         CraLog.note("extension popup \(step): shown, hangs from \(inSidebar ? "sidebar" : "page")")
+        CraLog.note("extension popup \(step) frame: dx=\(Int((frame.maxX - anchor.x).rounded())) dy=\(Int((frame.maxY - anchor.y).rounded())) "
+                    + "minX=\(Int(frame.minX - (window?.screen?.frame.minX ?? 0))) fullscreen=\(window?.styleMask.contains(.fullScreen) == true ? 1 : 0) "
+                    + "titleBar=\(Int(frame.midX)),\(Int((NSScreen.screens.first?.frame.maxY ?? 0) - frame.maxY + 10))")
     }
 
     /// Scenario hook (#531): "floating sidebar <step>: out" or "in".

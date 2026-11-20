@@ -60,6 +60,7 @@ enum ExtensionPopupWindowTests {
         expect(!bubble.isVisible, "dismissal closes the visible Chrome bubble asynchronously")
 
         closesOnAClickElsewhere()
+        hangsUnderItsButtonUntilDragged()
         print("Extension popup window: \(checks) checks passed")
     }
 
@@ -120,6 +121,71 @@ enum ExtensionPopupWindowTests {
         expect(thirdFrame.isVisible && third.parent === thirdFrame, "an earlier popup's watch doesn't close a later one")
         thirdFrame.performClose(nil)
         expect(ExtensionPopupWindow.shownAnchor == nil, "the close button ends it too")
+    }
+
+    // promise: #634
+    /// A popup hangs right under its button (the sidebar's sliders) unless the user dragged one away. On
+    /// 0.1.51 every popup hung by an offset that moves which were no drag had saved: AppKit says willMove
+    /// when the frame is carried along with its window too, so a popup opened from the sidebar in full
+    /// screen sat out on the page. The offset Cra ≤ 0.1.51 kept that way is dropped once.
+    @MainActor
+    private static func hangsUnderItsButtonUntilDragged() {
+        let defaults = UserDefaults.standard
+        for key in ["extensionPopupWindowOffset", "extensionPopupWindowDragOffset"] { defaults.removeObject(forKey: key) }
+        defer { for key in ["extensionPopupWindowOffset", "extensionPopupWindowDragOffset"] { defaults.removeObject(forKey: key) } }
+        let anchor = NSPoint(x: -9800, y: -9700)
+        func hangsUnder(_ why: String) {
+            let topLeft = ExtensionPopupWindow.placement(anchor: anchor, width: 300)
+            expect(topLeft == NSPoint(x: anchor.x - 300, y: anchor.y), why)
+        }
+
+        // What 0.1.51 left in the reporter's defaults (and on this Mac: {107, -14}).
+        defaults.set("{107, -14}", forKey: "extensionPopupWindowOffset")
+        let (page, frame) = presentPopup(anchor: anchor)
+        hangsUnder("an offset Cra ≤ 0.1.51 saved is dropped, so the popup hangs under its button again")
+
+        // The frame carried along with its window: AppKit posts willMove and didMove, with no press on the frame.
+        NotificationCenter.default.post(name: NSWindow.willMoveNotification, object: frame)
+        frame.setFrameOrigin(NSPoint(x: frame.frame.minX + 107, y: frame.frame.minY - 14))
+        hangsUnder("a move that isn't a drag of the popup's title bar is not where the user wants popups")
+
+        // A press on the title bar that never dragged, then the frame carried along: no drag either.
+        let titleBar = NSPoint(x: frame.frame.width / 2, y: frame.frame.height - 6)
+        makeCurrent(.leftMouseDown, at: titleBar, in: frame)
+        NotificationCenter.default.post(name: NSWindow.willMoveNotification, object: frame)
+        frame.setFrameOrigin(NSPoint(x: frame.frame.minX + 200, y: frame.frame.minY))
+        hangsUnder("a move after a press that never dragged is not where the user wants popups")
+
+        // A real title-bar drag, as AppKit delivers one (measured on a test copy): willMove on the first
+        // leftMouseDragged, then one didMove on the leftMouseUp, on the frame. That place is kept, as in Arc.
+        let start = frame.frame.origin
+        makeCurrent(.leftMouseDragged, at: titleBar, in: frame)
+        NotificationCenter.default.post(name: NSWindow.willMoveNotification, object: frame)
+        makeCurrent(.leftMouseUp, at: titleBar, in: frame)
+        let dropped = NSPoint(x: start.x + 120, y: start.y - 40), size = frame.frame.size
+        frame.setFrameOrigin(dropped)
+        let kept = ExtensionPopupWindow.placement(anchor: anchor, width: 300)
+        // The top-left a 300 pt popup takes: moved by the same offset from hanging under the anchor.
+        let wanted = NSPoint(x: anchor.x - 300 + (dropped.x - (anchor.x - size.width)), y: dropped.y + size.height)
+        expect(kept == wanted, "a drag of the popup's title bar is where later popups hang")
+
+        // After the drop the frame is carried along with its window: the place the user chose stays.
+        frame.setFrameOrigin(NSPoint(x: frame.frame.minX + 300, y: frame.frame.minY + 50))
+        expect(ExtensionPopupWindow.placement(anchor: anchor, width: 300) == kept,
+               "a move after the drag ended doesn't replace where the user dropped it")
+        frame.performClose(nil)
+        _ = page
+    }
+
+    /// Makes a mouse event of `type` in `window`, timed now, NSApp.currentEvent (as AppKit's own are when it
+    /// posts willMove and didMove).
+    @MainActor
+    private static func makeCurrent(_ type: NSEvent.EventType, at point: NSPoint, in window: NSWindow) {
+        let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        NSApp.postEvent(event, atStart: true)
+        let current = NSApp.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true)
+        expect(current?.type == type && NSApp.currentEvent?.window === window, "the \(type) is on the popup's frame")
     }
 
     /// A stand-in for Chrome's bubble, framed under `anchor`.

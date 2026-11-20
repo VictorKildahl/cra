@@ -1,11 +1,13 @@
 # promise: #626
 # promise: #631
+# promise: #634
 # An extension popup's Settings opens the options page as a tab while the popup is still up, as
 # Obsidian Web Clipper's and Keeper's (#626) and LeechBlock NG's (#631) do. Chromium closes the popup
 # while the new tab goes into its tab strip; Cra's window becomes key again, the page there takes
 # focus, and Cra made that page Chrome's active tab right then, inside the tab strip's own change:
 # TabStripModel's reentrancy CHECK quit Cra (0.1.50 and 0.1.51, 52 crash reports). Both ways in: the
-# service worker's chrome.tabs.create, and chrome.runtime.openOptionsPage() from the popup. It takes the
+# service worker's chrome.tabs.create (Tampermonkey's Dashboard, #634: its popup asks the worker for the
+# tab, then closes itself), and chrome.runtime.openOptionsPage() from the popup. It takes the
 # screen: the popup hands the keys back only to the app in use.
 requires screen
 env CRA_TEST_BACKGROUND=0

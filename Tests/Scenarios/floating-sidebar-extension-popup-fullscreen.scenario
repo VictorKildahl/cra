@@ -1,0 +1,52 @@
+# promise: #634
+# floating-sidebar-extension-popup (#531) in full screen, as #634 reported it on 0.1.51: the sidebar
+# hidden and the toolbar too, the window full screen, the sidebar out at the edge, its Site Control
+# Center opened from the URL field and an extension run from there. The popup's frame hangs under that
+# field with its right edge on the sliders (dx=0), not out on the page beside the sidebar.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=800 stalls50=60
+pace 0.4
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=popup
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 0.5
+cra://debug?activate=1
+wait 1
+cra://debug?fullscreen=1
+wait 2
+cra://debug?fullscreen=state&label=in
+expect-log fullscreen in: window=1
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?urlFieldHover=1
+expect-log url field: copyURL siteControls$
+cra://debug?urlFieldPress=siteControls
+expect-log url field press siteControls: pressed true, site control center shown
+cra://debug?floatingSidebar=release
+wait 1
+cra://debug?floatingSidebar=state:menu
+expect-log floating sidebar menu: out$
+
+cra://debug?siteControlsPress=Cra%20Scenario%20Fixture
+expect-log site controls pressed Cra Scenario Fixture
+expect-log extension popup shown
+wait 1
+cra://debug?extensionPopup=run
+expect-log extension popup run: shown, hangs from sidebar$
+expect-log extension popup run frame: dx=0 dy=0 .* fullscreen=1 titleBar=
+cra://debug?floatingSidebar=state:popup
+expect-log floating sidebar popup: out$
+
+cra://debug?clickAt=120,600&target=floating
+wait 1
+cra://debug?extensionPopup=click
+expect-log extension popup click: closed$
+cra://debug?fullscreen=0
+wait 2
+cra://debug?removeExtension=${EXTENSION_ID}
