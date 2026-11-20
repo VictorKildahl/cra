@@ -54,4 +54,12 @@ public enum SiteControlsPopupAnchor {
         guard !showToolbar, !openedInPaneBar, let sliders = slidersFrame, let y = urlFieldBottom else { return nil }
         return CGPoint(x: sliders.maxX, y: y)
     }
+
+    /// The x the popover hangs from, centred on a sliders button: the one it was opened from (`given`), else
+    /// the one under the pointer, else the sidebar's own `sliders`. Only with none of them, the pointer's x.
+    /// With no button under the pointer (VoiceOver's press, a scripted one) it hung at the pointer's x, off
+    /// the window when the pointer was elsewhere, and macOS showed nothing.
+    public static func buttonMidX(given: CGRect?, underPointer: CGRect?, sliders: CGRect?, pointerX: CGFloat) -> CGFloat {
+        (given ?? underPointer ?? sliders)?.midX ?? pointerX
+    }
 }

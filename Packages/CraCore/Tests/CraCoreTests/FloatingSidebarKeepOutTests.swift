@@ -70,4 +70,17 @@ import Testing
         #expect(SiteControlsPopupAnchor.fromSidebar(showToolbar: false, openedInPaneBar: false, slidersFrame: sliders,
                                                     urlFieldBottom: nil) == nil)
     }
+
+    /// Opened with no button under the pointer (VoiceOver's press, Nightly's scripted press with the pointer in a
+    /// corner): it hung at the pointer's x, off the window, and macOS showed nothing.
+    @Test func popupWithNoButtonUnderThePointerHangsFromTheSliders() {
+        let sliders = CGRect(x: 300, y: 748, width: 32, height: 28)
+        #expect(SiteControlsPopupAnchor.buttonMidX(given: nil, underPointer: nil, sliders: sliders, pointerX: 0) == 316)
+        // A button that was pressed, or is under the pointer, wins.
+        let pressed = CGRect(x: 900, y: 760, width: 32, height: 28)
+        #expect(SiteControlsPopupAnchor.buttonMidX(given: pressed, underPointer: nil, sliders: sliders, pointerX: 0) == 916)
+        #expect(SiteControlsPopupAnchor.buttonMidX(given: nil, underPointer: pressed, sliders: sliders, pointerX: 0) == 916)
+        // Nothing to hang from: the pointer, as before.
+        #expect(SiteControlsPopupAnchor.buttonMidX(given: nil, underPointer: nil, sliders: nil, pointerX: 40) == 40)
+    }
 }

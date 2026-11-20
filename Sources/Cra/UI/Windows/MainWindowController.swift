@@ -4298,7 +4298,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard let window, let content = window.contentView,
               let y = pressed != nil && shell.panesShowBars ? toolbarBottomOnScreen()?.y : urlBarBottomOnScreen() else { return }
         ExtensionStore.shared.reload()
-        let midX = (anchor ?? pressed ?? Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton })?.midX ?? NSEvent.mouseLocation.x
+        let midX = SiteControlsPopupAnchor.buttonMidX(given: anchor ?? pressed, underPointer: Self.buttonFrameUnderPointer { $0 is SidebarGlyphButton },
+                                                      sliders: (shell.sidebarHost as? SidebarView)?.siteControlsButtonFrameOnScreen,
+                                                      pointerX: NSEvent.mouseLocation.x)
         // Arc's popover overlaps the bar by 4 pt (popover top 71 under a bar ending at 75).
         let onScreen = NSRect(x: midX - 16, y: y + 4, width: 32, height: 28)
         let rect = content.convert(window.convertFromScreen(onScreen), from: nil)
