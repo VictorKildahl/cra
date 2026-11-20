@@ -46,6 +46,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var barSwipePullsSearch = false
     /// How far up the search sheet is being pulled out of the pill, while it is (#623).
     var searchPull: CGFloat?
+    /// A pulled sheet let go: where it stays, and how open its field is, until the keyboard comes (#623).
+    var pulledSheetHold: (top: CGFloat, openness: CGFloat)?
     /// A drag up from the tab button: the tab it brings back (#537).
     var barSwipeTarget: MobileTab?
     // Voice search (BrowserGestures.swift).
@@ -256,11 +258,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let keyboard = max(keyboardHeight, safeBottom)
         let safeTop = view.safeAreaInsets.top
         sheet.rowsInView = MobileSearchSheet.rowsInView(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop)
-        let top = isSearching ? MobileSearchSheet.top(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop)
+        let top = isSearching ? MobileSearchSheet.openingTop(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop,
+                                                             heldAt: pulledSheetHold?.top)
             : barFrame.minY - max(0, pull ?? 0)
         sheet.frame = CGRect(x: 0, y: top, width: bounds.width, height: max(MobileSearchSheet.height(rows: sheet.rowsInView) + keyboard, bounds.height - top))
         sheet.collapsedFieldFrame = bar.pillFrame
-        sheet.openness = isSearching ? 1 : pulled ?? 0
+        sheet.openness = isSearching ? pulledSheetHold?.openness ?? 1 : pulled ?? 0
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))
         logo.alpha = isSearching || store.selected != nil || switcher != nil ? 0 : 1
         layoutBrowseToggle(barTop: barFrame.minY)
@@ -310,6 +313,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         guard event != .didHide || height != keyboardHeight else { return }
         keyboardHeight = height
         keyboardDroveLayout = true
+        pulledSheetHold = nil
         if duration > 0 {
             animateChrome(duration: duration, options: UIView.AnimationOptions(rawValue: curve << 16))
         } else {
@@ -345,6 +349,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // A sheet pulled out of the pill is already laid out under the finger: it goes on from there.
         let pulled = searchPull != nil
         searchPull = nil
+        pulledSheetHold = searching && pulled ? (sheet.frame.minY, sheet.openness) : nil
         if searching, !pulled {
             prepareSearchSheet(incognito: incognito)
             // Starts from the pill: lay the closed state out before anything animates.
@@ -364,9 +369,20 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         } else {
             sheet.field.resignFirstResponder()
         }
-        // No software keyboard (a hardware one is attached): move the chrome ourselves.
+        // No software keyboard (a hardware one is attached): move the chrome ourselves. A pulled
+        // sheet waits a moment for the keyboard, whose animation takes it up (#623).
         if !keyboardDroveLayout {
-            animateChrome(duration: 0.35, options: .curveEaseInOut)
+            if pulledSheetHold != nil {
+                // The page behind sits back now; the sheet stays where it was let go.
+                animateChrome(duration: 0.35, options: .curveEaseInOut)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                    guard let self, self.isSearching, self.pulledSheetHold != nil else { return }
+                    self.pulledSheetHold = nil
+                    self.animateChrome(duration: 0.35, options: .curveEaseInOut)
+                }
+            } else {
+                animateChrome(duration: 0.35, options: .curveEaseInOut)
+            }
         }
     }
 

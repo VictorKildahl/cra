@@ -50,6 +50,14 @@ public enum MobileSearchSheet {
         screenHeight - keyboardHeight - height(rows: rowsInView(screenHeight: screenHeight, keyboardHeight: keyboardHeight, safeTop: safeTop))
     }
 
+    /// Where the sheet's top is while it opens. Pulled out of the pill and let go (#623), it stays
+    /// where the finger left it, `heldAt`, until the keyboard's own animation takes it up, as in
+    /// Arc Search (the reporter's 60 fps recording: straight up with the keyboard, settled in
+    /// about 0.28 s). Laid out for no keyboard in the meantime, it sank towards the bar first.
+    public static func openingTop(screenHeight: CGFloat, keyboardHeight: CGFloat, safeTop: CGFloat, heldAt: CGFloat?) -> CGFloat {
+        heldAt ?? top(screenHeight: screenHeight, keyboardHeight: keyboardHeight, safeTop: safeTop)
+    }
+
     /// The field's button at its right end (clear, incognito): 44 pt square, its centre 29.5 pt
     /// from the field's right end.
     public static func accessoryFrame(field: CGRect) -> CGRect {

@@ -481,6 +481,13 @@ built release app with a test profile. Note anything that fails in the release's
   `AddedListRulesTests` compile a list of EasyList's shape on the Mac, and
   `testAnAddedListsPathRuleStopsAScriptFromAnUnlistedDomain` pins a served list in the simulator.
 
+- **#623, the pull-up's motion:** on a real iPhone at 60 fps, record a drag up from the + pill let go
+  halfway and compare it frame by frame with the reporter's Arc Search recording
+  (streamable.com/vbu4dx): let go, the sheet stays put until the keyboard comes, then rises with it
+  and rests about 0.28 s after letting go, with no sink towards the bar and no overshoot. The
+  simulator records at a variable rate, so only a phone settles the timing; CraCore's
+  `aLetGoSheetWaitsForTheKeyboardWhereItWasLeft` pins the hold.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into

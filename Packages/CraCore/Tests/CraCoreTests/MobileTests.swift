@@ -39,6 +39,16 @@ struct MobileChromeTests {
         #expect(abs((off.maxX - 11.5) - accessory.midX) <= 1)
     }
 
+    /// A sheet let go halfway up stays there until the keyboard comes, then goes where the
+    /// keyboard puts it; without the hold it aimed at the keyboard-less spot, lower down (#623).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/623")) func aLetGoSheetWaitsForTheKeyboardWhereItWasLeft() {
+        let held = MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 34, safeTop: 59, heldAt: 420)
+        #expect(held == 420)
+        let keyboardless = MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 34, safeTop: 59, heldAt: nil)
+        #expect(keyboardless > 420, "what it used to aim at while the keyboard was on its way: lower")
+        #expect(MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 291, safeTop: 59, heldAt: nil) == 259, "with the keyboard up, Arc's place")
+    }
+
     /// The same phone's bar: 76 pt tall, pill 76 × 39 centred 44.5 pt above the bottom edge,
     /// round buttons 35 pt wide centred 41 pt from each side.
     @Test func bottomBarOnAnIPhone15Pro() {

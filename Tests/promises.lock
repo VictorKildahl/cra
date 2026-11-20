@@ -1349,6 +1349,7 @@
 #622   Tests/Scenarios/tabs-menu-states.scenario  87e05e5d8c31
 #622   Tests/StoreTests.swift::tabsMenuCountsStopEarly  a0cea44d9eae
 #623   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aDragUpFromThePillPullsTheSearchSheetOut  4566f2ce018d
+#623   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aLetGoSheetWaitsForTheKeyboardWhereItWasLeft  ea1721ef97a8
 #623   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theWholeSheetDragsDown  03b9e3f79af9
 #623   iOS/CraUITests/SearchPullTests.swift::testAShortPullFallsBackIntoThePill  965bf2fd7f04
 #623   iOS/CraUITests/SearchPullTests.swift::testDraggingTheSheetDownByItsSuggestionsClosesIt  cf09fd8048ed
