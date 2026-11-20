@@ -150,6 +150,7 @@ feature	Bluetooth chooser	checklist	navigator.bluetooth.requestDevice (asks macO
 feature	screen share picker	checklist	getDisplayMedia for a screen or a window (macOS's picker and Screen Recording)
 feature	tab share prompt	scenarios page-share-tab	getDisplayMedia({preferCurrentTab: true})
 feature	shared tab marks	scenarios page-shared-tab-marks	a call sharing a tab: Arc's yellow ring on its row and page, "Share this tab instead" on the others
+feature	recording dot	scenarios recording-dot	a page using the camera or microphone: Arc's pulsing red dot leading its tab's row
 feature	payment sheet	scenarios page-payment	PaymentRequest.show()
 feature	security key dialog	scenarios page-webauthn	navigator.credentials.get with a security key
 feature	passkey with Touch ID	checklist	navigator.credentials.create/get with a platform passkey (macOS's own sheet)

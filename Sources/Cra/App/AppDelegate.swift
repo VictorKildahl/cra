@@ -1203,6 +1203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // tabSharing=<label>[&hover=<part of a tab's URL>[&press=1]]: what calls share and Arc's marks for it
             // (TabSharing). hover hovers that tab's row as the pointer would; press clicks the "Share this tab instead"
             // it shows.
+            // recordingDot=<label>: each shown tab row's recording dot (RecordingDot), by the tab's URL.
+            if let label = dict["recordingDot"] {
+                CraLog.note("recording dot \(label): " + main.recordingDotReadout()); return
+            }
             if let label = dict["tabSharing"] {
                 main.tabSharingReadout(label, hover: dict["hover"], press: dict["press"] == "1") { CraLog.note($0) }
                 return

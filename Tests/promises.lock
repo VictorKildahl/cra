@@ -1331,3 +1331,4 @@ web-page-share-picker Tests/Scenarios/page-share-picker.scenario  24eeea592355
 web-page-share-tab Tests/Scenarios/page-share-tab.scenario  df5fb132612d
 web-page-shared-tab-marks Tests/Scenarios/page-shared-tab-marks.scenario  fe7fe9addc2b
 web-page-webauthn Tests/Scenarios/page-webauthn.scenario  cdc887b7e2c2
+web-recording-dot Tests/Scenarios/recording-dot.scenario  e306d6f20c9a

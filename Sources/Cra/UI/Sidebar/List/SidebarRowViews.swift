@@ -1233,19 +1233,46 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         subtitleLabel.isHidden = shownSubtitle == nil || renameField != nil
     }
 
-    /// Recording dot, mute or playing sound, unread dot, and on hover close. Made once
-    /// per row and shown or hidden: hover moves from row to row on every frame of a scroll.
+    /// Arc's recording dot (RecordingDot): before the favicon, pulsing. Made once per row and shown or hidden.
     private lazy var captureDot: NSView = {
-        let dot = NSView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
-        let c = CALayer()
-        c.frame = CGRect(x: 4.5, y: 4.5, width: 7, height: 7)
-        c.cornerRadius = 3.5
-        c.backgroundColor = NSColor.systemRed.cgColor
+        let d = CGFloat(RecordingDot.diameter)
+        let dot = NSView(frame: NSRect(x: 0, y: 0, width: d, height: d))
         dot.wantsLayer = true
-        dot.layer?.addSublayer(c)
+        dot.layer?.cornerRadius = d / 2
+        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
         _ = ArcTooltipAnchorView.attach(to: dot, help: "This tab is using your camera or microphone")
+        addSubview(dot)
         return dot
     }()
+    private var showsCaptureDot = false
+    /// `cra://debug?recordingDot`: the dot shows, and where it and the favicon are in the row.
+    var recordingDotReadout: String {
+        guard showsCaptureDot else { return "dot=0 icon=\(Int(favicon.frame.minX))" }
+        let pulsing = captureDot.layer?.animation(forKey: "pulse") != nil
+        return "dot=1 x=\(Int(captureDot.frame.minX)) w=\(Int(captureDot.frame.width)) icon=\(Int(favicon.frame.minX)) pulse=\(pulsing ? 1 : 0)"
+    }
+
+    /// Arc's pulse: the red toward white and back, forever; still under Reduce Motion.
+    private func syncCapturePulse() {
+        guard let layer = captureDot.layer else { return }
+        let pulse = showsCaptureDot && window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard pulse != (layer.animation(forKey: "pulse") != nil) else { return }
+        guard pulse else { layer.removeAnimation(forKey: "pulse"); return }
+        let red = NSColor.systemRed
+        let a = CABasicAnimation(keyPath: "backgroundColor")
+        a.fromValue = red.cgColor
+        a.toValue = (red.blended(withFraction: CGFloat(RecordingDot.pulseWhite), of: .white) ?? red).cgColor
+        a.duration = RecordingDot.pulseHalfPeriod
+        a.autoreverses = true
+        a.repeatCount = .infinity
+        a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(a, forKey: "pulse")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if showsCaptureDot { syncCapturePulse() }
+    }
     /// Arc 1.171: a playing or muted tab shows a speaker between the favicon and the title (17.5 pt
     /// wide, 8 pt before the title, in the glyph tone); clicking it mutes or unmutes the tab
     /// (31 Oct 2026, issue #28).
@@ -1287,7 +1314,12 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         guard let m = model, list != nil else { return }
         let id = m.id
         var shown: [NSView] = []
-        if m.capturing { shown.append(captureDot) }
+        if m.capturing != showsCaptureDot {
+            showsCaptureDot = m.capturing
+            captureDot.isHidden = !m.capturing
+            needsLayout = true
+        }
+        if showsCaptureDot { syncCapturePulse() }
         let sound = (m.muted || m.audible) && !m.editing
         if sound {
             if soundButton.superview == nil { addSubview(soundButton) }
@@ -1351,7 +1383,12 @@ final class TabRowView: SidebarRowView, ArcTooltipTarget, NSTextFieldDelegate {
         super.layout()
         guard let m = model else { return }
         let h = bounds.height
-        var x = CraMetrics.rowLeading + CGFloat(m.depth) * CraMetrics.indent
+        let lead = RecordingDot.leading(iconX: Double(CraMetrics.rowLeading + CGFloat(m.depth) * CraMetrics.indent), recording: showsCaptureDot)
+        if let dx = lead.dotX {
+            let d = CGFloat(RecordingDot.diameter)
+            captureDot.frame = NSRect(x: CGFloat(dx), y: (h - d) / 2, width: d, height: d)
+        }
+        var x = CGFloat(lead.iconX)
         favicon.frame = NSRect(x: x, y: (h - CraMetrics.favicon) / 2, width: CraMetrics.favicon, height: CraMetrics.favicon)
         if m.navigatedAway {
             // Arc: 4 pt, the slash, then the name 5 pt on (2 pt later than without it).

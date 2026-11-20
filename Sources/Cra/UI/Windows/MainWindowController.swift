@@ -2145,6 +2145,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         (view as? T).map { [$0] } ?? view.subviews.flatMap { views(type, in: $0) }
     }
 
+    /// `cra://debug?recordingDot`: each shown tab row's recording dot and favicon, by the tab's URL, sorted.
+    func recordingDotReadout() -> String {
+        let rows = (window?.contentView.map { Self.views(TabRowView.self, in: $0) } ?? []).filter { !$0.isHiddenOrHasHiddenAncestor }
+        return rows.compactMap { row -> String? in
+            guard let id = row.model?.id else { return nil }
+            let url = browsers.runtime(for: id)?.browser.currentURL ?? id.uuidString
+            return "\(url) \(row.recordingDotReadout)"
+        }.sorted().joined(separator: " | ")
+    }
+
     /// Sharing spans windows: a call in one window can switch to a tab another window's sidebar lists.
     func browserManagerTabSharingChanged() {
         for w in app.mainWindows { w.syncTabSharing() }

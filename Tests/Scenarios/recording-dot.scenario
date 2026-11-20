@@ -1,0 +1,35 @@
+# promise: web-recording-dot
+# web-features: a page using the camera or microphone (a call). Arc leads its tab's row with a pulsing red dot,
+# the favicon 14 pt further in (ARCUI.RecordingDotIndicator, TabCellView.hasLeadingRecordingIndicator; X DM
+# 19 Nov 2026, a recording of Arc 1.173 in Google Meet). Cra had a still dot at the row's end. Chrome's fake devices
+# answer getUserMedia once the card is allowed, so no real microphone opens.
+budget rss=1000 stalls50=30
+pace 0.5
+arg --use-fake-device-for-media-stream
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=quiet
+expect-log GET /features.html\?n=quiet
+cra://open?url=${ORIGIN}/features.html?n=call
+expect-log GET /features.html\?n=call
+wait 2
+cra://debug?recordingDot=none
+expect-log recording dot none: \S+n=call dot=0 icon=10 \| \S+n=quiet dot=0 icon=10$
+cra://debug?cdp=Runtime.evaluate&params={"expression":"navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{window.__mic=s});'asked'","returnByValue":true,"userGesture":true}
+expect-log "value":"asked"
+wait 2
+cra://debug?permissionCard=Allow
+expect-log permission card: .*; pressed Allow
+expect-log tab \S+ uses the camera or microphone
+wait 1
+# The call's row: the dot where the favicon was, the favicon 14 pt in, pulsing. The other row is as it was.
+cra://debug?recordingDot=call
+expect-log recording dot call: \S+n=call dot=1 x=10 w=7 icon=24 pulse=1 \| \S+n=quiet dot=0 icon=10$
+# The call hangs up: the dot goes and the favicon comes back.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"setTimeout(()=>window.__mic.getTracks().forEach(t=>t.stop()),0);'stopping'"}
+expect-log "value":"stopping"
+expect-log tab \S+ stopped using the camera and microphone
+wait 1
+cra://debug?recordingDot=ended
+expect-log recording dot ended: \S+n=call dot=0 icon=10 \| \S+n=quiet dot=0 icon=10$
+reject-log fault:
