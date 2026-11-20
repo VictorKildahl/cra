@@ -48,6 +48,9 @@ public struct ToolbarComposition: Equatable, Sendable {
 
     public var left: [Item] = []
     public var right: [Item] = []
+    /// A right-click (or ⌃-click) on ↻ shows the reload menu (PR #517): every working ↻, a split
+    /// pane's too, whose bar focuses its page as the menu opens so the commands act on that pane.
+    public var reloadMenu = false
 
     /// `hovered`: the pointer is over this bar, which reveals an unfocused pane's controls.
     /// `translatable`: the page offers translation (PageTranslation.offersTranslation).
@@ -82,6 +85,7 @@ public struct ToolbarComposition: Equatable, Sendable {
             right += kind == .developer ? [.extensions] + pins : pins + [.extensions]
             if !inSplit { right.append(.addSplit) }
         }
+        reloadMenu = left.contains { if case .reload(_, true) = $0 { true } else { false } }
         if inSplit {
             // On a hovered pane too: its bar then doesn't move when a click on it takes the focus.
             if !essentialOnly, kind != .emptyPane { right.append(.splitOptions) }

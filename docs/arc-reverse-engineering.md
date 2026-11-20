@@ -393,7 +393,8 @@ each pane has one and the keys act on the focused pane.
 
 Cra's own, not in Arc (PR #517, a deviation Victor agreed to on 17 Nov 2026): a right-click or ⌃-click on the
 toolbar's ↻ opens the same menu (`ReloadMenu`), in every mode, not only Developer Mode. Arc shows it only from the ⌄.
-A split pane's bar keeps a plain ↻, since the menu's rows act on the focused page.
+A split pane's ↻ has it too: the right-click focuses that pane first, since the menu's rows act on the
+focused page (`ToolbarComposition.reloadMenu`).
 
 Extensions: CEF 154 has no extension API for Alloy-style browsers. A spike
 (`cra://debug?chromeSpike=<url>`) proved the alternative: a Chrome-style Views window

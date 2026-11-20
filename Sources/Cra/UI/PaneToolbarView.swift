@@ -244,6 +244,14 @@ final class PaneToolbarView: NSView {
             .min { $0.frame.minX < $1.frame.minX }
     }
 
+    /// Scenarios (cra://debug?paneReloadMenu): a right-click on ↻ with the pointer over this bar,
+    /// which reveals an unfocused pane's ↻; the menu it opens, nil when ↻ has none.
+    func debugRightClickReload() -> NSMenu? {
+        hovered = true
+        defer { hovered = false }
+        return buttons["reload"]?.menuProvider?()
+    }
+
     func buttonFrameOnScreen(_ key: String) -> NSRect? {
         // A floating bar put away above its card has no button to hang anything from.
         guard let b = buttons[key], !b.isHiddenOrHasHiddenAncestor, b.frame.width > 0, let window,
@@ -318,8 +326,13 @@ final class PaneToolbarView: NSView {
                 let b = glyph("reload", loading ? "xmark" : "arrow.clockwise", help: enabled ? "Refresh (⌘R)" : "", enabled: enabled, width: 37,
                               iconSize: 15, animated: enabled) { if !wide { $0.navigate("reload") } }
                 // A right-click (or ⌃-click) shows the reload menu: Force Refresh, Clear Cookies, Clear Cache and the
-                // developer items. Its commands act on the focused page, so a split pane's bar keeps a plain button.
-                b.menuProvider = enabled && !m.inSplit ? { [actions] in ReloadMenu.make(actions) } : nil
+                // developer items. Its commands act on the focused page, so a split pane's bar focuses its own
+                // first, while the menu opens: the window catches up before a row is picked.
+                b.menuProvider = bar.reloadMenu ? { [weak self] in
+                    guard let self else { return nil }
+                    if let id = self.paneTabID { self.actions.focusPane(id) }
+                    return ReloadMenu.make(self.actions)
+                } : nil
                 return b
             case .copyURL:
                 return glyph("copy", "link", help: "Copy URL (⇧⌘C)", width: 28) { $0.actions.performAction("copyURL") }

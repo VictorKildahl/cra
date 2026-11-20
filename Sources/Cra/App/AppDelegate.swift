@@ -2202,6 +2202,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("split \(label): panes=\(urls) selected=\(selected?.tab?.url ?? "-") downloads=\(DownloadHistory.shared.live.count + DownloadHistory.shared.entries.count)")
                 return
             }
+            // paneReloadMenu=<label>&pane=<n>: a right-click on pane n's ↻ (pointer over its bar). Logs the
+            // menu's rows, then, once the window has caught up, the focused pane and the pane whose page the
+            // menu's commands reach (BrowserManager.visibleRuntime).
+            if let label = dict["paneReloadMenu"], let n = dict["pane"].flatMap({ Int($0) }) {
+                let cards = main.shell.paneCards
+                guard cards.indices.contains(n), let bar = cards[n].toolbarHost as? PaneToolbarView else {
+                    CraLog.note("pane reload menu \(label): no pane \(n)"); return
+                }
+                let rows = bar.debugRightClickReload()?.items.map { $0.isSeparatorItem ? "-" : $0.title }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak main] in
+                    guard let main else { return }
+                    let cards = main.shell.paneCards
+                    let focused = cards.firstIndex { $0.tabID == main.selectedTab?.id }.map(String.init) ?? "-"
+                    let page = cards.firstIndex { $0.tabID == main.browsers.visibleTabID }.map(String.init) ?? "-"
+                    CraLog.note("pane reload menu \(label): menu=\(rows?.joined(separator: " | ") ?? "none") focused=\(focused) page=\(page)")
+                }
+                return
+            }
             // paneLengths=<label>: each pane card's length along the split's axis in pane order, the
             // split's stored width factors and which pane is focused (View ▸ Expand Current Split).
             if let label = dict["paneLengths"] {

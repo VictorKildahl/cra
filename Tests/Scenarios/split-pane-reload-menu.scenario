@@ -1,0 +1,26 @@
+# A right-click on ↻ shows the reload menu (PR #517) in a split pane too. Its rows act on the focused
+# page, so a right-click on the other pane's ↻ (shown while the pointer is over its bar) focuses that
+# pane first: Force Refresh and Clear Cookies then reach the page that was right-clicked, not the one
+# that had the focus. Before this, a split pane's ↻ had no menu at all.
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=left
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/addSplitView
+cra://navigate?url=${PAGE}?n=right
+wait 2
+cra://debug?paneLengths=start
+expect-log pane lengths start: .* focused=1 horizontal$
+
+# The unfocused pane: the menu, and that pane takes the focus and the commands.
+cra://debug?paneReloadMenu=other&pane=0
+expect-log pane reload menu other: menu=.*Force Refresh the Page.*Clear Cookies and Refresh.* focused=0 page=0$
+
+# The focused pane: the menu, and the focus stays.
+cra://debug?paneReloadMenu=focused&pane=0
+expect-log pane reload menu focused: menu=.*Force Refresh the Page.*Clear Cookies and Refresh.* focused=0 page=0$
+cra://debug?paneReloadMenu=back&pane=1
+expect-log pane reload menu back: menu=.*Force Refresh the Page.* focused=1 page=1$

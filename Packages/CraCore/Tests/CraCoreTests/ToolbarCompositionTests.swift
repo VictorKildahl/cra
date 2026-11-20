@@ -55,6 +55,18 @@ struct ToolbarCompositionTests {
         #expect(pane.right == [.pinnedExtension("a"), .extensions, .splitOptions, .closePane])
     }
 
+    /// A right-click on a working ↻ shows the reload menu (PR #517), a split pane's too: the pane's
+    /// bar focuses its page first, so Force Refresh and Clear Cookies act on that pane.
+    @Test func everyWorkingReloadHasTheMenu() {
+        #expect(bar(.normal).reloadMenu)
+        #expect(bar(.normal, split: true).reloadMenu)
+        #expect(bar(.normal, split: true, focused: false, hovered: true).reloadMenu)
+        // No ↻ (an unfocused pane's essentials, the developer bar) or a greyed one: no menu.
+        #expect(!bar(.normal, split: true, focused: false).reloadMenu)
+        #expect(!bar(.developer).reloadMenu)
+        #expect(!bar(.noTab).reloadMenu)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/178")) func anUnfocusedPaneShowsOnlyTheEssentials() {
         // Arc's onlyShowEssentialControls: ← →, the address and close.
         let pane = bar(.normal, split: true, focused: false, back: true, pinned: ["a"])
