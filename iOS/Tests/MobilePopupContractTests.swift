@@ -7,7 +7,19 @@ final class UIImage {
     init?(contentsOfFile: String) { return nil }
     func jpegData(compressionQuality: Double) -> Data? { nil }
 }
-final class WKWebView {}
+// CraCore's PageEngine (ProtectedMedia.swift), which PageHistory names, without the rest of that file.
+public enum PageEngine: String, Equatable, Sendable {
+    case chromium
+    case webKit
+}
+final class WKBackForwardListItem {}
+final class WKBackForwardList { var currentItem: WKBackForwardListItem? }
+// What TabStore reads of a page to keep its place (#656): its back and forward list, address and state.
+final class WKWebView {
+    let backForwardList = WKBackForwardList()
+    var url: URL?
+    var interactionState: Any?
+}
 final class WKWindowFeatures {}
 struct WKNavigationAction { let request: URLRequest }
 protocol WebPageDelegate: AnyObject {

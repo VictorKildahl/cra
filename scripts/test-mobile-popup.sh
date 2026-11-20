@@ -21,7 +21,7 @@ store = '\n'.join(line for line in store.splitlines() if not line.startswith('im
 Path(sys.argv[1]).write_text(tests + '\n' + store)
 PY
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
-  Packages/CraCore/Sources/CraCore/Mobile/MobileTabs.swift \
+  Packages/CraCore/Sources/CraCore/Mobile/MobileTabs.swift Packages/CraCore/Sources/CraCore/PageHistory.swift \
   "$TEST_DIR/MobilePopupContractTests.swift" -o "$TEST_DIR/mobile-popup-tests"
 [ -z "${CRA_TEST_KEEP:-}" ] || cp "$TEST_DIR/mobile-popup-tests" "$CRA_TEST_KEEP/"
 "$TEST_DIR/mobile-popup-tests"
