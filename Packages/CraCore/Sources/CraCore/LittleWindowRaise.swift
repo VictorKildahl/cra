@@ -31,10 +31,11 @@ public struct StackedWindow: Equatable {
     #endif
 }
 
-/// A Little Window opened from another app leaves Cra's browser window where it was (#607). Arc's
-/// Little Arc comes up alone; Cra's browser window rose over the app the link came from, on its own
-/// display, as Cra came forward and Chrome's hidden window followed the page into the Little Window.
-/// Cra notes the window that was just in front of the browser window and puts it back behind it.
+/// A Little Window opened from another app leaves Cra's browser window where it was (#607). macOS raises an app's main
+/// window as it comes forward for a link, so Cra's browser window rose over the app the link came from, on its own
+/// display, as the Little Window came up on another one. Arc 1.173.1 does the same (docs/arc-parity.md); Cra doesn't, on
+/// purpose (Victor, 20 Nov 2026). Cra notes the window that was just in front of the browser window and puts it back
+/// behind it, as the link arrives and again as the Little Window comes up.
 public enum LittleWindowRaise {
     /// Other apps' normal windows in front of window `number` that overlap it.
     public static func othersOver(_ number: Int, in stack: [StackedWindow], pid: Int32) -> Int {
@@ -59,11 +60,17 @@ public enum LittleWindowRaise {
         return stack[..<i].last { $0.pid != pid && $0.layer == 0 && $0.bounds.intersects(mine.bounds) }?.number
     }
 
-    /// Whether window `number` rose in front of `anchor`, and so goes back behind it. Not when either
-    /// is gone from the screen (closed, minimized, another Space).
-    public static func rose(_ number: Int, over anchor: Int, in stack: [StackedWindow]) -> Bool {
-        guard let mine = stack.firstIndex(where: { $0.number == number }),
-              let theirs = stack.firstIndex(where: { $0.number == anchor }) else { return false }
-        return mine < theirs
+    /// Whether window `number` goes back behind `anchor`: while both are on screen. Not by whether it rose: the window
+    /// server's list catches up with AppKit's raise only later, so a check of the order missed it and the browser
+    /// window stayed in front until the Little Window had grown in. Ordered behind the window just in front of it, it stays where
+    /// it was. Not when either is gone from the screen (closed, minimized, another Space).
+    /// `isKey` with `clickedIfKey` (the Little Window has had the keys): the browser window was clicked meanwhile, is in
+    /// use and stays in front. Before the Little Window has had them, a key browser window is key only because Cra came
+    /// forward (AppKit hands the keys back to the window that had them) and goes back all the same; skipping it left
+    /// it in front until the Little Window had grown in.
+    public static func goesBack(_ number: Int, behind anchor: Int, in stack: [StackedWindow],
+                                isKey: Bool = false, clickedIfKey: Bool = false) -> Bool {
+        if isKey && clickedIfKey { return false }
+        return stack.contains { $0.number == number } && stack.contains { $0.number == anchor }
     }
 }

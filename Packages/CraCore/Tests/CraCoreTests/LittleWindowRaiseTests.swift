@@ -22,12 +22,12 @@ struct LittleWindowRaiseTests {
         let anchor = LittleWindowRaise.anchor(for: 10, in: before, pid: Self.cra)
         #expect(anchor == 30)
         #expect(LittleWindowRaise.othersOver(10, in: before, pid: Self.cra) == 1)
-        // After: the Little Window on the right, and the browser window risen over Slack.
+        // After: the Little Window on the right, and the browser window risen over Slack. It goes back behind Slack.
         let after = [Self.little(), Self.browser(), Self.slackOverBrowser()]
         #expect(LittleWindowRaise.othersOver(10, in: after, pid: Self.cra) == 0)
-        #expect(LittleWindowRaise.rose(10, over: 30, in: after))
-        // Put back, it is behind Slack again.
-        #expect(!LittleWindowRaise.rose(10, over: 30, in: [Self.little(), Self.slackOverBrowser(), Self.browser()]))
+        #expect(LittleWindowRaise.goesBack(10, behind: 30, in: after))
+        // Also while the window server's list doesn't show the raise yet: ordered behind Slack, it stays where it was.
+        #expect(LittleWindowRaise.goesBack(10, behind: 30, in: [Self.little(), Self.slackOverBrowser(), Self.browser()]))
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/607"))
@@ -35,6 +35,17 @@ struct LittleWindowRaiseTests {
         // Mail over Slack over the browser window: it goes back just behind Slack, the window in front of it.
         let mailWindow = StackedWindow(number: 31, pid: Self.mail, bounds: Self.left)
         #expect(LittleWindowRaise.anchor(for: 10, in: [mailWindow, Self.slackOverBrowser(), Self.browser()], pid: Self.cra) == 30)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/607"))
+    func itGoesBackAsTheLinkArrivesThoughItIsKeyFromCraComingForward() {
+        // Cra coming forward gives the browser window the keys back: it goes back as the link arrives, before the
+        // Little Window has had them. Skipping key windows left it in front until the Little Window had grown in.
+        let after = [Self.browser(), Self.slackOverBrowser()]
+        #expect(LittleWindowRaise.goesBack(10, behind: 30, in: after, isKey: true, clickedIfKey: false))
+        // Once the Little Window has had the keys, a key browser window was clicked: it is in use and stays in front.
+        #expect(!LittleWindowRaise.goesBack(10, behind: 30, in: after, isKey: true, clickedIfKey: true))
+        #expect(LittleWindowRaise.goesBack(10, behind: 30, in: after, isKey: false, clickedIfKey: true))
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/607"))
@@ -52,9 +63,9 @@ struct LittleWindowRaiseTests {
         // In front already: nothing to go back behind.
         #expect(LittleWindowRaise.anchor(for: 10, in: [Self.browser(), Self.slackOverBrowser()], pid: Self.cra) == nil)
         // Slack's window closed (or went to another Space) while the Little Window came up.
-        #expect(!LittleWindowRaise.rose(10, over: 30, in: [Self.little(), Self.browser()]))
+        #expect(!LittleWindowRaise.goesBack(10, behind: 30, in: [Self.little(), Self.browser()]))
         // The browser window itself went (closed, minimized).
-        #expect(!LittleWindowRaise.rose(10, over: 30, in: [Self.little(), Self.slackOverBrowser()]))
+        #expect(!LittleWindowRaise.goesBack(10, behind: 30, in: [Self.little(), Self.slackOverBrowser()]))
         #expect(LittleWindowRaise.anchor(for: 99, in: [Self.slackOverBrowser()], pid: Self.cra) == nil)
     }
 

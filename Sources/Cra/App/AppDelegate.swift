@@ -1004,14 +1004,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @discardableResult
     func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil, space: UUID? = nil,
                           fromOtherApp: Bool = false) -> LittleWindowController {
+        // The browser windows stay where they were (#607): for a link, where they were before Cra came forward for it.
+        // They go back at once, before the Little Window is made, and again as it comes up.
+        var behind = BrowserWindowsBehind.none
+        if activate {
+            let before = stackBeforeActivation.flatMap { fromOtherApp && NSApp.isActive
+                && store.clock.now.timeIntervalSince($0.at) <= FrontmostAppHistory.linkGrace ? $0.stack : nil }
+            behind = BrowserWindowsBehind(mainWindows.compactMap(\.window), stack: before ?? StackedWindow.onScreen())
+            behind.putBack(clickedIfKey: false)
+        }
         let w = makeLittleWindow(url: url, opener: opener, space: space)
         // Opened over another app (a link from it, the shortcut pressed in it): it goes back there (#430).
         if activate {
             w.focusReturn = LittleWindowReturn(app: frontmostApps.returnApp(at: store.clock.now))
-            // The browser windows stay where they were (#607): for a link, where they were before Cra came forward for it.
-            let before = stackBeforeActivation.flatMap { fromOtherApp && NSApp.isActive
-                && store.clock.now.timeIntervalSince($0.at) <= FrontmostAppHistory.linkGrace ? $0.stack : nil }
-            w.noteBrowserWindows(before ?? StackedWindow.onScreen())
+            w.browsersBehind = behind
             w.show()
         } else {
             w.orderFrontInBackground()

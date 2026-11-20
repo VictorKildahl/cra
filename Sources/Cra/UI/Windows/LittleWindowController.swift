@@ -515,6 +515,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             if let render = EmbeddedPages.renderView(in: b.containerView) { window.makeFirstResponder(render) }
         }
         b.setFocused(true)
+        browsersBehind.putBack(clickedIfKey: true)
         // Focusing the page moves Chrome's hidden window over to this one (FollowWindow in the
         // engine's bridge.mm), and AppKit rebuilds the ordering group of the browser window it left:
         // the browser window rose over this one as it finished growing in (#500). It comes back on
@@ -522,36 +523,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if !isPeek, let window, window.isVisible { window.orderFront(nil) }
     }
 
-    /// The browser windows another app's window was over before this window came up, with that window (#607).
-    private var browserAnchors: [(window: NSWindow, anchor: Int)] = []
+    /// The browser windows another app's window covered before this window came up for a link (#607).
+    var browsersBehind = BrowserWindowsBehind.none
 
-    /// Notes, from the window order before this window comes up, which browser windows another app's window covered.
-    func noteBrowserWindows(_ stack: [StackedWindow]) {
-        let pid = getpid()
-        browserAnchors = app.mainWindows.compactMap { c in
-            guard let w = c.window, w.isVisible, let anchor = LittleWindowRaise.anchor(for: w.windowNumber, in: stack, pid: pid) else { return nil }
-            return (w, anchor)
-        }
-    }
-
-    /// Arc's Little Arc comes up alone. Cra coming forward for a link raises its main window, the browser window,
-    /// and focusing the page moves Chrome's hidden window out of it (#500), so a browser window could rise over
-    /// the app the link came from, on its own display (#607). It goes back behind the window that was over it.
-    private func putBrowserWindowsBack() {
-        guard !browserAnchors.isEmpty else { return }
-        let stack = StackedWindow.onScreen()
-        // A browser window clicked meanwhile (key) is in use and stays in front.
-        for (w, anchor) in browserAnchors where !w.isKeyWindow && LittleWindowRaise.rose(w.windowNumber, over: anchor, in: stack) {
-            w.order(.below, relativeTo: anchor)
-        }
-    }
-
+    /// Cra coming forward for a link raises the browser window (its main window then), and focusing the page moves
+    /// Chrome's hidden window out of it (#500): the browser window goes back as the window shows, as the page takes
+    /// focus, once it has grown in and 300 ms later, then this window forgets it.
     private func putBrowserWindowsBackOnceShown() {
-        putBrowserWindowsBack()
-        // The engine's FollowWindow reorders the browser window's group a moment after the page takes focus (#500).
+        browsersBehind.putBack(clickedIfKey: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.putBrowserWindowsBack()
-            self?.browserAnchors = []
+            self?.browsersBehind.putBack(clickedIfKey: true)
+            self?.browsersBehind = .none
         }
     }
 
@@ -901,7 +883,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// full frame in about 120 ms (content laid out at full size, no fade).
     func show() {
         guard let window else { return }
-        putBrowserWindowsBack()
+        browsersBehind.putBack(clickedIfKey: false)
         if isCard {
             // Arc's card is on screen at its size from its first frame (98 % of it, settling within
             // 100 ms), the bar already in it.
@@ -2711,6 +2693,36 @@ extension StackedWindow {
     /// The windows on screen now, front to back.
     static func onScreen() -> [StackedWindow] {
         stack(from: CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
+    }
+}
+
+/// Browser windows another app's window covered before a Little Window came up for a link from that app, each with the
+/// window just in front of it (#607): macOS raised the browser window over the app the link came from, on its own display.
+/// Arc's main window rises too; Cra's stays behind on purpose (docs/arc-parity.md).
+struct BrowserWindowsBehind {
+    static let none = BrowserWindowsBehind(pairs: [])
+    private let pairs: [(window: NSWindow, anchor: Int)]
+
+    private init(pairs: [(window: NSWindow, anchor: Int)]) { self.pairs = pairs }
+
+    /// From the window order before Cra came forward.
+    init(_ windows: [NSWindow], stack: [StackedWindow]) {
+        let pid = getpid()
+        pairs = windows.compactMap { w in
+            guard w.isVisible, let anchor = LittleWindowRaise.anchor(for: w.windowNumber, in: stack, pid: pid) else { return nil }
+            return (w, anchor)
+        }
+    }
+
+    /// Each goes back behind its window. `clickedIfKey`: the Little Window has had the keys, so a browser window that has
+    /// them now was clicked meanwhile and stays in front (LittleWindowRaise.goesBack).
+    func putBack(clickedIfKey: Bool) {
+        guard !pairs.isEmpty else { return }
+        let stack = StackedWindow.onScreen()
+        for (w, anchor) in pairs where w.isVisible
+            && LittleWindowRaise.goesBack(w.windowNumber, behind: anchor, in: stack, isKey: w.isKeyWindow, clickedIfKey: clickedIfKey) {
+            w.order(.below, relativeTo: anchor)
+        }
     }
 }
 

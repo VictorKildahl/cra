@@ -584,5 +584,15 @@ sidebar"; the app's `MainWindowController`, `FloatingSidebarController.retreat`)
   sidebar on the right, and a mouse's back button over the floating sidebar (Cra takes it the same
   way in).
 
+## Little Arc from a link in another app, measured (Arc 1.173.1, Victor's Arc, 20 Nov 2026)
+
+Measured with a probe app that clicks a link the way Slack does (LaunchServices, `NSWorkspace.open` with Arc's
+app), with its own window just over Arc's main window, sampling the window server's order every 2 ms. Arc's
+main window was on the left display, and Little Arc opened on the main one.
+
+| Arc | Cra |
+|---|---|
+| Arc's main window rose over the other app's window 0.5 s after the click and stayed in front; Little Arc came up on the other display 1.2 s later | *Deviation, Victor 20 Nov 2026 (GitHub #607):* the browser windows stay behind the app the link came from. macOS raises Cra's main window as Cra comes forward for the link; it goes back as soon as the link arrives, before the Little Window shows (`LittleWindowRaise`, `BrowserWindowsBehind`; scenario little-window-leaves-browser). Before the fix it stayed in front, as in Arc |
+
 ## Left for later, and why
 

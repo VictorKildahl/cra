@@ -1300,11 +1300,12 @@
 #601   Tests/StoreTests.swift::reopenClosedTabInThisSpaceOnly  2600e34f494e
 #604   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAppAddressOpensItsApp  22affcbfecae
 #604   Tests/Scenarios/command-bar-app-address.scenario  9dc5b635b27a
+#607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::itGoesBackAsTheLinkArrivesThoughItIsKeyFromCraComingForward  61dbaf57cee0
 #607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::itGoesBackBehindTheNearestWindowOverIt  2a360059d1dc
-#607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::nothingMovesWhenTheBrowserWindowWasInFrontOrTheOtherWindowWent  78e2dbb4be98
+#607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::nothingMovesWhenTheBrowserWindowWasInFrontOrTheOtherWindowWent  ad6169f609f5
 #607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::onlyOtherAppsNormalWindowsOverItCount  3e3257dd7d17
 #607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::readsTheWindowServersList  3d92ccab1a77
-#607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::theBrowserWindowGoesBackBehindTheAppTheLinkCameFrom  3e738284a5a2
+#607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::theBrowserWindowGoesBackBehindTheAppTheLinkCameFrom  1bbb5a74cfc1
 #607   Tests/Scenarios/little-window-leaves-browser.scenario  ee90fc09d7ea
 #608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::dotAndTriangleAreSwappedPartWay  d115ea9cbacc
 #608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::hoverLiftsAndTurnsTheStarOnArcsSpring  1eb74bce4bd0
