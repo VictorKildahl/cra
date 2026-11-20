@@ -14,6 +14,8 @@ final class SidebarView: NSView {
 
     /// The URL field's sliders button (screen rect), nil while the toolbar has it.
     var siteControlsButtonFrameOnScreen: NSRect? { topBar.siteControlsButtonFrameOnScreen }
+    /// The URL field Arc's address panel hangs from (#663).
+    var addressFrameOnScreen: NSRect? { topBar.addressFrameOnScreen }
     /// The URL field's "Translation Available" (screen rect), nil while it isn't shown (#310).
     var translateFrameOnScreen: NSRect? { topBar.translateFrameOnScreen }
     /// The URL field's "Pop-ups Blocked" (#357), on the translate line's place.
@@ -495,6 +497,12 @@ final class SidebarTopBarView: NSView {
     private var rowButtons: [SidebarGlyphButton] = []
     private var chevron: NSView?
     private let pill = SidebarURLPill()
+
+    /// The URL field (screen rect), which Arc's address panel hangs from (#663); nil while it isn't shown.
+    var addressFrameOnScreen: NSRect? {
+        guard !pill.isHiddenOrHasHiddenAncestor, let window else { return nil }
+        return window.convertToScreen(pill.convert(pill.bounds, to: nil))
+    }
 
     /// Where the URL field's sliders button is or appears on hover (screen rect): its last
     /// accessory, 28 pt ending 5 pt in. nil while the field isn't shown (the toolbar has it).
@@ -1030,8 +1038,8 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
     func click() {
         switch SidebarAddressEdit.click(editInPlace: editInPlace, hasTab: hasTab) {
         case .editInPlace: beginEditing()
-        case .commandBarEditURL: actions?.openCommandBar(.editURL)
-        case .commandBarNewTab: actions?.openCommandBar(.newTab)
+        case .commandBarEditURL: actions?.openAddressPanel(.editURL)
+        case .commandBarNewTab: actions?.openAddressPanel(.newTab)
         }
     }
 

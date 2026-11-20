@@ -16,6 +16,14 @@ final class CommandTextField {
         field = Self.makeField(controller: controller, coordinator: coordinator)
     }
 
+    /// Arc's address panel (#663) types in 13 pt, the full bar in 18.
+    func setCompact(_ compact: Bool) {
+        let size: CGFloat = compact ? CGFloat(SidebarAddressPanel.fontSize) : 18
+        guard field.font?.pointSize != size else { return }
+        field.font = .systemFont(ofSize: size, weight: .medium)
+        field.placeholderAttributedString = Self.placeholder(controller.placeholder, size: size)
+    }
+
     func update() {
         Self.update(field, controller: controller, coordinator: coordinator)
         // A completion needs the field's editor, which exists once the field is first responder
@@ -45,9 +53,9 @@ final class CommandTextField {
         return field
     }
 
-    private static func placeholder(_ text: String) -> NSAttributedString {
+    private static func placeholder(_ text: String, size: CGFloat = 18) -> NSAttributedString {
         NSAttributedString(string: text, attributes: [
-            .font: NSFont.systemFont(ofSize: 18, weight: .medium),
+            .font: NSFont.systemFont(ofSize: size, weight: .medium),
             // Arc 1.172.1 live: the placeholder's ink peaks at (163,162,162).
             .foregroundColor: NSColor(white: 0.64, alpha: 1),
         ])
@@ -56,7 +64,7 @@ final class CommandTextField {
     private static func update(_ field: NSTextField, controller: CommandBarController, coordinator coord: Coordinator) {
         // Runs on every keystroke: rebuild the placeholder only when its text changes.
         if field.placeholderAttributedString?.string != controller.placeholder {
-            field.placeholderAttributedString = placeholder(controller.placeholder)
+            field.placeholderAttributedString = placeholder(controller.placeholder, size: field.font?.pointSize ?? 18)
         }
         if coord.appliedVersion != controller.fieldTextVersion {
             coord.appliedVersion = controller.fieldTextVersion

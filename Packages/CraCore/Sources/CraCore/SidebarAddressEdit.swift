@@ -1,8 +1,9 @@
 import Foundation
 
 /// The sidebar's URL field edited where it is (GitHub #344, not in Arc). Arc's sidebar field opens
-/// the command bar on a click; Settings ▸ Tabs ▸ "Edit the address in the sidebar" turns it into a
-/// text field in place instead, the way Arc's developer bar edits its URL (ContentPanelTextField).
+/// its address panel on a click (SidebarAddressPanel, #663); Settings ▸ Tabs ▸ "Edit the address in
+/// the sidebar" turns it into a text field in place instead, the way Arc's developer bar edits its
+/// URL (ContentPanelTextField).
 /// ⌘L and ⌘T keep opening the command bar either way.
 public enum SidebarAddressEdit {
     /// What a click on the field does.

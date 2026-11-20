@@ -3122,6 +3122,26 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   at once), on tab and space switches alike. Now the bar takes ToolbarColor (CraCore): the page's report,
   else TabData.themeColor, else white, and fades to a new report over 0.18 s (14–15 frames).
 
+## The address panel from the sidebar (Arc 1.174, 20 Nov 2026, issue #663, offline Arc)
+- [O live] Offline Arc on a fake home (network denied, pages from a loopback server), `topBarURLEnabled` NO so the
+  address is in the sidebar, the toolbar hidden; AX frames and 2x window captures. A click on the sidebar's
+  address opens a compact command bar hanging from it: its top left on the field's (window x 8, y 45), not the
+  centred bar. ⌘L in the same state opens Arc's bar across the top of the page card instead (field 1431 pt wide),
+  as with the toolbar shown (above). With no tab the click opens the same panel, empty, "Search or Enter URL…".
+- [O] Width: the field is the address in 13 pt medium + ~2 pt, at least 240 (22–40 characters) and at most 610
+  (101 characters, truncated); the panel is the field + 110 (glyph centred 32 pt in, field at 53, ⓘ 10 pt after
+  the field and 21 from the edge): 350 to 720 pt. The reporter's 1x capture agrees (717 pt). Fit within 2.3 pt
+  on four addresses.
+- [O] Input row 45 pt (glyph, address and ⓘ centred 24 pt down), no line under it; rows on the full bar's 50 pt
+  pitch, the highlight 46 tall and inset 10, from 51 pt down; 10.5 pt under the last row (five rows: 307.5 pt);
+  ~10 pt corners. Rows show titles only, 13 pt semibold ("The Browser Company", not "— youtube.com/…"); tab
+  rows keep "Switch to Tab" and its arrow.
+- Cra (#663): CraCore `SidebarAddressPanel` holds the numbers; `CommandBarController.compact` lays the bar out
+  that way and MainWindowController hangs it from `SidebarView.addressFrameOnScreen`. #344's "Edit the address
+  in the sidebar" still edits in place, and ⌘L keeps Cra's centred bar (Arc's top-of-page bar is not built).
+  Pinned by `SidebarAddressPanelTests` and the `sidebar-address-panel` scenario. Not measured: whether Arc's
+  panel grows while typing (Cra keeps the width it opened with).
+
 ## Sidebar toggle and the command bar's leading glyph (Arc 1.171, 1 Nov 2026, issue #50, live captures at 2x)
 
 Victor's Arc (toolbar shown, full URLs on), window captures by id; Little Arc with keys posted to its pid for

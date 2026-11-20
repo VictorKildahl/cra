@@ -25,6 +25,9 @@ final class CommandBarController {
     /// Layout hints set by the window controller before opening.
     var panelWidth: CGFloat = CraMetrics.commandBarWidth
     var attached = false
+    /// Arc's address panel (#663): opened by a click on the sidebar's address, it hangs from that
+    /// field, sized to the address (CraCore SidebarAddressPanel), not centred in the window.
+    var compact = false
     /// The space whose palette colours the selected row and the info badge (CraCore CommandBarTones).
     var theme: SpaceTheme?
     var focusedSpaceID: UUID?

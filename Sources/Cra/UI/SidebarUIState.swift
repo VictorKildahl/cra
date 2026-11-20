@@ -217,6 +217,8 @@ enum SplitDropTarget: Equatable {
 @MainActor
 final class SidebarActions {
     var openCommandBar: (CommandBarMode) -> Void = { _ in }
+    /// A click on the sidebar's address: Arc's panel hanging from it (#663).
+    var openAddressPanel: (CommandBarMode) -> Void = { _ in }
     var closeTab: (UUID) -> Void = { _ in }
     /// A tab dragged out of every Cra window and let go there (screen point): Arc opens it in a
     /// Blank Window where it was dropped (GitHub #219).

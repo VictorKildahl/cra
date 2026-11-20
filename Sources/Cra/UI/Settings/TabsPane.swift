@@ -25,7 +25,7 @@ struct TabsPane: View {
             }
             SettingsFootnote("\(KeyBindingRegistry.shared.action("toggleToolbar")?.primary?.display ?? "⇧⌘D") in any window, or the View menu’s Show Toolbar, switches it too.")
             SettingsFeatureCard {
-                // GitHub #344, not in Arc: Arc's sidebar address opens the command bar on a click.
+                // GitHub #344, not in Arc: Arc's sidebar address opens its address panel on a click (#663).
                 SettingsToggleRow("Edit the address in the sidebar",
                                   detail: "Clicking the address at the top of the sidebar lets you edit it right there instead of opening the command bar. \(KeyBindingRegistry.shared.action("editURL")?.primary?.display ?? "⌘L") still opens the command bar.",
                                   isOn: $store.settings.editAddressInPlace,

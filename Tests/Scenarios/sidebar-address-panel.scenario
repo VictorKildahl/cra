@@ -1,0 +1,23 @@
+# promise: #663
+# A click on the sidebar's address opens Arc's address panel hanging from it, not the centred bar:
+# its top left on the field's, as wide as the address (13 pt medium, from 240 to 610 pt) plus
+# 110 pt, so a short address gets a panel a little wider than the sidebar and a long one runs
+# past it over the page, to Arc's widest, 720 pt. ⌘L keeps the centred bar. Measured in offline Arc 1.174 (20 Nov 2026).
+budget rss=600 stalls50=6
+cra://open?url=${PAGE}?n=short
+wait 3
+cra://debug?urlFieldEdit=click
+expect-log url field click: not editing, command bar open, panel compact w=3[5-9][0-9] h=[0-9]+ at field
+cra://dismiss
+wait 1
+cra://open?url=${PAGE}?n=a-much-longer-address-that-runs-well-past-the-sidebar-into-the-page-0123456789
+wait 3
+cra://debug?urlFieldEdit=click
+expect-log url field click: not editing, command bar open, panel compact w=720 h=[0-9]+ at field
+cra://dismiss
+wait 1
+cra://debug?key=l,37,1048576
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar open, panel centred w=
+cra://dismiss

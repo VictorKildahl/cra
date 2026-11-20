@@ -34,6 +34,8 @@ final class CommandBarView: NSView {
     private var rows: [CommandBarRowView] = []
     private var syncQueued = false
     private var attached = false
+    /// Arc's address panel from the sidebar (#663): a 45 pt input row, 13 pt type, titles only.
+    private var compact = false
     /// The card ⌥⌘N opens (#337): the bar is the whole Little Window, with a ✕ at the field's end.
     var card: CommandBarCard? { didSet { scheduleSync(); needsLayout = true } }
     /// The card's ✕: closes the bar, and with it the card.
@@ -161,6 +163,8 @@ final class CommandBarView: NSView {
         let dark = self.dark
         text.update()
         attached = c.attached
+        compact = c.compact && card == nil
+        text.setCompact(compact)
         // Arc's dark bar shows the page through it: 26 over black, ≈ 47 over white (CraCore CommandBarTones.panel, #502).
         material.material = dark ? .hudWindow : .popover
         let panel = CommandBarTones.panel(dark: dark)
@@ -197,7 +201,8 @@ final class CommandBarView: NSView {
             ScopedSearchFill.fill(enabled: c.fillsSiteScope, siteColor: site.color, space: tones.selection.rgb, dark: dark)
         } else { nil }
         if let fill = shownFill { tint.layer?.backgroundColor = Self.ink(fill, 0.97).cgColor }
-        divider.isHidden = items.isEmpty && !c.showsNoticeBanner
+        // Arc's address panel has no line under its field (#663).
+        divider.isHidden = compact || (items.isEmpty && !c.showsNoticeBanner)
         pill.isHidden = scope == nil
         if let scope {
             let color = highlight.withAlphaComponent(1)
@@ -264,7 +269,7 @@ final class CommandBarView: NSView {
             let s = items[i]
             r.show(s, icon: s.faviconKey.flatMap { favicons.image(forKey: $0) }, selected: i == c.selectedIndex, highlight: highlight,
                    otherSpace: s.spaceID.flatMap { $0 != c.focusedSpaceID && s.tabID != nil ? c.spaceName($0) : nil },
-                   dark: dark)
+                   dark: dark, compact: compact)
         }
         needsLayout = true
     }
@@ -277,16 +282,19 @@ final class CommandBarView: NSView {
         if let splash, let window { splash.setFrame(window.frame.insetBy(dx: -Self.splashMargin, dy: -Self.splashMargin), display: false) }
         material.frame = b
         tint.frame = b
-        let top: CGFloat = card?.top ?? (attached ? 10 : 12)
-        let path = Self.path(b, top: top, bottom: card?.bottom ?? 12)
+        let radius = CGFloat(SidebarAddressPanel.cornerRadius)
+        let top: CGFloat = card?.top ?? (compact ? radius : attached ? 10 : 12)
+        let path = Self.path(b, top: top, bottom: card?.bottom ?? (compact ? radius : 12))
         shape.frame = b
         shape.path = path
         border.frame = b
         border.path = path
         // The magnifier and row favicons share a centre; input and result titles align.
-        let fh = Self.fieldHeight
+        let fh = compact ? CGFloat(SidebarAddressPanel.inputHeight) : Self.fieldHeight
+        // Arc's panel centres its glyph, address and ⓘ 24 pt down its 45 pt row (#663).
+        let mid = compact ? 24 : fh / 2
         let icon = leadingIcon.frame.size
-        leadingIcon.frame = NSRect(x: 21 + (22 - icon.width) / 2, y: (fh - icon.height) / 2, width: icon.width, height: icon.height)
+        leadingIcon.frame = NSRect(x: 21 + (22 - icon.width) / 2, y: mid - icon.height / 2, width: icon.width, height: icon.height)
         var right = b.width - 22
         var end = b.width
         if let card {
@@ -297,7 +305,7 @@ final class CommandBarView: NSView {
         }
         if !info.isHidden {
             // Arc: a 24 pt circle 21 pt from the edge (in a card, 8 pt before the ✕).
-            info.frame = NSRect(x: end - 21 - 24, y: (fh - 24) / 2, width: 24, height: 24)
+            info.frame = NSRect(x: end - 21 - 24, y: mid - 12, width: 24, height: 24)
             right = info.frame.minX - 14
         }
         if !keycap.isHidden {
@@ -319,7 +327,12 @@ final class CommandBarView: NSView {
             pillLabel.frame = NSRect(x: 10.5 - SidebarText.inset, y: (23 - lh) / 2, width: lw + 2 * SidebarText.inset, height: lh)
             x = pill.frame.maxX + 11
         }
-        text.field.frame = NSRect(x: x - 1.5, y: (fh - 30) / 2 + 3, width: max(0, right - x), height: 30)
+        if compact {
+            let th = ceil(text.field.intrinsicContentSize.height)
+            text.field.frame = NSRect(x: x - 1.5, y: mid - th / 2, width: max(0, right - x), height: th)
+        } else {
+            text.field.frame = NSRect(x: x - 1.5, y: (fh - 30) / 2 + 3, width: max(0, right - x), height: 30)
+        }
         if let card {
             // A hairline: one pixel.
             let px = 1 / (window?.backingScaleFactor ?? 2)
@@ -493,7 +506,7 @@ final class CommandBarRowView: NSView {
     private let trailing = NSTextField.sidebarLabel(size: 14, weight: .semibold)
     private let arrowBox = NSView()
     private let arrow = NSImageView()
-    private var shown: (Suggestion, NSImage?, Bool, NSColor, String?, Bool)?
+    private var shown: (Suggestion, NSImage?, Bool, NSColor, String?, Bool, Bool)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -518,9 +531,10 @@ final class CommandBarRowView: NSView {
 
     override var isFlipped: Bool { true }
 
-    func show(_ s: Suggestion, icon image: NSImage?, selected: Bool, highlight: NSColor, otherSpace: String?, dark: Bool) {
-        if let o = shown, o.0 == s, o.1 === image, o.2 == selected, o.3 == highlight, o.4 == otherSpace, o.5 == dark { return }
-        shown = (s, image, selected, highlight, otherSpace, dark)
+    /// `compact`: Arc's address panel from the sidebar (#663), 13 pt titles without their address.
+    func show(_ s: Suggestion, icon image: NSImage?, selected: Bool, highlight: NSColor, otherSpace: String?, dark: Bool, compact: Bool = false) {
+        if let o = shown, o.0 == s, o.1 === image, o.2 == selected, o.3 == highlight, o.4 == otherSpace, o.5 == dark, o.6 == compact { return }
+        shown = (s, image, selected, highlight, otherSpace, dark, compact)
         layer?.backgroundColor = (selected ? highlight : .clear).cgColor
         // Selection changes all foregrounds too, including when reusable rows keep their content.
         // Arc 1.172.1 live (dark): titles (214,214,214), "Switch to Tab" and URLs (117,117,117), white when selected.
@@ -552,12 +566,15 @@ final class CommandBarRowView: NSView {
             icon.imageScaling = .scaleNone
             icon.contentTintColor = selected ? .white : ink
         }
-        let t = NSMutableAttributedString(string: s.title, attributes: [.font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: ink])
-        t.append(NSAttributedString(string: Self.detail(s), attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: secondaryInk]))
+        let size: CGFloat = compact ? CGFloat(SidebarAddressPanel.fontSize) : 14
+        let t = NSMutableAttributedString(string: s.title, attributes: [.font: NSFont.systemFont(ofSize: size, weight: .semibold), .foregroundColor: ink])
+        if !compact {
+            t.append(NSAttributedString(string: Self.detail(s), attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: secondaryInk]))
+        }
         label.attributedStringValue = t
         let isTab = s.tabID != nil
         if isTab {
-            trailing.font = .systemFont(ofSize: 14, weight: .semibold)
+            trailing.font = .systemFont(ofSize: size, weight: .semibold)
             trailing.stringValue = otherSpace ?? "Switch to Tab"
         } else {
             trailing.font = .systemFont(ofSize: 13, weight: .medium)
