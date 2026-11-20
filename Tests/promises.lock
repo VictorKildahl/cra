@@ -1400,6 +1400,8 @@
 #650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  a64d7221a346
 #650   iOS/CraUITests/BrowserTests.swift::testPhoneSiteWinsOverSyncedSpace  f3705dffdfb4
 #650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  587d781bccdd
+#653   Tests/Scenarios/extension-popup-button-closes.scenario  c5424cc0359c
+#653   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #654   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theIncognitoGlyphKeepsItsPlaceOffAndOn  29893e17853f
 #654   iOS/CraUITests/SearchFieldTests.swift::testTheIncognitoGlyphStaysPutWhenSwitchedOn  4c8dbe371fb4
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae

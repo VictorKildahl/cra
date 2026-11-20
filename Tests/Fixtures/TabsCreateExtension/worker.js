@@ -25,6 +25,8 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  // GitHub #653: Tampermonkey's popup buttons send the worker a "buttonPress" and close the popup on its answer.
+  if (message === 'button-press' && !sender.tab) { reply(true); return; }
   if (message === 'open-options-tab' && !sender.tab) {
     chrome.tabs.create({ url: chrome.runtime.getURL('options.html') }).then(() => reply(true), () => reply(false));
     return true;
@@ -39,7 +41,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   } else if (message === 'badge') {
     // GitHub #106: what an extension sets on its toolbar action reaches Cra's button.
     action = Promise.all([chrome.action.setBadgeText({ text: '7' }), chrome.action.setTitle({ title: 'Seven' })]);
-  } else if (message === 'settings-popup-worker' || message === 'settings-popup-runtime') {
+  } else if (message === 'settings-popup-worker' || message === 'settings-popup-runtime' || message === 'settings-popup-close') {
     // GitHub #626, #631: the toolbar button shows a popup whose Settings opens the options page. Each step
     // asks the fixture server for page.html?n=settings-<step>-<how>, which a scenario waits for.
     const how = message.slice('settings-popup-'.length);

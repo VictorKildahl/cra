@@ -1,0 +1,29 @@
+# promise: #653
+# A button in an extension's popup that opens nothing, as almost every one in Tampermonkey's (5.5.1) does: the
+# popup sends its service worker a message ("buttonPress") and closes itself with window.close() on the answer.
+# On 0.1.51 every Tampermonkey button quit Cra (#653). Cra's window takes the keys back as the popup goes, and the
+# page there takes focus; Cra must leave Chrome's tab strip alone while that happens (#626's crash, fa9214e1).
+# It takes the screen: the popup hands the keys back only to the app in use.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=settings-popup-close
+expect-log "GET /page\.html\?n=settings-set-close HTTP
+cra://debug?activate=1
+wait 1
+cra://debug?extensionAction=${TABS_CREATE_EXTENSION_ID}
+expect-log "GET /page\.html\?n=settings-shown-close HTTP
+expect-log extension popup shown
+expect-log "GET /page\.html\?n=settings-press-close HTTP
+wait 2
+cra://debug?extensionPopup=close
+expect-log extension popup close: closed
+cra://debug?back=close
+expect-log back close: selected=http://127\.0\.0\.1:[0-9]+/page\.html\?n=settings-popup-close
+cra://debug?removeExtension=${TABS_CREATE_EXTENSION_ID}
+wait 1
+reject-log fault:
