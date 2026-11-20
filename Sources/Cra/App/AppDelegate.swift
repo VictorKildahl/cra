@@ -1199,6 +1199,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // httpsOnly=1|0: Settings ▸ Privacy's HTTPS-only switch, flipped while pages are open: Chromium takes the
             // change at once (#36: it crashed doing so once onboarding ended).
+            // chromePref=<name>: the Default profile's Chrome pref as Chromium holds it now, as JSON (#625).
+            if let name = dict["chromePref"] {
+                CraLog.note("chrome pref \(name): " + (CraCEFRuntime.preference(name, forProfile: nil) ?? "none"))
+                return
+            }
             if let v = dict["httpsOnly"] {
                 store.settings.httpsOnly = v == "1"
                 CraLog.note("https only: \(store.settings.httpsOnly ? "on" : "off")")

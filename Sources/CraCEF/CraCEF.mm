@@ -548,14 +548,18 @@ static bool g_httpsOnly = false;
 static NSInteger g_websiteAppearance = 0;
 static bool g_incognitoReady = false;
 
-/// Chrome's "Always use secure connections" (Settings ▸ Privacy in Cra).
+/// Chrome's "Always use secure connections" (Settings ▸ Privacy in Cra), in Balanced Mode as on the
+/// engine (profile_prefs.mm, GitHub #625): addresses on the user's own network load without the warning.
 static void ApplyHttpsOnly(CefRefPtr<CefRequestContext> context) {
     if (!context) return;
-    CefRefPtr<CefValue> value = CefValue::Create();
-    value->SetBool(g_httpsOnly);
-    CefString error;
-    if (!context->SetPreference("https_only_mode_enabled", value, error)) {
-        NSLog(@"CraCEF: https_only_mode_enabled: %s", error.ToString().c_str());
+    const std::pair<const char*, bool> prefs[] = {{"https_only_mode_enabled", false}, {"https_first_balanced_mode_enabled", g_httpsOnly}};
+    for (const auto& [name, on] : prefs) {
+        CefRefPtr<CefValue> value = CefValue::Create();
+        value->SetBool(on);
+        CefString error;
+        if (!context->SetPreference(name, value, error)) {
+            NSLog(@"CraCEF: %s: %s", name, error.ToString().c_str());
+        }
     }
 }
 

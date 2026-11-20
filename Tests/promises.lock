@@ -1357,6 +1357,7 @@
 #623   iOS/CraUITests/SearchPullTests.swift::testAShortPullFallsBackIntoThePill  965bf2fd7f04
 #623   iOS/CraUITests/SearchPullTests.swift::testDraggingTheSheetDownByItsSuggestionsClosesIt  cf09fd8048ed
 #623   iOS/CraUITests/SearchPullTests.swift::testDraggingUpFromThePillOpensSearch  9e4edbf036b0
+#625   Tests/Scenarios/https-only-local-network.scenario  938de62b42f3
 #626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #627   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aSidewaysDragScrollsWhatCanScrollBeforeItNavigates  b047657926fb
 #627   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::scrollRoomIsWhatIsLeftOnEitherSide  5e2c9ad0b408

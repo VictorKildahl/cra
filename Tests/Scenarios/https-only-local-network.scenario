@@ -1,0 +1,26 @@
+# promise: #625
+# Settings ▸ Privacy ▸ "Always use secure connections" is Chrome's Balanced Mode: an address on the user's own
+# network (here a .local name; 192.168…, 10… and Tailscale's 100.64.0.0/10 alike) loads over HTTP without the
+# full-page warning; public sites still upgrade and warn (Chrome's own Balanced Mode, read back below: this
+# fixture server has no default port, which Chrome never upgrades). Cra used Chrome's strict mode, which warned
+# before every one of them (GitHub #625).
+budget rss=900 stalls50=40
+arg --host-resolver-rules=MAP nas.local 127.0.0.1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "httpsOnly": true}
+
+cra://open?url=${LOCALNET}/page.html?n=local
+expect-log loaded nas\.local \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'page:'+location.host+location.search"}
+expect-log "value":"page:nas\.local:\d+\?n=local"
+
+# The switch is Chrome's Balanced Mode, not its strict mode; turned off, neither is on.
+cra://debug?chromePref=https_first_balanced_mode_enabled
+expect-log chrome pref https_first_balanced_mode_enabled: true
+cra://debug?chromePref=https_only_mode_enabled
+expect-log chrome pref https_only_mode_enabled: false
+cra://debug?httpsOnly=0
+expect-log https only: off
+wait 0.5
+cra://debug?chromePref=https_first_balanced_mode_enabled
+expect-log chrome pref https_first_balanced_mode_enabled: false

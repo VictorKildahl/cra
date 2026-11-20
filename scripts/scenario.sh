@@ -273,6 +273,9 @@ WEBKIT="http://localhost:${PORT}"
 # A music host recognized by MusicNotes, mapped to this Mac by the scenario:
 #   arg --host-resolver-rules=MAP nts.live 127.0.0.1
 MUSIC="http://nts.live:${PORT}"
+# A name on the user's own network (#625), mapped to this Mac by the scenario:
+#   arg --host-resolver-rules=MAP nas.local 127.0.0.1
+LOCALNET="http://nas.local:${PORT}"
 # A port that accepts connections (the kernel's backlog does) and never answers one.
 python3 -I -u -c '
 import socket, time
@@ -337,7 +340,7 @@ WS_SERVER=$!
 disown "$WS_SERVER"
 for _ in $(seq 1 50); do WS_PORT=$(head -1 "$OUT/ws.log"); [ -n "$WS_PORT" ] && break; sleep 0.1; done
 WS="ws://127.0.0.1:${WS_PORT:?WebSocket server did not start}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{COVER\}/${COVER:-}}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{LOCALNET\}/$LOCALNET}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{COVER\}/${COVER:-}}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; printf '%s' "$s"; }
 # AppKit asks "reopen windows?" after a test copy was killed, and that modal blocks every command;
 # Cra restores its own windows from windows.json, so AppKit's restoration is off.
 app_args=(-ApplePersistenceIgnoreState YES)

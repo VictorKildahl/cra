@@ -95,6 +95,17 @@ void WebsiteAppearanceChanged(Profile* profile) {
   });
 }
 
+// Settings ▸ Privacy ▸ "Always use secure connections" is Chrome's HTTPS-First in Balanced Mode
+// ("Warn you for insecure public sites"), not its strict mode (GitHub #625): an address on the
+// user's own network (192.168…, 10…, Tailscale's 100.64.0.0/10, a .local or single-label name)
+// can't get a public certificate, so it loads over HTTP without the full-page warning, as in Arc
+// and in Chrome's default. Public sites still upgrade and warn. Both prefs are written, so Chrome's
+// own heuristics never turn a mode on by themselves.
+void ApplyHttpsFirst(PrefService* prefs) {
+  prefs->SetBoolean("https_only_mode_enabled", false);
+  prefs->SetBoolean("https_first_balanced_mode_enabled", g_https_only);
+}
+
 void ApplySettings(Profile* profile) {
   PrefService* prefs = profile->GetPrefs();
   ApplyWebsiteAppearance(profile);
@@ -106,7 +117,7 @@ void ApplySettings(Profile* profile) {
   // Every download asks where to go, and Cra's app answers (its save panel or its Downloads folder;
   // patches/cra-downloads.patch).
   prefs->SetBoolean("download.prompt_for_download", true);
-  prefs->SetBoolean("https_only_mode_enabled", g_https_only);
+  ApplyHttpsFirst(prefs);
   if (prefs->FindPreference(kFingerprintingProtection)) {
     prefs->SetBoolean(kFingerprintingProtection, g_fingerprinting);
   }
@@ -225,7 +236,7 @@ void StopProfilePrefs() {
 
 void SetHttpsOnly(bool enabled) {
   g_https_only = enabled;
-  ForEachProfile([](Profile* profile) { profile->GetPrefs()->SetBoolean("https_only_mode_enabled", g_https_only); });
+  ForEachProfile([](Profile* profile) { ApplyHttpsFirst(profile->GetPrefs()); });
 }
 
 void SetFingerprintingProtection(bool enabled) {
