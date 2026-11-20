@@ -3514,11 +3514,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let normal = useNormalWindow()
             _ = store.createTab(url: HistoryPage.url, select: true)
             normal.showWindow(nil)
-        // Arc's page shortcuts are show/hide toggles too (LibraryShortcut, #649).
+        // View Downloads (⇧⌘J) is a show/hide toggle like Open Library, as in Arc (LibraryShortcut, #649). The other
+        // pages' commands (no key of their own) show their page: the command bar and scripts ask for a page.
         case "viewDownloads": main.toggleLibrary(.downloads)
-        case "viewMedia": main.toggleLibrary(.media)
-        case "viewEasels": main.toggleLibrary(.easels)
-        case "viewBoosts": main.toggleLibrary(.boosts)
+        case "viewMedia": main.showLibrary(.media)
+        case "viewEasels": main.showLibrary(.easels)
+        case "viewBoosts": main.showLibrary(.boosts)
         case "goBack": main.goBack()
         case "goForward": main.currentBrowser?.goForward()
         case "pinTab": if let c = current, !main.isBlank { store.togglePinned(c) }
