@@ -276,9 +276,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                 // Arc lists a group's tabs under its header without an indent.
                 row.content = .groupHeader(GroupHeaderRowModel(id: item.id, title: item.title ?? "Untitled"))
                 out.append(row)
-                let kids = item.children
-                for c in store.children(of: item.id) {
-                    add(c, depth: depth, pinned: pinned, parent: item.id, index: kids.firstIndex(of: c.id) ?? 0)
+                for (index, c) in SidebarChildOrder.listed(item.children, lookup: store.item) {
+                    add(c, depth: depth, pinned: pinned, parent: item.id, index: index)
                 }
             } else if item.isFolder {
                 let expanded = store.isExpanded(item.id)
@@ -301,9 +300,8 @@ final class SpaceListView: NSView, NSDraggingSource {
                     }
                     return
                 }
-                let kids = item.children
-                for c in store.children(of: item.id) {
-                    add(c, depth: depth + 1, pinned: pinned, parent: item.id, index: kids.firstIndex(of: c.id) ?? 0)
+                for (index, c) in SidebarChildOrder.listed(item.children, lookup: store.item) {
+                    add(c, depth: depth + 1, pinned: pinned, parent: item.id, index: index)
                 }
                 if item.isLiveFolder, let m = Self.liveStatus(item, hasTabs: !store.tabs(under: item.id).isEmpty) {
                     out.append(Row(key: .liveStatus(item.id), content: .liveStatus(LiveStatusModel(text: m.text, url: m.url, depth: depth + 1))))
@@ -361,8 +359,10 @@ final class SpaceListView: NSView, NSDraggingSource {
         let blank = store.isBlank(space: spaceID)
         let pinnedKids = blank ? [] : store.item(space.pinnedContainerID)?.children ?? []
         let pinnedItems = blank ? [] : store.listedPinnedItems(in: space, window: window)
+        // Each child's stored index in one pass, not a firstIndex(of:) per row (#618).
+        let pinnedIndex = SidebarChildOrder.indexes(pinnedKids)
         for item in pinnedItems {
-            add(item, depth: 0, pinned: true, parent: space.pinnedContainerID, index: pinnedKids.firstIndex(of: item.id) ?? 0)
+            add(item, depth: 0, pinned: true, parent: space.pinnedContainerID, index: pinnedIndex[item.id] ?? 0)
         }
         let section = dropSection(drop)
         // With nothing pinned the list takes no room; a drag opens a real target. Not when
@@ -382,8 +382,8 @@ final class SpaceListView: NSView, NSDraggingSource {
         for r in InstantLinksService.shared.pending(in: spaceID) {
             out.append(Row(key: .instantLinks(r.id), content: .instantLinks(InstantLinksRowModel(id: r.id, failed: r.failed, current: r.current))))
         }
-        for item in store.children(of: space.todayContainerID) {
-            add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: todayKids.firstIndex(of: item.id) ?? 0)
+        for (index, item) in SidebarChildOrder.listed(todayKids, lookup: store.item) {
+            add(item, depth: 0, pinned: false, parent: space.todayContainerID, index: index)
         }
         if !atTop && showsNewTab { out.append(Row(key: .newTab, content: .newTab(active: placeholder))) }
         return Built(rows: out, pinnedCount: pinnedCount, palette: palette,

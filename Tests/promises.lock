@@ -1280,6 +1280,7 @@
 #601   Tests/StoreTests.swift::reopenClosedTabInThisSpaceOnly  2600e34f494e
 #604   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAppAddressOpensItsApp  22affcbfecae
 #604   Tests/Scenarios/command-bar-app-address.scenario  9dc5b635b27a
+#618   Packages/CraCore/Tests/CraCoreTests/SidebarChildOrderTests.swift::oneStoredIndexPerChildInOnePass  d4962ed3b593
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
