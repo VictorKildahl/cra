@@ -453,8 +453,23 @@ final class SidebarStore {
         if isStandalone(space: sid), let s = spaces[sid] {
             return tabs(under: s.favoritesContainerID) + tabs(under: s.pinnedContainerID) + tabs(under: s.todayContainerID)
         }
-        // Not the favorites of a profile no space uses (#154): nothing shows them.
-        return allTabs().filter { spaceID(ofItem: $0.id).map { !isStandalone(space: $0) } ?? false }
+        // Not the favorites of a profile no space uses (#154): nothing shows them. Walked space by space, each
+        // container once (spaces can share one favorites list), not a parent walk per tab: at 5,000 tabs that
+        // was most of ⌘T's first keystroke (#617). The same tabs; allTabs() had no order either.
+        var walked = Set<UUID>()
+        var out: [SidebarItem] = []
+        func walk(_ id: UUID, depth: Int) {
+            guard depth < 64 else { return }
+            for c in children(of: id) {
+                if c.isTab { out.append(c) } else { walk(c.id, depth: depth + 1) }
+            }
+        }
+        for (sid, s) in spaces where !isStandalone(space: sid) {
+            for c in [s.favoritesContainerID, s.pinnedContainerID, s.todayContainerID] where walked.insert(c).inserted {
+                walk(c, depth: 0)
+            }
+        }
+        return out
     }
 
     private func collectSubtree(of space: Space, into ids: inout Set<UUID>) {

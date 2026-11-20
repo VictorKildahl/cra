@@ -65,6 +65,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        profileTabsSpaceBySpace()
         newDocumentApps()
         themePreview()
         try arcSpacesWithoutAThemeShareOneDefault()
@@ -1408,6 +1409,42 @@ enum StoreTests {
         let restored = AppComposition(clock: ManualScheduler()).store
         expect(restored.isFavoritesEmptyStateDismissed(homeFavorites) && !restored.isFavoritesEmptyStateDismissed(workFavorites),
                "and it stays closed after a relaunch")
+    }
+
+    // promise: #617
+    /// ⌘T's tabs (profileTabs) were every tab walked up to its space: most of the first keystroke at 5,000
+    /// tabs. Gathered space by space now; the same tabs, in folders, groups and splits, pinned, favorites
+    /// shared across spaces and another profile's, and none from a Blank Window's space.
+    @MainActor
+    private static func profileTabsSpaceBySpace() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        func asBefore() -> Set<UUID> {
+            Set(store.allTabs().filter { store.spaceID(ofItem: $0.id).map { !store.isStandalone(space: $0) } ?? false }.map(\.id))
+        }
+        func now() -> [UUID] { store.profileTabs(window: nil).map(\.id) }
+        let home = store.focusedSpaceID
+        let work = store.createSpace(title: "PT Work", emoji: "💼", focus: false).id
+        let client = store.createProfile(name: "PT Client")
+        let other = store.createSpace(title: "PT Client", emoji: "🧾", focus: false).id
+        store.setProfile(client.id, forSpace: other)
+        let a = store.createTab(url: "https://example.com/pt-a", in: home, select: false).id
+        let b = store.createTab(url: "https://example.com/pt-b", in: home, select: false).id
+        _ = store.createFolder(with: [a, b], named: "PT Folder")
+        let c = store.createTab(url: "https://example.com/pt-c", in: work, select: false).id
+        let d = store.createTab(url: "https://example.com/pt-d", in: work, select: false).id
+        _ = store.createSplit(with: [c, d])
+        let e = store.createTab(url: "https://example.com/pt-e", in: other, select: false).id
+        store.addToFavorites(e, in: other)
+        let f = store.createTab(url: "https://example.com/pt-f", in: home, pinned: true, select: false).id
+        let g = store.createTab(url: "https://example.com/pt-g", in: home, select: false).id
+        let h = store.createTab(url: "https://example.com/pt-h", in: home, select: false).id
+        store.applyTidy(TidyTabs.Plan(newGroups: [.init(name: "PT Group", tabs: [0, 1])], joins: [:]), tabIDs: [g, h], in: home)
+        expect(Set(now()) == asBefore() && Set([a, b, c, d, e, f, g, h]).isSubset(of: Set(now())),
+               "⌘T's tabs are the same, folders, splits, groups, pinned and favorites included (#617)")
+        expect(now().count == Set(now()).count, "no tab twice")
+        store.setFavoritesShared(true)
+        expect(Set(now()) == asBefore() && now().count == Set(now()).count, "favorites shared by spaces are listed once")
+        store.setFavoritesShared(false)
     }
 
     // promise: #154

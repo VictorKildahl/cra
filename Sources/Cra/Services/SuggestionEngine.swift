@@ -193,11 +193,18 @@ final class SuggestionEngine {
     private var searchIndex: SearchIndex {
         if let index { return index }
         var i = SearchIndex()
-        let tabs = commandBarTabs()
-        i.tabs = tabs.compactMap { tab in tab.tab.map { (tab, Self.searchable(title: tab.displayTitle, url: $0.url)) } }
+        let tabs = commandBarTabs().filter { $0.tab != nil }
+        let archive = store.archive.prefix(400).filter { $0.item.tab != nil }
+        let history = Array(store.history.values)
+        // The rows' text is read here; their keys (lowercasing, words, bytes, the host) are built on every
+        // core at once: at 5,000 tabs that was most of the first keystroke (#617).
+        let keys = Self.searchables(tabs.map { ($0.displayTitle, $0.tab!.url) }
+                                    + archive.map { ($0.item.displayTitle, $0.item.tab!.url) }
+                                    + history.map { ($0.title, $0.url) })
+        i.tabs = Array(zip(tabs, keys[0..<tabs.count]))
+        i.archive = Array(zip(archive, keys[tabs.count..<(tabs.count + archive.count)]))
+        i.history = Array(zip(history, keys[(tabs.count + archive.count)...]))
         i.openURLs = Set(tabs.compactMap { $0.tab?.url })
-        i.archive = store.archive.prefix(400).compactMap { e in e.item.tab.map { (e, Self.searchable(title: e.item.displayTitle, url: $0.url)) } }
-        i.history = store.history.values.map { ($0, Self.searchable(title: $0.title, url: $0.url)) }
         index = i
         return i
     }
@@ -454,8 +461,23 @@ final class SuggestionEngine {
         Self.score(q, Self.searchable(title: title, url: url))
     }
 
+    /// Keys for many rows, in order, built in parallel chunks.
+    nonisolated static func searchables(_ rows: [(title: String, url: String)]) -> [Searchable] {
+        guard rows.count > 512 else { return rows.map { searchable(title: $0.title, url: $0.url) } }
+        let chunks = min(ProcessInfo.processInfo.activeProcessorCount, 8)
+        var parts = [[Searchable]](repeating: [], count: chunks)
+        parts.withUnsafeMutableBufferPointer { out in
+            let out = out
+            DispatchQueue.concurrentPerform(iterations: chunks) { c in
+                let lo = rows.count * c / chunks, hi = rows.count * (c + 1) / chunks
+                out[c] = rows[lo..<hi].map { searchable(title: $0.title, url: $0.url) }
+            }
+        }
+        return parts.flatMap { $0 }
+    }
+
     /// What the old Searchable kept: the title and human address lowercased, the host from the address.
-    static func searchable(title: String, url: String) -> Searchable {
+    nonisolated static func searchable(title: String, url: String) -> Searchable {
         Searchable(title: title.lowercased(), url: SuggestionEngine.humanURL(url).lowercased(), host: (URL(string: url)?.host ?? "").lowercased())
     }
 
