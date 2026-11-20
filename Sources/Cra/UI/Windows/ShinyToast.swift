@@ -80,6 +80,12 @@ final class ShinyToast {
     static let closeGap: CGFloat = 6
     private var hide: DispatchWorkItem?
     private var action: Action?
+    /// The whole toast is a button (Arc's "New Tab Created" opens its tab, #543): a click anywhere on it
+    /// runs this. Arc 1.173.1 (20 Nov 2026, live): the pointing hand over it and no change to its fill; after
+    /// the click the tab is in front and the toast stays, going on its time.
+    private var onTap: (() -> Void)?
+    /// The toast up now opens something when clicked: a toast with nothing to open replaces it.
+    var isTappable: Bool { isShown && onTap != nil }
     /// The text colour: the button is a wash of it.
     private var buttonTint = NSColor.black
 
@@ -135,6 +141,14 @@ final class ShinyToast {
 
     var isShown: Bool { panel.parent != nil }
 
+    /// A click on the middle of the pill through the event queue, as the pointer's (cra://debug?clickToast=1,
+    /// scenario background-tab-toast). False when no toast is up to take it.
+    func testClick() -> Bool {
+        guard isShown, !panel.ignoresMouseEvents else { return false }
+        TestGesture.click(at: NSPoint(x: Self.margin + pill.bounds.width / 2, y: Self.margin + pill.bounds.height / 2), in: panel)
+        return true
+    }
+
     /// A toast that stays (onClose) keeps to the page's top right as the window resizes, sidebar
     /// toggles included; one that goes on its time isn't moved.
     func follow(page: NSRect, in window: NSWindow) {
@@ -151,14 +165,16 @@ final class ShinyToast {
     /// `onClose`: the toast stays until its ✕ is pressed (or its action runs), and this is told
     /// then; something Cra has to be sure the user saw. Without it, the toast goes on its time.
     func show(_ text: String, keyCap: (keys: String, after: String)? = nil, action: Action? = nil, page: NSRect, in window: NSWindow,
-              theme: SpaceTheme, onClose: (() -> Void)? = nil) {
-        show(text, keyCap: keyCap, action: action, page: page, in: window, colors: Self.colors(theme), onClose: onClose)
+              theme: SpaceTheme, onClose: (() -> Void)? = nil, onTap: (() -> Void)? = nil) {
+        show(text, keyCap: keyCap, action: action, page: page, in: window, colors: Self.colors(theme), onClose: onClose, onTap: onTap)
     }
 
-    /// `keyCap`: `text`, then the keys in a cap, then `after` (no button with it).
+    /// `keyCap`: `text`, then the keys in a cap, then `after` (no button with it). `onTap`: the whole
+    /// toast is a button that runs it.
     func show(_ text: String, keyCap: (keys: String, after: String)? = nil, action: Action? = nil, page: NSRect, in window: NSWindow,
-              colors: Colors, onClose: (() -> Void)? = nil) {
+              colors: Colors, onClose: (() -> Void)? = nil, onTap: (() -> Void)? = nil) {
         self.action = action
+        self.onTap = onTap
         persistent = onClose != nil
         self.onClose = onClose
         let closeRoom = persistent ? Self.closeGap + Self.closeSize : 0
@@ -260,8 +276,9 @@ final class ShinyToast {
             buttonTint = colors.text
         }
         CATransaction.commit()
-        let clickable = action != nil || persistent
+        let clickable = action != nil || persistent || onTap != nil
         panel.ignoresMouseEvents = !clickable
+        view.handRect = onTap == nil ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: height)
         view.hitRect = !clickable ? .zero : NSRect(x: Self.margin, y: Self.margin, width: width, height: height)
         if !isShown {
             // Opening the tab's page holds the main thread for ~0.1 s, so the toast waits for the
@@ -289,7 +306,7 @@ final class ShinyToast {
 
     /// The pointer on a toast with a button holds it up; leaving starts its time again.
     private func hovered(_ inside: Bool) {
-        guard isShown, action != nil || persistent else { return }
+        guard isShown, action != nil || persistent || onTap != nil else { return }
         if persistent {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -330,7 +347,12 @@ final class ShinyToast {
             closed?()
             return
         }
-        guard let action else { return }
+        guard let action else {
+            // A toast that is a button: anywhere on the pill, and it stays up (Arc).
+            guard let tap = onTap, pill.bounds.contains(local) else { return }
+            tap()
+            return
+        }
         guard button.frame.insetBy(dx: -4, dy: -4).contains(local) else { return }
         if let anchored = action.anchored, let root = view.layer {
             // The menu hangs from the button, the toast stays up under it (Arc), then goes on its time.
@@ -385,6 +407,7 @@ final class ShinyToast {
         hide = nil
         persistent = false
         onClose = nil
+        onTap = nil
         guard isShown else { return }
         panel.ignoresMouseEvents = true
         CATransaction.begin()
@@ -439,6 +462,8 @@ final class ShinyToast {
 /// without making Cra active first.
 private final class ToastView: NSView {
     var hitRect: NSRect = .zero { didSet { updateTrackingAreas() } }
+    /// Where the pointing hand shows: a toast that is a button (#543).
+    var handRect: NSRect = .zero
     var onHover: (Bool) -> Void = { _ in }
     var onClick: (NSPoint) -> Void = { _ in }
     /// The pointer over the pill, in this view (the ✕ fills only under it).
@@ -454,12 +479,20 @@ private final class ToastView: NSView {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
         guard !hitRect.isEmpty else { return }
-        addTrackingArea(NSTrackingArea(rect: hitRect, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways], owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(rect: hitRect, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways],
+                                       owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { onHover(true) }
-    override func mouseExited(with event: NSEvent) { onHover(false) }
-    override func mouseMoved(with event: NSEvent) { onMove(convert(event.locationInWindow, from: nil)) }
+    override func mouseEntered(with event: NSEvent) { onHover(true); updateCursor(event) }
+    override func mouseExited(with event: NSEvent) { onHover(false); if !handRect.isEmpty { NSCursor.arrow.set() } }
+    override func mouseMoved(with event: NSEvent) { onMove(convert(event.locationInWindow, from: nil)); updateCursor(event) }
+    override func cursorUpdate(with event: NSEvent) { updateCursor(event) }
+
+    /// The panel never becomes key, so cursor rects don't apply: the hand is set as the pointer moves.
+    private func updateCursor(_ event: NSEvent) {
+        guard !handRect.isEmpty else { return }
+        (handRect.contains(convert(event.locationInWindow, from: nil)) ? NSCursor.pointingHand : NSCursor.arrow).set()
+    }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick(convert(event.locationInWindow, from: nil)) }
 }

@@ -3340,6 +3340,13 @@ was frontmost, 1x region captures and 100 fps recordings; test tabs archived aft
   setting turns it on with the sidebar out or off. [U] Open Link in New Tab from the page menu (not driven; same
   notification) and the "in %@" variant (not reached). Cra: BackgroundTabToast (CraCore),
   BrowserManagerDelegate.browserManagerOpenedInBackground, MainWindowController.toastBackgroundTab.
+- [O static + live] Arc 1.173.1 (20 Nov 2026, gxcodes on #543): the toast is a button. `BackgroundTabNotificationContent`
+  carries `windowID` and `itemID`, and `BackgroundTabAffordanceControllerDelegate` takes the click. Live, in a Blank
+  Window with the sidebar hidden, on a local page: a ⌘-click showed "New Tab Created"; the pointer on it turned into
+  the pointing hand and the fill stayed the same (50/31/78 at rest and under the pointer); a click brought the new tab
+  to the front (the window's title became its page) and the toast stayed up. [U] Which tab a click opens after two
+  background tabs in a row (Cra: the newest, as the notification's content is replaced) and what Arc does when the tab
+  was closed first (Cra: nothing). Cra: BackgroundTabToast.clickOpens, ShinyToast `onTap`.
 - [O static] It is Arc's one toast (Toasts.ShinyToastView, `ToastContent`): the same component carries
   "Copied Current URL" (`copyTabURL`), "Cannot Add New Pane" (`maxNumberPanes`), "Screenshot Copied to Clipboard",
   "Pinned Tab to …", zoom changes, undo and more; some kinds add an SF Symbol (`quote.bubble.fill`,

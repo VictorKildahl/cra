@@ -1124,11 +1124,14 @@
 #540   Tests/Scenarios/little-window-fullscreen-bar.scenario  68c2b18c5237
 #542   Tests/LiveFolderProviderTests.swift::azureDevOps  0d42712d01b7
 #542   Tests/Scenarios/live-folder-azure-devops.scenario  8a12a260ea63
+#543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::aClosedTabOpensNothing  b96721bf271d
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::anotherSpaceIsNamed  6d3b818e11aa
+#543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::clickOpensTheAnnouncedTab  1baa42c30f84
+#543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::clickOpensTheNewestOfSeveral  1e5b5b025290
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::hiddenSidebarSaysSo  f40706666c21
 #543   Packages/CraCore/Tests/CraCoreTests/BackgroundTabToastTests.swift::sidebarOutShowsTheRowInstead  bafff498f7e3
 #543   Tests/BrowserManagerLifecycleTests.swift::backgroundTabToastCase  9cde0b455475
-#543   Tests/Scenarios/background-tab-toast.scenario  2c50b42bceca
+#543   Tests/Scenarios/background-tab-toast.scenario  13639af797b7
 #544   Packages/CraCore/Tests/CraCoreTests/FolderPreviewRowsTests.swift::aScrollMovesTheHoverToTheRowNowUnderThePointer  8e1dd4220c09
 #544   Packages/CraCore/Tests/CraCoreTests/ListKnobGateTests.swift::aTouchAfterTheKnobFadedHidesIt  337dd9ba81dc
 #544   Packages/CraCore/Tests/CraCoreTests/ListKnobGateTests.swift::aTouchWhileTheListScrollsKeepsTheKnob  dbc9c61c51b4

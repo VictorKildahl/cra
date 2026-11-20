@@ -5027,11 +5027,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                                  tabSpaceTitle: space.flatMap { store.space($0)?.title }) else { return }
         backgroundTabToasts += 1
         CraLog.note("background tab toast \(backgroundTabToasts): \(text)")
-        showToast(text)
+        // Still up from the last one: it bumps and now holds this tab too; up with something else, or gone, it starts over.
+        announcedBackgroundTabs = toast.isTappable ? announcedBackgroundTabs + [id] : [id]
+        showToast(text) { [weak self] in
+            // Arc's toast is a button (#543): it opens the tab it announced, in its space.
+            guard let self, let tab = BackgroundTabToast.clickOpens(announced: self.announcedBackgroundTabs,
+                                                                   isOpen: { self.store.item($0)?.isTab == true }) else {
+                CraLog.note("background tab toast clicked: nothing to open")
+                return
+            }
+            CraLog.note("background tab toast clicked: \(self.store.item(tab)?.tab?.url ?? "")")
+            self.store.selectTab(tab, window: self.windowID)
+        }
     }
 
     /// The background-tab toasts this window showed, for cra.log (scenario background-tab-toast).
     private var backgroundTabToasts = 0
+    /// The tabs the toast up now announced, oldest first: a click opens the newest (BackgroundTabToast.clickOpens).
+    private var announcedBackgroundTabs: [UUID] = []
+
+    /// cra://debug?clickToast=1: a click on the toast up now, as the pointer's.
+    func clickToastForTest() {
+        if !toast.testClick() { CraLog.note("toast click: no toast to click") }
+    }
+
+    /// cra://debug?toastShown=<label>: whether a toast is up in this window.
+    var toastIsShown: Bool { toast.isShown }
 
     /// ⌥Return in the bar: the row opens as a split pane beside the current tab instead of in its
     /// place, an open tab of this space joining the split as it is. False takes it as Return: no
@@ -5108,11 +5129,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var offeredProtectedMedia: Set<String> = []
 
     /// Arc's toast at the top right of the page (ShinyToast): Cra's confirmations.
-    func showToast(_ text: String, keyCap: (keys: String, after: String)? = nil, action: ShinyToast.Action? = nil) {
+    func showToast(_ text: String, keyCap: (keys: String, after: String)? = nil, action: ShinyToast.Action? = nil,
+                   onTap: (() -> Void)? = nil) {
         guard let window else { return }
         let page = shell.webContainer.convert(shell.webContainer.bounds, to: nil)
         slowResponseToastTab = nil
-        toast.show(text, keyCap: keyCap, action: action, page: page, in: window, theme: focusedSpace.theme)
+        toast.show(text, keyCap: keyCap, action: action, page: page, in: window, theme: focusedSpace.theme, onTap: onTap)
     }
 
     /// An MCP agent's pill at the bottom of the page (AgentPill): its face, what it does, Take Over (⌘.).

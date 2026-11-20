@@ -30,3 +30,27 @@ struct BackgroundTabToastTests {
                 == "New Tab Created")
     }
 }
+
+/// Arc's "New Tab Created" toast is a button (GitHub #543, gxcodes): a click opens the tab it announced.
+/// Arc's BackgroundTabNotificationContent carries the window and the tab (`windowID`, `itemID`), and
+/// another background tab while the toast is up replaces it, so the click opens the newest one.
+struct BackgroundTabToastClickTests {
+    let first = UUID(), second = UUID()
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/543"))
+    func clickOpensTheAnnouncedTab() {
+        #expect(BackgroundTabToast.clickOpens(announced: [first], isOpen: { _ in true }) == first)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/543"))
+    func clickOpensTheNewestOfSeveral() {
+        #expect(BackgroundTabToast.clickOpens(announced: [first, second], isOpen: { _ in true }) == second)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/543"))
+    func aClosedTabOpensNothing() {
+        // Closed (or archived) before the click: nothing opens, not the one before it.
+        #expect(BackgroundTabToast.clickOpens(announced: [first, second], isOpen: { $0 == first }) == nil)
+        #expect(BackgroundTabToast.clickOpens(announced: [], isOpen: { _ in true }) == nil)
+    }
+}

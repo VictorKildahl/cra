@@ -1252,6 +1252,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("hit at \(Int(g[0])),\(Int(g[1])): \(chain.isEmpty ? "nothing" : chain.joined(separator: " < "))")
                 return
             }
+            // clickToast=1: a click on the toast up now, through the event queue as the pointer's (#543).
+            if dict["clickToast"] == "1" { main.clickToastForTest(); return }
+            // toastShown=<label>: whether a toast is up in the front window (#543: a click leaves it up).
+            if let label = dict["toastShown"] { CraLog.note("toast shown \(label): \(main.toastIsShown ? "yes" : "no")"); return }
             // dragAt=x,y&by=dx,dy: a press there moved by dx,dy (down is +) and released, through the event
             // queue as clickAt's click (#547); target=floating as for clickAt.
             if let g = dict["dragAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,

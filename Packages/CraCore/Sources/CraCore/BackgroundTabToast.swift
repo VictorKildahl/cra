@@ -21,4 +21,16 @@ public enum BackgroundTabToast {
         }
         return "New Tab Created"
     }
+
+    /// What a click on the toast opens (#543, gxcodes): the toast is a button in Arc, its
+    /// BackgroundTabNotificationContent carrying the window and the tab (`windowID`, `itemID`). Another
+    /// background tab while it is up replaces what it holds, so the click opens the newest one, and
+    /// only while that tab is still open (closed or archived meanwhile, the click opens nothing).
+    /// - Parameters:
+    ///   - announced: the tabs this toast announced while it stayed up, oldest first.
+    ///   - isOpen: whether a tab is still open.
+    public static func clickOpens(announced: [UUID], isOpen: (UUID) -> Bool) -> UUID? {
+        guard let newest = announced.last, isOpen(newest) else { return nil }
+        return newest
+    }
 }

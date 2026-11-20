@@ -3,6 +3,7 @@
 # and a middle click (Chromium's new pages, popupHostForURL), as ⌘Return in the command bar did alone before (#85).
 # With the sidebar out the new row in Today says it and no toast shows. Open Link in New Tab goes through
 # requestsNewTabWithURL (the browser-manager harness checks it); BackgroundTabToast (CraCore) decides the text.
+# The toast is a button, as in Arc (gxcodes on #543): a click opens the newest tab it announced.
 budget rss=1200 stalls50=40
 pace 0.5
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
@@ -37,4 +38,17 @@ expect-log n=three HTTP
 expect-log background tab toast 2: New Tab Created$
 cra://debug?selectedTab=end
 expect-log selected tab end: \S+n=source$
+
+# A click on the toast opens the tab it announced last; the toast stays up and goes on its time (Arc 1.173.1).
+cra://debug?clickToast=1
+expect-log background tab toast clicked: \S+n=three$
+cra://debug?selectedTab=clicked
+expect-log selected tab clicked: \S+n=three$
+cra://debug?toastShown=afterclick
+expect-log toast shown afterclick: yes$
+wait 6
+cra://debug?toastShown=later
+expect-log toast shown later: no$
+cra://debug?clickToast=1
+expect-log toast click: no toast to click
 reject-log fault:
