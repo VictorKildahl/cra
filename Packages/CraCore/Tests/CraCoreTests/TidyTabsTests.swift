@@ -247,3 +247,23 @@ struct TabGroupItemTests {
         #expect(try !JSONDecoder().decode(SidebarItem.self, from: folder).isTabGroup)
     }
 }
+
+struct TidyOffersLazilyTests {
+    /// GitHub #618: the sidebar asked whether to offer Tidy on every rebuild and read every Today tab to
+    /// answer. The lazy form reads only as far as it needs and gives the old answer, checked on random Todays.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/618"))
+    func theLazyAnswerIsTheOldOne() {
+        var rng = SystemRandomNumberGenerator()
+        for _ in 0..<2_000 {
+            let today = Int.random(in: 0...12, using: &rng)
+            let loose = (0..<Int.random(in: 0...today, using: &rng)).map { $0 }
+            let tidied: Set<Int>? = Bool.random(using: &rng) ? nil : Set(loose.filter { _ in Bool.random(using: &rng) })
+            let old = TidyTabs.offers(todayTabs: today, looseTabs: loose, tidied: tidied)
+            #expect(TidyTabs.offers(todayTabs: 0..<today, looseTabs: loose, tidied: tidied) == old)
+        }
+        // It stops counting at the minimum.
+        var read = 0
+        let counted = (0..<5_000).lazy.map { i -> Int in read += 1; return i }
+        #expect(TidyTabs.offers(todayTabs: counted, looseTabs: [1], tidied: nil) && read == TidyTabs.minimumTabs)
+    }
+}

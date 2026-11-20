@@ -1326,6 +1326,8 @@
 #617   Tests/Scenarios/command-bar-row-details.scenario  9902d60dcadf
 #617   Tests/StoreTests.swift::profileTabsSpaceBySpace  ac6153dfad00
 #618   Packages/CraCore/Tests/CraCoreTests/SidebarChildOrderTests.swift::oneStoredIndexPerChildInOnePass  d4962ed3b593
+#618   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::theLazyAnswerIsTheOldOne  55fd280fbe76
+#618   Tests/Scenarios/sidebar-long-list.scenario  d8917fd58f10
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
 #626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f

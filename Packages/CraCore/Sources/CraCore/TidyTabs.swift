@@ -74,6 +74,21 @@ public enum TidyTabs {
         return looseTabs.contains { !tidied.contains($0) }
     }
 
+    /// `offers` without reading more than it needs: Today's tabs counted only up to `minimumTabs`, and the
+    /// loose tabs only until one hasn't been tidied. The sidebar asks this on every rebuild for its divider's
+    /// Tidy button; at 5,000 tabs reading all of them was half of each rebuild (#618). Same answer.
+    public static func offers<T: Sequence, L: Sequence>(todayTabs: T, looseTabs: L, tidied: Set<L.Element>?) -> Bool
+        where L.Element: Hashable {
+        var count = 0
+        for _ in todayTabs {
+            count += 1
+            if count >= minimumTabs { break }
+        }
+        guard count >= minimumTabs else { return false }
+        for id in looseTabs where tidied?.contains(id) != true { return true }
+        return false
+    }
+
     /// Put unseen tabs first so a capped request eventually reaches the whole sidebar. Previously
     /// considered tabs remain optional context, with each part retaining its current Today order.
     public static func requestOrder<ID: Hashable>(looseTabs: [ID], tidied: Set<ID>?) -> [ID] {

@@ -1993,6 +1993,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if prepared { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { MainActor.assumeIsolated { run() } } } else { run() }
                 return
             }
+            // sidebarBuild=<label>: the sidebar lists' rebuilds since the last readout, then reset (#618).
+            if let label = dict["sidebarBuild"] {
+                CraLog.note("sidebar build \(label): \(SpaceListView.stats.line)")
+                SpaceListView.stats = .init()
+                return
+            }
             // commandBarDetail=<label>: the main window's bar rows as kind:subtitle, which only the rows shown
             // get (#617).
             if let label = dict["commandBarDetail"] {

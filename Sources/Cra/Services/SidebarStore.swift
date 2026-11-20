@@ -1865,6 +1865,10 @@ final class SidebarStore {
         return out
     }
 
+    /// The open tab of the window's focused space: what `isSelected` compares with, worked out once for a
+    /// whole list (#618). It observes no item; the list reads every item it shows anyway.
+    func openTabID(window: UUID?) -> UUID? { Self.openTab(in: untrackedWindow(window), firstSpace: spaceOrder.first) }
+
     /// Whether `id` is the open tab of the window's focused space, or of `space`.
     func isSelected(_ id: UUID, inSpace space: UUID? = nil, window: UUID?) -> Bool {
         items.observe(id)
@@ -2442,8 +2446,26 @@ final class SidebarStore {
     /// Whether the divider offers Tidy now (the Apple Intelligence check is the caller's).
     func canTidy(_ sid: UUID) -> Bool {
         guard let space = spaces[sid], !isIncognito(space: sid) else { return false }
-        return TidyTabs.offers(todayTabs: tabs(under: space.todayContainerID).count,
-                               looseTabs: looseTodayTabs(sid).map(\.id), tidied: tidiedTabs[sid])
+        // Read lazily, only as far as the answer needs (#618): the sidebar asks this on every rebuild.
+        let today = space.todayContainerID
+        let loose = (items[today]?.children ?? []).lazy.filter { self.items[$0]?.isTab == true }
+        return TidyTabs.offers(todayTabs: lazyTabs(under: today), looseTabs: loose, tidied: tidiedTabs[sid])
+    }
+
+    /// The tabs under a container, depth first as `tabs(under:)` lists them, read one at a time.
+    private func lazyTabs(under id: UUID) -> AnySequence<UUID> {
+        AnySequence { () -> AnyIterator<UUID> in
+            var stack: [IndexingIterator<[UUID]>] = [(self.items[id]?.children ?? []).makeIterator()]
+            return AnyIterator {
+                while !stack.isEmpty {
+                    guard let next = stack[stack.count - 1].next() else { stack.removeLast(); continue }
+                    guard let item = self.items[next] else { continue }
+                    if item.isTab { return next }
+                    if item.isFolder || item.isSplit { stack.append(item.children.makeIterator()) }
+                }
+                return nil
+            }
+        }
     }
 
     func setTidying(_ sid: UUID, _ on: Bool) {

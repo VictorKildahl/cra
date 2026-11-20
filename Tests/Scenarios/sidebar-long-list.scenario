@@ -1,0 +1,24 @@
+# promise: #618
+# Every title or favicon a page reported rebuilt its space's list, and the rebuild made a full row model (title,
+# favicon, subtitle, two address parses) for every row: at 5,000 tabs that was most of the rebuild, for the ~40
+# rows on screen. Models are now made only for rows that get a view. 300 Today tabs (never loaded); a page that
+# changes its title five times; each rebuild makes models for the rows near the screen, far fewer than 300.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "autoArchiveEnabled": false}
+profile ${FIXTURES}/LongSidebarProfile
+cra://open?url=${PAGE}?n=titles
+expect-log loaded 127\.0\.0\.1
+wait 2
+cra://debug?sidebarBuild=reset
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title='Loading 1'"}
+wait 0.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title='Loading 2'"}
+wait 0.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title='Loading 3'"}
+wait 0.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title='Loading 4'"}
+wait 0.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title='Loading 5'"}
+wait 1
+cra://debug?sidebarBuild=titles
+expect-log sidebar build titles: [1-9]\d* rebuilds, up to 30\d rows, up to ([1-9]|[1-9]\d) row models a rebuild
