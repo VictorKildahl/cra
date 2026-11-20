@@ -1,0 +1,20 @@
+# promise: #596 #643
+# The theme editor's slider on a two-colour space makes the window see-through, as Arc's does (#596, #643).
+# The space was saved by the editor before the fix: two colours on Light, opaque, so the slider only took them
+# toward white. Moving the slider saves it again as Arc's editor does, vibrant at the slider's intensity, and
+# the window shows the blurred desktop under the sidebar (SpaceThemeVariants.picked).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#F8D558","#A4F454"],"intensity":0.8,"noise":0,"appearance":"light","accent":"#F8D558","key":["#F8D558","#A4F454"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}}]}
+cra://debug?windowSize=1280x900
+wait 1
+cra://debug?themeShown=before
+expect-log Cra theme shown before: space=Home .* seeThrough=0 vibrant=0
+cra://debug?themeEditor=1
+wait 1
+cra://debug?themeEditor=intensity:0.30
+wait 1
+cra://dismiss
+wait 1
+cra://debug?themeShown=after
+expect-log Cra theme shown after: space=Home .*theme=light .* seeThrough=1 vibrant=1 intensity=0\.30

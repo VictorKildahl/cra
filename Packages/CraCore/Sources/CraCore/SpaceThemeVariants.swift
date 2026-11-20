@@ -46,7 +46,7 @@ public enum SpaceThemeVariants {
         var t = SpaceTheme(colors: key, intensity: intensity, noise: noise, appearance: "auto", accent: key.first)
         if t.isDark { t.colors = key.map { shade($0, lightness: 0.9) }; t.accent = t.colors.first }
         t.appearance = "light"
-        if t.colors.count == 1 { t.colors.append(t.colors[0]); t.solid = true }
+        if t.colors.count == 1 { t.colors.append(t.colors[0]); t.solid = true } else { t.vibrant = true }
         return t
     }
 
@@ -55,25 +55,15 @@ public enum SpaceThemeVariants {
     /// #1A1A1A, #333333 and navy were saved as themselves); a lighter one keeps its hue at HSL
     /// lightness ≈ 0.064, as Arc's default dark half does (#8389FF → #01021F). Arc draws them over a
     /// neutral grey, never a purple one (#392). One colour is Arc's one-dot theme over the dark
-    /// material (SpaceTheme.solid), at the slider's intensity like the light half.
+    /// material (SpaceTheme.solid), at the slider's intensity like the light half. Two or three are a
+    /// see-through gradient at the slider's intensity, like every gradient the editor makes (#643).
     public static func dark(key: [String], intensity: Double, noise: Double) -> SpaceTheme {
         let base = key.map(darkTone)
         if base.count == 1 {
             return SpaceTheme(colors: base + base, intensity: intensity, noise: noise, appearance: "dark", accent: base[0], solid: true)
         }
-        // A gradient is opaque: each stop at Arc's solid-theme opacity for the intensity over the
-        // grey Arc's default dark half is drawn on (its top stop: 0.63 of #01021F over #5E5E5E).
-        let a = SpaceTheme.solidAlpha(intensity: intensity)
-        let colors = base.map { hex in
-            let k = HexColor.components(hex) ?? (0, 0, 0)
-            func ch(_ v: Double) -> Int { Int((a * v * 255 + (1 - a) * neutralGrey).rounded()) }
-            return String(format: "#%02X%02X%02X", ch(k.r), ch(k.g), ch(k.b))
-        }
-        return SpaceTheme(colors: colors, intensity: 1, noise: noise, appearance: "dark", accent: base.first)
+        return SpaceTheme(colors: base, intensity: intensity, noise: noise, appearance: "dark", vibrant: true, accent: base.first)
     }
-
-    /// The grey under a dark gradient half (sRGB 0–255), fitted to Arc's default dark half.
-    static let neutralGrey = 94.0
 
     /// A pad colour as the dark half uses it: itself when it already reads dark, else its hue darkened.
     static func darkTone(_ hex: String) -> String {
@@ -85,9 +75,13 @@ public enum SpaceThemeVariants {
     /// Arc lightens and darkens nothing: a light colour is a light sidebar with dark text and a dark
     /// one a dark sidebar with white text, on Light and Dark alike (SpaceTheme.isDark, #392). Only
     /// Auto's halves are lifted or darkened (`light`, `dark`), so an Auto space follows macOS (#155).
+    /// Two or three colours are a see-through gradient: Arc's editor saves every pick as one `single`
+    /// theme with `isVibrant` (offline Arc 1.171–1.172, its preset pairs and Victor's own space), drawn
+    /// over the blurred desktop at the slider's intensity. Cra made them opaque, so the slider only
+    /// took the colours toward white (#596, #643).
     public static func picked(key: [String], intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
         var t = SpaceTheme(colors: key.map { $0.uppercased() }, intensity: intensity, noise: noise, appearance: appearance, accent: key.first?.uppercased())
-        if t.colors.count == 1 { t.colors.append(t.colors[0]); t.solid = true }
+        if t.colors.count == 1 { t.colors.append(t.colors[0]); t.solid = true } else { t.vibrant = true }
         return t
     }
 

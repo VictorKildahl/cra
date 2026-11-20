@@ -4413,6 +4413,35 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   Little Window has no such monitor. LittleWindow.sendEvent now does the same for its children. A press while the browser
   window itself was key always worked (its monitor made the Peek key), which is why it looked intermittent.
 
+## Editor gradients over a backdrop (Arc 1.174, 20 Nov 2026, #596 #643, offline Arc on a fake home)
+
+Arc 1.174 on a fake home (network denied, Victor's Arc not running) with every space set to one `single`
+`isVibrant` gradient, the window active over a full-screen white and then black window, sidebar sampled 5 pt
+from the left at 2x (6 × 6 px means, sRGB). Victor's macOS on Dark, Arc's View ▸ Appearance on Automatic
+unless noted.
+
+| Theme (baseColors, no overlay) | style | intensity | over white (top) | over black (top) |
+|---|---|---|---|---|
+| A: #6CBAD9 / #7F7EDC | light | 0.8 | 144/187/210 | 94/139/162 |
+| A, View ▸ Appearance ▸ Light | light | 0.8 | 160/205/229 | 131/175/199 |
+| B: #6CBAD9 / #7F7EDC | light | 0.3 | 174/200/212 | 84/109/122 |
+| C: #666789 / #7F6589 | dark | 0.8 | 112/112/134 | 79/78/100 |
+
+- [O fit] An editor gradient is drawn like a one-colour theme: the base colour at `solidAlpha(intensity)`
+  (0.63 at 0.8; B fits α ≈ 0.34 for 0.355) over Arc's material. A light-style gradient takes the one-colour
+  material (Dark: 63 + 0.529·backdrop; Light: 166 + 0.315·backdrop), every channel within 3/255. A dark-style
+  one (`translucencyStyle` dark, what the editor writes for colours that read dark, Brand9's pair) sits on a
+  darker one: 40 + 0.35·backdrop, every channel within 2/255. The slider is opacity, not a pull toward white.
+- [O] The gradient runs across the whole window, top-left to bottom-right: A over black goes 94/140/162 →
+  99/126/163 down the sidebar (5 pt in) but 118/123/173 at the window's right edge. Cra's runs top to bottom
+  inside the sidebar, so it reaches the second colour sooner down the sidebar (126 vs 133 green at 500 pt).
+  Not changed by #643; it holds for every Cra gradient.
+- Cra (#643): an editor gradient (`vibrant` with the pad's `key`) is `SpaceTheme.drawnOverMaterial`, drawn
+  with its picked colours at solidAlpha over SidebarBackdrop's solid materials, a dark-reading one over
+  `solidActiveDarkGradient` (dim 0.585, lift 0.157). Re-captured the same way, Cra is within 4/255 of A, A on
+  Light and B over black at the top, C within 7, and B over white 6–10 darker than Arc's. An imported vibrant theme keeps its baked stops and the
+  light-vibrant calibration below.
+
 ## Theme editor hover, tab-on-tab drops, Download location (Arc 1.171, static, 5 Nov 2026, #189–#191)
 Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and field names only; no numbers).
 - [O metadata] SpaceStyleEditor module: `ColorPillButtonStyle { colorSet, _isHovered, addComplimentary }` (the preset

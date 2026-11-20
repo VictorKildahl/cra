@@ -31,6 +31,8 @@ final class ShellView: NSView {
     private(set) var solidBackdrop = false
     /// Arc's light material under a solid theme, for a space on Light (or Auto while macOS is light, #455).
     private(set) var solidLightMaterial = false
+    /// The material under a gradient whose colours read dark (SidebarBackdrop.solidActiveDarkGradient, #643).
+    private(set) var solidDarkGradient = false
     /// System Settings ▸ Accessibility ▸ Display ▸ Reduce transparency (or Increase contrast):
     /// AppKit's materials, and Arc's sidebar, go opaque. The backdrop layer path follows (GitHub #156).
     private var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -242,11 +244,12 @@ final class ShellView: NSView {
 
     /// A space's theme in one refresh: set one flag at a time, a switch from a vibrant to a solid
     /// space drew a frame with the vibrant calibration (two cra.log lines, dim 0.36 then 0.30).
-    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool, lightMaterial: Bool = false) {
+    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool, lightMaterial: Bool = false, darkGradient: Bool = false) {
         self.vibrantDark = vibrantDark
         self.vibrantLight = vibrantLight
         solidBackdrop = solid
         solidLightMaterial = lightMaterial
+        solidDarkGradient = darkGradient
         refreshLift()
     }
 
@@ -308,7 +311,7 @@ final class ShellView: NSView {
                 reduceTransparency: reduceTransparency, tintAvailable: desktopTintLayer != nil,
                 vibrant: .init(dim: t.blurDim, liftTop: t.liftActive, liftBottom: t.liftActiveBottom,
                                dimInactive: t.blurDimInactive, liftInactive: t.liftInactive),
-                lightMaterial: solidLightMaterial)
+                lightMaterial: solidLightMaterial, darkGradient: solidDarkGradient)
             dimLayer.opacity = Float(backdrop.dim)
             // The desktop tint stays in the tree, as in AppKit's material: at 0.05 windowed, active or not,
             // and in place of the blur in full screen. Only Reduce transparency takes it out. Inserted

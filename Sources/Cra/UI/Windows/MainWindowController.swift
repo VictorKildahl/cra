@@ -651,7 +651,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
             shell.setTheme(vibrantDark: palette.isDark, vibrantLight: palette.vibrant && !palette.isDark, solid: palette.solid,
-                           lightMaterial: palette.lightMaterial)
+                           lightMaterial: palette.lightMaterial, darkGradient: palette.darkGradient)
             window?.isOpaque = !palette.vibrant
             window?.backgroundColor = palette.vibrant ? .clear : NSColor(palette.gradientColors.first ?? .gray)
         }

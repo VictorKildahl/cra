@@ -274,7 +274,7 @@ struct SpaceThemeAppearanceTests {
         let theme = SpaceThemeVariants.theme(key: ["#8389FF", "#FF83C8"], intensity: 0.5, noise: 0, appearance: "auto")
         #expect(theme.followsSystem && theme.key == ["#8389FF", "#FF83C8"])
         let light = theme.resolved(systemDark: false), dark = theme.resolved(systemDark: true)
-        #expect(light.colors == ["#8389FF", "#FF83C8"] && !light.isDark)
+        #expect(light.colors == ["#8389FF", "#FF83C8"] && !light.isDark && light.vibrant)
         #expect(close(dark.accent, "#01021F") && dark.isDark)
         // One colour on Auto is a flat fill on both halves: the colour while macOS is light, its hue
         // dark while macOS is dark (#155; not Arc's fixed `single`, see everySwatchOnAutoFollowsMacOS).
@@ -321,20 +321,61 @@ struct SpaceThemeAppearanceTests {
         }
     }
 
-    /// Auto's dark half bakes the slider into a gradient's stops: more intensity, more of the colour
-    /// over neutral grey. Before, the dark half ignored the slider (#392).
+    /// Auto's dark half follows the slider: a gradient there is see-through at the slider's intensity,
+    /// its colours the pad's dark tones (black stays black, navy stays navy). Before #392 the dark half
+    /// ignored the slider; until #643 it baked it into opaque stops over grey, so the slider only took
+    /// the colours toward grey instead of letting the desktop through (changed with Victor, 20 Nov 2026).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/392"), arguments: [0.0, 0.3, 0.5, 0.8, 1.0])
     func darkGradientFollowsTheSlider(intensity: Double) throws {
         let key = ["#000000", "#26456B"]
-        func darkHalf(_ i: Double) -> SpaceTheme {
-            SpaceThemeVariants.theme(key: key, intensity: i, noise: 0, appearance: "auto").resolved(systemDark: true)
+        let dark = SpaceThemeVariants.theme(key: key, intensity: intensity, noise: 0, appearance: "auto").resolved(systemDark: true)
+        #expect(dark.isDark && dark.vibrant && !dark.solid)
+        #expect(dark.intensity == intensity, "the slider is the gradient's opacity over the desktop")
+        #expect(dark.colors == key, "dark colours stay themselves")
+        #expect(dark.drawnOverMaterial, "drawn as Arc draws an editor theme: at solidAlpha over its material")
+    }
+
+    /// Two or three colours make a see-through gradient in every mode, at the slider's intensity, as
+    /// Arc's editor saves every pick (`single`, `isVibrant`: its preset pairs, Victor's own space).
+    /// Cra drew them opaque, so the slider only took the colours toward white (#596, #643). Arc draws
+    /// one like its one-colour themes, the picked colours at solidAlpha over its material (measured on
+    /// Arc 1.174, 20 Nov 2026), so Cra does: drawnOverMaterial. An imported vibrant theme keeps the
+    /// stops its fit baked in and its own drawing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/643"), .bug("https://github.com/VictorKildahl/cra/issues/596"),
+          arguments: ["light", "dark", "auto"])
+    func gradientsAreSeeThroughAtTheSlidersIntensity(appearance: String) throws {
+        let keys = SpaceColorPresets.pages.flatMap(\.swatches).filter { $0.count == 2 } + [["#F8D558", "#A4F454", "#FF7567"]]
+        for key in keys {
+            for intensity in [0.1, 0.5, 0.9] {
+                let theme = SpaceThemeVariants.theme(key: key, intensity: intensity, noise: 0, appearance: appearance)
+                for half in [theme.resolved(systemDark: false), theme.resolved(systemDark: true)] {
+                    #expect(half.vibrant && !half.solid && half.intensity == intensity, "\(key) on \(appearance)")
+                    #expect(half.drawnOverMaterial, "\(key) on \(appearance)")
+                    // Colours that read dark take Arc's darker material for those (translucencyStyle dark).
+                    #expect(half.drawnOverDarkGradientMaterial == half.isDark, "\(key) on \(appearance)")
+                }
+            }
         }
-        let first = try #require(HexColor.components(darkHalf(intensity).colors[0]))
-        let a = SpaceTheme.solidAlpha(intensity: intensity)
-        #expect(abs(first.r * 255 - (1 - a) * 94) <= 1, "black at the slider's opacity over neutral grey")
-        if intensity < 1 {
-            #expect((HexColor.luminance(darkHalf(min(1, intensity + 0.2)).colors[0]) ?? 1) < (HexColor.luminance(darkHalf(intensity).colors[0]) ?? 0))
-        }
+        // One colour stays Arc's flat one-dot fill, over the one-colour material.
+        let one = SpaceThemeVariants.theme(key: ["#6CBAD9"], intensity: 0.5, noise: 0, appearance: appearance)
+        #expect(one.resolved(systemDark: false).solid && one.resolved(systemDark: true).solid)
+        #expect(!one.resolved(systemDark: true).drawnOverDarkGradientMaterial)
+
+        // Arc's measured materials (Arc 1.174, 20 Nov 2026, under Dark): a light pair over 63 + 0.53 · backdrop,
+        // a dark pair over 40 + 0.35 · backdrop. Each is lift · 255 + (1 − lift)(1 − dim) · backdrop.
+        func material(_ b: SidebarBackdrop) -> (grey: Double, passes: Double) { (b.liftTop * 255, (1 - b.liftTop) * (1 - b.dim)) }
+        let lightPair = material(.resolve(solid: true, active: true, fullscreen: false, reduceTransparency: false, tintAvailable: false,
+                                          vibrant: .init(dim: 0, liftTop: 0, liftBottom: 0, dimInactive: 1, liftInactive: 0)))
+        let darkPair = material(.resolve(solid: true, active: true, fullscreen: false, reduceTransparency: false, tintAvailable: false,
+                                         vibrant: .init(dim: 0, liftTop: 0, liftBottom: 0, dimInactive: 1, liftInactive: 0), darkGradient: true))
+        #expect(abs(lightPair.grey - 66) <= 4 && abs(lightPair.passes - 0.52) <= 0.02)
+        #expect(abs(darkPair.grey - 40) <= 2 && abs(darkPair.passes - 0.35) <= 0.02)
+
+        guard appearance == "light" else { return }
+        let picked = SpaceThemeVariants.theme(key: ["#6cbad9", "#7F7EDC"], intensity: 0.8, noise: 0, appearance: "light")
+        #expect(picked.colors == ["#6CBAD9", "#7F7EDC"], "the pad's colours are saved and drawn as picked (#392)")
+        let arc = try #require(ArcThemeImportTests.theme("gradientVibrantLight"))
+        #expect(arc.vibrant && !arc.drawnOverMaterial, "an imported vibrant theme keeps its own drawing")
     }
 
     /// Light and Dark keep every swatch as it is, as Arc does with its appearance set either way

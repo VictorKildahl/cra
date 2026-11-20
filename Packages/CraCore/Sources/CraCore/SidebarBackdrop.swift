@@ -50,6 +50,12 @@ public struct SidebarBackdrop: Equatable, Sendable {
     /// (offline Arc 1.172, 17 Nov 2026, navy, red and pastel over white and black, within 1/255), for a
     /// space on Light (#455).
     public static let solidActiveLight = SidebarBackdrop(source: .blur, dim: 0.10, liftTop: 0.65, liftBottom: 0.65)
+    /// Arc's material under a gradient whose colours read dark (its editor saves those with `translucencyStyle`
+    /// dark, Brand9's pair among its presets), under Dark: grey 40 passing 35 % of the backdrop, darker than a
+    /// light gradient's or one colour's 63 + 0.529 · backdrop (Arc 1.174 on a fake home, 20 Nov 2026, #666789 /
+    /// #7F6589 at 0.8: 112/112/134 over white, 79/78/100 over black at the top, every channel within 2/255 of
+    /// solidAlpha(0.8) of the colour over it; #643).
+    public static let solidActiveDarkGradient = SidebarBackdrop(source: .blur, dim: 0.585, liftTop: 0.157, liftBottom: 0.157)
     /// Its inactive look, flat 252 (Light) where the dark one is 212 (same run: 252 over navy, red and
     /// pastel, 207 under Dark).
     public static let solidInactiveLight = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.99, liftBottom: 0.99)
@@ -61,12 +67,12 @@ public struct SidebarBackdrop: Equatable, Sendable {
 
     public static func resolve(
         solid: Bool, active: Bool, fullscreen: Bool, reduceTransparency: Bool,
-        tintAvailable: Bool, vibrant: Vibrant, lightMaterial: Bool = false
+        tintAvailable: Bool, vibrant: Vibrant, lightMaterial: Bool = false, darkGradient: Bool = false
     ) -> SidebarBackdrop {
         if solid {
             if reduceTransparency { return solidReduced }
             guard active else { return lightMaterial ? solidInactiveLight : solidInactive }
-            var b = lightMaterial ? solidActiveLight : solidActive
+            var b = lightMaterial ? solidActiveLight : darkGradient ? solidActiveDarkGradient : solidActive
             if fullscreen && tintAvailable { b.source = .desktopTint }
             return b
         }

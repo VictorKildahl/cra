@@ -745,7 +745,7 @@
 #391   Tests/DockedWindowAccessibilityTests.swift::movesFindsTheBrowserWindow  b7cbb5a23a9d
 #391   Tests/DockedWindowAccessibilityTests.swift::movingADockedWindowMovesTheBrowser  2138e64da85d
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkColoursKeepTheirOwnTone  180984317a3e
-#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  de760b3df3ea
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  fd13db337106
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  1afc110bfec4
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::lightAndDarkKeepThePickedColourAsArcDoes  aff895b8b551
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageContentTests.swift::quoteResultsRequireCompletedBoundedDOMEvidence  324bbcbcf216
@@ -1289,6 +1289,8 @@
 #591   iOS/CraUITests/BrowserTests.swift::testRecentTabsShowUnderTheEmptyField  6bf1170efbe9
 #593   Tests/Scenarios/extension-crx-drop.scenario  69cfe2dc2f7a
 #594   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::aModelThatNamesEveryTabLeavesThemLoose  c97e1f073cec
+#596   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::gradientsAreSeeThroughAtTheSlidersIntensity  6adbda8ba3c3
+#596   Tests/Scenarios/theme-gradient-see-through.scenario  71863f429e42
 #597   Tests/Scenarios/page-opened-tab-shows.scenario  9578d2e1e5dd
 #598   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::onlyARealChangeIsWrittenSoon  af18caaf55f8
 #598   Tests/StoreTests.swift::syncWritesSoonAfterAChange  45f2ff09c26a
@@ -1401,6 +1403,8 @@
 #636   Tests/BrowserManagerLifecycleTests.swift::fullscreenTabClosedCase  590ed2927628
 #636   Tests/Scenarios/page-fullscreen-close-tab.scenario  f5f69eafd931
 #641   Tests/Scenarios/little-window-click-raises.scenario  a03c24fccffe
+#643   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::gradientsAreSeeThroughAtTheSlidersIntensity  6adbda8ba3c3
+#643   Tests/Scenarios/theme-gradient-see-through.scenario  71863f429e42
 #644   Packages/CraCore/Tests/CraCoreTests/FileMenuTests.swift::closeTabClosesWhatIsInFront  d4c48a307105
 #644   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::newWindowsTakeTheLastSidebarChoice  0e56b30dc90f
 #644   Tests/Scenarios/new-window-sidebar.scenario  76fa0c958937
