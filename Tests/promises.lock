@@ -1366,6 +1366,10 @@
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::theUserLeavingFirstForgetsThePage  3d0074797d11
 #636   Tests/BrowserManagerLifecycleTests.swift::fullscreenTabClosedCase  590ed2927628
 #636   Tests/Scenarios/page-fullscreen-close-tab.scenario  f5f69eafd931
+#644   Packages/CraCore/Tests/CraCoreTests/FileMenuTests.swift::closeTabClosesWhatIsInFront  d4c48a307105
+#644   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::newWindowsTakeTheLastSidebarChoice  0e56b30dc90f
+#644   Tests/Scenarios/new-window-sidebar.scenario  76fa0c958937
+#644   Tests/StoreTests.swift::newWindowsTakeTheLastSidebarChoice  850dee2335df
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

@@ -32,6 +32,19 @@ public enum FileMenu {
         id == "closeTab" ? tabSelected : true
     }
 
+    /// What ⌘W (Close Tab, Arc's "Close current tab or window") closes.
+    public enum CloseTarget: String, Equatable, Sendable {
+        case commandBar, tab, window
+    }
+
+    /// What ⌘W closes, what is in front first. With a tab selected the command bar goes as Escape does
+    /// and the tab stays (#497); then the tab. A window with no tab closes as a whole, the bar over it or
+    /// not, as Arc's new windows do at once (#644): Close Tab is hidden there, so ⌘W is the window's.
+    public static func closeTab(commandBarOpen: Bool, tabSelected: Bool) -> CloseTarget {
+        guard tabSelected else { return .window }
+        return commandBarOpen ? .commandBar : .tab
+    }
+
     /// The rows that show, in sections, as the menu draws them.
     public static func shown(tabSelected: Bool) -> [[String]] {
         sections.map { $0.filter { shows($0, tabSelected: tabSelected) } }.filter { !$0.isEmpty }

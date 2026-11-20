@@ -109,6 +109,7 @@ enum StoreTests {
         recentTabsInAllSpacesGoBack()
         recentCardsKeepSplitsWhole()
         incognitoSpaceKeepsItsContext()
+        newWindowsTakeTheLastSidebarChoice()
         print("Store: \(checks) checks passed")
     }
 
@@ -3537,6 +3538,25 @@ enum StoreTests {
         expect(store.exportSpace(sid, intoFolderIn: home) == nil, "an incognito space doesn't export into a saved space")
         expect(store.isIncognito(item: secret.id) && store.spaceID(ofItem: secret.id) == sid, "its tab stays in the incognito window")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// A new window, normal, incognito or Blank, opens with the sidebar as it was last hidden or shown,
+    /// in any window (Arc's sidebarViewPreferences.sidebarMode, #644). The windows already open keep theirs.
+    // promise: #644
+    @MainActor
+    private static func newWindowsTakeTheLastSidebarChoice() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let first = store.prefs.windows[0].id
+        expect(store.addIncognitoWindow(frame: nil).sidebarVisible, "with no choice made, a new window shows its sidebar")
+        store.chooseSidebar(visible: false, window: first)
+        expect(!store.window(first).sidebarVisible, "the window hides its sidebar")
+        let incognito = store.addIncognitoWindow(frame: nil)
+        let normal = store.addWindow(spaceID: store.focusedSpaceID(window: first), frame: nil)
+        let blank = store.addBlankWindow(frame: nil)
+        expect([incognito, normal, blank].allSatisfy { !$0.sidebarVisible }, "new windows open with the sidebar hidden too")
+        store.chooseSidebar(visible: true, window: normal.id)
+        expect(store.addIncognitoWindow(frame: nil).sidebarVisible, "the choice made last counts, in whichever window")
+        expect(!store.window(first).sidebarVisible && !store.window(incognito.id).sidebarVisible, "open windows keep their own")
     }
 
     /// Arc's Clear on Today ("Clear unselected Today tabs"): the tab on screen and a tab playing

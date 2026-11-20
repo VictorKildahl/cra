@@ -1,0 +1,80 @@
+# promise: #644
+# A new window opens with the sidebar as it was last hidden or shown, as Arc's does (its
+# sidebarViewPreferences.sidebarMode). Cra opened every new window with the sidebar docked, so ⇧⌘N from a
+# window with the sidebar hidden gave an incognito window with it shown, and the page opened there kept it
+# (GitHub #644). Now the empty window holds the hidden sidebar out, and the first page sends it in (#483).
+# ⌘W in a window with no tab closes the window, the command bar with it, as Arc does. The File menu hides
+# Close Tab there and the bar's borderless panel, the key window, has no close button for AppKit to fall
+# back on: ⌘W did nothing. Cra's key monitor now hands it to Close Tab. The ⌘W here is posted to the bar;
+# a background copy has no key window, so AppKit's fallback reached the window's close button and closed
+# it anyway. "close tab: window" says Cra's own Close Tab did.
+budget rss=900 stalls50=20
+pace 0.3
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=normal
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# An empty window with its sidebar hidden and the bar up: ⌘W closes it.
+cra://action/newWindow
+wait 2
+cra://action/toggleSidebar
+wait 1
+cra://debug?sidebarShown=empty-hidden
+expect-log sidebar shown empty-hidden: visible=0 .* presentation=heldOpen
+cra://action/newTab
+wait 1
+cra://debug?commandBarRows=empty-hidden
+expect-log Cra command bar rows empty-hidden: open=1 mode=newTab
+cra://debug?key=w,13,1048576
+wait 1.5
+cra://debug?browserWindows=empty-closed
+expect-log browser windows empty-closed: count=1
+expect-log close tab: window
+reject-log close tab: commandBar
+
+# The reporter's: the sidebar hidden over a page, then ⇧⌘N. The incognito window's is hidden too, held
+# out while it has no tab, the bar up; ⌘W from the bar closes it.
+cra://action/toggleSidebar
+wait 1
+cra://debug?sidebarShown=normal-hidden
+expect-log sidebar shown normal-hidden: visible=0 .* presentation=hidden
+cra://action/newIncognitoWindow
+wait 2
+cra://debug?sidebarShown=incognito
+expect-log sidebar shown incognito: visible=0 .* presentation=heldOpen
+cra://debug?commandBarRows=incognito
+expect-log Cra command bar rows incognito: open=1 mode=newTab
+cra://debug?key=w,13,1048576
+wait 1.5
+cra://debug?browserWindows=incognito-closed
+expect-log browser windows incognito-closed: count=1
+reject-log browser windows incognito-closed: kind=incognito
+
+# Again, and a page typed in its bar: the sidebar goes in, as in Arc.
+cra://action/newIncognitoWindow
+wait 2
+cra://commandbar?query=${PAGE}?n=private
+wait 1
+cra://debug?key=%0D,36,0
+expect-log GET \S*\?n=private
+wait 1.5
+cra://debug?sidebarShown=private-page
+expect-log sidebar shown private-page: visible=0 .* presentation=hidden
+cra://debug?browserWindows=private-page
+expect-log browser windows private-page: kind=incognito .*open=1
+
+# Shown again (in the incognito window), a new window follows that choice: ⌘N opens it docked.
+cra://action/toggleSidebar
+wait 1
+cra://action/newWindow
+wait 2
+cra://debug?sidebarShown=new-normal
+expect-log sidebar shown new-normal: visible=1 .* presentation=docked
+cra://debug?commandBarRows=new-normal
+expect-log Cra command bar rows new-normal: open=1 mode=newTab
+cra://debug?key=w,13,1048576
+wait 1.5
+cra://debug?browserWindows=end
+expect-log browser windows end: count=2

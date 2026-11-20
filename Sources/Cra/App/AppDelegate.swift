@@ -3034,11 +3034,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return nil
             }
             guard let self, event.modifierFlags.intersection([.command, .control]).isEmpty == false,
-                  let window = event.window, window.windowController is MainWindowController || window === self.main.window else { return event }
-            if self.undoClosedTab(event) { return nil }
-            guard let action = self.bindings.action(for: event) else { return event }
-            // Let the menu bar take it first (normal path); only act when it cannot.
-            if NSApp.mainMenu?.performKeyEquivalent(with: event) == true { return nil }
+                  let window = event.window else { return event }
+            // The command bar's own panel keeps its keys (its field's ⌘A, ⌘Z…) but ⌘W, which goes to the
+            // bar's window: in a window with no tab the File menu hides Close Tab and the panel has no close
+            // button of its own, so ⌘W went nowhere (#644).
+            let fromBar = window === self.main?.openCommandPanel
+            guard window.windowController is MainWindowController || window === self.main.window || fromBar else { return event }
+            if !fromBar, self.undoClosedTab(event) { return nil }
+            guard let action = self.bindings.action(for: event), !fromBar || action.id == "closeTab" else { return event }
+            // Let the menu bar take it first (normal path); only act when it cannot. A row the menu hides
+            // still matches its key and runs nothing: Close Tab with no tab selected, where ⌘W is the
+            // window's (FileMenu.shows, #644).
+            let rowHidden = !FileMenu.shows(action.id, tabSelected: self.store.selectedTabID != nil)
+            if !rowHidden, NSApp.mainMenu?.performKeyEquivalent(with: event) == true { return nil }
             self.perform(action.id)
             return nil
         }
@@ -3326,10 +3334,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "deleteSpace": if !main.isStandalone { confirmDeleteSpace(store.focusedSpace) }
         case "manageSpaces": if !main.isStandalone { main.showManageSpaces() }
         case "closeTab":
-            // Arc: "Close current tab or window". With the command bar open, ⌘W closes the bar, as
-            // Escape does, and the tab behind it stays (#497).
-            if main.commandBar.isOpen { main.commandBar.close() }
-            else if current != nil { main.closeCurrentTab() } else { main.window?.performClose(nil) }
+            // Arc: "Close current tab or window". With the command bar open over a tab, ⌘W closes the bar,
+            // as Escape does, and the tab stays (#497); a window with no tab closes, bar and all (#644).
+            let target = FileMenu.closeTab(commandBarOpen: main.commandBar.isOpen, tabSelected: current != nil)
+            CraLog.note("close tab: \(target.rawValue)")
+            switch target {
+            case .commandBar: main.commandBar.close()
+            case .tab: main.closeCurrentTab()
+            case .window: main.window?.performClose(nil)
+            }
         case "closeWindow": main.window?.performClose(nil)
         case "reopenClosedTab":
             guard !main.isIncognito else { break }  // incognito tabs leave nothing to restore

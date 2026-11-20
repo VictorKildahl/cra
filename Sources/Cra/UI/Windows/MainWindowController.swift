@@ -278,7 +278,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 // a 200 pt sidebar dragged shut from 200).
                 shell.sidebarWidth = CGFloat(resize.startWidth)
                 if sidebarVisible {
-                    sidebarVisible = false
+                    store.chooseSidebar(visible: false, window: windowID)
                     hiddenByResize = true
                 }
             case .hidden:
@@ -287,7 +287,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 shell.sidebarWidth = CGFloat(w)
                 if hiddenByResize {
                     hiddenByResize = false
-                    sidebarVisible = true
+                    store.chooseSidebar(visible: true, window: windowID)
                 }
             }
             shell.layoutSubtreeIfNeeded()
@@ -3191,7 +3191,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             closeLibrary()
             if showed { return }
         }
-        sidebarVisible.toggle()
+        // New windows open with it as it is now, as in Arc (#644).
+        store.chooseSidebar(visible: !sidebarVisible, window: windowID)
         if !sidebarVisible { floatingSidebar?.hide(animated: true) }
     }
 
