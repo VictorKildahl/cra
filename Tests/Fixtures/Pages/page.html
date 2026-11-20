@@ -14,6 +14,8 @@
   // ?icon=1: a red square favicon, for checks that show a page's favicon (#381).
   if (query.get('icon') === '1') { const l = document.createElement('link'); l.rel = 'icon'; l.href = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVR4nGN4ZqPxnxLMMGrAqAGjBgwXAwB2LEkfOWMJxAAAAABJRU5ErkJggg=='; document.head.appendChild(l); }
   if (query.get('beforeunload') === '1') addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
+  // ?bg=<rrggbb>: the page's background, for checks of the toolbar colour it gives its tab (#629).
+  if (/^[0-9a-f]{6}$/i.test(query.get('bg') || '')) document.documentElement.style.background = document.body.style.background = '#' + query.get('bg');
   // ?go=<address>: answers, then sends the tab on to that address, as a link shortener (t.co) does (#597).
   if (query.get('go')) location.replace(query.get('go'));
   const rows = document.getElementById('rows');

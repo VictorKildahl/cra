@@ -107,7 +107,8 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 - (void)browser:(CraBrowser *)browser didFinishLoadingURL:(NSString *)url title:(NSString *)title statusCode:(NSInteger)statusCode;
 - (void)browser:(CraBrowser *)browser didLoadFavicon:(NSImage *)image forURL:(NSString *)iconURL;
 - (void)browser:(CraBrowser *)browser didChangeStatusMessage:(NSString *)message;
-/// The page's theme colour (meta theme-color or body background) as "#RRGGBB", or "" when unknown.
+/// The page's toolbar colour as "#RRGGBB", or "" when unknown. Cra reads it off the page's pixels
+/// (ToolbarSampler, #629); the engines don't report theme-color, which Arc ignores. An Easel reports its own.
 - (void)browser:(CraBrowser *)browser didReportThemeColor:(NSString *)hex;
 - (void)browser:(CraBrowser *)browser didChangeFullscreen:(BOOL)fullscreen;
 /// Cmd-click, middle-click and similar: open a plain new tab.

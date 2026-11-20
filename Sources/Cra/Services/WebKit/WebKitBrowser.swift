@@ -216,9 +216,6 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                     self.delegate?.browser(self, didChangeProgress: web.estimatedProgress)
                 }
             },
-            web.observe(\.themeColor, options: [.new]) { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.reportThemeColor() }
-            },
             web.observe(\.cameraCaptureState, options: [.new]) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.reportCapture() }
             },
@@ -312,14 +309,6 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             DispatchQueue.main.asyncAfter(deadline: .now() + AudibleHold.quiet, execute: work)
         case .nothing:
             break
-        }
-    }
-
-    @MainActor
-    private func reportThemeColor() {
-        guard let web = webView, !closed else { return }
-        if let color = web.themeColor, let hex = Self.hex(color) {
-            delegate?.browser(self, didReportThemeColor: hex)
         }
     }
 
@@ -419,7 +408,6 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         guard !closed else { return }
         let url = webView.url?.absoluteString ?? pendingURL
         delegate?.browser(self, didFinishLoadingURL: url, title: webView.title ?? "", statusCode: lastStatus)
-        reportThemeColor()
         probeBackgroundColor()
         loadFavicon()
     }
@@ -831,8 +819,8 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             webView?.evaluateJavaScript(Self.backgroundProbe, in: nil, in: Self.world) { [weak self] r in
                 MainActor.assumeIsolated {
                     guard let self, !self.closed, let hex = (try? r.get()) as? String, !hex.isEmpty else { return }
+                    // The toolbar takes the page's pixels, not its theme-color (ToolbarSampler, #629).
                     self.delegate?.browser?(self, didReportBackgroundColor: hex)
-                    if self.webView?.themeColor == nil { self.delegate?.browser(self, didReportThemeColor: hex) }
                 }
             }
         }
@@ -1242,12 +1230,6 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     }
 
     // MARK: Helpers
-
-    static func hex(_ color: NSColor) -> String? {
-        guard let c = color.usingColorSpace(.sRGB), c.alphaComponent > 0 else { return nil }
-        return String(format: "#%02x%02x%02x", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
-                      Int((c.blueComponent * 255).rounded()))
-    }
 
     /// Chromium's net error for a URL loading error, for the log and ExtensionPageRetry.
     static func netError(_ e: NSError) -> Int {

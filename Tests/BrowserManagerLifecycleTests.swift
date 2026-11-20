@@ -263,6 +263,7 @@ enum BrowserManagerLifecycleTests {
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
+        await toolbarSampleCase()
         syncedDocumentKeepsLivePagesCase()
         extensionPageRetryCase()
         await sleepCase("malformed or missing replies cannot authorize sleeping", reply: nil) { _, _ in }
@@ -2450,6 +2451,73 @@ enum BrowserManagerLifecycleTests {
         manager.show(a, focus: false)
         expect(woken.browser.backgroundProbes == 1, "one already on screen is not asked again")
         manager.closeAll()
+    }
+
+    // promise: #629
+    /// The toolbar takes its colour from the page's pixels when the load ends, as Arc does
+    /// (GitHub's light header under its dark theme-color gave Cra a dark bar, #629). A page that
+    /// loads behind is read when it comes on screen (a hidden page paints nothing to read), and
+    /// a reading that lands after the page moved on is dropped.
+    @MainActor
+    private static func toolbarSampleCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let a = store.createTab(url: "https://example.test/issues").id, b = store.createTab(url: "https://example.test/dark").id
+        let ra = manager.ensureRuntime(for: a)!, rb = manager.ensureRuntime(for: b)!
+        func captures(_ rt: TabRuntime) -> Int { rt.browser.replies.filter { $0.method == "Page.captureScreenshot" }.count }
+        func settle(_ rt: TabRuntime, to hex: String) async {
+            for _ in 0..<200 where rt.themeColor != hex {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+        }
+
+        manager.show(a, focus: false)
+        ra.browser.setLoading(true)
+        ra.browser.setLoading(false)
+        expect(captures(ra) == 1, "a page on screen is read when its load ends")
+        ra.browser.reply(to: "Page.captureScreenshot", with: screenshot(header: (0xF6, 0xF8, 0xFA), below: (0xFF, 0xFF, 0xFF)))
+        await settle(ra, to: "#F6F8FA")
+        expect(ra.themeColor == "#F6F8FA" && store.item(a)?.tab?.themeColor == "#F6F8FA",
+               "the bar is the page's top-right corner (got \(ra.themeColor))")
+
+        rb.browser.setLoading(true)
+        rb.browser.setLoading(false)
+        expect(captures(rb) == 0, "a page loading behind isn't read: it paints nothing")
+        manager.show(b, focus: false)
+        expect(captures(rb) == 1, "it is read when it comes on screen")
+        rb.browser.reply(to: "Page.captureScreenshot", with: screenshot(header: (0x20, 0x30, 0x40), below: (0x20, 0x30, 0x40)))
+        await settle(rb, to: "#203040")
+        expect(rb.themeColor == "#203040", "the page read on screen gives its bar (got \(rb.themeColor))")
+        manager.show(a, focus: false)
+        manager.show(b, focus: false)
+        expect(captures(rb) == 0, "a page already read isn't read again when it comes back")
+
+        rb.browser.setLoading(true)
+        rb.browser.setLoading(false)
+        rb.browser.setLoading(true)
+        rb.browser.reply(to: "Page.captureScreenshot", with: screenshot(header: (0xFF, 0x00, 0x00), below: (0xFF, 0x00, 0x00)))
+        await settle(rb, to: "#FF0000")
+        expect(rb.themeColor == "#203040", "a reading of the page before a new load doesn't colour the new one")
+        manager.closeAll()
+    }
+
+    /// Page.captureScreenshot's answer: a 2x viewport 400×200 points, a 64-point header over the page.
+    private static func screenshot(header: (Int, Int, Int), below: (Int, Int, Int)) -> String {
+        let w = 800, h = 400
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        func fill(_ c: (Int, Int, Int), _ rect: CGRect) {
+            ctx.setFillColor(red: CGFloat(c.0) / 255, green: CGFloat(c.1) / 255, blue: CGFloat(c.2) / 255, alpha: 1)
+            ctx.fill(rect)
+        }
+        fill(below, CGRect(x: 0, y: 0, width: w, height: h))
+        fill(header, CGRect(x: 0, y: h - 128, width: w, height: 128))
+        let data = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
+        CGImageDestinationFinalize(dest)
+        let json = try! JSONSerialization.data(withJSONObject: ["data": (data as Data).base64EncodedString()])
+        return String(decoding: json, as: UTF8.self)
     }
 
     /// A synced sidebar from the other Mac replaced the document while this Mac's page stayed

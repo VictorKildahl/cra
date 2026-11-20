@@ -1649,16 +1649,7 @@ public:
         if (!o) return;
         [o.delegate browser:o didFinishLoadingURL:NSStringFromCef(frame->GetURL()) title:o.currentTitle
                  statusCode:httpStatusCode];
-        // Ask the page for its theme colour; the answer comes back as "theme:<css colour>".
-        RunPageScript(frame, "",
-            "(function(send){function probe(){try{var c='';var ms=document.querySelectorAll('meta[name=\"theme-color\"]');"
-            "for(var i=0;i<ms.length;i++){if(!ms[i].getAttribute('media')){c=ms[i].getAttribute('content')||'';if(c)break;}}"
-            "if(!c&&document.body){var b=getComputedStyle(document.body).backgroundColor;if(b&&b!=='rgba(0, 0, 0, 0)'&&b!=='transparent'){c=b;}}"
-            "if(!c){var h=getComputedStyle(document.documentElement).backgroundColor;if(h&&h!=='rgba(0, 0, 0, 0)'&&h!=='transparent'){c=h;}}"
-            "if(!c){c='rgb(255, 255, 255)';}"
-            "var d=document.createElement('div');d.style.color=c;document.body.appendChild(d);"
-            "var rgb=getComputedStyle(d).color;d.remove();send('theme:'+rgb);}catch(e){}}"
-            "probe();setTimeout(probe,1500);})");
+        // The toolbar takes the page's pixels, not its theme-color (ToolbarSampler, #629).
         RunPageScript(frame, "bg", kBackgroundProbe);
     }
 
@@ -1709,13 +1700,6 @@ public:
                 [o.delegate browser:o didReportBackgroundColor:hex];
             return;
         }
-        const std::string prefix = "theme:";
-        if (m.compare(0, prefix.size(), prefix) != 0) return;
-        CraBrowser* o = owner_;
-        if (!o) return;
-        std::string rgb = m.substr(prefix.size());  // "rgb(r, g, b)", "rgba(…)" or "none"
-        NSString* hex = rgb == "none" ? @"none" : HexFromCSSColor(rgb);
-        [o.delegate browser:o didReportThemeColor:hex];
     }
 
     void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode,

@@ -8,7 +8,11 @@ final class TabRuntime {
     let tabID: UUID
     let browser: CraBrowser
     var progress: Double = 0
+    /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
+    /// The page finished a load that hasn't been read for the toolbar yet: it loaded behind,
+    /// where it paints nothing, so it is read when it comes on screen (#629).
+    var toolbarSamplePending = false
     /// Chrome's bars over the page (the Chromium engine's; CEF draws its own): Cra's card draws them.
     var infoBars: [PageInfoBar] = []
     /// What the page paints behind its content ("#RRGGBB", "" until reported).
@@ -463,6 +467,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
                 // A loading page gets its thumbnail once it has loaded: a capture now would be of
                 // a half-painted page, in the busiest second of its load (#136).
                 if !rt.browser.isLoading { scheduleSnapshot(id) }
+                if rt.toolbarSamplePending, !rt.browser.isLoading { sampleToolbarColor(id) }
                 log(id, "shown: \(site(rt.browser.currentURL, id, rt.browser))\(rt.browser.isLoading ? ", loading" : "")\(rt.browser.isCreated ? "" : ", page not created yet")")
                 // A loading page is probed once it has loaded (didChangeLoading), or says it never did.
                 scheduleProbe(id, rt, after: rt.browser.isLoading ? 12 : 3)
@@ -1590,6 +1595,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if !loading { scheduleHistorySave(id) }
         // Two seconds on, the page (a video player especially) has settled before it is captured.
         if !loading { scheduleSnapshot(id, after: 2) }
+        if let rt = runtimes[id] { rt.toolbarSamplePending = !loading }
+        if !loading { sampleToolbarColor(id) }
         if !loading, let rt = runtimes[id], rt.probeWork != nil { scheduleProbe(id, rt, after: 3) }
         if !loading, id == visibleTabID { Perf.phase("firstPageLoaded") }
         delegate?.browserManagerDidUpdate(id)
@@ -1699,6 +1706,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         store.setFaviconKey(id, key)
     }
 
+    /// Arc's toolbar colour (#629): the page's top-right corner once its load ends, not its
+    /// theme-color. A page behind paints nothing, so it waits until it is on screen (show).
+    private func sampleToolbarColor(_ id: UUID) {
+        guard let rt = runtimes[id], rt.toolbarSamplePending, !rt.discarded, visibleTabIDs.contains(id) else { return }
+        rt.toolbarSamplePending = false
+        let revision = rt.navigationRevision
+        ToolbarSampler.sample(rt.browser) { [weak self, weak rt] hex in
+            // A reading that lands after the page moved on isn't the new page's colour.
+            guard let self, let rt, self.runtimes[id] === rt, rt.navigationRevision == revision, !rt.browser.isLoading else { return }
+            self.browser(rt.browser, didReportThemeColor: hex)
+        }
+    }
+
+    /// The page's toolbar colour: ToolbarSampler's reading (engines no longer pass theme-color
+    /// here), or an Easel's fixed bar.
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) {
         // The blank document a discard leaves answers the load end's probe with white (#237).
         guard let id = tabID(of: browser), runtimes[id]?.discarded != true else { return }

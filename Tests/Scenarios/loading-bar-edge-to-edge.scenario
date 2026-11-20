@@ -16,7 +16,11 @@ wait 4
 cra://debug?windowState=edge-page-light
 expect-log window state edge-page-light: main0 .* fills=1 .* loading=0,0,132x10 ink=dark shown=1 phase=loading
 
-cra://open?url=${ORIGIN}/loading-dark.html
+# The bar takes a page's colour when its load ends, as Arc (#629): a dark page that finished gives the
+# tab its dark bar, which it keeps while the next page in it loads.
+cra://open?url=${ORIGIN}/page.html?bg=121212
+wait 3
+cra://navigate?url=${ORIGIN}/loading-dark.html
 wait 4
 cra://debug?windowState=edge-page-dark
 expect-log window state edge-page-dark: main0 .* fills=1 .* loading=0,0,132x10 ink=light shown=1 phase=loading

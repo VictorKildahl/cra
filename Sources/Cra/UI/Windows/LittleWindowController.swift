@@ -2054,6 +2054,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         state.canGoBack = canGoBack
         state.canGoForward = canGoForward
         if !loading { state.progress = 0 }
+        // Peek's bar takes the page's colour as the main window's does (#629): its top-right corner.
+        if !loading, browser === self.browser {
+            ToolbarSampler.sample(browser) { [weak self, weak browser] hex in
+                guard let self, let browser, browser === self.browser, !browser.isLoading else { return }
+                self.state.themeColor = hex
+            }
+        }
         syncSlowResponse(browser)
     }
 

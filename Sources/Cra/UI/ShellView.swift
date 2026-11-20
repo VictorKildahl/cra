@@ -968,6 +968,12 @@ final class ShellView: NSView {
     /// For `cra://debug?toolbar=…`: `out` and `in` put the floating bar there, `sample` looks at
     /// the pointer once, `at:x,y` says what a pointer there would be to the bar; anything else is
     /// a label. Every one answers with the command and where the bar is.
+    /// toolbarColor=<label>: the colour behind the first pane's bar as RRGGBB ("#" starts a comment in a
+    /// scenario), "white" when it has none (#629).
+    func toolbarColorReadout(_ label: String) -> String {
+        "toolbar colour \(label): bar=\(paneCards.first?.toolbarColor.map { $0.replacingOccurrences(of: "#", with: "") } ?? "white")"
+    }
+
     func debugToolbar(_ command: String) -> String {
         switch command {
         case "out": bringFloatingToolbarOut()

@@ -1142,7 +1142,7 @@
 #548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::barSitsInTheMarginAboveACardInItsInset  5c2a40bc258e
 #548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::barStaysAtTheTopOverACardThatFillsTheWindow  ea16076c58d6
 #548   Packages/CraCore/Tests/CraCoreTests/LoadingIndicatorPlacementTests.swift::inkFollowsWhatIsUnderTheBar  c1270445b16c
-#548   Tests/Scenarios/loading-bar-edge-to-edge.scenario  ec60a4518d95
+#548   Tests/Scenarios/loading-bar-edge-to-edge.scenario  223e23ac6df0
 #548   Tests/Scenarios/loading-bar-full-screen.scenario  9f4ff50f7b0b
 #549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::anAutoThemesNameFollowsMacOSButItsStripDoesnt  8f73c859196b
 #549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::onlyTheSpaceNameTakesTheSpacesColour  efd6d2934c10
@@ -1330,6 +1330,16 @@
 #618   Tests/Scenarios/sidebar-long-list.scenario  d8917fd58f10
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
 #626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::classicScrollbarIsNotThePage  abccd5334bec
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::emptyCaptureHasNoColour  3bc22c2230eb
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::gradientGivesItsRightEdge  318ba07ac859
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::lightHeaderGivesLightBar  067bfd4d0734
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::patchIsAFewPointsTall  47c359484584
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::patchIsTheTopRightCorner  710a00db9818
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::plainPageAtEveryScale  fb9658bff920
+#629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::rightCornerNotMajority  627ed13703cc
+#629   Tests/BrowserManagerLifecycleTests.swift::toolbarSampleCase  0561e1ab0765
+#629   Tests/Scenarios/toolbar-colour-from-page.scenario  c790f08859b2
 #631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aClosingWindowLeavesItsFullScreenItself  12ad008e3fd3
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aWindowTheUserMadeFullScreenStays  8a2d0d776ad0

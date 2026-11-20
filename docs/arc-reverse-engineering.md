@@ -315,8 +315,8 @@ earlier `.underWindowBackground` + 15 % lift calibration.
 
 Toolbar band is opaque and theme-derived (same colour over any backdrop):
 light = HSB(h, s + 0.10, v · 0.46) of the raw base colour (#F8D558 → #725F1D; Arc #72601D),
-dark = HSB(h, s · 0.6, v · 0.8) (#010220 → #0A0B19; Arc #0E0B16). Pages with a
-`theme-color` meta use that colour instead (Kildash #1A1917, Messenger white).
+dark = HSB(h, s · 0.6, v · 0.8) (#010220 → #0A0B19; Arc #0E0B16). A page gives the bar its own
+colour instead: its top-right corner, not its theme-color (see "Toolbar colour from the page", #629).
 
 Other measured details: window buttons are muted grey discs (bg −10 %) until the pointer
 reaches the sidebar's title row; favicons 16 pt centred 25.75 pt from the window edge; space
@@ -942,7 +942,7 @@ has no H.264/AAC. Cra now ships its own CEF build with them; see docs/release.md
   was white 38 % (lightening); now black 4.5 % on light themes. The active favourite keeps
   its white 38 % fill explicitly.
 - Toolbar colour: Arc tints the bar from the page (theme-color meta, else the page
-  background). Cra's probe had an unreachable body/html fallback (a `__none__` sentinel was
+  background). Corrected 20 Nov (#629): it reads the page's top-right corner and ignores theme-color. Cra's probe had an unreachable body/html fallback (a `__none__` sentinel was
   set first), so pages without a meta tag got the space tint. Fixed: meta → body
   background → html background → white. Cra's New Tab page now gives a 34/34/34 bar.
 - Library glyph: `LibraryButton` composes `archivebox.fill` with a cloud, dot and triangle
@@ -1173,6 +1173,23 @@ Duplicate pressed over AX, StorableSidebar.json read after each.
   Profiles, or only your X Profile?"), New documents, Download location, and Privacy and Security,
   Passwords, Credit Cards, Notifications, Clear Browsing Data.
 
+### Toolbar colour from the page (Arc 1.173.1, live, 20 Nov 2026, #629)
+Victor's Arc in a File ▸ Blank Window, local test pages loaded over AppleScript (`make new tab`, `execute
+javascript` to scroll), window captures by id (Display P3, 2x), the bar read at x 3400 px.
+- [O] Theme-color is ignored: a `#602040` theme-color over a 64 pt `#F6F8FA` header gave a `#F6F8FA` bar.
+  The reporter's captures agree: GitHub's light header under its dark `#1e2327` theme-color, and a site with
+  no theme-color and a beige body whose dark hero photo under a see-through nav gave a dark bar.
+- [O] It is the top-right corner, not the majority or the mean: 70/30, 50/50 and 90/10 red | blue tops gave
+  blue; eight stripes gave the last; a black-to-white gradient gave pure white.
+- [O] A few points tall: a 24 pt red band over green gave red, a 10 pt one mostly red, a 2 pt line a
+  green-yellow mix (not a clean blend; Arc's downscale filter overshoots one channel).
+- [O] Once, when the load ends (#84: white while a load is held open): scrolling the header away
+  (300 pt) and a header recoloured by script 3 s after load both left the bar as it was. A plain page had
+  its colour within ~0.1 s of the AppleScript returning.
+- Cra: ToolbarSample (2 × 12 pt at the corner, left of a classic scroll bar) on an unclipped
+  Page.captureScreenshot at load end (ToolbarSampler); a page that loaded behind is read when shown. The
+  engines no longer report theme-color. Peek's bar is read the same way (Arc's Peek not measured).
+
 ### One space (Arc 1.171, static)
 - [O strings] Defaults key `showSpaceHeaderOnSingleUnnamedSpaces` (+ `…DidChange` action); the space context
   menu has "Show Space Header" / "Hide Space Header" ("Menu item to toggle space header visibility").
@@ -1376,8 +1393,8 @@ of the sidebar strip, pixel runs at x=500 px (2x), y = 160/700/1200/1700/2100.
 - Hover (pointer moved, same backdrop): Arc row 220/210/171 → 210/200/163, favourite tile
   207/194/166 → 197/184/158; Cra row 207/198/160 → 198/189/154 (same Δ), tile hover now
   black 9 % (was equal to the resting tile).
-- Toolbar: white until the page reports a colour (meta theme-color, else body/html
-  background, else white), as Arc.
+- Toolbar: white until the page gives a colour, as Arc (since #629 the page's top-right corner
+  once its load ends, not theme-color or body/html background).
 - Sidebar toggle (⌘S) recorded at 60 fps with `screencapture -V`, per-frame mean |Δ| on the
   sidebar strip: Arc moves for 5 frames (108, 34, 15, 6, 1 → 66 % of the travel in the first
   frame, then a soft landing); Cra 5 frames (59, 160, 35, 13, 10; the first value is a

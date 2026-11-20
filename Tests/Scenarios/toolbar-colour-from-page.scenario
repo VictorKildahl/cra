@@ -1,0 +1,9 @@
+# promise: #629
+# The toolbar takes the page's colour as Arc does: its top-right corner once the load ends, not its
+# theme-color. GitHub's light header under its dark theme-color gave Cra a dark bar.
+# Readout: the colour the first pane's bar is painted in.
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://open?url=${ORIGIN}/toolbar-colour.html
+wait 4
+cra://debug?toolbarColor=github
+expect-log toolbar colour github: bar=F6F8FA$
