@@ -1390,6 +1390,9 @@
 #634   Tests/ExtensionPopupWindowTests.swift::hangsUnderItsButtonUntilDragged  ecd8a3e853c5
 #634   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #634   Tests/Scenarios/floating-sidebar-extension-popup-fullscreen.scenario  735aacadfad7
+#635   Packages/CraCore/Tests/CraCoreTests/FloatingSidebarStillPointerTests.swift::aPointMovedEitherWayCounts  23a11eef3154
+#635   Tests/FloatingSidebarTests.swift::aStillPointerWaitsToMove  f912b8ead8fe
+#635   Tests/Scenarios/library-swipe-out-still-pointer.scenario  08cf5c8a8571
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aClosingWindowLeavesItsFullScreenItself  12ad008e3fd3
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aWindowTheUserMadeFullScreenStays  8a2d0d776ad0
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aWindowTheVideoTookFullScreenComesBack  3747ecd4ef6a

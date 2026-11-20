@@ -47,6 +47,9 @@ final class FloatingSidebarController {
     private let shadowClip = CALayer()
     /// The pointer's wait in the reveal strip (#293).
     private var dwell = FloatingSidebarRevealDwell()
+    /// Where the pointer rested when the sidebar went away without it moving (#635): the strip brings
+    /// nothing out until the pointer moves from there (FloatingSidebarStillPointer).
+    private(set) var stillPointer: CGPoint?
     /// The pointer's way out past the window's left edge, and its wait there (#350).
     private var offEdge = FloatingSidebarOffEdge()
     /// The clock the wait runs on; the tests stand one in.
@@ -179,6 +182,7 @@ final class FloatingSidebarController {
     /// screen (the tests stand one in).
     func pointerSample(at p: CGPoint) {
         guard isShown || sidebarHidden() else { return }
+        if !isShown, pointerStillThere(p) { return }
         if !isShown {
             let t = now()
             guard sidebarHidden(), isKey else {
@@ -222,9 +226,30 @@ final class FloatingSidebarController {
     /// The shell saw the pointer move in the strip: a sample toward the same wait as the poll's, so a
     /// moving pointer can't skip it (#293).
     func edgeHovered() {
-        guard !isShown, sidebarHidden(), isKey else { return }
+        guard !isShown, sidebarHidden(), isKey, !pointerStillThere(pointerInShell) else { return }
         edgeSample(inStrip: true)
     }
+
+    /// The sidebar went away with no move of the pointer (a swipe out of the Library, ⇧⌘L or Esc out of a
+    /// Library a hidden sidebar opened; #635): the strip under a resting pointer waits for it to move.
+    func waitForPointerToMove(from p: CGPoint? = nil) {
+        stillPointer = p ?? pointerInShell
+        dwell.reset()
+        offEdge.reset()
+        if staged { unstage() }
+    }
+
+    /// Scenarios (#635): as if the pointer had moved since.
+    func debugPointerMoved() { stillPointer = nil }
+
+    /// Whether the pointer is still where it rested when the sidebar went away (and the strip waits).
+    private func pointerStillThere(_ p: CGPoint) -> Bool {
+        guard let still = stillPointer else { return false }
+        if FloatingSidebarStillPointer.moved(from: still, to: p) { stillPointer = nil; return false }
+        return true
+    }
+
+    private var pointerInShell: CGPoint { shell.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil) }
 
     /// The shell saw the pointer leave the sidebar over the window itself, where no page window takes
     /// the pointer (an empty window, GitHub #483).

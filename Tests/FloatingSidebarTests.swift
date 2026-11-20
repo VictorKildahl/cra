@@ -108,6 +108,7 @@ enum FloatingSidebarTests {
         dockingFromHeldOpenHasOneOwner(window: window, sidebar: sidebar, panel: panel)
         dockingARevealedSidebarCanBeSuperseded(window: window, sidebar: sidebar, panel: panel)
         comesOutOnTheRight(window: window, sidebar: sidebar, shell: shell)
+        aStillPointerWaitsToMove(window: window, sidebar: sidebar)
 
         // #136: the pointer is sampled only while Cra is the active app.
         sidebar.install()
@@ -136,6 +137,33 @@ enum FloatingSidebarTests {
 
     /// GitHub #464: with the sidebar on the right, its panel stands on the window's right edge, the
     /// sidebar rests Arc's 5 pt in from it, and its resize strip is the edge beside the page, its left.
+    // promise: #635
+    /// A swipe out of the Library (or ⇧⌘L / Esc out of one a hidden sidebar opened) hides the sidebar with
+    /// the pointer resting where it was, in the edge strip in the report: the strip's wait brought the
+    /// floating sidebar straight back out over the page. As in Arc, it waits for the pointer to move.
+    @MainActor
+    private static func aStillPointerWaitsToMove(window: NSWindow, sidebar: FloatingSidebarController) {
+        var clock: TimeInterval = 900
+        sidebar.now = { clock }
+        sidebar.keyWindow = { window }
+        sidebar.hide(animated: false)
+        let edge = CGPoint(x: 4, y: sidebar.shell.bounds.midY)
+        func sample(_ p: CGPoint, at t: TimeInterval) {
+            clock = t
+            sidebar.pointerSample(at: p)
+        }
+        sidebar.waitForPointerToMove(from: edge)
+        for t in [900.0, 900.2, 900.5, 901.5] { sample(edge, at: t) }
+        expect(!sidebar.isShown && !sidebar.staged, "a pointer resting in the strip as the sidebar goes brings nothing out")
+        sample(CGPoint(x: edge.x + 0.4, y: edge.y), at: 902)
+        expect(!sidebar.isShown && sidebar.stillPointer != nil, "less than a point is the same place")
+        sample(CGPoint(x: edge.x, y: edge.y + 3), at: 903)
+        sample(CGPoint(x: edge.x, y: edge.y + 3), at: 903.2)
+        expect(sidebar.isShown && sidebar.stillPointer == nil, "moved inside the strip, it comes out after the usual wait")
+        sidebar.hide(animated: false)
+        sidebar.now = { ProcessInfo.processInfo.systemUptime }
+    }
+
     // promise: #464
     @MainActor
     private static func comesOutOnTheRight(window: NSWindow, sidebar: FloatingSidebarController, shell: ShellView) {

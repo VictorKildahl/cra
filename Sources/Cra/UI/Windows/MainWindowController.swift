@@ -3345,6 +3345,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if libraryShowedSidebar {
             libraryShowedSidebar = false
             sidebarVisible = false
+            // ⇧⌘L and Esc move no pointer either (#635).
+            floatingSidebar?.waitForPointerToMove()
         } else {
             shell.animateSidebar(visible: shell.sidebarVisible, floating: false, fullscreen: shell.contentFullscreen, width: width, duration: 0.1)
         }
@@ -3871,6 +3873,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // It came out of a hidden sidebar, and that is where leaving it goes back to (Arc).
             libraryShowedSidebar = false
             setSidebarVisibleInPlace(false)
+            // Two fingers move no pointer: one resting in the edge strip brought the sidebar straight
+            // back out over the page (#635).
+            floatingSidebar?.waitForPointerToMove()
             CraLog.note("library left by a swipe: the sidebar hides again")
         }
         shell.thawPages()

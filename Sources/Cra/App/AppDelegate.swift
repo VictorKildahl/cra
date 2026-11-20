@@ -2647,6 +2647,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // floatingSidebar=1 out, =0 away, =hold out and kept there whatever the pointer does (#424).
             // =release lets the pointer decide again without sending it away; =state:<step> logs it (#531).
             if let f = dict["floatingSidebar"], f.hasPrefix("state") { main.debugFloatingSidebarState(String(f.dropFirst(6))); return }
+            // floatingSidebar=still<label> (#635): whether the edge strip waits for the pointer to move.
+            if dict["floatingSidebar"] == "stillreset" { main.floatingSidebar?.debugPointerMoved(); return }
+            if let f = dict["floatingSidebar"], f.hasPrefix("still") {
+                CraLog.note("floating sidebar \(f): waits=\(main.floatingSidebar?.stillPointer == nil ? 0 : 1)")
+                return
+            }
             if dict["floatingSidebar"] == "release" { main.floatingSidebar?.heldOut = false; return }
             // extensionPopup=<step>: whether an extension's popup is up and where it hangs (#531).
             if let step = dict["extensionPopup"] { main.debugExtensionPopup(step); return }

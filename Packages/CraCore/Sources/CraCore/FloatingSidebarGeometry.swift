@@ -83,6 +83,21 @@ public enum FloatingSidebarGeometry {
 
 /// The wait before a hidden sidebar comes out: the pointer has to stay in the reveal strip for
 /// `FloatingSidebarGeometry.revealDwell`; leaving it starts the wait over (GitHub #293).
+/// The sidebar went away under a pointer that didn't move: a two-finger swipe out of the Library, or
+/// ⇧⌘L / Esc out of a Library that a hidden sidebar opened (GitHub #635). The pointer can be resting in the
+/// edge strip then, and the strip's wait brought the floating sidebar straight back out, a flash of the
+/// sidebar over the page. Arc's strip needs the pointer to move inside it (1.171, 2 Nov 2026: "a pointer
+/// jump into the strip does not reveal; a few points of movement inside it does"), so the strip waits for
+/// the pointer to move from where it was.
+public enum FloatingSidebarStillPointer {
+    /// Less than a point either way is the same place (the window server rounds what it reports).
+    public static let slop: CGFloat = 1
+
+    public static func moved(from start: CGPoint, to p: CGPoint) -> Bool {
+        abs(p.x - start.x) >= slop || abs(p.y - start.y) >= slop
+    }
+}
+
 public struct FloatingSidebarRevealDwell {
     public private(set) var since: TimeInterval?
 

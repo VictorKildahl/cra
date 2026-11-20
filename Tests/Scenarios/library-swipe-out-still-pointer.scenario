@@ -1,0 +1,36 @@
+# promise: #635
+# Out of the Library by a swipe, or by ⇧⌘L, the hidden sidebar hides again with the pointer resting where it was.
+# In the report it rested in the edge strip, and the floating sidebar came straight back out over the page for a
+# moment. As in Arc, the strip now waits for the pointer to move (FloatingSidebarStillPointer; the controller's
+# side is in Tests/FloatingSidebarTests.swift).
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=hidden-library
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=stillstart
+expect-log floating sidebar stillstart: waits=0
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?swipe=30,25
+wait 2
+expect-log library swipe from the hidden sidebar: lands docked
+cra://debug?swipe=-30,25
+wait 2
+expect-log library left by a swipe: the sidebar hides again
+cra://debug?floatingSidebar=stillswipe
+expect-log floating sidebar stillswipe: waits=1
+# ⇧⌘L into the Library from the hidden sidebar and out again, the pointer having moved since.
+cra://debug?floatingSidebar=release
+cra://debug?floatingSidebar=stillreset
+cra://debug?floatingSidebar=stillmoved
+expect-log floating sidebar stillmoved: waits=0
+cra://action/openLibrary
+wait 2
+cra://action/openLibrary
+wait 2
+cra://debug?floatingSidebar=stillkey
+expect-log floating sidebar stillkey: waits=1
