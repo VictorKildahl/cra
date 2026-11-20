@@ -63,8 +63,22 @@ extension Easel {
     public static let pickerRows: [[Shade]] = [[.black, .yellow, .pink, .red, .lightGreen, .darkGreen],
                                                [.white, .gray, .purple, .lightBlue, .darkBlue]]
 
-    /// Whether the colour picker applies: shapes, arrows and strokes.
-    public static func takesShade(_ kind: Item.Kind) -> Bool { defaultShade(kind) != nil }
+    /// Whether the colour picker applies: shapes, arrows and strokes, and text. Text is Cra's own (GitHub
+    /// #658): Arc's text pill has only +, Aa and −. A text with no colour picked is drawn in the canvas's
+    /// ink, as before.
+    public static func takesShade(_ kind: Item.Kind) -> Bool {
+        if case .text = kind { return true }
+        return defaultShade(kind) != nil
+    }
+
+    /// Whether the colour picker shows over these picks: every one takes a colour, and they are all
+    /// shapes or all text (#658). Text among shapes keeps it hidden, as #580 shipped it: a colour
+    /// for both would paint a shape's fill and a text's ink at once.
+    public static func pickerApplies(to kinds: [Item.Kind]) -> Bool {
+        guard !kinds.isEmpty, kinds.allSatisfy(takesShade) else { return false }
+        let texts = kinds.filter { if case .text = $0 { return true } else { return false } }.count
+        return texts == 0 || texts == kinds.count
+    }
 
     /// How a shape is painted: Arc fills rectangles and ellipses at 75 % and strokes everything
     /// 2.5 pt in the same colour.

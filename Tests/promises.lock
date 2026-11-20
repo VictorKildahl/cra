@@ -1452,6 +1452,9 @@
 #656   iOS/CraUITests/PageRestoreTests.swift::testAScrolledPageOpensWhereItWasAfterTheAppIsClosed  bc87e240b0d2
 #657   Packages/CraCore/Tests/CraCoreTests/MobileStatusBandTests.swift::theBandTakesThePagesColour  53e8729415af
 #657   iOS/CraUITests/StatusBandTests.swift::testTheStatusBarSitsOnThePagesColour  a51edc261764
+#658   Packages/CraCore/Tests/CraCoreTests/EaselObjectsTests.swift::theColourPickerAppliesToTextToo  f107d7c5fd90
+#658   Packages/CraCore/Tests/CraCoreTests/EaselObjectsTests.swift::thePickerShowsOverTextOrShapesNotBoth  32e2f573da8c
+#658   Tests/Scenarios/easel-text-colour.scenario  5e2fb83621eb
 #660   Tests/Scenarios/extension-store-copy-install-type.scenario  4b8996fb57e7
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b

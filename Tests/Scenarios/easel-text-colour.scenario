@@ -1,0 +1,11 @@
+# promise: #658
+# A text on an easel takes a colour from the picker, as shapes do (Cra's own: Arc's text pill has only +, Aa and −).
+# Picked, the text shows the colour picker over it, and a colour from it is the text's ink (GitHub #658).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://action/newEasel
+wait 2
+cra://debug?easelTextColor=red
+expect-log easel text color red: picker=1 shade=red ink=#[0-9A-F]{6}
+cra://debug?easelTextColor=lightBlue
+expect-log easel text color lightBlue: picker=1 shade=lightBlue ink=#[0-9A-F]{6}

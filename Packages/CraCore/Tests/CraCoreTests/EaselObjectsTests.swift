@@ -201,3 +201,22 @@ struct EaselThumbnailTests {
         #expect(e.thumbnailItem == nil)
     }
 }
+
+/// Colours for text on an easel, Cra's own (GitHub #658).
+struct EaselTextColourTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/658"))
+    func theColourPickerAppliesToTextToo() {
+        #expect(Easel.takesShade(.text("Hello", size: 24)))
+        #expect(Easel.defaultShade(.text("Hello", size: 24)) == nil, "a text with no colour picked keeps the canvas's ink")
+        #expect(Easel.takesShade(.rectangle) && !Easel.takesShade(.image(file: "a.png")))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/658"))
+    func thePickerShowsOverTextOrShapesNotBoth() {
+        let text = Easel.Item.Kind.text("Hello", size: 24)
+        #expect(Easel.pickerApplies(to: [text]) && Easel.pickerApplies(to: [text, .text("Hi", size: 18)]))
+        #expect(Easel.pickerApplies(to: [.rectangle, .ellipse]))
+        #expect(!Easel.pickerApplies(to: [.rectangle, text]), "text among shapes keeps it hidden, as #580 shipped")
+        #expect(!Easel.pickerApplies(to: []) && !Easel.pickerApplies(to: [.image(file: "a.png")]))
+    }
+}

@@ -1536,6 +1536,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let target = dict["easelCanvas"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugCanvas(target); return
             }
+            // easelTextColor=<shade>: the open easel's first text (one is added if there is none) picked and given
+            // that colour from the picker; cra.log says whether the picker showed over it and the text's ink (#658).
+            if let name = dict["easelTextColor"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                CraLog.note("easel text color \(name): " + canvas.sheetView.debugTextColor(name)); return
+            }
             // easelPick=<n>: the open easel's n-th item (from 0) picked; cra.log says what shows over it and its menu.
             if let n = dict["easelPick"].flatMap(Int.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugPick(n); return

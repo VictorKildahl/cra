@@ -350,6 +350,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
             if let f = texts[item.id] {
                 if f.stringValue != string { f.stringValue = string }
                 f.font = Self.font(item.style, size: size, title: false)
+                f.textColor = textColor(of: item)
                 f.frame = rect(item.frame)
             } else {
                 addTextField(for: item)
@@ -1167,11 +1168,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         sizePill.frame = NSRect(x: item.frame.x - 44, y: item.frame.y, width: 24, height: 72)
     }
 
-    /// The colour picker sits over the picked shapes, when every picked item is one (not while one is
-    /// being dragged or drawn). Several show the colour they share, if they do.
+    /// The colour picker sits over the picked shapes, or the picked text, when it applies to every pick
+    /// (Easel.pickerApplies; not while one is being dragged or drawn). Several show the colour they share, if they do.
     private func placeColorPicker() {
         let items = document.items.filter { picked.contains($0.id) }
-        guard tool == .pointer, !items.isEmpty, items.allSatisfy({ Easel.takesShade($0.kind) }),
+        guard tool == .pointer, !items.isEmpty, Easel.pickerApplies(to: items.map(\.kind)),
               let box = Easel.bounds(of: items.map(\.frame)) else { colorPicker.isHidden = true; return }
         let shades = Set(items.map { $0.shade ?? ($0.color == nil ? Easel.defaultShade($0.kind) : nil) })
         colorPicker.palette = document.palette
@@ -1180,14 +1181,42 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         colorPicker.isHidden = false
     }
 
-    /// A colour from the picker for the picked shapes.
+    /// A colour from the picker for the picked shapes and text (#658).
     func setShade(_ shade: Easel.Shade) {
         let ids = picked
         guard !ids.isEmpty else { return }
         commit("Change Color") {
             for i in $0.items.indices where ids.contains($0.items[i].id) { $0.items[i].shade = shade; $0.items[i].color = nil }
         }
+        for item in document.items where ids.contains(item.id) { texts[item.id]?.textColor = textColor(of: item) }
         placeColorPicker()
+    }
+
+    /// A text's colour: its shade in the easel's palette (#658), else the canvas's white ink.
+    private func textColor(of item: Easel.Item) -> NSColor {
+        item.shade.map { Self.color($0, palette: document.palette, dark: Self.dark) } ?? .white
+    }
+
+    /// Scenarios (#658): the first text box picked, the picker's colour `name` applied as a click on its dot
+    /// does, then "easel text color: picker=1 shade=red ink=#RRGGBB" (picker: whether it showed over the text).
+    func debugTextColor(_ name: String) -> String {
+        func firstText() -> Easel.Item? { document.items.first { if case .text = $0.kind { return true } else { return false } } }
+        if firstText() == nil {
+            let text = Easel.Item(kind: .text("Colour me", size: 24), frame: .init(x: 120, y: 420, width: 240, height: 40))
+            commit("Text") { $0.items.append(text) }
+            addTextField(for: text)
+        }
+        guard let item = firstText() else { return "no text" }
+        picked = [item.id]
+        selected = item.id
+        placeColorPicker()
+        let shown = !colorPicker.isHidden
+        if let shade = Easel.Shade(rawValue: name) { setShade(shade) }
+        let ink = texts[item.id]?.textColor?.usingColorSpace(.sRGB).map { c in
+            String(format: "#%02X%02X%02X", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()), Int((c.blueComponent * 255).rounded()))
+        } ?? "-"
+        let shade = document.items.first { $0.id == item.id }?.shade.map(\.rawValue) ?? "none"
+        return "picker=\(shown ? 1 : 0) shade=\(shade) ink=\(ink)"
     }
 
     /// Arc's four looks for the Aa button (Easel.FontStyle) in macOS's own designs.
@@ -1244,7 +1273,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         f.drawsBackground = false
         f.focusRingType = .none
         f.font = Self.font(item.style, size: size, title: false)
-        f.textColor = .white
+        f.textColor = textColor(of: item)
         f.placeholderString = "Type something"
         // Several lines that wrap in the box, as Arc's (#580).
         f.usesSingleLineMode = false
