@@ -1286,6 +1286,7 @@
 #616   Tests/BrowserManagerLifecycleTests.swift::sleptPagesBudgetCase  57eaa6cdf655
 #616   Tests/Scenarios/slept-pages-budget.scenario  70106c2dcee6
 #617   Packages/CraCore/Tests/CraCoreTests/CommandBarRankingTests.swift::theMostRecentSevenAreTheSortedSeven  c025ee0f6307
+#617   Packages/CraCore/Tests/CraCoreTests/CommandBarScoreTests.swift::bytesScoreAsStringsDo  115a9ad0b713
 #617   Tests/Scenarios/command-bar-row-details.scenario  9902d60dcadf
 #618   Packages/CraCore/Tests/CraCoreTests/SidebarChildOrderTests.swift::oneStoredIndexPerChildInOnePass  d4962ed3b593
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4

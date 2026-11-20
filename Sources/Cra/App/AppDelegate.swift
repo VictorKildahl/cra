@@ -1936,6 +1936,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for l in littleWindows where l.commandBar.isOpen { line("\(label) \(l.isPeek ? "peek" : "little")", l.commandBar) }
                 return
             }
+            // commandBarTime=<query>: how long ⌘T's engine takes for each prefix of <query>, as typing it does,
+            // the index built fresh first (#617): the per-keystroke cost at scale, in cra.log.
+            if let typed = dict["commandBarTime"] {
+                let engine = main.commandBar.engine
+                engine.resetIndex()
+                var lines: [String] = []
+                for end in 1...max(1, typed.count) {
+                    let q = String(typed.prefix(end))
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    let r = engine.suggestions(for: q, mode: .newTab, currentTabID: nil)
+                    let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+                    lines.append("\(q)=\(String(format: "%.1f", ms))ms(\(r.items.count))")
+                }
+                CraLog.note("command bar time: tabs=\(store.allTabs().count) history=\(store.history.count) archive=\(store.archive.count) " + lines.joined(separator: " "))
+                return
+            }
             // commandBarDetail=<label>: the main window's bar rows as kind:subtitle, which only the rows shown
             // get (#617).
             if let label = dict["commandBarDetail"] {

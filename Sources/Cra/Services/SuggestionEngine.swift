@@ -177,21 +177,8 @@ final class SuggestionEngine {
 
     /// What scoring needs from a title and a URL. Worked out per keystroke for every tab,
     /// archived tab and history entry (a URL parse each) it held up typing in the command bar.
-    struct Searchable {
-        let title: String
-        let words: [Substring]
-        let url: String
-        let host: String
-        let bareHost: String
-
-        init(title: String, url: String) {
-            self.title = title.lowercased()
-            words = self.title.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-            self.url = SuggestionEngine.humanURL(url).lowercased()
-            host = (URL(string: url)?.host ?? "").lowercased()
-            bareHost = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        }
-    }
+    /// A row's text for scoring, prepared once per bar opening (CraCore CommandBarScore, #617).
+    typealias Searchable = CommandBarScore.Key
 
     private struct SearchIndex {
         var tabs: [(SidebarItem, Searchable)] = []
@@ -207,10 +194,10 @@ final class SuggestionEngine {
         if let index { return index }
         var i = SearchIndex()
         let tabs = commandBarTabs()
-        i.tabs = tabs.compactMap { tab in tab.tab.map { (tab, Searchable(title: tab.displayTitle, url: $0.url)) } }
+        i.tabs = tabs.compactMap { tab in tab.tab.map { (tab, Self.searchable(title: tab.displayTitle, url: $0.url)) } }
         i.openURLs = Set(tabs.compactMap { $0.tab?.url })
-        i.archive = store.archive.prefix(400).compactMap { e in e.item.tab.map { (e, Searchable(title: e.item.displayTitle, url: $0.url)) } }
-        i.history = store.history.values.map { ($0, Searchable(title: $0.title, url: $0.url)) }
+        i.archive = store.archive.prefix(400).compactMap { e in e.item.tab.map { (e, Self.searchable(title: e.item.displayTitle, url: $0.url)) } }
+        i.history = store.history.values.map { ($0, Self.searchable(title: $0.title, url: $0.url)) }
         index = i
         return i
     }
@@ -464,49 +451,16 @@ final class SuggestionEngine {
 
     /// 0...100 from how well the query matches a title and a URL.
     func textScore(_ q: String, title: String, url: String) -> Double {
-        Self.score(q, Searchable(title: title, url: url))
+        Self.score(q, Self.searchable(title: title, url: url))
     }
 
-    private static func score(_ q: String, _ key: Searchable) -> Double {
-        let t = key.title, u = key.url, host = key.host, bareHost = key.bareHost
-        var score = 0.0
-        let tokens = q.split(separator: " ").map(String.init)
-        if tokens.count > 1 {
-            let hay = t + " " + u
-            let hits = tokens.filter { hay.contains($0) }.count
-            if hits == tokens.count { score = 75 } else if hits > 0 { score = 30 * Double(hits) / Double(tokens.count) }
-            if t.hasPrefix(q) { score = 95 }
-            return score
-        }
-        if t.hasPrefix(q) { score = 100 }
-        else if key.words.contains(where: { $0.hasPrefix(q) }) { score = 85 }
-        else if t.contains(q) { score = 65 }
-        else if let f = fuzzy(q, in: t) { score = 25 + 25 * f }
-        if bareHost.hasPrefix(q) || host.hasPrefix(q) { score = max(score, 95) }
-        else if bareHost.contains(q) { score = max(score, 70) }
-        else if u.contains(q) { score = max(score, 55) }
-        return score
+    /// What the old Searchable kept: the title and human address lowercased, the host from the address.
+    static func searchable(title: String, url: String) -> Searchable {
+        Searchable(title: title.lowercased(), url: SuggestionEngine.humanURL(url).lowercased(), host: (URL(string: url)?.host ?? "").lowercased())
     }
 
-    /// Subsequence match quality (0...1) or nil when not a subsequence.
-    private static func fuzzy(_ q: String, in text: String) -> Double? {
-        guard q.count >= 3 else { return nil }
-        var it = text.makeIterator()
-        var matched = 0
-        var gaps = 0
-        var inGap = false
-        for c in q {
-            var found = false
-            while let x = it.next() {
-                if x == c { found = true; break }
-                inGap = true
-            }
-            if !found { return nil }
-            if inGap { gaps += 1; inGap = false }
-            matched += 1
-        }
-        return max(0, 1 - Double(gaps) / Double(q.count))
-    }
+    /// The match score (CraCore CommandBarScore: on bytes for ASCII text, #617).
+    private static func score(_ q: String, _ key: Searchable) -> Double { CommandBarScore.score(q, key) }
 
     /// The keystroke's clock reading (`suggestions(for:)` sets it once per query).
     private var now = Date()
