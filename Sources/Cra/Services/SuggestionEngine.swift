@@ -19,7 +19,7 @@ struct Suggestion: Identifiable, Equatable {
     let title: String
     var subtitle: String
     let url: String?
-    let faviconKey: String?
+    var faviconKey: String?
     let symbol: String?
     let trailing: String?
     var score: Double
@@ -95,9 +95,10 @@ final class SuggestionEngine {
         items = dedupe(items)
         // Stable: equal scores keep their order (tabs, archive, history, domains, then commands
         // in menu order), so "clear" lists Clear Cache before Clear Cookies, as Arc does.
-        items = items.enumerated().sorted { a, b in
-            a.element.score != b.element.score ? a.element.score > b.element.score : a.offset < b.offset
-        }.map(\.element)
+        // Sorted as indices, then the rows taken in that order once: sorting thousands of Suggestion values moved
+        // each many times (#617). The same stable order.
+        let order = items.indices.sorted { a, b in items[a].score != items[b].score ? items[a].score > items[b].score : a < b }
+        items = order.map { items[$0] }
 
         // Arc's order: the row that supplies the inline completion comes first,
         // then what you typed, then everything else.
@@ -187,6 +188,8 @@ final class SuggestionEngine {
         var openURLs: Set<String> = []
         /// Each row's CommandBarDedupe keys, by its row id: an address parsed once per opening, not per keystroke.
         var dedupeKeys: [String: [String]] = [:]
+        /// Each row's Suggestion id ("tab:<uuid>"…), made once per opening, in the order of `tabs`, `archive`, `history`.
+        var tabIDs: [String] = [], archiveIDs: [String] = [], historyIDs: [String] = []
     }
 
     private var index: SearchIndex?
@@ -225,6 +228,8 @@ final class SuggestionEngine {
         var i = SearchIndex()
         i.dedupeKeys = keys.dedupe
         let keys = keys.keys
+        let ids = rows.rowIDs.map(\.id), nt = rows.tabs.count, na = rows.archive.count
+        i.tabIDs = Array(ids[0..<nt]); i.archiveIDs = Array(ids[nt..<(nt + na)]); i.historyIDs = Array(ids[(nt + na)...])
         let t = rows.tabs.count, a = rows.archive.count
         i.tabs = Array(zip(rows.tabs, keys[0..<t]))
         i.archive = Array(zip(rows.archive, keys[t..<(t + a)]))
@@ -354,7 +359,8 @@ final class SuggestionEngine {
 
     private func tabSuggestions(_ q: String, excluding current: UUID?) -> [Suggestion] {
         var out: [Suggestion] = []
-        for (tab, key) in searchIndex.tabs where tab.id != current {
+        let index = searchIndex
+        for (n, (tab, key)) in index.tabs.enumerated() where tab.id != current {
             guard let t = tab.tab else { continue }
             var score = Self.score(q, key)
             let loose = score < Self.looseBelow && !(tab.title?.lowercased().hasPrefix(q) ?? false)
@@ -363,7 +369,7 @@ final class SuggestionEngine {
             score += recencyBoost(t.timeLastActiveAt)
             score += Double(CommandBarRanking.recentSwitches(store.ranking.recentlySwitchedToTabs[tab.id], now: now)) * 3
             // Its space, pin and subtitle come in `finished`, for the rows shown (#617).
-            out.append(Suggestion(id: "tab:\(tab.id)", kind: .switchToTab(tab.id), title: tab.displayTitle, subtitle: "",
+            out.append(Suggestion(id: index.tabIDs[n], kind: .switchToTab(tab.id), title: tab.displayTitle, subtitle: "",
                                   url: t.url, faviconKey: t.faviconKey, symbol: nil, trailing: "Switch to Tab", score: score, loose: loose))
         }
         return out
@@ -374,13 +380,14 @@ final class SuggestionEngine {
 
     private func archiveSuggestions(_ q: String) -> [Suggestion] {
         var out: [Suggestion] = []
-        for (entry, key) in searchIndex.archive {
+        let index = searchIndex
+        for (n, (entry, key)) in index.archive.enumerated() {
             guard let t = entry.item.tab else { continue }
             let text = Self.score(q, key)
             var score = text * 0.85
             if score < 30 { continue }
             score += recencyBoost(entry.archivedAt) * 0.5
-            out.append(Suggestion(id: "arch:\(entry.id)", kind: .archived(entry.id), title: entry.item.displayTitle, subtitle: "",
+            out.append(Suggestion(id: index.archiveIDs[n], kind: .archived(entry.id), title: entry.item.displayTitle, subtitle: "",
                                   url: t.url, faviconKey: t.faviconKey, symbol: nil, trailing: "Restore", score: score,
                                   loose: text < Self.looseBelow))
         }
@@ -389,13 +396,15 @@ final class SuggestionEngine {
 
     private func historySuggestions(_ q: String, openURLs: Set<String>) -> [Suggestion] {
         var out: [Suggestion] = []
-        for (h, key) in searchIndex.history where !openURLs.contains(h.url) {
+        let index = searchIndex
+        for (n, (h, key)) in index.history.enumerated() where !openURLs.contains(h.url) {
             let text = Self.score(q, key)
             var score = text * 0.8
             if score < 30 { continue }
             score += min(Double(h.visitCount), 20) * 1.5 + recencyBoost(h.lastVisit) * 0.6
-            out.append(Suggestion(id: "hist:\(h.url)", kind: .history, title: h.title.isEmpty ? Self.humanURL(h.url) : h.title,
-                                  subtitle: "", url: h.url, faviconKey: FaviconKey.key(for: h.url),
+            // Its favicon key (an address parse) comes in `finished`, for the rows shown (#617).
+            out.append(Suggestion(id: index.historyIDs[n], kind: .history, title: h.title.isEmpty ? Self.humanURL(h.url) : h.title,
+                                  subtitle: "", url: h.url, faviconKey: nil,
                                   symbol: "clock", trailing: nil, score: score, loose: text < Self.looseBelow))
         }
         return out
@@ -563,6 +572,7 @@ final class SuggestionEngine {
             s.subtitle = ["Archived \(Self.relative(entry.archivedAt))", spaceName, Self.humanURL(s.url ?? "")].filter { !$0.isEmpty }.joined(separator: " · ")
         case .history where s.id.hasPrefix("hist:"):
             s.subtitle = Self.humanURL(s.url ?? "")
+            s.faviconKey = s.url.flatMap { FaviconKey.key(for: $0) }
         default: break
         }
         return s
@@ -658,3 +668,4 @@ enum PopularDomains {
         "producthunt.com", "news.ycombinator.com", "arc.net", "tryspook.com", "kildahl.dk", "localhost:3000",
     ]
 }
+
