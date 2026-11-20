@@ -84,6 +84,7 @@ enum StoreTests {
         reopenClosedTabInThisSpaceOnly()
         duplicateFavoritesAndSplits()
         windowsShareTheSidebar()
+        clearTodayArchivesInOnePass()
         settingsSync()
         syncLeavesBlankWindowsOnTheirMac()
         blankWindows()
@@ -2447,6 +2448,34 @@ enum StoreTests {
         store.removeWindow(second)
         expect(store.item(tab.id) != nil && store.item(made.id) != nil, "closing a window keeps the tabs")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #614
+    /// Clear Today, auto-archive, deleting a space and Archive Tabs Above/Below archived tab by tab, each
+    /// with a full touch() (the document copied, empty groups pruned, a save): quadratic at 5,000 tabs.
+    /// A batch is one change, with the archive in the order one-by-one archiving gave.
+    @MainActor
+    private static func clearTodayArchivesInOnePass() {
+        let store = SidebarStore(clock: ManualScheduler())
+        let sid = store.focusedSpaceID
+        let ids = (0..<50).map { store.createTab(url: "https://example.com/batch/\($0)", select: false).id }
+        let shown = store.createTab(url: "https://example.com/shown").id
+        let before = store.revision
+        store.clearToday(sid, playing: [])
+        expect(store.revision == before + 1, "Clear Today on 50 tabs is one change to the sidebar (#614), was \(store.revision - before)")
+        // (The store may have loaded tabs an earlier test saved; they're archived too.)
+        expect(Set(store.archive.map(\.id)).isSuperset(of: ids) && ids.allSatisfy { store.item($0) == nil } && store.item(shown) != nil,
+               "the 50 tabs are archived, the one on screen stays")
+        // The order sequential archiving gave: each went in at the top.
+        let sequential = SidebarStore(clock: ManualScheduler())
+        let again = (0..<3).map { sequential.createTab(url: "https://example.com/one/\($0)", select: false).id }
+        for id in again { sequential.archiveTab(id, reason: .manual) }
+        let batch = SidebarStore(clock: ManualScheduler())
+        let lot = (0..<3).map { batch.createTab(url: "https://example.com/lot/\($0)", select: false).id }
+        batch.archiveTabs(lot, reason: .manual)
+        let one = sequential.archive.prefix(3).map { again.firstIndex(of: $0.id) ?? -1 }
+        let many = batch.archive.prefix(3).map { lot.firstIndex(of: $0.id) ?? -1 }
+        expect(one == many && one == [2, 1, 0], "a batch archives in the order one-by-one archiving did (\(one) vs \(many))")
     }
 
     /// Two Macs on one sync folder: the second takes the first's sidebar, a change on either reaches

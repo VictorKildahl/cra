@@ -1530,7 +1530,7 @@ final class SidebarStore {
         // Arc's Remove Favorite (1.171, shared favorites): the favorite is gone, not pinned or archived.
         if profileList(ofItem: id) != nil {
             let tabs = items[id]?.isSplit == true ? children(of: id).filter(\.isTab).map(\.id) : [id]
-            for t in tabs { archiveTab(t, reason: .manual) }
+            archiveTabs(tabs, reason: .manual)
             archive.removeAll { tabs.contains($0.id) }
             return
         }
@@ -1799,7 +1799,7 @@ final class SidebarStore {
             touch()
             return
         }
-        for t in tabs(under: id) { archiveTab(t.id, reason: .manual) }
+        archiveTabs(tabs(under: id).map(\.id), reason: .manual)
         // Nested folders left behind (now empty) go too.
         for c in children(of: id) where c.isFolder { deleteFolder(c.id) }
         for c in children(of: id) where c.isSplit { items[c.id] = nil }
@@ -2189,8 +2189,21 @@ final class SidebarStore {
 
     // MARK: Archive
 
-    func archiveTab(_ id: UUID, reason: ArchiveReason) {
-        guard let it = items[id], it.isTab else { return }
+    func archiveTab(_ id: UUID, reason: ArchiveReason) { archiveTabs([id], reason: reason) }
+
+    /// Archives `ids` in order, as archiveTab one by one would, with one save and one change for the
+    /// lot. Clear Today, auto-archive, deleting a space and Archive Tabs Above/Below archive thousands
+    /// at 5,000 tabs; a full touch() per tab (the document copied, empty groups pruned, a save) made
+    /// them quadratic (#614).
+    func archiveTabs<S: Sequence>(_ ids: S, reason: ArchiveReason) where S.Element == UUID {
+        var archived = false
+        for id in ids { archived = archiveOne(id, reason: reason) || archived }
+        if archived { touch() }
+    }
+
+    /// One tab out to the archive, without the touch() that saves: archiveTabs does that once.
+    private func archiveOne(_ id: UUID, reason: ArchiveReason) -> Bool {
+        guard let it = items[id], it.isTab else { return false }
         // ⌘Z now brings this tab back, not the tidy before it (Arc's undo stack).
         lastTidy = nil
         let sid = spaceID(ofItem: id)
@@ -2201,7 +2214,8 @@ final class SidebarStore {
         let split = splitContaining(id)
         let folder = it.parentID.flatMap { items[$0]?.isFolder == true ? $0 : nil }
         let index = folder.flatMap { items[$0]?.children.firstIndex(of: id) }
-        let list = pinned ? [] : (sid.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
+        // The Today list a close successor is picked from: walked only for a tab some window has selected (#614).
+        let list = pinned || selectedIn.isEmpty ? [] : (sid.flatMap { spaces[$0] }.map { shownTabs(under: $0.todayContainerID) } ?? [])
         // Closed out of a live folder: the item stays out (Arc: hiddenItems). The archive keeps
         // the live copy so ⇧⌘T can put it back.
         if let folder, let live = liveFolder(containing: folder) {
@@ -2230,7 +2244,7 @@ final class SidebarStore {
             }
         }
         if let split { collapseSplitIfNeeded(split.id) }
-        touch()
+        return true
     }
 
     /// The tab shown once the selected `id` closes in window `w`: `list` is the space's Today
@@ -2539,10 +2553,10 @@ final class SidebarStore {
         guard let item = items[id], let parent = item.parentID, let sid = spaceID(ofItem: id),
               spaces[sid]?.todayContainerID == parent,
               let rows = items[parent]?.children, let i = rows.firstIndex(of: id) else { return }
-        for row in rows[(i + 1)...] {
-            guard let r = items[row] else { continue }
-            for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
-        }
+        archiveTabs(rows[(i + 1)...].flatMap { row -> [UUID] in
+            guard let r = items[row] else { return [] }
+            return (r.isTab ? [r] : tabs(under: row)).map(\.id)
+        }, reason: .manual)
     }
 
     /// Arc 1.173.1's ⌥ row under Archive Tabs Below: every Today row over this one (#600).
@@ -2570,10 +2584,10 @@ final class SidebarStore {
     }
 
     private func archiveRows<C: Collection>(_ rows: C) where C.Element == UUID {
-        for row in Array(rows) {
-            guard let r = items[row] else { continue }
-            for t in r.isTab ? [r] : tabs(under: row) { archiveTab(t.id, reason: .manual) }
-        }
+        archiveTabs(Array(rows).flatMap { row -> [UUID] in
+            guard let r = items[row] else { return [] }
+            return (r.isTab ? [r] : tabs(under: row)).map(\.id)
+        }, reason: .manual)
     }
 
     /// Arc's Clear on Today (`TodayClear`): the tab each window has on screen in this space and
@@ -2584,7 +2598,7 @@ final class SidebarStore {
         let rows = children(of: space.todayContainerID).map { r in
             TodayClear.Row(id: r.id, tabs: r.isTab ? [r.id] : tabs(under: r.id).map(\.id))
         }
-        for t in TodayClear.archived(rows, selected: selected, playing: playing) { archiveTab(t, reason: .clear) }
+        archiveTabs(TodayClear.archived(rows, selected: selected, playing: playing), reason: .clear)
     }
 
     /// Today tabs idle longer than the threshold are archived (Arc:
@@ -2594,10 +2608,9 @@ final class SidebarStore {
         let cutoff = clock.now.addingTimeInterval(-settings.autoArchive.seconds)
         for space in orderedSpaces {
             let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
-            for t in tabs(under: space.todayContainerID) where !selected.contains(t.id) {
-                let last = t.tab?.timeLastActiveAt ?? t.createdAt
-                if last < cutoff { archiveTab(t.id, reason: .auto) }
-            }
+            archiveTabs(tabs(under: space.todayContainerID).filter { t in
+                !selected.contains(t.id) && (t.tab?.timeLastActiveAt ?? t.createdAt) < cutoff
+            }.map(\.id), reason: .auto)
         }
     }
 
@@ -2662,9 +2675,8 @@ final class SidebarStore {
         // A profile's favorites stay with the profile (Arc).
         let shared = isProfileList(space.favoritesContainerID)
         let favorites = shared ? [] : [space.favoritesContainerID]
-        for t in (favorites + [space.pinnedContainerID, space.todayContainerID]).flatMap({ tabs(under: $0) }) {
-            archiveTab(t.id, reason: .spaceDeleted)
-        }
+        archiveTabs((favorites + [space.pinnedContainerID, space.todayContainerID]).flatMap { tabs(under: $0) }.map(\.id),
+                    reason: .spaceDeleted)
         for c in (favorites + [space.pinnedContainerID]).flatMap({ children(of: $0) }) where c.isFolder { deleteFolder(c.id) }
         for c in favorites { items[c] = nil }
         items[space.pinnedContainerID] = nil
