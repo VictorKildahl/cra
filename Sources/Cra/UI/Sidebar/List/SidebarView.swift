@@ -1725,14 +1725,14 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
     var hostWindow: NSWindow? { window }
 }
 
-/// Arc's Library button (a box with a confetti puff, drawn by LibraryGlyph) and, over it, the
-/// latest download's "bin" (DownloadsUI.DownloadToLibrary): the file's thumbnail, 32 pt with
-/// 8 pt corners, up and to the right of the glyph. It drops in from 6 pt above, overshoots 12 pt
+/// Arc's Library button (LibraryGlyphView: a box with a star, a dot and a triangle that move while the
+/// pointer is on it, #608) and, over it, the latest download's "bin" (DownloadsUI.DownloadToLibrary):
+/// the file's thumbnail, 32 pt with 8 pt corners, up and to the right of the glyph. It drops in from 6 pt above, overshoots 12 pt
 /// below and settles (Arc 1.170 at 60 fps), and is faint while the window is in the background.
 final class LibraryButtonView: NSView {
     private let ui: SidebarUIState
     private let actions: SidebarActions
-    private let glyph = NSImageView()
+    private let glyph = LibraryGlyphView()
     private let tip: ArcTooltipAnchorView
     private let bin = NSView()
     private let binImage = CALayer()
@@ -1740,8 +1740,8 @@ final class LibraryButtonView: NSView {
     /// The ring on the bin's corner while downloads run (#272).
     private let badge = DownloadProgressBadgeView()
     private var shownDownload: UInt32?
-    private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
-    var colors = SidebarColors() { didSet { if colors != oldValue { glyph.image = LibraryGlyph.image(dark: colors.isDark); badge.colors = colors; refresh() } } }
+    private var hovering = false { didSet { if hovering != oldValue { glyph.setHovered(hovering); refresh() } } }
+    var colors = SidebarColors() { didSet { if colors != oldValue { glyph.dark = colors.isDark; badge.colors = colors; refresh() } } }
     static let binOffset = CGSize(width: 9, height: -12)
     /// The download bin's frame, for Tidy Downloads' card to point at.
     var binFrame: NSRect { bin.frame }
@@ -1757,8 +1757,6 @@ final class LibraryButtonView: NSView {
         glyph.wantsLayer = true
         glyph.layer?.cornerRadius = 7
         glyph.layer?.cornerCurve = .continuous
-        glyph.imageScaling = .scaleNone
-        glyph.image = LibraryGlyph.image(dark: false)
         addSubview(glyph)
         (tip.text, tip.keys) = ArcTooltipLabel.split("View Library (⇧⌘L)")
         tip.placement = .trailing
@@ -1854,6 +1852,16 @@ final class LibraryButtonView: NSView {
         let p = convert(point, from: superview)
         if binHasFile, bin.frame.contains(p) { return self }
         return bounds.contains(p) ? self : nil
+    }
+
+    /// cra://debug?libraryHover=1|0: the pointer on the button, or gone; once the glyph has come to rest,
+    /// where it was drawn and in how many frames (#608).
+    func debugHover(_ on: Bool, done: @escaping (String) -> Void) {
+        hovering = on
+        DispatchQueue.main.asyncAfter(deadline: .now() + LibraryGlyph.settleTime + 0.2) { [weak self] in
+            guard let self else { return }
+            done(self.glyph.readout)
+        }
     }
 
     /// For `cra://debug?downloadState`: whether the bin is up, and what a press on its right edge

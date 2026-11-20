@@ -1,0 +1,9 @@
+# promise: #608
+# GitHub #608: the Library button's glyph moves like Arc's (1.173) when the pointer is on it. The star
+# comes up out of the box and turns, the dot rises and the triangle turns the other way, over a run of
+# frames; leaving the button runs it all back. cra.log says where the glyph was last drawn and in how
+# many frames it got there (a jump would be one).
+cra://debug?libraryHover=1
+expect-log library glyph: hover=on frames=([5-9]|[1-9][0-9]+) star=-2\.90,-4\.65@104 dot=3\.00,-10\.00 triangle=6\.17,-5\.03@-121
+cra://debug?libraryHover=0
+expect-log library glyph: hover=off frames=([5-9]|[1-9][0-9]+) star=-2\.50,-2\.78@-8 dot=2\.00,-7\.50 triangle=4\.70,-3\.75@12

@@ -663,7 +663,7 @@ same 1728×1084 frame, probing pixel runs at 2x:
   No dashed ring on a clicked tab (the yellow/black ring stays keyboard-only).
 - Sidebar glyphs (sidebar toggle, library, +) render at ≈ 26 % black over the sidebar
   (toggle 179/173/144 over 229/221/184); Cra had them at 58 %. Arc's library icon is a
-  filled box with a confetti puff above it; Cra uses `archivebox.fill` (no puff).
+  filled box with a confetti puff above it; Cra uses `archivebox.fill` (no puff). (Superseded: see "Library button glyph on hover".)
 - Not verified here: hover fills and animation timings. Window-id captures cannot show
   hover states, and the Mac was in use (Dia full screen in front), so no pointer was moved.
 
@@ -5090,3 +5090,23 @@ Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window record
   over 4 pt at the top, and about 35–42 over 6–8 pt below. The stronger lower edge matches the page card.
 - Cra (#483): `SidebarPresentation` derives the held-open state without storing another flag; `CardVeil` uses 0.65
   light and 0.10 dark, and the empty card reuses the page card's shadow.
+
+### Library button glyph on hover (Arc 1.173.1, 20 Nov 2026, 120 fps app captures at 2x, GitHub #608)
+- Arc's glyph is drawn in code (`HomeBadging.HomeButton`), not an asset: `LibraryIcon` in
+  ARCClients_BaseAssets is an unrelated four-dot icon, and the Lotties in ARC_HomeButton.bundle
+  (archive, boosts, downloads, easels, screenshots, spaces; markers hover-start 1, hover-end 11,
+  selection-end 35) are the Library page's own section icons.
+- The "cloud" above the box is a five-point star (R 4.75 pt, r 2.7 pt, corners rounded) sunk into the
+  box: everything above the box is cut off 1.5 pt over it. Box 12×9 pt, top corners ≈ 0.5 pt, bottom
+  2.5 pt, a 3.5×2 pt slot 1 pt under its top that shows the background. Dot radius 0.95 pt, triangle
+  side 3.9 pt. Points from the 32 pt button's centre, y down: rest star (-2.5, -2.78) at -8°, dot
+  (2, -7.5), triangle (4.7, -3.75) at 12°; hovered star (-2.9, -4.65) at 104°, dot (3, -10), triangle
+  (6.17, -5.03) at -121°.
+- Entering and leaving run the same way, back and forth: one critically damped spring, ω 14.5/s (20 %
+  at 50 ms, 42 % at 0.1 s, 77 % at 0.2 s, 92.5 % at 0.3 s, 99 % at 0.4 s, no overshoot). At ≈ 0.14 s the
+  dot and triangle are swapped: the old triangle has shrunk to about half and faded, the new one comes
+  in at 1.4x and settles; the dot is gone until ≈ 0.30 s, then shows where it is headed. No loop while
+  the pointer stays. Tooltip windows appearing mid-hover made Arc's glyph flicker (dot and triangle gone
+  for 2–3 frames); Cra doesn't copy that.
+- Cra: `LibraryGlyph` (CraCore) and `LibraryGlyphView`; `cra://debug?libraryHover=1|0`, scenario
+  library-glyph-hover.

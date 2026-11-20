@@ -1280,6 +1280,12 @@
 #601   Tests/StoreTests.swift::reopenClosedTabInThisSpaceOnly  2600e34f494e
 #604   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAppAddressOpensItsApp  22affcbfecae
 #604   Tests/Scenarios/command-bar-app-address.scenario  9dc5b635b27a
+#608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::dotAndTriangleAreSwappedPartWay  d115ea9cbacc
+#608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::hoverLiftsAndTurnsTheStarOnArcsSpring  1eb74bce4bd0
+#608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::leavingHalfwayTurnsBackWithoutAJump  311a3a698637
+#608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::restsUntilHovered  02e3e1476874
+#608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::starSinksIntoTheBoxAtRest  44dd5170a322
+#608   Tests/Scenarios/library-glyph-hover.scenario  f12eb9c2de66
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
 #614   Tests/StoreTests.swift::clearTodayArchivesInOnePass  6edf309ca7f0
 #616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::aWindowKeepsItsLatestSleptPages  318f272da9bc

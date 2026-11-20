@@ -1490,6 +1490,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let key = dict["easelTool"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugTool(key: key, hover: dict["hover"]); return
             }
+            // libraryHover=1|0: the pointer on the sidebar's Library button, or gone; cra.log says where its
+            // glyph was drawn once at rest and in how many frames it got there (#608).
+            if let on = dict["libraryHover"] {
+                guard let library = main.sidebarUI.libraryAnchor as? LibraryButtonView else { CraLog.note("library glyph: none"); return }
+                library.debugHover(on == "1") { CraLog.note("library glyph: \($0)") }
+                return
+            }
             // easelTileHover=1|0: the pointer over Library ▸ Easels' first tile, or gone; cra.log says
             // how large it is drawn and how bright its backing is.
             if let on = dict["easelTileHover"] {
