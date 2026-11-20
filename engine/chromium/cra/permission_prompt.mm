@@ -50,8 +50,7 @@ NSUInteger KindOf(RequestType type) {
       return 1 << 8;
     case RequestType::kStorageAccess:
       return 1 << 9;
-    case RequestType::kTopLevelStorageAccess:
-      return 1 << 10;
+    // 1 << 10 was Top-Level Storage Access, which Chrome 159 dropped.
     case RequestType::kLocalFonts:
       return 1 << 11;
     case RequestType::kIdleDetection:

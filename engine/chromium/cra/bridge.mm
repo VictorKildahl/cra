@@ -3630,9 +3630,14 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   if (!g_ready) {
     return nil;
   }
-  int ids = string == CraChromiumStringOpenLinkInNewTab      ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB
-            : string == CraChromiumStringSearchLensForImage ? IDS_CONTENT_CONTEXT_SEARCHLENSFORIMAGE
-                                                            : IDS_CONTENT_CONTEXT_SEARCHWEBFORIMAGE;
+  if (string == CraChromiumStringSearchWebForImage) {
+    // Chrome 159 dropped "Search $1 for Image" (IDS_CONTENT_CONTEXT_SEARCHWEBFORIMAGE) and its translations: Chrome
+    // labels every image search with the Lens string now. Arc's English label stays; in another language Cra
+    // keeps Chrome's own label (nil).
+    return base::StartsWith(g_browser_process->GetApplicationLocale(), "en") ? @"&Search $1 for Image" : nil;
+  }
+  int ids = string == CraChromiumStringOpenLinkInNewTab ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB
+                                                        : IDS_CONTENT_CONTEXT_SEARCHLENSFORIMAGE;
   return base::SysUTF16ToNSString(l10n_util::GetStringUTF16(ids));
 }
 + (void)setImageSearchTitle:(NSString* _Nullable (^)(NSString*))block {

@@ -462,7 +462,8 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// opens its tab in the background. Read when a menu opens.
 + (void)setLinkMenuTitle:(NSString *)title opensInBackground:(BOOL)background;
 /// One of Chromium's strings in the language Chromium runs in, as its resource bundle has it
-/// (`$1` where a name goes, `&` before a mnemonic); nil before CEF is up.
+/// (`$1` where a name goes, `&` before a mnemonic); nil before CEF is up. Chromium 159 has no
+/// "Search $1 for Image": SearchWebForImage is that English template when Chromium runs in English, else nil.
 + (nullable NSString *)chromiumString:(CraChromiumString)string;
 /// Gets the Google Lens item's title when an image's menu opens (main thread) and gives the title
 /// of the image search item that replaces it, or nil to keep Chromium's item.
