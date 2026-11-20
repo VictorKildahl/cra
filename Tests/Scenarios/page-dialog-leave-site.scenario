@@ -4,6 +4,11 @@
 # click, sent here as DevTools input to the page alone), and asks with an AppKit alert of its own, not on
 # the hidden Browser window, so the 1 pt strip of 0.1.49 (#346, #574) never reached it: this keeps it so.
 # Closing a tab never asks (a forced close, as in Arc).
+# Cra is in front, as when someone reloads: macOS puts an app's alert on the display of its key window. A copy
+# in the background has none, and on Nightly's runner (Cra's window on the display below the main one) the
+# alert went to the main display, away from the page.
+requires screen
+env CRA_TEST_BACKGROUND=0
 budget rss=900 stalls50=30
 pace 0.5
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}

@@ -23,10 +23,12 @@ wait 1.5
 cra://debug?split=two
 expect-log split two: panes=\S+n=source \| \S+n=p2 selected=\S+n=p2 downloads
 
-# Middle clicks in the new pane, the rightmost each time, add a pane after it: three, four, then a fifth.
+# Middle clicks in the new pane, the rightmost each time, add a pane after it: three, four, then a fifth. They land
+# 100 pt in from the window's right edge: on a Mac without a trackpad (Nightly's runners) the page's scroll bar
+# always shows there, and a click 20 pt in hit the bar, not the link (the page saw no auxclick).
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p3',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p3'))(document.createElement('a'))"}
 expect-log Cra cdp Runtime.evaluate .*"value":"placed p3"
-cra://debug?clickAt=1180,400&button=middle
+cra://debug?clickAt=1100,400&button=middle
 expect-log n=p3 HTTP
 wait 1.5
 cra://debug?split=three
@@ -34,7 +36,7 @@ expect-log split three: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 selected=\S+n=p3
 
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p4',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p4'))(document.createElement('a'))"}
 expect-log Cra cdp Runtime.evaluate .*"value":"placed p4"
-cra://debug?clickAt=1180,400&button=middle
+cra://debug?clickAt=1100,400&button=middle
 expect-log n=p4 HTTP
 wait 1.5
 cra://debug?split=four
@@ -42,7 +44,7 @@ expect-log split four: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 \| \S+n=p4 select
 
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=p5',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed p5'))(document.createElement('a'))"}
 expect-log Cra cdp Runtime.evaluate .*"value":"placed p5"
-cra://debug?clickAt=1180,400&button=middle
+cra://debug?clickAt=1100,400&button=middle
 expect-log n=p5 HTTP
 wait 1.5
 cra://debug?split=five
@@ -51,7 +53,7 @@ expect-log split five: panes=\S+n=source \| \S+n=p2 \| \S+n=p3 \| \S+n=p4 \| \S+
 # ⌘-click: a tab behind the page, as before; the split keeps its five.
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=behind',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed behind'))(document.createElement('a'))"}
 expect-log Cra cdp Runtime.evaluate .*"value":"placed behind"
-cra://debug?clickAt=1180,400&mods=1048576
+cra://debug?clickAt=1100,400&mods=1048576
 wait 0.5
 wait 1.5
 cra://debug?split=command

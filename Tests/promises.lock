@@ -1002,7 +1002,7 @@
 #498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::aSplitHoldsArcsFourUnlessMorePanesIsOn  ab44765a9a5c
 #498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::offByDefault  b19a78f103c5
 #498   Packages/CraCore/Tests/CraCoreTests/SplitPaneOptionsTests.swift::openInSplitViewTakesUpToTheLimit  3ca722af278c
-#498   Tests/Scenarios/split-middle-click-pane.scenario  d371b10abe89
+#498   Tests/Scenarios/split-middle-click-pane.scenario  30e8f2ef8629
 #498   Tests/StoreTests.swift::fullSplitTakesNoMorePanes  7b27b455e777
 #499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::edges  541bacddf659
 #499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::leavingTheEdgeStartsOver  e93abb2a1742
@@ -1058,8 +1058,8 @@
 #520   Packages/CraCore/Tests/CraCoreTests/PeekEscapeTests.swift::anEscThePageKeepsAsksAndTheNextOneCloses  99345edfff78
 #520   Packages/CraCore/Tests/CraCoreTests/PeekEscapeTests.swift::anEscThePageLeavesAloneIsThePages  60f919c0e5f6
 #520   Packages/CraCore/Tests/CraCoreTests/PeekEscapeTests.swift::theEscAPeekActsOnIsAPlainEsc  79ea88bd0384
-#520   Tests/Scenarios/peek-escape-closes.scenario  39370bce7341
-#520   Tests/Scenarios/peek-escape-page-uses-it.scenario  3f003979cc73
+#520   Tests/Scenarios/peek-escape-closes.scenario  2bcc9e92751c
+#520   Tests/Scenarios/peek-escape-page-uses-it.scenario  89763d066ff8
 #521   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::singleSignOnShowsAKeyAndSignedOutAWarning  e523aa0032fa
 #521   Tests/LiveFolderProviderTests.swift::gitHubSSOBesideOtherPullRequests  0dc0efc40994
 #521   Tests/LiveFolderProviderTests.swift::gitHubSSOKey  275f1e1d6edc
@@ -1228,7 +1228,7 @@
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::elsewhereIsOff  208002bd0a23
 #574   Packages/CraCore/Tests/CraCoreTests/PageDialogPlacementTests.swift::whatTheStripMadeOfOneIsASliver  874d4f592a90
 #574   Tests/Scenarios/page-device-chooser.scenario  d3857ab1ca1d
-#574   Tests/Scenarios/page-dialog-leave-site.scenario  2e86098d586a
+#574   Tests/Scenarios/page-dialog-leave-site.scenario  a4d4559539af
 #574   Tests/Scenarios/page-dialog-sign-in.scenario  7b1b4f09dfa4
 #574   Tests/Scenarios/page-dialog-split.scenario  623e49b359e6
 #574   Tests/Scenarios/page-dialogs.scenario  b2a40bd093c2

@@ -37,11 +37,12 @@ wait 1.5
 cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"window.__dialog=true;window.__closed=0;addEventListener('keydown',e=>{if(e.key==='Escape')if(window.__dialog){e.preventDefault();window.__dialog=false;window.__closed=1}},true);'dialog-open'","returnByValue":true}
 wait 0.5
 cra://debug?key=%1B,53,0&page=1&target=little
-wait 0.8
-# The page got it and closed its dialog; the Peek stays, and Close asks.
+wait 0.6
+# The page got it and closed its dialog; the Peek stays, and Close asks. Close asks from 0.5 s after the Escape
+# for 1 s: the look comes first, in the middle of that (after 0.8 s and the page's check a slow runner missed it).
+cra://debug?peekClose=dialog
 cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"['dialog-closed',window.__closed].join('-')","returnByValue":true}
 expect-log Cra cdp Runtime\.evaluate → .*dialog-closed-1
-cra://debug?peekClose=dialog
 expect-log peek close dialog: open=1 capturing=0 hold=escape
 cra://debug?peeks=dialog
 expect-log Cra peeks dialog: shown .*n=own-dialog

@@ -42,12 +42,13 @@ cra://debug?peekClose=gaveUp
 expect-log peek close gaveUp: open=1 capturing=0 hold=none close=34x33
 cra://debug?peeks=stays
 expect-log Cra peeks stays: shown .*keeps-escape
-# Escape again, then again while Close asks: the Peek closes.
+# Escape again, then again while Close asks: the Peek closes. Close asks from 0.5 s after the Escape for 1 s;
+# the look and the second Escape land in the middle of that (a slow runner missed it after 0.8 s and a check).
 cra://debug?key=%1B,53,0&page=1&target=little
-wait 0.8
+wait 0.6
 cra://debug?peekClose=askedAgain
-expect-log peek close askedAgain: open=1 capturing=0 hold=escape
 cra://debug?key=%1B,53,0&page=1&target=little
+expect-log peek close askedAgain: open=1 capturing=0 hold=escape
 wait 1.5
 expect-log peek: Esc closes before the page \(Close asked\)
 cra://debug?peeks=closed
