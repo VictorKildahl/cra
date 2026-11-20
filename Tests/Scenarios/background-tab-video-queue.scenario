@@ -1,0 +1,43 @@
+# promise: #619
+# Arc lets you queue videos: ⌘-click several YouTube videos or Shorts and none plays until its tab is first
+# visited. On 0.1.50 the first one played behind the page (a Short every time). The fixture plays its clip as
+# soon as it loads, as a Short does; ⌘-clicked into the background it waits for its first visit, the first one,
+# the next ones, and one opened after visiting an earlier tab and coming back (the reporter's sequence).
+budget rss=900 stalls50=20
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "openLinksInForeground": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=source
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"const a=document.createElement('a');a.id='video-link';a.href='${ORIGIN}/background-video.html?first';a.textContent='Video';a.style='position:fixed;inset:0;z-index:99999';document.body.appendChild(a);'queue link ready'"}
+expect-log queue link ready
+cra://debug?clickAt=760,400&mods=1048576
+expect-log POST /first-loaded-hidden
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('video-link').href='${ORIGIN}/background-video.html?second';'second ready'"}
+expect-log second ready
+cra://debug?clickAt=760,400&mods=1048576
+expect-log POST /second-loaded-hidden
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('video-link').href='${ORIGIN}/background-video.html?third';'third ready'"}
+expect-log third ready
+cra://debug?clickAt=760,400&mods=1048576
+expect-log POST /third-loaded-hidden
+wait 3
+cra://debug?selectedTab=queued
+expect-log selected tab queued: \S+n=source$
+reject-log POST /first-playing-
+reject-log POST /second-playing-
+reject-log POST /third-playing-
+
+# The first one visited plays; back on the source page, the next one queued still waits.
+cra://debug?selectTab=background-video.html?first
+expect-log POST /first-playing-visible
+cra://debug?selectTab=n=source
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('video-link').href='${ORIGIN}/background-video.html?fourth';'fourth ready'"}
+expect-log fourth ready
+cra://debug?clickAt=760,400&mods=1048576
+expect-log POST /fourth-loaded-hidden
+wait 3
+reject-log POST /fourth-playing-
+reject-log POST /second-playing-
+cra://debug?selectTab=background-video.html?second
+expect-log POST /second-playing-visible
