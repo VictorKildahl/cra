@@ -1,0 +1,33 @@
+# The Dock icon's menu lists each window Cra shows, once. With one browser window it listed the page twice: Chrome's
+# window that holds a profile's pages is never seen (alpha 0, bridge.mm) but stays ordered in, titled after its
+# active tab, so AppKit put it in the Window menu and the Dock menu read it from there (Victor, 20 Nov); hidden
+# DevTools added a third row. Chrome's hidden windows are left out of the Window menu now (NeverKeyOrMain); on
+# engine -2 the first readout is `2 [main, "Fixture main" hidden docked]`.
+budget rss=900
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?windowsMenu=page
+expect-log windows menu page: 1 \[main\]
+
+# A second tab: still one window.
+cra://open?url=${PAGE}?n=second
+wait 2
+cra://debug?windowsMenu=tabs
+expect-log windows menu tabs: 1 \[main\]
+
+# DevTools docked beside the page: Chrome's DevTools window is hidden too.
+cra://action/devTools
+wait 4
+cra://debug?windowsMenu=devtools
+expect-log windows menu devtools: 1 \[main\]
+cra://action/devTools
+wait 3
+
+# A Little Window's page is a hidden Chrome window too.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?windowsMenu=little
+expect-log windows menu little: .*main
+reject-log windows menu .*(hidden|docked)
+reject-log fault:

@@ -1245,6 +1245,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["switcherWindows"] {
                 CraLog.note(SwitcherWindows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }
+            // windowsMenu=<label>: the Window menu's window rows, which the Dock icon's menu lists too.
+            if let label = dict["windowsMenu"] {
+                CraLog.note(WindowsMenuRows.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
+            }
             if let label = dict["windowManagers"] {
                 CraLog.note(WindowManagers.readout(label, main: main.window, little: littleWindows.compactMap(\.window))); return
             }
