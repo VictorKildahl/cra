@@ -50,6 +50,7 @@ if [ "${1:-}" != core ]; then
   suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
   suite "Policies" scripts/test-policies.sh
+  suite "Content blocker" scripts/test-content-blocker.sh
   suite "WebKit stores" scripts/test-webkit-stores.sh
   suite "Update channels" scripts/test-update-channels.sh
   suite "Feed counts kept on promote" scripts/test-feed-counts.sh

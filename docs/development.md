@@ -146,6 +146,9 @@ to Markdown or `docs/` alone runs nothing.
   would pick.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-content-blocker.sh`: the engine's ad and tracker matching
+  (`Sources/CraCEF/CraContentBlocker.h`) on Cra's own list, through a C shim: sites' own hosts
+  stay first party, and what a site needs to load isn't on the list (Reddit, #586).
 - `scripts/test-webkit-stores.sh`: `WebKitStores` in a process where nothing has started WebKit
   yet, as at launch: a deleted profile's WebKit data goes without crashing.
 - `scripts/test-folder-glyph.sh`: the standalone folder component's real AppKit layers and image
