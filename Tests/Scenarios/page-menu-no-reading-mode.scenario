@@ -2,8 +2,11 @@
 # A page's right-click menu has Arc's rows and no "Open in reading mode". Chrome adds that row (and
 # "Listen to this page") to open its reading mode side panel, which on Cra's engine opened in the
 # page's hidden Chrome window: the row did nothing (0.1.49). Arc's page menu has no reading mode.
-# The menu's rows are read as it opens, then it closes.
+# The menu's rows are read as it opens, then it closes. Arc's menu has "Translate to <language>"
+# after Cast… when Chromium offers translation, which needs a Google API key: release builds have
+# one, so the run sets a stand-in and the row may show (it did on 0.1.51's release check).
 budget rss=700 stalls50=10
+env GOOGLE_API_KEY=cra-scenario
 cra://open?url=${PAGE}?n=article
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 wait 1
@@ -11,4 +14,4 @@ cra://debug?menuShown=next
 expect-log Cra menu shown: waiting
 cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":300,"y":300,"button":"right","buttons":2,"clickCount":1}
 cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":300,"y":300,"button":"right","buttons":0,"clickCount":1}
-expect-log Cra menu shown: Back\|Forward\|Reload\|Save As…\|Print…\|Cast…\|View Page Source\|Inspect$
+expect-log Cra menu shown: Back\|Forward\|Reload\|Save As…\|Print…\|Cast…\|(Translate to [^|]+\|)?View Page Source\|Inspect$
