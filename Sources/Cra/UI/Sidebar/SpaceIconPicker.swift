@@ -126,34 +126,38 @@ struct SpaceIconPicker: View {
     }
 }
 
-/// The Icon tab: Arc's 56 glyphs in its order (7 rows of 8, no search), as SF Symbols.
+/// The Icon tab: Arc's 56 glyphs first, then Cra's extras, as SF Symbols (scrolls past the first
+/// seven rows). No search, matching Arc's Icon tab.
 struct SpaceSymbolGrid: View {
     let current: String?
     let onPick: (String) -> Void
     @State private var hovered: String?
 
-    /// Arc's order, shared with the Arc importer (`ArcSpaceIcon.picker`).
+    /// Arc's order, then Cra's extras (`SpaceIcon.pickerSymbols`).
     static let symbols = SpaceIcon.pickerSymbols
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(31), spacing: 0), count: 8), spacing: 0) {
-            ForEach(Self.symbols, id: \.self) { name in
-                Image(systemName: name)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 31, height: 31)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color.primary.opacity(name == current ? 0.16 : hovered == name ? 0.1 : 0))
-                            .frame(width: 29, height: 29)
-                    )
-                    .contentShape(Rectangle())
-                    .onHover { hovered = $0 ? name : (hovered == name ? nil : hovered) }
-                    .onTapGesture { onPick(name) }
+        ScrollView {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(31), spacing: 0), count: 8), spacing: 0) {
+                ForEach(Self.symbols, id: \.self) { name in
+                    Image(systemName: name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 31, height: 31)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(Color.primary.opacity(name == current ? 0.16 : hovered == name ? 0.1 : 0))
+                                .frame(width: 29, height: 29)
+                        )
+                        .contentShape(Rectangle())
+                        .onHover { hovered = $0 ? name : (hovered == name ? nil : hovered) }
+                        .onTapGesture { onPick(name) }
+                }
             }
+            .padding(.horizontal, 11)
+            .padding(.top, 11)
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, 11)
-        .padding(.top, 11)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 }
