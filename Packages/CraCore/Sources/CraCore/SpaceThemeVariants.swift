@@ -7,7 +7,9 @@ public enum SpaceThemeVariants {
     /// Auto always gets both halves, one colour too (#155): Arc saves a swatch picked on Auto as one
     /// `single` theme that never changes with macOS, and copying that (0.1.30–0.1.32) left a space set
     /// to Auto stuck on one side. An imported Arc `single` stays on its side (ArcThemeImport, #171).
-    public static func theme(key: [String], intensity: Double, noise: Double, appearance: String) -> SpaceTheme {
+    /// `wheel` is kept with two or three colours, so the editor reopens on it (#632).
+    public static func theme(key: [String], intensity: Double, noise: Double, appearance: String,
+                             wheel: SpaceThemeWheel? = nil) -> SpaceTheme {
         var t: SpaceTheme
         if key.isEmpty {
             t = colourless(intensity: intensity, noise: noise, appearance: appearance)
@@ -20,6 +22,7 @@ public enum SpaceThemeVariants {
         default: t = SpaceTheme(light: light(key: key, intensity: intensity, noise: noise), dark: dark(key: key, intensity: intensity, noise: noise))
         }
         t.key = key
+        t.wheel = key.count > 1 ? wheel : nil
         return t
     }
 

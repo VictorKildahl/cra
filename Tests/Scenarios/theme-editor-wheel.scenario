@@ -1,0 +1,37 @@
+# promise: #632
+# Each page of Arc's theme presets places a second and third colour its own way (Arc 1.174, measured
+# offline 20 Nov 2026): a Brand, Pastel, Drab or Greyscale swatch is one colour, and + takes it across
+# the wheel (`complimentary`: 180°, then 150° and 210°, in Display P3); a page-2 swatch is three
+# colours 40° either side (`analogous`). − puts the rest back where the wheel puts that many. Before,
+# every + went 40° on in sRGB and page 2 gave two colours.
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x900
+wait 1
+cra://debug?themeEditor=1
+wait 1
+# Brand red: + gives Arc's cyan, a second + splits it into Arc's green and blue, − puts the cyan back.
+cra://debug?themeEditor=swatch:03
+expect-log theme editor pad 1: wheel=complimentary key=#F25E6B$
+cra://debug?themeEditor=add:1
+expect-log theme editor pad 2: wheel=complimentary key=#F25E6B,#01E4DB$
+cra://debug?themeEditor=add:1
+expect-log theme editor pad 3: wheel=complimentary key=#F25E6B,#01E497,#4FADE6$
+cra://debug?themeEditor=remove:1
+expect-log theme editor pad 4: wheel=complimentary key=#F25E6B,#01E4DB$
+# Drab navy goes across the wheel too, kept dark.
+cra://debug?themeEditor=swatch:38
+cra://debug?themeEditor=add:1
+cra://debug?themeEditor=add:1
+expect-log theme editor pad 7: wheel=complimentary key=#26456B,#70302B,#606822$
+# Page 2: Arc's three analogous colours; − then + keeps the wheel, and from one colour + goes across.
+cra://debug?themeEditor=swatch:13
+expect-log theme editor pad 8: wheel=analogous key=#F25E6B,#EAAF5A,#F25EC3$
+cra://debug?themeEditor=remove:1
+expect-log theme editor pad 9: wheel=analogous key=#F25E6B,#EAAF5A$
+cra://debug?themeEditor=add:1
+expect-log theme editor pad 10: wheel=analogous key=#F25E6B,#EAAF5A,#F25EC3$
+cra://debug?themeEditor=remove:1
+cra://debug?themeEditor=remove:1
+cra://debug?themeEditor=add:1
+expect-log theme editor pad 13: wheel=complimentary key=#F25E6B,#01E4DB$
+cra://dismiss

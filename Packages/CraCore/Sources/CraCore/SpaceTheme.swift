@@ -1,5 +1,14 @@
 import Foundation
 
+/// Where the theme editor's pad puts a second and third colour (Arc: the saved theme's `wheel`, #632);
+/// SpaceColorWheel places them. Here, with the theme, so a file that reads themes needs no more.
+public enum SpaceThemeWheel: String, Codable, Sendable, CaseIterable {
+    /// +40°, then −40°: a page-2 swatch.
+    case analogous
+    /// Across the wheel: 180°, or 150° and 210° (Arc's spelling, as its file has it).
+    case complimentary
+}
+
 public struct SpaceTheme: Codable, Equatable {
     /// One or two hex colors blended into a gradient (Arc: blendedGradient.baseColors).
     public var colors: [String]
@@ -26,6 +35,10 @@ public struct SpaceTheme: Codable, Equatable {
     /// The theme editor's pad colours the theme was built from (Arc: the editor's key colour and
     /// the ones its wheel adds); nil for a preset or an import, whose own colours go on the pad.
     public var key: [String]? = nil
+    /// The pad's wheel for two or three `key` colours (Arc: the saved theme's `wheel`), which + , −
+    /// and a drag place them on (#632); nil for one colour, a preset or an import, and for a theme
+    /// saved before 0.1.53 (SpaceColorPresets.wheel(of:) then picks it).
+    public var wheel: SpaceThemeWheel? = nil
 
     /// One half of an Auto theme: everything but the appearance, which is the half's own.
     public struct Variant: Codable, Equatable {
@@ -59,7 +72,7 @@ public struct SpaceTheme: Codable, Equatable {
     }
 
     public init(colors: [String], intensity: Double, noise: Double, appearance: String, vibrant: Bool = false, accent: String? = nil,
-         solid: Bool = false, dark: Variant? = nil, key: [String]? = nil) {
+         solid: Bool = false, dark: Variant? = nil, key: [String]? = nil, wheel: SpaceThemeWheel? = nil) {
         self.colors = colors
         self.intensity = intensity
         self.noise = noise
@@ -69,6 +82,7 @@ public struct SpaceTheme: Codable, Equatable {
         self.solid = solid
         self.dark = dark
         self.key = key
+        self.wheel = wheel
     }
 
     /// Arc's Auto: a light and a dark half, shown as macOS' appearance says.
@@ -90,6 +104,8 @@ public struct SpaceTheme: Codable, Equatable {
         // A dark half that can't be read is dropped, not the whole sidebar.json with it.
         dark = (try? c.decodeIfPresent(Variant.self, forKey: .dark)) ?? nil
         key = try c.decodeIfPresent([String].self, forKey: .key)
+        // A wheel this Cra doesn't know falls back to the colours' own, not a failed sidebar.json.
+        wheel = (try? c.decodeIfPresent(SpaceThemeWheel.self, forKey: .wheel)) ?? nil
     }
 
     var variant: Variant {

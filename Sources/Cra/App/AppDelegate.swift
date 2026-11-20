@@ -2536,8 +2536,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
-            // themeEditor=1 opens it; themeEditor=intensity:<0…1> or noise:<0…1> moves its slider or
-            // dial as a drag would, and logs how many ticks that played.
             // pasteAndGo=<text>: ⌥⌘V with that text in place of the clipboard, which a test copy shares with the Mac (#610).
             if let text = dict["pasteAndGo"] { pasteAndGo(clipboard: text, in: main); return }
             // setPasteboard=<text>: what ⌥⌘V reads next, on the CRA_TEST_PASTEBOARD board only (#610).
@@ -2546,6 +2544,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 Self.pasteboard.setString(text, forType: .string)
                 return
             }
+            // themeEditor=1 opens it; themeEditor=intensity:<0…1> or noise:<0…1> moves its slider or
+            // dial as a drag would, and logs how many ticks that played; swatch:<page><index>, add:1 and
+            // remove:1 press a swatch, + or −, and log "theme editor pad <n>: wheel=… key=…" (#632).
             if let step = dict["themeEditor"] {
                 let parts = step.split(separator: ":").map(String.init)
                 guard parts.count == 2, let v = Double(parts[1]) else { main.showSpaceStyleEditor(space: store.focusedSpace); return }

@@ -3755,6 +3755,31 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   closes (Escape, a click elsewhere, the app deactivating), as Arc does; the sheet writes it on Save and puts the
   stored theme back on Cancel.
 
+## The theme editor's two wheels (Arc 1.174, 20 Nov 2026, issue #632, offline Arc)
+- [O strings] The saved theme's `wheel` is `analogous` or `complimentary` (Arc's spelling), next to `baseColors`
+  and `overlayColors`; the editor state keeps `primaryColor`, `numberOfColors` and `wheel`.
+- [O live] Offline Arc on a fake home (network denied), Spaces ▸ Edit Theme… over AX: page arrows pressed to
+  the page, a swatch pressed, Add / Remove pressed, then another app activated (that closes the editor and
+  commits; Escape posted to the pid did not), StorableSidebar.json read from `sidebar.containers[1].spaces`
+  (the `sidebarSyncState` copy lags). 41 runs over all five pages.
+- [O] Pages 1, 3, 4 and 5 give one colour; the next + saves `complimentary`. Page 2 gives three colours,
+  `analogous` (`baseColors` = colour, second; `overlayColors` = clear, third). + on one colour always turns
+  `complimentary`, from page 2 too (page 2, − −, + → the complementary pair); + on two keeps the wheel
+  (page 2, −, + → the same three).
+- [O fit] Every colour is the first one turned round the wheel in Display P3 HSB at the first one's P3
+  saturation and brightness: analogous +40°, −40°; complimentary two at +180°, three at +150° and +210° (the
+  second moves when the third comes and back when it goes). All 32 sets within 1/255 of Arc's (Arc writes
+  extended sRGB, so a few saturated ones run past sRGB and are clipped here). In sRGB HSB the same turns read
+  29–46°, which is why #170 kept Arc's page-2 seconds as a table.
+- Cra (#632): `SpaceColorWheel` (CraCore) works in P3 (`padHSB` / `padHex`, which the pad also draws its knobs
+  by), `offsets(_:count:)`, `adding(to:wheel:)`, `removing(from:wheel:)` and `placed(…, wheel:)`; the page sets the
+  wheel (`SpaceColorPresets.Page.wheel`), page 2 is Arc's three colours (`brandThirds`), and the theme saves
+  `wheel` beside `key` for two or three colours (a theme saved before has none: its preset's, else analogous,
+  Cra's old ±40°). Before, every + went ±40° in sRGB HSB and page 2 gave two colours. Pinned by
+  `eachPageAddsColoursOnArcsWheel`, `removeAndAddFollowArcsWheel`, `dragKeepsTheWheel`, `wheelIsSaved` and the
+  `theme-editor-wheel` scenario. Not measured: what an empty pad's first tap starts on (it can't matter: + on
+  one colour is always complimentary).
+
 ## The space's primary palette (Arc 1.172.2, 17 Nov 2026, issue #490, offline Arc)
 - [O live] Offline Arc on a fake home (network denied), Spaces ▸ Edit Theme… over AX, one swatch pressed, Escape,
   then StorableSidebar.json read once Arc had written it (the write lags the Escape by a few seconds; read too

@@ -264,10 +264,10 @@
 #168   Tests/Scenarios/open-in-space.scenario  9f2fdc2279a0
 #170   Packages/CraCore/Tests/CraCoreTests/ShippedThemesTests.swift::newSpaceStartsOnOneBrandColour  37cb20e10c4b
 #170   Packages/CraCore/Tests/CraCoreTests/ShippedThemesTests.swift::oneColourIsSavedLikeAnArcSingleImport  c847f6695226
-#170   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::brandPairs  9ae9693433ba
+#170   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::brandPairs  7ec03f816fdc
 #170   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::catalogColours  3739d0009dc7
 #170   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::pageOfAKey  1030ea02929f
-#170   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::pages  c20880c3012c
+#170   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::pages  250165007c51
 #170   Tests/StoreTests.swift::themePreview  d10606ab1689
 #171   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::appearanceBasedWithOneHalfKeepsIt  8c8e340cb468
 #171   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoThemeWithOneHalfKeepsItsLook  6162547ce294
@@ -886,9 +886,9 @@
 #452   Tests/PolicyTests.swift::defaultBrowserPicker  ea5c3e09748a
 #455   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::materialFollowsTheSpacesAppearance  9fdd8d37a5ca
 #455   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::solidThemesOnLightUseArcsLightMaterial  91f673d9b3d9
-#455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::dragKeepsTheColoursBrightness  c0ca845abdf1
-#455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::emptyPadAndGreysOnTheDrag  054bd4904f81
-#455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::plusIsOffOnGreys  c8ce7fe1d6dd
+#455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::dragKeepsTheColoursBrightness  795f8ad6f8e7
+#455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::emptyPadAndGreysOnTheDrag  63aeeed505b1
+#455   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::plusIsOffOnGreys  c06eb51f0066
 #455   Tests/Scenarios/theme-material.scenario  0f0829a439b4
 #457   Packages/CraCore/Tests/CraCoreTests/ScopedSearchFillTests.swift::darkBarMatchesTheRequest  f8ff4a25f631
 #457   Packages/CraCore/Tests/CraCoreTests/ScopedSearchFillTests.swift::lightBarIsAPaleWash  a9835ca239f4
@@ -1392,6 +1392,11 @@
 #630   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::chromiumsModeComesBack  37b8a834e38f
 #630   Tests/Scenarios/chromium-appearance-mode.scenario  d13c9665dc42
 #631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
+#632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::dragKeepsTheWheel  117948aa5336
+#632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::eachPageAddsColoursOnArcsWheel  0720894ebafe
+#632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::removeAndAddFollowArcsWheel  eaf76faa3f2d
+#632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::wheelIsSaved  731297878198
+#632   Tests/Scenarios/theme-editor-wheel.scenario  7f7783800517
 #634   Tests/ExtensionPopupWindowTests.swift::hangsUnderItsButtonUntilDragged  ecd8a3e853c5
 #634   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #634   Tests/Scenarios/floating-sidebar-extension-popup-fullscreen.scenario  735aacadfad7
