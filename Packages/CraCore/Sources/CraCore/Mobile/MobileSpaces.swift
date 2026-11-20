@@ -38,6 +38,10 @@ public enum MobileSpaces {
     /// Every tab the Spaces view can show, inside folders and splits too: each Space's pinned
     /// tabs, then its Today tabs. Favorites and blank-window spaces are left out, as in `spaces`.
     static func tabs(in document: SidebarDocument) -> [(SidebarItem, TabData)] {
+        tabsWithPlace(in: document).map { ($0.item, $0.tab) }
+    }
+
+    static func tabsWithPlace(in document: SidebarDocument) -> [(item: SidebarItem, tab: TabData, space: String, pinned: Bool)] {
         let items = Dictionary(document.items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // The file comes from another device: a folder inside itself must not loop.
         func tabs(under parent: UUID, depth: Int) -> [(SidebarItem, TabData)] {
@@ -48,8 +52,9 @@ public enum MobileSpaces {
                 return tabs(under: id, depth: depth + 1)
             }
         }
-        return document.spaces.filter { $0.standaloneWindowID == nil }.flatMap {
-            tabs(under: $0.pinnedContainerID, depth: 0) + tabs(under: $0.todayContainerID, depth: 0)
+        return document.spaces.filter { $0.standaloneWindowID == nil }.flatMap { space in
+            tabs(under: space.pinnedContainerID, depth: 0).map { ($0.0, $0.1, space.title, true) }
+                + tabs(under: space.todayContainerID, depth: 0).map { ($0.0, $0.1, space.title, false) }
         }
     }
 

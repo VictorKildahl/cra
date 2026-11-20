@@ -4,6 +4,11 @@ import Foundation
 /// The rows under the iPhone app's search field: what was typed, pages the phone knows that
 /// match it, then the search engine's completions, four in all (Arc Search's count).
 public enum MobileSuggestions {
+    public struct Place: Equatable {
+        public var prefix: String
+        public var space: String
+    }
+
     public struct Row: Equatable, Identifiable {
         public enum Kind: Equatable {
             /// Searches the default engine for `text`.
@@ -19,13 +24,15 @@ public enum MobileSuggestions {
         /// How many leading characters of `text` the user typed. Arc Search draws them grey in a
         /// completion and leaves the row for the typed text itself all black.
         public var typedPrefixLength: Int
+        public var place: Place?
 
         public var id: String { "\(kind)|\(text)" }
 
-        public init(kind: Kind, text: String, typedPrefixLength: Int = 0) {
+        public init(kind: Kind, text: String, typedPrefixLength: Int = 0, place: Place? = nil) {
             self.kind = kind
             self.text = text
             self.typedPrefixLength = typedPrefixLength
+            self.place = place
         }
     }
 
@@ -34,10 +41,26 @@ public enum MobileSuggestions {
     public struct Site: Equatable {
         public var title: String
         public var url: String
+        public var place: Place?
 
-        public init(title: String, url: String) {
+        public init(title: String, url: String, place: Place? = nil) {
             self.title = title
             self.url = url
+            self.place = place
+        }
+    }
+
+    public static func macSites(in document: SidebarDocument) -> [Site] {
+        MobileSpaces.tabsWithPlace(in: document).enumerated().filter { $0.element.pinned && !$0.element.tab.url.isEmpty }.sorted { left, right in
+            switch (left.element.tab.timeLastActiveAt, right.element.tab.timeLastActiveAt) {
+            case let (a?, b?): return a == b ? left.offset < right.offset : a > b
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil): return left.offset < right.offset
+            }
+        }.map { _, entry in
+            Site(title: MobileSpaces.tabTitle(item: entry.item, tab: entry.tab), url: entry.tab.url,
+                 place: Place(prefix: "Pinned in ", space: entry.space))
         }
     }
 
@@ -55,7 +78,7 @@ public enum MobileSuggestions {
         guard !query.isEmpty else { return [] }
         let matches = siteMatches(typed: query, in: sites)
         let shown = Array((matches.byHost + matches.byTitle).prefix(min(maxSiteRows, max(0, limit - 1))))
-        let siteRows = shown.map { Row(kind: .site(url: $0.url), text: title(of: $0)) }
+        let siteRows = shown.map { Row(kind: .site(url: $0.url), text: title(of: $0), place: $0.place) }
         let typedRow = Row(kind: TypedURL.looksLikeURL(query) ? .address : .search, text: query)
         let leadsWithSite = !matches.byHost.isEmpty && !siteRows.isEmpty
         var rows = leadsWithSite ? [siteRows[0], typedRow] + siteRows.dropFirst() : [typedRow] + siteRows
