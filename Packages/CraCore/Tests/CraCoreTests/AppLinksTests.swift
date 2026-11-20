@@ -60,3 +60,20 @@ struct AppLinksTests {
         #expect(asked == [true, false, true, false, true, false])
     }
 }
+
+struct TypedAppLinksTests {
+    /// GitHub #604: todoist:// typed in ⌘T and sent with Return opened nothing. Another app's address
+    /// typed in the command bar opens that app; with no app for it, it is searched for; a refused
+    /// scheme stays refused; a web address loads as before.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/604"))
+    func aTypedAppAddressOpensItsApp() {
+        #expect(AppLinks.typed("todoist://", hasApp: true) == .openApp)
+        #expect(AppLinks.typed("zoommtg://zoom.us/join?confno=1", hasApp: true) == .openApp)
+        #expect(AppLinks.typed("mailto:someone@example.com", hasApp: true) == .openApp)
+        #expect(AppLinks.typed("todoist://", hasApp: false) == .search)
+        #expect(AppLinks.typed("afp://server/share", hasApp: true) == .refuse)
+        #expect(AppLinks.typed("cra://open?url=x", hasApp: true) == .refuse)
+        #expect(AppLinks.typed("https://todoist.com", hasApp: true) == .load)
+        #expect(AppLinks.typed("about:blank", hasApp: false) == .load)
+    }
+}

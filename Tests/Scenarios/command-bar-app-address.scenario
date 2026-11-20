@@ -1,0 +1,25 @@
+# promise: #604
+# todoist:// typed in ⌘T and sent with Return opened nothing. Another app's address typed in the
+# command bar now opens that app with no tab (AppLinks.typed, AppLinksTests); this checks Return goes
+# through it without launching an app here: an app address no app on this Mac opens is searched for,
+# as Chrome does, and a scheme Cra never hands to macOS (afp:) opens nothing.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "searchEngine": "duckduckgo"}
+cra://open?url=${PAGE}?n=start
+wait 2
+
+cra://commandbar?query=cranoapp604://inbox
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+expect-log command bar: no app opens cranoapp604:, searched
+cra://debug?browserWindows=noapp
+expect-log Cra browser windows noapp: .*open=https://duckduckgo\.com/\?q=cranoapp604
+
+cra://commandbar?query=afp://server/share
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+expect-log command bar can't open afp: \(refused\)
+cra://debug?browserWindows=refused
+expect-log Cra browser windows refused: .*open=https://duckduckgo\.com/\?q=cranoapp604

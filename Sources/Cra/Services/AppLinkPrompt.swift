@@ -20,6 +20,25 @@ enum AppLinkPrompt {
         }
     }
 
+    /// An address typed in a command bar and sent with Return (#604): another app's opens it here and
+    /// needs no tab; the caller loads a page, searches an address no app opens, and drops a refused one.
+    static func openTyped(_ url: String) -> AppLinks.Typed {
+        let target = URL(string: url)
+        let app = target.flatMap { NSWorkspace.shared.urlForApplication(toOpen: $0) }
+        let typed = AppLinks.typed(url, hasApp: app != nil)
+        let scheme = url.prefix { $0 != ":" }.lowercased() + ":"
+        switch typed {
+        case .load: break
+        case .openApp:
+            let name = app.map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") } ?? "?"
+            CraLog.note("command bar opens \(name) for \(scheme)")
+            if let target { NSWorkspace.shared.open(target) }
+        case .search: CraLog.note("command bar: no app opens \(scheme), searched")
+        case .refuse: CraLog.note("command bar can't open \(scheme) (refused)")
+        }
+        return typed
+    }
+
     /// A Chromium page committed in its main frame (a new page or a reload; its tab's or Little
     /// Window's delegate says so): its own redirect may ask once again.
     static func pageLoaded(_ browser: CraBrowser) {

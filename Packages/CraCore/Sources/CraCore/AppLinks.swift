@@ -67,3 +67,29 @@ public enum AppLinks {
         return openedSchemes.contains(scheme) ? .opens : .asksFirst
     }
 }
+
+// MARK: Typed addresses (#604)
+
+extension AppLinks {
+    /// What Return does with an address typed in the command bar (⌘T, ⌘L, a Little Window's bar).
+    public enum Typed: Equatable, Sendable {
+        /// A page: the engine loads it.
+        case load
+        /// Another app's address with an app that opens it: macOS opens it, no tab. Typed by the person,
+        /// it is their click, so no "Open <app>?" first (#604: todoist:// opened nothing, as Arc did).
+        case openApp
+        /// Another app's address no app here opens: it is searched for, as Chrome treats a scheme
+        /// nothing is registered for.
+        case search
+        /// A scheme never handed to macOS (afp:, cra:): nothing happens.
+        case refuse
+    }
+
+    public static func typed(_ url: String, hasApp: Bool) -> Typed {
+        switch kind(of: url) {
+        case .page: return .load
+        case .refused: return .refuse
+        case .asksFirst, .opens: return hasApp ? .openApp : .search
+        }
+    }
+}

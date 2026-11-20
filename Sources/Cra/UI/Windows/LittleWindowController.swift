@@ -1337,6 +1337,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
         let query = commandBar.query
         func open(_ url: String) {
+            var url = url
+            // Another app's address opens that app, with no page (#604).
+            switch AppLinkPrompt.openTyped(url) {
+            case .load: break
+            case .openApp, .refuse: return
+            case .search: url = commandBar.engine.searchURL(typed)
+            }
             store.recordQuerySelection(query: query, url: url)
             navigate(url)
         }
