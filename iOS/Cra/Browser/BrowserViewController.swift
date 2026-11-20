@@ -440,7 +440,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func searchSheet(_ sheet: SearchSheet, didPickRecentTab row: MobileRecentTabs.Row) {
         switch row.source {
         case .phone(let id):
-            store.select(id)
+            store.bringToFront(id)
             guard let tab = store.selected else { return }
             show(tab)
             setSearching(false)
@@ -641,7 +641,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func tabSwitcher(_ switcher: TabSwitcherView, didSelect id: UUID) {
-        store.select(id)
+        store.bringToFront(id)
         guard let tab = store.selected else { return }
         show(tab)
         switcher.expandedID = id

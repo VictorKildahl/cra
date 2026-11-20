@@ -1378,6 +1378,10 @@
 #644   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::newWindowsTakeTheLastSidebarChoice  0e56b30dc90f
 #644   Tests/Scenarios/new-window-sidebar.scenario  76fa0c958937
 #644   Tests/StoreTests.swift::newWindowsTakeTheLastSidebarChoice  850dee2335df
+#647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aPickedTabMovesToTheNewestEnd  d64f90ed30eb
+#647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::archivingAPopupReturnsToItsOpener  c28451ef2820
+#647   iOS/CraUITests/TabOrderTests.swift::testAPickedTabMovesToTheEndOfTheRow  9332f7345e40
+#647   iOS/CraUITests/TabOrderTests.swift::testSwipingAPopupAwayReturnsToItsOpener  77038b0e6667
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

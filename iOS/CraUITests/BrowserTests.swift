@@ -540,12 +540,13 @@ final class GestureTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
         openSecondTab()
+        // Read from the page on screen: picking a card in the row would move it to the row's end (#647).
         drag(fromX: 0.3, toX: 0.9, y: 0.95)
-        sleep(1)
-        XCTAssertEqual(shownTabTitle(), "First")
+        waitForPage("First")
+        XCTAssertFalse(app.webViews.staticTexts["Second"].exists)
         drag(fromX: 0.8, toX: 0.2, y: 0.95)
-        sleep(1)
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
+        XCTAssertFalse(app.webViews.staticTexts["First"].exists)
     }
 
     /// A swipe right across a tab's first page archives the tab and shows the one before it; the

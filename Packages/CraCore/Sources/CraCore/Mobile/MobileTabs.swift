@@ -122,6 +122,16 @@ public struct MobileTabsDocument: Codable, Equatable {
         unseenIncognito.remove(id)
     }
 
+    /// Shows a tab picked from the tab row (or the search sheet's recent tabs) and moves it to the
+    /// row's newest end, as Arc Search's row keeps tabs from the least to the most recently picked,
+    /// like the iPhone's app switcher (#647). A swipe along the bar only `select`s, so it walks the
+    /// row without shuffling it.
+    public mutating func bringToFront(_ id: UUID, now: Date) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        tabs.append(tabs.remove(at: index))
+        select(id, now: now)
+    }
+
     /// Closes a tab. When it was the one on screen, the tab after it takes its place, or the one
     /// before when it was last.
     public mutating func close(_ id: UUID) {
@@ -158,9 +168,13 @@ public struct MobileTabsDocument: Codable, Equatable {
 
 extension MobileTabsDocument {
     /// Closes a tab into the archive, as a swipe up on its card does. Incognito tabs just close.
-    public mutating func archive(_ id: UUID) {
+    /// A popup on screen hands the screen back to `opener`, the tab that opened it, when that is
+    /// still open, as closing it from the page does (#647).
+    public mutating func archive(_ id: UUID, returningTo opener: UUID? = nil) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        let wasSelected = selected == id
         close(id)
+        if wasSelected, let opener, tabs.contains(where: { $0.id == opener }) { selected = opener }
         guard !tab.isIncognito else { return }
         archived.insert(tab, at: 0)
     }

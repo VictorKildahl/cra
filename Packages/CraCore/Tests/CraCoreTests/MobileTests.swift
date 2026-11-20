@@ -171,6 +171,48 @@ struct MobileTabsTests {
         #expect(document.selected == nil)
     }
 
+    /// A tab picked from the row moves to its newest end, as in Arc Search: the row runs from
+    /// the least to the most recently picked. A plain select (a swipe along the bar) keeps the order.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/647")) func aPickedTabMovesToTheNewestEnd() {
+        var document = MobileTabsDocument()
+        let tabs = ["a", "b", "c", "d"].map { Self.tab($0, hoursAgo: 1) }
+        tabs.forEach { document.open($0) }
+        document.bringToFront(tabs[0].id, now: Self.start)
+        #expect(document.tabs.map(\.title) == ["b", "c", "d", "a"])
+        #expect(document.selected == tabs[0].id)
+        #expect(document.selectedTab?.lastActive == Self.start)
+        document.bringToFront(tabs[0].id, now: Self.start)
+        #expect(document.tabs.map(\.title) == ["b", "c", "d", "a"], "the newest stays where it is")
+        document.select(tabs[2].id, now: Self.start)
+        #expect(document.tabs.map(\.title) == ["b", "c", "d", "a"], "walking the row doesn't reorder it")
+        document.bringToFront(UUID(), now: Self.start)
+        #expect(document.selected == tabs[2].id, "a tab that is gone changes nothing")
+    }
+
+    /// The reporter's follow-up: a popup from a tab further back, once put away, hands the screen
+    /// back to that tab, not to its neighbour at the end of the row.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/647")) func archivingAPopupReturnsToItsOpener() {
+        var document = MobileTabsDocument()
+        let tabs = ["a", "b", "c"].map { Self.tab($0, hoursAgo: 1) }
+        tabs.forEach { document.open($0) }
+        let popup = Self.tab("popup", hoursAgo: 0)
+        document.open(popup)
+        document.archive(popup.id, returningTo: tabs[0].id)
+        #expect(document.selected == tabs[0].id)
+        #expect(document.archived.map(\.title) == ["popup"])
+
+        let other = Self.tab("other", hoursAgo: 0)
+        document.open(other)
+        document.archive(tabs[1].id, returningTo: tabs[0].id)
+        #expect(document.selected == other.id, "a tab off screen leaves the screen alone")
+
+        document.archive(tabs[0].id)
+        let orphan = Self.tab("orphan", hoursAgo: 0)
+        document.open(orphan)
+        document.archive(orphan.id, returningTo: tabs[0].id)
+        #expect(document.selected == other.id, "an opener that is gone falls back to the neighbour")
+    }
+
     @Test func staleTabsGoToTheArchiveNewestFirst() {
         var document = MobileTabsDocument()
         let old = Self.tab("old", hoursAgo: 50), older = Self.tab("older", hoursAgo: 80), fresh = Self.tab("fresh", hoursAgo: 2)
