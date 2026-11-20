@@ -66,7 +66,9 @@ what was drawn, for the fingerprinting-protection scenarios.</p>
     return ctx.startRendering().then(function (buffer) {
       var data = buffer.getChannelData(0), moved = 0, most = 0;
       for (var i = 0; i < data.length; i++) { var d = Math.abs(data[i] - 0.5); if (d) moved++; most = Math.max(most, d); }
-      return moved + '/' + (most <= 0.5e-5 ? 'faint' : 'loud:' + most);
+      // A hundred-thousandth of 0.5, plus one float32 step at 0.5 (6e-8): 0.5 * (1 + 1e-5) has no exact float, and
+      // the nearest one is 0.5 + 5.0068e-6.
+      return moved + '/' + (most <= 0.5e-5 + 6e-8 ? 'faint' : 'loud:' + most);
     });
   }
   // A dedicated worker: its cores, and an OffscreenCanvas read back there.
