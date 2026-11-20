@@ -17,7 +17,7 @@ struct Suggestion: Identifiable, Equatable {
     let id: String
     let kind: SuggestionKind
     let title: String
-    let subtitle: String
+    var subtitle: String
     let url: String?
     let faviconKey: String?
     let symbol: String?
@@ -76,6 +76,8 @@ final class SuggestionEngine {
 
         var items: [Suggestion] = []
         let typed = typedRow(query: query)
+        // One clock reading for the keystroke, not two per matching row (#617).
+        now = Date()
         items.append(contentsOf: tabSuggestions(q, excluding: currentTabID))
         // Incognito: the window's own tabs, search and commands; nothing from the normal profile.
         if !incognito {
@@ -117,7 +119,8 @@ final class SuggestionEngine {
                 items.insert(contentsOf: searchSuggestions(query, after: items).prefix(Self.maxRows - at), at: at)
             }
         }
-        result.items = Array(items.prefix(Self.maxRows))
+        // Rows are scored without their subtitles; only the ones shown get them (#617).
+        result.items = items.prefix(Self.maxRows).map(finished)
         result.inlineCompletion = completion?.text
         result.scope = TabSearchScope.isOffered(by: query) ? .tabs
             : SiteSearch.match(q, completion: completion?.text, keywords: engines.keywords).map(CommandBarScope.site)
@@ -310,14 +313,10 @@ final class SuggestionEngine {
             if let custom = tab.title?.lowercased(), custom.hasPrefix(q) { score += 40 }
             if score < 30 { continue }
             score += recencyBoost(t.timeLastActiveAt)
-            let switches = store.ranking.recentlySwitchedToTabs[tab.id]?.filter { $0 > Date().addingTimeInterval(-7 * 86400) }.count ?? 0
-            score += Double(min(switches, 10)) * 3
-            let sid = store.spaceID(ofItem: tab.id)
-            let spaceName = sid.flatMap { store.space($0)?.title } ?? ""
-            let pinned = store.isPinned(tab.id)
-            out.append(Suggestion(id: "tab:\(tab.id)", kind: .switchToTab(tab.id), title: tab.displayTitle,
-                                  subtitle: [spaceName, pinned ? "Pinned" : "", Self.humanURL(t.url)].filter { !$0.isEmpty }.joined(separator: " · "),
-                                  url: t.url, faviconKey: t.faviconKey, symbol: nil, trailing: "Switch to Tab", score: score, spaceID: sid, loose: loose))
+            score += Double(CommandBarRanking.recentSwitches(store.ranking.recentlySwitchedToTabs[tab.id], now: now)) * 3
+            // Its space, pin and subtitle come in `finished`, for the rows shown (#617).
+            out.append(Suggestion(id: "tab:\(tab.id)", kind: .switchToTab(tab.id), title: tab.displayTitle, subtitle: "",
+                                  url: t.url, faviconKey: t.faviconKey, symbol: nil, trailing: "Switch to Tab", score: score, loose: loose))
         }
         return out
     }
@@ -333,9 +332,7 @@ final class SuggestionEngine {
             var score = text * 0.85
             if score < 30 { continue }
             score += recencyBoost(entry.archivedAt) * 0.5
-            let spaceName = entry.sourceSpaceID.flatMap { store.space($0)?.title } ?? ""
-            out.append(Suggestion(id: "arch:\(entry.id)", kind: .archived(entry.id), title: entry.item.displayTitle,
-                                  subtitle: ["Archived \(Self.relative(entry.archivedAt))", spaceName, Self.humanURL(t.url)].filter { !$0.isEmpty }.joined(separator: " · "),
+            out.append(Suggestion(id: "arch:\(entry.id)", kind: .archived(entry.id), title: entry.item.displayTitle, subtitle: "",
                                   url: t.url, faviconKey: t.faviconKey, symbol: nil, trailing: "Restore", score: score,
                                   loose: text < Self.looseBelow))
         }
@@ -350,7 +347,7 @@ final class SuggestionEngine {
             if score < 30 { continue }
             score += min(Double(h.visitCount), 20) * 1.5 + recencyBoost(h.lastVisit) * 0.6
             out.append(Suggestion(id: "hist:\(h.url)", kind: .history, title: h.title.isEmpty ? Self.humanURL(h.url) : h.title,
-                                  subtitle: Self.humanURL(h.url), url: h.url, faviconKey: FaviconKey.key(for: h.url),
+                                  subtitle: "", url: h.url, faviconKey: FaviconKey.key(for: h.url),
                                   symbol: "clock", trailing: nil, score: score, loose: text < Self.looseBelow))
         }
         return out
@@ -444,9 +441,10 @@ final class SuggestionEngine {
     }
 
     private func recentSuggestions(excluding current: UUID?) -> [Suggestion] {
-        let tabs = commandBarTabs().filter { $0.id != current }
-            .sorted { ($0.tab?.timeLastActiveAt ?? .distantPast) > ($1.tab?.timeLastActiveAt ?? .distantPast) }
-            .prefix(7)
+        // The seven latest without sorting every tab (#617).
+        let tabs = CommandBarRanking.mostRecent(commandBarTabs().lazy.filter { $0.id != current }, count: 7) {
+            $0.tab?.timeLastActiveAt ?? .distantPast
+        }
         var out: [Suggestion] = tabs.map { tab in
             let sid = store.spaceID(ofItem: tab.id)
             return Suggestion(id: "tab:\(tab.id)", kind: .switchToTab(tab.id), title: tab.displayTitle,
@@ -510,14 +508,34 @@ final class SuggestionEngine {
         return max(0, 1 - Double(gaps) / Double(q.count))
     }
 
+    /// The keystroke's clock reading (`suggestions(for:)` sets it once per query).
+    private var now = Date()
+
     private func recencyBoost(_ date: Date?) -> Double {
-        guard let date else { return 0 }
-        let age = Date().timeIntervalSince(date)
-        if age < 600 { return 30 }
-        if age < 3600 { return 22 }
-        if age < 86400 { return 14 }
-        if age < 7 * 86400 { return 7 }
-        return 0
+        CommandBarRanking.recencyBoost(age: date.map { now.timeIntervalSince($0) })
+    }
+
+    /// A scored row as the bar shows it: a tab's space, pin and address, an archived tab's age, space and
+    /// address, a visited page's address. Only the rows shown are finished: dedupe, ranking and the inline
+    /// completion read none of this, and at 5,000 tabs a short query matched thousands of rows (#617).
+    private func finished(_ s: Suggestion) -> Suggestion {
+        guard s.subtitle.isEmpty else { return s }
+        var s = s
+        switch s.kind {
+        case .switchToTab(let id) where s.id.hasPrefix("tab:"):
+            let sid = store.spaceID(ofItem: id)
+            let spaceName = sid.flatMap { store.space($0)?.title } ?? ""
+            s.spaceID = sid
+            s.subtitle = [spaceName, store.isPinned(id) ? "Pinned" : "", Self.humanURL(s.url ?? "")].filter { !$0.isEmpty }.joined(separator: " · ")
+        case .archived(let id) where s.id.hasPrefix("arch:"):
+            guard let entry = store.archive.first(where: { $0.id == id }) else { break }
+            let spaceName = entry.sourceSpaceID.flatMap { store.space($0)?.title } ?? ""
+            s.subtitle = ["Archived \(Self.relative(entry.archivedAt))", spaceName, Self.humanURL(s.url ?? "")].filter { !$0.isEmpty }.joined(separator: " · ")
+        case .history where s.id.hasPrefix("hist:"):
+            s.subtitle = Self.humanURL(s.url ?? "")
+        default: break
+        }
+        return s
     }
 
     private func dedupe(_ items: [Suggestion]) -> [Suggestion] {

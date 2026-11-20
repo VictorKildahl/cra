@@ -1934,6 +1934,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for l in littleWindows where l.commandBar.isOpen { line("\(label) \(l.isPeek ? "peek" : "little")", l.commandBar) }
                 return
             }
+            // commandBarDetail=<label>: the main window's bar rows as kind:subtitle, which only the rows shown
+            // get (#617).
+            if let label = dict["commandBarDetail"] {
+                let rows = main.commandBar.result.items.map { row -> String in
+                    switch row.kind {
+                    case .switchToTab: return "tab:\(row.subtitle)"
+                    case .archived: return "archived:\(row.subtitle)"
+                    case .history: return "history:\(row.subtitle)"
+                    default: return "other:\(row.subtitle)"
+                    }
+                }
+                CraLog.note("command bar detail \(label): \(rows.joined(separator: " | "))")
+                return
+            }
             // sidebarShown=<label>: whether the main window shows its sidebar, and the View menu's
             // Hide/Show Sidebar row as the menu bar has it: title and the key it answers to, which
             // is the user's own when System Settings ▸ Keyboard ▸ App Shortcuts names the row (#253).

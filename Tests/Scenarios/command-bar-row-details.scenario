@@ -1,0 +1,19 @@
+# promise: #617
+# At 5,000 tabs a one-letter query built a whole row (space, pin, address, an archived tab's age) for every
+# match, to show five. Rows are now scored bare and only the ones shown get their details; this checks the
+# shown ones still have them: an open tab its space and address, an archived tab its age, space and address.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1
+cra://open?url=${PAGE}?n=closed
+expect-log loaded 127\.0\.0\.1
+cra://action/closeTab
+cra://open?url=${PAGE}?n=third
+wait 2
+
+cra://commandbar?query=fixture
+wait 1
+cra://debug?commandBarDetail=fixture
+expect-log command bar detail fixture: .*tab:\S+ · 127\.0\.0\.1:\d+/page\.html\?n=first
+expect-log command bar detail fixture: .*archived:Archived [^|]+ · \S+ · 127\.0\.0\.1:\d+/page\.html\?n=closed
