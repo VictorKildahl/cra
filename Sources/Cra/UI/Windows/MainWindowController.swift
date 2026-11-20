@@ -872,16 +872,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// opens, nothing picked (rows as menuReadout writes them, then its Edit Pinned Page and Move to
     /// submenus). `run` picks a row by title, in a submenu too, and logs the space's pinned and Today
     /// rows (page queries) and the open tab (#600).
-    func testTabMenu(_ n: Int, label: String, run: String?, split: Bool = false) {
-        let kind = split ? "split menu" : "tab menu"
+    func testTabMenu(_ n: Int, label: String, run: String?, split: Bool = false, folder: Bool = false) {
+        let kind = folder ? "folder menu" : split ? "split menu" : "tab menu"
         func rows(in v: NSView) -> [SidebarRowView] {
-            if let r = v as? TabRowView, !split { return [r] }
+            if let r = v as? TabRowView, !split, !folder { return [r] }
+            if let r = v as? FolderRowView, folder, !r.isHiddenOrHasHiddenAncestor { return [r] }
             if let r = v as? SplitRowView, split, !r.isHiddenOrHasHiddenAncestor { return [r] }
             return v.subviews.flatMap { rows(in: $0) }
         }
         let found = window?.contentView.flatMap(rows(in:)) ?? []
         let row: SidebarRowView?
-        if split {
+        if folder {
+            let folders = found.compactMap { $0 as? FolderRowView }.sorted { $0.convert($0.bounds, to: nil).maxY > $1.convert($1.bounds, to: nil).maxY }
+            row = folders.indices.contains(n - 1) ? folders[n - 1] : nil
+        } else if split {
             // The n-th split row from the top of the list.
             let splits = found.compactMap { $0 as? SplitRowView }.sorted { $0.convert($0.bounds, to: nil).maxY > $1.convert($1.bounds, to: nil).maxY }
             row = splits.indices.contains(n - 1) ? splits[n - 1] : nil

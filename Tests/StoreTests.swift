@@ -61,6 +61,7 @@ enum StoreTests {
         tabFavicons()
         folderSymbols()
         moveTabToSpace()
+        moveFolderToSpace()
         folderPeek()
         folderPeekAfterClosing()
         collapsedPinnedPeek()
@@ -1684,6 +1685,39 @@ enum StoreTests {
                && store.isIncognito(item: secret.id) && store.focusedSpaceID(window: incognito.id) != home,
                "an incognito tab never leaves its window")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    // promise: #662
+    @MainActor
+    private static func moveFolderToSpace() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let a = store.createSpace(title: "Folder source", emoji: "🏠", focus: false)
+        let b = store.createSpace(title: "Folder destination", emoji: "💼", focus: false)
+        let first = store.createTab(url: "https://example.com/first", in: a.id, pinned: true, select: false)
+        let folder = store.createFolder(named: "F", in: a.pinnedContainerID)
+        let last = store.createTab(url: "https://example.com/last", in: a.id, pinned: true, select: false)
+        let t1 = store.createTab(url: "https://example.com/t1", pinned: true, select: false, parent: folder.id)
+        let nested = store.createFolder(named: "N", in: folder.id)
+        let t2 = store.createTab(url: "https://example.com/t2", pinned: true, select: false, parent: nested.id)
+        let t3 = store.createTab(url: "https://example.com/t3", pinned: true, select: false, parent: folder.id)
+        let existing = store.createTab(url: "https://example.com/existing", in: b.id, pinned: true, select: false)
+        store.setExpanded(folder.id, true)
+        store.setExpanded(nested.id, false)
+        let window = store.addWindow(spaceID: a.id, frame: nil)
+        store.selectTab(t2.id, window: window.id)
+        store.setExpanded(nested.id, false)
+        let count = store.orderedSpaces.reduce(0) { $0 + store.tabs(under: $1.pinnedContainerID).count + store.tabs(under: $1.todayContainerID).count + store.tabs(under: $1.favoritesContainerID).count }
+        store.moveTab(folder.id, toSpace: b.id, window: nil)
+        expect(store.children(of: b.pinnedContainerID).map(\.id) == [existing.id, folder.id], "folder appends to target pinned")
+        expect(store.children(of: a.pinnedContainerID).map(\.id) == [first.id, last.id], "folder leaves source pinned")
+        expect(store.children(of: folder.id).map(\.id) == [t1.id, nested.id, t3.id] && store.children(of: nested.id).map(\.id) == [t2.id], "folder subtree keeps ids and order")
+        expect([folder.id, nested.id, t1.id, t2.id, t3.id].allSatisfy { store.spaceID(ofItem: $0) == b.id }, "whole subtree belongs to target")
+        let after = store.orderedSpaces.reduce(0) { $0 + store.tabs(under: $1.pinnedContainerID).count + store.tabs(under: $1.todayContainerID).count + store.tabs(under: $1.favoritesContainerID).count }
+        expect(count == after && store.integrityProblems().isEmpty, "moving preserves tabs and sidebar integrity")
+        expect(store.isExpanded(folder.id) && !store.isExpanded(nested.id), "folder expansion states survive")
+        expect(store.selectedTabID(in: a.id, window: window.id).map { ![t1.id, t2.id, t3.id].contains($0) } ?? true, "source selection does not follow moved tab")
+        store.moveTab(folder.id, toSpace: b.id, window: nil)
+        expect(store.children(of: b.pinnedContainerID).map(\.id) == [existing.id, folder.id] && store.children(of: folder.id).map(\.id) == [t1.id, nested.id, t3.id], "moving to own space does nothing")
     }
 
     // promise: #105
