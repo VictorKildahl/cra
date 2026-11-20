@@ -35,6 +35,25 @@ final class SearchPullTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["bar-search"].isHittable, "the pill is back")
     }
 
+    // promise: #655
+    /// The open sheet, nothing typed, goes down with a drag that starts anywhere on it, below the field
+    /// too, as Arc Search's does in the reporter's recording; before #623 only a drag on the field did.
+    func testDraggingTheEmptySheetDownFromAnywhereClosesIt() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        // Well below the field, on the sheet: not the field itself.
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 3.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 250)), withVelocity: .fast, thenHoldForDuration: 0)
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.keyboards.firstMatch)
+        wait(for: [gone], timeout: 5)
+        waitForBarOnScreen()
+        keep("empty sheet dragged down from below the field")
+    }
+
     // promise: #623
     /// The open sheet goes down with a drag that starts on its suggestions, not only on the field.
     /// With something typed the suggestions scroll, and before, they took the drag.
