@@ -4413,6 +4413,24 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   Little Window has no such monitor. LittleWindow.sendEvent now does the same for its children. A press while the browser
   window itself was key always worked (its monitor made the Peek key), which is why it looked intermittent.
 
+## Boost colours leave images alone; incognito follows the space's profile (Arc 1.174, 20 Nov 2026)
+
+- [O live] Boost colour wheel (#602): Victor's Arc, Wikipedia's Cat article, command bar "New Boost", the pad's
+  handle dragged to a strong blue-purple. The article's white turned 216/218/242, text, links and table headers
+  purple; every photo kept its pixels (the white cat 202/194/188 before and after). The Boost was deleted after.
+  Arc's binary registers a native per-host colour filter (`registerColorFilter:forHostPattern:`,
+  `applyColorFilter:`, `BoostColorScheme`, `BoostColorWheelScheme`): a filter in the engine that tints what the
+  page draws but its images, not a page stylesheet. Cra's tint is `html { filter: sepia … }`, which takes the
+  pictures with it; a CSS counter-filter can't give them back (sepia isn't invertible within 0–1), and inline
+  colours from a script would freeze hover and focus colours. Arc's result needs an engine-side filter that skips
+  image draws.
+- [O live] Incognito (#620): an offline Arc on a fake home, every space on "Profile 2", each profile's Chromium
+  `download.default_directory` its own folder. File ▸ New Incognito Window from that space, then a file:// zip:
+  it landed in Profile 2's folder. Arc's incognito window is the incognito side of the opening space's profile.
+- [U] Swiping between spaces (#613): synthesized two-finger scroll events (phases and momentum, posted to the app
+  or through the HID tap with the pointer over the sidebar) don't switch Arc's space, nor did ⌘⌥→ posted to it;
+  Arc's swipe needs a real trackpad. Not measured.
+
 ## Editor gradients over a backdrop (Arc 1.174, 20 Nov 2026, #596 #643, offline Arc on a fake home)
 
 Arc 1.174 on a fake home (network denied, Victor's Arc not running) with every space set to one `single`
