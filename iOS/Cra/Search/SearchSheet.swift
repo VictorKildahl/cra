@@ -36,6 +36,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private var rowViews: [SuggestionRowView] = []
     /// The rows, scrolling up under the field (`MobileSuggestions.Scroll`).
     private let list = SuggestionListView()
+    /// The suggestions' scroll view, which a drag down on the sheet takes over at its top (#623).
+    var suggestionList: UIScrollView { list }
     /// What was typed: the query the rows are for, shown again when the list is back at the top.
     private var typedText = ""
     /// How many rows have gone under the field; the field shows the last of them.

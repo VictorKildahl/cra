@@ -43,6 +43,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// What the finger was on when the swipe across the page started (#627).
     weak var pageSwipeTouchView: UIView?
     var barSwipeOpensRow = false
+    var barSwipePullsSearch = false
+    /// How far up the search sheet is being pulled out of the pill, while it is (#623).
+    var searchPull: CGFloat?
     /// A drag up from the tab button: the tab it brings back (#537).
     var barSwipeTarget: MobileTab?
     // Voice search (BrowserGestures.swift).
@@ -240,7 +243,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let keyboardUpForPage = keyboardHeight > safeBottom && !isSearching
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
-        bar.controlsVisibility = isSearching ? 0 : 1
+        // Pulled out of the pill (#623), the sheet's top follows the finger and its field grows
+        // from the pill on the way up.
+        let pull = isSearching ? nil : searchPull
+        let pulled = pull.map { MobileSwipe.searchPullProgress(dragUp: $0) }
+        bar.controlsVisibility = isSearching ? 0 : 1 - (pulled ?? 0)
         barReveal.frame = MobileBottomBar.revealStrip(in: bounds.size, safeBottom: safeBottom)
         barReveal.isHidden = !barHiddenByScroll || isSearching || switcher != nil || shownPage == nil
         placeBlockerNotices()
@@ -249,10 +256,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let keyboard = max(keyboardHeight, safeBottom)
         let safeTop = view.safeAreaInsets.top
         sheet.rowsInView = MobileSearchSheet.rowsInView(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop)
-        let top = isSearching ? MobileSearchSheet.top(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop) : barFrame.minY
+        let top = isSearching ? MobileSearchSheet.top(screenHeight: bounds.height, keyboardHeight: keyboard, safeTop: safeTop)
+            : barFrame.minY - max(0, pull ?? 0)
         sheet.frame = CGRect(x: 0, y: top, width: bounds.width, height: max(MobileSearchSheet.height(rows: sheet.rowsInView) + keyboard, bounds.height - top))
         sheet.collapsedFieldFrame = bar.pillFrame
-        sheet.openness = isSearching ? 1 : 0
+        sheet.openness = isSearching ? 1 : pulled ?? 0
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))
         logo.alpha = isSearching || store.selected != nil || switcher != nil ? 0 : 1
         layoutBrowseToggle(barTop: barFrame.minY)
@@ -280,7 +288,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func chromeSettled() {
-        guard !isSearching else { return }
+        guard !isSearching, searchPull == nil else { return }
         sheet.isHidden = true
         bar.pill.alpha = 1
     }
@@ -334,31 +342,17 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     func setSearching(_ searching: Bool, incognito: Bool? = nil) {
         guard searching != isSearching else { return }
-        if searching {
-            dropBlockerNotices()
-            editsShownTab = false
-            if let incognito { incognitoSearch = incognito }
-            sheet.isIncognito = incognitoSearch
-            backdrop.isIncognito = incognitoSearch
-            sheet.text = ""
-            sheet.setRows([])
-            sheet.offersBrowseForMe = BrowseForMe.isOffered
-            sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
-            updateRecentTabs()
-            SyncedSidebar.hasSpaces { [weak self] _ in
-                guard let self, self.isSearching, self.sheet.text.isEmpty else { return }
-                self.updateRecentTabs()
-            }
-            sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
-                                                            hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
-            sheet.isHidden = false
-            bar.pill.alpha = 0
+        // A sheet pulled out of the pill is already laid out under the finger: it goes on from there.
+        let pulled = searchPull != nil
+        searchPull = nil
+        if searching, !pulled {
+            prepareSearchSheet(incognito: incognito)
             // Starts from the pill: lay the closed state out before anything animates.
             UIView.performWithoutAnimation {
                 self.layoutChrome()
                 self.sheet.layoutIfNeeded()
             }
-        } else {
+        } else if !searching {
             suggestions.cancel()
             editsShownTab = false
         }
@@ -374,6 +368,28 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if !keyboardDroveLayout {
             animateChrome(duration: 0.35, options: .curveEaseInOut)
         }
+    }
+
+    /// Fills the sheet for a new search and puts it in place of the pill, still closed.
+    func prepareSearchSheet(incognito: Bool? = nil) {
+        dropBlockerNotices()
+        editsShownTab = false
+        if let incognito { incognitoSearch = incognito }
+        sheet.isIncognito = incognitoSearch
+        backdrop.isIncognito = incognitoSearch
+        sheet.text = ""
+        sheet.setRows([])
+        sheet.offersBrowseForMe = BrowseForMe.isOffered
+        sheet.setFavorites(favorites.value.shown().map { ($0, favicons.icon(for: $0.url)) })
+        updateRecentTabs()
+        SyncedSidebar.hasSpaces { [weak self] _ in
+            guard let self, self.isSearching, self.sheet.text.isEmpty else { return }
+            self.updateRecentTabs()
+        }
+        sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
+                                                        hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
+        sheet.isHidden = false
+        bar.pill.alpha = 0
     }
 
     private func updateRecentTabs() {

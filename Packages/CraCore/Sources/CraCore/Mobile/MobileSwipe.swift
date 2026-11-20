@@ -37,16 +37,45 @@ public enum MobileSwipe {
         /// Upwards from the tab button's zone (`MobileBottomBar.previousTabZone`): the tab
         /// looked at before this one (#537).
         case previousTab
+        /// Upwards from the pill (`MobileBottomBar.searchPullZone`): the search sheet, pulled
+        /// out under the finger (#623).
+        case searchSheet
     }
 
     /// Sideways goes to the neighbouring tab and upwards opens the tab row. From the tab
     /// button's zone, upwards brings the previous tab, and a thumb's flick that leans towards
     /// the middle of the screen still counts as upwards: anything steeper than a third of the
     /// way up from flat, since a swipe along the bar is close to flat.
-    public static func barDrag(velocity: CGPoint, startsInPreviousTabZone: Bool, hasPreviousTab: Bool) -> BarDrag {
+    public static func barDrag(velocity: CGPoint, startsInPreviousTabZone: Bool, hasPreviousTab: Bool,
+                               startsInSearchPullZone: Bool = false) -> BarDrag {
         let up = -velocity.y
         if startsInPreviousTabZone, hasPreviousTab, up > 0, abs(velocity.x) <= 1.5 * up { return .previousTab }
+        if startsInSearchPullZone, up > abs(velocity.x) { return .searchSheet }
         return abs(velocity.y) > abs(velocity.x) ? .tabRow : .neighbour
+    }
+
+    /// The search sheet pulled up out of the pill (#623) follows the finger; a pull of this
+    /// many points has it fully out, its field grown from the pill.
+    public static let searchPullSpan: CGFloat = 260
+
+    /// How far out the pulled sheet is, 0 in the bar to 1 open.
+    public static func searchPullProgress(dragUp distance: CGFloat) -> CGFloat {
+        min(1, max(0, distance / searchPullSpan))
+    }
+
+    /// Whether letting go of the pull opens the sheet: far enough, or flicked upwards, and not
+    /// being pulled back down. Otherwise it sinks back into the pill.
+    public static func searchPullOpens(dragUp distance: CGFloat, velocityUp: CGFloat) -> Bool {
+        guard velocityUp > -200 else { return false }
+        return distance > 90 || (distance > 20 && velocityUp > 500)
+    }
+
+    /// Whether a drag down on the open search sheet takes the sheet down with it (#623): from
+    /// anywhere on it, the suggestions included, unless they are scrolled down and the drag
+    /// should scroll them back first.
+    public static func sheetDragStarts(velocity: CGPoint, onList: Bool, listOffset: CGFloat) -> Bool {
+        guard velocity.y > abs(velocity.x) else { return false }
+        return !onList || listOffset <= 0.5
     }
 
     /// A drag up that starts on the tab button brings the previous tab (`MobileTabsDocument.previousTab`)

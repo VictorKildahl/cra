@@ -643,6 +643,47 @@ struct MobileSwipeTests {
         #expect(drag(0, -900, previous: false) == .tabRow, "one tab: nothing to flick to, so the row opens")
     }
 
+    /// Arc Search 1.49 (the reporter's recording): a drag up from the "+" pill pulls the search
+    /// sheet out under the finger, and it opens once let go far enough up or flicked.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/623")) func aDragUpFromThePillPullsTheSearchSheetOut() {
+        let size = CGSize(width: 393, height: 852)
+        let frames = MobileBottomBar.frames(in: size, safeBottom: 34)
+        let zone = MobileBottomBar.searchPullZone(in: size, safeBottom: 34)
+        #expect(zone.contains(frames.pill.insetBy(dx: -6, dy: -6)), "the pill and its slop")
+        #expect(!zone.intersects(MobileBottomBar.previousTabZone(in: size, safeBottom: 34)), "the tab button keeps its flick")
+        #expect(!zone.intersects(frames.menu), "and the menu button its own")
+        #expect(zone.contains(CGPoint(x: 196, y: 850)), "down to the screen's edge")
+        #expect(!zone.contains(CGPoint(x: 196, y: frames.bar.minY - 1)), "not the page above the bar")
+        #expect(!zone.contains(CGPoint(x: 275, y: frames.pill.midY)), "the bar between the pill and the menu drags the tab row")
+
+        func drag(_ vx: CGFloat, _ vy: CGFloat, onPill: Bool = true) -> MobileSwipe.BarDrag {
+            MobileSwipe.barDrag(velocity: CGPoint(x: vx, y: vy), startsInPreviousTabZone: false, hasPreviousTab: true,
+                                startsInSearchPullZone: onPill)
+        }
+        #expect(drag(0, -800) == .searchSheet)
+        #expect(drag(300, -500) == .searchSheet, "leaning a little")
+        #expect(drag(800, -200) == .neighbour, "along the bar from the pill still changes tab")
+        #expect(drag(0, -800, onPill: false) == .tabRow, "from beside the pill the row opens")
+
+        #expect(MobileSwipe.searchPullProgress(dragUp: 0) == 0)
+        #expect(MobileSwipe.searchPullProgress(dragUp: 130) == 0.5)
+        #expect(MobileSwipe.searchPullProgress(dragUp: 600) == 1)
+        #expect(MobileSwipe.searchPullOpens(dragUp: 150, velocityUp: 0))
+        #expect(!MobileSwipe.searchPullOpens(dragUp: 60, velocityUp: 0), "too short: back into the pill")
+        #expect(MobileSwipe.searchPullOpens(dragUp: 40, velocityUp: 800), "a flick")
+        #expect(!MobileSwipe.searchPullOpens(dragUp: 200, velocityUp: -600), "pulled back down before letting go")
+    }
+
+    /// The open sheet goes down with a drag from anywhere on it, its suggestions included, as in
+    /// Arc Search; scrolled suggestions scroll back first.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/623")) func theWholeSheetDragsDown() {
+        #expect(MobileSwipe.sheetDragStarts(velocity: CGPoint(x: 0, y: 600), onList: false, listOffset: 0))
+        #expect(MobileSwipe.sheetDragStarts(velocity: CGPoint(x: 0, y: 600), onList: true, listOffset: 0), "on the suggestions")
+        #expect(!MobileSwipe.sheetDragStarts(velocity: CGPoint(x: 0, y: 600), onList: true, listOffset: 112), "scrolled: they scroll back")
+        #expect(!MobileSwipe.sheetDragStarts(velocity: CGPoint(x: 0, y: -600), onList: true, listOffset: 0), "up scrolls the suggestions")
+        #expect(!MobileSwipe.sheetDragStarts(velocity: CGPoint(x: 600, y: 100), onList: false, listOffset: 0))
+    }
+
     @Test func pullToRefreshActsOnRelease() {
         #expect(MobileSwipe.refreshes(pullAtRelease: 100))
         #expect(!MobileSwipe.refreshes(pullAtRelease: 60))

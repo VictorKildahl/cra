@@ -1345,6 +1345,11 @@
 #622   Tests/Scenarios/arc-tabs-menu.scenario  b04293f64c3b
 #622   Tests/Scenarios/tabs-menu-states.scenario  87e05e5d8c31
 #622   Tests/StoreTests.swift::tabsMenuCountsStopEarly  a0cea44d9eae
+#623   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aDragUpFromThePillPullsTheSearchSheetOut  4566f2ce018d
+#623   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theWholeSheetDragsDown  03b9e3f79af9
+#623   iOS/CraUITests/SearchPullTests.swift::testAShortPullFallsBackIntoThePill  965bf2fd7f04
+#623   iOS/CraUITests/SearchPullTests.swift::testDraggingTheSheetDownByItsSuggestionsClosesIt  cf09fd8048ed
+#623   iOS/CraUITests/SearchPullTests.swift::testDraggingUpFromThePillOpensSearch  9e4edbf036b0
 #626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #627   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aSidewaysDragScrollsWhatCanScrollBeforeItNavigates  b047657926fb
 #627   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::scrollRoomIsWhatIsLeftOnEitherSide  5e2c9ad0b408

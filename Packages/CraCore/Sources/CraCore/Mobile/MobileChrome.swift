@@ -95,6 +95,15 @@ public enum MobileBottomBar {
         return CGRect(x: 0, y: frames.bar.minY, width: (frames.tabs.maxX + frames.pill.minX) / 2, height: frames.bar.height)
     }
 
+    /// Where a drag up pulls the search sheet out of the pill (#623), as in Arc Search: the pill
+    /// with a thumb's slop either side, the bar's whole height. The rest of the bar's right half
+    /// still drags the tab row up.
+    public static func searchPullZone(in size: CGSize, safeBottom: CGFloat) -> CGRect {
+        let frames = frames(in: size, safeBottom: safeBottom)
+        let slop: CGFloat = 14
+        return CGRect(x: frames.pill.minX - slop, y: frames.bar.minY, width: frames.pill.width + 2 * slop, height: frames.bar.height)
+    }
+
     /// Where a tap brings the bar back after scrolling put it away: the home indicator's strip
     /// along the bottom edge, which pages leave empty. A swipe up from there is the system's
     /// and can open the app switcher, so a tap is the sure way back (#509). A phone without a
