@@ -492,6 +492,10 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// Chrome's own pages follow; profiles that load later get it too.
 + (void)setWebsiteAppearance:(NSInteger)mode;
 @property (class, nonatomic, readonly) NSInteger websiteAppearance;
+/// Chrome's own Mode (chrome://settings/appearance) is the same setting: a choice made there
+/// calls `handler` on the main thread with its mode (0, 1 or 2, as above), and every profile
+/// already shows it (#630). Cra's own setWebsiteAppearance: doesn't call it. Not on CEF.
++ (void)setWebsiteAppearanceChangeHandler:(nullable void (^)(NSInteger mode))handler;
 /// Chromium's secure DNS setting (chrome://settings/security), app-wide in Local State:
 /// `dns_over_https.mode` and `dns_over_https.templates` as Chromium holds them now. nil
 /// before Chromium is ready and once quitting starts.

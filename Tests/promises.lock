@@ -1356,6 +1356,8 @@
 #629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::rightCornerNotMajority  627ed13703cc
 #629   Tests/BrowserManagerLifecycleTests.swift::toolbarSampleCase  0561e1ab0765
 #629   Tests/Scenarios/toolbar-colour-from-page.scenario  c790f08859b2
+#630   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::chromiumsModeComesBack  37b8a834e38f
+#630   Tests/Scenarios/chromium-appearance-mode.scenario  d13c9665dc42
 #631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #634   Tests/ExtensionPopupWindowTests.swift::hangsUnderItsButtonUntilDragged  c4ad11dae1c2
 #634   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f

@@ -18,6 +18,8 @@ void SetFingerprintingProtection(bool enabled);
 // 0 Automatic (the Mac's), 1 Light, 2 Dark.
 void SetWebsiteAppearance(NSInteger mode);
 NSInteger WebsiteAppearance();
+// Chromium's own Mode changed in chrome://settings (0, 1 or 2 as above), on the main thread.
+void SetWebsiteAppearanceHandler(void (^handler)(NSInteger mode));
 
 NSString* SecureDNSPreference(const char* name);
 bool SetSecureDNS(NSString* mode, NSString* templates);

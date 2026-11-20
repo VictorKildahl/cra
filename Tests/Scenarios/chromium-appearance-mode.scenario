@@ -1,0 +1,32 @@
+# promise: #630
+# GitHub #630: Chromium's own Mode (chrome://settings/appearance: Device, Light, Dark) is the same
+# setting as Cra's View ▸ Appearance. Cra wrote its own choice over Chromium's at every launch, so
+# Light or Dark picked on the settings page went back to Device after a restart. A choice made there
+# now becomes Cra's: saved in settings.json, pages see it at once, and the page still shows it after
+# a relaunch. Checked by the select's value, which doesn't depend on the Mac's own appearance.
+budget rss=900 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "websiteAppearance": "automatic"}
+
+cra://open?url=chrome://settings/appearance
+wait 4
+# What the page's Mode menu does when Dark is picked.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const f=x=>{if(x.id==='colorSchemeModeSelect')return x;for(const c of [...(x.shadowRoot?x.shadowRoot.children:[]),...x.children]){const m=f(c);if(m)return m}return null};const s=f(document.documentElement);if(!s)return r('picked:none');s.value='2';s.dispatchEvent(new Event('change'));r('picked:'+s.value)},1000))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"picked:2"
+expect-log website appearance from Chromium settings: dark
+cra://open?url=${PAGE}?n=before
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'before-'+matchMedia('(prefers-color-scheme: dark)').matches"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before-true"
+wait 2
+
+relaunch
+wait 3
+cra://open?url=chrome://settings/appearance
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const f=x=>{if(x.id==='colorSchemeModeSelect')return x;for(const c of [...(x.shadowRoot?x.shadowRoot.children:[]),...x.children]){const m=f(c);if(m)return m}return null};const s=f(document.documentElement);r('kept:'+(s?s.value:'none'))},1000))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"kept:2"
+cra://open?url=${PAGE}?n=after
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after-'+matchMedia('(prefers-color-scheme: dark)').matches"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after-true"

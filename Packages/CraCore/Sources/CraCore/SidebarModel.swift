@@ -1190,4 +1190,11 @@ public enum WebsiteAppearance: String, Codable, CaseIterable, Sendable {
         case .dark: 2
         }
     }
+
+    /// The choice made in Chromium's own Mode (chrome://settings/appearance), which is this same
+    /// setting (#630); nil for a value Cra doesn't know.
+    public init?(chromiumMode: Int) {
+        guard let appearance = Self.allCases.first(where: { $0.chromiumMode == chromiumMode }) else { return nil }
+        self = appearance
+    }
 }

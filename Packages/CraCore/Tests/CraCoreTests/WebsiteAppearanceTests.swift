@@ -37,4 +37,16 @@ struct WebsiteAppearanceTests {
     func lightAndDarkTurnTheBrowserToo() {
         #expect(WebsiteAppearance.allCases.map(\.forcesDark) == [nil, false, true])
     }
+
+    /// Chromium's own Mode (chrome://settings/appearance: Device, Light, Dark) is the same setting:
+    /// a choice made there comes back as Cra's, so the next launch doesn't put Device back (#630).
+    /// Values Chromium may add later change nothing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/630"))
+    func chromiumsModeComesBack() {
+        for appearance in WebsiteAppearance.allCases {
+            #expect(WebsiteAppearance(chromiumMode: appearance.chromiumMode) == appearance)
+        }
+        #expect(WebsiteAppearance(chromiumMode: 3) == nil)
+        #expect(WebsiteAppearance(chromiumMode: -1) == nil)
+    }
 }

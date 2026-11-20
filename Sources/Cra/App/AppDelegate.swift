@@ -277,6 +277,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             CraCEFRuntime.setWebsiteAppearance(appearance.chromiumMode)
             NSApp.appearance = appearance.forcesDark.flatMap { NSAppearance(named: $0 ? .darkAqua : .aqua) }
         }
+        // Chromium's Mode in chrome://settings/appearance is the same setting, saved as Cra's so the
+        // next launch keeps it (#630).
+        CraCEFRuntime.setWebsiteAppearanceChangeHandler { [store] mode in
+            guard let appearance = WebsiteAppearance(chromiumMode: mode),
+                  store.settings.websiteAppearance != appearance else { return }
+            CraLog.note("website appearance from Chromium settings: \(appearance.rawValue)")
+            store.settings.websiteAppearance = appearance
+        }
         observeChanges(of: { [store] in store.settings.soundEffects }) { CaptureSound.enabled = $0 }
         observeLinkMenu()
         logSecureDNS()

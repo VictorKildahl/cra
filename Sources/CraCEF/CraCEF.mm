@@ -3576,6 +3576,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     if (g_incognitoContext && g_incognitoReady) ApplyWebsiteAppearance(g_incognitoContext);
 }
 + (NSInteger)websiteAppearance { return g_websiteAppearance; }
+// CEF's request-context preference is Cra's alone; only Cra's engine reports chrome://settings's Mode.
++ (void)setWebsiteAppearanceChangeHandler:(void (^)(NSInteger))handler {}
 + (void)setHttpsOnlyModeEnabled:(BOOL)enabled {
     if (enabled == g_httpsOnly) return;
     g_httpsOnly = enabled;

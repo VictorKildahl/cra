@@ -169,7 +169,6 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageMediaSession:(CraMediaSessionState)state controllable:(BOOL)controllable;
 - (void)pageFocused;
 - (void)pageDestroyed;
-- (void)pageThemeColor;
 - (void)pageBackgroundColor;
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
@@ -388,7 +387,6 @@ class PageObserver : public content::WebContentsObserver,
   void OnFindResultAvailable(content::WebContents* contents) override { [owner_ pageFindResult]; }
   void OnFindTabHelperDestroyed(find_in_page::FindTabHelper* helper) override { find_ = nullptr; }
 
-  void DidChangeThemeColor() override { [owner_ pageThemeColor]; }
   void DidOpenRequestedURL(content::WebContents* new_contents,
                            content::RenderFrameHost* source,
                            const GURL& url,
@@ -626,6 +624,8 @@ void NoteChromeWindowShown(NSWindow* window) {
 }
 
 // A Chrome window nobody sees never becomes key or main: keys would go to a window with nothing in it on screen.
+// Nor is it a row of the Window menu, which the Dock icon's menu lists too: it stays ordered in at alpha 0, titled
+// after its active page, and one browser window showed there twice (scenario dock-menu-windows).
 void NeverKeyOrMain(NSWindow* window) {
   if (!window) {
     return;
@@ -652,6 +652,7 @@ void NeverKeyOrMain(NSWindow* window) {
     }
   }
   [g_host_windows addObject:window];
+  window.excludedFromWindowsMenu = YES;
 }
 
 void MakeHostWindow(NSWindow* window) {
@@ -1537,6 +1538,7 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       // Not a page of Cra's (an extension's background page, say): Chrome's own DevTools window.
       NSWindow* window = browser->GetWindow()->GetNativeWindow().GetNativeNSWindow();
       [g_host_windows removeObject:window];
+      window.excludedFromWindowsMenu = NO;
       window.sharingType = NSWindowSharingReadOnly;
       window.alphaValue = 1;
       window.ignoresMouseEvents = NO;
@@ -2689,10 +2691,6 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   if ([_delegate respondsToSelector:@selector(browser:didChangeMediaCapture:)]) {
     [_delegate browser:self didChangeMediaCapture:self.isCapturingMedia];
   }
-}
-
-- (void)pageThemeColor {
-  [_delegate browser:self didReportThemeColor:Hex(_contents->GetThemeColor())];
 }
 
 - (void)pageBackgroundColor {
@@ -3948,6 +3946,9 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
 }
 + (NSInteger)websiteAppearance {
   return cra::WebsiteAppearance();
+}
++ (void)setWebsiteAppearanceChangeHandler:(void (^)(NSInteger))handler {
+  cra::SetWebsiteAppearanceHandler(handler);
 }
 + (NSString*)secureDNSMode {
   return g_quitting ? nil : cra::SecureDNSPreference("dns_over_https.mode");
