@@ -22,7 +22,11 @@ cra://debug?tidy=1
 
 # Six total Today tabs: the existing host fake produces 3 movies, 2 shopping, 1 Calendar-like singleton.
 cra://open?url=${MUSIC}/page.html?n=movie3
+# The sixth tab has loaded and the hover shows the button before the one snapshot looks (a slow runner took it
+# before either, while the button came moments later).
+expect-log n=movie3 HTTP
 cra://debug?hover=DividerRowView
+wait 1
 cra://debug?snapshot=TidyButton&out=/dev/null
 expect-log snapshot: TidyButton at
 cra://debug?tidy=1
