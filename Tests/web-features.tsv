@@ -165,3 +165,4 @@ feature	extension dialogs	scenarios extension-popup-shown,extension-window-focus
 feature	extension popup from the extension	scenarios extension-open-popup	chrome.action.openPopup(): an extension opening its own popup (1Password's inline menu)
 feature	extension options from its popup	scenarios extension-popup-opens-options	a popup's Settings opening the options page as a tab (chrome.runtime.openOptionsPage, tabs.create)
 feature	full screen and pointer notices	scenarios page-fullscreen-keyboard-lock,page-pointer-lock,little-window-fullscreen	Chrome's exclusive-access notice for a page's full screen, pointer lock and keyboard lock, as Arc's toast
+feature	file drop	scenarios extension-crx-drop	a file from the Finder let go on a page (a .crx on chrome://extensions)

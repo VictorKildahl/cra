@@ -1,0 +1,24 @@
+# A .crx let go on chrome://extensions with developer mode on installs it, as in Chrome and Arc: the page asks
+# chrome.developerPrivate for the file being dropped, Chrome shows its "Add extension?" prompt over the window, and
+# Add installs it (GitHub #593). Dropped.crx is self-signed (no Web Store proof), which the page's drop allows.
+# A package Chrome refuses (DroppedCrx2.crx, the old CRX2 format) says why in Chrome's bar over the page instead
+# of doing nothing. A real drag from another app's window took the same path on 0.1.49, 0.1.52 and main.
+# promise: #593
+budget rss=600
+cra://open?url=chrome://extensions/
+wait 3
+cra://debug?pageJS=chrome.developerPrivate.updateProfileConfiguration({inDeveloperMode:true})
+wait 1
+cra://debug?dropFile=${FIXTURES}/DroppedCrx2.crx
+expect-log dropFile: entered=.* performed=true
+expect-log info bars: Package is invalid: 'CRX_HEADER_INVALID'
+cra://debug?dropFile=${FIXTURES}/Dropped.crx
+expect-log Chromium dialog [0-9]+ shown over window
+# Chrome enables Add a moment after the prompt shows.
+wait 1
+cra://debug?chromiumDialogs=Add extension
+expect-log Chromium dialogs: frame=\{\{.*\}\} over=\{\{.*\}\} onScreen=true titleBarHidden=true
+expect-log Chromium dialog pressed Add extension
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionsInfo().then(l=>JSON.stringify(l.map(e=>[e.name,e.state])))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*Cra Dropped CRX.*ENABLED

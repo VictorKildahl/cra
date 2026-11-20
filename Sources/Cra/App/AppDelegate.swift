@@ -2903,6 +2903,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testDropLink(url, name: dict["name"], row: dict["before"] ?? dict["onto"], onto: dict["onto"] != nil)
                 return
             }
+            // dropFile=<path>: that file let go in the middle of the shown page, as from the Finder (#593).
+            if let path = dict["dropFile"], let container = main.currentBrowser?.containerView {
+                DebugFileDrop.drop(path, on: container)
+                return
+            }
             // dropSplit=<text>[&link=1][&name=<link text>]&x=<0…1>&y=<0…1>: the tab whose URL holds the
             // text (or a page's link to it) let go over the panes, at that fraction from their top left (#419).
             if let text = dict["dropSplit"] {
