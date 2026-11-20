@@ -228,6 +228,11 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
   List, AirDrop, Mail, Notes | Copy, Edit Extensions…) hanging from the top centre of the page under the toolbar; with
   no tab selected it stays enabled and does nothing. Spaces starts with New Space…; Tabs has New Folder… after
   Open Little Arc or Peek in… ⌘O.
+- [O] Tabs menu, Arc 1.173.1 (AX dump plus menu captures, 19 Nov 2026, #622): New Tab… ⌘T, Pin Tab ⌘D,
+  Open in <space> ⌘O (only with a Little Arc or Peek in front), New Folder… | Next Tab ⌥⌘↓, Previous Tab ⌥⌘↑,
+  Reveal Tab in Sidebar (no key) | Clear Today ⇧⌘K, Reset all tabs in this Space (no key). Arc has no Go to Tab
+  rows, shown or hidden; ⌘1–⌘9 work without them. In a fully empty space, Pin Tab, Reveal Tab in Sidebar, Clear
+  Today and Reset all tabs in this Space are dimmed. Next Tab and Previous Tab stay enabled and do nothing.
 
 ## Visual reference (Arc 1.168, measured at 2x from window captures)
 - [O] Sidebar 328pt wide. Row 1: traffic lights, sidebar toggle right after them (~93pt), nav ← → ↻ right-aligned when a

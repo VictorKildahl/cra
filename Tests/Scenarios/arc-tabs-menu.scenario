@@ -1,0 +1,37 @@
+# promise: #622
+# The menu bar's Tabs menu has Arc 1.173.1's rows and dividers: New Tab…, Pin Tab, New Folder… |
+# Next Tab, Previous Tab, Reveal Tab in Sidebar | Clear Today, Reset all tabs in this Space. Cra's
+# Tabs actions that had rows before stay in the menu as hidden rows, so their shortcuts still work,
+# as real key events through the menu bar: ⌘1 and ⌘9 go to the first and last sidebar item (Today
+# lists the newest first) from the tab in the middle, and ⌃Tab goes back to the tab used before.
+# Each step reads the menu as it draws.
+budget rss=600 stalls50=10
+pace 0.5
+cra://open?url=${PAGE}?n=a
+expect-log GET \S*\?n=a
+cra://open?url=${PAGE}?n=b
+expect-log GET \S*\?n=b
+cra://open?url=${PAGE}?n=c
+expect-log GET \S*\?n=c
+wait 1
+cra://debug?menuRows=Tabs
+expect-log menu rows Tabs: New Tab…\|Pin Tab\|New Folder…\|──\|Next Tab\|Previous Tab\|Reveal Tab in Sidebar\|──\|Clear Today\|Reset all tabs in this Space$
+# The rows Arc doesn't show are still there, hidden, and each still takes its shortcut: the key
+# fallback reaches ⌘ and ⌃ keys in a browser window without them, but not a Little Window's, nor an
+# ⌥ or F-key shortcut set in Settings ▸ Shortcuts.
+cra://debug?menuRows=Tabs&label=hidden&hidden=1
+expect-log menu rows hidden: .*\|Reset all tabs in this Space\|Next Recent Tab \(hidden, keys\)\|Add to Favorites \(hidden, keys\)\|Rename Tab… \(hidden, keys\)\|Duplicate Tab \(hidden, keys\)\|Reset Pinned Tab \(hidden, keys\)\|Mute / Unmute Tab \(hidden, keys\)\|Go to Tab 1 \(hidden, keys\)\|Go to Tab 2 \(hidden, keys\)\|Go to Tab 3 \(hidden, keys\)\|Go to Tab 4 \(hidden, keys\)\|Go to Tab 5 \(hidden, keys\)\|Go to Tab 6 \(hidden, keys\)\|Go to Tab 7 \(hidden, keys\)\|Go to Tab 8 \(hidden, keys\)\|Go to Last Tab \(hidden, keys\)$
+
+# Hidden, Go to Tab's rows still take ⌘1 and ⌘9.
+cra://debug?selectTab=n=b
+cra://debug?key=1,18,1048576
+cra://debug?selectedTab=first
+expect-log selected tab first: \S+\?n=c$
+cra://debug?selectTab=n=b
+cra://debug?key=9,25,1048576
+cra://debug?selectedTab=last
+expect-log selected tab last: \S+\?n=a$
+# Hidden, Next Recent Tab still takes ⌃Tab: nothing is held, so it switches at once, back to b.
+cra://debug?key=%09,48,262144
+cra://debug?selectedTab=recent
+expect-log selected tab recent: \S+\?n=b$

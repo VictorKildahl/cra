@@ -1954,7 +1954,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // (hidden rows left out), "|" between rows and "──" for a separator: Arc's File menu (#279).
             // marks=1 also puts ✓ before a checked row and " (off)" after a dimmed one (#333);
             // icons=1 puts [icon] before a row with an image; tips=1 puts [tip] before one whose
-            // full title is available as a tooltip (#471).
+            // full title is available as a tooltip (#471). hidden=1 lists the hidden rows too, with
+            // " (hidden)" after each, or " (hidden, keys)" when it still takes its shortcut (#622).
             // spacesMenuChange=add|moveLastFirst|renameFirst|deleteFirst mutates the temporary scenario
             // store, so reopening this lazy menu proves it follows live Space changes (#471).
             if let change = dict["spacesMenuChange"] {
@@ -1994,13 +1995,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let marks = dict["marks"] == "1"
                 let icons = dict["icons"] == "1"
                 let tips = dict["tips"] == "1"
-                let rows: [String] = menu?.items.filter { !$0.isHidden }.map { item -> String in
+                let withHidden = dict["hidden"] == "1"
+                let rows: [String] = menu?.items.filter { withHidden || !$0.isHidden }.map { item -> String in
                     if item.isSeparatorItem { return "──" }
                     let mark = marks && item.state == .on ? "✓" : ""
                     let icon = icons && item.image != nil ? "[icon]" : ""
                     let tip = tips && item.toolTip != nil ? "[tip]" : ""
                     let disabled = marks && !item.isEnabled ? " (off)" : ""
-                    return mark + icon + tip + item.title + disabled
+                    let hidden = item.isHidden ? (item.allowsKeyEquivalentWhenHidden ? " (hidden, keys)" : " (hidden)") : ""
+                    return mark + icon + tip + item.title + disabled + hidden
                 } ?? []
                 CraLog.note("menu rows \(dict["label"] ?? title): \(rows.joined(separator: "|"))")
                 return
@@ -2803,6 +2806,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(pasteAsPlainText(_:)) { return pageTakingPasteAndMatchStyle != nil }
         if let id = item.representedObject as? String, let title = flippingTitle(id), item.title != title { item.title = title }
+        // The menu bar's Tabs rows can act only when there is something to act on (CraCore TabsMenu, #622).
+        if let id = item.representedObject as? String, item.menu === tabsMenu, let state = tabsMenuState(id) {
+            if let title = state.title, item.title != title { item.title = title }
+            return state.enabled
+        }
         switch item.representedObject as? String {
         case "collapsePinned": return !main.isStandalone
         // A Little Window in front answers for itself (#333).
@@ -3138,6 +3146,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // A Use Both press the page left alone comes back by OnKeyEvent or, redispatched by Chromium,
         // through the menu bar: either way it ends here, so the page didn't keep it (#374).
         useBoth.pageLeft(id)
+        // A Tabs row dimmed in the menu does nothing from its shortcut or the command bar either, and
+        // isn't counted as used (#622).
+        if tabsMenuState(id)?.enabled == false { return }
         if let dialog = NSApp.keyWindow as? DialogPanel, ["closeTab", "closeWindow"].contains(id) {
             dialog.close()
             return
@@ -3484,6 +3495,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     // MARK: Menus (Arc's layout)
 
+    /// The menu bar's Tabs menu, as last built: its decided rows follow CraCore TabsMenu (#622).
+    private weak var tabsMenu: NSMenu?
+
+    /// Whether a Tabs row can act now, and its title: the same answer for the menu and the action (#622).
+    private func tabsMenuState(_ id: String) -> TabsMenu.RowState? {
+        guard TabsMenu.decides(id) else { return nil }
+        return TabsMenu.state(of: id, main.tabsMenuFacts(littleWindowInFront: keyLittleWindow != nil))
+    }
+
     private func item(_ id: String) -> NSMenuItem {
         guard let a = bindings.action(id) else { return NSMenuItem() }
         let m = NSMenuItem(title: a.name, action: #selector(menuAction(_:)), keyEquivalent: "")
@@ -3586,17 +3606,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menubar.addItem(submenu: spacesMenu.makeMenu(), title: "Spaces")
 
         let tabs = NSMenu(title: "Tabs")
-        // Arc: New Tab…, Pin Tab, Open in <space> (only while a Little Window or Peek is in front), New Folder… (#279).
-        for id in TabsMenu.head {
+        tabsMenu = tabs
+        // Arc's three groups (#622); Open in <space> shows only while a Little Window or Peek is in front (#279).
+        for (i, section) in TabsMenu.sections.enumerated() {
+            if i > 0 { tabs.addItem(.separator()) }
+            for id in section {
+                let row = item(id)
+                if id == "newFolder" { row.title = "New Folder…" }
+                tabs.addItem(row)
+            }
+        }
+        // The rows Cra had and Arc keeps out of its menu; hidden, they still take their shortcuts (⌃⇥, ⌘1–⌘9,
+        // any set in Settings ▸ Shortcuts) through the menu bar.
+        for id in TabsMenu.hidden {
             let row = item(id)
-            if id == "newFolder" { row.title = "New Folder…" }
+            row.isHidden = true
+            row.allowsKeyEquivalentWhenHidden = true
             tabs.addItem(row)
         }
-        for id in ["nextTab", "previousTab", "revealTab", "recentTab", "clearToday", "resetSpaceTabs"] { tabs.addItem(item(id)) }
-        tabs.addItem(.separator())
-        for id in ["favoriteTab", "renameTab", "duplicateTab", "resetTab", "muteTab"] { tabs.addItem(item(id)) }
-        tabs.addItem(.separator())
-        for n in 1...9 { tabs.addItem(item("item\(n)")) }
         menubar.addItem(submenu: tabs, title: "Tabs")
 
         let archive = NSMenu(title: "Archive")

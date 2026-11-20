@@ -4719,10 +4719,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Arc's Tabs ▸ Reset all tabs in this Space: every pinned tab away from its page goes back.
     func resetAllPinnedTabs() {
         guard !isStandalone else { return }
-        let space = store.focusedSpace(window: windowID)
-        for t in store.tabs(under: space.pinnedContainerID) where t.tab.map({ $0.url != $0.savedURL }) == true {
-            resetPinnedTab(t.id)
+        for t in pinnedTabsAway { resetPinnedTab(t.id) }
+    }
+
+    /// The focused space's pinned tabs away from their saved page, folders included, Favorites not:
+    /// what Reset all tabs in this Space takes back.
+    private var pinnedTabsAway: [SidebarItem] {
+        store.tabs(under: store.focusedSpace(window: windowID).pinnedContainerID).filter { t in
+            t.tab.map { $0.url != $0.savedURL } == true
         }
+    }
+
+    /// What the Tabs menu's rows can act on in this window's focused space (CraCore TabsMenu, #622).
+    func tabsMenuFacts(littleWindowInFront: Bool) -> TabsMenu.Facts {
+        let selection: TabsMenu.Facts.Selection = switch selectedTabID.flatMap({ store.rootContainer(of: $0) }) {
+        case .favorites: .favorite
+        case .pinned: .pinned
+        case .today: .today
+        case nil: .none
+        }
+        return TabsMenu.Facts(selection: selection, tabs: store.visibleTabs(in: focusedSpaceID).count,
+                              clearableToday: !store.todayClearing(playing: sidebarUI.audibleTabIDs).isEmpty,
+                              resettablePinned: !pinnedTabsAway.isEmpty,
+                              window: isBlank ? .blank : isIncognito ? .incognito : .normal,
+                              littleWindowInFront: littleWindowInFront, makingSpace: sidebarUI.spaceCreation != nil)
     }
 
     /// Arc's Edit ▸ Copy URL as Quote, Save Page As and the page captures, on the open tab (PageCommands).

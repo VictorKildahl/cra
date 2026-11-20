@@ -2572,12 +2572,17 @@ final class SidebarStore {
     /// Arc's Clear on Today (`TodayClear`): the tab each window has on screen in this space and
     /// the tabs in `playing` (the speaker's audible set) stay, with the split or group they're in.
     func clearToday(_ sid: UUID? = nil, playing: Set<UUID>) {
-        guard let space = spaces[sid ?? focusedSpaceID] else { return }
+        for t in todayClearing(sid, playing: playing) { archiveTab(t, reason: .clear) }
+    }
+
+    /// The tabs Clear on Today would archive now; the Tabs menu dims Clear Today when there are none (#622).
+    func todayClearing(_ sid: UUID? = nil, playing: Set<UUID>) -> [UUID] {
+        guard let space = spaces[sid ?? focusedSpaceID] else { return [] }
         let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
         let rows = children(of: space.todayContainerID).map { r in
             TodayClear.Row(id: r.id, tabs: r.isTab ? [r.id] : tabs(under: r.id).map(\.id))
         }
-        for t in TodayClear.archived(rows, selected: selected, playing: playing) { archiveTab(t, reason: .clear) }
+        return TodayClear.archived(rows, selected: selected, playing: playing)
     }
 
     /// Today tabs idle longer than the threshold are archived (Arc:
