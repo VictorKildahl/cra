@@ -1248,6 +1248,7 @@
 #584   Tests/AskOnPageServiceTests.swift::aRefusedAnswerIsAskedAgainInPlainText  e5c3ccb857c5
 #585   Packages/CraCore/Tests/CraCoreTests/WebKitPictureInPictureTests.swift::askedForItAWebKitTabTogglesPictureInPicture  a5e004a3ef37
 #585   Tests/Scenarios/webkit-picture-in-picture.scenario  cb6ed6b0b8b9
+#588   Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::fandangoAtHomePlaysInWebKit  0d94afb2ccd6
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
 #590   Tests/Scenarios/view-history.scenario  d890566954b5

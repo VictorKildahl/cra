@@ -51,7 +51,8 @@ licence, keys usable, 720p playing). That is the whole requirement.
   sends DRM sites to WebKit (its `PROTECTED_VIDEO_SITES`). Joyn (`joyn.de`, `.at`, `.ch`) and Rakuten TV
   (`rakuten.tv`) were seen refusing non-VMP Chromium with "Verified Media Path" errors; SkyShowtime,
   NOW (`nowtv.com`), WOW (`wowtv.de`) and Showmax run on Sky's and Peacock's platforms, which fail
-  the same way. Zattoo, Movistar Plus+, Crave, RTL+ and Viaplay had weaker evidence and are left to
+  the same way. Fandango at Home (`athome.fandango.com`, and `vudu.com`, its old address) told Chromium
+  "Unable to stream at this time. Please try a different browser." (#588). Zattoo, Movistar Plus+, Crave, RTL+ and Viaplay had weaker evidence and are left to
   the switch below. Amazon has path entries: Prime Video at
   `amazon.<store>/gp/video` (the US and Amazon's other stores that serve it there), and Amazon Music at
   `music.amazon.<store>`. The rest of Amazon (shopping, Login with Amazon) stays in Chromium.

@@ -57,6 +57,9 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "joyn.de", "joyn.at", "joyn.ch",
         "rakuten.tv",
         "skyshowtime.com", "nowtv.com", "wowtv.de", "showmax.com",
+        // Fandango at Home (Vudu until 2024; vudu.com sends you on to it): its player answered Cra's
+        // Chromium "Unable to stream at this time. Please try a different browser." (GitHub #588).
+        "athome.fandango.com", "vudu.com",
         // Prime Video where Amazon itself serves it (the US, and Amazon's stores that keep it under
         // /gp/video); the rest of Amazon (shopping, Login with Amazon) stays in Chromium.
     ] + amazonStores.map { "\($0)/gp/video" } + [
@@ -77,6 +80,7 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         "crunchyroll.com": "Crunchyroll", "hotstar.com": "Hotstar", "jiohotstar.com": "JioHotstar", "v.qq.com": "Tencent Video",
         "joyn.de": "Joyn", "joyn.at": "Joyn", "joyn.ch": "Joyn", "rakuten.tv": "Rakuten TV", "skyshowtime.com": "SkyShowtime",
         "nowtv.com": "NOW", "wowtv.de": "WOW", "showmax.com": "Showmax",
+        "athome.fandango.com": "Fandango at Home", "vudu.com": "Fandango at Home",
     ].merging(amazonStores.flatMap { [("\($0)/gp/video", "Prime Video"), ("music.\($0)", "Amazon Music")] }) { a, _ in a }
 
     /// Off: every page is Chromium's, as before.
