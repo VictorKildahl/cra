@@ -93,7 +93,7 @@ enum SidebarMenus {
         let web = URL(string: CleanURL.withoutTrackers(tab.url)).flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }
         if let web { SharePicker.addMenu(to: menu, url: web) }
         menu.addItem(.separator())
-        changeIconItems(menu, id, title: item.displayTitle, custom: tab.customIconKey, store: store, favicons: list.favicons)
+        changeIconItems(menu, id, custom: tab.customIconKey, list: list)
         add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         muteItem(menu, id, tab, ui: ui, store: store, actions: actions)
@@ -123,21 +123,12 @@ enum SidebarMenus {
         return menu
     }
 
-    /// Change Icon… (an image file for the tab), and Use Site Icon while it has one: Arc's row, and
-    /// Cra's way back from it.
-    static func changeIconItems(_ menu: NSMenu, _ id: UUID, title: String, custom: String?, store: SidebarStore, favicons: FaviconCache) {
-        add(menu, "Change Icon…") {
-            let panel = NSOpenPanel()
-            panel.allowedContentTypes = [.image]
-            panel.prompt = "Use Icon"
-            panel.message = "Choose an image for \(title)."
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            guard let key = favicons.importCustomIcon(from: url) else { NSSound.beep(); return }
-            let old = store.item(id)?.tab?.customIconKey
-            store.setCustomIcon(key, for: id)
-            if let old { favicons.removeCustomIcon(old) }
-        }
+    /// Change Icon… (Arc's Emoji | Icon picker, with a picture too; #640), and Use Site Icon while it has
+    /// one: Cra's way back from it beside the picker's Remove.
+    static func changeIconItems(_ menu: NSMenu, _ id: UUID, custom: String?, list: SpaceListView) {
+        add(menu, "Change Icon…") { [weak list] in list?.showTabIconPicker(id) }
         if let custom {
+            let store = list.store, favicons = list.favicons
             add(menu, "Use Site Icon") {
                 store.setCustomIcon(nil, for: id)
                 favicons.removeCustomIcon(custom)

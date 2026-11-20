@@ -1,0 +1,18 @@
+# promise: #640
+# Change Icon… on a favorite or a tab opens Arc's Emoji | Icon picker, the space icon's (Arc 1.17x, checked live
+# 20 Nov 2026 on a favorite's menu), not a file panel. An emoji or a symbol picked there becomes the tab's icon,
+# drawn into a picture every place that shows the icon uses; a symbol is drawn dark so it turns light on a dark
+# space like a site's glyph; Remove goes back to the site's icon (GitHub #640).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=icon
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?tabIcon=picker
+expect-log tab icon picker: shown
+cra://debug?tabIcon=emoji:%F0%9F%8D%95
+expect-log tab icon emoji:🍕: key=custom-emoji- dark=- image=1
+cra://debug?tabIcon=symbol:star.fill
+expect-log tab icon symbol:star.fill: key=custom-symbol- dark=1 image=1
+cra://debug?tabIcon=none
+expect-log tab icon none: key=none dark=- image=0

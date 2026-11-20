@@ -53,3 +53,16 @@ extension Space {
     /// a picture or no icon (a dot in the dock) has no gap in front of its name.
     public var labeled: String { emoji.isEmpty ? title : "\(emoji) \(title)" }
 }
+
+extension TabCustomIcon {
+    /// The cache key's prefix for a pick from Change Icon…'s picker (#640); nil for Remove, which goes back to
+    /// the site's icon.
+    public static func keyPrefix(for icon: SpaceIcon) -> String? {
+        switch icon {
+        case .emoji: emojiPrefix
+        case .symbol: symbolPrefix
+        case .image: imagePrefix
+        case .none: nil
+        }
+    }
+}

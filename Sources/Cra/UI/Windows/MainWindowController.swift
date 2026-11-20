@@ -750,6 +750,34 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The browser window the user is in (AppDelegate follows the key window).
     private var isActiveWindow: Bool { store.activeWindowID == windowID }
 
+    /// `cra://debug?tabIcon=` (#640): "picker" opens Change Icon…'s picker over the selected tab's row, as the
+    /// menu row does; "emoji:<e>", "symbol:<name>" or "none" picks that, as the picker does. Then logs the tab's
+    /// custom icon ("tab icon <step>: key=custom-emoji- dark=-" or "key=none").
+    func testTabIcon(_ step: String) {
+        guard let id = selectedTabID else { return CraLog.note("tab icon \(step): no tab") }
+        if step == "picker" {
+            func list(in v: NSView) -> SpaceListView? {
+                if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
+                return v.subviews.lazy.compactMap { list(in: $0) }.first
+            }
+            guard let l = window?.contentView.flatMap(list(in:)) else { return CraLog.note("tab icon picker: no list") }
+            l.showTabIconPicker(id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                CraLog.note("tab icon picker: \(TabIconPicker.shown?.isShown == true ? "shown" : "not shown")")
+            }
+            return
+        }
+        let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
+        let icon: SpaceIcon = parts.first == "emoji" && parts.count == 2 ? .emoji(parts[1])
+            : parts.first == "symbol" && parts.count == 2 ? .symbol(parts[1]) : .none
+        TabIconPicker.apply(icon, to: id, store: store, favicons: app.favicons)
+        let key = store.item(id)?.tab?.customIconKey
+        let prefix = key.map { k in ["custom-emoji-", "custom-symbol-", "custom-"].first { k.hasPrefix($0) } ?? k } ?? "none"
+        let dark = app.favicons.glyphIsDark(forKey: key).map { $0 ? "1" : "0" } ?? "-"
+        let image = key.flatMap { app.favicons.image(forKey: $0) } != nil ? 1 : 0
+        CraLog.note("tab icon \(step): key=\(prefix) dark=\(dark) image=\(image)")
+    }
+
     /// `cra://debug?dragEnd`: a drag of a row of this window's list let go at a screen point
     /// with nothing taking it, as a drag out of the sidebar ends (#219).
     func testDragEnded(_ id: UUID, at screenPoint: NSPoint) {

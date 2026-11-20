@@ -1913,18 +1913,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         }
     }
 
+    /// Change Icon… (#640): Arc's Emoji | Icon picker under the tile.
     private func pickIcon() {
-        guard let grid, let item = grid.store.item(itemID) else { return }
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Use Icon"
-        panel.message = "Choose an image for \(item.displayTitle)."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard let key = grid.favicons.importCustomIcon(from: url) else { NSSound.beep(); return }
-        let old = item.tab?.customIconKey
-        grid.store.setCustomIcon(key, for: itemID)
-        if let old { grid.favicons.removeCustomIcon(old) }
+        guard let grid else { return }
+        TabIconPicker.show(for: itemID, store: grid.store, favicons: grid.favicons, anchor: self, rect: bounds)
     }
 
     // ArcTooltipTarget: the title by the pointer.

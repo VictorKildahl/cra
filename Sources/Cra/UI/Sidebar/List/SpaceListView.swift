@@ -904,6 +904,13 @@ final class SpaceListView: NSView, NSDraggingSource {
         popover.show(relativeTo: row.convert(rect, to: content), of: content, preferredEdge: content.isFlipped ? .maxY : .minY)
     }
 
+    /// Change Icon… on a tab's row (#640): the picker under the row's icon.
+    func showTabIconPicker(_ id: UUID) {
+        guard let row = views[.item(id)] else { return }
+        let rect = NSRect(x: CraMetrics.rowLeading, y: 0, width: CraMetrics.favicon, height: row.bounds.height)
+        TabIconPicker.show(for: id, store: store, favicons: favicons, anchor: row, rect: rect)
+    }
+
     func showFolderIconPicker(_ id: UUID) {
         guard let row = views[.item(id)] as? FolderRowView, let item = store.item(id) else { return }
         FolderIconPicker.show(current: item.folderSymbol, anchor: row, rect: row.iconRect) { [store] symbol in

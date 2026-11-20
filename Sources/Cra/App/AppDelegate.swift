@@ -2009,6 +2009,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // libraryShown=<label> (#649): the Library's page on screen, or "closed".
+            // tabIcon=picker|emoji:<e>|symbol:<name>|none (#640): Change Icon… on the selected tab, see testTabIcon.
+            if let step = dict["tabIcon"] { main.testTabIcon(step); return }
             if let label = dict["libraryShown"] {
                 CraLog.note("library shown \(label): \(main.sidebarUI.libraryPage?.rawValue ?? "closed")")
                 return

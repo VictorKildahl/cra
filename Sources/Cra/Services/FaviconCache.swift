@@ -81,9 +81,10 @@ final class FaviconCache {
     /// For a one-color gray glyph on a transparent background (GitHub's
     /// octocat, black or white depending on the page's color scheme): true when
     /// it is dark, false when light, nil for any other icon. Such glyphs vanish
-    /// on a tile of their own tone. Custom icons are left as picked.
+    /// on a tile of their own tone. Custom icons are left as picked, but for a picked symbol (#640),
+    /// drawn in black so that it turns light on a dark space as a site's glyph does.
     func glyphIsDark(forKey key: String?) -> Bool? {
-        guard let key, !Self.isCustom(key) else { return nil }
+        guard let key, !Self.isCustom(key) || TabCustomIcon.followsTheme(key: key) else { return nil }
         if let v = glyphTone[key] { return v }
         guard let img = image(forKey: key), let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
         let w = 32, h = 32
@@ -123,7 +124,12 @@ final class FaviconCache {
     /// Fits an image the user picked into a 256px square and caches it under a
     /// fresh key, so a replaced icon never shows a stale copy.
     func importCustomIcon(from url: URL) -> String? {
-        guard let src = NSImage(contentsOf: url), src.size.width > 0, src.size.height > 0,
+        NSImage(contentsOf: url).flatMap { importCustomIcon($0, prefix: "custom-") }
+    }
+
+    /// A picture as a custom icon under a fresh key that starts with `prefix` (TabCustomIcon).
+    func importCustomIcon(_ src: NSImage, prefix: String) -> String? {
+        guard src.size.width > 0, src.size.height > 0,
               let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 256, pixelsHigh: 256, bitsPerSample: 8,
                                          samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
                                          bytesPerRow: 0, bitsPerPixel: 0),
@@ -139,7 +145,7 @@ final class FaviconCache {
         rep.size = NSSize(width: 128, height: 128)
         let img = NSImage(size: rep.size)
         img.addRepresentation(rep)
-        let key = "custom-" + UUID().uuidString.lowercased()
+        let key = prefix + UUID().uuidString.lowercased()
         store(img, forKey: key)
         return key
     }

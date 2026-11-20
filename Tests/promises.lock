@@ -1409,6 +1409,9 @@
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::theUserLeavingFirstForgetsThePage  3d0074797d11
 #636   Tests/BrowserManagerLifecycleTests.swift::fullscreenTabClosedCase  590ed2927628
 #636   Tests/Scenarios/page-fullscreen-close-tab.scenario  f5f69eafd931
+#640   Packages/CraCore/Tests/CraCoreTests/TabCustomIconTests.swift::eachPickHasAKeyOfItsOwnAndRemoveGoesBackToTheSite  37643c91b18a
+#640   Packages/CraCore/Tests/CraCoreTests/TabCustomIconTests.swift::onlyASymbolFollowsTheSpacesTheme  5b84d2a3275e
+#640   Tests/Scenarios/tab-change-icon-picker.scenario  0a38c05b5d12
 #641   Tests/Scenarios/little-window-click-raises.scenario  a03c24fccffe
 #643   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::gradientsAreSeeThroughAtTheSlidersIntensity  6adbda8ba3c3
 #643   Tests/Scenarios/theme-gradient-see-through.scenario  71863f429e42
