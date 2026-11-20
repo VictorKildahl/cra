@@ -61,6 +61,9 @@ final class EaselBrowser: CraBrowser, NativePage {
     }
 
     override var containerView: NSView { container }
+    /// View ▸ Zoom In, Zoom Out and Actual Size zoom the canvas (#580).
+    override func zoomLevel() -> Double { MainActor.assumeIsolated { canvas.zoomLevel } }
+    override func setZoomLevel(_ level: Double) { MainActor.assumeIsolated { canvas.zoomLevel = level } }
     var canvasView: EaselCanvasView { MainActor.assumeIsolated { canvas } }
     override var hostWindow: NSWindow? { nil }
     override var currentURL: String { address }

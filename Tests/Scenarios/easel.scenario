@@ -64,6 +64,23 @@ cra://debug?easelTool=o&hover=none
 expect-log easel toolbar: picked=ellipse hover=none letters=o$
 cra://debug?easelTool=v
 expect-log easel toolbar: picked=pointer hover=none letters=$
+# promise: #580
+# The canvas has no edge (Cra's own; Arc's is a fixed width that grows down): it opens on the home
+# sheet's top left with a view's room on every side, scrolling far past Arc's 2436 pt or up and left
+# of the home sheet still finds room, and View ▸ Zoom Out and Actual Size zoom it about the view's middle
+# (opening, the view's top may sit under the title bar's inset).
+cra://debug?easelCanvas=-
+expect-log easel canvas: zoom=1\.00 view=0,(0|-[0-9]+),[0-9]+,[0-9]+ extent=-[0-9]+,-[0-9]+,[0-9]+,[0-9]+ room=yes$
+cra://debug?easelCanvas=3000,9000
+expect-log easel canvas: zoom=1\.00 view=3000,9000,[0-9]+,[0-9]+ extent=.* room=yes$
+cra://debug?easelCanvas=-4000,-3000
+expect-log easel canvas: zoom=1\.00 view=-4000,-3000,[0-9]+,[0-9]+ extent=.* room=yes$
+cra://action/zoomOut
+cra://debug?easelCanvas=-
+expect-log easel canvas: zoom=0\.91 view=-40[0-9][0-9],-30[0-9][0-9],[0-9]+,[0-9]+ extent=.* room=yes$
+cra://action/resetZoom
+cra://debug?easelCanvas=-
+expect-log easel canvas: zoom=1\.00 view=-400[0-2],-300[0-2],[0-9]+,[0-9]+ extent=.* room=yes$
 # Arc 1.173.1's capture menu: a Send To… field that has the keyboard, the capture's actions,
 # Retake, then New Easel and every easel by name. Typing narrows the rows, and a row is where the
 # capture goes: New Easel makes one with it, an easel's row puts it on that easel.

@@ -68,11 +68,22 @@ final class EaselCanvasView: NSView {
         layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
+        // Endless in every direction, and zoomable (#580; Arc: fixed width, grows down).
+        scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true
+        scroll.allowsMagnification = true
+        scroll.minMagnification = Easel.zoomRange.lowerBound
+        scroll.maxMagnification = Easel.zoomRange.upperBound
         scroll.documentView = sheet
+        scroll.contentView.postsBoundsChangedNotifications = true
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        center.addObserver(self, selector: #selector(settleNow), name: NSScrollView.didEndLiveScrollNotification, object: scroll)
+        center.addObserver(self, selector: #selector(settleNow), name: NSScrollView.didEndLiveMagnifyNotification, object: scroll)
         addSubview(scroll)
         addSubview(toolbar)
         sheet.onChange = { [weak self] doc in self?.changed(doc) }
+        sheet.onDragged = { [weak self] in self?.updateExtent(shrink: false) }
         sheet.onToolDone = { [weak self] in self?.toolbar.tool = .pointer; self?.sheet.tool = .pointer }
         toolbar.onDuplicate = { [weak self] in self?.sheet.duplicateSelected() }
         let pick: (Easel.Tool) -> Void = { [weak self] tool in
@@ -96,6 +107,7 @@ final class EaselCanvasView: NSView {
     private func changed(_ doc: Easel) {
         let renamed = doc.title != document.title
         document = doc
+        settle()
         guard !EaselFiles.deleted.contains(doc.id) else { return }
         store.save(doc)
         if renamed {
@@ -123,10 +135,68 @@ final class EaselCanvasView: NSView {
     override func layout() {
         super.layout()
         scroll.frame = bounds
-        sheet.frame = NSRect(x: 0, y: 0, width: max(bounds.width - (scroll.verticalScroller?.frame.width ?? 0) * 0, 300),
-                             height: Easel.canvasHeight)
+        updateExtent(shrink: true)
         toolbar.frame = NSRect(x: 16, y: bounds.height - 16 - EaselToolbarLayout.height,
                                width: EaselToolbarLayout.width, height: EaselToolbarLayout.height)
+    }
+
+    // MARK: The endless canvas (#580)
+
+    /// The sheet's bounds are the part of the endless canvas that exists now (`Easel.extent`), in the
+    /// items' own points, so an item can sit anywhere, left of or above the home sheet too.
+    private var adjusting = false
+    private var placed = false
+
+    @objc private func scrolled() { updateExtent(shrink: false) }
+    @objc private func settleNow() { settle() }
+
+    /// Fit the canvas round what is there now, once a scroll, zoom or edit is over.
+    func settle() { updateExtent(shrink: true) }
+
+    /// Grow (or, with `shrink`, fit) the canvas to the home sheet, the items and the view, with a
+    /// view's room past them. When its top or left edge moves, the view moves by as much, so the
+    /// canvas under it stays put.
+    func updateExtent(shrink: Bool) {
+        guard !adjusting, bounds.width > 0, bounds.height > 0 else { return }
+        let clip = scroll.contentView
+        let home = Easel.home(width: max(Double(bounds.width), 300))
+        sheet.home = NSRect(x: home.x, y: home.y, width: home.width, height: home.height)
+        // Before the first fit the view is on the home sheet's top left.
+        let visible = placed ? sheet.visibleRect : NSRect(origin: .zero, size: clip.bounds.size)
+        let current = sheet.bounds
+        let e = Easel.extent(home: home, items: sheet.document.items.map(\.frame),
+                             visible: .init(x: visible.minX, y: visible.minY, width: visible.width, height: visible.height),
+                             keeping: shrink || !placed ? nil : .init(x: current.minX, y: current.minY, width: current.width, height: current.height))
+        let extent = NSRect(x: e.x, y: e.y, width: e.width, height: e.height)
+        if placed, extent == current { return }
+        adjusting = true
+        defer { adjusting = false }
+        sheet.setFrameSize(extent.size)
+        sheet.setBoundsOrigin(extent.origin)
+        clip.scroll(to: NSPoint(x: visible.minX - extent.minX, y: visible.minY - extent.minY))
+        scroll.reflectScrolledClipView(clip)
+        placed = true
+    }
+
+    /// View ▸ Zoom In, Zoom Out and Actual Size (⌘+ ⌘− ⌘0) on an easel: its magnification, in a
+    /// page's zoom steps, round the middle of the view.
+    var zoomLevel: Double {
+        get { Easel.zoomLevel(magnification: Double(scroll.magnification)) }
+        set {
+            let visible = sheet.visibleRect
+            let middle = NSPoint(x: visible.midX, y: visible.midY)
+            adjusting = true
+            scroll.magnification = CGFloat(Easel.magnification(zoomLevel: newValue))
+            adjusting = false
+            // Grow the canvas round the new view first, then put the same canvas point back in its middle,
+            // measured on the view as it is (insets and scrollers included).
+            updateExtent(shrink: false)
+            let clip = scroll.contentView
+            let now = sheet.visibleRect
+            clip.scroll(to: NSPoint(x: clip.bounds.minX + middle.x - now.midX, y: clip.bounds.minY + middle.y - now.midY))
+            scroll.reflectScrolledClipView(clip)
+            settle()
+        }
     }
 }
 
@@ -137,6 +207,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     var tool: Easel.Tool = .pointer { didSet { window?.invalidateCursorRects(for: self); placeColorPicker() } }
     var onChange: (Easel) -> Void = { _ in }
     var onToolDone: () -> Void = {}
+    /// Items moved under a drag: the canvas grows to take them in (#580).
+    var onDragged: () -> Void = {}
+    /// The home sheet the title is centred over (#580: the canvas around it has no edge). Unset, the bounds.
+    var home: NSRect? { didSet { if home != oldValue { needsLayout = true } } }
     /// A tool's key was pressed (Arc: V, I, T, O, R, A, P), or Escape with a tool in hand.
     var onToolKey: (Easel.Tool) -> Void = { _ in }
     private let title = EaselTextField()
@@ -246,8 +320,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
 
     override func layout() {
         super.layout()
-        let w = min(CGFloat(Easel.titleWidth), bounds.width - 40)
-        title.frame = NSRect(x: (bounds.width - w) / 2, y: CGFloat(Easel.titleTop) + 24, width: w, height: 48)
+        let area = home ?? bounds
+        let w = min(CGFloat(Easel.titleWidth), area.width - 40)
+        title.frame = NSRect(x: area.minX + (area.width - w) / 2, y: CGFloat(Easel.titleTop) + 24, width: w, height: 48)
         for item in document.items { texts[item.id]?.frame = rect(item.frame) }
     }
 
@@ -513,8 +588,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        let p = point(event)
         guard let start = dragStart, let last = dragLast else { return }
+        // A drag past the view's edge scrolls on: the canvas has no edge (#580).
+        autoscroll(with: event)
+        defer { onDragged() }
+        let p = point(event)
         dragLast = p
         switch tool {
         case .pointer:

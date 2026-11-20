@@ -1530,6 +1530,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["easelDraw"] != nil, let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.sheetView.debugDraw(); return
             }
+            // easelCanvas=<x>,<y>|-: the open easel scrolled to a canvas point; cra.log says its zoom, view and extent (#580).
+            if let target = dict["easelCanvas"], let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
+                canvas.debugCanvas(target); return
+            }
             // easelPick=<n>: the open easel's n-th item (from 0) picked; cra.log says what shows over it and its menu.
             if let n = dict["easelPick"].flatMap(Int.init), let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                 canvas.debugPick(n); return

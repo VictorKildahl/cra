@@ -105,8 +105,86 @@ enum EaselCanvasTests {
         drawingAndMenus(window)
         longText()
         severalItems()
+        endlessCanvas()
         window.close()
         print("Easel canvas: selection, movement, editing and deletion passed")
+    }
+
+    // promise: #580
+    /// "It should be an endless canvas to put ideas on board, but it isn't" (#580). The canvas was the
+    /// window's width and 2436 pt tall: an item further down or to the left was off it. Now the canvas
+    /// holds every item with a view's room past it, grows as you scroll toward any edge without moving
+    /// what is in view, keeps the title over the home sheet, and zooms (View ▸ Zoom, a pinch).
+    @MainActor
+    static func endlessCanvas() {
+        let low = Easel.Item(kind: .rectangle, frame: .init(x: 200, y: 3000, width: 100, height: 100))
+        let left = Easel.Item(kind: .ellipse, frame: .init(x: -400, y: 100, width: 100, height: 100))
+        let canvas = EaselCanvasView(document: Easel(items: [low, left]))
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = canvas
+        canvas.layoutSubtreeIfNeeded()
+        defer { window.close() }
+        let sheet = canvas.sheetView
+        guard let scroll = sheet.enclosingScrollView else { fatalError("the canvas scrolls") }
+        let clip = scroll.contentView
+        func contains(_ outer: NSRect, _ f: Easel.Rect) -> Bool { outer.contains(NSRect(x: f.x, y: f.y, width: f.width, height: f.height)) }
+        precondition(contains(sheet.bounds, low.frame), "an item below Arc's 2436 pt is on the canvas: \(sheet.bounds)")
+        precondition(contains(sheet.bounds, left.frame), "an item left of the home sheet is on the canvas: \(sheet.bounds)")
+        precondition(sheet.bounds.maxY >= 3100 + 700 && sheet.bounds.minX <= -400 - 900, "a view's room past the furthest items: \(sheet.bounds)")
+        precondition(sheet.visibleRect.minX == 0 && sheet.visibleRect.minY == 0, "it opens on the home sheet's top left: \(sheet.visibleRect)")
+        let title = sheet.subviews.compactMap { $0 as? NSTextField }.first!
+        precondition(abs(title.frame.midX - 450) < 1, "the title stays centred over the home sheet: \(title.frame)")
+
+        // Scrolled to the bottom right end of the canvas, there is more past it, and the view stays put.
+        clip.scroll(to: NSPoint(x: sheet.frame.width - clip.bounds.width, y: sheet.frame.height - clip.bounds.height))
+        scroll.reflectScrolledClipView(clip)
+        let atEnd = sheet.visibleRect
+        precondition(sheet.bounds.maxX >= atEnd.maxX + 900 && sheet.bounds.maxY >= atEnd.maxY + 700, "scrolling to the end grows the canvas: \(sheet.bounds) \(atEnd)")
+        // Up and to the left the same, without the canvas jumping under the view.
+        clip.scroll(to: .zero)
+        scroll.reflectScrolledClipView(clip)
+        let atStart = sheet.visibleRect
+        precondition(sheet.bounds.minX <= atStart.minX - 900 && sheet.bounds.minY <= atStart.minY - 700, "scrolling to the start grows it back there: \(sheet.bounds) \(atStart)")
+        let anchor = sheet.convert(NSPoint(x: atStart.midX, y: atStart.midY), to: nil)
+        canvas.settle()
+        let after = sheet.convert(anchor, from: nil)
+        precondition(abs(after.x - atStart.midX) < 1 && abs(after.y - atStart.midY) < 1, "the canvas under the view doesn't move when it grows or shrinks")
+        precondition(contains(sheet.bounds, low.frame) && contains(sheet.bounds, left.frame), "settling keeps every item on the canvas")
+
+        // An item dragged far up and left stays where it was put.
+        func event(_ type: NSEvent.EventType, _ q: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: sheet.convert(q, to: nil), modifierFlags: [], timestamp: 1,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+        }
+        let from = NSPoint(x: left.frame.x + 50, y: left.frame.y + 50), to = NSPoint(x: left.frame.x - 950, y: left.frame.y - 750)
+        let viewBefore = sheet.visibleRect
+        sheet.mouseDown(with: event(.leftMouseDown, from))
+        let up = event(.leftMouseDragged, to)
+        sheet.mouseDragged(with: up)
+        sheet.mouseUp(with: event(.leftMouseUp, to))
+        // The drag ended past the view's edge, so the canvas scrolled on under the pointer: the item is
+        // where the pointer is on the canvas now, far up and left of the home sheet.
+        let under = sheet.convert(up.locationInWindow, from: nil)
+        let moved = sheet.document.items.first { $0.id == left.id }!.frame
+        precondition(moved.x == under.x - 50 && moved.y == under.y - 50 && moved.x <= -1400 && moved.y <= -700,
+                     "an item goes to negative places on the canvas, under the pointer: \(moved) \(under)")
+        precondition(to.x - viewBefore.minX < 0 && sheet.visibleRect.minX < viewBefore.minX,
+                     "a drag past the edge scrolls the view on: \(viewBefore) → \(sheet.visibleRect)")
+        precondition(contains(sheet.bounds, moved), "the canvas takes in the moved item: \(sheet.bounds)")
+
+        // View ▸ Zoom In and Out (and a pinch) magnify the canvas, within Easel.zoomRange.
+        precondition(scroll.allowsMagnification && scroll.minMagnification == 0.1 && scroll.maxMagnification == 4, "the canvas zooms with a pinch")
+        let middle = NSPoint(x: sheet.visibleRect.midX, y: sheet.visibleRect.midY)
+        canvas.zoomLevel = -6
+        precondition(abs(scroll.magnification - Easel.magnification(zoomLevel: -6)) < 0.001, "Zoom Out shrinks the canvas: \(scroll.magnification)")
+        precondition(abs(sheet.visibleRect.midX - middle.x) < 2 && abs(sheet.visibleRect.midY - middle.y) < 2,
+                     "zooming keeps the middle of the view where it was: \(middle) → \(sheet.visibleRect)")
+        precondition(abs(canvas.zoomLevel + 6) < 0.001, "the zoom level reads back for View ▸ Zoom")
+        precondition(sheet.bounds.width >= sheet.visibleRect.width * 3 - 1, "zoomed out, the room past the view grows with it")
+        canvas.zoomLevel = 0
+        precondition(scroll.magnification == 1, "Actual Size goes back to 1×")
+        print("Easel canvas: endless in every direction, zooms (#580)")
     }
 
     // promise: #580
