@@ -16,6 +16,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let pagePan = UIPanGestureRecognizer(target: self, action: #selector(pageSwiped(_:)))
         pagePan.name = Name.page
         pagePan.delegate = self
+        pagePan.maximumNumberOfTouches = 1
         pageContainer.addGestureRecognizer(pagePan)
 
         let sheetPan = UIPanGestureRecognizer(target: self, action: #selector(sheetDragged(_:)))
@@ -51,9 +52,11 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // end, the previous tab: `MobileSwipe.barDrag`).
             return !isSearching && switcher == nil && shownPage != nil && (abs(velocity.x) > abs(velocity.y) || velocity.y < 0)
         case Name.page:
-            guard !isSearching, switcher == nil, menuHost == nil, let page = shownPage, abs(velocity.x) > 1.5 * abs(velocity.y) else { return false }
+            guard !isSearching, switcher == nil, menuHost == nil, let page = shownPage else { return false }
             let mode = settings.value.options(for: page.webView.url?.host).swipeToNavigate
-            return MobileSwipe.mayStart(at: pan.location(in: view).x - pan.translation(in: view).x, width: view.bounds.width, mode: mode)
+            return MobileSwipe.pageSwipeStarts(at: pan.location(in: view).x - pan.translation(in: view).x, width: view.bounds.width,
+                                               mode: mode, touches: pan.numberOfTouches, velocity: velocity,
+                                               scrollers: scrollRooms(under: pageSwipeTouchView, in: page.webView))
         case Name.sheet:
             return isSearching && velocity.y > abs(velocity.x)
         default:
@@ -65,9 +68,32 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         gesture.name == Name.pinch
     }
 
-    /// The page's own scrolling waits until a sideways swipe has been ruled out.
+    /// The page's own scrolling waits until a sideways swipe has been ruled out. Its pinch to zoom
+    /// doesn't wait (#628): two fingers never swipe the page.
     public func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-        gesture.name == Name.page && other.view is UIScrollView
+        gesture.name == Name.page && other.view is UIScrollView && other is UIPanGestureRecognizer
+    }
+
+    /// Notes what a swipe across the page starts on, to find the scroll views under it.
+    public func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if gesture.name == Name.page, gesture.numberOfTouches == 0 { pageSwipeTouchView = touch.view }
+        return true
+    }
+
+    /// How far each scroll view under the finger, from the innermost (a carousel, a wide table:
+    /// WebKit gives each its own scroll view) out to the page's, can still scroll sideways (#627).
+    private func scrollRooms(under touched: UIView?, in webView: UIView) -> [MobileSwipe.ScrollRoom] {
+        var rooms: [MobileSwipe.ScrollRoom] = []
+        var view = touched
+        while let current = view, current !== webView {
+            if let scroll = current as? UIScrollView, scroll.isScrollEnabled {
+                rooms.append(MobileSwipe.ScrollRoom(offsetX: scroll.contentOffset.x, contentWidth: scroll.contentSize.width,
+                                                    width: scroll.bounds.width, insetLeft: scroll.adjustedContentInset.left,
+                                                    insetRight: scroll.adjustedContentInset.right))
+            }
+            view = current.superview
+        }
+        return rooms
     }
 
     // MARK: Along the bar: the neighbouring tab

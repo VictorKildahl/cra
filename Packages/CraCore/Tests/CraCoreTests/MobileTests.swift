@@ -511,6 +511,55 @@ struct MobileSwipeTests {
         #expect(MobileSwipe.mayStart(at: 385, width: 393, mode: .fromEdges))
     }
 
+    /// A scroll view's room to either side: none on a page that fits, both ways in the middle
+    /// of a zoomed page, and none past the end it sits at.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/627")) func scrollRoomIsWhatIsLeftOnEitherSide() {
+        #expect(MobileSwipe.ScrollRoom(offsetX: 0, contentWidth: 393, width: 393) == .init(left: 0, right: 0))
+        #expect(MobileSwipe.ScrollRoom(offsetX: 300, contentWidth: 1179, width: 393) == .init(left: 300, right: 486))
+        #expect(MobileSwipe.ScrollRoom(offsetX: 786, contentWidth: 1179, width: 393) == .init(left: 786, right: 0))
+        #expect(MobileSwipe.ScrollRoom(offsetX: -10, contentWidth: 800, width: 393, insetLeft: 10) == .init(left: 0, right: 417))
+        #expect(MobileSwipe.ScrollRoom(offsetX: 900, contentWidth: 800, width: 393) == .init(left: 900, right: 0), "rubber-banding past the end")
+    }
+
+    /// Zoomed in, or on a carousel, a sideways drag scrolls what is under the finger; at its end,
+    /// or where nothing scrolls, it goes Back or Forward. The screen's edge always navigates.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/627")) func aSidewaysDragScrollsWhatCanScrollBeforeItNavigates() {
+        func starts(at x: CGFloat = 200, right: Bool, mode: MobileSwipeToNavigate = .fromAnywhere, _ scrollers: [MobileSwipe.ScrollRoom]) -> Bool {
+            MobileSwipe.pageSwipeStarts(at: x, width: 393, mode: mode, touches: 1, velocity: CGPoint(x: right ? 600 : -600, y: 40),
+                                        scrollers: scrollers)
+        }
+        let page = MobileSwipe.ScrollRoom(left: 0, right: 0)
+        #expect(starts(right: true, [page]), "a page that fits goes Back")
+        #expect(starts(right: false, [page]), "and Forward")
+
+        let zoomedMiddle = MobileSwipe.ScrollRoom(left: 300, right: 486)
+        #expect(!starts(right: true, [zoomedMiddle]), "zoomed in, the page scrolls")
+        #expect(!starts(right: false, [zoomedMiddle]))
+
+        let zoomedAtLeft = MobileSwipe.ScrollRoom(left: 0, right: 786)
+        #expect(starts(right: true, [zoomedAtLeft]), "at its left end, a drag right goes Back")
+        #expect(!starts(right: false, [zoomedAtLeft]))
+
+        let carousel = MobileSwipe.ScrollRoom(left: 0, right: 1200)
+        #expect(!starts(right: false, [carousel, page]), "the carousel under the finger scrolls")
+        #expect(!starts(right: true, [MobileSwipe.ScrollRoom(left: 120, right: 0), page]), "and back again")
+        #expect(starts(right: true, [carousel, page]), "at its start, a drag right goes Back")
+
+        #expect(starts(at: 10, right: true, [zoomedMiddle]), "the left edge always goes Back")
+        #expect(starts(at: 385, right: false, [carousel]), "the right edge always goes Forward")
+        #expect(!starts(right: true, mode: .fromEdges, [page]), "From Edges keeps its rule")
+    }
+
+    /// Two fingers are a pinch: the page zooms instead of being dragged sideways.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/628")) func twoFingersNeverSwipeThePage() {
+        let page = MobileSwipe.ScrollRoom(left: 0, right: 0)
+        #expect(MobileSwipe.pageSwipeStarts(at: 200, width: 393, mode: .fromAnywhere, touches: 1, velocity: CGPoint(x: 600, y: 0), scrollers: [page]))
+        #expect(!MobileSwipe.pageSwipeStarts(at: 200, width: 393, mode: .fromAnywhere, touches: 2, velocity: CGPoint(x: 600, y: 0), scrollers: [page]))
+        #expect(!MobileSwipe.pageSwipeStarts(at: 10, width: 393, mode: .fromEdges, touches: 2, velocity: CGPoint(x: 600, y: 0), scrollers: [page]))
+        #expect(!MobileSwipe.pageSwipeStarts(at: 200, width: 393, mode: .fromAnywhere, touches: 1, velocity: CGPoint(x: 300, y: 250), scrollers: [page]),
+                "a drag that is not clearly sideways is the page's scroll")
+    }
+
     /// The flick up from the tab button switches once it is far enough or quick enough upwards.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/537")) func theFlickUpSwitchesByDistanceOrSpeed() {
         #expect(MobileSwipe.switchesToPreviousTab(dragUp: 120, velocityUp: 0))

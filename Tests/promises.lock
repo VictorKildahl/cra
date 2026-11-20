@@ -1346,6 +1346,12 @@
 #622   Tests/Scenarios/tabs-menu-states.scenario  87e05e5d8c31
 #622   Tests/StoreTests.swift::tabsMenuCountsStopEarly  a0cea44d9eae
 #626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
+#627   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aSidewaysDragScrollsWhatCanScrollBeforeItNavigates  b047657926fb
+#627   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::scrollRoomIsWhatIsLeftOnEitherSide  5e2c9ad0b408
+#627   iOS/CraUITests/PageGestureTests.swift::testACarouselScrollsSidewaysInsteadOfGoingBack  23f7bb675666
+#627   iOS/CraUITests/PageGestureTests.swift::testAZoomedPageScrollsSidewaysAndItsEndGoesBack  f944ad9e228b
+#628   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::twoFingersNeverSwipeThePage  81a648c56aa4
+#628   iOS/CraUITests/PageGestureTests.swift::testAZoomedPageScrollsSidewaysAndItsEndGoesBack  f944ad9e228b
 #629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::classicScrollbarIsNotThePage  abccd5334bec
 #629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::emptyCaptureHasNoColour  3bc22c2230eb
 #629   Packages/CraCore/Tests/CraCoreTests/ToolbarSampleTests.swift::gradientGivesItsRightEdge  318ba07ac859

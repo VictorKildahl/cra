@@ -40,6 +40,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var swipeNeighbour: UIImageView?
     var swipeNeighbourStep = 0
     var tabArchivedBySwipe: UUID?
+    /// What the finger was on when the swipe across the page started (#627).
+    weak var pageSwipeTouchView: UIView?
     var barSwipeOpensRow = false
     /// A drag up from the tab button: the tab it brings back (#537).
     var barSwipeTarget: MobileTab?

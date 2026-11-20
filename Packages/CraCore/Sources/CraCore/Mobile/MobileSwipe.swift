@@ -83,7 +83,46 @@ public enum MobileSwipe {
 
     /// Whether a swipe across the page may start at `x` in a page `width` wide.
     public static func mayStart(at x: CGFloat, width: CGFloat, mode: MobileSwipeToNavigate) -> Bool {
-        mode == .fromAnywhere || x < 24 || x > width - 24
+        mode == .fromAnywhere || startsAtEdge(x, width: width)
+    }
+
+    /// The strip along each side where a swipe is always Back or Forward.
+    static func startsAtEdge(_ x: CGFloat, width: CGFloat) -> Bool {
+        x < 24 || x > width - 24
+    }
+
+    /// How far a scroll view can still move its content sideways: `left` towards the content's
+    /// left end (what a finger moving right does), `right` towards its right end.
+    public struct ScrollRoom: Equatable, Sendable {
+        public var left: CGFloat
+        public var right: CGFloat
+
+        public init(left: CGFloat, right: CGFloat) {
+            self.left = left
+            self.right = right
+        }
+
+        /// From a scroll view's numbers: its offset, the content's width, its own width and the
+        /// insets it adds on either side.
+        public init(offsetX: CGFloat, contentWidth: CGFloat, width: CGFloat, insetLeft: CGFloat = 0, insetRight: CGFloat = 0) {
+            left = max(0, offsetX + insetLeft)
+            right = max(0, contentWidth + insetRight - width - offsetX)
+        }
+    }
+
+    /// Whether a drag across a page goes Back or Forward, decided as it starts. Only a one-finger
+    /// drag that is clearly sideways does: two fingers are a pinch, and the page zooms (#628).
+    /// It also leaves the drag to the page wherever something under the finger can still scroll
+    /// that way, such as a carousel, a wide table or the page itself when zoomed in (#627), so
+    /// that only its end goes on to navigate. A drag from the screen's edge always navigates.
+    /// `scrollers` are the scroll views under the finger, `velocity` the finger's as it starts.
+    public static func pageSwipeStarts(at x: CGFloat, width: CGFloat, mode: MobileSwipeToNavigate, touches: Int,
+                                       velocity: CGPoint, scrollers: [ScrollRoom]) -> Bool {
+        guard touches == 1, abs(velocity.x) > 1.5 * abs(velocity.y), mayStart(at: x, width: width, mode: mode) else { return false }
+        if startsAtEdge(x, width: width) { return true }
+        // A finger moving right pulls content in from the left.
+        let scrolls = scrollers.contains { velocity.x > 0 ? $0.left > 0.5 : $0.right > 0.5 }
+        return !scrolls
     }
 
     /// How far the page must be pulled down, and held there at release, to reload.
