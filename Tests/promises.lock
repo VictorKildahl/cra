@@ -1257,6 +1257,7 @@
 #591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::macTabsComeFromItsSyncedSpaces  2102b05a769d
 #591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::mergesAndFiltersRecentTabs  427408879f3f
 #591   iOS/CraUITests/BrowserTests.swift::testRecentTabsShowUnderTheEmptyField  6bf1170efbe9
+#594   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::aModelThatNamesEveryTabLeavesThemLoose  c97e1f073cec
 #597   Tests/Scenarios/page-opened-tab-shows.scenario  9578d2e1e5dd
 #599   Packages/CraCore/Tests/CraCoreTests/LittleBarRowsTests.swift::littleWindowLoadsOpenTabsAndArchivedPagesInPlace  3db7ce838adc
 #599   Packages/CraCore/Tests/CraCoreTests/LittleWindowLinksTests.swift::newTabLinkLoadsInTheWindow  80fbb6cec90e

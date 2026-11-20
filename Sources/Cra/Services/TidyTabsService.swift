@@ -216,8 +216,12 @@ final class TidyTabsService {
         switch outcome {
         case .success(let answer):
             // The adapter may have reduced this request: consume its actual fitted mapping only.
-            store.applyTidy(answer.request.plan(answer.proposals), tabIDs: answer.request.tabIDs, in: key.space)
-            CraLog.note("Tidy Tabs: completed \(answer.request.tabs.count) tabs, \(answer.proposals.count) proposed groups")
+            let plan = answer.request.plan(answer.proposals)
+            store.applyTidy(plan, tabIDs: answer.request.tabIDs, in: key.space)
+            // What the run did: proposals are one per tab since the per-tab answer, so their count said nothing (#594).
+            let names = TidyTabs.distinctNames(answer.proposals)
+            CraLog.note("Tidy Tabs: completed \(answer.request.tabs.count) tabs, \(names) proposed groups, "
+                + "\(plan.newGroups.count) new, \(plan.joins.values.reduce(0) { $0 + $1.count }) joined")
         case .failure(let request):
             store.markTidied(key.space, tabIDs: request.tabIDs)
         }

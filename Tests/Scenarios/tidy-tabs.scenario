@@ -33,7 +33,7 @@ cra://debug?tidy=1
 # The fake provider pauses for 1.6 s; inspect the real running divider in the native capture run.
 cra://debug?snapshot=DividerRowView&out=/dev/null
 expect-log snapshot: DividerRowView at
-expect-log Tidy Tabs: completed 6 tabs, 3 proposed groups$
+expect-log Tidy Tabs: completed 6 tabs, 3 proposed groups, 3 new, 0 joined$
 cra://debug?snapshot=GroupHeaderRowView,0&out=/dev/null
 expect-log snapshot: GroupHeaderRowView,0 at
 cra://debug?snapshot=GroupHeaderRowView,1&out=/dev/null
