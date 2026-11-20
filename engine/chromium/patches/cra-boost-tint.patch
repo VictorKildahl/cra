@@ -1,0 +1,293 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -4923,6 +4923,12 @@
+     const uint64_t seed =
+         base::HashInts64(launch_secret, base::FastHash(id.str()));
+     web_prefs->cra_fingerprinting_seed = seed ? seed : 1;
++  }
++
++  // Cra: the Boost colours of this tab's page, every colour but images (#602;
++  // cra_engine_hooks.h). Asked again when Cra changes them.
++  if (cra::g_boost_color_matrix && web_contents) {
++    web_prefs->cra_boost_color_matrix = cra::g_boost_color_matrix(web_contents);
+   }
+ 
+   web_prefs->data_saver_enabled = IsDataSaverEnabled(profile);
+diff --git a/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc b/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc
+--- a/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc
++++ b/third_party/blink/common/web_preferences/web_preferences_mojom_traits.cc
+@@ -102,6 +102,9 @@
+   out->allow_running_insecure_content = data.allow_running_insecure_content();
+   out->disable_reading_from_canvas = data.disable_reading_from_canvas();
+   out->cra_fingerprinting_seed = data.cra_fingerprinting_seed();
++  if (!data.ReadCraBoostColorMatrix(&out->cra_boost_color_matrix)) {
++    return false;
++  }
+   out->strict_mixed_content_checking = data.strict_mixed_content_checking();
+   out->allow_geolocation_on_insecure_origins =
+       data.allow_geolocation_on_insecure_origins();
+diff --git a/third_party/blink/public/common/web_preferences/web_preferences.h b/third_party/blink/public/common/web_preferences/web_preferences.h
+--- a/third_party/blink/public/common/web_preferences/web_preferences.h
++++ b/third_party/blink/public/common/web_preferences/web_preferences.h
+@@ -115,6 +115,10 @@
+   // Cra: fingerprinting protection. Zero when off; otherwise a seed for this
+   // profile and launch that Blink mixes with the top-level site.
+   uint64_t cra_fingerprinting_seed = 0;
++  // Cra: a Boost's colours (#602), 20 comma-separated numbers of a 4x5 colour
++  // matrix every colour the page draws goes through, but not its images.
++  // Empty when the page has no Boost colour.
++  std::string cra_boost_color_matrix;
+   // Strict mixed content checking disables both displaying and running insecure
+   // mixed content, and disables embedder notifications that such content was
+   // requested (thereby preventing user override).
+diff --git a/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h b/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h
+--- a/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h
++++ b/third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h
+@@ -263,6 +263,11 @@
+     return r.cra_fingerprinting_seed;
+   }
+ 
++  static const std::string& cra_boost_color_matrix(
++      const blink::web_pref::WebPreferences& r) {
++    return r.cra_boost_color_matrix;
++  }
++
+   static bool strict_mixed_content_checking(
+       const blink::web_pref::WebPreferences& r) {
+     return r.strict_mixed_content_checking;
+diff --git a/third_party/blink/public/mojom/webpreferences/web_preferences.mojom b/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
+--- a/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
++++ b/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
+@@ -174,6 +174,8 @@
+   bool disable_reading_from_canvas;
+   // Cra: fingerprinting protection seed, 0 when off.
+   uint64 cra_fingerprinting_seed;
++  // Cra: a Boost's colour matrix (20 numbers), empty when none.
++  string cra_boost_color_matrix;
+   // Strict mixed content checking disables both displaying and running insecure
+   // mixed content, and disables embedder notifications that such content was
+   // requested (thereby preventing user override).
+diff --git a/third_party/blink/renderer/core/exported/web_settings_impl.cc b/third_party/blink/renderer/core/exported/web_settings_impl.cc
+--- a/third_party/blink/renderer/core/exported/web_settings_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_settings_impl.cc
+@@ -661,6 +661,10 @@
+ 
+ void WebSettingsImpl::SetCraFingerprintingSeed(uint64_t seed) {
+   settings_->SetCraFingerprintingSeed(seed);
++}
++
++void WebSettingsImpl::SetCraBoostColorMatrix(const String& matrix) {
++  settings_->SetCraBoostColorMatrix(matrix);
+ }
+ 
+ void WebSettingsImpl::SetAllowCustomScrollbarInMainFrame(bool enabled) {
+diff --git a/third_party/blink/renderer/core/exported/web_settings_impl.h b/third_party/blink/renderer/core/exported/web_settings_impl.h
+--- a/third_party/blink/renderer/core/exported/web_settings_impl.h
++++ b/third_party/blink/renderer/core/exported/web_settings_impl.h
+@@ -77,6 +77,8 @@
+   void SetCookieEnabled(bool) override;
+   // Cra: fingerprinting protection seed, 0 when off (settings.json5's craFingerprintingSeed).
+   void SetCraFingerprintingSeed(uint64_t);
++  // Cra: a Boost's colour matrix, empty for none (settings.json5's craBoostColorMatrix, #602).
++  void SetCraBoostColorMatrix(const String&);
+   void SetCaretBrowsingEnabled(bool) override;
+   void SetDNSPrefetchingEnabled(bool) override;
+   void SetDOMPasteAllowed(bool) override;
+diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
+--- a/third_party/blink/renderer/core/exported/web_view_impl.cc
++++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
+@@ -1719,6 +1719,8 @@
+   settings->SetDisableReadingFromCanvas(prefs.disable_reading_from_canvas);
+   web_view_impl->GetPage()->GetSettings().SetCraFingerprintingSeed(
+       prefs.cra_fingerprinting_seed);
++  web_view_impl->GetPage()->GetSettings().SetCraBoostColorMatrix(
++      String::FromUtf8(std::string_view(prefs.cra_boost_color_matrix)));
+   settings->SetStrictMixedContentChecking(prefs.strict_mixed_content_checking);
+ 
+   settings->SetStrictlyBlockBlockableMixedContent(
+diff --git a/third_party/blink/renderer/core/frame/local_frame_view.cc b/third_party/blink/renderer/core/frame/local_frame_view.cc
+--- a/third_party/blink/renderer/core/frame/local_frame_view.cc
++++ b/third_party/blink/renderer/core/frame/local_frame_view.cc
+@@ -26,6 +26,8 @@
+ 
+ #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+ 
++#include <array>
++#include <optional>
+ #include <algorithm>
+ #include <memory>
+ #include <utility>
+@@ -198,6 +200,7 @@
+ #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+ #include "third_party/blink/renderer/platform/web_test_support.h"
+ #include "third_party/blink/renderer/platform/widget/frame_widget.h"
++#include "third_party/blink/renderer/platform/wtf/text/string_to_number.h"
+ #include "third_party/blink/renderer/platform/wtf/functional.h"
+ #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
+ #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
+@@ -223,6 +226,30 @@
+   } while (false)
+ 
+ namespace blink {
++
++namespace {
++
++// Cra: settings' craBoostColorMatrix, 20 comma-separated numbers (#602). False
++// when it is empty or isn't 20 numbers.
++bool CraBoostTint(const Settings* settings, std::array<float, 20>& matrix) {
++  if (!settings || settings->GetCraBoostColorMatrix().empty()) {
++    return false;
++  }
++  Vector<String> parts = settings->GetCraBoostColorMatrix().Split(',');
++  if (parts.size() != 20) {
++    return false;
++  }
++  for (wtf_size_t i = 0; i < 20; ++i) {
++    std::optional<float> value = StringToFloat(parts[i].StripWhiteSpace());
++    if (!value) {
++      return false;
++    }
++    matrix[i] = *value;
++  }
++  return true;
++}
++
++}  // namespace
+ namespace {
+ 
+ std::optional<cc::PaintRecord> GetCanvasSnapshot(DOMNodeId id) {
+@@ -3489,6 +3516,11 @@
+                              paint_controller_persistent_data_.Get(),
+                              benchmark_mode);
+     GraphicsContext graphics_context(*paint_controller);
++    // Cra: the page's Boost colours, every colour but images (#602).
++    std::array<float, 20> cra_tint;
++    if (CraBoostTint(frame_->GetSettings(), cra_tint)) {
++      graphics_context.SetCraTint(cra_tint.data());
++    }
+ 
+     // Draw the WebXR DOM overlay if present.
+     if (PaintLayer* full_screen_layer = GetXROverlayLayer()) {
+diff --git a/third_party/blink/renderer/core/frame/settings.json5 b/third_party/blink/renderer/core/frame/settings.json5
+--- a/third_party/blink/renderer/core/frame/settings.json5
++++ b/third_party/blink/renderer/core/frame/settings.json5
+@@ -850,6 +850,14 @@
+       name: "craFingerprintingSeed",
+       type: "uint64_t",
+       initial: 0,
++    },
++    // Cra: a Boost's colour matrix, 20 comma-separated numbers; empty when
++    // none. GraphicsContext draws every colour but images through it (#602).
++    {
++      name: "craBoostColorMatrix",
++      type: "String",
++      initial: "",
++      invalidate: ["Paint"],
+     },
+     {
+       name: "strictMixedContentChecking",
+diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/third_party/blink/renderer/platform/graphics/graphics_context.cc
+--- a/third_party/blink/renderer/platform/graphics/graphics_context.cc
++++ b/third_party/blink/renderer/platform/graphics/graphics_context.cc
+@@ -26,6 +26,7 @@
+ 
+ #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
+ 
++#include <algorithm>
+ #include <memory>
+ #include <optional>
+ 
+@@ -78,6 +79,9 @@
+ SkColor4f DarkModeColor(GraphicsContext& context,
+                         const SkColor4f& color,
+                         const AutoDarkMode& auto_dark_mode) {
++  if (context.HasCraTint()) {
++    return context.CraTintColor(color);
++  }
+   if (auto_dark_mode.enabled && !context.IsAutoDarkModePaused()) {
+     return context.GetDarkModeFilter()->InvertColorIfNeeded(
+         color, auto_dark_mode.role,
+@@ -190,6 +194,14 @@
+   DarkModeFlags(GraphicsContext* context,
+                 const AutoDarkMode& auto_dark_mode,
+                 const cc::PaintFlags& flags) {
++    // Cra: a Boost's colours on everything but images (#602). A draw that already
++    // has a colour filter of its own keeps it.
++    if (context->HasCraTint() && !flags.getColorFilter()) {
++      dark_mode_flags_ = flags;
++      dark_mode_flags_->setColorFilter(context->CraTintFilter());
++      flags_ = &dark_mode_flags_.value();
++      return;
++    }
+     if (auto_dark_mode.enabled && !context->IsAutoDarkModePaused()) {
+       dark_mode_flags_ = context->GetDarkModeFilter()->ApplyToFlagsIfNeeded(
+           flags, auto_dark_mode.role,
+@@ -245,6 +257,29 @@
+   return dark_mode_filter_.get();
+ }
+ 
++void GraphicsContext::SetCraTint(const float* matrix_4x5) {
++  if (!matrix_4x5) {
++    cra_tint_filter_ = nullptr;
++    return;
++  }
++  std::copy(matrix_4x5, matrix_4x5 + 20, cra_tint_matrix_.begin());
++  cra_tint_filter_ = cc::ColorFilter::MakeMatrix(cra_tint_matrix_.data());
++}
++
++SkColor4f GraphicsContext::CraTintColor(const SkColor4f& color) const {
++  const auto& m = cra_tint_matrix_;
++  const float in[4] = {color.fR, color.fG, color.fB, color.fA};
++  float out[4];
++  for (int row = 0; row < 4; ++row) {
++    float v = m[row * 5 + 4];
++    for (int col = 0; col < 4; ++col) {
++      v += m[row * 5 + col] * in[col];
++    }
++    out[row] = std::clamp(v, 0.f, 1.f);
++  }
++  return SkColor4f{out[0], out[1], out[2], out[3]};
++}
++
+ DarkModeFilter* GraphicsContext::GetDarkModeFilterForImage(
+     const ImageAutoDarkMode& auto_dark_mode) {
+   if (!auto_dark_mode.enabled)
+diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.h b/third_party/blink/renderer/platform/graphics/graphics_context.h
+--- a/third_party/blink/renderer/platform/graphics/graphics_context.h
++++ b/third_party/blink/renderer/platform/graphics/graphics_context.h
+@@ -28,6 +28,7 @@
+ #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_GRAPHICS_CONTEXT_H_
+ #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_GRAPHICS_CONTEXT_H_
+ 
++#include <array>
+ #include <memory>
+ 
+ #include "base/dcheck_is_on.h"
+@@ -199,6 +200,17 @@
+   DarkModeFilter* GetDarkModeFilter();
+   DarkModeFilter* GetDarkModeFilterForImage(
+       const ImageAutoDarkMode& auto_dark_mode);
++
++  // Cra: a Boost's colours (#602). Every colour drawn through this context, text,
++  // backgrounds, borders, shapes and gradients, goes through the 4x5 matrix;
++  // images (DrawImage*) don't, as in Arc. Set from the page's settings before it
++  // paints (LocalFrameView); null matrix for none.
++  void SetCraTint(const float* matrix_4x5);
++  bool HasCraTint() const { return !!cra_tint_filter_; }
++  SkColor4f CraTintColor(const SkColor4f& color) const;
++  const sk_sp<cc::ColorFilter>& CraTintFilter() const {
++    return cra_tint_filter_;
++  }
+ 
+   // Pushes a dark mode inversion pause state on construction and pops it on
+   // destruction, guaranteeing pushes and pops are always balanced. See the
+@@ -593,6 +605,8 @@
+ #endif
+ 
+   std::unique_ptr<DarkModeFilter> dark_mode_filter_;
++  sk_sp<cc::ColorFilter> cra_tint_filter_;
++  std::array<float, 20> cra_tint_matrix_{};
+ 
+   Vector<bool> auto_dark_mode_states_;
+   bool printing_ = false;

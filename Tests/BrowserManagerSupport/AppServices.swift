@@ -202,3 +202,8 @@ enum WebKitStores {
         done()
     }
 }
+
+/// The engine Cra runs on (Sources/Cra/App/EngineFramework.swift): the Chromium engine here.
+enum EngineFramework {
+    static let isChromiumEngine = true
+}

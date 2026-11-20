@@ -27,6 +27,55 @@ struct BoostTests {
         #expect(Boost.onSite(of: "cra://settings", from: [b]).isEmpty)
     }
 
+    /// A Boost's colours leave the page's images alone, as in Arc (#602; Arc 1.174, 20 Nov 2026: Wikipedia's
+    /// photos kept their pixels under a strong tint). On Cra's Chromium engine the tint is a colour matrix the
+    /// engine draws every colour but images through, the same colours CSS's sepia hue-rotate saturate gave; the
+    /// stylesheet then leaves the tint out and keeps the other controls.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/602"))
+    func theTintIsAColourMatrixTheEngineDrawsAroundImages() throws {
+        var b = Boost(host: "example.com")
+        #expect(b.tintMatrix == nil && b.tintMatrixString == nil, "no tint, no matrix")
+        b.hue = 0.7
+        b.strength = 0.6
+        b.contrast = 60
+        let m = try #require(b.tintMatrix)
+        #expect(m.count == 20 && Array(m[15...]) == [0, 0, 0, 1, 0], "alpha is left as it is")
+        #expect(b.tintMatrixString?.split(separator: ",").count == 20)
+        #expect(b.stylesheet.contains("sepia(") && b.stylesheet.contains("contrast("))
+        let engine = b.stylesheet(engineTints: true)
+        #expect(!engine.contains("sepia(") && !engine.contains("hue-rotate(") && engine.contains("contrast("),
+                "the engine draws the tint; the rest stays CSS")
+
+        // The CSS chain, step by step with its clamping, against the one matrix, for colours that stay in range.
+        func clamp(_ x: Double) -> Double { max(0, min(1, x)) }
+        func css(_ c: [Double]) -> [Double] {
+            var v = c
+            let steps: [Boost.Matrix3] = [Boost.sepia(0.6), Boost.hueRotate(degrees: 0.7 * 360 - 38), Boost.saturate(2.2)]
+            for step in steps {
+                var next: [Double] = [0, 0, 0]
+                for r in 0..<3 {
+                    var sum = 0.0
+                    for k in 0..<3 { sum += step[r][k] * v[k] }
+                    next[r] = clamp(sum)
+                }
+                v = next
+            }
+            return v
+        }
+        func matrix(_ c: [Double]) -> [Double] {
+            var out: [Double] = [0, 0, 0]
+            for r in 0..<3 {
+                var sum = m[r * 5 + 4]
+                for k in 0..<3 { sum += m[r * 5 + k] * c[k] }
+                out[r] = clamp(sum)
+            }
+            return out
+        }
+        for colour in [[0.2, 0.2, 0.2], [0.4, 0.3, 0.2], [0.1, 0.3, 0.5]] {
+            for (a, b) in zip(css(colour), matrix(colour)) { #expect(abs(a - b) < 0.002, "\(colour)") }
+        }
+    }
+
     @Test func eachControlWritesItsRule() {
         var b = Boost(host: "example.com")
         b.invert = true

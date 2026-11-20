@@ -80,11 +80,31 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
     public var colorsUntouched: Bool { strength == 0 && !invert && contrast == 50 && brightness == 50 && saturation == 50 }
 
     /// The stylesheet the page gets.
-    public var stylesheet: String {
+    public var stylesheet: String { stylesheet(engineTints: false) }
+
+    /// The tint as the engine draws it (#602): a 4x5 colour matrix, row by row with the offsets in 0–1, of CSS's
+    /// sepia(s) hue-rotate(θ) saturate(1 + 2s) in that order, the same colours the stylesheet's filter gives. Cra's
+    /// Chromium engine draws every colour of the page through it but its images, as Arc's Boosts leave pictures
+    /// alone (Arc 1.174, 20 Nov 2026: a strong tint turned Wikipedia's white to 216/218/242 while every photo kept
+    /// its pixels). nil without a tint.
+    public var tintMatrix: [Double]? {
+        guard strength > 0 else { return nil }
+        let m = Self.saturate(1 + strength * 2) * Self.hueRotate(degrees: hue * 360 - 38) * Self.sepia(strength)
+        return (0..<3).flatMap { r in [m[r][0], m[r][1], m[r][2], 0, 0] } + [0, 0, 0, 1, 0]
+    }
+
+    /// `tintMatrix` as the engine reads it: 20 comma-separated numbers; nil without a tint.
+    public var tintMatrixString: String? {
+        tintMatrix.map { $0.map { String(format: "%.6g", $0) }.joined(separator: ",") }
+    }
+
+    /// The stylesheet, without the tint's filter when the engine draws the tint itself (`tintMatrix`), so the
+    /// page's images keep their colours (#602).
+    public func stylesheet(engineTints: Bool) -> String {
         var rules: [String] = []
         var filters: [String] = []
         if invert { filters.append("invert(1) hue-rotate(180deg)") }
-        if strength > 0 {
+        if strength > 0, !engineTints {
             // A tint: the page washed toward the hue, as much as the handle is out from the middle.
             filters.append("sepia(\(fmt(strength)))")
             filters.append("hue-rotate(\(fmt(hue * 360 - 38))deg)")
@@ -114,6 +134,33 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
     }
 
     private func fmt(_ v: Double) -> String { String(format: "%.3g", v) }
+
+    // The Filter Effects spec's matrices for sepia(), hue-rotate() and saturate() (3x3, linear RGB rows).
+    public typealias Matrix3 = [[Double]]
+    public static func sepia(_ s: Double) -> Matrix3 {
+        let k = 1 - max(0, min(1, s))
+        return [[0.393 + 0.607 * k, 0.769 - 0.769 * k, 0.189 - 0.189 * k],
+                [0.349 - 0.349 * k, 0.686 + 0.314 * k, 0.168 - 0.168 * k],
+                [0.272 - 0.272 * k, 0.534 - 0.534 * k, 0.131 + 0.869 * k]]
+    }
+    public static func hueRotate(degrees: Double) -> Matrix3 {
+        let a = degrees * .pi / 180, c = cos(a), s = sin(a)
+        return [[0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928],
+                [0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.140, 0.072 - c * 0.072 - s * 0.283],
+                [0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072]]
+    }
+    public static func saturate(_ v: Double) -> Matrix3 {
+        [[0.213 + 0.787 * v, 0.715 - 0.715 * v, 0.072 - 0.072 * v],
+         [0.213 - 0.213 * v, 0.715 + 0.285 * v, 0.072 - 0.072 * v],
+         [0.213 - 0.213 * v, 0.715 - 0.715 * v, 0.072 + 0.928 * v]]
+    }
+}
+
+fileprivate extension Array where Element == [Double] {
+    /// 3x3 product: `lhs * rhs` applies `rhs` first.
+    static func * (lhs: [[Double]], rhs: [[Double]]) -> [[Double]] {
+        (0..<3).map { r in (0..<3).map { c in (0..<3).reduce(0) { $0 + lhs[r][$1] * rhs[$1][c] } } }
+    }
 }
 
 /// How Arc 1.172.1's Boost editor moves (60 fps screen recordings of Victor's Arc, 7 Nov 2026).

@@ -1051,13 +1051,16 @@ enum BrowserManagerLifecycleTests {
         expect(themed() == before + 2 && rt.browser.lastIsolatedParams.contains("__craCookieBanners")
                && rt.browser.lastIsolatedParams.contains("#onetrust-banner-sdk"), "blocking cookie banners hides them on every committed page")
         // Arc's Boosts: a committed page on a boosted site gets the boost's stylesheet and script.
-        BrowserManager.boostFor = { url in url.contains("example.test") ? (css: "h1 { color: red }", js: "window.boosted = 1") : nil }
+        BrowserManager.boostFor = { url, engineTints in
+            url.contains("example.test") ? (css: "h1 { color: red }", js: "window.boosted = 1", tint: engineTints ? "1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0" : nil) : nil
+        }
         store.settings.blockCookieBanners = false
         rt.browser.navigate(to: "https://example.test/themed")
         manager.browser(rt.browser, didChangeCommittedLoad: true)
         expect(rt.browser.replies.contains { $0.method == isolatedProbe } && rt.browser.lastIsolatedParams.contains("__craBoost")
                && rt.browser.lastIsolatedParams.contains("h1 { color: red }") && rt.browser.scripts.last == "window.boosted = 1",
                "a boosted site's page gets the boost's CSS and runs its script")
+        expect(rt.browser.boostColorMatrix?.hasPrefix("1,0,0,0,0") == true, "and the engine its colours, drawn around images (#602)")
         BrowserManager.boostFor = nil
         manager.closeAll()
     }

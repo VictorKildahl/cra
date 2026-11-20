@@ -111,11 +111,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         CaptureOverlay.easels = { EaselFiles.all().map { CaptureMenuLayout.Destination(id: $0.id, title: $0.title) } }
         EaselBrowser.registerServices(self)
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
-        BrowserManager.boostFor = { [store] url in
+        BrowserManager.boostFor = { [store] url, engineTints in
             guard store.settings.boostsEnabled else { return nil }
             let boosts = Boost.applying(to: url, from: BoostStore.shared.boosts)
             guard !boosts.isEmpty else { return nil }
-            return (boosts.map(\.stylesheet).joined(separator: "\n"), boosts.map(\.js).filter { !$0.isEmpty }.joined(separator: ";\n"))
+            // One tint, as the stylesheet's filters were: the last boost's wins.
+            return (boosts.map { $0.stylesheet(engineTints: engineTints) }.joined(separator: "\n"),
+                    boosts.map(\.js).filter { !$0.isEmpty }.joined(separator: ";\n"),
+                    boosts.compactMap(\.tintMatrixString).last)
         }
         BoostStore.changed = { [weak self] host in for m in self?.mainWindows ?? [] { m.browsers.reapplyBoosts(host: host) } }
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }
@@ -2720,6 +2723,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     RunLoop.main.perform(inModes: [.eventTracking, .default]) { menu.cancelTrackingWithoutAnimation() }
                 }
                 NSLog("Cra menu shown: waiting")
+                return
+            }
+            // pagePixel=<label>&x=<css px>&y=<css px>: the current page's colour there as drawn, a one-pixel
+            // DevTools capture, logged as sRGB r/g/b (boost-tint, #602).
+            if let label = dict["pagePixel"], let x = dict["x"].flatMap(Double.init), let y = dict["y"].flatMap(Double.init) {
+                let params = "{\"format\":\"png\",\"clip\":{\"x\":\(x),\"y\":\(y),\"width\":1,\"height\":1,\"scale\":1}}"
+                main.currentBrowser?.sendDevToolsMethod("Page.captureScreenshot", params: params) { result, error in
+                    guard let json = result?.data(using: .utf8),
+                          let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+                          let base64 = object["data"] as? String, let png = Data(base64Encoded: base64),
+                          let pixel = NSBitmapImageRep(data: png)?.converting(to: .sRGB, renderingIntent: .default)?.colorAt(x: 0, y: 0)
+                    else { CraLog.note("Cra page pixel \(label): none \(error ?? "")"); return }
+                    func byte(_ v: CGFloat) -> Int { Int((v * 255).rounded()) }
+                    CraLog.note("Cra page pixel \(label): \(byte(pixel.redComponent))/\(byte(pixel.greenComponent))/\(byte(pixel.blueComponent))")
+                }
                 return
             }
             if let method = dict["cdp"] {

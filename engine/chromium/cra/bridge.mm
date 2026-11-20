@@ -158,6 +158,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 
 @interface CraBrowser ()
 - (void)adoptContents:(content::WebContents*)contents;
+/// The page's Boost colour matrix for its WebPreferences (#602), empty for none.
+- (std::string)boostColorMatrixForPrefs;
 - (void)contentsCreated:(content::WebContents*)contents;
 - (void)pageStartedNavigation:(content::NavigationHandle*)handle;
 - (void)pageFinishedNavigation:(content::NavigationHandle*)handle;
@@ -290,6 +292,12 @@ bool g_adding_own_page = false;
 CraBrowser* BrowserFor(content::WebContents* contents) {
   auto it = PagesByContents().find(contents);
   return it == PagesByContents().end() ? nil : it->second;
+}
+
+// The Boost colours of a page of Cra's, every colour it draws but its images (#602; cra_engine_hooks.h).
+std::string BoostColorMatrix(content::WebContents* contents) {
+  CraBrowser* page = BrowserFor(contents);
+  return page ? [page boostColorMatrixForPrefs] : std::string();
 }
 
 void Later(base::OnceClosure task) {
@@ -1931,6 +1939,7 @@ void RunReadyBlocks() {
   g_page_window_active = &PageWindowActive;
   g_exclusive_access_notice = &ExclusiveAccessNotice;
   g_block_request = &BlockRequest;
+  g_boost_color_matrix = &BoostColorMatrix;
   g_page_menu_built = &BuildArcMenu;
   g_page_menu_command = &PageMenuCommand;
   g_page_menu_show = &PageMenuShow;
@@ -2082,6 +2091,8 @@ bool HandleDebugMethod(content::WebContents* contents,
   NSString* _pendingURL;
   BOOL _waitingForPopup;
   BOOL _audioMuted;
+  // A Boost's colour matrix, 20 comma-separated numbers; empty for none (#602).
+  std::string _boostColorMatrix;
   // The app's find session (AskOnPage.FindRequest): every result Chrome reports is tagged with it. Nil
   // after -stopFinding:, so a late result of a stopped search reaches nobody.
   NSUUID* _findGeneration;
@@ -2837,6 +2848,23 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   }
   [self makeChromeActiveTab];
   _contents->Focus();
+}
+
+- (void)setBoostColorMatrix:(NSString*)matrix {
+  std::string value = base::SysNSStringToUTF8(matrix ?: @"");
+  if (value == _boostColorMatrix) {
+    return;
+  }
+  _boostColorMatrix = value;
+  // Chrome asks again (OverrideWebPreferences → g_boost_color_matrix) and the page repaints; a page made later
+  // gets it as it's made.
+  if (_contents) {
+    _contents->OnWebPreferencesChanged();
+  }
+}
+
+- (std::string)boostColorMatrixForPrefs {
+  return _boostColorMatrix;
 }
 
 - (void)setAudioMuted:(BOOL)muted {

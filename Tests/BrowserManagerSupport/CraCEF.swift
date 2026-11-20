@@ -112,6 +112,9 @@ open class CraBrowser {
     public func applyDevToolsAction() { devToolsRequests.append("apply \(devToolsAction ?? "")"); devToolsAction = nil }
     public func closeDevTools() { hasDevTools = false; devToolsRequests.append("close") }
     public func setAudioMuted(_ muted: Bool) {}
+    /// What BrowserManager gave the engine for a Boost's colours (#602).
+    public private(set) var boostColorMatrix: String?
+    public func setBoostColorMatrix(_ matrix: String?) { boostColorMatrix = matrix }
     public private(set) var backgroundProbes = 0
     public func probeBackgroundColor() { backgroundProbes += 1 }
     public func setFocused(_ focused: Bool) {}

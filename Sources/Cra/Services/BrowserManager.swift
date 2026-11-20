@@ -1625,16 +1625,21 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         adopt(css, as: "__craArcTheme", in: browser)
     }
 
-    /// Arc's Boosts: the site's boost for this page (set by the app; BoostStore), nil for none.
-    static var boostFor: ((String) -> (css: String, js: String)?)?
+    /// Arc's Boosts: the site's boost for this page (set by the app; BoostStore), nil for none. `engineTints`:
+    /// the page's engine draws the tint (`tint`, Boost.tintMatrixString), so `css` leaves it out (#602).
+    static var boostFor: ((_ url: String, _ engineTints: Bool) -> (css: String, js: String, tint: String?)?)?
 
     /// The page's boost: its stylesheet adopted like the theme data, its script run in the page.
-    /// An emptied boost clears what an earlier one adopted.
+    /// An emptied boost clears what an earlier one adopted. On Cra's Chromium engine its colours go to the engine,
+    /// which draws every colour but the page's images through them, as in Arc (#602); WebKit and CEF pages keep the
+    /// stylesheet's filter.
     func applyBoost(to browser: CraBrowser, clearing: Bool = true) {
-        let boost = Self.boostFor?(browser.currentURL)
+        let engineTints = EngineFramework.isChromiumEngine && !(browser is WebKitBrowser)
+        let boost = Self.boostFor?(browser.currentURL, engineTints)
         // A new document has nothing adopted: no call unless there is a boost to put on it.
         guard boost != nil || clearing else { return }
         adopt(boost?.css ?? "", as: "__craBoost", in: browser)
+        if engineTints { browser.setBoostColorMatrix(boost?.tint) }
         if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
     }
 

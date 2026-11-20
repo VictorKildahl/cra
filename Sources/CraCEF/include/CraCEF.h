@@ -374,6 +374,10 @@ CRA_EXPORT @interface CraBrowser : NSObject
 - (void)findText:(NSString *)text forward:(BOOL)forward matchCase:(BOOL)matchCase findNext:(BOOL)findNext
     generation:(NSUUID *)generation quote:(BOOL)quote;
 - (void)stopFinding:(BOOL)clearSelection;
+/// A Boost's colours (#602): the page draws every colour but its images through this 4x5 colour matrix, 20
+/// comma-separated numbers (Boost.tintMatrix); nil or empty for none. Also for a page Chromium hasn't made yet.
+/// The engine only: CEF ignores it and its pages keep the Boost's CSS filter.
+- (void)setBoostColorMatrix:(nullable NSString *)matrix;
 /// Mutes the page, also one Chromium hasn't made yet: it starts muted (#387).
 - (void)setAudioMuted:(BOOL)muted;
 /// Whether Chromium has the page muted (CefBrowserHost::IsAudioMuted), NO before it made it.

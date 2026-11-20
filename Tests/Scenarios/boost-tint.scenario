@@ -1,0 +1,22 @@
+# promise: #602
+# A Boost's colours tint the page but leave its pictures alone, as Arc's do (Arc 1.174, 20 Nov 2026: Wikipedia's
+# photos kept their pixels under a strong tint). The boosted page is grey with a solid orange picture: the grey
+# takes the tint (152/137/196 for hue 0.7, strength 0.6) and the picture stays 240/120/20. The engine draws the
+# tint (Boost.tintMatrix, GraphicsContext::SetCraTint); the CSS filter Cra used before turned it 150/141/255.
+budget rss=700 stalls50=10
+port 47602
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed boosts.json [{"id":"7B1E0D2C-6A43-4F0A-9E3B-60202D000602","host":"127.0.0.1","name":"Tint","enabled":true,"hue":0.7,"strength":0.6,"invert":false,"contrast":50,"brightness":50,"saturation":50,"textScale":1,"textCase":"none","zapped":[],"css":"","js":""}]
+cra://open?url=${ORIGIN}/boost-tint.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+# Three samples 2 s apart: once, right after the full suite at load, the first read 149/138/192 and the next runs
+# 151/138/196 (the matrix's own 152/137/196). The old CSS filter's blue 255 never matches any of them.
+wait 2
+cra://debug?pagePixel=page&x=40&y=400
+wait 2
+cra://debug?pagePixel=page&x=40&y=400
+wait 2
+cra://debug?pagePixel=page&x=40&y=400
+expect-log Cra page pixel page: 1(5[0-4])/13[5-9]/19[4-8]$
+cra://debug?pagePixel=picture&x=400&y=140
+expect-log Cra page pixel picture: 2(3[8-9]|4[0-2])/1(1[8-9]|2[0-2])/(1[8-9]|2[0-2])$
