@@ -907,7 +907,7 @@
 #458   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::keptActivePagesOutlastTheClock  e70d89d7db36
 #458   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::keptActivePagesTakeNoRecentPlace  6aa6bcffc0ed
 #458   Tests/BrowserManagerLifecycleTests.swift::keepActiveSitesCase  b494d97c05dc
-#458   Tests/Scenarios/keep-active-sites.scenario  880f87b22cb2
+#458   Tests/Scenarios/keep-active-sites.scenario  d1d4f2c01029
 #459   Packages/CraCore/Tests/CraCoreTests/MCPProtocolTests.swift::fullServerReplySaysWhy  c603156a09f1
 #459   Tests/MCPTransportTests.swift::fullServerSaysWhy  78c75dce7c78
 #460   Packages/CraCore/Tests/CraCoreTests/PictureInPictureInputTests.swift::chromiumWindowNeverBecomesKey  042491a47d87

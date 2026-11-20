@@ -15,7 +15,12 @@ repeat 6 cra://open?url=${PAGE}?n=${i}
 wait 8
 cra://debug?freezingState=1
 expect-log freezing state .*kept\.example.* title=Fixture kept: frozen=false .*reasons=.*opted out
+# Chrome freezes background pages one at a time, at its own pace: on a slow runner the quiet page's turn came
+# after the first look. A second look 10 s later counts too, and the kept page stays awake through it.
+wait 10
+cra://debug?freezingState=2
 expect-log freezing state .*n=quiet title=Fixture quiet: frozen=true
+reject-log freezing state .*kept\.example.* frozen=true
 cra://debug?sleepTabs=1
 wait 4
 expect-log tab sleep (unloads|discards) 127\.0\.0\.1
