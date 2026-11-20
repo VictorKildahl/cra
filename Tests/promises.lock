@@ -1346,6 +1346,7 @@ crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensio
 crash-duplicate-extension-ids Tests/Scenarios/extensions-menu-one-each.scenario  46498caea716
 crash-fedcm-dialog Tests/Scenarios/fedcm-sign-in-dialog.scenario  d1ccf325b5a7
 crash-hidden-page-closed-in-callback Tests/Scenarios/hidden-page-closes-in-callback.scenario  3e9967b994ed
+crash-mcp-bridge-closed-stderr Tests/MCPTransportTests.swift::bridgeWithoutStderr  28bfe7ac9a93
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfSessionTests.swift::hugeCountersSaturateInsteadOfOverflowing  03ac411a6675
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfStateTests.swift::historyFootprintSaturatesInsteadOfOverflowing  2a8c526e26ad
 crash-tab-group-closed-window Tests/Scenarios/engine-tab-group-closed-window.scenario  14b438f2b3b0

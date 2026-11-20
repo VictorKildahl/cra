@@ -62,6 +62,30 @@ enum MCPTransportTests {
         precondition(!MCPConnection.write(Data([1]), to: -1))
         print("MCP transport: fragmentation, batching, Unicode, limits and EOF passed")
         try fullServerSaysWhy()
+        bridgeWithoutStderr()
+    }
+
+    // promise: crash-mcp-bridge-closed-stderr
+    /// An agent launched `Cra --mcp` with its stderr closed while Cra's MCP was off (0.1.50 crash
+    /// reports): the "unavailable" line went through FileHandle.standardError, whose write raises
+    /// on a closed descriptor, and the bridge aborted with a crash report instead of failing.
+    static func bridgeWithoutStderr() {
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_addclose(&actions, STDERR_FILENO)
+        let args = [CommandLine.arguments[0], "--mcp", "/tmp/cra-no-mcp-\(UUID().uuidString).sock"]
+        var argv: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var pid: pid_t = 0
+        precondition(posix_spawn(&pid, args[0], &actions, nil, &argv, environ) == 0)
+        var status: Int32 = 0
+        precondition(waitpid(pid, &status, 0) == pid)
+        let signal = status & 0x7f, code = (status >> 8) & 0xff
+        precondition(signal == 0 && code == 1, "a bridge without stderr exits 1, not on signal \(signal) (code \(code))")
+        print("MCP bridge without stderr: Cra unavailable exits 1, no crash")
     }
 
     // promise: #459

@@ -109,7 +109,7 @@ enum MCPConnection {
                 }
                 // Turned away (Cra is full): the agent got the error, and its log gets the reason.
                 if let refusal {
-                    FileHandle.standardError.write(Data((refusal + "\n").utf8))
+                    _ = write(Data((refusal + "\n").utf8), to: STDERR_FILENO)
                     exit(1)
                 }
                 exit(0)
@@ -122,7 +122,9 @@ enum MCPConnection {
             // The receiving worker exits when the server has drained and closed.
             dispatchMain()
         } catch {
-            FileHandle.standardError.write(Data("Cra MCP is unavailable. Enable it in the running browser's Advanced settings. \(error)\n".utf8))
+            // Not FileHandle: its write raises when the agent gave the bridge no stderr, and that aborted the bridge.
+            _ = write(Data("Cra MCP is unavailable. Enable it in the running browser's Advanced settings. \(error)\n".utf8),
+                      to: STDERR_FILENO)
             exit(1)
         }
     }
