@@ -1,0 +1,26 @@
+[
+ {
+  "url": "https://home-visit.example.com/",
+  "title": "Sieve home-visit",
+  "lastVisit": "2026-11-19T09:00:00Z",
+  "visitCount": 3,
+  "profiles": [
+   "default"
+  ]
+ },
+ {
+  "url": "https://work-visit.example.com/",
+  "title": "Sieve work-visit",
+  "lastVisit": "2026-11-19T09:00:00Z",
+  "visitCount": 3,
+  "profiles": [
+   "B0000000-0000-0000-0000-000000000001"
+  ]
+ },
+ {
+  "url": "https://old-visit.example.com/",
+  "title": "Sieve old-visit",
+  "lastVisit": "2026-11-19T09:00:00Z",
+  "visitCount": 3
+ }
+]

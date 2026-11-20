@@ -1,0 +1,36 @@
+# promise: #609
+# A space's ⌘T suggests archived tabs and visited pages from its own profile only (#609): Home is on
+# Default and Work on another profile, each with an archived tab and a visited page. Before, Home's bar
+# offered Work's too, so one profile's browsing was searchable from the other. A page in history from
+# before Cra kept profiles (old-visit) is still suggested on both. The archive's Library page keeps
+# every space's, as Arc's does (CommandBarProfileScope).
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+profile ${FIXTURES}/TwoProfiles
+cra://open?url=${PAGE}?n=home
+expect-log loaded 127\.0\.0\.1
+wait 1
+cra://commandbar?query=sieve
+wait 1
+cra://debug?commandBarRows=home
+expect-log Cra command bar rows home: .*home-closed\.example\.com
+expect-log Cra command bar rows home: .*home-visit\.example\.com
+expect-log Cra command bar rows home: .*old-visit\.example\.com
+reject-log Cra command bar rows home:.*work-
+cra://dismiss
+wait 1
+cra://commandbar
+wait 1
+cra://debug?commandBarRows=home-empty
+reject-log Cra command bar rows home-empty:.*work-closed
+cra://dismiss
+cra://open?url=${PAGE}?n=work&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://commandbar?query=sieve
+wait 1
+cra://debug?commandBarRows=work
+expect-log Cra command bar rows work: .*work-closed\.example\.com
+expect-log Cra command bar rows work: .*work-visit\.example\.com
+expect-log Cra command bar rows work: .*old-visit\.example\.com
+reject-log Cra command bar rows work:.*home-
+cra://dismiss

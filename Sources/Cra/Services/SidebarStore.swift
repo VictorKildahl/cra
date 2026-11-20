@@ -2983,9 +2983,11 @@ final class SidebarStore {
 
     // MARK: History and ranking signals
 
-    func recordVisit(url: String, title: String) {
+    /// A page loaded in `profile` (nil = Default): the command bar suggests it in that profile's spaces (#609).
+    func recordVisit(url: String, title: String, profile: UUID?) {
         guard url.hasPrefix("http") else { return }
         var e = history[url] ?? HistoryEntry(url: url, title: title, lastVisit: clock.now, visitCount: 0)
+        e.visited(in: profile)
         e.visitCount += 1
         e.lastVisit = clock.now
         if !title.isEmpty { e.title = title }

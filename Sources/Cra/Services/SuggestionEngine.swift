@@ -67,6 +67,7 @@ final class SuggestionEngine {
         let query = rawQuery.trimmingCharacters(in: .whitespaces)
         let q = query.lowercased()
         var result = SuggestionResult(query: query)
+        barProfile = profile(spaceShown: spaceShown)
         if q.isEmpty {
             result.items = Array(recentSuggestions(excluding: currentTabID).prefix(Self.maxRows))
             // Tab on the empty field lists the actions (Arc's typeTravel), with no hint at the end of it.
@@ -186,6 +187,8 @@ final class SuggestionEngine {
         var archive: [(ArchivedItem, Searchable)] = []
         var history: [(HistoryEntry, Searchable)] = []
         var openURLs: Set<String> = []
+        /// The profile its archive and history rows are limited to (#609).
+        var profile: UUID?
         /// Each row's CommandBarDedupe keys, by its row id: an address parsed once per opening, not per keystroke.
         var dedupeKeys: [String: [String]] = [:]
         /// Each row's Suggestion id ("tab:<uuid>"…), made once per opening, in the order of `tabs`, `archive`, `history`.
@@ -193,20 +196,25 @@ final class SuggestionEngine {
     }
 
     private var index: SearchIndex?
+    /// The profile of the space the bar is in: its archive and history rows are that profile's (#609).
+    private var barProfile: UUID?
+
+    private func profile(spaceShown: UUID?) -> UUID? { store.profileID(space: spaceShown ?? store.focusedSpaceID) }
 
     /// What the index is made of, read on the main thread: the rows and the text their keys come from.
     private struct IndexRows {
         let tabs: [SidebarItem], archive: [ArchivedItem], history: [HistoryEntry]
+        let profile: UUID?
         let text: [(title: String, url: String)]
         /// Each row's id, address and title as its Suggestion has them, for its dedupe keys.
         let rowIDs: [(id: String, url: String, title: String)]
     }
 
-    private func indexRows() -> IndexRows {
+    private func indexRows(profile: UUID?) -> IndexRows {
         let tabs = commandBarTabs().filter { $0.tab != nil }
-        let archive = Array(store.archive.filter { $0.item.tab != nil })
-        let history = Array(store.history.values)
-        return IndexRows(tabs: tabs, archive: archive, history: history,
+        let archive = Array(store.archive.filter { $0.item.tab != nil && suggests($0, on: profile) })
+        let history = store.history.values.filter { CommandBarProfileScope.suggests($0, on: profile) }
+        return IndexRows(tabs: tabs, archive: archive, history: history, profile: profile,
                          text: tabs.map { ($0.displayTitle, $0.tab!.url) } + archive.map { ($0.item.displayTitle, $0.item.tab!.url) }
                                + history.map { ($0.title, $0.url) },
                          rowIDs: tabs.map { ("tab:\($0.id)", $0.tab!.url, $0.displayTitle) }
@@ -235,7 +243,13 @@ final class SuggestionEngine {
         i.archive = Array(zip(rows.archive, keys[t..<(t + a)]))
         i.history = Array(zip(rows.history, keys[(t + a)...]))
         i.openURLs = Set(rows.tabs.compactMap { $0.tab?.url })
+        i.profile = rows.profile
         return i
+    }
+
+    /// An archived tab is suggested on the profile of the space it was closed in (#609).
+    private func suggests(_ entry: ArchivedItem, on profile: UUID?) -> Bool {
+        CommandBarProfileScope.suggests(archivedFrom: entry.sourceSpaceID.map { store.profileID(space: $0) }, on: profile)
     }
 
     /// Which opening of the bar an index is for: one built for an earlier opening is dropped.
@@ -245,7 +259,7 @@ final class SuggestionEngine {
     /// first keystroke finds the index ready (#617). A keystroke before it is ready builds it then, as before.
     func prepareIndex() {
         guard index == nil else { return }
-        let rows = indexRows(), generation = indexGeneration, work = (text: rows.text, ids: rows.rowIDs)
+        let rows = indexRows(profile: profile(spaceShown: nil)), generation = indexGeneration, work = (text: rows.text, ids: rows.rowIDs)
         DispatchQueue.global(qos: .userInitiated).async {
             let keys = Self.rowKeys(work)
             DispatchQueue.main.async { [weak self] in
@@ -259,8 +273,8 @@ final class SuggestionEngine {
 
     /// Built when the bar opens (prepareIndex) or on its first keystroke, kept until it closes.
     private var searchIndex: SearchIndex {
-        if let index { return index }
-        let rows = indexRows()
+        if let index, index.profile == barProfile { return index }
+        let rows = indexRows(profile: barProfile)
         // The keys (lowercasing, words, bytes, the host) are built on every core at once (#617).
         let i = Self.index(rows, keys: Self.rowKeys((text: rows.text, ids: rows.rowIDs)))
         index = i
@@ -508,7 +522,7 @@ final class SuggestionEngine {
                               subtitle: [sid.flatMap { store.space($0)?.title } ?? "", Self.humanURL(tab.tab?.url ?? "")].filter { !$0.isEmpty }.joined(separator: " · "),
                               url: tab.tab?.url, faviconKey: tab.tab?.faviconKey, symbol: nil, trailing: "Switch to Tab", score: 0, spaceID: sid)
         }
-        for entry in store.archive.prefix(incognito ? 0 : 2) {
+        for entry in store.archive.lazy.filter({ self.suggests($0, on: self.barProfile) }).prefix(incognito ? 0 : 2) {
             guard let t = entry.item.tab else { continue }
             out.append(Suggestion(id: "arch:\(entry.id)", kind: .archived(entry.id), title: entry.item.displayTitle,
                                   subtitle: "Archived \(Self.relative(entry.archivedAt))", url: t.url, faviconKey: t.faviconKey,

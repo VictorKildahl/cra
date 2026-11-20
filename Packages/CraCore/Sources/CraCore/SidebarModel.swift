@@ -932,6 +932,10 @@ public struct HistoryEntry: Codable, Equatable {
     public var title: String
     public var lastVisit: Date
     public var visitCount: Int
+    /// The profiles the page was visited in (CommandBarProfileScope.key), so the command bar of a
+    /// space on one profile doesn't suggest what was browsed on another (#609). nil for an entry
+    /// saved before Cra kept them: its profile isn't known, and it is suggested everywhere as before.
+    public var profiles: [String]? = nil
 
     public init(url: String, title: String, lastVisit: Date, visitCount: Int) {
         self.url = url

@@ -51,6 +51,7 @@ enum StoreTests {
         gitLabFolderMovesRejectDuplicateServers()
         gitLabProfileChangeKeepsNavigatedPages()
         stampsUseTheClock()
+        visitsRememberTheirProfile()
         persistenceFaults()
         incognitoStaysOffDisk()
         chromePagesLeaveIncognito()
@@ -960,13 +961,34 @@ enum StoreTests {
         expect(store.item(b.id)?.tab?.timeLastActiveAt == clock.now, "selecting a tab stamps it with the clock")
         let split = store.createSplit(with: [a.id, b.id])
         expect(split?.split?.timeLastActiveAt == clock.now, "a new split is stamped with the clock")
-        store.recordVisit(url: "https://example.com/a", title: "A")
+        store.recordVisit(url: "https://example.com/a", title: "A", profile: nil)
         expect(store.history["https://example.com/a"]?.lastVisit == clock.now, "history visits use the clock")
         store.archiveLittleWindowPage(url: "https://example.com/little", title: "Little")
         expect(store.archive.first?.archivedAt == clock.now, "a Little Window's page is archived at the clock's time")
         let incognito = store.addIncognitoWindow(frame: nil)
         expect(incognito.focusedSpaceID.flatMap { store.spaces[$0] }?.createdAt == clock.now, "an incognito space is made at the clock's time")
         expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
+    }
+
+    // promise: #609
+    /// A page's history entry keeps the profiles it was visited in, so a space's ⌘T suggests only its
+    /// own profile's pages (CommandBarProfileScope). One visited on two profiles is suggested on both.
+    @MainActor
+    private static func visitsRememberTheirProfile() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Work")
+        store.recordVisit(url: "https://example.com/work", title: "Work page", profile: work.id)
+        store.recordVisit(url: "https://example.com/home", title: "Home page", profile: nil)
+        store.recordVisit(url: "https://example.com/both", title: "Both", profile: nil)
+        store.recordVisit(url: "https://example.com/both", title: "Both", profile: work.id)
+        store.recordVisit(url: "https://example.com/both", title: "Both", profile: work.id)
+        let suggested = { (profile: UUID?) in
+            Set(store.history.values.filter { CommandBarProfileScope.suggests($0, on: profile) }.map(\.url))
+        }
+        expect(suggested(work.id) == ["https://example.com/work", "https://example.com/both"], "Work's bar: \(suggested(work.id))")
+        expect(suggested(nil) == ["https://example.com/home", "https://example.com/both"], "Default's bar: \(suggested(nil))")
+        expect(store.history["https://example.com/both"]?.profiles == ["default", work.id.uuidString], "each profile once, in visit order")
+        expect(store.history["https://example.com/both"]?.visitCount == 3, "visits still count across profiles")
     }
 
     /// A file that can't be read or written says so (a fault) instead of failing silently.

@@ -1,0 +1,46 @@
+[
+ {
+  "archivedAt": "2026-11-19T08:01:00Z",
+  "reason": "manual",
+  "sourceSpaceID": "A0000000-0000-0000-0000-000000000001",
+  "wasPinned": false,
+  "item": {
+   "id": "E0000000-0000-0000-0000-000000000001",
+   "children": [],
+   "isUnread": false,
+   "createdAt": "2026-11-19T07:00:00Z",
+   "data": {
+    "tab": {
+     "_0": {
+      "url": "https://home-closed.example.com/",
+      "savedURL": "https://home-closed.example.com/",
+      "savedTitle": "Sieve home-closed",
+      "faviconKey": "home-closed.example.com"
+     }
+    }
+   }
+  }
+ },
+ {
+  "archivedAt": "2026-11-19T08:02:00Z",
+  "reason": "manual",
+  "sourceSpaceID": "A0000000-0000-0000-0000-000000000002",
+  "wasPinned": false,
+  "item": {
+   "id": "E0000000-0000-0000-0000-000000000002",
+   "children": [],
+   "isUnread": false,
+   "createdAt": "2026-11-19T07:00:00Z",
+   "data": {
+    "tab": {
+     "_0": {
+      "url": "https://work-closed.example.com/",
+      "savedURL": "https://work-closed.example.com/",
+      "savedTitle": "Sieve work-closed",
+      "faviconKey": "work-closed.example.com"
+     }
+    }
+   }
+  }
+ }
+]

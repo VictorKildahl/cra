@@ -2118,7 +2118,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func browser(_ browser: CraBrowser, didChangeProgress progress: Double) { state.progress = progress }
 
     func browser(_ browser: CraBrowser, didFinishLoadingURL url: String, title: String, statusCode: Int) {
-        store.recordVisit(url: url, title: title)
+        store.recordVisit(url: url, title: title, profile: state.profileID)
     }
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {

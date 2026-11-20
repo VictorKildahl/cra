@@ -77,6 +77,7 @@ enum TestRoot { case today }
     var profilePaths: [UUID: String] = [:]
     func profilePath(item: UUID) -> String? { profilePaths[item] }
     func profileDirectoryName(item: UUID) -> String { "Default" }
+    func profileID(item: UUID) -> UUID? { nil }
     func spaceID(ofItem: UUID) -> UUID? { nil }
     func splitContaining(_ id: UUID) -> TestItem? {
         guard let p = items[id]?.parentID, let parent = items[p], parent.isSplit else { return nil }
@@ -108,7 +109,7 @@ enum TestRoot { case today }
     func setFaviconKey(_ id: UUID, _ key: String) { items[id]?.tab?.faviconKey = key }
     /// The URLs a finished load counted as visits, in order.
     var visits: [String] = []
-    func recordVisit(url: String, title: String) { visits.append(url) }
+    func recordVisit(url: String, title: String, profile: UUID?) { visits.append(url) }
     func clearHistory(_ range: BrowsingDataClear.Range) {}
     /// The tabs selected, in order (Picture in Picture's Back to Tab selects; Minimize doesn't).
     private(set) var selections: [UUID] = []
