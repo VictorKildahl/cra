@@ -1259,6 +1259,8 @@
 #591   iOS/CraUITests/BrowserTests.swift::testRecentTabsShowUnderTheEmptyField  6bf1170efbe9
 #594   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::aModelThatNamesEveryTabLeavesThemLoose  c97e1f073cec
 #597   Tests/Scenarios/page-opened-tab-shows.scenario  9578d2e1e5dd
+#598   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::onlyARealChangeIsWrittenSoon  af18caaf55f8
+#598   Tests/StoreTests.swift::syncWritesSoonAfterAChange  45f2ff09c26a
 #599   Packages/CraCore/Tests/CraCoreTests/LittleBarRowsTests.swift::littleWindowLoadsOpenTabsAndArchivedPagesInPlace  3db7ce838adc
 #599   Packages/CraCore/Tests/CraCoreTests/LittleWindowLinksTests.swift::newTabLinkLoadsInTheWindow  80fbb6cec90e
 #599   Tests/Scenarios/little-window-stays.scenario  f152fd5a1638

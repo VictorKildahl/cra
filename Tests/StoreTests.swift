@@ -2555,6 +2555,7 @@ enum StoreTests {
         syncA.disable()
         iCloudSync(first: a, firstClock: clockA)
         syncGoesOnWithoutAsking()
+        syncWritesSoonAfterAChange()
         syncPutsAMixedBundleRight()
         syncPutsAFileThatNeverArrivesRight()
         syncLeavesAMixToItsWriterOnANewMac()
@@ -2713,6 +2714,44 @@ enum StoreTests {
         let fresh = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
         expect(fresh.location == nil, "Stop Syncing is remembered across a relaunch")
         syncA.disable()
+    }
+
+    // promise: #598
+    /// A change made here was written only at the next 30-second look. It goes up 3 s after the last
+    /// change; a tab switch alone (last-active times) waits for the look, as before.
+    @MainActor
+    private static func syncWritesSoonAfterAChange() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-soon-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clock = ManualScheduler()
+        let a = SidebarStore(clock: clock)
+        let first = a.createTab(url: "https://example.com/one").id
+        let second = a.createTab(url: "https://example.com/two").id
+        let sync = SettingsSyncService(store: a, clock: clock, device: "Studio", deviceID: "studio")
+        expect(sync.enable(folder: folder) == .synced, "sync is on, with this Mac's bundle written")
+        let manifest = folder.appendingPathComponent(SettingsSync.folderName).appendingPathComponent(SettingsSync.manifestName)
+        let written = try? Data(contentsOf: manifest)
+
+        // A tab switch: only last-active times change. Nothing goes up before the look.
+        clock.advance(by: 5)
+        a.selectTab(first)
+        a.selectTab(second)
+        clock.advance(by: SettingsSync.writeSoonDelay + 1)
+        expect((try? Data(contentsOf: manifest)) == written, "a tab switch alone waits for the 30-second look")
+
+        // A rename: written 3 s after the last change, well before the look.
+        a.rename(second, to: "Renamed here")
+        clock.advance(by: 1)
+        a.rename(second, to: "Renamed here, twice")
+        clock.advance(by: SettingsSync.writeSoonDelay - 1)
+        expect((try? Data(contentsOf: manifest)) == written, "not while changes keep coming")
+        clock.advance(by: 1)
+        let soon = try? Data(contentsOf: manifest)
+        expect(soon != written, "the bundle is written 3 s after the last change (#598)")
+        let sidebar = (try? Data(contentsOf: folder.appendingPathComponent(SettingsSync.folderName).appendingPathComponent(SettingsSync.sidebarName))) ?? Data()
+        expect(String(decoding: sidebar, as: UTF8.self).contains("Renamed here, twice"), "with the change in it")
+        sync.disable()
     }
 
     /// The question comes once, when sync is turned on. After the answer a bundle from the other

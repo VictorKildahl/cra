@@ -92,6 +92,17 @@ final class SettingsSyncService {
     private var identityObserver: NSObjectProtocol?
     private var queryObservers: [NSObjectProtocol] = []
     private var watcherDebounce: ScheduledWork?
+    /// A change here, written `SettingsSync.writeSoonDelay` after the last one (#598).
+    private var writeSoon: ScheduledWork?
+    /// The bundle last written or applied, without last-active times: a change to those alone waits
+    /// for the 30-second look. Kept as values and compared with ==, never encoded: at 5,000 tabs an
+    /// encode of the sidebar is a 2 MB main-thread job (#615).
+    private var writtenShape: Shape?
+    private struct Shape: Equatable {
+        var document: SidebarDocument
+        var settings: AppSettings
+        var keybindings: Data
+    }
 
     init(store: SidebarStore, clock: Scheduler, device: String? = nil, deviceID: String? = nil) {
         self.store = store
@@ -111,6 +122,32 @@ final class SettingsSyncService {
             iCloudAvailable = true
             if case .iCloud? = state.location { folder = Self.bundleFolder(inContainer: iCloudContainer!) }
         }
+        store.onChange.append { [weak self] in self?.changedHere() }
+    }
+
+    /// The sidebar or the settings changed: a look (and a write) a few seconds after the last change,
+    /// if more changed than when tabs were last active (#598).
+    private func changedHere() {
+        guard isEnabled, folder != nil else { return }
+        writeSoon?.cancel()
+        writeSoon = clock.after(SettingsSync.writeSoonDelay) { [weak self] in
+            guard let self else { return }
+            writeSoon = nil
+            let shape = currentShape()
+            guard shape != writtenShape else { return }
+            CraLog.note("sync: a change here, written now rather than at the next look")
+            let before = state.lastWritten?.id
+            poll()
+            // The look wrote nothing and waits for nothing: the folder already has this (a write sets it itself).
+            if state.lastWritten?.id == before, !awaitingDownload, pendingChoice == nil, error == nil { writtenShape = shape }
+        }
+    }
+
+    /// This Mac's bundle without last-active times.
+    private func currentShape() -> Shape { shape(of: localBundle()) }
+
+    private func shape(of bundle: Bundle) -> Shape {
+        Shape(document: bundle.document.withoutActivity(), settings: bundle.settings, keybindings: bundle.keybindings)
     }
 
     /// Sync is on and past the first question. A later bundle that iCloud is still downloading
@@ -408,6 +445,7 @@ final class SettingsSyncService {
             let bundle = localBundle()
             let manifest = try write(bundle, to: folder, parentIDs: history.ids)
             state.lastWritten = manifest
+            writtenShape = shape(of: bundle)
             lastSync = manifest.writtenAt
             error = nil
             stateFile.save(state)
@@ -534,6 +572,7 @@ final class SettingsSyncService {
         // A merge that kept something changed here differs from the folder's: it goes up on this look.
         let hashes = document == bundle.document ? localHashes() ?? manifest.files : manifest.files
         state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: hashes)
+        writtenShape = document == bundle.document ? currentShape() : nil
         if manifest.deviceID != deviceID, !state.devices.contains(manifest.device) { state.devices.append(manifest.device) }
         otherDevices = state.devices
         lastSync = manifest.writtenAt
@@ -582,6 +621,8 @@ final class SettingsSyncService {
         poller = nil
         watcherDebounce?.cancel()
         watcherDebounce = nil
+        writeSoon?.cancel()
+        writeSoon = nil
         watcher?.cancel()
         watcher = nil
         metadataQuery?.stop()

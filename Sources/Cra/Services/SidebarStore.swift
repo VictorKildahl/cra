@@ -37,6 +37,7 @@ final class SidebarStore {
                 NotificationCenter.default.post(name: AskOnPage.disabledNotification, object: self)
             }
             settingsStore.save(settings)
+            changedHere()
             if settings.tidyDownloads != oldValue.tidyDownloads { tidyDownloadsChanged(settings.tidyDownloads) }
             if settings.tidyTabs != oldValue.tidyTabs { tidyTabsChanged(settings.tidyTabs) }
             if settings.fiveSecondPreviews != oldValue.fiveSecondPreviews { fiveSecondPreviewsChanged(settings.fiveSecondPreviews) }
@@ -255,7 +256,13 @@ final class SidebarStore {
         pruneEmptyGroups()
         revision &+= 1
         save()
+        changedHere()
     }
+
+    /// Told, at once, of every change to the sidebar or the settings: sync writes its bundle a few
+    /// seconds after the last one instead of at its next 30-second look (#598).
+    @ObservationIgnored var onChange: [@MainActor () -> Void] = []
+    private func changedHere() { for f in onChange { f() } }
 
     // MARK: Windows
 

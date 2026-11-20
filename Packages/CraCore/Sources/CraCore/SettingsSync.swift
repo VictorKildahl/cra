@@ -266,3 +266,34 @@ public extension AppSettings {
         return s
     }
 }
+
+// MARK: Writing soon after a change (#598)
+
+extension SettingsSync {
+    /// How long after the last change here this Mac writes its bundle. The 30-second look stays, for
+    /// the other Mac's bundles and as the fallback; a change made here no longer waits for it (#598).
+    public static let writeSoonDelay: TimeInterval = 3
+}
+
+extension SidebarDocument {
+    /// The document as a write soon sees it: without when each tab and split was last active, or which
+    /// pane of a split has focus. Switching tabs changes only those, and with a write on every switch
+    /// each one would upload the whole sidebar (about 210 KB for 229 tabs); they go up with the next
+    /// 30-second look, as before (#598).
+    public func withoutActivity() -> SidebarDocument {
+        var doc = self
+        for i in doc.items.indices {
+            switch doc.items[i].data {
+            case .tab(var t):
+                t.timeLastActiveAt = nil
+                doc.items[i].data = .tab(t)
+            case .split(var s):
+                s.timeLastActiveAt = nil
+                s.focusTabID = nil
+                doc.items[i].data = .split(s)
+            case .folder, .container: break
+            }
+        }
+        return doc
+    }
+}
