@@ -964,7 +964,7 @@ final class SidebarStore {
     func archiveLittleWindowPage(url: String, title: String) {
         let it = SidebarItem.tab(url, title: title, parent: nil)
         archive.insert(ArchivedItem(archivedAt: clock.now, reason: .manual, sourceSpaceID: nil, wasPinned: false, item: it, fromLittleWindow: true), at: 0)
-        if archive.count > 2000 { archive.removeLast(archive.count - 2000) }
+        if ArchiveLimit.overflow(archive.count) > 0 { archive.removeLast(ArchiveLimit.overflow(archive.count)) }
         touch()
     }
 
@@ -2228,7 +2228,7 @@ final class SidebarStore {
         if !it.isEmptyTab, !isIncognito(space: sid) {
             archive.insert(ArchivedItem(archivedAt: clock.now, reason: reason, sourceSpaceID: sid, wasPinned: pinned, item: it,
                                         sourceFolderID: folder, sourceIndex: index), at: 0)
-            if archive.count > 2000 { archive.removeLast(archive.count - 2000) }
+            if ArchiveLimit.overflow(archive.count) > 0 { archive.removeLast(ArchiveLimit.overflow(archive.count)) }
         }
         if !selectedIn.isEmpty {
             for (w, sid) in selectedIn {
