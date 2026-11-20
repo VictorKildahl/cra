@@ -1,0 +1,13 @@
+# promise: #614
+# ⌘T searched only the 400 newest archived tabs; the rest were findable only by scrolling Library ▸ Archived Tabs.
+# It searches the whole archive now. The profile holds 450 archived tabs; the oldest, past the old 400, is found.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+profile ${FIXTURES}/ArchiveProfile
+cra://open?url=${PAGE}?n=start
+expect-log loaded 127\.0\.0\.1
+wait 1
+cra://commandbar?query=needle
+wait 1
+cra://debug?commandBarRows=needle
+expect-log Cra command bar rows needle: .*archived:https://archive449\.example\.com/

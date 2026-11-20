@@ -204,7 +204,7 @@ final class SuggestionEngine {
 
     private func indexRows() -> IndexRows {
         let tabs = commandBarTabs().filter { $0.tab != nil }
-        let archive = Array(store.archive.prefix(400).filter { $0.item.tab != nil })
+        let archive = Array(store.archive.filter { $0.item.tab != nil })
         let history = Array(store.history.values)
         return IndexRows(tabs: tabs, archive: archive, history: history,
                          text: tabs.map { ($0.displayTitle, $0.tab!.url) } + archive.map { ($0.item.displayTitle, $0.item.tab!.url) }

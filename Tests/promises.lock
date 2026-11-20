@@ -1287,6 +1287,7 @@
 #608   Packages/CraCore/Tests/CraCoreTests/LibraryGlyphMotionTests.swift::starSinksIntoTheBoxAtRest  44dd5170a322
 #608   Tests/Scenarios/library-glyph-hover.scenario  f12eb9c2de66
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
+#614   Tests/Scenarios/command-bar-whole-archive.scenario  757726fdd663
 #614   Tests/StoreTests.swift::clearTodayArchivesInOnePass  6edf309ca7f0
 #616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::aWindowKeepsItsLatestSleptPages  318f272da9bc
 #616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::theTimerAsksSixteenPagesAPass  d199ebf2a55d
