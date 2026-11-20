@@ -1244,6 +1244,8 @@
 #580   Packages/CraCore/Tests/CraCoreTests/EaselTextBoxTests.swift::longTextWidensThenWrapsAndReturnStartsALine  7499188a4995
 #580   Tests/EaselCanvasTests.swift::longText  bb1d30ef94bc
 #581   Tests/Scenarios/little-window-mission-control.scenario  9c0af64b7751
+#584   Packages/CraCore/Tests/CraCoreTests/AskOnPageRefusalTests.swift::aRefusedAnswerIsAskedAgainInPlainText  974697490f34
+#584   Tests/AskOnPageServiceTests.swift::aRefusedAnswerIsAskedAgainInPlainText  e5c3ccb857c5
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
 #590   Tests/Scenarios/view-history.scenario  d890566954b5

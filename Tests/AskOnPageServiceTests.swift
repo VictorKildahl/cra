@@ -38,6 +38,7 @@ enum AskOnPageServiceTests {
         await invalidationAndTimeout()
         await synchronousConfigurationInvalidation()
         await failuresAndOverflow()
+        await aRefusedAnswerIsAskedAgainInPlainText()
         await aStreamedAnswerReachesTheCardTenTimesASecond()
         await anEchoedRequestIsAskedAgain()
         try await schemaAndCompleteness()
@@ -253,6 +254,34 @@ enum AskOnPageServiceTests {
         service.clear()
     }
 
+    // promise: #584
+    /// The on-device model refused a quoted answer about a news article ("May contain sensitive content")
+    /// and the card said "Sorry, I encountered an error"; asked in plain text it answers. The card shows
+    /// that answer, without quotes.
+    private static func aRefusedAnswerIsAskedAgainInPlainText() async {
+        let browser = BrowserManager(), provider = Provider(), clock = ManualScheduler()
+        let service = AskOnPageService(browsers: browser, enabled: { true }, available: { true }, clock: clock,
+            countTokens: count, generate: provider.stream)
+        service.ask("who is being discussed in this article", language: "English"); browser.reply(page)
+        await provider.started(1)
+        expect(provider.requests[0].form == .quoted, "a question is first asked for quotes and an answer")
+        provider.complete(throwing: .refused)
+        await provider.started(2)
+        expect(provider.requests[1].form == .plain && provider.requests[1].prompt == provider.requests[0].prompt
+               && provider.requests[1].question == provider.requests[0].question,
+               "refused, the same page and question are asked again in plain text")
+        provider.emit(.init(excerpts: [], answer: "Abdul"))
+        expect(service.current?.answer?.text == "Abdul", "the plain answer streams into the card")
+        provider.complete(AskOnPage.plainDraft("Abdul El-Sayed.\n"))
+        await settled(service)
+        expect(service.phase == .idle && service.messages.last?.answer?.text == "Abdul El-Sayed."
+               && service.messages.last?.answer?.quotes.isEmpty == true && service.messages.last?.answer?.isComplete == true
+               && service.failureText == nil,
+               "the card shows the plain answer, not an error")
+        expect(CraLog.notes.contains("Ask on Page: the model refused the quoted answer; asking for plain text"), "cra.log says why it asked again")
+        service.clear()
+    }
+
     private static func failuresAndOverflow() async {
         let browser = BrowserManager(), provider = Provider(), clock = ManualScheduler()
         let service = AskOnPageService(browsers: browser, enabled: { true }, available: { true }, clock: clock,
@@ -275,15 +304,19 @@ enum AskOnPageServiceTests {
         service.ask("Refusal", language: "English"); browser.reply(page)
         await provider.started(3)
         provider.complete(throwing: .refused)
-        await settled(service)
-        expect(service.phase == .failed(.refused) && provider.requests.count == 3, "refusal does not invoke an overflow retry")
-        service.ask("Empty", language: "English"); browser.reply(page)
         await provider.started(4)
+        expect(provider.requests[3].form == .plain && provider.requests[3].source == provider.requests[2].source,
+               "a refusal is asked once more in plain text (#584), not as an overflow retry")
+        provider.complete(throwing: .refused)
+        await settled(service)
+        expect(service.phase == .failed(.refused) && provider.requests.count == 4, "a refused plain answer ends the turn")
+        service.ask("Empty", language: "English"); browser.reply(page)
+        await provider.started(5)
         provider.complete(.init(excerpts: []))
         await settled(service)
         expect(service.phase == .failed(.invalidAnswer), "an empty stream cannot become a completed answer")
         service.ask("Interrupted", language: "English"); browser.reply(page)
-        await provider.started(5)
+        await provider.started(6)
         provider.emit(.init(excerpts: [], answer: "Incomplete", keyAnswer: "Incomplete"))
         provider.complete(throwing: .incompleteAnswer)
         await settled(service)

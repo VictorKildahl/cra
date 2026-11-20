@@ -117,6 +117,14 @@ public enum AskOnPage {
         case quoted
         /// A short list of points in the model's own words, without quotes.
         case summary
+        /// The answer as plain text, without quotes or fields. The on-device model refuses a quoted (or
+        /// listed) answer about some pages, "May contain sensitive content", while it answers the same
+        /// question about the same page in plain text: a news article about a senator and the president
+        /// (GitHub #584, macOS 27). Asked again this way after such a refusal.
+        case plain
+
+        /// How to ask again after the model refused this form: in plain text, once.
+        public var afterRefusal: Form? { self == .plain ? nil : .plain }
 
         public init(question: String) {
             let asked = question.lowercased()
@@ -220,6 +228,11 @@ public enum AskOnPage {
 
     /// Required-field completeness is separate from citation validity and optional emphasis:
     /// complete empty citation arrays remain legitimate conversation turns.
+    /// A plain-text answer (`Form.plain`) as a draft: the text, no quotes, no bold hint (#584).
+    public static func plainDraft(_ text: String) -> Draft {
+        Draft(excerpts: [], answer: text.trimmingCharacters(in: .whitespacesAndNewlines), keyAnswer: nil)
+    }
+
     public static func completeAnswer(_ draft: Draft, source: String) -> Answer? {
         guard let excerpts = draft.excerpts, let text = draft.answer,
               excerpts.count <= 4, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

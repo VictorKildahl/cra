@@ -186,11 +186,14 @@ final class AskOnPageService {
         task = Task { [weak self] in
             do {
                 var overflowed = false, echoes = 0
+                // Set after a refusal: the form to ask again in (#584).
+                var form: AskOnPage.Form?
                 while true {
                     try Task.checkCancellation()
                     // Overflow retry has a smaller budget and a fresh provider session. Failed partial text is replaced.
                     guard let fitted = try await AskOnPagePrompt.fit(page: page, question: question, history: history,
-                        language: language, currentDate: date, inputLimit: overflowed ? 2048 : 3072, countTokens: countTokens, estimatedTokenCount: estimated) else {
+                        language: language, currentDate: date, inputLimit: overflowed ? 2048 : 3072, countTokens: countTokens, estimatedTokenCount: estimated,
+                        form: form) else {
                         self?.fail(.inputTooLong, id: id); return
                     }
                     guard self?.accepts(id) == true else { self?.refresh(); return }
@@ -220,7 +223,13 @@ final class AskOnPageService {
                         guard self?.accepts(id) == true else { self?.refresh(); return }
                         self?.dropPendingSnapshot()
                         self?.current?.answer = answer
-                    } catch Failure.contextOverflow where !overflowed { overflowed = true; continue }
+                    } catch Failure.contextOverflow where !overflowed { overflowed = true; continue
+                    } catch Failure.refused where fitted.form.afterRefusal != nil {
+                        // The on-device model refuses quoted answers about some pages it answers in plain text (#584).
+                        CraLog.note("Ask on Page: the model refused the \(fitted.form) answer; asking for plain text")
+                        form = fitted.form.afterRefusal
+                        continue
+                    }
                     try Task.checkCancellation()
                     self?.finish(id)
                     return
@@ -358,15 +367,15 @@ enum AskOnPageLocalModel {
     #if canImport(FoundationModels)
     /// The earlier questions and answers as turns of their own, before the prompt (#417).
     @available(macOS 26.0, *)
-    static func session(for fitted: AskOnPagePrompt.Fitted) -> LanguageModelSession {
-        guard !fitted.turns.isEmpty else { return LanguageModelSession(instructions: fitted.instructions) }
+    static func session(for fitted: AskOnPagePrompt.Fitted, model: SystemLanguageModel = .default) -> LanguageModelSession {
+        guard !fitted.turns.isEmpty else { return LanguageModelSession(model: model, instructions: fitted.instructions) }
         func text(_ s: String) -> [Transcript.Segment] { [.text(Transcript.TextSegment(content: s))] }
         var entries: [Transcript.Entry] = [.instructions(Transcript.Instructions(segments: text(fitted.instructions), toolDefinitions: []))]
         for turn in fitted.turns {
             entries.append(.prompt(Transcript.Prompt(segments: text(turn.question))))
             entries.append(.response(Transcript.Response(assetIDs: [], segments: text(turn.answer))))
         }
-        return LanguageModelSession(transcript: Transcript(entries: entries))
+        return LanguageModelSession(model: model, transcript: Transcript(entries: entries))
     }
     #endif
 
@@ -392,6 +401,19 @@ enum AskOnPageLocalModel {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             do {
+                if fitted.form == .plain {
+                    // Plain text after a refusal (#584): the guardrails Apple gives text-to-text work such as
+                    // answering about an article, which apply only to text answers, not to typed ones.
+                    let session = session(for: fitted, model: SystemLanguageModel(guardrails: .permissiveContentTransformations))
+                    var last = ""
+                    for try await snapshot in session.streamResponse(to: fitted.prompt, options: options) {
+                        try Task.checkCancellation()
+                        guard snapshot.content.utf8.count <= 300_000 else { throw AskOnPageService.Failure.invalidAnswer }
+                        last = snapshot.content
+                        update(.init(excerpts: [], answer: last))
+                    }
+                    return AskOnPage.plainDraft(last)
+                }
                 let session = session(for: fitted)
                 if fitted.form == .summary {
                     // No quote field: asked for a list, the model copied a page paragraph as the quote and the answer (#417).
@@ -413,6 +435,8 @@ enum AskOnPageLocalModel {
                 }
                 return try completeDraft(from: last)
             } catch let error as LanguageModelSession.GenerationError {
+                // Which one it was: every kind but three reads "Sorry, I encountered an error" (#584).
+                CraLog.note("Ask on Page: the model failed: \(error)")
                 switch error {
                 case .exceededContextWindowSize: throw AskOnPageService.Failure.contextOverflow
                 case .refusal, .guardrailViolation: throw AskOnPageService.Failure.refused
