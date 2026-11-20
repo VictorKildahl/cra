@@ -1,0 +1,16 @@
+# promise: #616
+# Tab sleeping ends a page's renderer, but its browser and hidden window stayed for the whole session.
+# Forty background pages slept (cra://debug?sleepTabs, a one-second threshold), then the budget's pass:
+# the slept pages hidden longest close, at most 8 a pass, and the window keeps 32.
+budget rss=900 stalls50=100
+cra://open?url=${PAGE}?n=first
+wait 3
+pace 0.3
+repeat 40 cra://open?url=${PAGE}?n=${i}
+cra://action/nextTab
+wait 4
+cra://debug?sleepTabs=1
+wait 6
+expect-log tab sleep (unloads|discards)
+cra://debug?closeSleptPages=1
+expect-log slept pages: [1-8] closed beyond the 32 a window keeps

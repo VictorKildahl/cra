@@ -176,6 +176,7 @@ enum BrowserManagerLifecycleTests {
         await sleepCase("a page holding typed text stays awake", reply: #"{"result":{"type":"string","value":"typed"}}"#) { _, _ in }
         await refusalBackoffCase()
         recentTabsCase()
+        sleptPagesBudgetCase()
         freezingVoteCase()
         await keepActiveSitesCase()
         await sleepClockCase()
@@ -951,6 +952,34 @@ enum BrowserManagerLifecycleTests {
     @MainActor
     private static func asleep(_ manager: BrowserManager, _ id: UUID) -> Bool {
         manager.runtime(for: id).map(\.discarded) ?? true
+    }
+
+    // promise: #616
+    /// Slept pages kept their browser and window for the whole session. Past the window's budget the ones
+    /// hidden longest close, a few a pass; the page on screen, pages not slept and busy ones stay, and a
+    /// closed one gets a new page when its tab is shown.
+    @MainActor
+    private static func sleptPagesBudgetCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let ids = (0..<8).map { store.createTab(url: "https://example.test/slept\($0)").id }
+        let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
+        manager.show(ids[7], focus: false)
+        for (n, rt) in runtimes.dropLast().enumerated() {
+            rt.hiddenAt = Date(timeIntervalSince1970: Double(n))
+            rt.discarded = n != 6  // the one hidden last is still awake
+        }
+        let closed = manager.closeSleptPages(budget: 3, limit: 2)
+        expect(closed == 2 && manager.runtime(for: ids[0]) == nil && manager.runtime(for: ids[1]) == nil,
+               "the two slept pages hidden longest close first (#616)")
+        expect(manager.closeSleptPages(budget: 3, limit: 2) == 1 && manager.runtime(for: ids[2]) == nil,
+               "the next pass closes the rest past the budget")
+        expect(manager.closeSleptPages(budget: 3, limit: 2) == 0, "three slept pages are kept")
+        expect([3, 4, 5, 6, 7].allSatisfy { manager.runtime(for: ids[$0]) != nil },
+               "the latest slept pages, the page not slept and the page on screen keep their pages")
+        let again = manager.ensureRuntime(for: ids[0])
+        expect(again != nil && again !== runtimes[0] && again?.discarded == false, "a closed page's tab gets a new page when shown")
+        manager.closeAll()
     }
 
     // promise: #136

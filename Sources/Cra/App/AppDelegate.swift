@@ -341,6 +341,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
             w.releaseHiddenFrames(now: composition.clock.now)
             if settings.tabSleepTimerEnabled { w.browsers.sleepIdleTabs(.timer(settings.tabSleepAfter)) }
+            // Pages already slept hold a browser and a window each for the session: past the budget they close (#616).
+            w.browsers.closeSleptPages()
         }
         let pressure = PerfSystemSample.pressure(level: PerfSystemSampler.pressureLevel())
         if let lastPressure, lastPressure != pressure { CraLog.note("memory pressure \(lastPressure.rawValue) → \(pressure.rawValue)") }
@@ -2253,6 +2255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for w in mainWindows { w.browsers.sleepIdleTabs(TabSleepPolicy(hiddenFor: s, keepsRecentTabs: false)) }
                 return
             }
+            // closeSleptPages=1: the slept-page budget's pass now, not at the next minute (#616).
+            if dict["closeSleptPages"] != nil { for w in mainWindows { w.browsers.closeSleptPages() }; return }
             // What waking the Mac does (#275), without sleeping it: the cards re-read, one pass.
             if dict["sleep"] != nil { systemWillSleep(); return }
             if dict["wake"] != nil { systemDidWake(); return }

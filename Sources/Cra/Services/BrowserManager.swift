@@ -630,6 +630,24 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate {
         scheduleMemoryReclaim()
     }
 
+    /// Slept pages beyond the window's budget close, oldest hidden first, a few a pass (RetainedPageBudget,
+    /// #616): tab sleeping ended their renderers, but their browsers, hidden windows and thumbnails stayed for
+    /// the whole session. A closed one loads again when shown, with its back/forward list, as a slept one does.
+    @discardableResult
+    func closeSleptPages(budget: Int = RetainedPageBudget.perWindow, limit: Int = RetainedPageBudget.perPass) -> Int {
+        let pages = runtimes.values.map { rt in
+            let b = rt.browser
+            return RetainedPageBudget.Page(id: rt.tabID, discarded: rt.discarded, hiddenAt: rt.hiddenAt,
+                                           visible: visibleTabIDs.contains(rt.tabID),
+                                           busy: b.isAudible || b.isInPictureInPicture || b.isCapturingMedia || b.isLoading || b.hasDevTools)
+        }
+        let ids = RetainedPageBudget.unloads(pages, budget: budget, limit: limit)
+        guard !ids.isEmpty else { return 0 }
+        for id in ids { unload(id) }
+        CraLog.note("slept pages: \(ids.count) closed beyond the \(budget) a window keeps, \(runtimes.count) pages left")
+        return ids.count
+    }
+
     private var memoryReclaimWork: ScheduledWork?
     /// Chromium's browser process returns what closed pages freed, once closing has settled and
     /// nobody is typing (MemoryReclaim). Any page can carry the call: it acts on the whole process.
