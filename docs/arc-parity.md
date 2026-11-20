@@ -537,6 +537,13 @@ intensity slider dragged end to end (CraCore `SpaceStyleControls`; the app's `Wa
   cursors on a picked item's corners; rectangles and ellipses resize freely (⇧ keeps proportions).
 - An easel picked on the Easels page opens in Peek (no toolbar, the canvas on #0B0B0B, only ✕ and ⤢;
   ⤢ makes it a tab with the veiled backdrop).
+- A Peek with the address in the sidebar (Arc 1.174, checked live by the reporter of GitHub #648, 20 Nov
+  2026): the card has no bar; the sidebar's address field shows the Peek's page while it is in front, and
+  its ← → ↻, the field (command bar or edit in place) and Copy Link act on the Peek. Closing the Peek or
+  showing another tab gives the field back to the tab. With the toolbar shown the card keeps its 32 pt bar
+  (Arc 1.171). Cra: CraCore `PeekAddress`; scenarios peek-sidebar-address and peek-card-bar-with-toolbar.
+  Cra's own: #493's "Hide the Peek toolbar until you need it" keeps a bar that slides in either way, and
+  while the field shows a Peek it offers only Copy Link (pins and the Site Control Center are the tab's).
 - Media grid: in a 305 pt column the tiles are 132 pt, 12 pt from the left, 16 pt apart, rows 8 pt
   apart; a video has a white ▶ over its picture.
 - Downloads and Archived Tabs: a "Filter" pill (73 × 36 pt) beside the search opens a panel in its

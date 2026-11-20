@@ -1,0 +1,16 @@
+# promise: #648
+# With the address in the toolbar a Peek's card keeps its own 32 pt bar (Arc 1.171): only the sidebar's
+# address field stands in for it (peek-sidebar-address), and the toolbar's address is the tab's.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "peekInEveryTab": true}
+
+cra://open?url=${PAGE}?n=under
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+cra://debug?littleToolbar=card
+expect-log littleToolbar card: floats=0 out=0 pageTop=32 .* barHidden=0
+cra://debug?peeks=open
+expect-log Cra peeks open: shown \S*n=peek$

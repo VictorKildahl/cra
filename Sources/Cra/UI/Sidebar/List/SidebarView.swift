@@ -29,6 +29,9 @@ final class SidebarView: NSView {
     /// The URL field edited in place puts the address back (#344).
     func endAddressEditing() { topBar.endAddressEditing() }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { topBar.debugURLFieldType(text, commit: commit) }
+    /// Scenario hooks (#648): the header's address row, and a press on its ← → ↻.
+    var debugAddressRow: String { topBar.debugAddressRow }
+    func debugPressAddressRow(_ key: String) -> Bool { topBar.debugPressAddressRow(key) }
     private let pager: SpacePagerView
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
@@ -518,6 +521,19 @@ final class SidebarTopBarView: NSView {
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { !pill.isHidden && pill.debugType(text, commit: commit) }
     func endAddressEditing() { pill.endEditing(commit: false) }
     var debugURLFieldState: String { pill.isHidden ? "hidden" : pill.editingText.map { "editing \($0)" } ?? "not editing" }
+
+    /// Scenarios (#648): the address row as it stands, "url=<the field's address> back=1 forward=0".
+    var debugAddressRow: String {
+        let back = buttons["back"] ?? buttons["nback"], forward = buttons["forward"] ?? buttons["nforward"]
+        return "url=\(pill.isHidden ? "hidden" : pill.shownURL) back=\(back?.enabled == true ? 1 : 0) forward=\(forward?.enabled == true ? 1 : 0)"
+    }
+
+    /// Scenarios (#648): a press on the row's "back", "forward" or "reload", as a click on it does.
+    func debugPressAddressRow(_ key: String) -> Bool {
+        guard let b = buttons[key] ?? buttons["n" + key], b.enabled else { return false }
+        b.action()
+        return true
+    }
     private var syncQueued = false
 
     var preferredHeight: CGFloat { CraMetrics.titleAreaHeight + (compact ? 2 + pill.height + 8 : 0) }
@@ -586,7 +602,10 @@ final class SidebarTopBarView: NSView {
         let tab = store.selectedTab(window: ui.windowID)
         devNav = !compact && (tab?.tab.map { store.settings.isDeveloperMode(url: $0.url) } ?? false)
         let active = ui.appActive
-        let reloadSymbol = ui.isLoading ? "xmark" : "arrow.clockwise"
+        // A Peek in front takes the address row while the address is in the sidebar, as in Arc (#648).
+        let peek = PeekAddress.sidebarShows(peek: ui.peekPage, showToolbar: store.settings.showToolbar)
+        let canGoBack = peek?.canGoBack ?? ui.canGoBack, canGoForward = peek?.canGoForward ?? ui.canGoForward
+        let reloadSymbol = (peek?.isLoading ?? ui.isLoading) ? "xmark" : "arrow.clockwise"
         fullscreen = ui.windowFullscreen
         // Arc 1.171: the header always carries the sidebar toggle; the toolbar has one only while the
         // sidebar is hidden (PaneToolbarView), so a floating sidebar shows both.
@@ -606,13 +625,13 @@ final class SidebarTopBarView: NSView {
             : button("toggle", symbol: store.settings.sidebarSide.toggleSymbol, help: help, size: 32, height: 32, iconSize: 15.5, active: active) { [weak self] in self?.actions.toggleSidebar() }
         var shown = narrow ? [] : [toggle]
         if narrow {
-            shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
-            shown.append(button("nforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 28, height: 28, iconSize: 15, active: active, enabled: ui.canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("nback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 28, height: 28, iconSize: 15, active: active, enabled: canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
+            shown.append(button("nforward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 28, height: 28, iconSize: 15, active: active, enabled: canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
             shown.append(button("more", symbol: morePanel == nil ? "ellipsis" : "xmark", help: "More options", size: 28, height: 28, iconSize: 15,
                                 weight: .semibold, active: active) { [weak self] in self?.toggleMorePanel() })
         } else if compact {
-            shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
-            shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: ui.canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
+            shown.append(button("back", symbol: "arrow.left", help: "Go Back (⌘[)", size: 32, height: 32, iconSize: 15, active: active, enabled: canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
+            shown.append(button("forward", symbol: "arrow.right", help: "Go Forward (⌘])", size: 32, height: 32, iconSize: 15, active: active, enabled: canGoForward, history: .forward) { [weak self] in self?.actions.goForward() })
             shown.append(button("reload", symbol: reloadSymbol, help: "Refresh (⌘R)", size: 32, height: 32, iconSize: 15, active: active, animated: true) { [weak self] in self?.actions.reload() })
         } else if devNav {
             shown.append(button("dback", symbol: "arrow.left", help: "Go Back (⌘[)", size: 34, height: 28, iconSize: 15, active: nil, enabled: ui.canGoBack, history: .back) { [weak self] in self?.actions.goBack() })
@@ -636,7 +655,15 @@ final class SidebarTopBarView: NSView {
         (chevron as? DevMenuChevron)?.tint = colors.textTertiary
         pill.isHidden = !compact
         if !compact { pill.endEditing(commit: false) }
-        if compact {
+        if compact, let peek {
+            // The Peek's page, with Copy Link only: the pins and the Site Control Center are the tab's (PeekAddress).
+            let host = URL(string: peek.url)?.host ?? ""
+            let text = peek.url.isEmpty ? "Search or Enter URL…"
+                : host.isEmpty ? SuggestionEngine.humanURL(peek.url) : host.replacingOccurrences(of: "www.", with: "")
+            pill.show(text: text, url: peek.url, hasTab: !peek.url.isEmpty, colors: colors, active: active, pinned: [], tabID: peek.id,
+                      editInPlace: store.settings.editAddressInPlace, peek: true)
+            pill.onTranslate = {}
+        } else if compact {
             let url = tab?.tab?.url ?? ""
             let host = URL(string: url)?.host ?? ""
             let text = tab == nil ? "Search or Enter URL…" : (host.isEmpty ? SuggestionEngine.humanURL(url) : host.replacingOccurrences(of: "www.", with: ""))
@@ -822,6 +849,8 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
     private var colors = SidebarColors()
     private var hasTab = false
     private var url = ""
+    /// The address the field stands for (its tip), for scenarios.
+    var shownURL: String { url }
     private var tabID: UUID?
     /// Settings ▸ Tabs "Edit the address in the sidebar" (#344): a click edits in place.
     private var editInPlace = false
@@ -835,6 +864,8 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
     /// Scenarios (cra://debug?hover=SidebarURLPill): the pill as the pointer leaves it hovered (#293).
     func debugHover() { hovering = true }
     private var model: (pinned: [(String, String, NSImage?)], active: Bool)?
+    /// The field shows a Peek's page (#648): Copy Link is its only accessory.
+    private var showsPeek = false
 
     override init(frame: NSRect) {
         tip = ArcTooltipAnchorView(frame: .zero)
@@ -868,10 +899,12 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
 
     func show(text: String, url: String, hasTab: Bool, colors: SidebarColors, active: Bool,
               pinned: [(String, String, NSImage?)], protectedMedia: String? = nil, translate: String? = nil,
-              tabID: UUID? = nil, editInPlace: Bool = false) {
-        // Another tab, or the option turned off, ends the edit; the same tab loading keeps it.
+              tabID: UUID? = nil, editInPlace: Bool = false, peek: Bool = false) {
+        // Another tab, or the option turned off, ends the edit; the same tab loading keeps it. A Peek
+        // passes its own id, so the field going over to it, or back to the tab, ends an edit too (#648).
         if field != nil, tabID != editingTab || !editInPlace { endEditing(commit: false) }
         self.editInPlace = editInPlace
+        showsPeek = peek
         self.url = url
         self.tabID = tabID
         field?.textColor = colors.textPrimary
@@ -911,7 +944,8 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
         guard showAccessories, hasTab, field == nil, let m = model, let actions else { needsLayout = true; return }
         pinsInField = PinnedExtensionGrid.fitsInURLField(count: m.pinned.count, fieldWidth: bounds.width)
         let icons = Dictionary(m.pinned.map { ($0.0, $0.2) }, uniquingKeysWith: { a, _ in a })
-        for item in ToolbarComposition.urlFieldAccessories(pinnedExtensions: m.pinned.map(\.0), fieldWidth: bounds.width) {
+        let items = ToolbarComposition.urlFieldAccessories(pinnedExtensions: m.pinned.map(\.0), fieldWidth: bounds.width)
+        for item in showsPeek ? PeekAddress.fieldAccessories(items) : items {
             switch item {
             case .pinnedExtension(let id):
                 let b = ToolbarGlyphButton()

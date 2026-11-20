@@ -66,7 +66,7 @@ struct LinksPane: View {
                         SettingsCardDivider()
                         // Not in Arc (GitHub #493): the Peek's bar floats over its page (ToolbarAutoHide.peekFloats).
                         SettingsSwitchLine("Hide the Peek toolbar until you need it", isOn: $store.settings.autoHidePeekToolbar) {
-                            Text("The page takes the toolbar’s room. Move the pointer to the top of the Peek and the toolbar slides in over the page. ⌘L still edits the address.")
+                            Text("The page takes the toolbar’s room. Move the pointer to the top of the Peek and the toolbar slides in over the page. ⌘L still edits the address. With the address in the sidebar a Peek has no toolbar of its own, as in Arc, and the sidebar’s address shows the Peek; this keeps one that slides in.")
                                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         }
                     }

@@ -42,6 +42,9 @@ final class SidebarUIState {
     var canGoBack = false
     var canGoForward = false
     var isLoading = false
+    /// The Peek on screen over this window, if any: with the address in the sidebar the field and its
+    /// ← → ↻ stand for it (PeekAddress, GitHub #648).
+    var peekPage: PeekAddress.Page?
     var isCompact = false
     /// The window is in macOS fullscreen (no traffic lights), not a page's element fullscreen.
     var windowFullscreen = false

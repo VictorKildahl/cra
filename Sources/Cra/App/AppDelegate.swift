@@ -2546,6 +2546,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
             // The URL field edited in place (#344): a click on it, then typing and Return or Escape.
             if let step = dict["urlFieldEdit"] { main.debugURLFieldEdit(step); return }
+            // The sidebar header's address row (#648): "sidebar address <label>: url=… back=… forward=…",
+            // and a press on its back, forward or reload.
+            if let label = dict["sidebarAddress"] {
+                CraLog.note("sidebar address \(label): " + ((main.shell.sidebarHost as? SidebarView)?.debugAddressRow ?? "none"))
+                return
+            }
+            if let key = dict["sidebarAddressPress"] {
+                let pressed = (main.shell.sidebarHost as? SidebarView)?.debugPressAddressRow(key) == true
+                CraLog.note("sidebar address press \(key): \(pressed ? "pressed" : "not pressed")")
+                return
+            }
             if let step = dict["commandBarNotice"] { main.debugCommandBarNotice(step); return }
             if let step = dict["commandBarScope"] { main.debugCommandBarScope(step); return }
             // Arc's translate UI (#310): what shows, and a press on its parts.

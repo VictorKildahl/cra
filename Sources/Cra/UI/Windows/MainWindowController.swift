@@ -389,7 +389,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func wireActions() {
         sidebarActions.titleBarDoubleClick = { [weak self] in (self?.window as? CraWindow)?.performTitleDoubleClickAction() }
-        sidebarActions.openCommandBar = { [weak self] mode in self?.openCommandBar(mode) }
+        sidebarActions.openCommandBar = { [weak self] mode in
+            // A click on the address field while it shows a Peek edits the Peek's address, as ⌘L there does (#648).
+            if mode == .editURL, let peek = self?.sidebarPeek { peek.openCommandBar() } else { self?.openCommandBar(mode) }
+        }
         sidebarActions.closeTab = { [weak self] id in self?.closeTab(id) }
         sidebarActions.moveBlankWindow = { [weak self] space in
             guard let self else { return }
@@ -399,14 +402,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             guard let self else { return }
             self.app.tearOffTab(id, at: point, from: self)
         }
-        sidebarActions.goBack = { [weak self] in self?.goBack() }
-        sidebarActions.goForward = { [weak self] in self?.currentBrowser?.goForward() }
+        // The sidebar's ← → ↻ act on the Peek its address field shows (#648), else on the tab.
+        // The click made this window key: the keys go back to the Peek, so ⌘[ and ⌘R carry on there.
+        sidebarActions.goBack = { [weak self] in
+            guard let peek = self?.sidebarPeek else { self?.goBack(); return }
+            peek.goBack()
+            peek.focusPage()
+        }
+        sidebarActions.goForward = { [weak self] in
+            guard let peek = self?.sidebarPeek else { self?.currentBrowser?.goForward(); return }
+            peek.browser?.goForward()
+            peek.focusPage()
+        }
         sidebarActions.showBackForwardMenu = { [weak self] tab, direction, anchor in
             self?.showBackForwardMenu(tab: tab, direction: direction, anchor: anchor)
         }
         sidebarActions.reload = { [weak self] in
-            guard let b = self?.currentBrowser else { return }
+            let peek = self?.sidebarPeek
+            guard let b = peek?.browser ?? self?.currentBrowser else { return }
             b.isLoading ? b.stopLoading() : b.reload()
+            peek?.focusPage()
         }
         // A new space is made in the sidebar (Arc's Create a Space page); an existing one keeps the sheet.
         sidebarActions.editSpace = { [weak self] s in
@@ -458,7 +473,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             self.loadInSelectedTab(SuggestionEngine.looksLikeURL(t) ? SuggestionEngine.urlFromInput(t) : self.commandBar.engine.searchURL(t))
         }
         sidebarActions.commitAddress = { [weak self] typed in
-            guard let self, let tab = self.selectedTab, let id = self.selectedTabID else { return }
+            guard let self else { return }
+            // Edited in place while the field shows a Peek: the Peek loads it (#648).
+            if let peek = self.sidebarPeek {
+                if case .load(let url) = SidebarAddressEdit.commit(typed: typed, currentURL: peek.currentURL, pinned: false,
+                                                                   searchURL: self.commandBar.engine.searchURL) {
+                    peek.navigate(url)
+                }
+                return
+            }
+            guard let tab = self.selectedTab, let id = self.selectedTabID else { return }
             switch SidebarAddressEdit.commit(typed: typed, currentURL: tab.tab?.url ?? "", pinned: self.store.isPinned(id),
                                              searchURL: self.commandBar.engine.searchURL) {
             case .none: break
@@ -562,6 +586,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             } else if id.hasPrefix("muteTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
                 let muted = self?.store.item(uuid)?.tab?.muted ?? false
                 self?.app.runtime(for: uuid)?.browser.setAudioMuted(muted)
+            } else if id == "copyURL", let peek = self?.sidebarPeek {
+                // The address field's link button while the field shows a Peek copies the Peek's (#648).
+                peek.copyURL()
             } else {
                 self?.app.perform(id)
             }
@@ -2827,6 +2854,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private var peeks: [LittleWindowController] { app.littleWindows.filter { $0.peekParent === self } }
 
+    /// The Peek on screen over this window: not waiting behind another tab, not on its way out.
+    private var frontPeek: LittleWindowController? {
+        peeks.first { !$0.isParked && !$0.closingPeek && $0.window?.isVisible == true }
+    }
+
+    /// The Peek the sidebar's address field stands for (PeekAddress, #648): the one in front, while the
+    /// address is in the sidebar. nil: the field and its ← → ↻ are the tab's.
+    private var sidebarPeek: LittleWindowController? {
+        guard let page = PeekAddress.sidebarShows(peek: sidebarUI.peekPage, showToolbar: store.settings.showToolbar) else { return nil }
+        return peeks.first { $0.peekID == page.id && !$0.closingPeek }
+    }
+
+    /// The Peek in front's page for the sidebar's address row, kept as its page moves on and as Peeks
+    /// come, wait behind another tab and go (#648).
+    func syncPeekAddress() {
+        let page = frontPeek.map { p in
+            PeekAddress.Page(id: p.peekID, url: p.currentURL == "about:blank" ? "" : p.currentURL, canGoBack: p.browser?.canGoBack ?? false,
+                             canGoForward: p.browser?.canGoForward ?? false, isLoading: p.browser?.isLoading ?? false)
+        }
+        if sidebarUI.peekPage != page { sidebarUI.peekPage = page }
+    }
+
     /// Arc keeps a Peek per tab (#242): each shows while its tab is on screen here, waits out of
     /// sight while another is, and goes with its tab (PeekPresence).
     private func syncPeeks(onScreen panes: [UUID]) {
@@ -2901,7 +2950,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// split pane's, or the tab in front), in Arc's menu under the button; a row goes straight to
     /// its page. Chromium's history comes over DevTools, so the main thread never waits for it.
     func showBackForwardMenu(tab: UUID?, direction: BackForwardMenu.Direction, anchor: NSView) {
-        guard let id = tab ?? browsers.visibleTabID, let b = browsers.runtime(for: id)?.browser else { return }
+        // The sidebar's ← → while its address field shows a Peek: the Peek's history (#648).
+        let peek = tab == nil ? sidebarPeek?.browser : nil
+        guard let id = tab ?? browsers.visibleTabID, let b = peek ?? browsers.runtime(for: id)?.browser else { return }
+        let forPeek = peek != nil
         ArcTooltipController.shared.dismiss()
         b.sendDevToolsMethod("Page.getNavigationHistory", params: "{}") { [weak self, weak anchor] result, _ in
             MainActor.assumeIsolated {
@@ -2918,10 +2970,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
                 let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
                                                        shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
-                let menu = BackForwardMenuView(items: items, colors: colors) { [weak self] index in
+                let menu = BackForwardMenuView(items: items, colors: colors) { [weak self, weak b] index in
                     guard let self else { return }
                     self.backForwardMenu.close()
-                    guard let index, let b = self.browsers.runtime(for: id)?.browser else { return }
+                    guard let index, let b = forPeek ? b : self.browsers.runtime(for: id)?.browser else { return }
                     if tab != nil, self.selectedTabID != id { self.store.selectTab(id, window: self.windowID) }
                     b.sendDevToolsMethod("Page.navigateToHistoryEntry", params: "{\"entryId\":\(rows[index].entryID)}") { _, error in
                         if let error { CraLog.note("back-forward menu: \(error)") }

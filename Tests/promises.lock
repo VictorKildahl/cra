@@ -1390,6 +1390,12 @@
 #647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::archivingAPopupReturnsToItsOpener  c28451ef2820
 #647   iOS/CraUITests/TabOrderTests.swift::testAPickedTabMovesToTheEndOfTheRow  9332f7345e40
 #647   iOS/CraUITests/TabOrderTests.swift::testSwipingAPopupAwayReturnsToItsOpener  77038b0e6667
+#648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::aPeekInTheFieldOffersOnlyCopyLink  89551038f611
+#648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::addressInTheSidebarLeavesTheCardWithoutABar  ee61ea39d3d6
+#648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::theHideUntilNeededSwitchKeepsItsBar  1dc896deffcb
+#648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::theSidebarFieldFollowsThePeekOnlyWhileItHasTheAddress  6ff7993bdbfb
+#648   Tests/Scenarios/peek-card-bar-with-toolbar.scenario  a6847ae78beb
+#648   Tests/Scenarios/peek-sidebar-address.scenario  305b71ef5d44
 #650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  5985614aa527
 #650   iOS/CraUITests/BrowserTests.swift::testPhoneSiteWinsOverSyncedSpace  f3705dffdfb4
 #650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  f320b5eaba77

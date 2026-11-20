@@ -1,0 +1,53 @@
+# promise: #648
+# With the address in the sidebar a Peek has no bar on its card, as in Arc 1.174: the sidebar's address
+# field shows the Peek's page while the Peek is in front, and the field's ← → and an edit in place act on
+# the Peek, not on the tab behind it. Closed, the field is the tab's again (GitHub #648).
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true, "editAddressInPlace": true}
+
+cra://open?url=${PAGE}?n=under
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?sidebarAddress=tab
+expect-log sidebar address tab: url=\S*n=under back=0 forward=0
+
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 1.5
+# No bar on the card: the page fills it.
+cra://debug?littleToolbar=card
+expect-log littleToolbar card: floats=0 out=0 pageTop=0 .* barHidden=1
+cra://debug?sidebarAddress=peek
+expect-log sidebar address peek: url=\S*n=peek back=0 forward=0
+
+# The Peek goes on to another page: the field follows it, and its Back and Forward move the Peek.
+cra://debug?target=little&cdp=Runtime.evaluate&params={"expression":"location.href=location.href.replace('n=peek','n=next');'ok'","returnByValue":true,"userGesture":true}
+wait 1.5
+cra://debug?sidebarAddress=next
+expect-log sidebar address next: url=\S*n=next back=1 forward=0
+cra://debug?sidebarAddressPress=back
+wait 1.5
+cra://debug?peeks=back
+expect-log Cra peeks back: shown \S*n=peek$
+cra://debug?sidebarAddress=afterBack
+expect-log sidebar address afterBack: url=\S*n=peek back=0 forward=1
+cra://debug?sidebarAddressPress=forward
+wait 1.5
+cra://debug?peeks=forward
+expect-log Cra peeks forward: shown \S*n=next$
+
+# Edited in place, the field loads what was typed in the Peek.
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing \S*n=next, command bar closed
+cra://debug?urlFieldEdit=type:${PAGE}?n=typed
+wait 1.5
+cra://debug?peeks=typed
+expect-log Cra peeks typed: shown \S*n=typed$
+
+# Closed, the field is the tab's again, and the tab never moved.
+cra://debug?key=%1B,53,0&page=1&target=little
+wait 1.5
+cra://debug?peeks=closed
+expect-log Cra peeks closed: none$
+cra://debug?sidebarAddress=closed
+expect-log sidebar address closed: url=\S*n=under back=0 forward=0
