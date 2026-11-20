@@ -47,6 +47,9 @@
 #   home                        a throwaway home folder, so downloads stay out of ~/Downloads
 #   crash-report <file>         copied into the throwaway home's Library/Logs/DiagnosticReports
 #                               before launch, as macOS leaves one (needs home)
+#   cover                       another app's window over the browser window, right above it in the window order
+#                               (scripts/cover-window/cover.m); ${COVER} is its pid, for cra://debug?yieldTo=${COVER}
+#   cover link                  that app, once in front, brings Cra forward, as for a link clicked in it (#607)
 #   bare-helper <suffix>        runs the engine's "Cra Helper (<suffix>)" with no arguments, as macOS launches the
 #                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   requires screen
@@ -334,7 +337,7 @@ WS_SERVER=$!
 disown "$WS_SERVER"
 for _ in $(seq 1 50); do WS_PORT=$(head -1 "$OUT/ws.log"); [ -n "$WS_PORT" ] && break; sleep 0.1; done
 WS="ws://127.0.0.1:${WS_PORT:?WebSocket server did not start}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{COVER\}/${COVER:-}}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; printf '%s' "$s"; }
 # AppKit asks "reopen windows?" after a test copy was killed, and that modal blocks every command;
 # Cra restores its own windows from windows.json, so AppKit's restoration is off.
 app_args=(-ApplePersistenceIgnoreState YES)
@@ -352,6 +355,7 @@ PIDS+=("$PID")
 
 cleanup() {
   for p in "${PIDS[@]}"; do kill -KILL "$p" 2>/dev/null; done
+  [ -n "${COVER:-}" ] && kill "$COVER" 2>/dev/null
   kill "$SERVER" "$STALLER" "$TRICKLER" "$WS_SERVER" 2>/dev/null
   cp "$DATA"/cra*.log "$OUT/" 2>/dev/null
   [ -n "${CRA_SCENARIO_DATA:-}" ] || rm -rf "$DATA"
@@ -459,6 +463,18 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       else
         [ -x "$OUT/compare-png" ] || xcrun swiftc -O "$ROOT/scripts/compare-png.swift" -o "$OUT/compare-png" 2>"$OUT/compare-png.log"
         verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1) || budget_problem "snapshot $3: $verdict"
+      fi ;;
+    cover)
+      if [ "${2:-}" = "link" ]; then
+        if [ -n "${COVER:-}" ] && kill -USR1 "$COVER" 2>/dev/null; then sleep 0.3; else problem "cover link: no cover window"; fi
+        continue
+      fi
+      [ -x "$OUT/cover" ] || clang -fobjc-arc -framework AppKit "$ROOT/scripts/cover-window/cover.m" -o "$OUT/cover" 2>"$OUT/cover-build.log"
+      if [ ! -x "$OUT/cover" ]; then problem "the cover window did not build (cover-build.log)"
+      else
+        "$OUT/cover" "$PID" >"$OUT/cover.log" 2>&1 & COVER=$!
+        for _ in $(seq 1 50); do grep -q '^covering' "$OUT/cover.log" && break; sleep 0.2; done
+        grep -q '^covering' "$OUT/cover.log" && echo "  $(head -1 "$OUT/cover.log")" || problem "no cover window: $(cat "$OUT/cover.log")"
       fi ;;
     bare-helper)
       helper="Cra Helper (${line#bare-helper })"

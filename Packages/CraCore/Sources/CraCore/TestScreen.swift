@@ -12,6 +12,10 @@ import Foundation
 /// Two displays of the same model get a "(1)"/"(2)" that macOS can swap: pick those by side.
 public enum TestScreen {
     public static let environmentKey = "CRA_TEST_SCREEN"
+    /// The display a test instance's Little Windows open on, picked the same way: a Little Window opens on the
+    /// display under the pointer, which a scenario can't move, so this stands in for the pointer on another
+    /// display than the browser window's (#607).
+    public static let littleEnvironmentKey = "CRA_TEST_LITTLE_SCREEN"
 
     public struct Display: Equatable, Sendable {
         public var name: String

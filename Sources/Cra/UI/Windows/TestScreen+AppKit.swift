@@ -9,6 +9,12 @@ extension TestScreen {
         return pick(ProcessInfo.processInfo.environment[environmentKey], among: screens.map(\.testDisplay)).map { screens[$0] }
     }
 
+    /// The display CRA_TEST_LITTLE_SCREEN names, for Little Windows (#607); nil when unset or not connected.
+    @MainActor static var littleScreen: NSScreen? {
+        let screens = NSScreen.screens
+        return pick(ProcessInfo.processInfo.environment[littleEnvironmentKey], among: screens.map(\.testDisplay)).map { screens[$0] }
+    }
+
     /// `frame` moved onto the test display, or unchanged without one.
     @MainActor static func place(_ frame: NSRect) -> NSRect {
         guard let screen else { return frame }

@@ -522,6 +522,39 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if !isPeek, let window, window.isVisible { window.orderFront(nil) }
     }
 
+    /// The browser windows another app's window was over before this window came up, with that window (#607).
+    private var browserAnchors: [(window: NSWindow, anchor: Int)] = []
+
+    /// Notes, from the window order before this window comes up, which browser windows another app's window covered.
+    func noteBrowserWindows(_ stack: [StackedWindow]) {
+        let pid = getpid()
+        browserAnchors = app.mainWindows.compactMap { c in
+            guard let w = c.window, w.isVisible, let anchor = LittleWindowRaise.anchor(for: w.windowNumber, in: stack, pid: pid) else { return nil }
+            return (w, anchor)
+        }
+    }
+
+    /// Arc's Little Arc comes up alone. Cra coming forward for a link raises its main window, the browser window,
+    /// and focusing the page moves Chrome's hidden window out of it (#500), so a browser window could rise over
+    /// the app the link came from, on its own display (#607). It goes back behind the window that was over it.
+    private func putBrowserWindowsBack() {
+        guard !browserAnchors.isEmpty else { return }
+        let stack = StackedWindow.onScreen()
+        // A browser window clicked meanwhile (key) is in use and stays in front.
+        for (w, anchor) in browserAnchors where !w.isKeyWindow && LittleWindowRaise.rose(w.windowNumber, over: anchor, in: stack) {
+            w.order(.below, relativeTo: anchor)
+        }
+    }
+
+    private func putBrowserWindowsBackOnceShown() {
+        putBrowserWindowsBack()
+        // The engine's FollowWindow reorders the browser window's group a moment after the page takes focus (#500).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.putBrowserWindowsBack()
+            self?.browserAnchors = []
+        }
+    }
+
     /// Shows the window without making it key (a link opened in the background).
     func orderFrontInBackground() {
         window?.orderFront(nil)
@@ -567,10 +600,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         window.setFrame(frame, display: false)
     }
 
-    /// The screen a new Little Window opens on: the one under the pointer.
+    /// The screen a new Little Window opens on: the one under the pointer (in a test instance, its display).
     private var placementScreen: NSScreen {
         let mouse = NSEvent.mouseLocation
-        return TestScreen.screen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
+        return TestScreen.littleScreen ?? TestScreen.screen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
     // MARK: ⌥⌘N's card (#337)
@@ -868,6 +901,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// full frame in about 120 ms (content laid out at full size, no fade).
     func show() {
         guard let window else { return }
+        putBrowserWindowsBack()
         if isCard {
             // Arc's card is on screen at its size from its first frame (98 % of it, settling within
             // 100 ms), the bar already in it.
@@ -875,6 +909,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             rejoinPage()
             NSApp.activate(ignoringOtherApps: true)
             openCommandBar()
+            putBrowserWindowsBackOnceShown()
             return
         }
         let final = window.frame
@@ -900,6 +935,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // A popup host has no URL until Chromium navigates it, but it is a page
         // all the same: the command bar would cover a sign-in popup.
         if hasPage || isPopupHost { focusPage() } else { openCommandBar() }
+        putBrowserWindowsBackOnceShown()
     }
 
     // MARK: Peek
@@ -2661,6 +2697,13 @@ final class LittleShellView: NSView {
         if isPeek { return PeekLayout.cornerRadius }
         guard let window = window as? LittleWindow, !window.styleMask.contains(.fullScreen) else { return 0 }
         return max(0, window.systemCornerRadius - LittleMetrics.edgeInset)
+    }
+}
+
+extension StackedWindow {
+    /// The windows on screen now, front to back.
+    static func onScreen() -> [StackedWindow] {
+        stack(from: CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
     }
 }
 

@@ -1,0 +1,27 @@
+# promise: #607
+# A link clicked in another app opens a Little Window and leaves the browser window where it was: behind that
+# app's windows (#607). A link brings Cra forward before it arrives, and AppKit raised the browser window (the main
+# window then) over the app the link came from, on its own display, as the Little Window came up on another one.
+# `cover` is that app, with a window over the browser window; over=<n> counts other apps' windows still over it
+# (0 without the fix). The Little Window opens on the main display and the browser window on the test display
+# (CRA_TEST_SCREEN; the nightly's virtual one), as with the pointer on another display.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+env CRA_TEST_LITTLE_SCREEN=main
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+# The browser window was in use (key) before another app came over it.
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+
+# A link clicked in that app: it brings Cra forward, then the link arrives.
+cover link
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+cra://debug?littleShown=first
+expect-log little shown first: windows=1 .* behind=0 over=[1-9]

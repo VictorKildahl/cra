@@ -453,6 +453,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidBecomeActive(_ notification: Notification) { installURLEventHandler() }
 
+    /// The window order as Cra comes forward, before AppKit raises its key and main window: a link clicked in
+    /// another app brings Cra forward (LaunchServices) before it arrives, so the browser window had already risen
+    /// over that app when the Little Window opened (#607).
+    private var stackBeforeActivation: (at: Date, stack: [StackedWindow])?
+    func applicationWillBecomeActive(_ notification: Notification) {
+        stackBeforeActivation = (store.clock.now, StackedWindow.onScreen())
+    }
+
     /// Arc's frontmostApplicationHistory: which app was in front before Cra (#430).
     private func observeFrontmostApp() {
         let me = NSRunningApplication.current.processIdentifier
@@ -627,7 +635,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch store.settings.destination(forExternalURL: url) {
         case .littleWindow(let space):
             // #258: the route's space names the page's profile and where ⌘O sends it.
-            openLittleWindow(url: url, space: openableSpace(space))
+            openLittleWindow(url: url, space: openableSpace(space), fromOtherApp: true)
             return
         case .space(let id) where store.space(id) != nil:
             store.createTab(url: url, in: id, select: true)
@@ -994,11 +1002,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @discardableResult
-    func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil, space: UUID? = nil) -> LittleWindowController {
+    func openLittleWindow(url: String, activate: Bool = true, opener: CraBrowser? = nil, space: UUID? = nil,
+                          fromOtherApp: Bool = false) -> LittleWindowController {
         let w = makeLittleWindow(url: url, opener: opener, space: space)
         // Opened over another app (a link from it, the shortcut pressed in it): it goes back there (#430).
         if activate {
             w.focusReturn = LittleWindowReturn(app: frontmostApps.returnApp(at: store.clock.now))
+            // The browser windows stay where they were (#607): for a link, where they were before Cra came forward for it.
+            let before = stackBeforeActivation.flatMap { fromOtherApp && NSApp.isActive
+                && store.clock.now.timeIntervalSince($0.at) <= FrontmostAppHistory.linkGrace ? $0.stack : nil }
+            w.noteBrowserWindows(before ?? StackedWindow.onScreen())
             w.show()
         } else {
             w.orderFrontInBackground()
@@ -1335,6 +1348,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 } else {
                     NSApp.deactivate()
                 }
+                return
+            }
+            // yieldTo=<pid>: Cra hands the front to that app, as when the user picks it: a scenario's `cover`, which
+            // then brings Cra forward as for a link clicked in it (#607). macOS lets only the app in front do either.
+            if let pid = dict["yieldTo"].flatMap({ Int32($0) }), let other = NSRunningApplication(processIdentifier: pid) {
+                NSApp.yieldActivation(to: other)
+                other.activate(from: .current, options: [])
                 return
             }
             // secureInput=<label>: whether macOS Secure Input is on (it is for one app at a time, and it stops
@@ -1842,14 +1862,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     profile = named?.name ?? "Default"
                     shown = " \(w.debugCard) \(w.debugReadout)"
                     // The window server's order, front to back.
-                    let order = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
-                        .compactMap { $0[kCGWindowNumber as String] as? Int }
+                    let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+                    let order = info.compactMap { $0[kCGWindowNumber as String] as? Int }
                     if let mine = w.window.flatMap({ order.firstIndex(of: $0.windowNumber) }) {
                         let browsers = Set(mainWindows.compactMap { $0.window?.windowNumber })
                         shown += " behind=\(order[..<mine].filter { browsers.contains($0) }.count)"
                     } else {
                         shown += " behind=-"
                     }
+                    // over=<n>: other apps' windows still in front of the browser window and over it. A Little
+                    // Window opened from another app left the browser window where it was; it rose over them (#607).
+                    shown += " over=" + (main.window.map { String(LittleWindowRaise.othersOver($0.windowNumber, in: info)) } ?? "-")
                 }
                 CraLog.note("little shown \(label): windows=\(littleWindows.count) space=\(space) profile=\(profile)\(shown)")
                 return
