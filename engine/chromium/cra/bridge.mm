@@ -2166,7 +2166,9 @@ bool HandleDebugMethod(content::WebContents* contents,
   _delegate = delegate;
   _pendingHistory = url && !incognito && [history[@"history"] isKindOfClass:NSString.class] ? [history copy] : nil;
   _isIncognito = incognito;
-  _profilePath = incognito ? nil : [profilePath copy];
+  // An incognito page keeps its profile's folder: it loads in that profile's off-the-record one, as each
+  // Chrome profile has its own incognito (GitHub #620). Without one it is Default's, as before.
+  _profilePath = [profilePath copy];
   _container = [[CraPageContainerView alloc] initWithFrame:frame];
   _container.wantsLayer = YES;
   _container.autoresizesSubviews = YES;

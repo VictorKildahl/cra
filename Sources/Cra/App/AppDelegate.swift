@@ -866,7 +866,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             sourceFullScreen: current.map { $0.1.styleMask.contains(.fullScreen) && store.window($0.0.windowID).fullScreen } ?? false,
             screen: (current?.1.screen ?? NSScreen.main)?.visibleFrame, defaultSize: MainWindowController.defaultSize)
         let frame = placement.frame.map(NSStringFromRect)
-        let session = incognito ? store.addIncognitoWindow(frame: frame)
+        // Incognito from a space goes in that space's profile's off-the-record one, as in Chrome (#620).
+        let fromSpace = main.map { $0.focusedSpaceID } ?? store.focusedSpaceID(window: store.lastNormalWindowID)
+        let session = incognito ? store.addIncognitoWindow(frame: frame, profileID: store.profileID(space: fromSpace))
             : blank ? store.addBlankWindow(frame: frame)
             : store.addWindow(spaceID: store.focusedSpaceID(window: store.lastNormalWindowID), frame: frame)
         if placement.opensFullScreen { store.updateWindow(session.id) { $0.fullScreen = true } }

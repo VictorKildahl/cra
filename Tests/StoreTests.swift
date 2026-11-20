@@ -55,6 +55,7 @@ enum StoreTests {
         persistenceFaults()
         incognitoStaysOffDisk()
         chromePagesLeaveIncognito()
+        incognitoKeepsItsSpacesProfile()
         mcpExcludesPrivateTabs()
         pinnedURL()
         tabFavicons()
@@ -1018,6 +1019,30 @@ enum StoreTests {
         expect(store.mcpTab(UUID()) == nil, "MCP refuses unknown IDs")
         expect(store.spaces.values.allSatisfy { store.mcpTab($0.todayContainerID) == nil },
                "MCP refuses containers")
+    }
+
+    // promise: #620
+    /// Each Chrome profile has its own incognito: an incognito window opened from a space with a profile of
+    /// its own loads in that profile's off-the-record one, with its extensions and their "Allow in Incognito".
+    /// Cra put every incognito window in Default's, so a profile's extensions found nothing to work on there.
+    @MainActor
+    private static func incognitoKeepsItsSpacesProfile() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Work")
+        let fromWork = store.addIncognitoWindow(frame: nil, profileID: work.id)
+        let space = fromWork.focusedSpaceID!
+        expect(store.isIncognito(space: space), "a window of its own, incognito")
+        expect(store.profileDirectoryName(space: space) == work.directoryName, "in Work's profile, whose off-the-record one it uses")
+        expect(store.profilePath(space: space) == store.profilePath(profile: work.id), "its pages load from Work's folder")
+        expect(store.profileID(space: space) == work.id, "and it counts as Work's for extensions and profile choices")
+        let tab = store.createTab(url: "https://example.com/private", window: fromWork.id)
+        expect(store.profileDirectoryName(item: tab.id) == work.directoryName && store.isIncognito(item: tab.id), "and so do its tabs")
+        let fromDefault = store.addIncognitoWindow(frame: nil)
+        expect(store.profileDirectoryName(space: fromDefault.focusedSpaceID!) == "Default"
+               && store.profilePath(space: fromDefault.focusedSpaceID!) == nil, "from a space on Default it is Default's, as before")
+        let gone = store.addIncognitoWindow(frame: nil, profileID: UUID())
+        expect(store.profileDirectoryName(space: gone.focusedSpaceID!) == "Default", "a profile that is gone falls back to Default")
+        expect(store.integrityProblems().isEmpty, "and the sidebar stays sound")
     }
 
     // promise: #412

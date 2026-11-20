@@ -1351,6 +1351,8 @@
 #618   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::theLazyAnswerIsTheOldOne  55fd280fbe76
 #618   Tests/Scenarios/sidebar-long-list.scenario  d8917fd58f10
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
+#620   Tests/Scenarios/incognito-space-profile.scenario  2e76ee02603e
+#620   Tests/StoreTests.swift::incognitoKeepsItsSpacesProfile  c9a5e854a829
 #621   Tests/Scenarios/extension-action-other-profiles.scenario  b337359c249a
 #622   Packages/CraCore/Tests/CraCoreTests/TabsMenuTests.swift::aLittleWindowInFrontDimsTheTabRows  bcd7c394cab4
 #622   Packages/CraCore/Tests/CraCoreTests/TabsMenuTests.swift::anEmptySpaceOffersOnlyNewTabAndNewFolder  1135e1e8a412
