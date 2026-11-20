@@ -1,0 +1,25 @@
+# promise: crash-sign-in-dialog-tab-closed
+# A tab closed while its page's HTTP sign-in prompt is up (a router or intranet page left asking for a
+# user name and password). Cra's host for page dialogs (cra-page-dialogs.patch) told the prompt its host
+# was going only as the page's own data was torn down, the last step of closing it; Chrome then shut
+# the prompt at once, and its sign-in handler, already gone with the page's request, was used anyway:
+# SIGSEGV in LoginHandler::CancelAuth (0.1.50 and 0.1.51 crash reports). The host now lets its dialogs go
+# when the page starts closing, while all of it is still there.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=before
+wait 1
+cra://open?url=${ORIGIN}/auth?n=closed-tab
+expect-log "GET /auth\?n=closed-tab HTTP/1.1" 401
+wait 2
+cra://debug?pageDialogs=sign-in
+expect-log page dialog sign-in: chrome [0-9]+x[0-9]+ at=page front=1 .*buttons=.*Cancel.* fields=2
+cra://action/closeTab
+wait 2
+cra://debug?pageDialogs=after
+expect-log page dialogs after: n=0
+cra://debug?back=after
+expect-log back after: selected=.*page\.html\?n=before
+reject-log fault:

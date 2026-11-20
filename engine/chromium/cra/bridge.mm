@@ -1744,6 +1744,8 @@ void StopBridge() {
 // The last click (left mouse-up) or Return in any window, for the link Chromium opens a moment after it: where it
 // landed and the keys held (the CEF bridge's CraNoteLastPress). Set in -[CraApplication sendEvent:].
 NSWindow* __weak g_last_press_window = nil;
+// The page that took the focus last (pageFocused).
+CraBrowser* __weak g_last_focused_page = nil;
 NSView* __weak g_last_press_view = nil;
 NSEventModifierFlags g_last_press_modifiers = 0;
 NSTimeInterval g_last_press_time = -1;
@@ -2727,11 +2729,25 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
 // (WebContentsImpl::RunFileChooser asks IsContentsActive) and closes one whose page stops being it. A click back
 // into a page from a Little Window's, or from another window's, left Chrome's active tab on that other page, and
 // every upload button (X's media button) did nothing. Only in the key window: the page the user is in.
+// Once Chrome is done with what it was doing: focus also comes back in the middle of a tab strip change. An
+// extension popup's Settings (#626, #631) opens the options page as a tab; Chrome closes the popup while that
+// tab goes in, Cra's window becomes key again, its page takes focus, and activating it there hit TabStripModel's
+// reentrancy CHECK. Only for the page focused last: an earlier one, made Chrome's active tab after another took the
+// focus, takes it back, and that one's turn takes it back again (two pages traded focus hundreds of times a second).
+// (Not the view's HasFocus: the window's key state reaches it later, and a page just focused read as not.)
 - (void)pageFocused {
-  if (_container.window.isKeyWindow) {
-    [self makeChromeActiveTab];
-  }
-  [_delegate browserDidReceiveFocus:self];
+  cra::g_last_focused_page = self;
+  CraBrowser* __weak weakSelf = self;
+  Later(base::BindOnce(^{
+    CraBrowser* page = weakSelf;
+    if (!page || !page->_contents || page != cra::g_last_focused_page) {
+      return;
+    }
+    if (page->_container.window.isKeyWindow) {
+      [page makeChromeActiveTab];
+    }
+    [page->_delegate browserDidReceiveFocus:page];
+  }));
 }
 
 - (void)pageDestroyed {

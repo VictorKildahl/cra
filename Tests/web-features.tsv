@@ -138,7 +138,7 @@ feature	camera and microphone permission	scenarios permission-doubled-request,pe
 feature	MIDI permission	scenarios permission-card	navigator.requestMIDIAccess
 feature	window management permission	scenarios page-permission-prompts	window.getScreenDetails
 feature	permission waits for its tab	scenarios permission-waits-for-its-tab	a background tab's request
-feature	HTTP sign-in	scenarios page-dialog-sign-in	a page behind HTTP Basic, Digest or NTLM
+feature	HTTP sign-in	scenarios page-dialog-sign-in,page-dialog-sign-in-tab-closed	a page behind HTTP Basic, Digest or NTLM
 feature	password save	scenarios page-save-password	"Save password?" after a sign-in form
 feature	select menu	scenarios page-pickers	<select>
 feature	date picker	scenarios page-pickers	<input type=date>
@@ -163,4 +163,5 @@ feature	translate	scenarios translate	a page in another language
 feature	infobars	scenarios debugger-infobar	Chrome's bars over a page
 feature	extension dialogs	scenarios extension-popup-shown,extension-window-focus	an extension's popup and windows
 feature	extension popup from the extension	scenarios extension-open-popup	chrome.action.openPopup(): an extension opening its own popup (1Password's inline menu)
+feature	extension options from its popup	scenarios extension-popup-opens-options	a popup's Settings opening the options page as a tab (chrome.runtime.openOptionsPage, tabs.create)
 feature	full screen and pointer notices	scenarios page-fullscreen-keyboard-lock,page-pointer-lock,little-window-fullscreen	Chrome's exclusive-access notice for a page's full screen, pointer lock and keyboard lock, as Arc's toast

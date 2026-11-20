@@ -1327,6 +1327,8 @@
 #617   Tests/StoreTests.swift::profileTabsSpaceBySpace  ac6153dfad00
 #618   Packages/CraCore/Tests/CraCoreTests/SidebarChildOrderTests.swift::oneStoredIndexPerChildInOnePass  d4962ed3b593
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
+#626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
+#631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
@@ -1349,6 +1351,7 @@ crash-hidden-page-closed-in-callback Tests/Scenarios/hidden-page-closes-in-callb
 crash-mcp-bridge-closed-stderr Tests/MCPTransportTests.swift::bridgeWithoutStderr  28bfe7ac9a93
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfSessionTests.swift::hugeCountersSaturateInsteadOfOverflowing  03ac411a6675
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfStateTests.swift::historyFootprintSaturatesInsteadOfOverflowing  2a8c526e26ad
+crash-sign-in-dialog-tab-closed Tests/Scenarios/page-dialog-sign-in-tab-closed.scenario  d3ee757e488c
 crash-tab-group-closed-window Tests/Scenarios/engine-tab-group-closed-window.scenario  14b438f2b3b0
 crash-tooltip-over-sheet Tests/Scenarios/tooltip-over-sheet.scenario  c4535ba50b5b
 crash-web-store-install-after-tab-closes Tests/Scenarios/web-store-install-after-tab-closes.scenario  a5324abc50b7

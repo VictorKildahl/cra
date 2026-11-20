@@ -347,3 +347,13 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   under Rosetta passes the functional checks of a smoke set (cookies from a CEF profile, downloads, extensions,
   fifty tabs, fingerprinting, live folders); first launches of a translated build go over their stall budgets, as
   on 158.
+- 20 Nov 2026: **engine-159.0.8154.13-2**, two crashes from 0.1.50 and 0.1.51's reports. An extension popup's
+  Settings that opens the options page as a tab (#626, #631; 52 reports): Chrome closes the popup while the tab
+  goes into its tab strip, Cra's window becomes key again, and the bridge's `pageFocused` activated the focused
+  page inside that change, which TabStripModel's reentrancy CHECK stops. `pageFocused` now runs once Chrome is
+  done, and only for the page focused last: a stale one took the focus back and two pages traded it hundreds of times
+  a second (the scenario's stall budget caught it). The view's `HasFocus()` is no test for that, since the window's
+  key state reaches it later, and page fullscreen and Little Window fullscreen broke (scenario `extension-popup-opens-options`). A tab closed under its HTTP sign-in prompt (3 reports):
+  `CraPageDialogHost` (cra-page-dialogs.patch) is the page's own data, so it told its dialogs it was going only
+  after the page's parts were gone, and the prompt's `LoginHandler::CancelAuth` used them. It lets them go in
+  `WebContentsDestroyed` now (scenario `page-dialog-sign-in-tab-closed`). Both scenarios crash on -1.

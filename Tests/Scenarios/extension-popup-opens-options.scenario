@@ -1,0 +1,44 @@
+# promise: #626
+# promise: #631
+# An extension popup's Settings opens the options page as a tab while the popup is still up, as
+# Obsidian Web Clipper's and Keeper's (#626) and LeechBlock NG's (#631) do. Chromium closes the popup
+# while the new tab goes into its tab strip; Cra's window becomes key again, the page there takes
+# focus, and Cra made that page Chrome's active tab right then, inside the tab strip's own change:
+# TabStripModel's reentrancy CHECK quit Cra (0.1.50 and 0.1.51, 52 crash reports). Both ways in: the
+# service worker's chrome.tabs.create, and chrome.runtime.openOptionsPage() from the popup. It takes the
+# screen: the popup hands the keys back only to the app in use.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?installExtension=${FIXTURES}/TabsCreateExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=settings-popup-worker
+expect-log "GET /page\.html\?n=settings-set-worker HTTP
+cra://debug?activate=1
+wait 1
+cra://debug?extensionAction=${TABS_CREATE_EXTENSION_ID}
+expect-log "GET /page\.html\?n=settings-shown-worker HTTP
+expect-log "GET /page\.html\?n=settings-options-worker HTTP
+wait 1
+cra://debug?back=worker
+expect-log back worker: selected=chrome-extension://${TABS_CREATE_EXTENSION_ID}/options\.html
+cra://debug?extensionPopup=worker
+expect-log extension popup worker: closed
+cra://action/closeTab
+cra://open?url=${PAGE}?n=settings-popup-runtime
+expect-log "GET /page\.html\?n=settings-set-runtime HTTP
+cra://debug?activate=1
+wait 1
+cra://debug?extensionAction=${TABS_CREATE_EXTENSION_ID}
+expect-log "GET /page\.html\?n=settings-shown-runtime HTTP
+expect-log "GET /page\.html\?n=settings-options-runtime HTTP
+wait 1
+cra://debug?back=runtime
+expect-log back runtime: selected=chrome-extension://${TABS_CREATE_EXTENSION_ID}/options\.html
+cra://debug?extensionPopup=runtime
+expect-log extension popup runtime: closed
+cra://debug?removeExtension=${TABS_CREATE_EXTENSION_ID}
+wait 1
+reject-log fault:

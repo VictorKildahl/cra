@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/ui/tabs/tab_dialog_manager.cc b/chrome/browser/ui/tabs/tab_dialog_manager.cc
-index b771331..3947c0a 100644
+index 86bcb24ee0..03d06dccea 100644
 --- a/chrome/browser/ui/tabs/tab_dialog_manager.cc
 +++ b/chrome/browser/ui/tabs/tab_dialog_manager.cc
-@@ -124,8 +124,11 @@ gfx::Rect GetModalDialogBounds(views::Widget* widget,
+@@ -126,8 +126,11 @@ gfx::Rect GetModalDialogBounds(views::Widget* widget,
      const gfx::Rect host_screen_bounds = host_widget->GetWindowBoundsInScreen();
  
      // The requested dialog bounds should never fall outside the bounds of the
@@ -17,7 +17,7 @@ index b771331..3947c0a 100644
  
      // Adjust the dialog bound to ensure it remains visible on the display.
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 764e295..46f7a52 100644
+index 0dabb77645..a1c8d5d067 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -31,6 +31,7 @@
@@ -28,7 +28,7 @@ index 764e295..46f7a52 100644
  #include "base/scoped_observation.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/strings/stringprintf.h"
-@@ -306,6 +307,7 @@
+@@ -307,6 +308,7 @@
  #include "content/public/browser/render_widget_host.h"
  #include "content/public/browser/render_widget_host_view.h"
  #include "content/public/browser/web_contents.h"
@@ -36,7 +36,7 @@ index 764e295..46f7a52 100644
  #include "content/public/common/content_features.h"
  #include "content/public/common/content_switches.h"
  #include "content/public/common/drop_data.h"
-@@ -356,6 +358,7 @@
+@@ -357,6 +359,7 @@
  #include "ui/views/bubble/bubble_dialog_delegate_view.h"
  #include "ui/views/controls/button/menu_button.h"
  #include "ui/views/controls/textfield/textfield.h"
@@ -44,7 +44,7 @@ index 764e295..46f7a52 100644
  #include "ui/views/controls/webview/webview.h"
  #include "ui/views/interaction/element_tracker_views.h"
  #include "ui/views/interaction/view_subregion_anchor.h"
-@@ -429,6 +432,103 @@ using web_modal::WebContentsModalDialogHost;
+@@ -431,6 +434,109 @@ using web_modal::WebContentsModalDialogHost;
  
  namespace {
  
@@ -123,6 +123,12 @@ index 764e295..46f7a52 100644
 +  void PrimaryMainFrameWasResized(bool width_changed) override {
 +    NotifyPositionRequiresUpdate();
 +  }
++  // The page is closing: its dialogs go now, while it is all still there. This host is the page's own data, so
++  // its destructor runs after the page's parts are gone, and a dialog closed from there (the HTTP sign-in
++  // prompt, LoginHandler::CancelAuth) used them (crash-sign-in-dialog-tab-closed).
++  void WebContentsDestroyed() override {
++    observers_.Notify(&web_modal::ModalDialogHostObserver::OnHostDestroying);
++  }
 +
 + private:
 +  static const void* UserDataKey() {
@@ -148,7 +154,7 @@ index 764e295..46f7a52 100644
  // The visible height of the shadow above the tabs. Clicks in this area are
  // treated as clicks to the frame, rather than clicks to the tab.
  const int kTabShadowSize = 2;
-@@ -3473,6 +3573,10 @@ WebContentsModalDialogHost* BrowserView::GetWebContentsModalDialogHost() {
+@@ -3523,6 +3629,10 @@ WebContentsModalDialogHost* BrowserView::GetWebContentsModalDialogHost() {
  
  WebContentsModalDialogHost* BrowserView::GetWebContentsModalDialogHostFor(
      content::WebContents* web_contents) {
