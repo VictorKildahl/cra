@@ -1,0 +1,29 @@
+# promise: #502
+# Arc's dark ⌘T bar shows the page through it: (26,26,26) over a black page, ≈ 47 over a white one. Cra's
+# tint over the bar's hudWindow material is CommandBarTones.panel: neutral 26 grey at 0.85 in dark (before
+# #502, (46,45,45) at 0.97 kept the bar at 45–50 over anything); the light bar keeps white at 0.94.
+# CommandBarPanelTests holds the composite; this checks the bar draws that tint.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=see-through
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?systemAppearance=dark
+wait 1
+cra://commandbar?query=
+wait 1
+cra://debug?commandBarScope=state
+wait 1
+expect-log command bar scope state: none, fill default, panel #1A1A1A at 0\.85
+cra://dismiss
+wait 1
+cra://debug?systemAppearance=light
+wait 1
+cra://commandbar?query=
+wait 1
+cra://debug?commandBarScope=state
+wait 1
+expect-log command bar scope state: none, fill default, panel #FFFFFF at 0\.94
+cra://dismiss
+wait 1
+cra://debug?systemAppearance=system

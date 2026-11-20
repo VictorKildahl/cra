@@ -27,3 +27,39 @@ struct CommandBarTonesTests {
         #expect(Self.gap(Self.arcDefault.badge, (5, 6, 39)) <= 1)
     }
 }
+
+/// Arc's dark ⌘T bar is see-through: (26,26,26) over a black page (#502 screenshot, and 3 Nov's YouTube
+/// splash), ≈ 45–48 over a white one (Jelena's research on #502; (48,48,48)–(51,50,50) over light pages on
+/// 9 Nov). Cra's tint sits on a `.hudWindow` material that comes out at 27 over black, 97 over 128 grey and
+/// 169 over white (measured 20 Nov 2026 on macOS 26, dark appearance, sRGB), and the tint blends over it.
+struct CommandBarPanelTests {
+    static let material = (black: 27.0, grey: 96.5, white: 168.5)
+    static func bar(over material: Double) -> Double {
+        let p = CommandBarTones.panel(dark: true)
+        return p.alpha * p.rgb.g * 255 + (1 - p.alpha) * material
+    }
+    static func row(_ tones: CommandBarTones, over bar: Double) -> Double {
+        let s = tones.selection
+        return s.alpha * s.rgb.g * 255 + (1 - s.alpha) * bar
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/502"))
+    func theDarkBarTakesOnThePageBehindItLikeArcs() {
+        #expect(abs(Self.bar(over: Self.material.black) - 26) <= 2, "over black: \(Self.bar(over: Self.material.black))")
+        #expect(abs(Self.bar(over: Self.material.white) - 47) <= 2, "over white: \(Self.bar(over: Self.material.white))")
+        let grey = Self.bar(over: Self.material.grey)
+        #expect(grey > Self.bar(over: Self.material.black) && grey < Self.bar(over: Self.material.white))
+        let p = CommandBarTones.panel(dark: true)
+        #expect(p.rgb.r == p.rgb.g && p.rgb.g == p.rgb.b, "Arc's panel is neutral grey")
+    }
+
+    /// The selected row was fitted over a ≈ 28 panel (CommandBarTonesTests); over Cra's old 45–48 bar the
+    /// darkest theme's row came out darker than the bar around it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/502"))
+    func theDarkestThemesSelectedRowIsLighterThanTheBarOverADarkPage() {
+        let black = CommandBarTones(theme: SpaceTheme(colors: ["#000000"], intensity: 1, noise: 0, appearance: "dark"), dark: true)
+        let bar = Self.bar(over: Self.material.black)
+        #expect(Self.row(black, over: bar) > bar + 6, "row \(Self.row(black, over: bar)) on bar \(bar)")
+        #expect(abs(bar - CommandBarTonesTests.panel.g * 255) <= 3, "the bar is the panel the selected row was fitted on")
+    }
+}

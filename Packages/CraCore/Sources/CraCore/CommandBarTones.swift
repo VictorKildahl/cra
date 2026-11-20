@@ -12,6 +12,15 @@ public struct CommandBarTones: Equatable, Sendable {
 
     public static let selectionAlpha = 0.86
 
+    /// The tint over the bar's material (`.hudWindow` dark, `.popover` light). Arc's dark bar is
+    /// see-through (#502): (26,26,26) over a black page, ≈ 47 over a white one, in between over photos. A
+    /// neutral 26 grey at 0.85 over `.hudWindow` (27 over black, 169 over white) comes to 26 and 47, and
+    /// keeps the ≈ 28 panel the selected row was fitted on over dark pages. Before, (46,45,45) at 0.97 held
+    /// the bar at 45–50 over anything, which put the darkest theme's selected row below the bar.
+    public static func panel(dark: Bool) -> ArcThemeData.Color {
+        dark ? ArcThemeData.Color(RGB(26 / 255, 26 / 255, 26 / 255), 0.85) : ArcThemeData.Color(.white, 0.94)
+    }
+
     public init(selection: ArcThemeData.Color, badge: RGB) { (self.selection, self.badge) = (selection, badge) }
 
     public init(shadedDark: RGB, shaded: RGB, midTone: RGB, tintedLight: RGB, dark: Bool) {

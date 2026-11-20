@@ -1009,6 +1009,9 @@
 #499   Packages/CraCore/Tests/CraCoreTests/SidebarEdgeDragTests.swift::pagesAfterTheDelayAndAgainWhileHeld  a917017eb9bf
 #499   Tests/Scenarios/sidebar-edge-drag.scenario  78006ab4e6ca
 #500   Tests/Scenarios/little-window-over-browser.scenario  95a396732422
+#502   Packages/CraCore/Tests/CraCoreTests/CommandBarTonesTests.swift::theDarkBarTakesOnThePageBehindItLikeArcs  c15465f0edbd
+#502   Packages/CraCore/Tests/CraCoreTests/CommandBarTonesTests.swift::theDarkestThemesSelectedRowIsLighterThanTheBarOverADarkPage  ebbc7d83a379
+#502   Tests/Scenarios/command-bar-see-through.scenario  ef7a0d58034f
 #503   Tests/Scenarios/extension-window-focus.scenario  93c9f59c585d
 #504   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
 #505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::aSiteWithTheSwitchOffShowsTheBarItArrivesWithout  f83a1077e558

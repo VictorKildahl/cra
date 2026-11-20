@@ -120,6 +120,12 @@ Privacy and Extensions follow Advanced. Tabs, Plugins and Performance have no ta
 - Command bar (⌘T / File ▸ New Tab…), 7 Nov 2026, 57 fps region recordings of both apps: Arc's bar is
   there complete from one frame to the next, no fade or scale; Cra's too. Matches.
 
+- Command bar tone in dark mode (#502, Jelena Jansson's research, 18 Nov 2026): Arc's bar is see-through,
+  (26,26,26) over a black page, ≈ 30 over a mid-dark photo, 45–48 over a white page. Cra's stayed at 45–50
+  over anything ((46,45,45) at 0.97 over `.hudWindow`). Since 20 Nov the tint is a neutral 26 grey at 0.85
+  (CraCore `CommandBarTones.panel`): 26 over black, 36 over 128 grey, 47 over white, measured on macOS 26.
+  Arc's mid-tones come out a few levels darker than Cra's; the ends match.
+
 - Boost editor, 7 Nov 2026, 60 fps recordings of both apps (BoostEditorMotion): Arc draws the panel at
   85 % on its first frame and grows it to full size in 0.28 s about the middle of its right edge, no fade;
   it closes from one frame to the next. Code widens it 183 → 480 pt in 0.35 s with the 480 pt layout

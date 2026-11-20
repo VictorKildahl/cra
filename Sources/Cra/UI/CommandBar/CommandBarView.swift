@@ -120,6 +120,12 @@ final class CommandBarView: NSView {
         guard let f = shownFill else { return "default" }
         return String(format: "#%02X%02X%02X", Int((f.r * 255).rounded()), Int((f.g * 255).rounded()), Int((f.b * 255).rounded()))
     }
+    /// The tint as drawn over the material, "#RRGGBB at <alpha>" in sRGB (#502).
+    var debugPanel: String {
+        guard let c = tint.layer?.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB) else { return "none" }
+        return String(format: "#%02X%02X%02X at %.2f", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
+                      Int((c.blueComponent * 255).rounded()), c.alphaComponent)
+    }
 
     override var isFlipped: Bool { true }
 
@@ -155,10 +161,10 @@ final class CommandBarView: NSView {
         let dark = self.dark
         text.update()
         attached = c.attached
-        // Arc 1.172.1 live: a neutral dark panel, (48,48,48)–(51,50,50) over light pages; Cra's hudWindow
-        // material under this tint (white ≈ 0.5 through 3 %) comes to ≈ (48,47,47).
+        // Arc's dark bar shows the page through it: 26 over black, ≈ 47 over white (CraCore CommandBarTones.panel, #502).
         material.material = dark ? .hudWindow : .popover
-        tint.layer?.backgroundColor = (dark ? NSColor(srgbRed: 46 / 255, green: 45 / 255, blue: 45 / 255, alpha: 0.97) : NSColor.white.withAlphaComponent(0.94)).cgColor
+        let panel = CommandBarTones.panel(dark: dark)
+        tint.layer?.backgroundColor = Self.ink(panel.rgb, panel.alpha).cgColor
         // Arc 1.172.1 live: the badge is the space's backgroundExtra, its glyph (148,146,140) on a gold space.
         let tones = self.tones(dark: dark)
         info.layer?.backgroundColor = Self.ink(tones.badge).cgColor

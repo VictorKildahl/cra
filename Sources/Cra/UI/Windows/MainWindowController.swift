@@ -4633,12 +4633,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Scenario hook (#457): "enter" presses Tab on what the bar holds, "leave" Backspaces out of the
     /// scope, "state" only reads; then logs "command bar scope <step>: <scope name or none>, fill <#RRGGBB
-    /// or default>" once the bar has drawn.
+    /// or default>, panel <#RRGGBB at alpha>" (the tint over the material, #502) once the bar has drawn.
     func debugCommandBarScope(_ step: String) {
         if step == "enter" { _ = commandBar.enterScope() } else if step == "leave" { commandBar.leaveScope() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
-            CraLog.note("command bar scope \(step): \(self.commandBar.scope?.name ?? "none"), fill \(self.commandHost.debugFill)")
+            CraLog.note("command bar scope \(step): \(self.commandBar.scope?.name ?? "none"), fill \(self.commandHost.debugFill), "
+                + "panel \(self.commandHost.debugPanel)")
         }
     }
 
