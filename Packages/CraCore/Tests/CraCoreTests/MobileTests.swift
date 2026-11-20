@@ -23,6 +23,22 @@ struct MobileChromeTests {
         #expect(MobileSearchSheet.rowsInView(screenHeight: 300, keyboardHeight: 290, safeTop: 0) == 0)
     }
 
+    /// The incognito glyph keeps the same room to the field's right end off and on: before, off,
+    /// it sat 7.5 pt from the end and on (with its label) 18.5 pt (#654).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/654")) func theIncognitoGlyphKeepsItsPlaceOffAndOn() {
+        let field = CGRect(x: 16, y: 16, width: 361, height: 48)
+        let off = MobileSearchSheet.incognitoToggleFrame(field: field)
+        let on = MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: 130)
+        #expect(off.maxX == on.maxX)
+        #expect(field.maxX - off.maxX == 18.5)
+        #expect(off.width == 44 && on.width == 130)
+        #expect(off.midY == field.midY && on.midY == field.midY)
+        let accessory = MobileSearchSheet.accessoryFrame(field: field)
+        #expect(field.maxX - accessory.midX == 29.5, "the clear button stays where Arc Search has it")
+        // The 23 pt glyph, right-aligned, is centred where the accessory's centre is, give or take a point.
+        #expect(abs((off.maxX - 11.5) - accessory.midX) <= 1)
+    }
+
     /// The same phone's bar: 76 pt tall, pill 76 × 39 centred 44.5 pt above the bottom edge,
     /// round buttons 35 pt wide centred 41 pt from each side.
     @Test func bottomBarOnAnIPhone15Pro() {

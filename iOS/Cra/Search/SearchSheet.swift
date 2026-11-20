@@ -410,10 +410,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         // Text starts 24.5 pt inside the field; the accessory's centre is 29.5 pt from its right end.
         field.frame = CGRect(x: frame.minX + 24.5, y: frame.minY, width: max(0, frame.width - 24.5 - 52), height: frame.height)
         field.alpha = t
-        let accessory = CGRect(x: frame.maxX - 29.5 - 22, y: frame.midY - 22, width: 44, height: 44)
+        let accessory = MobileSearchSheet.accessoryFrame(field: frame)
         clearButton.frame = accessory
-        // With its "Incognito" label the toggle reaches left from the same right edge.
-        incognitoButton.frame = isIncognito ? CGRect(x: accessory.maxX - 11 - 130, y: accessory.minY, width: 130, height: 44) : accessory
+        // Off or with its "Incognito" label, the toggle's glyph keeps one place (#654).
+        incognitoButton.frame = MobileSearchSheet.incognitoToggleFrame(field: frame, labelledWidth: isIncognito ? 130 : nil)
         clearButton.alpha = t
         incognitoButton.alpha = t
         micButton.frame = accessory.offsetBy(dx: -38, dy: 0)

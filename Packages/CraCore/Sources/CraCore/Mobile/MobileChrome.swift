@@ -49,6 +49,22 @@ public enum MobileSearchSheet {
     public static func top(screenHeight: CGFloat, keyboardHeight: CGFloat, safeTop: CGFloat) -> CGFloat {
         screenHeight - keyboardHeight - height(rows: rowsInView(screenHeight: screenHeight, keyboardHeight: keyboardHeight, safeTop: safeTop))
     }
+
+    /// The field's button at its right end (clear, incognito): 44 pt square, its centre 29.5 pt
+    /// from the field's right end.
+    public static func accessoryFrame(field: CGRect) -> CGRect {
+        CGRect(x: field.maxX - 29.5 - 22, y: field.midY - 22, width: 44, height: 44)
+    }
+
+    /// The incognito toggle, whose glyph sits at its right edge: 18.5 pt from the field's right
+    /// end whether it is off (the glyph alone) or on (the glyph with "Incognito" to its left,
+    /// `labelledWidth` wide). Off, it used to end at the accessory's edge, 7.5 pt from the end,
+    /// so the glyph sat hard against the field's rim (#654).
+    public static func incognitoToggleFrame(field: CGRect, labelledWidth: CGFloat? = nil) -> CGRect {
+        let accessory = accessoryFrame(field: field)
+        let width = labelledWidth ?? accessory.width
+        return CGRect(x: field.maxX - 18.5 - width, y: accessory.minY, width: width, height: accessory.height)
+    }
 }
 
 /// The bar at the bottom of a page: tabs, the pill that opens search, and the menu.
