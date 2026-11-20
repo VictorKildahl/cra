@@ -350,6 +350,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         nowPlaying?.remove(tabID)
         nowPlaying?.pictureInPicture.remove(tabID)
         byBrowser[ObjectIdentifier(rt.browser)] = nil
+        // A page in full screen leaves it with its tab (#636), as in Chrome and Arc: ⌘W on a video in full
+        // screen, or the tab dragged to another window. Chromium's own word for a closing page comes once
+        // the tab is no longer this window's, so the window the video took full screen never came back.
+        if fullscreenTabs.remove(tabID) != nil {
+            rt.browser.exitFullscreen()
+            delegate?.browserManager(fullscreen: false, tabID: tabID)
+        }
         rt.snapshotWork?.cancel()
         rt.snapshotWork = nil
         rt.probeWork?.cancel()
@@ -1759,8 +1766,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         delegate?.browserManager(findAction: action)
     }
 
+    /// The tabs whose pages are in their own full screen (a video's): they leave it when they go (#636).
+    private var fullscreenTabs: Set<UUID> = []
+
     func browser(_ browser: CraBrowser, didChangeFullscreen fullscreen: Bool) {
         guard let id = tabID(of: browser) else { return }
+        if fullscreen { fullscreenTabs.insert(id) } else { fullscreenTabs.remove(id) }
         delegate?.browserManager(fullscreen: fullscreen, tabID: id)
     }
 

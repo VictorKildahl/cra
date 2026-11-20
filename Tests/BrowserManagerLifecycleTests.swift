@@ -74,9 +74,58 @@ enum BrowserManagerLifecycleTests {
         store.settings.littleWindowOnOptionCommandClick = false
     }
 
+    /// A page's full screen ends with its tab (#636): ⌘W on a video in full screen, or the tab moved to another
+    /// window, tells the window the page left full screen, so a window the video took full screen comes back.
+    /// Chromium's own "left" for a closed page comes too late, once the tab is no longer the window's.
+    // promise: #636
+    @MainActor
+    private static func fullscreenTabClosedCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let video = store.createTab(url: "https://example.test/video").id
+        manager.show(video, focus: false)
+        let page = manager.runtime(for: video)!.browser
+        manager.browser(page, didChangeFullscreen: true)
+        expect(observer.fullscreenChanges.map(\.fullscreen) == [true] && observer.fullscreenChanges.last?.tab == video,
+               "a page going full screen reaches the window")
+        manager.unload(video)
+        expect(observer.fullscreenChanges.map(\.fullscreen) == [true, false] && observer.fullscreenChanges.last?.tab == video,
+               "closing the tab whose page is in full screen tells the window it left full screen")
+        manager.browser(page, didChangeFullscreen: false)
+        page.finishClose()
+        expect(observer.fullscreenChanges.count == 2, "the closed page's own late answer changes nothing more")
+
+        let plain = store.createTab(url: "https://example.test/plain").id
+        manager.show(plain, focus: false)
+        manager.unload(plain)
+        expect(observer.fullscreenChanges.count == 2, "closing a tab that was never in full screen says nothing about full screen")
+
+        let left = store.createTab(url: "https://example.test/left").id
+        manager.show(left, focus: false)
+        let leftPage = manager.runtime(for: left)!.browser
+        manager.browser(leftPage, didChangeFullscreen: true)
+        manager.browser(leftPage, didChangeFullscreen: false)
+        manager.unload(left)
+        expect(observer.fullscreenChanges.map(\.fullscreen) == [true, false, true, false],
+               "a page that already left full screen says nothing more when its tab closes")
+
+        let moved = store.createTab(url: "https://example.test/moved").id
+        manager.show(moved, focus: false)
+        let movedPage = manager.runtime(for: moved)!.browser
+        manager.browser(movedPage, didChangeFullscreen: true)
+        let handedOff = manager.release(moved)
+        expect(handedOff?.browser === movedPage && observer.fullscreenChanges.last.map { !$0.fullscreen && $0.tab == moved } == true,
+               "a tab moved to another window takes its page out of this window's full screen")
+        expect(movedPage.exitFullscreenRequests == 1, "and its page leaves full screen, as Chrome's does when a tab is dragged out")
+        handedOff?.browser.close()
+    }
+
     @MainActor
     static func main() async {
         downloadSourceAdoptionCase()
+        fullscreenTabClosedCase()
         await sparePagesCase()
         await tabFaviconsCase()
         let store = SidebarStore()
@@ -2672,7 +2721,8 @@ private final class Observer: BrowserManagerDelegate {
     func browserManager(findState state: AskOnPage.FindState) { findStates.append(state) }
     func browserManager(findAction action: CraFindAction) { findActions.append(action) }
     func browserManager(download: CraDownloadInfo) { onDownload?(download) }
-    func browserManager(fullscreen: Bool, tabID: UUID) {}
+    var fullscreenChanges: [(fullscreen: Bool, tab: UUID)] = []
+    func browserManager(fullscreen: Bool, tabID: UUID) { fullscreenChanges.append((fullscreen, tabID)) }
     func browserManager(exclusiveAccessToast toast: ExclusiveAccessNotice.Toast, tabID: UUID) {}
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView? { nil }
     func browserManagerDevToolsChanged() {}

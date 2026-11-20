@@ -1331,6 +1331,12 @@
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
 #626   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
+#636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aClosingWindowLeavesItsFullScreenItself  12ad008e3fd3
+#636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aWindowTheUserMadeFullScreenStays  8a2d0d776ad0
+#636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aWindowTheVideoTookFullScreenComesBack  3747ecd4ef6a
+#636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::theUserLeavingFirstForgetsThePage  3d0074797d11
+#636   Tests/BrowserManagerLifecycleTests.swift::fullscreenTabClosedCase  590ed2927628
+#636   Tests/Scenarios/page-fullscreen-close-tab.scenario  f5f69eafd931
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

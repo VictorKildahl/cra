@@ -53,7 +53,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var swipeKnobReveal: DispatchWorkItem?
     /// Whether a touch over the sidebar hides the lists' knob (#77), or leaves it showing (#544).
     private var listKnob = ListKnobGate()
-    private var enteredFullscreenForContent = false
+    /// Whether the window is full screen for a page's own (a video's), and leaves it with the page (#636).
+    private var pageFullscreenWindow = PageFullscreenWindow()
     /// The tab whose page (a video) is in element fullscreen.
     private var contentFullscreenTab: UUID?
     /// Esc in a page's full screen while the page holds the keyboard (Arc: "[⎋] again to exit fullscreen").
@@ -1503,12 +1504,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if fullscreen, let toast = ExclusiveAccessNotice.fullscreen.toast(inLittleWindow: false) {
             if window.styleMask.contains(.fullScreen) { showNoticeToast(toast) } else { pendingNoticeToast = toast }
         }
-        if fullscreen, !window.styleMask.contains(.fullScreen) {
-            enteredFullscreenForContent = true
-            window.toggleFullScreen(nil)
-        } else if !fullscreen, enteredFullscreenForContent, window.styleMask.contains(.fullScreen) {
-            enteredFullscreenForContent = false
-            window.toggleFullScreen(nil)
+        switch pageFullscreenWindow.page(fullscreen: fullscreen, windowFullscreen: window.styleMask.contains(.fullScreen),
+                                         closing: isTornDown || isPutAway) {
+        case .enter, .leave: window.toggleFullScreen(nil)
+        case .stay: break
         }
     }
 
@@ -5659,7 +5658,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         (window as? CraWindow)?.fullScreenChanged()
         shell.needsLayout = true
         // Remembered for the next launch (#426), unless a page's video took the window there.
-        if !enteredFullscreenForContent { store.updateWindow(windowID) { $0.fullScreen = true } }
+        if !pageFullscreenWindow.enteredForPage { store.updateWindow(windowID) { $0.fullScreen = true } }
         if let toast = pendingNoticeToast {
             pendingNoticeToast = nil
             showNoticeToast(toast)
@@ -5676,7 +5675,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         contentFullscreenTab = nil
         if shell.contentFullscreen { shell.contentFullscreen = false }
         floatingSidebar?.sidebarVisibilityChanged()
-        enteredFullscreenForContent = false
+        pageFullscreenWindow.windowLeftFullScreen()
         shell.needsLayout = true
     }
 

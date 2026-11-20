@@ -100,6 +100,9 @@ open class CraBrowser {
     }
 
     public func close() { closeRequested = true; onClose?() }
+    /// How many times Cra asked the page to leave its element full screen (a video's), as Esc does.
+    public var exitFullscreenRequests = 0
+    public func exitFullscreen() { exitFullscreenRequests += 1 }
     public func finishClose() { isClosed = true; delegate?.browserDidClose(self) }
     /// "show" / "close" / "apply <action>", in the order Cra asked.
     public var devToolsRequests: [String] = []

@@ -1,0 +1,52 @@
+# promise: #636
+# ⌘W on a tab whose page is in its own full screen (a video's full-screen button): the tab closes and the
+# window that went full screen for it comes back, as in Arc and Chrome. Chromium's word that the closing page
+# left full screen came once the tab was no longer the window's, so the window stayed full screen. A window the
+# user had made full screen first (⌃⌘F) stays full screen, and stays remembered for the next launch (#426).
+# The harness half is BrowserManagerLifecycleTests.fullscreenTabClosedCase.
+requires screen
+# Cra has to come to the front to have a key window; a page only takes focus in a key window.
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=behind
+expect-log GET /features.html\?n=behind
+cra://open?url=${ORIGIN}/features.html?n=video
+expect-log GET /features.html\?n=video
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.documentElement.requestFullscreen().then(()=>'entered')","awaitPromise":true,"userGesture":true}
+expect-log "value":"entered"
+wait 3
+cra://debug?windowState=video
+expect-log window state video: main0 fullscreen=1
+cra://action/closeTab
+wait 3
+cra://debug?windowState=closed
+expect-log window state closed: main0 fullscreen=0 visible=1
+cra://debug?fullscreen=state&label=closed
+expect-log fullscreen closed: window=0 saved=0
+
+# Full screen first, by the user: the video's tab closing leaves the window full screen.
+cra://debug?fullscreen=1
+wait 3
+cra://open?url=${ORIGIN}/features.html?n=again
+expect-log GET /features.html\?n=again
+wait 2
+cra://debug?clickAt=760,500
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.documentElement.requestFullscreen().then(()=>'entered again')","awaitPromise":true,"userGesture":true}
+expect-log "value":"entered again"
+wait 2
+cra://action/closeTab
+wait 3
+cra://debug?fullscreen=state&label=kept
+expect-log fullscreen kept: window=1 saved=1
+cra://debug?fullscreen=0
+wait 3
+reject-log fault:
