@@ -14,11 +14,16 @@ final class ExtensionPopupWindow: NSWindow {
     /// Chrome's bubble draws a transparent margin around the page.
     static let bubbleInset: CGFloat = 7
     static let titleBarHeight: CGFloat = 28
-    /// Where the user dragged a popup to, relative to its anchor. Dropped once: Cra ≤ 0.1.17 kept an absolute
-    /// screen point under "extensionPopupWindowTopLeft", and Cra ≤ 0.1.51 an offset under
-    /// "extensionPopupWindowOffset" that moves which were no drag could set (#634).
-    private static let savedOffsetKey = "extensionPopupWindowDragOffset"
-    private static let droppedKeys = ["extensionPopupWindowTopLeft", "extensionPopupWindowOffset"]
+    /// Where the user dragged a popup to, relative to its anchor, kept across updates. (Cra ≤ 0.1.17 kept an
+    /// absolute screen point under "extensionPopupWindowTopLeft"; that one is dropped. 0.1.52 kept it under
+    /// "extensionPopupWindowDragOffset" and dropped older ones; that key is moved back.)
+    private static let savedOffsetKey = "extensionPopupWindowOffset"
+    private static let interimKey = "extensionPopupWindowDragOffset"
+    /// A test instance (CRA_DATA_DIR) keeps it in a file in its own data folder, as Picture in Picture's
+    /// placement: test copies share the app's defaults, so a run read the place the user dragged popups to
+    /// (and a test's drag moved the user's popups).
+    private static let testFile = ProcessInfo.processInfo.environment["CRA_DATA_DIR"]
+        .map { URL(fileURLWithPath: $0).appendingPathComponent("extension-popup-offset.txt") }
 
     private static var current: ExtensionPopupWindow?
     /// When the mouse-down that closed the last popup happened (event time), if one did.
@@ -69,7 +74,12 @@ final class ExtensionPopupWindow: NSWindow {
         let w = ExtensionPopupWindow()
         w.bubble = bubble
         w.anchor = anchor
-        for key in droppedKeys { UserDefaults.standard.removeObject(forKey: key) }
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "extensionPopupWindowTopLeft")
+        if let interim = defaults.string(forKey: interimKey) {
+            if defaults.string(forKey: savedOffsetKey) == nil { defaults.set(interim, forKey: savedOffsetKey) }
+            defaults.removeObject(forKey: interimKey)
+        }
         w.offset = savedOffset ?? .zero
         w.appearance = bubble.parent?.effectiveAppearance ?? NSApp.effectiveAppearance
         w.backgroundColor = .windowBackgroundColor
@@ -198,10 +208,14 @@ final class ExtensionPopupWindow: NSWindow {
 
     private static var savedOffset: NSPoint? {
         get {
-            guard let s = UserDefaults.standard.string(forKey: savedOffsetKey) else { return nil }
-            return NSPointFromString(s)
+            let s = testFile.map { try? String(contentsOf: $0, encoding: .utf8) } ?? UserDefaults.standard.string(forKey: savedOffsetKey)
+            return s.map(NSPointFromString)
         }
-        set { UserDefaults.standard.set(newValue.map(NSStringFromPoint), forKey: savedOffsetKey) }
+        set {
+            let s = newValue.map(NSStringFromPoint)
+            guard let testFile else { return UserDefaults.standard.set(s, forKey: savedOffsetKey) }
+            if let s { try? s.write(to: testFile, atomically: true, encoding: .utf8) } else { try? FileManager.default.removeItem(at: testFile) }
+        }
     }
 
     override func performClose(_ sender: Any?) { dismiss(closingBubble: true) }

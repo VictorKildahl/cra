@@ -1374,7 +1374,7 @@
 #630   Packages/CraCore/Tests/CraCoreTests/WebsiteAppearanceTests.swift::chromiumsModeComesBack  37b8a834e38f
 #630   Tests/Scenarios/chromium-appearance-mode.scenario  d13c9665dc42
 #631   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
-#634   Tests/ExtensionPopupWindowTests.swift::hangsUnderItsButtonUntilDragged  c4ad11dae1c2
+#634   Tests/ExtensionPopupWindowTests.swift::hangsUnderItsButtonUntilDragged  ecd8a3e853c5
 #634   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #634   Tests/Scenarios/floating-sidebar-extension-popup-fullscreen.scenario  735aacadfad7
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::aClosingWindowLeavesItsFullScreenItself  12ad008e3fd3

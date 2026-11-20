@@ -124,10 +124,10 @@ enum ExtensionPopupWindowTests {
     }
 
     // promise: #634
-    /// A popup hangs right under its button (the sidebar's sliders) unless the user dragged one away. On
-    /// 0.1.51 every popup hung by an offset that moves which were no drag had saved: AppKit says willMove
-    /// when the frame is carried along with its window too, so a popup opened from the sidebar in full
-    /// screen sat out on the page. The offset Cra ≤ 0.1.51 kept that way is dropped once.
+    /// A popup hangs right under its button (the sidebar's sliders) unless the user dragged one away, and that
+    /// place is kept across updates (Victor, 20 Nov). On 0.1.51 a move after the drop that was no drag (the
+    /// frame carried along with its window) replaced it, so a popup opened from the sidebar in full screen
+    /// could sit out on the page.
     @MainActor
     private static func hangsUnderItsButtonUntilDragged() {
         let defaults = UserDefaults.standard
@@ -139,10 +139,26 @@ enum ExtensionPopupWindowTests {
             expect(topLeft == NSPoint(x: anchor.x - 300, y: anchor.y), why)
         }
 
-        // What 0.1.51 left in the reporter's defaults (and on this Mac: {107, -14}).
+        // A place dragged to on 0.1.51 stays where the user left it after the update.
         defaults.set("{107, -14}", forKey: "extensionPopupWindowOffset")
+        let (first, firstFrame) = presentPopup(anchor: anchor)
+        expect(ExtensionPopupWindow.placement(anchor: anchor, width: 300) == NSPoint(x: anchor.x - 300 + 107, y: anchor.y - 14),
+               "a place the user dragged popups to on an earlier Cra is kept after the update")
+        firstFrame.performClose(nil)
+        _ = first
+        // One saved under the key 0.1.52 used (01a099af) comes back too, unless there is an older one.
+        defaults.removeObject(forKey: "extensionPopupWindowOffset")
+        defaults.set("{-20, 30}", forKey: "extensionPopupWindowDragOffset")
+        let (second, secondFrame) = presentPopup(anchor: anchor)
+        expect(ExtensionPopupWindow.placement(anchor: anchor, width: 300) == NSPoint(x: anchor.x - 320, y: anchor.y + 30)
+               && defaults.string(forKey: "extensionPopupWindowDragOffset") == nil,
+               "a place saved under the interim key is moved back to the kept one")
+        secondFrame.performClose(nil)
+        _ = second
+        defaults.removeObject(forKey: "extensionPopupWindowOffset")
+
         let (page, frame) = presentPopup(anchor: anchor)
-        hangsUnder("an offset Cra ≤ 0.1.51 saved is dropped, so the popup hangs under its button again")
+        hangsUnder("with no place saved, the popup hangs under its button")
 
         // The frame carried along with its window: AppKit posts willMove and didMove, with no press on the frame.
         NotificationCenter.default.post(name: NSWindow.willMoveNotification, object: frame)
