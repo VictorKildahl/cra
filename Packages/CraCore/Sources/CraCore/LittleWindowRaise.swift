@@ -16,6 +16,7 @@ public struct StackedWindow: Equatable {
         self.bounds = bounds
     }
 
+    #if os(macOS)
     /// The window server's description of each window, front to back; entries it can't read are left out.
     public static func stack(from info: [[String: Any]]) -> [StackedWindow] {
         info.compactMap { w in
@@ -27,6 +28,7 @@ public struct StackedWindow: Equatable {
             return StackedWindow(number: number, pid: pid, layer: layer, bounds: bounds)
         }
     }
+    #endif
 }
 
 /// A Little Window opened from another app leaves Cra's browser window where it was (#607). Arc's
@@ -41,9 +43,12 @@ public enum LittleWindowRaise {
         return stack[..<i].filter { $0.pid != pid && $0.layer == 0 && $0.bounds.intersects(mine.bounds) }.count
     }
 
+    #if os(macOS)
+    // The window server's list exists only on the Mac (the iPhone app builds CraCore too).
     public static func othersOver(_ number: Int, in info: [[String: Any]], pid: Int32 = getpid()) -> Int {
         othersOver(number, in: StackedWindow.stack(from: info), pid: pid)
     }
+    #endif
 
     /// The other app's normal window just in front of window `number`, over it: the one it goes back
     /// behind once the Little Window is up. Nil when nothing of another app's covers it (it was in
