@@ -1,0 +1,85 @@
+# promise: #622
+# The Tabs menu's rows are enabled only when choosing them would do something (GitHub #622), read as
+# the menu draws them (marks=1: " (off)" after a dimmed row). Arc leaves several enabled with nothing
+# to act on. Home is empty while Work has a pinned tab away from its page: only the focused space
+# counts. Then one Today tab, two, the Create a Space page over them, the second as a Favorite and
+# pinned (Unpin Tab, nothing to reset), Work's pin away from its saved page (Reset all tabs), a Blank
+# Window, and a Little Window in front, which takes these commands and does nothing with them.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+seed sidebar.json {"version": 1, "spaceOrder": ["A6220000-0000-0000-0000-000000000001", "A6220000-0000-0000-0000-000000000002"], "spaces": [{"id": "A6220000-0000-0000-0000-000000000001", "title": "Home", "emoji": "\ud83c\udfe0", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C6220000-0000-0000-0000-000000000011", "pinnedContainerID": "C6220000-0000-0000-0000-000000000012", "todayContainerID": "C6220000-0000-0000-0000-000000000013", "createdAt": "2026-11-19T08:00:00Z"}, {"id": "A6220000-0000-0000-0000-000000000002", "title": "Work", "emoji": "\ud83d\udcbc", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C6220000-0000-0000-0000-000000000021", "pinnedContainerID": "C6220000-0000-0000-0000-000000000022", "todayContainerID": "C6220000-0000-0000-0000-000000000023", "createdAt": "2026-11-19T08:00:00Z"}], "items": [{"id": "C6220000-0000-0000-0000-000000000011", "children": [], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A6220000-0000-0000-0000-000000000001"}}}}}, {"id": "C6220000-0000-0000-0000-000000000012", "children": [], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A6220000-0000-0000-0000-000000000001"}}}}}, {"id": "C6220000-0000-0000-0000-000000000013", "children": [], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A6220000-0000-0000-0000-000000000001"}}}}}, {"id": "C6220000-0000-0000-0000-000000000021", "children": [], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A6220000-0000-0000-0000-000000000002"}}}}}, {"id": "C6220000-0000-0000-0000-000000000022", "children": ["E6220000-0000-0000-0000-000000000002"], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A6220000-0000-0000-0000-000000000002"}}}}}, {"id": "C6220000-0000-0000-0000-000000000023", "children": [], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A6220000-0000-0000-0000-000000000002"}}}}}, {"id": "E6220000-0000-0000-0000-000000000002", "parentID": "C6220000-0000-0000-0000-000000000022", "children": [], "isUnread": false, "createdAt": "2026-11-19T08:00:00Z", "data": {"tab": {"_0": {"url": "http://127.0.0.1/page.html?n=away", "savedURL": "http://127.0.0.1/page.html?n=home", "savedTitle": "Pinned home"}}}}]}
+wait 1
+cra://debug?selectedTab=empty
+expect-log selected tab empty: none
+cra://debug?menuRows=Tabs&label=empty&marks=1
+expect-log menu rows empty: New Tab…\|Pin Tab \(off\)\|New Folder…\|──\|Next Tab \(off\)\|Previous Tab \(off\)\|Reveal Tab in Sidebar \(off\)\|──\|Clear Today \(off\)\|Reset all tabs in this Space \(off\)$
+
+# One Today tab, selected: it can be pinned and revealed, but there's nowhere else to go and nothing
+# Clear Today would archive.
+cra://open?url=${PAGE}?n=one
+expect-log GET \S*\?n=one
+wait 1
+cra://debug?menuRows=Tabs&label=one&marks=1
+expect-log menu rows one: New Tab…\|Pin Tab\|New Folder…\|──\|Next Tab \(off\)\|Previous Tab \(off\)\|Reveal Tab in Sidebar\|──\|Clear Today \(off\)\|Reset all tabs in this Space \(off\)$
+
+# A second Today tab: somewhere to go, and the first can be cleared.
+cra://open?url=${PAGE}?n=two
+expect-log GET \S*\?n=two
+wait 1
+cra://debug?menuRows=Tabs&label=two&marks=1
+expect-log menu rows two: New Tab…\|Pin Tab\|New Folder…\|──\|Next Tab\|Previous Tab\|Reveal Tab in Sidebar\|──\|Clear Today\|Reset all tabs in this Space \(off\)$
+
+# The Create a Space page covers Home: nothing acts on its tabs behind it, from the menu or as an
+# action, and cancelling it finds the same tab selected. With none selected Next Tab would go to the
+# first, two (Today lists the newest first), so one is selected for the check.
+cra://debug?selectTab=n=one
+cra://action/newSpace
+wait 1
+cra://debug?menuRows=Tabs&label=creating&marks=1
+expect-log menu rows creating: New Tab…\|Pin Tab \(off\)\|New Folder… \(off\)\|──\|Next Tab \(off\)\|Previous Tab \(off\)\|Reveal Tab in Sidebar \(off\)\|──\|Clear Today \(off\)\|Reset all tabs in this Space \(off\)$
+cra://action/nextTab
+cra://debug?spaceCreation=cancel
+wait 1
+cra://debug?selectedTab=back
+expect-log selected tab back: \S+\?n=one$
+
+# A Favorite selected: Unpin Tab, which takes it out of Favorites into Today, as ⌘D always has.
+cra://action/favoriteTab
+wait 1
+cra://debug?menuRows=Tabs&label=favorite&marks=1
+expect-log menu rows favorite: New Tab…\|Unpin Tab\|New Folder…\|
+cra://action/pinTab
+wait 1
+cra://debug?menuRows=Tabs&label=unfavorited&marks=1
+expect-log menu rows unfavorited: New Tab…\|Pin Tab\|New Folder…\|
+
+# Pinned, at its saved page: Unpin Tab, and nothing to reset.
+cra://action/pinTab
+wait 1
+cra://debug?menuRows=Tabs&label=pinned&marks=1
+expect-log menu rows pinned: New Tab…\|Unpin Tab\|New Folder…\|──\|Next Tab\|Previous Tab\|Reveal Tab in Sidebar\|──\|Clear Today\|Reset all tabs in this Space \(off\)$
+
+# Work's pinned tab is away from its saved page (it didn't count while Home was focused): there,
+# Reset all tabs in this Space can take it back.
+cra://action/nextSpace
+wait 1
+cra://debug?menuRows=Tabs&label=away&marks=1
+expect-log menu rows away: .*\|Reset all tabs in this Space$
+
+# A Blank Window has no pinned section and no tabs: only New Tab.
+cra://action/newBlankWindow
+wait 2
+cra://debug?menuRows=Tabs&label=blank&marks=1
+expect-log menu rows blank: New Tab…\|Pin Tab \(off\)\|New Folder… \(off\)\|──\|Next Tab \(off\)\|Previous Tab \(off\)\|Reveal Tab in Sidebar \(off\)\|──\|Clear Today \(off\)\|Reset all tabs in this Space \(off\)$
+cra://action/closeWindow
+wait 1
+
+# A Little Window in front takes these commands and does nothing with them; New Folder still makes
+# a folder in the browser window's space.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://debug?littleShown=front
+expect-log little shown front: windows=1
+cra://debug?menuRows=Tabs&label=little&marks=1
+expect-log menu rows little: New Tab…\|Pin Tab \(off\)\|Open in Work\|New Folder…\|──\|Next Tab \(off\)\|Previous Tab \(off\)\|Reveal Tab in Sidebar \(off\)\|──\|Clear Today \(off\)\|Reset all tabs in this Space \(off\)$

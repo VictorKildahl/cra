@@ -566,6 +566,24 @@ final class SidebarStore {
         return tabs(under: space.favoritesContainerID) + tabs(under: space.pinnedContainerID) + tabs(under: space.todayContainerID)
     }
 
+    /// `visibleTabs(in:).count`, counted no further than `limit`: the Tabs menu only needs to know
+    /// whether Next and Previous Tab have somewhere to go (#622), and listing 5,000 tabs took 9 ms
+    /// on every check of the menu.
+    func visibleTabCount(in spaceID: UUID, upTo limit: Int) -> Int {
+        guard let space = spaces[spaceID], limit > 0 else { return 0 }
+        var count = 0
+        func walk(_ id: UUID) -> Bool {
+            for child in items[id]?.children ?? [] {
+                guard let c = items[child] else { continue }
+                if c.isTab { count += 1; if count >= limit { return true } }
+                else if c.isFolder || c.isSplit, walk(c.id) { return true }
+            }
+            return false
+        }
+        _ = [space.favoritesContainerID, space.pinnedContainerID, space.todayContainerID].contains(where: walk)
+        return count
+    }
+
     /// What ⌘1…⌘9 go to, one entry per sidebar item (Arc: "Go to Sidebar Item N"): a split is
     /// one item, opened on the pane focused last as a click on its row does, so a split favorite
     /// takes one number. Folders open or closed list their tabs, as before.
@@ -2630,12 +2648,28 @@ final class SidebarStore {
     /// Arc's Clear on Today (`TodayClear`): the tab each window has on screen in this space and
     /// the tabs in `playing` (the speaker's audible set) stay, with the split or group they're in.
     func clearToday(_ sid: UUID? = nil, playing: Set<UUID>) {
-        guard let space = spaces[sid ?? focusedSpaceID] else { return }
+        archiveTabs(todayClearing(sid, playing: playing), reason: .clear)
+    }
+
+    /// Whether Clear on Today would archive anything now: the Tabs menu dims Clear Today when not
+    /// (#622). It reads Today's rows one at a time and stops at the first Clear would take.
+    func todayHasClearable(_ sid: UUID? = nil, playing: Set<UUID>) -> Bool {
+        guard let space = spaces[sid ?? focusedSpaceID] else { return false }
+        let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
+        let rows = (items[space.todayContainerID]?.children ?? []).lazy.compactMap { self.items[$0] }.map { r in
+            TodayClear.Row(id: r.id, tabs: r.isTab ? [r.id] : self.tabs(under: r.id).map(\.id))
+        }
+        return TodayClear.archivesAny(rows, selected: selected, playing: playing)
+    }
+
+    /// The tabs Clear on Today would archive now.
+    func todayClearing(_ sid: UUID? = nil, playing: Set<UUID>) -> [UUID] {
+        guard let space = spaces[sid ?? focusedSpaceID] else { return [] }
         let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
         let rows = children(of: space.todayContainerID).map { r in
             TodayClear.Row(id: r.id, tabs: r.isTab ? [r.id] : tabs(under: r.id).map(\.id))
         }
-        archiveTabs(TodayClear.archived(rows, selected: selected, playing: playing), reason: .clear)
+        return TodayClear.archived(rows, selected: selected, playing: playing)
     }
 
     /// Today tabs idle longer than the threshold are archived (Arc:

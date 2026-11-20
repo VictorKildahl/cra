@@ -20,4 +20,12 @@ public enum TodayClear {
         let kept = selected.union(playing)
         return rows.filter { $0.tabs.allSatisfy { !kept.contains($0) } }.flatMap(\.tabs)
     }
+
+    /// Whether Clear would archive anything: `archived` isn't empty. It stops at the first row Clear
+    /// would take, so the Tabs menu can dim Clear Today without listing a long Today on every check
+    /// (GitHub #622; 5,000 Today tabs took 7 ms to list).
+    public static func archivesAny<Rows: Sequence>(_ rows: Rows, selected: Set<UUID>, playing: Set<UUID>) -> Bool where Rows.Element == Row {
+        let kept = selected.union(playing)
+        return rows.contains { !$0.tabs.isEmpty && $0.tabs.allSatisfy { !kept.contains($0) } }
+    }
 }

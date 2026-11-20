@@ -97,6 +97,7 @@ enum StoreTests {
         splitIconAndReset()
         numberedSidebarItems()
         clearTodayKeepsSelectedAndPlaying()
+        tabsMenuCountsStopEarly()
         allFoldersExpanded()
         dropIntoFolderGoesOnTop()
         revealInSidebar()
@@ -3565,6 +3566,40 @@ enum StoreTests {
         store.clearToday(sid, playing: [])
         expect(store.children(of: today).map(\.id) == [paneSplit.id], "a split with the selected pane stays whole")
         expect(store.integrityProblems().isEmpty, "the sidebar stays sound")
+    }
+
+    /// The Tabs menu's facts (#622) count tabs only up to what its rules need and stop at the first
+    /// clearable Today row; each answer has to agree with the full lists they stand in for.
+    // promise: #622
+    @MainActor
+    private static func tabsMenuCountsStopEarly() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let sid = store.createSpace(title: "Counts", emoji: "🔢").id
+        let space = store.space(sid)!
+        func agrees(_ label: String, playing: Set<UUID> = []) {
+            let all = store.visibleTabs(in: sid).count
+            for limit in 0...4 {
+                expect(store.visibleTabCount(in: sid, upTo: limit) == min(all, limit), "\(label): \(limit) of \(all) tabs counted")
+            }
+            expect(store.todayHasClearable(sid, playing: playing) == !store.todayClearing(sid, playing: playing).isEmpty,
+                   "\(label): Clear Today's answer is the full list's")
+        }
+        agrees("an empty space")
+        let folder = store.createFolder(named: "Empty", in: space.todayContainerID, index: 0)
+        agrees("a folder with no tabs")
+        let pinned = store.createTab(url: "https://pinned.example/", in: sid, select: false, parent: folder.id, index: 0)
+        agrees("one tab in a folder")
+        let a = store.createTab(url: "https://a.example/", in: sid, select: false, parent: space.todayContainerID, index: 1)
+        let b = store.createTab(url: "https://b.example/", in: sid, select: false, parent: space.todayContainerID, index: 2)
+        let split = store.createSplit(with: [a.id, b.id])!
+        agrees("a split after the folder")
+        store.selectTab(b.id)
+        agrees("the split's pane on screen")
+        agrees("the folder's tab playing", playing: [pinned.id])
+        let shown = store.createTab(url: "https://shown.example/", in: sid, parent: space.todayContainerID, index: 3)
+        agrees("another tab on screen", playing: [pinned.id])
+        expect(store.item(split.id) != nil && store.selectedTabID == shown.id, "set up: the split stays, the last tab is on screen")
+        expect(store.visibleTabCount(in: UUID(), upTo: 2) == 0 && !store.todayHasClearable(UUID(), playing: []), "an unknown space has none")
     }
 
     /// Arc's Shortcuts list: Collapse All Folders / Expand All Folders, nested folders included.
