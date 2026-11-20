@@ -1059,9 +1059,26 @@ final class SidebarStore {
 
     /// What goes to disk: everything but incognito windows' spaces and tabs. Blank Windows'
     /// spaces go too, outside `spaceOrder`.
-    var document: SidebarDocument {
+    var document: SidebarDocument { document(withItems: true) }
+
+    /// What `document` is made of: the same key, the same document, without building its items
+    /// (sync looks every 30 seconds and encodes the sidebar again only when this changed, #615).
+    /// Every item write moves `items.changeCount`; the rest is small and compared as it is.
+    struct DocumentKey: Equatable {
+        var itemChanges: Int
+        var rest: SidebarDocument
+        var incognito: Set<UUID>
+    }
+
+    var documentKey: DocumentKey {
+        DocumentKey(itemChanges: items.changeCount, rest: document(withItems: false), incognito: incognitoSpaceIDs)
+    }
+
+    private func document(withItems: Bool) -> SidebarDocument {
         var hidden = Set<UUID>()
-        for sid in incognitoSpaceIDs { if let s = spaces[sid] { collectSubtree(of: s, into: &hidden) } }
+        if withItems {
+            for sid in incognitoSpaceIDs { if let s = spaces[sid] { collectSubtree(of: s, into: &hidden) } }
+        }
         // A theme still being previewed goes to disk as it was stored.
         let saved = storedThemes.isEmpty ? orderedSpaces : orderedSpaces.map { s in
             var s = s
@@ -1069,8 +1086,8 @@ final class SidebarStore {
             return s
         }
         let blank = blankSpaceIDs.compactMap { spaces[$0] }.sorted { $0.createdAt < $1.createdAt }
-        return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: saved + blank,
-                               items: hidden.isEmpty ? Array(items.values) : items.values.filter { !hidden.contains($0.id) },
+        let kept: [SidebarItem] = !withItems ? [] : hidden.isEmpty ? Array(items.values) : items.values.filter { !hidden.contains($0.id) }
+        return SidebarDocument(version: 1, spaceOrder: spaceOrder, spaces: saved + blank, items: kept,
                                profiles: profiles, profileFavorites: profileFavorites.isEmpty ? nil : profileFavorites)
     }
 

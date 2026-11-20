@@ -20,6 +20,9 @@ public final class ItemTable {
     @ObservationIgnored private var signals: [UUID: ItemSignal] = [:]
     /// Bumped on every change: what a walk over all items observes.
     private var version = 0
+    /// Bumped on every change too, read without observing: the same count means the same items, so
+    /// sync encodes the sidebar again only after a change (#615).
+    @ObservationIgnored public private(set) var changeCount = 0
     @ObservationIgnored private var tabs = 0
 
     public init() {}
@@ -60,6 +63,7 @@ public final class ItemTable {
     public func notify(_ id: UUID) {
         signal(id).version &+= 1
         version &+= 1
+        changeCount &+= 1
     }
 
     private func signal(_ id: UUID) -> ItemSignal {

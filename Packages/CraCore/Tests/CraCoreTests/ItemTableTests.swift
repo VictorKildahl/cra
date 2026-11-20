@@ -25,6 +25,37 @@ struct ItemTableTests {
         #expect(fired.value)
     }
 
+    /// Sync encodes the sidebar again only when this count moved (#615): every write that changes an
+    /// item moves it, a write of the same value doesn't, and reading it is observed by nothing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/615"))
+    func changeCountMovesWithEveryChange() {
+        let table = ItemTable()
+        let a = SidebarItem.tab("https://a.test", parent: nil)
+        let start = table.changeCount
+        table[a.id] = a
+        #expect(table.changeCount != start)
+        var count = table.changeCount
+        table[a.id] = a
+        #expect(table.changeCount == count, "the same value is no change")
+        var titled = a
+        titled.title = "A"
+        table[a.id] = titled
+        #expect(table.changeCount != count, "a title")
+        count = table.changeCount
+        var favicon = titled
+        if case .tab(var t) = favicon.data { t.faviconKey = "other.test"; favicon.data = .tab(t) }
+        table[a.id] = favicon
+        #expect(table.changeCount != count, "a favicon")
+        count = table.changeCount
+        table[a.id] = nil
+        #expect(table.changeCount != count, "a removal")
+
+        let fired = Fired()
+        withObservationTracking { _ = table.changeCount } onChange: { fired.value = true }
+        table[a.id] = a
+        #expect(!fired.value)
+    }
+
     @Test func walksSeeEveryChange() {
         let table = ItemTable()
         let a = SidebarItem.folder("A", parent: nil)

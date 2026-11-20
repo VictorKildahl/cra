@@ -304,6 +304,8 @@ final class SettingsSyncService {
         stateFile.saveNow(state)
         history = SyncHistory()
         historyFile.saveNow(history)
+        local = nil
+        lastDecoded = nil
     }
 
     /// One look: a newer bundle from another Mac is applied, then what changed here is written.
@@ -364,7 +366,7 @@ final class SettingsSyncService {
         let target = Self.bundleFolder(in: picked)
         do {
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            _ = try write(localBundle(), to: target)
+            _ = try write(localFiles().files, to: target)
             return nil
         } catch { return error.localizedDescription }
     }
@@ -416,10 +418,47 @@ final class SettingsSyncService {
         return d
     }()
 
-    private func localBundle() -> Bundle {
+    /// This Mac's bundle, encoded, and what it was made from. A look every 30 seconds used to sort,
+    /// encode and hash the whole sidebar each time, also when nothing had changed (#615): now that
+    /// happens again only when the sidebar, the settings or the shortcuts did.
+    private struct Local {
+        struct Key: Equatable {
+            var document: SidebarStore.DocumentKey
+            var settings: AppSettings
+            var keybindings: Data
+        }
+        var key: Key
+        var bundle: Bundle
+        var files: [String: Data]
+        var hashes: [String: String]
+    }
+    private var local: Local?
+    /// Test hooks (#615): how often this Mac's bundle was encoded, and a folder's sidebar decoded.
+    private(set) var localEncodes = 0
+    private(set) var folderDecodes = 0
+    /// The folder's sidebar and settings last decoded, by their hashes: the same bytes decode the same.
+    private var lastDecoded: (sidebar: String, settings: String, document: SidebarDocument, appSettings: AppSettings)?
+
+    private func localFiles() throws -> Local {
+        let keys = (try? Data(contentsOf: AppPaths.file(SettingsSync.keybindingsName))) ?? Data("{}".utf8)
+        let settings = store.settings.forSync()
+        let key = Local.Key(document: store.documentKey, settings: settings, keybindings: keys)
+        if let local, local.key == key { return local }
         var doc = store.document.forSync()
         // The store keeps items in a dictionary: the same sidebar must encode to the same bytes.
-        doc.items.sort { $0.id.uuidString < $1.id.uuidString }
+        doc.sortItemsForSync()
+        let bundle = Bundle(document: doc, settings: settings, keybindings: keys)
+        let files = try files(of: bundle)
+        localEncodes += 1
+        let made = Local(key: key, bundle: bundle, files: files, hashes: files.mapValues(Self.hash))
+        local = made
+        return made
+    }
+
+    private func localBundle() -> Bundle {
+        if let made = try? localFiles() { return made.bundle }
+        var doc = store.document.forSync()
+        doc.sortItemsForSync()
         let keys = (try? Data(contentsOf: AppPaths.file(SettingsSync.keybindingsName))) ?? Data("{}".utf8)
         return Bundle(document: doc, settings: store.settings.forSync(), keybindings: keys)
     }
@@ -431,8 +470,7 @@ final class SettingsSyncService {
     }
 
     private func localHashes() -> [String: String]? {
-        guard let files = try? files(of: localBundle()) else { return nil }
-        return files.mapValues(Self.hash)
+        (try? localFiles())?.hashes
     }
 
     private static func hash(_ data: Data) -> String {
@@ -442,8 +480,9 @@ final class SettingsSyncService {
     private func writeBundle() {
         guard let folder else { return }
         do {
-            let bundle = localBundle()
-            let manifest = try write(bundle, to: folder, parentIDs: history.ids)
+            let made = try localFiles()
+            let bundle = made.bundle
+            let manifest = try write(made.files, to: folder, parentIDs: history.ids)
             state.lastWritten = manifest
             writtenShape = shape(of: bundle)
             lastSync = manifest.writtenAt
@@ -461,9 +500,8 @@ final class SettingsSyncService {
 
     /// The files first, the manifest last: a reader with a manifest whose hashes match has it all.
     /// Through a file coordinator, so iCloud sees whole files (a plain folder does not mind).
-    private func write(_ bundle: Bundle, to folder: URL, parentIDs: [UUID] = []) throws -> SyncManifest {
+    private func write(_ files: [String: Data], to folder: URL, parentIDs: [UUID] = []) throws -> SyncManifest {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let files = try files(of: bundle)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
                                     id: UUID(), parentIDs: parentIDs)
@@ -520,10 +558,10 @@ final class SettingsSyncService {
         default: manifestState = .missing
         }
         var bundle: Bundle?
-        if let manifest, SettingsSync.isComplete(manifest, hashes: data.mapValues(Self.hash)),
-           let sidebar = data[SettingsSync.sidebarName], let settings = data[SettingsSync.settingsName],
-           let document = try? Self.decoder.decode(SidebarDocument.self, from: sidebar),
-           let appSettings = try? Self.decoder.decode(AppSettings.self, from: settings) {
+        let hashes = data.mapValues(Self.hash)
+        if let manifest, SettingsSync.isComplete(manifest, hashes: hashes),
+           let sidebar = hashes[SettingsSync.sidebarName], let settings = hashes[SettingsSync.settingsName],
+           let (document, appSettings) = decoded(sidebar: sidebar, settings: settings, from: data) {
             bundle = Bundle(document: document, settings: appSettings, keybindings: data[SettingsSync.keybindingsName] ?? Data("{}".utf8))
         }
         let state = SettingsSync.folderState(manifest: manifestState, files: states, readable: bundle != nil)
@@ -533,7 +571,7 @@ final class SettingsSyncService {
         case .arriving where !SettingsSync.isLacking(manifest: manifestState, files: states): return .downloading
         case .newer: return .newer
         case .mixed, .arriving:
-            var files = data.mapValues(Self.hash)
+            var files = hashes
             if let manifestData { files[SettingsSync.manifestName] = Self.hash(manifestData) }
             return .mixed(files, wroteManifest: manifest?.deviceID == deviceID, lacking: state == .arriving)
         case .whole:
@@ -542,11 +580,24 @@ final class SettingsSyncService {
         }
     }
 
+    /// The folder's sidebar and settings, decoded only when their bytes are new: an unchanged
+    /// bundle is decoded once, not at every look (#615).
+    private func decoded(sidebar: String, settings: String, from data: [String: Data]) -> (SidebarDocument, AppSettings)? {
+        if let last = lastDecoded, last.sidebar == sidebar, last.settings == settings { return (last.document, last.appSettings) }
+        guard let sidebarData = data[SettingsSync.sidebarName], let settingsData = data[SettingsSync.settingsName],
+              let document = try? Self.decoder.decode(SidebarDocument.self, from: sidebarData),
+              let appSettings = try? Self.decoder.decode(AppSettings.self, from: settingsData) else { return nil }
+        folderDecodes += 1
+        lastDecoded = (sidebar, settings, document, appSettings)
+        return (document, appSettings)
+    }
+
     /// The `cra://debug?sync=` readout: what the last look found and what this Mac does about it.
     func readout() -> String {
         let since = mixWait.since.map { "\(Int(clock.now.timeIntervalSince($0)))s" } ?? "-"
         return "folder=\(folderState.map { "\($0)" } ?? "-") awaiting=\(awaitingDownload) mixedFor=\(since) asking=\(pendingChoice?.device ?? "-") "
-            + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-")"
+            + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-") "
+            + "encodes=\(localEncodes) decodes=\(folderDecodes)"
     }
 
     /// `merge`: the bundle was written from one this Mac still has (SyncHistory.base), so what changed

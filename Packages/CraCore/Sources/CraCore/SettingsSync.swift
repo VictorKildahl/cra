@@ -54,6 +54,16 @@ public enum SettingsSync {
     /// only a placeholder is not applied; Cra asks iCloud to download it and looks again.
     public static func placeholderName(for name: String) -> String { ".\(name).icloud" }
 
+    /// Whether `a` sorts before `b` as their `uuidString`s do, from their 16 bytes (#615).
+    public static func precedes(_ a: UUID, _ b: UUID) -> Bool {
+        withUnsafeBytes(of: a.uuid) { x in
+            withUnsafeBytes(of: b.uuid) { y in
+                for i in 0..<16 where x[i] != y[i] { return x[i] < y[i] }
+                return false
+            }
+        }
+    }
+
     /// Whether a manifest read from the folder is applied: written by another Mac, by a Cra
     /// that writes a format this one reads, and later than the one applied last.
     public static func shouldApply(remote: SyncManifest, lastApplied: SyncManifest?, deviceID: String) -> Bool {
@@ -207,6 +217,13 @@ public struct SyncBundleSummary: Equatable {
 }
 
 public extension SidebarDocument {
+    /// The items in the order the sync bundle writes them, so the same sidebar encodes to the same
+    /// bytes: by id, the order `uuidString` sorts in. Compared as the id's 16 bytes, which upper-case
+    /// hex keeps in order, with no string made per comparison (#615).
+    mutating func sortItemsForSync() {
+        items.sort { SettingsSync.precedes($0.id, $1.id) }
+    }
+
     /// The sidebar as written to the sync folder: without Blank Windows (#220), which are this
     /// Mac's windows (each holds its own space outside `spaceOrder`, with its tabs).
     func forSync() -> SidebarDocument {

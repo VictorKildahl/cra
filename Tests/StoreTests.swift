@@ -2624,6 +2624,7 @@ enum StoreTests {
         iCloudSync(first: a, firstClock: clockA)
         syncGoesOnWithoutAsking()
         syncWritesSoonAfterAChange()
+        syncLooksWithoutEncodingWhatDidNotChange()
         syncPutsAMixedBundleRight()
         syncPutsAFileThatNeverArrivesRight()
         syncLeavesAMixToItsWriterOnANewMac()
@@ -2819,6 +2820,79 @@ enum StoreTests {
         expect(soon != written, "the bundle is written 3 s after the last change (#598)")
         let sidebar = (try? Data(contentsOf: folder.appendingPathComponent(SettingsSync.folderName).appendingPathComponent(SettingsSync.sidebarName))) ?? Data()
         expect(String(decoding: sidebar, as: UTF8.self).contains("Renamed here, twice"), "with the change in it")
+        sync.disable()
+    }
+
+    // promise: #615
+    /// A look every 30 seconds sorted, encoded and hashed the whole sidebar and decoded the folder's,
+    /// also when nothing had changed: with thousands of tabs, a stall on the main thread twice a
+    /// minute (#615). An idle look now does neither. A title, a favicon, a setting or a shortcut
+    /// changed here still goes up at the next look, encoded once and to the same bytes as before.
+    @MainActor
+    private static func syncLooksWithoutEncodingWhatDidNotChange() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-idle-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let shortcuts = AppPaths.file(SettingsSync.keybindingsName)
+        let shortcutsBefore = try? Data(contentsOf: shortcuts)
+        defer {
+            if let shortcutsBefore { try? shortcutsBefore.write(to: shortcuts) } else { try? FileManager.default.removeItem(at: shortcuts) }
+        }
+        let clock = ManualScheduler()
+        let a = SidebarStore(clock: clock)
+        let tabs = (0..<1_500).map { a.createTab(url: "https://example.com/\($0)").id }
+        let sync = SettingsSyncService(store: a, clock: clock, device: "Studio", deviceID: "studio")
+        expect(sync.enable(folder: folder) == .synced, "sync is on, with this Mac's bundle written")
+        let bundle = folder.appendingPathComponent(SettingsSync.folderName)
+        func files() -> [String: Data] {
+            Dictionary(uniqueKeysWithValues: ([SettingsSync.manifestName] + SettingsSync.fileNames).map {
+                ($0, (try? Data(contentsOf: bundle.appendingPathComponent($0))) ?? Data())
+            })
+        }
+        func sidebarText() -> String { String(decoding: files()[SettingsSync.sidebarName] ?? Data(), as: UTF8.self) }
+
+        // Idle: the first look reads the bundle written; later looks encode and decode nothing.
+        sync.poll()
+        let written = files()
+        let (encodes, decodes) = (sync.localEncodes, sync.folderDecodes)
+        for _ in 0..<3 {
+            clock.advance(by: 30)
+            sync.poll()
+        }
+        expect(sync.localEncodes == encodes, "an idle look encodes nothing (\(sync.localEncodes - encodes) times)")
+        expect(sync.folderDecodes == decodes, "an idle look decodes nothing (\(sync.folderDecodes - decodes) times)")
+        expect(files() == written, "and writes nothing")
+
+        // A title (updateTab moves no revision): written at the next look, encoded once, in the
+        // bytes the bundle always had: pretty-printed, sorted keys, items by id string.
+        a.updateTab(tabs[3], title: "Retitled here")
+        sync.poll()
+        expect(sync.localEncodes == encodes + 1, "one change, one encode (\(sync.localEncodes - encodes))")
+        expect(sidebarText().contains("Retitled here"), "the title goes up")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        var expected = a.document.forSync()
+        expected.items.sort { $0.id.uuidString < $1.id.uuidString }
+        expect(files()[SettingsSync.sidebarName] == (try? encoder.encode(expected)), "the same bytes as before #615")
+        let afterTitle = files()
+        sync.poll()
+        expect(sync.localEncodes == encodes + 1 && files() == afterTitle, "and the look after it is idle again")
+
+        // A favicon, a setting and a shortcut each go up too.
+        a.setFaviconKey(tabs[5], "favicon.example")
+        sync.poll()
+        expect(sidebarText().contains("favicon.example"), "a favicon goes up")
+        a.settings.httpsOnly.toggle()
+        sync.poll()
+        let settingsText = String(decoding: files()[SettingsSync.settingsName] ?? Data(), as: UTF8.self)
+        expect(settingsText.contains("\"httpsOnly\" : \(a.settings.httpsOnly)"), "a setting goes up")
+        try? Data(#"{"shortcuts":{"newTab":[{"key":"y","modifiers":1048576}]}}"#.utf8).write(to: shortcuts)
+        sync.poll()
+        expect(String(decoding: files()[SettingsSync.keybindingsName] ?? Data(), as: UTF8.self).contains("newTab"), "a shortcut goes up")
+        let settled = sync.localEncodes
+        sync.poll()
+        expect(sync.localEncodes == settled, "idle again")
         sync.disable()
     }
 

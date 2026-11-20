@@ -16,6 +16,29 @@ struct SettingsSyncTests {
         #expect(try d.decode(SyncManifest.self, from: e.encode(m)) == m)
     }
 
+    /// The bundle's items are sorted by their ids' bytes, no longer by `uuidString` (a string made on
+    /// every comparison, ~50 ms at 5,000 tabs): the order, and so the bytes written, stay the same.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/615"))
+    func itemsSortAsTheirIDStringsDo() {
+        var ids = (0..<2_000).map { _ in UUID() }
+        // Ids that differ only late, or only in a digit against a letter, as hex sorts them.
+        ids += ["00000000-0000-0000-0000-000000000009", "00000000-0000-0000-0000-00000000000A",
+                "00000000-0000-0000-0000-0000000000A0", "90000000-0000-0000-0000-000000000000",
+                "A0000000-0000-0000-0000-000000000000", "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"].map { UUID(uuidString: $0)! }
+        ids.append(ids[7])
+        #expect(ids.sorted { SettingsSync.precedes($0, $1) } == ids.sorted { $0.uuidString < $1.uuidString })
+        #expect(!SettingsSync.precedes(ids[7], ids[7]))
+
+        var doc = SidebarDocument(spaceOrder: [], spaces: [], items: ids.prefix(300).map { id in
+            var item = SidebarItem.tab("https://example.com/\(id)", parent: nil)
+            item.id = id
+            return item
+        })
+        let byString = doc.items.sorted { $0.id.uuidString < $1.id.uuidString }
+        doc.sortItemsForSync()
+        #expect(doc.items == byString)
+    }
+
     @Test func aMacNeverAppliesItsOwnWrite() {
         #expect(!SettingsSync.shouldApply(remote: manifest("Studio"), lastApplied: nil, deviceID: "id-Studio"))
         #expect(SettingsSync.shouldApply(remote: manifest("Studio"), lastApplied: nil, deviceID: "id-MacBook"))

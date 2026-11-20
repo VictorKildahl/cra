@@ -1317,6 +1317,9 @@
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
 #614   Tests/Scenarios/command-bar-whole-archive.scenario  757726fdd663
 #614   Tests/StoreTests.swift::clearTodayArchivesInOnePass  6edf309ca7f0
+#615   Packages/CraCore/Tests/CraCoreTests/ItemTableTests.swift::changeCountMovesWithEveryChange  64667fc9f401
+#615   Packages/CraCore/Tests/CraCoreTests/SettingsSyncTests.swift::itemsSortAsTheirIDStringsDo  107ca5ba873e
+#615   Tests/StoreTests.swift::syncLooksWithoutEncodingWhatDidNotChange  87c81cb16c92
 #616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::aWindowKeepsItsLatestSleptPages  318f272da9bc
 #616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::theTimerAsksSixteenPagesAPass  d199ebf2a55d
 #616   Tests/BrowserManagerLifecycleTests.swift::sleptPagesBudgetCase  57eaa6cdf655
