@@ -1,0 +1,34 @@
+# promise: #645
+# Add Split View, then an open tab picked in the command bar: the tab comes into the split in the new
+# pane's place, as in Arc. Cra switched to the tab and left the empty pane behind (GitHub #645).
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=left
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=${PAGE}?n=right
+wait 2
+cra://action/addSplitView
+wait 1
+cra://commandbar?query=n%3Dleft
+wait 1
+cra://debug?commandBarRows=pick
+expect-log Cra command bar rows pick: open=1 mode=newTab .*tab:\S*n=left
+cra://debug?commandBarPick=n=left
+expect-log command bar pick n=left: tab
+wait 1.5
+cra://debug?split=joined
+expect-log split joined: panes=\S*n=right \| \S*n=left selected=\S*n=left
+
+# A tab already in the split: it is selected, and the new empty pane goes.
+cra://action/addSplitView
+wait 1
+cra://commandbar?query=n%3Dright
+wait 1
+cra://debug?commandBarRows=again
+expect-log Cra command bar rows again: open=1 mode=newTab .*tab:\S*n=right
+cra://debug?commandBarPick=n=right
+expect-log command bar pick n=right: tab
+wait 1.5
+cra://debug?split=selected
+expect-log split selected: panes=\S*n=right \| \S*n=left selected=\S*n=right

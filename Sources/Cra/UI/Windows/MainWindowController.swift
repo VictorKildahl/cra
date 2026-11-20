@@ -1210,6 +1210,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.selectTab(split.flatMap { store.paneID(for: id, in: $0) } ?? id, window: windowID)
     }
 
+    /// An open tab picked for Add Split View's empty pane (#645): it takes that pane's place, as a tab
+    /// dropped on a pane does, and is the open pane. A pinned tab stays where it is and a copy joins.
+    private func fillEmptyPane(_ empty: UUID, with id: UUID) {
+        guard let split = store.splitContaining(empty), let index = store.item(split.id)?.children.firstIndex(of: empty) else {
+            store.selectTab(id, window: windowID)
+            return
+        }
+        store.addToSplit(split.id, tabID: id, at: index, replacing: empty)
+        guard let joined = store.splitContaining(empty), let pane = store.paneID(for: id, in: joined) else {
+            store.selectTab(id, window: windowID)
+            return
+        }
+        store.selectTab(pane, window: windowID)
+        closeSplitPane(empty)
+    }
+
     /// Arc's "Close this Split Pane" (⌃⇧-): the pane's tab closes like any tab;
     /// the split keeps the other panes. A pinned split's pane leaves it (closing it
     /// would only unload the whole split).
@@ -5170,7 +5186,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         switch s.kind {
         case .switchToTab(let id):
             store.recordQuerySelection(query: query, url: s.url ?? "")
-            store.selectTab(id, window: windowID)
+            // Filling Add Split View's new pane, an open tab comes into the split, as in Arc (#645).
+            let empty = selectedTab?.isEmptyTab == true ? selectedTabID : nil
+            let sameProfile = empty.map { store.profileDirectoryName(item: $0) == store.profileDirectoryName(item: id) } ?? false
+            switch SplitPanePick.of(picked: id, emptyPane: empty, panes: empty.map { store.paneTabIDs(for: $0) } ?? [], sameProfile: sameProfile) {
+            case .switchTo:
+                store.selectTab(id, window: windowID)
+            case .selectPane(let empty):
+                store.selectTab(id, window: windowID)
+                closeSplitPane(empty)
+            case .join(let empty):
+                fillEmptyPane(empty, with: id)
+            }
         case .archived(let id):
             store.restoreArchived(id)
         case .navigate:

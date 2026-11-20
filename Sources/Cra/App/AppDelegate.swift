@@ -1971,6 +1971,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // (the title when it has none), so a scenario reads which tabs ⌘T found (#307), with its
             // mode and the selected row (#379, #382). An open Little Window's or Peek's bar gets a line
             // of its own ("<label> peek:").
+            // commandBarPick=<text>: the browser window's open bar commits its first row whose address holds
+            // <text>, as ↩ on that row does (#645); logs the row's kind.
+            if let text = dict["commandBarPick"] {
+                guard let row = main.commandBar.result.items.first(where: { $0.url?.contains(text) == true }) else {
+                    CraLog.note("command bar pick \(text): none in \(main.commandBar.result.items.count) rows"); return
+                }
+                if case .switchToTab = row.kind { CraLog.note("command bar pick \(text): tab") } else { CraLog.note("command bar pick \(text): other") }
+                main.commandBar.commit(row)
+                return
+            }
             if let label = dict["commandBarRows"] {
                 func line(_ name: String, _ bar: CommandBarController) {
                     let rows = bar.result.items.map { row -> String in
