@@ -1387,6 +1387,7 @@
 #636   Packages/CraCore/Tests/CraCoreTests/PageFullscreenWindowTests.swift::theUserLeavingFirstForgetsThePage  3d0074797d11
 #636   Tests/BrowserManagerLifecycleTests.swift::fullscreenTabClosedCase  590ed2927628
 #636   Tests/Scenarios/page-fullscreen-close-tab.scenario  f5f69eafd931
+#641   Tests/Scenarios/little-window-click-raises.scenario  a03c24fccffe
 #644   Packages/CraCore/Tests/CraCoreTests/FileMenuTests.swift::closeTabClosesWhatIsInFront  d4c48a307105
 #644   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::newWindowsTakeTheLastSidebarChoice  0e56b30dc90f
 #644   Tests/Scenarios/new-window-sidebar.scenario  76fa0c958937
@@ -1394,6 +1395,9 @@
 #645   Packages/CraCore/Tests/CraCoreTests/SplitPanePickTests.swift::aTabAlreadyInTheSplitIsSelectedAndTheEmptyPaneGoes  987c6354b097
 #645   Packages/CraCore/Tests/CraCoreTests/SplitPanePickTests.swift::anOpenTabTakesTheEmptyPanesPlace  1818ce3ad167
 #645   Tests/Scenarios/split-add-open-tab.scenario  822c0891043c
+#646   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::aCloseInTheBackgroundMovesNothingForward  bc046d4ede1f
+#646   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::theNextLittleWindowTakesTheKeyboardNotTheApp  846a91b7ac79
+#646   Tests/Scenarios/little-window-close-next.scenario  e56b9ac7f111
 #647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aPickedTabMovesToTheNewestEnd  d64f90ed30eb
 #647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::archivingAPopupReturnsToItsOpener  c28451ef2820
 #647   iOS/CraUITests/TabOrderTests.swift::testAPickedTabMovesToTheEndOfTheRow  9332f7345e40

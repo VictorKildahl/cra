@@ -1757,6 +1757,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleKey=<n>: the nth Little Window (oldest first) picked as Mission Control picks one (#581);
             // littleOrder=<label>: Cra's browser and Little Windows, front to back, as the window server has them.
             if let n = dict["littleKey"].flatMap(Int.init), littleWindows.indices.contains(n) { littleWindows[n].debugPick(); return }
+            // littleFocus=<label> (#646, #641): whether Cra is the active app, which Little Window (oldest first) has
+            // the keys, and how many other apps' windows are over the newest one.
+            if let label = dict["littleFocus"] {
+                var key = NSApp.keyWindow
+                while let parent = key?.parent { key = parent }
+                let lw = littleWindows.filter { !$0.isPeek }
+                let i = lw.firstIndex { $0.window === key }
+                let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+                let over = lw.last?.window.map { String(LittleWindowRaise.othersOver($0.windowNumber, in: info)) } ?? "-"
+                CraLog.note("little focus \(label): active=\(NSApp.isActive ? 1 : 0) key=\(i.map { "little\($0)" } ?? "none") over=\(over) windows=\(lw.count)")
+                return
+            }
             if let label = dict["littleOrder"] {
                 var names: [Int: String] = [:]
                 for (i, m) in mainWindows.enumerated() { if let w = m.window { names[w.windowNumber] = "main\(i)" } }

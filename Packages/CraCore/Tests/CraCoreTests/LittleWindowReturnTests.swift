@@ -79,3 +79,29 @@ struct LittleWindowReturnTests {
         #expect(history.returnApp(at: Self.t0 + 62 + FrontmostAppHistory.linkGrace + 0.1) == nil)
     }
 }
+
+/// #646: ⌘W on one of several Little Windows opened from another app.
+struct LittleWindowCloseNextTests {
+    static let slack: Int32 = 501
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/646"))
+    func theNextLittleWindowTakesTheKeyboardNotTheApp() {
+        var back = LittleWindowReturn(app: Self.slack)
+        back.littleWindowBecameKey()
+        // Two more are open: Slack stays where it is, and the front one of them takes the keyboard.
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false, littleWindowsLeft: true) == nil)
+        #expect(LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: true, craActive: true, movedToTab: false, littleWindowsLeft: true))
+        // The last one closes back to Slack (#430).
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false, littleWindowsLeft: false) == Self.slack)
+        #expect(!LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: true, craActive: true, movedToTab: false, littleWindowsLeft: false))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/646"))
+    func aCloseInTheBackgroundMovesNothingForward() {
+        // An idle archive or a close while another app is in front: no window is raised.
+        #expect(!LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: false, craActive: true, movedToTab: false, littleWindowsLeft: true))
+        #expect(!LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: true, craActive: false, movedToTab: false, littleWindowsLeft: true))
+        // Moved into a tab: the browser window is in use.
+        #expect(!LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: true, craActive: true, movedToTab: true, littleWindowsLeft: true))
+    }
+}

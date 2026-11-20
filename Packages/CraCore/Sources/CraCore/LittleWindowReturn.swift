@@ -67,8 +67,17 @@ public struct LittleWindowReturn: Equatable {
     /// The app to bring forward as the window closes: only when it had the keyboard and Cra was
     /// in front (not an idle archive, a quit or a close in the background), and not when its page
     /// moved into a tab of the browser window, which is then what's in use.
-    public func target(closingKeyWindow: Bool, craActive: Bool, movedToTab: Bool) -> Int32? {
-        guard closingKeyWindow, craActive, !movedToTab else { return nil }
+    /// `littleWindowsLeft`: other Little Windows are still open. As in Arc, the front one of them takes
+    /// the keyboard, so ⌘W can close it next, and the app comes back only after the last (#646). Bringing
+    /// the app forward put it over all of them.
+    public func target(closingKeyWindow: Bool, craActive: Bool, movedToTab: Bool, littleWindowsLeft: Bool = false) -> Int32? {
+        guard closingKeyWindow, craActive, !movedToTab, !littleWindowsLeft else { return nil }
         return app
+    }
+
+    /// Whether the Little Window in front takes the keyboard as `closing` goes (#646): it had the
+    /// keyboard while Cra was in front, and its page didn't move into a tab (the browser window has it then).
+    public static func nextTakesKeyboard(closingKeyWindow: Bool, craActive: Bool, movedToTab: Bool, littleWindowsLeft: Bool) -> Bool {
+        closingKeyWindow && craActive && !movedToTab && littleWindowsLeft
     }
 }

@@ -1,0 +1,27 @@
+# promise: #641
+# A Little Window behind another app's window (`cover`, as Slack in the report) comes to the front when it is
+# clicked, as in Arc. It is a non-activating panel: macOS let the click through without letting Cra come
+# forward, and the window stayed behind the other app (GitHub #641).
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+# The other app comes back over it.
+cra://debug?yieldTo=${COVER}
+wait 1.5
+cra://debug?littleFocus=covered
+expect-log little focus covered: active=0 key=none over=[1-9] windows=1
+cra://debug?clickAt=200,120&target=little
+wait 1.5
+cra://debug?littleFocus=clicked
+expect-log little focus clicked: active=\d key=\S+ over=0 windows=1

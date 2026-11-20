@@ -1,0 +1,35 @@
+# promise: #646
+# Two Little Windows opened by links from another app (`cover`, as Slack in the report). ⌘W on the front one
+# gives the keyboard to the other, which stays in front, as in Arc. Cra brought the app the window was opened
+# over forward instead (#430), and it came over every Little Window still open (GitHub #646).
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=one
+wait 2
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=two
+wait 2
+cra://debug?littleFocus=open
+expect-log little focus open: active=1 key=little1 over=0 windows=2
+
+cra://action/closeTab
+wait 1.5
+cra://debug?littleFocus=closed
+expect-log little focus closed: active=1 key=little0 over=0 windows=1
+# The last one closes back to the app it was opened over (#430).
+cra://action/closeTab
+wait 1.5
+cra://debug?littleFocus=last
+expect-log little focus last: active=0 key=none over=- windows=0
