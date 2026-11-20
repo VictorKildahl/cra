@@ -104,6 +104,7 @@ enum EaselCanvasTests {
         objectsAndHistory(sheet, window) { makeMouse($0, $1, clicks: $2) }
         drawingAndMenus(window)
         longText()
+        severalItems()
         window.close()
         print("Easel canvas: selection, movement, editing and deletion passed")
     }
@@ -149,6 +150,122 @@ enum EaselCanvasTests {
         frame = sheet.document.items[0].frame
         precondition(frame.width == 560 && frame.height > 2 * 27, "past 560 pt the text wraps and the box grows down: \(frame)")
         print("Easel canvas: long text widens, wraps and takes Return (#580)")
+    }
+
+    // promise: #580
+    /// Picking several items as on the rest of the Mac (#580): ⌘- and ⇧-click add and remove, a drag from
+    /// empty canvas draws a box that picks what it touches, and the picked items move, snap, colour,
+    /// layer, duplicate, copy, paste, delete and undo together. ⌘A picks them all.
+    @MainActor
+    static func severalItems() {
+        let saved = NSPasteboard.general.pasteboardItems?.map { item -> NSPasteboardItem in
+            let copy = NSPasteboardItem()
+            for t in item.types { if let d = item.data(forType: t) { copy.setData(d, forType: t) } }
+            return copy
+        } ?? []
+        defer { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects(saved) }
+        let a = Easel.Item(kind: .rectangle, frame: .init(x: 100, y: 150, width: 100, height: 100))
+        let b = Easel.Item(kind: .ellipse, frame: .init(x: 300, y: 150, width: 100, height: 100))
+        let t = Easel.Item(kind: .text("Note", size: 18), frame: .init(x: 100, y: 450, width: 240, height: 27))
+        let sheet = EaselSheetView(document: Easel(items: [a, b, t]))
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = sheet
+        sheet.layoutSubtreeIfNeeded()
+        defer { window.close() }
+        let field = sheet.subviews.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == t.id.uuidString }!
+        func event(_ type: NSEvent.EventType, _ p: NSPoint, _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: sheet.convert(p, to: nil), modifierFlags: flags, timestamp: 1,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+        }
+        func click(_ p: NSPoint, _ flags: NSEvent.ModifierFlags = []) {
+            sheet.mouseDown(with: event(.leftMouseDown, p, flags))
+            sheet.mouseUp(with: event(.leftMouseUp, p, flags))
+        }
+        func drag(_ from: NSPoint, _ to: NSPoint, _ flags: NSEvent.ModifierFlags = [], check: () -> Void = {}) {
+            sheet.mouseDown(with: event(.leftMouseDown, from, flags))
+            sheet.mouseDragged(with: event(.leftMouseDragged, NSPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2), flags))
+            sheet.mouseDragged(with: event(.leftMouseDragged, to, flags))
+            check()
+            sheet.mouseUp(with: event(.leftMouseUp, to, flags))
+        }
+        func frame(_ id: UUID) -> Easel.Rect { sheet.document.items.first { $0.id == id }!.frame }
+
+        click(NSPoint(x: 150, y: 200))
+        precondition(sheet.picked == [a.id], "a click picks one item")
+        click(NSPoint(x: 350, y: 200), .command)
+        precondition(sheet.picked == [a.id, b.id], "⌘-click adds an item to the picks")
+        click(NSPoint(x: 150, y: 200), .shift)
+        precondition(sheet.picked == [b.id], "⇧-click takes a picked item out")
+        click(NSPoint(x: 150, y: 200), .shift)
+        precondition(sheet.picked == [b.id, a.id], "⇧-click adds it back")
+        precondition(!sheet.colorPicker.isHidden, "two shapes show the colour picker")
+        sheet.setShade(.purple)
+        precondition(sheet.document.items[0].shade == .purple && sheet.document.items[1].shade == .purple, "a colour goes to every picked shape")
+
+        // Dragging one of them moves both by the same amount; the text box stays.
+        drag(NSPoint(x: 150, y: 200), NSPoint(x: 170, y: 230))
+        precondition(frame(a.id) == .init(x: 120, y: 180, width: 100, height: 100) && frame(b.id) == .init(x: 320, y: 180, width: 100, height: 100),
+                     "the picked items move together: \(frame(a.id)) \(frame(b.id))")
+        precondition(frame(t.id) == t.frame && sheet.picked == [b.id, a.id], "the others stay, and the group stays picked")
+        sheet.undo(nil)
+        precondition(frame(a.id) == a.frame && frame(b.id) == b.frame, "one Undo puts the whole group back")
+        // The group snaps as one box: its left edge 4 pt off the text box's lands on it.
+        drag(NSPoint(x: 150, y: 200), NSPoint(x: 154, y: 200))
+        precondition(frame(a.id).x == 100 && frame(b.id).x == 300, "the group snaps onto the text box's left edge")
+
+        // A plain click on one of the group, without dragging, picks it alone.
+        click(NSPoint(x: 350, y: 200))
+        precondition(sheet.picked == [b.id], "a click on one picked item, let go, picks it alone")
+
+        // A drag from empty canvas draws a box; the items it touches are picked as it grows.
+        drag(NSPoint(x: 60, y: 120), NSPoint(x: 320, y: 300)) {
+            precondition(sheet.band == Easel.Rect(x: 60, y: 120, width: 260, height: 180), "the drag draws the box it spans")
+            precondition(sheet.picked == [a.id, b.id], "the box picks every item it touches: \(sheet.picked)")
+        }
+        precondition(sheet.band == nil && sheet.picked == [a.id, b.id], "letting go keeps the picks and drops the box")
+        precondition(frame(a.id) == a.frame, "drawing the box moves nothing")
+        // ⌘ held: the box's items flip in the picks from before.
+        drag(NSPoint(x: 60, y: 420), NSPoint(x: 160, y: 500), .command)
+        precondition(sheet.picked == [a.id, b.id, t.id], "a ⌘-drag box adds what it touches")
+        precondition(sheet.colorPicker.isHidden, "a text box among the picks hides the colour picker")
+        click(NSPoint(x: 700, y: 600))
+        precondition(sheet.picked.isEmpty, "a click on empty canvas picks nothing")
+        precondition(window.makeFirstResponder(sheet) && NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: sheet, from: nil),
+                     "Select All reaches the canvas")
+        precondition(sheet.picked == [a.id, b.id, t.id], "⌘A picks every item")
+
+        // The object menu acts on the whole group.
+        click(NSPoint(x: 700, y: 600))
+        click(NSPoint(x: 150, y: 200)); click(NSPoint(x: 350, y: 200), .command)
+        let menu = sheet.menu(for: event(.rightMouseDown, NSPoint(x: 150, y: 200)))!
+        precondition(sheet.picked == [a.id, b.id], "a right click on a picked item keeps the group")
+        precondition(menu.items.map(\.title) == ["Bring to Front", "Send to Back", "Delete", "", "Cut", "Copy", "Paste", "", "Duplicate"],
+                     "the group's menu: \(menu.items.map(\.title))")
+        let front = menu.items.first { $0.title == "Bring to Front" }!
+        _ = front.target?.perform(front.action, with: front)
+        precondition(sheet.document.items.map(\.id) == [t.id, a.id, b.id], "Bring to Front lifts the group, in its order")
+
+        // Duplicate, copy and paste, and Delete work on every picked item.
+        sheet.duplicateSelected()
+        precondition(sheet.document.items.count == 5 && sheet.picked.count == 2 && !sheet.picked.contains(a.id), "Duplicate copies each picked item and picks the copies")
+        precondition(frame(sheet.picked[0]) == a.frame.offset(by: .init(20, 20)), "each copy sits 20 pt down and right of its original")
+        let delete = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 2, windowNumber: window.windowNumber,
+                                      context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 51)!
+        sheet.keyDown(with: delete)
+        precondition(sheet.document.items.map(\.id) == [t.id, a.id, b.id] && sheet.picked.isEmpty, "Delete removes every picked item")
+        click(NSPoint(x: 150, y: 200)); click(NSPoint(x: 150, y: 460), .command)
+        precondition(sheet.picked == [a.id, t.id], "a text box can join the picks")
+        sheet.copy(nil)
+        sheet.paste(nil)
+        let pasted = sheet.picked
+        precondition(sheet.document.items.count == 5 && pasted.count == 2 && !pasted.contains(a.id), "paste adds every copied item and picks them")
+        let pastedText = sheet.document.items.first { pasted.contains($0.id) && $0.kind == t.kind }!
+        precondition(sheet.subviews.contains { ($0 as? NSTextField)?.identifier?.rawValue == pastedText.id.uuidString && $0 !== field },
+                     "the pasted text box gets its own field")
+        sheet.cut(nil)
+        precondition(sheet.document.items.count == 3 && sheet.picked.isEmpty, "Cut removes every picked item")
+        print("Easel canvas: several items picked, moved, layered, copied and deleted together (#580)")
     }
 
     /// Every kind of item drawn as Arc draws it (pixels checked), the picker's colours, the canvas menu,

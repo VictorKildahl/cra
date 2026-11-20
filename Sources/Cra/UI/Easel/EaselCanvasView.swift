@@ -141,7 +141,26 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     var onToolKey: (Easel.Tool) -> Void = { _ in }
     private let title = EaselTextField()
     private var texts: [UUID: NSTextField] = [:]
-    private var selected: UUID? { didSet { if selected != nil { titlePicked = false }; needsDisplay = true; placeSizePill(); window?.invalidateCursorRects(for: self) } }
+    /// The picked items, in the order they were picked (#580: ⌘- or ⇧-click and the drag box pick several).
+    private(set) var picked: [UUID] = [] {
+        didSet {
+            guard picked != oldValue else { return }
+            if !picked.isEmpty { titlePicked = false }
+            needsDisplay = true; placeSizePill(); window?.invalidateCursorRects(for: self)
+        }
+    }
+    /// The one picked item, when only one is: it alone shows corner handles, the size pill and a live page.
+    private var selected: UUID? {
+        get { picked.count == 1 ? picked[0] : nil }
+        set { picked = newValue.map { [$0] } ?? [] }
+    }
+    /// The box being drawn from empty canvas, and the picks from before it (#580).
+    private(set) var band: Easel.Rect?
+    private var bandBefore: [UUID] = []
+    /// ⌘ or ⇧ was held when the drag started.
+    private var extending = false
+    /// A plain click on an item of a picked group: it alone is picked if the click doesn't become a drag.
+    private var soloOnUp: UUID?
     /// A corner of the picked item being dragged (Arc's AspectRatioControlPoints).
     private var resizing: (corner: Easel.Corner, from: Easel.Rect)?
     /// The title box is being typed in: the pill acts on it.
@@ -263,7 +282,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         }
         if title.stringValue != easel.title, easel.title != "Untitled Easel" || !title.stringValue.isEmpty { title.stringValue = easel.title }
         title.font = Self.font(easel.titleStyle, size: easel.titleSize ?? 34, title: true)
-        if let id = selected, !ids.contains(id) { selected = nil }
+        picked = picked.filter(ids.contains)
         placeSizePill()
         needsDisplay = true
         onChange(document)
@@ -284,7 +303,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     override func draw(_ dirtyRect: NSRect) {
         for item in document.items + [preview].compactMap({ $0 }) { draw(item) }
         if stroke.count > 1, let s = Easel.freehand(stroke) { draw(s) }
-        if let id = selected, let item = document.items.first(where: { $0.id == id }) {
+        for item in document.items where picked.contains(item.id) {
             if Easel.resizes(item.kind) {
                 // Arc 1.172.1: a square 2 pt outline on the item's edge (#7FB8D6) and, at each corner,
                 // a 7.5 pt ring of it round a 3 pt dark dot (8 Nov 2026, 2x stills).
@@ -293,6 +312,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
                 let path = NSBezierPath(rect: r.insetBy(dx: -1, dy: -1))
                 path.lineWidth = 2
                 path.stroke()
+                // Corner handles only when it is picked alone: a group doesn't resize.
+                guard picked.count == 1 else { continue }
                 for c in [NSPoint(x: r.minX, y: r.minY), NSPoint(x: r.maxX, y: r.minY), NSPoint(x: r.minX, y: r.maxY), NSPoint(x: r.maxX, y: r.maxY)] {
                     Self.arcSelection.setFill()
                     NSBezierPath(ovalIn: NSRect(x: c.x - 3.75, y: c.y - 3.75, width: 7.5, height: 7.5)).fill()
@@ -312,6 +333,16 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
                 path.lineWidth = 2
                 path.stroke()
             }
+        }
+        // The selection box a drag from empty canvas draws (#580), as Finder's: a light fill, a thin edge.
+        if let band {
+            let r = rect(band)
+            Self.arcSelection.withAlphaComponent(0.15).setFill()
+            r.fill()
+            Self.arcSelection.withAlphaComponent(0.8).setStroke()
+            let edge = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
+            edge.lineWidth = 1
+            edge.stroke()
         }
         // Arc's alignment guides: a thin line along the edge a moving item shares.
         Self.arcSelection.setStroke()
@@ -405,14 +436,32 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         dragStart = p
         dragLast = p
         dragBefore = nil
+        band = nil
+        soloOnUp = nil
         switch tool {
         case .pointer:
+            // ⌘ or ⇧ adds the clicked item to the picks or takes it out, as everywhere on the Mac (#580).
+            extending = !event.modifierFlags.isDisjoint(with: [.command, .shift])
+            let hit = document.item(at: p)
+            if extending {
+                picked = Easel.picked(picked, click: hit?.id, extend: true)
+                if hit == nil { band = Easel.Rect(from: p, to: p); bandBefore = picked }
+                // An item just taken out isn't dragged.
+                if let hit, !picked.contains(hit.id) { dragStart = nil }
+                return
+            }
             // A corner of the picked picture or shape resizes it; anywhere else picks (and moves).
             if let item = item(selected), Easel.resizes(item.kind), let corner = Easel.corner(of: item.frame, at: p) {
                 resizing = (corner, item.frame)
                 return
             }
-            let hit = document.item(at: p)
+            // Empty canvas starts a selection box.
+            if hit == nil {
+                picked = []
+                band = Easel.Rect(from: p, to: p)
+                bandBefore = []
+                return
+            }
             // A capture's ↗ chip opens its page (Arc's hover bar).
             if let hit, case .capture(let c) = hit.kind, hovered == hit.id, EaselCards.chipRect(in: rect(hit.frame)).contains(NSPoint(x: p.x, y: p.y)) {
                 EaselHooks.openURL?(c.url)
@@ -433,8 +482,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
                     live.click(at: .init((p.x - f.x) * k, (p.y - f.y) * k)) { EaselHooks.openURL?($0) }
                 }
             }
-            selected = hit?.id
+            // A click on an item of a picked group keeps the group, to drag it; let go without a drag
+            // and that item is picked alone.
+            if let hit, picked.count > 1, picked.contains(hit.id), event.clickCount == 1 { soloOnUp = hit.id }
+            picked = Easel.picked(picked, click: hit?.id, extend: false)
             if event.clickCount == 2, let hit {
+                selected = hit.id
                 dragStart = nil
                 dragLast = nil
                 if let field = texts[hit.id] { field.selectText(nil) }
@@ -465,27 +518,31 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         dragLast = p
         switch tool {
         case .pointer:
-            guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }) else { return }
+            _ = last
+            // The selection box: the items it touches are picked as it grows (#580).
+            if band != nil {
+                band = Easel.Rect(from: start, to: p)
+                picked = Easel.picked(bandBefore, band: document.touching(band!), extend: extending)
+                needsDisplay = true
+                return
+            }
+            guard !picked.isEmpty else { return }
+            soloOnUp = nil
             if dragBefore == nil { dragBefore = document }
-            if let r = resizing {
+            if let r = resizing, let id = selected, let i = document.items.firstIndex(where: { $0.id == id }) {
                 let keep = Easel.keepsRatio(document.items[i].kind) || event.modifierFlags.contains(.shift)
                 document.items[i].frame = Easel.resized(r.from, corner: r.corner, to: p, keepRatio: keep)
                 needsDisplay = true
                 return
             }
-            // Where the drag puts it, then onto its neighbours' edges (Use Alignment Guides).
-            let from = dragBefore?.items.first { $0.id == id } ?? document.items[i]
-            var moved = from.moved(by: .init(p.x - start.x, p.y - start.y))
-            guides = []
-            if Self.usesGuides, !event.modifierFlags.contains(.command) {
-                let others = document.items.filter { $0.id != id }.map(\.frame)
-                let snap = Easel.snapped(moved.frame, to: others)
-                moved = moved.moved(by: .init(snap.frame.x - moved.frame.x, snap.frame.y - moved.frame.y))
-                guides = snap.guides
-            }
-            document.items[i] = moved
-            _ = last
-            texts[id]?.frame = rect(document.items[i].frame)
+            // Where the drag puts the picked items, then onto their neighbours' edges as one box (Use
+            // Alignment Guides; ⌘ held doesn't snap).
+            guard let before = dragBefore else { return }
+            let snap = Self.usesGuides && !event.modifierFlags.contains(.command)
+            let moved = before.moving(picked, by: .init(p.x - start.x, p.y - start.y), snap: snap)
+            document = moved.easel
+            guides = moved.guides
+            for id in picked { if let item = item(id) { texts[id]?.frame = rect(item.frame) } }
             placeSizePill()
             needsDisplay = true
         case .freehand:
@@ -498,9 +555,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil; dragLast = nil; preview = nil; stroke = []; resizing = nil; dragBefore = nil; guides = [] }
+        defer { dragStart = nil; dragLast = nil; preview = nil; stroke = []; resizing = nil; dragBefore = nil; guides = []; band = nil; soloOnUp = nil }
         switch tool {
         case .pointer:
+            if let solo = soloOnUp, dragBefore == nil { selected = solo }
             if let before = dragBefore, before != document {
                 history.record(before, resizing == nil ? "Move" : "Resize")
                 onChange(document)
@@ -542,10 +600,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     override func mouseExited(with event: NSEvent) { hovered = nil }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 51 || event.keyCode == 117, selected != nil {  // Delete, Forward Delete
+        if event.keyCode == 51 || event.keyCode == 117, !picked.isEmpty {  // Delete, Forward Delete
             deleteSelected()
         } else if event.keyCode == 53 {
-            selected = nil
+            picked = []
             // Arc: Escape with a tool in hand goes back to the pointer.
             if tool != .pointer { onToolKey(.pointer) }
         } else if let picked = Easel.Tool.picked(byKey: event.charactersIgnoringModifiers ?? "",
@@ -567,10 +625,17 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     func deleteSelected() {
-        guard let id = selected else { return }
-        texts.removeValue(forKey: id)?.removeFromSuperview()
-        selected = nil
-        commit("Delete") { $0.items.removeAll { $0.id == id } }
+        let ids = picked
+        guard !ids.isEmpty else { return }
+        for id in ids { texts.removeValue(forKey: id)?.removeFromSuperview() }
+        picked = []
+        commit("Delete") { $0.items.removeAll { ids.contains($0.id) } }
+    }
+
+    /// Edit ▸ Select All (⌘A) on the canvas: every item (#580).
+    override func selectAll(_ sender: Any?) {
+        window?.makeFirstResponder(self)
+        picked = document.items.map(\.id)
     }
 
     // MARK: Menus (Arc's EaselObjectMenuProvider and EaselCanvasMenuProvider)
@@ -578,10 +643,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     override func menu(for event: NSEvent) -> NSMenu? {
         let p = point(event)
         if let hit = document.item(at: p) {
-            selected = hit.id
+            // A right click on one of several picked items acts on them all (#580).
+            if !picked.contains(hit.id) { selected = hit.id }
             return objectMenu(for: hit)
         }
-        selected = nil
+        picked = []
         return canvasMenu(at: NSPoint(x: p.x, y: p.y))
     }
 
@@ -596,12 +662,14 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     /// Arc 1.172.2's object menu (EaselObjectMenuProvider, read over AX 11 Nov 2026): Bring to Front,
     /// Send to Back, Delete, —, Cut, Copy, Paste, —, Duplicate. Its other rows (alt text, the easel's
     /// thumbnail, a capture's address) follow for the kinds they belong to.
+    /// With several items picked (#580) the rows act on them all, and the rows for one kind are left out.
     func objectMenu(for item: Easel.Item) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         let id = item.id
-        add(menu, "Bring to Front", enabled: !document.isFront(id)) { [weak self] in self?.commit("Bring to Front") { $0.bringToFront(id) } }
-        add(menu, "Send to Back", enabled: !document.isBack(id)) { [weak self] in self?.commit("Send to Back") { $0.sendToBack(id) } }
+        let group = picked.count > 1 && picked.contains(id) ? picked : [id]
+        add(menu, "Bring to Front", enabled: !document.isFront(group)) { [weak self] in self?.commit("Bring to Front") { $0.bringToFront(group) } }
+        add(menu, "Send to Back", enabled: !document.isBack(group)) { [weak self] in self?.commit("Send to Back") { $0.sendToBack(group) } }
         add(menu, "Delete") { [weak self] in self?.deleteSelected() }
         menu.addItem(.separator())
         add(menu, "Cut", key: "x") { [weak self] in self?.cut(nil) }
@@ -610,6 +678,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         menu.addItem(.separator())
         add(menu, "Duplicate") { [weak self] in self?.duplicateSelected() }
         var extra: [() -> Void] = []
+        guard group.count == 1 else { return menu }
         switch item.kind {
         case .capture(let c):
             if c.canGoLive {
@@ -739,7 +808,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         switch item.action {
         case #selector(undo(_:)): return history.canUndo
         case #selector(redo(_:)): return history.canRedo
-        case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)): return selected != nil
+        case #selector(copy(_:)), #selector(cut(_:)), #selector(delete(_:)): return !picked.isEmpty
+        case #selector(selectAll(_:)): return !document.items.isEmpty
         case #selector(paste(_:)): return canPaste
         default: return true
         }
@@ -816,17 +886,21 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     // MARK: Copy and paste (Arc's object menu: Cut, Copy, Paste, Duplicate)
 
     @objc func copy(_ sender: Any?) {
-        guard let item = item(selected), let data = try? JSONEncoder().encode(EaselClip(easel: document.id, items: [item])) else { return }
+        // Every picked item, bottom to top (#580).
+        let items = document.items.filter { picked.contains($0.id) }
+        guard let item = items.first, let data = try? JSONEncoder().encode(EaselClip(easel: document.id, items: items)) else { return }
         let pb = NSPasteboard.general
         pb.clearContents()
-        // Cra's own type for pasting on an easel, and what other apps can take.
+        // Cra's own type for pasting on an easel, and what other apps can take (for one item).
         var other: [NSPasteboard.PasteboardType: Data] = [:]
-        switch item.kind {
-        case .link(let l): other[.string] = Data(l.url.utf8); other[.URL] = Data(l.url.utf8)
-        case .capture(let c): other[.png] = try? Data(contentsOf: picturesURL(c.image))
-        case .image(let f): other[.png] = try? Data(contentsOf: picturesURL(f))
-        case .text(let s, _): other[.string] = Data(s.utf8)
-        default: break
+        if items.count == 1 {
+            switch item.kind {
+            case .link(let l): other[.string] = Data(l.url.utf8); other[.URL] = Data(l.url.utf8)
+            case .capture(let c): other[.png] = try? Data(contentsOf: picturesURL(c.image))
+            case .image(let f): other[.png] = try? Data(contentsOf: picturesURL(f))
+            case .text(let s, _): other[.string] = Data(s.utf8)
+            default: break
+            }
         }
         pb.declareTypes([.craEaselItems] + Array(other.keys), owner: nil)
         pb.setData(data, forType: .craEaselItems)
@@ -834,7 +908,7 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     @objc func cut(_ sender: Any?) {
-        guard selected != nil else { return }
+        guard !picked.isEmpty else { return }
         copy(sender)
         deleteSelected()
     }
@@ -870,13 +944,16 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         let visible = enclosingScrollView?.documentVisibleRect ?? bounds
         var pasted: [Easel.Item] = []
         // Any app can write the pasteboard: an item naming a picture by a path is left out.
-        for item in clip.items where Easel.files(of: item).allSatisfy(Easel.isPlainFileName) {
+        let items = clip.items.filter { Easel.files(of: $0).allSatisfy(Easel.isPlainFileName) }
+        // A copy pasted where its original is shows beside it; on another easel, in view. Several
+        // items keep their places among themselves (#580).
+        var shift: Easel.Point?
+        if let box = Easel.bounds(of: items.map(\.frame)), clip.easel != document.id || !visible.intersects(rect(box)) {
+            shift = .init(visible.midX - box.width / 2 - box.x, visible.midY - box.height / 2 - box.y)
+        }
+        for item in items {
             var copy = Easel.copy(of: item)
-            // A copy pasted where its original is shows beside it; on another easel, in view.
-            if clip.easel != document.id || !visible.intersects(rect(item.frame)) {
-                copy = Easel.copy(of: item, offset: 0).moved(by: .init(visible.midX - item.frame.width / 2 - item.frame.x,
-                                                                        visible.midY - item.frame.height / 2 - item.frame.y))
-            }
+            if let shift { copy = Easel.copy(of: item, offset: 0).moved(by: shift) }
             switch copy.kind {
             case .image(let f): copy.kind = .image(file: carry(f))
             case .capture(var c): c.image = carry(c.image); copy.kind = .capture(c)
@@ -887,27 +964,31 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         }
         commit("Paste") { $0.items.append(contentsOf: pasted) }
         for item in pasted { if case .text = item.kind { addTextField(for: item) } }
-        selected = pasted.last?.id
+        picked = pasted.map(\.id)
     }
 
-    /// Arc's Duplicate button: a copy of the picked item, 20 pt down and right, picked.
+    /// Arc's Duplicate button: a copy of each picked item, 20 pt down and right, picked.
     func duplicateSelected() {
-        guard let item = item(selected) else { return }
-        var copy = Easel.copy(of: item)
+        let items = document.items.filter { picked.contains($0.id) }
+        guard !items.isEmpty else { return }
         let pics = EaselFiles.pictures(document.id)
         func clone(_ file: String) -> String {
             let name = UUID().uuidString + "." + (file as NSString).pathExtension
             try? FileManager.default.copyItem(at: pics.appendingPathComponent(file), to: pics.appendingPathComponent(name))
             return name
         }
-        switch item.kind {
-        case .image(let file): copy.kind = .image(file: clone(file))
-        case .capture(var c): c.image = clone(c.image); copy.kind = .capture(c)
-        default: break
+        let copies = items.map { item in
+            var copy = Easel.copy(of: item)
+            switch item.kind {
+            case .image(let file): copy.kind = .image(file: clone(file))
+            case .capture(var c): c.image = clone(c.image); copy.kind = .capture(c)
+            default: break
+            }
+            return copy
         }
-        commit("Duplicate") { $0.items.append(copy) }
-        if case .text = copy.kind { addTextField(for: copy) }
-        selected = copy.id
+        commit("Duplicate") { $0.items.append(contentsOf: copies) }
+        for copy in copies { if case .text = copy.kind { addTextField(for: copy) } }
+        picked = copies.map(\.id)
     }
 
     func addPictureFromFile() {
@@ -1008,19 +1089,26 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         sizePill.frame = NSRect(x: item.frame.x - 44, y: item.frame.y, width: 24, height: 72)
     }
 
-    /// The colour picker sits over the picked shape (not while it is being dragged or drawn).
+    /// The colour picker sits over the picked shapes, when every picked item is one (not while one is
+    /// being dragged or drawn). Several show the colour they share, if they do.
     private func placeColorPicker() {
-        guard tool == .pointer, let item = item(selected), Easel.takesShade(item.kind) else { colorPicker.isHidden = true; return }
+        let items = document.items.filter { picked.contains($0.id) }
+        guard tool == .pointer, !items.isEmpty, items.allSatisfy({ Easel.takesShade($0.kind) }),
+              let box = Easel.bounds(of: items.map(\.frame)) else { colorPicker.isHidden = true; return }
+        let shades = Set(items.map { $0.shade ?? ($0.color == nil ? Easel.defaultShade($0.kind) : nil) })
         colorPicker.palette = document.palette
-        colorPicker.current = item.shade ?? (item.color == nil ? Easel.defaultShade(item.kind) : nil)
-        colorPicker.frame = EaselColorPicker.frame(over: rect(item.frame))
+        colorPicker.current = shades.count == 1 ? shades.first! : nil
+        colorPicker.frame = EaselColorPicker.frame(over: rect(box))
         colorPicker.isHidden = false
     }
 
-    /// A colour from the picker for the picked shape.
+    /// A colour from the picker for the picked shapes.
     func setShade(_ shade: Easel.Shade) {
-        guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }) else { return }
-        commit("Change Color") { $0.items[i].shade = shade; $0.items[i].color = nil }
+        let ids = picked
+        guard !ids.isEmpty else { return }
+        commit("Change Color") {
+            for i in $0.items.indices where ids.contains($0.items[i].id) { $0.items[i].shade = shade; $0.items[i].color = nil }
+        }
         placeColorPicker()
     }
 
