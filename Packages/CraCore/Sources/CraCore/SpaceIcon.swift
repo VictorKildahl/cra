@@ -1,8 +1,8 @@
 import Foundation
 
-/// A space's icon: an emoji, an SF Symbol from the Icon tab of Arc's picker, a picture the user
-/// chose, or none (Remove Icon). sidebar.json keeps it as `emoji`, `symbol` and `iconImage`, never
-/// more than one: a symbol or picture leaves `emoji` empty.
+/// A space's icon: an emoji, an SF Symbol from the Icon tab (Arc's 56 plus Cra's extras), a picture
+/// the user chose, or none (Remove Icon). sidebar.json keeps it as `emoji`, `symbol` and
+/// `iconImage`, never more than one: a symbol or picture leaves `emoji` empty.
 public enum SpaceIcon: Hashable, Sendable {
     case emoji(String)
     case symbol(String)

@@ -6,12 +6,15 @@ import Testing
 struct ArcSpaceIconTests {
     static let any: (String) -> Bool = { _ in true }
 
-    /// Arc's Icon tab has 56 glyphs (7 rows of 8), each once, and Cra's grid has one per slot.
+    /// Arc's Icon tab has 56 glyphs (7 rows of 8), each once; Cra's grid keeps them first, then extras.
     @Test
     func pickerHasArcsFiftySixGlyphs() {
         #expect(ArcSpaceIcon.picker.count == 56)
         #expect(Set(ArcSpaceIcon.picker.map(\.arc)).count == 56)
-        #expect(Set(SpaceIcon.pickerSymbols).count == 56)
+        #expect(SpaceIcon.pickerSymbols.prefix(56).elementsEqual(ArcSpaceIcon.picker.map(\.symbol)))
+        #expect(SpaceIcon.extraPickerSymbols.count == 64)
+        #expect(Set(SpaceIcon.pickerSymbols).count == 56 + 64)
+        #expect(Set(SpaceIcon.extraPickerSymbols).isDisjoint(with: ArcSpaceIcon.picker.map(\.symbol)))
     }
 
     @Test(arguments: [

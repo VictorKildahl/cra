@@ -53,6 +53,26 @@ public enum ArcSpaceIcon {
 }
 
 extension SpaceIcon {
-    /// The Icon tab of Cra's picker: Arc's glyphs in Arc's order.
-    public static let pickerSymbols = ArcSpaceIcon.picker.map(\.symbol)
+    /// The Icon tab of Cra's picker: Arc's 56 glyphs first, then Cra's own extras.
+    public static let pickerSymbols = ArcSpaceIcon.picker.map(\.symbol) + extraPickerSymbols
+
+    /// Extra Icon-tab glyphs past Arc's 56.
+    public static let extraPickerSymbols: [String] = [
+        "house.fill", "building.2.fill", "briefcase.fill", "graduationcap.fill",
+        "cart.fill", "creditcard.fill", "lock.fill", "key.fill",
+        "wifi", "antenna.radiowaves.left.and.right", "desktopcomputer", "laptopcomputer",
+        "iphone", "headphones", "camera.fill", "photo.fill",
+        "mic.fill", "speaker.wave.2.fill", "tv.fill", "gamecontroller.fill",
+        "car.fill", "bicycle", "bus.fill", "ferry.fill",
+        "figure.walk", "figure.run", "cup.and.saucer.fill", "drop.fill",
+        "snowflake", "umbrella.fill", "tree.fill", "mountain.2.fill",
+        "tent.fill", "binoculars.fill", "location.fill", "tag.fill",
+        "link", "paperplane.fill", "printer.fill", "scissors",
+        "pencil", "paintbrush.pointed.fill", "sparkles", "crown.fill",
+        "trophy.fill", "medal.fill", "target", "puzzlepiece.fill",
+        "chart.bar.fill", "clock.fill", "hourglass", "magnifyingglass",
+        "newspaper.fill", "hammer.fill", "stethoscope", "cross.case.fill",
+        "pill.fill", "flask.fill", "atom", "cat.fill",
+        "dog.fill", "fish.fill", "bird.fill", "tortoise.fill",
+    ]
 }
