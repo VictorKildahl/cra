@@ -46,4 +46,12 @@ struct RetainedPageBudgetTests {
         let a = RetainedPageBudget.unloads(pages), b = RetainedPageBudget.unloads(pages.shuffled())
         #expect(a == b && a.count == 8)
     }
+
+    /// GitHub #616 (c): when hundreds of pages cross the four-hour line in one minute, the clock's pass asks
+    /// 16 of them; the rest wait for the next minutes.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/616"))
+    func theTimerAsksSixteenPagesAPass() {
+        #expect(TabSleepPolicy.timer(.fourHours).limit == 16 && TabSleepPolicy.timer(.fifteenMinutes).limit == 16)
+        #expect(TabSleepPolicy.memoryPressure(.critical).limit == 9)
+    }
 }

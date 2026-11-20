@@ -200,7 +200,7 @@
 #135   Packages/CraCore/Tests/CraCoreTests/PerfStateTests.swift::stallsAreCountedByKindAndHeldMenusAreNotFreezes  128d23a62afd
 #135   Tests/PerfTests.swift::theFirstSlowPassGetsAStack  ebe2a46b43da
 #135   Tests/PerfTests.swift::workAcrossATimerBoundaryIsOnePass  f398d95a67d4
-#136   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::defaultsAreArcs  2eed7b4fce3e
+#136   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::defaultsAreArcs  36054bc6039e
 #136   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::fourHoursKeepsTheTenUsedLast  727fd73ab07f
 #136   Tests/BrowserManagerLifecycleTests.swift::freezingVoteCase  edf0a4d06cf6
 #136   Tests/BrowserManagerLifecycleTests.swift::loadingTabCase  49ae346fce0b
@@ -222,7 +222,7 @@
 #152   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::shadedDarkKeepsTheHueAtTenPercentLuminance  c6abb206f33e
 #152   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::tonesAreArcsPaletteSlots  53cd2a932167
 #152   Packages/CraCore/Tests/CraCoreTests/ThemeTonesTests.swift::victorsThemeRebuildsArcsShade  13a808fdd28a
-#153   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::defaultsAreArcs  2eed7b4fce3e
+#153   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::defaultsAreArcs  36054bc6039e
 #153   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::earlierSwitchIsIgnored  e76746fb1993
 #153   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::eightHoursKeepsThemToo  b3da3d8b8221
 #153   Packages/CraCore/Tests/CraCoreTests/TabSleepPolicyTests.swift::fourHoursKeepsTheTenUsedLast  727fd73ab07f
@@ -1289,7 +1289,9 @@
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
 #614   Tests/StoreTests.swift::clearTodayArchivesInOnePass  6edf309ca7f0
 #616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::aWindowKeepsItsLatestSleptPages  318f272da9bc
+#616   Packages/CraCore/Tests/CraCoreTests/RetainedPageBudgetTests.swift::theTimerAsksSixteenPagesAPass  d199ebf2a55d
 #616   Tests/BrowserManagerLifecycleTests.swift::sleptPagesBudgetCase  57eaa6cdf655
+#616   Tests/BrowserManagerLifecycleTests.swift::timerAsksSixteenCase  e84ca7cd1028
 #616   Tests/Scenarios/slept-pages-budget.scenario  70106c2dcee6
 #617   Packages/CraCore/Tests/CraCoreTests/CommandBarRankingTests.swift::theMostRecentSevenAreTheSortedSeven  c025ee0f6307
 #617   Packages/CraCore/Tests/CraCoreTests/CommandBarScoreTests.swift::bytesScoreAsStringsDo  115a9ad0b713

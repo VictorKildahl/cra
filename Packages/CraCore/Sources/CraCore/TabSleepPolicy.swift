@@ -28,9 +28,12 @@ public struct TabSleepPolicy: Equatable, Sendable {
 
     /// "Force tabs out of memory after:". Arc's 4 hours, or longer, keep the 10 tabs used last;
     /// a shorter time is asked for to close those too, since they hold most of the memory.
+    /// At most `timerLimit` pages are asked a pass. When hundreds cross the line in one minute each asked page
+    /// is three page evaluations at once; the rest are asked on the next minutes' passes (#616, Victor 20 Nov 2026).
     public static func timer(_ after: TabSleepThreshold) -> TabSleepPolicy {
-        TabSleepPolicy(hiddenFor: after.seconds, keepsRecentTabs: after.seconds >= TabSleepThreshold.fourHours.seconds)
+        TabSleepPolicy(hiddenFor: after.seconds, keepsRecentTabs: after.seconds >= TabSleepThreshold.fourHours.seconds, limit: timerLimit)
     }
+    public static let timerLimit = 16
 
     /// "…when the Mac is short of memory": the pages hidden longest, whatever their rank, but
     /// none left in the last 5 minutes, so a tab just left (or just woken) isn't closed again.

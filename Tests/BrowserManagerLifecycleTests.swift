@@ -177,6 +177,7 @@ enum BrowserManagerLifecycleTests {
         await refusalBackoffCase()
         recentTabsCase()
         sleptPagesBudgetCase()
+        timerAsksSixteenCase()
         freezingVoteCase()
         await keepActiveSitesCase()
         await sleepClockCase()
@@ -952,6 +953,23 @@ enum BrowserManagerLifecycleTests {
     @MainActor
     private static func asleep(_ manager: BrowserManager, _ id: UUID) -> Bool {
         manager.runtime(for: id).map(\.discarded) ?? true
+    }
+
+    // promise: #616
+    /// Hundreds of pages crossing the four-hour line in one minute were all asked at once, three page
+    /// evaluations each. The clock's pass asks 16; the rest are asked on the next passes.
+    @MainActor
+    private static func timerAsksSixteenCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        manager.protectedRecentTabs = 0
+        let ids = (0..<24).map { store.createTab(url: "https://example.test/timer\($0)").id }
+        let runtimes = ids.map { manager.ensureRuntime(for: $0)! }
+        for rt in runtimes { rt.hiddenAt = Date.distantPast }
+        manager.sleepIdleTabs(.timer(.fifteenMinutes))
+        let asked = runtimes.filter { $0.browser.replies.contains { $0.method == isolatedProbe } }.count
+        expect(asked == 16, "one pass of the clock asks 16 pages, not all 24 (#616), asked \(asked)")
+        manager.closeAll()
     }
 
     // promise: #616

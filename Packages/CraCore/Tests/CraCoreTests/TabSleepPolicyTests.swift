@@ -19,7 +19,8 @@ struct TabSleepPolicyTests {
         let s = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
         #expect(s.tabSleepTimerEnabled && s.tabSleepAfter == .fourHours && !s.tabSleepOnMemoryPressure)
         let policy = TabSleepPolicy.timer(s.tabSleepAfter)
-        #expect(policy == TabSleepPolicy(hiddenFor: 4 * 3600, keepsRecentTabs: true))
+        // A pass asks at most 16 pages since #616 (Victor approved the change, 20 Nov 2026).
+        #expect(policy == TabSleepPolicy(hiddenFor: 4 * 3600, keepsRecentTabs: true, limit: 16))
         #expect(!TabSleepPolicy.sweepsForPressure(.critical, enabled: s.tabSleepOnMemoryPressure, lastSweep: nil, now: now))
     }
 
