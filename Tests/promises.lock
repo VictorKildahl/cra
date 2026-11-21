@@ -1314,8 +1314,8 @@
 #601   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::onlyThisSpaceWithNothingClosedHereStays  8c1082fa6684
 #601   Tests/Scenarios/reopen-closed-tab-this-space.scenario  187bee3640c1
 #601   Tests/StoreTests.swift::reopenClosedTabInThisSpaceOnly  2600e34f494e
-#602   Packages/CraCore/Tests/CraCoreTests/BoostTests.swift::theTintIsAColourMatrixTheEngineDrawsAroundImages  41852c0f0a52
-#602   Tests/Scenarios/boost-tint.scenario  09e24db04ac5
+#602   Packages/CraCore/Tests/CraCoreTests/BoostTests.swift::theTintIsArcsColorizeTheEngineDrawsAroundImages  a91a530ab839
+#602   Tests/Scenarios/boost-tint.scenario  840181c675ef
 #604   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAppAddressOpensItsApp  22affcbfecae
 #604   Tests/Scenarios/command-bar-app-address.scenario  9dc5b635b27a
 #607   Packages/CraCore/Tests/CraCoreTests/LittleWindowRaiseTests.swift::itGoesBackAsTheLinkArrivesThoughItIsKeyFromCraComingForward  61dbaf57cee0

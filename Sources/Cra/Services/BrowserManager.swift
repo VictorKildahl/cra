@@ -1626,7 +1626,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     }
 
     /// Arc's Boosts: the site's boost for this page (set by the app; BoostStore), nil for none. `engineTints`:
-    /// the page's engine draws the tint (`tint`, Boost.tintMatrixString), so `css` leaves it out (#602).
+    /// the page's engine draws the tint (`tint`, Boost.Colorize.engineString), so `css` leaves it out (#602).
     static var boostFor: ((_ url: String, _ engineTints: Bool) -> (css: String, js: String, tint: String?)?)?
 
     /// The page's boost: its stylesheet adopted like the theme data, its script run in the page.
@@ -1639,7 +1639,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         // A new document has nothing adopted: no call unless there is a boost to put on it.
         guard boost != nil || clearing else { return }
         adopt(boost?.css ?? "", as: "__craBoost", in: browser)
-        if engineTints { browser.setBoostColorMatrix(boost?.tint) }
+        if engineTints { browser.setBoostTint(boost?.tint) }
         if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
     }
 

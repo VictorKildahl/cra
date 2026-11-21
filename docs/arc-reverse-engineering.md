@@ -4469,6 +4469,17 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   pictures with it; a CSS counter-filter can't give them back (sepia isn't invertible within 0–1), and inline
   colours from a script would freeze hover and focus colours. Arc's result needs an engine-side filter that skips
   image draws.
+- [O] Boost colour formula (#602 follow-up, 21 Nov 2026): an offline Arc 1.174 on a fake home, New Boost on a
+  page of 40 swatches (grey ramp, saturated, pastel and dark hues), the big handle dragged to 3 radii × 6
+  directions, each captured and read in sRGB. Arc's boost data names the model (`colorWheelDriven`:
+  `primaryHueDegrees`, `primarySaturation`, `secondaryHueOffset`; per appearance `preservedSaturation`,
+  `preservedLightness`, `lightnessShift`, `primaryLightness`, `secondaryLightness`). Fitted, in sRGB's HSL with
+  ps = 0.5 × strength^1.2 (strength = the handle's distance / 56 pt):
+  lightness 0.4·ps + (1 − 0.6·ps)·l, saturation ps + 0.5·s, hue = the big handle's direction + 45° × (1 − l), so
+  light colours take the big handle's hue and dark ones the small handle's (an eighth of a turn on). Within 3/255
+  on average, 8 at most, away from the middle; every saturated colour of one lightness becomes one colour.
+  A handle dropped exactly in the middle still halves saturation and picks a hue in Arc; Cra's middle is no tint.
+  `Boost.tint` (CraCore) holds it, `cc::ColorFilter::MakeCraColorize` (cra-boost-tint.patch) draws it.
 - [O live] Incognito (#620): an offline Arc on a fake home, every space on "Profile 2", each profile's Chromium
   `download.default_directory` its own folder. File ▸ New Incognito Window from that space, then a file:// zip:
   it landed in Profile 2's folder. Arc's incognito window is the incognito side of the opening space's profile.

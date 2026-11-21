@@ -3125,7 +3125,7 @@ static BOOL g_makingSpare = NO;
     self.findGeneration = nil;
     if (_browser) _browser->GetHost()->StopFinding(clearSelection);
 }
-- (void)setBoostColorMatrix:(NSString *)matrix {}
+- (void)setBoostTint:(NSString *)tint {}
 - (void)setAudioMuted:(BOOL)muted {
     _audioMuted = muted;
     if (_browser) _browser->GetHost()->SetAudioMuted(muted);

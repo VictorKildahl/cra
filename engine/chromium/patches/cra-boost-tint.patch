@@ -1,3 +1,140 @@
+diff --git a/cc/paint/color_filter.cc b/cc/paint/color_filter.cc
+--- a/cc/paint/color_filter.cc
++++ b/cc/paint/color_filter.cc
+@@ -17,6 +17,7 @@
+ #include "third_party/skia/include/core/SkColorTable.h"
+ #include "third_party/skia/include/effects/SkHighContrastFilter.h"
+ #include "third_party/skia/include/effects/SkLumaColorFilter.h"
++#include "third_party/skia/include/effects/SkRuntimeEffect.h"
+ 
+ namespace cc {
+ 
+@@ -112,6 +113,72 @@
+   sk_sp<SkColorTable> table_;
+ };
+ 
++// Cra: Arc's Boost colorize (#602), in sRGB's HSL whatever the working space.
++class CraColorizeColorFilter final : public ColorFilter {
++ public:
++  explicit CraColorizeColorFilter(const float params[6])
++      : ColorFilter(Type::kCraColorize, Make(params)) {
++    std::copy(params, params + 6, params_);
++  }
++
++ private:
++  static sk_sp<SkColorFilter> Make(const float params[6]) {
++    static constexpr char kCode[] =
++        "uniform half hue, darkHue, satAdd, satKeep, lightLow, lightScale;"
++        "half enc(half c) { return c <= 0.0031308 ? 12.92 * c :"
++        "  1.055 * pow(c, 1.0 / 2.4) - 0.055; }"
++        "half dec(half c) { return c <= 0.04045 ? c / 12.92 :"
++        "  pow((c + 0.055) / 1.055, 2.4); }"
++        "half channel(half p, half q, half t) {"
++        "  t = fract(t);"
++        "  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;"
++        "  if (t < 0.5) return q;"
++        "  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;"
++        "  return p; }"
++        "half4 main(half4 color) {"
++        "  half4 c = unpremul(color);"
++        "  half3 lin = toLinearSrgb(c.rgb);"
++        "  half3 rgb = half3(enc(saturate(lin.r)), enc(saturate(lin.g)),"
++        "    enc(saturate(lin.b)));"
++        "  half mx = max(max(rgb.r, rgb.g), rgb.b);"
++        "  half mn = min(min(rgb.r, rgb.g), rgb.b);"
++        "  half l = (mx + mn) * 0.5;"
++        "  half d = mx - mn;"
++        "  half s = d <= 0.0 ? 0.0 : d / (1.0 - abs(2.0 * l - 1.0));"
++        "  half h = hue + darkHue * (1.0 - l);"
++        "  half S = saturate(satAdd + satKeep * s);"
++        "  half L = saturate(lightLow + lightScale * l);"
++        "  half q = L < 0.5 ? L * (1.0 + S) : L + S - L * S;"
++        "  half p = 2.0 * L - q;"
++        "  half3 o = half3(channel(p, q, h + 1.0 / 3.0), channel(p, q, h),"
++        "    channel(p, q, h - 1.0 / 3.0));"
++        "  o = half3(dec(o.r), dec(o.g), dec(o.b));"
++        "  return half4(fromLinearSrgb(o) * c.a, c.a); }";
++    static SkRuntimeEffect* const effect =
++        SkRuntimeEffect::MakeForColorFilter(SkString(kCode)).effect.release();
++    if (!effect) {
++      return nullptr;
++    }
++    SkRuntimeColorFilterBuilder builder(sk_ref_sp(effect));
++    builder.uniform("hue") = params[0];
++    builder.uniform("darkHue") = params[1];
++    builder.uniform("satAdd") = params[2];
++    builder.uniform("satKeep") = params[3];
++    builder.uniform("lightLow") = params[4];
++    builder.uniform("lightScale") = params[5];
++    return builder.makeColorFilter();
++  }
++  size_t SerializedDataSize() const override {
++    return PaintOpWriter::SerializedSizeOfElements(params_, 6);
++  }
++  void SerializeData(PaintOpWriter& writer) const override {
++    for (float f : params_) {
++      writer.Write(f);
++    }
++  }
++  float params_[6];
++};
++
+ class HighContrastColorFilter final : public ColorFilter {
+  public:
+   explicit HighContrastColorFilter(const SkHighContrastConfig& config)
+@@ -170,6 +237,10 @@
+   return sk_make_sp<LumaColorFilter>();
+ }
+ 
++sk_sp<ColorFilter> ColorFilter::MakeCraColorize(const float params[6]) {
++  return sk_make_sp<CraColorizeColorFilter>(params);
++}
++
+ sk_sp<ColorFilter> ColorFilter::MakeHighContrast(
+     const SkHighContrastConfig& config) {
+   return sk_make_sp<HighContrastColorFilter>(config);
+@@ -234,6 +305,16 @@
+       reader.Read(&config);
+       return MakeHighContrast(config);
+     }
++    case Type::kCraColorize: {
++      float params[6];
++      for (float& f : params) {
++        reader.Read(&f);
++        if (!reader.valid()) {
++          return nullptr;
++        }
++      }
++      return MakeCraColorize(params);
++    }
+     default:
+       NOTREACHED();
+   }
+diff --git a/cc/paint/color_filter.h b/cc/paint/color_filter.h
+--- a/cc/paint/color_filter.h
++++ b/cc/paint/color_filter.h
+@@ -38,6 +38,11 @@
+   static sk_sp<ColorFilter> MakeTable(sk_sp<SkColorTable> table);
+   static sk_sp<ColorFilter> MakeHighContrast(
+       const SkHighContrastConfig& config);
++  // Cra: a Boost's colorize, as Arc draws it (#602). `params` are the hue at white and the extra hue
++  // at black (turns), the saturation added and the share of the colour's own kept, and the lightness
++  // at black and its scale: h = hue + dark_hue * (1 - l), s = add + keep * s, l = low + scale * l,
++  // in sRGB's HSL.
++  static sk_sp<ColorFilter> MakeCraColorize(const float params[6]);
+ 
+   SkColor4f FilterColor(const SkColor4f& color) const;
+ 
+@@ -60,7 +65,8 @@
+     kLuma,
+     kTableARGB,
+     kHighContrast,
+-    kMaxValue = kHighContrast,
++    kCraColorize,
++    kMaxValue = kCraColorize,
+   };
+ 
+   explicit ColorFilter(Type type, sk_sp<SkColorFilter> sk_color_filter);
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
@@ -9,8 +146,8 @@ diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/ch
 +
 +  // Cra: the Boost colours of this tab's page, every colour but images (#602;
 +  // cra_engine_hooks.h). Asked again when Cra changes them.
-+  if (cra::g_boost_color_matrix && web_contents) {
-+    web_prefs->cra_boost_color_matrix = cra::g_boost_color_matrix(web_contents);
++  if (cra::g_boost_tint && web_contents) {
++    web_prefs->cra_boost_tint = cra::g_boost_tint(web_contents);
    }
  
    web_prefs->data_saver_enabled = IsDataSaverEnabled(profile);
@@ -21,7 +158,7 @@ diff --git a/third_party/blink/common/web_preferences/web_preferences_mojom_trai
    out->allow_running_insecure_content = data.allow_running_insecure_content();
    out->disable_reading_from_canvas = data.disable_reading_from_canvas();
    out->cra_fingerprinting_seed = data.cra_fingerprinting_seed();
-+  if (!data.ReadCraBoostColorMatrix(&out->cra_boost_color_matrix)) {
++  if (!data.ReadCraBoostTint(&out->cra_boost_tint)) {
 +    return false;
 +  }
    out->strict_mixed_content_checking = data.strict_mixed_content_checking();
@@ -34,10 +171,10 @@ diff --git a/third_party/blink/public/common/web_preferences/web_preferences.h b
    // Cra: fingerprinting protection. Zero when off; otherwise a seed for this
    // profile and launch that Blink mixes with the top-level site.
    uint64_t cra_fingerprinting_seed = 0;
-+  // Cra: a Boost's colours (#602), 20 comma-separated numbers of a 4x5 colour
-+  // matrix every colour the page draws goes through, but not its images.
-+  // Empty when the page has no Boost colour.
-+  std::string cra_boost_color_matrix;
++  // Cra: a Boost's colours (#602), Arc's colorize as 6 comma-separated numbers
++  // (cc::ColorFilter::MakeCraColorize) every colour the page draws goes
++  // through, but not its images. Empty when the page has no Boost colour.
++  std::string cra_boost_tint;
    // Strict mixed content checking disables both displaying and running insecure
    // mixed content, and disables embedder notifications that such content was
    // requested (thereby preventing user override).
@@ -48,9 +185,9 @@ diff --git a/third_party/blink/public/common/web_preferences/web_preferences_moj
      return r.cra_fingerprinting_seed;
    }
  
-+  static const std::string& cra_boost_color_matrix(
++  static const std::string& cra_boost_tint(
 +      const blink::web_pref::WebPreferences& r) {
-+    return r.cra_boost_color_matrix;
++    return r.cra_boost_tint;
 +  }
 +
    static bool strict_mixed_content_checking(
@@ -63,8 +200,8 @@ diff --git a/third_party/blink/public/mojom/webpreferences/web_preferences.mojom
    bool disable_reading_from_canvas;
    // Cra: fingerprinting protection seed, 0 when off.
    uint64 cra_fingerprinting_seed;
-+  // Cra: a Boost's colour matrix (20 numbers), empty when none.
-+  string cra_boost_color_matrix;
++  // Cra: a Boost's colorize (6 numbers), empty when none.
++  string cra_boost_tint;
    // Strict mixed content checking disables both displaying and running insecure
    // mixed content, and disables embedder notifications that such content was
    // requested (thereby preventing user override).
@@ -77,8 +214,8 @@ diff --git a/third_party/blink/renderer/core/exported/web_settings_impl.cc b/thi
    settings_->SetCraFingerprintingSeed(seed);
 +}
 +
-+void WebSettingsImpl::SetCraBoostColorMatrix(const String& matrix) {
-+  settings_->SetCraBoostColorMatrix(matrix);
++void WebSettingsImpl::SetCraBoostTint(const String& tint) {
++  settings_->SetCraBoostTint(tint);
  }
  
  void WebSettingsImpl::SetAllowCustomScrollbarInMainFrame(bool enabled) {
@@ -89,8 +226,8 @@ diff --git a/third_party/blink/renderer/core/exported/web_settings_impl.h b/thir
    void SetCookieEnabled(bool) override;
    // Cra: fingerprinting protection seed, 0 when off (settings.json5's craFingerprintingSeed).
    void SetCraFingerprintingSeed(uint64_t);
-+  // Cra: a Boost's colour matrix, empty for none (settings.json5's craBoostColorMatrix, #602).
-+  void SetCraBoostColorMatrix(const String&);
++  // Cra: a Boost's colorize, empty for none (settings.json5's craBoostTint, #602).
++  void SetCraBoostTint(const String&);
    void SetCaretBrowsingEnabled(bool) override;
    void SetDNSPrefetchingEnabled(bool) override;
    void SetDOMPasteAllowed(bool) override;
@@ -101,8 +238,8 @@ diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_p
    settings->SetDisableReadingFromCanvas(prefs.disable_reading_from_canvas);
    web_view_impl->GetPage()->GetSettings().SetCraFingerprintingSeed(
        prefs.cra_fingerprinting_seed);
-+  web_view_impl->GetPage()->GetSettings().SetCraBoostColorMatrix(
-+      String::FromUtf8(std::string_view(prefs.cra_boost_color_matrix)));
++  web_view_impl->GetPage()->GetSettings().SetCraBoostTint(
++      String::FromUtf8(std::string_view(prefs.cra_boost_tint)));
    settings->SetStrictMixedContentChecking(prefs.strict_mixed_content_checking);
  
    settings->SetStrictlyBlockBlockableMixedContent(
@@ -126,43 +263,46 @@ diff --git a/third_party/blink/renderer/core/frame/local_frame_view.cc b/third_p
  #include "third_party/blink/renderer/platform/wtf/functional.h"
  #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
  #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
-@@ -223,6 +226,30 @@
+@@ -223,8 +226,33 @@
    } while (false)
  
  namespace blink {
 +
-+namespace {
-+
-+// Cra: settings' craBoostColorMatrix, 20 comma-separated numbers (#602). False
-+// when it is empty or isn't 20 numbers.
-+bool CraBoostTint(const Settings* settings, std::array<float, 20>& matrix) {
-+  if (!settings || settings->GetCraBoostColorMatrix().empty()) {
+ namespace {
+ 
++// Cra: settings' craBoostTint, Arc's colorize as 6 comma-separated numbers
++// (#602, cc::ColorFilter::MakeCraColorize). False when it is empty or isn't 6
++// numbers.
++bool CraBoostTint(const Settings* settings, std::array<float, 6>& params) {
++  if (!settings || settings->GetCraBoostTint().empty()) {
 +    return false;
 +  }
-+  Vector<String> parts = settings->GetCraBoostColorMatrix().Split(',');
-+  if (parts.size() != 20) {
++  Vector<String> parts = settings->GetCraBoostTint().Split(',');
++  if (parts.size() != 6) {
 +    return false;
 +  }
-+  for (wtf_size_t i = 0; i < 20; ++i) {
++  for (wtf_size_t i = 0; i < 6; ++i) {
 +    std::optional<float> value = StringToFloat(parts[i].StripWhiteSpace());
 +    if (!value) {
 +      return false;
 +    }
-+    matrix[i] = *value;
++    params[i] = *value;
 +  }
 +  return true;
 +}
 +
 +}  // namespace
- namespace {
- 
++namespace {
++
  std::optional<cc::PaintRecord> GetCanvasSnapshot(DOMNodeId id) {
-@@ -3489,6 +3516,11 @@
+   if (auto* nested_canvas =
+           DynamicTo<HTMLCanvasElement>(DOMNodeIds::NodeForId(id))) {
+@@ -3489,6 +3517,11 @@
                               paint_controller_persistent_data_.Get(),
                               benchmark_mode);
      GraphicsContext graphics_context(*paint_controller);
 +    // Cra: the page's Boost colours, every colour but images (#602).
-+    std::array<float, 20> cra_tint;
++    std::array<float, 6> cra_tint;
 +    if (CraBoostTint(frame_->GetSettings(), cra_tint)) {
 +      graphics_context.SetCraTint(cra_tint.data());
 +    }
@@ -177,10 +317,10 @@ diff --git a/third_party/blink/renderer/core/frame/settings.json5 b/third_party/
        type: "uint64_t",
        initial: 0,
 +    },
-+    // Cra: a Boost's colour matrix, 20 comma-separated numbers; empty when
-+    // none. GraphicsContext draws every colour but images through it (#602).
++    // Cra: a Boost's colorize, Arc's 6 numbers comma-separated
++    // (cc::ColorFilter::MakeCraColorize); empty when none. GraphicsContext draws every colour but images through it (#602).
 +    {
-+      name: "craBoostColorMatrix",
++      name: "craBoostTint",
 +      type: "String",
 +      initial: "",
 +      invalidate: ["Paint"],
@@ -190,15 +330,7 @@ diff --git a/third_party/blink/renderer/core/frame/settings.json5 b/third_party/
 diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/third_party/blink/renderer/platform/graphics/graphics_context.cc
 --- a/third_party/blink/renderer/platform/graphics/graphics_context.cc
 +++ b/third_party/blink/renderer/platform/graphics/graphics_context.cc
-@@ -26,6 +26,7 @@
- 
- #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
- 
-+#include <algorithm>
- #include <memory>
- #include <optional>
- 
-@@ -78,6 +79,9 @@
+@@ -78,6 +78,9 @@
  SkColor4f DarkModeColor(GraphicsContext& context,
                          const SkColor4f& color,
                          const AutoDarkMode& auto_dark_mode) {
@@ -208,7 +340,7 @@ diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/
    if (auto_dark_mode.enabled && !context.IsAutoDarkModePaused()) {
      return context.GetDarkModeFilter()->InvertColorIfNeeded(
          color, auto_dark_mode.role,
-@@ -190,6 +194,14 @@
+@@ -190,6 +193,14 @@
    DarkModeFlags(GraphicsContext* context,
                  const AutoDarkMode& auto_dark_mode,
                  const cc::PaintFlags& flags) {
@@ -223,71 +355,48 @@ diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/
      if (auto_dark_mode.enabled && !context->IsAutoDarkModePaused()) {
        dark_mode_flags_ = context->GetDarkModeFilter()->ApplyToFlagsIfNeeded(
            flags, auto_dark_mode.role,
-@@ -245,6 +257,29 @@
+@@ -243,6 +254,12 @@
+         std::make_unique<DarkModeFilter>(GetCurrentDarkModeSettings());
+   }
    return dark_mode_filter_.get();
++}
++
++void GraphicsContext::SetCraTint(const float* colorize_params) {
++  cra_tint_filter_ = colorize_params
++                         ? cc::ColorFilter::MakeCraColorize(colorize_params)
++                         : nullptr;
  }
  
-+void GraphicsContext::SetCraTint(const float* matrix_4x5) {
-+  if (!matrix_4x5) {
-+    cra_tint_filter_ = nullptr;
-+    return;
-+  }
-+  std::copy(matrix_4x5, matrix_4x5 + 20, cra_tint_matrix_.begin());
-+  cra_tint_filter_ = cc::ColorFilter::MakeMatrix(cra_tint_matrix_.data());
-+}
-+
-+SkColor4f GraphicsContext::CraTintColor(const SkColor4f& color) const {
-+  const auto& m = cra_tint_matrix_;
-+  const float in[4] = {color.fR, color.fG, color.fB, color.fA};
-+  float out[4];
-+  for (int row = 0; row < 4; ++row) {
-+    float v = m[row * 5 + 4];
-+    for (int col = 0; col < 4; ++col) {
-+      v += m[row * 5 + col] * in[col];
-+    }
-+    out[row] = std::clamp(v, 0.f, 1.f);
-+  }
-+  return SkColor4f{out[0], out[1], out[2], out[3]};
-+}
-+
  DarkModeFilter* GraphicsContext::GetDarkModeFilterForImage(
-     const ImageAutoDarkMode& auto_dark_mode) {
-   if (!auto_dark_mode.enabled)
 diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.h b/third_party/blink/renderer/platform/graphics/graphics_context.h
 --- a/third_party/blink/renderer/platform/graphics/graphics_context.h
 +++ b/third_party/blink/renderer/platform/graphics/graphics_context.h
-@@ -28,6 +28,7 @@
- #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_GRAPHICS_CONTEXT_H_
- #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_GRAPHICS_CONTEXT_H_
- 
-+#include <array>
- #include <memory>
- 
- #include "base/dcheck_is_on.h"
-@@ -199,6 +200,17 @@
-   DarkModeFilter* GetDarkModeFilter();
+@@ -200,6 +200,20 @@
    DarkModeFilter* GetDarkModeFilterForImage(
        const ImageAutoDarkMode& auto_dark_mode);
-+
+ 
 +  // Cra: a Boost's colours (#602). Every colour drawn through this context, text,
-+  // backgrounds, borders, shapes and gradients, goes through the 4x5 matrix;
-+  // images (DrawImage*) don't, as in Arc. Set from the page's settings before it
-+  // paints (LocalFrameView); null matrix for none.
-+  void SetCraTint(const float* matrix_4x5);
++  // backgrounds, borders, shapes and gradients, goes through Arc's colorize
++  // (cc::ColorFilter::MakeCraColorize, six parameters); images (DrawImage*)
++  // don't, as in Arc. Set from the page's settings before it paints
++  // (LocalFrameView); null for none.
++  void SetCraTint(const float* colorize_params);
 +  bool HasCraTint() const { return !!cra_tint_filter_; }
-+  SkColor4f CraTintColor(const SkColor4f& color) const;
++  SkColor4f CraTintColor(const SkColor4f& color) const {
++    return cra_tint_filter_->FilterColor(color);
++  }
 +  const sk_sp<cc::ColorFilter>& CraTintFilter() const {
 +    return cra_tint_filter_;
 +  }
- 
++
    // Pushes a dark mode inversion pause state on construction and pops it on
    // destruction, guaranteeing pushes and pops are always balanced. See the
-@@ -593,6 +605,8 @@
+   // comment on IsAutoDarkModePaused() for the semantics of the pause states.
+@@ -593,6 +607,7 @@
  #endif
  
    std::unique_ptr<DarkModeFilter> dark_mode_filter_;
 +  sk_sp<cc::ColorFilter> cra_tint_filter_;
-+  std::array<float, 20> cra_tint_matrix_{};
  
    Vector<bool> auto_dark_mode_states_;
    bool printing_ = false;

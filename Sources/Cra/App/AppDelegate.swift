@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // One tint, as the stylesheet's filters were: the last boost's wins.
             return (boosts.map { $0.stylesheet(engineTints: engineTints) }.joined(separator: "\n"),
                     boosts.map(\.js).filter { !$0.isEmpty }.joined(separator: ";\n"),
-                    boosts.compactMap(\.tintMatrixString).last)
+                    boosts.compactMap(\.tint?.engineString).last)
         }
         BoostStore.changed = { [weak self] host in for m in self?.mainWindows ?? [] { m.browsers.reapplyBoosts(host: host) } }
         mainWindows = store.prefs.windows.map { MainWindowController(app: self, session: $0) }

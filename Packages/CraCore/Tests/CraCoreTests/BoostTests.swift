@@ -28,52 +28,46 @@ struct BoostTests {
     }
 
     /// A Boost's colours leave the page's images alone, as in Arc (#602; Arc 1.174, 20 Nov 2026: Wikipedia's
-    /// photos kept their pixels under a strong tint). On Cra's Chromium engine the tint is a colour matrix the
-    /// engine draws every colour but images through, the same colours CSS's sepia hue-rotate saturate gave; the
-    /// stylesheet then leaves the tint out and keeps the other controls.
+    /// photos kept their pixels under a strong tint), in Arc's own colours: a colorize by lightness between the
+    /// two handles' hues (21 Nov 2026). On Cra's Chromium engine the engine draws every colour but images
+    /// through it; the stylesheet then leaves the tint out and keeps the other controls.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/602"))
-    func theTintIsAColourMatrixTheEngineDrawsAroundImages() throws {
+    func theTintIsArcsColorizeTheEngineDrawsAroundImages() throws {
         var b = Boost(host: "example.com")
-        #expect(b.tintMatrix == nil && b.tintMatrixString == nil, "no tint, no matrix")
+        #expect(b.tint == nil, "no tint, nothing for the engine")
         b.hue = 0.7
         b.strength = 0.6
         b.contrast = 60
-        let m = try #require(b.tintMatrix)
-        #expect(m.count == 20 && Array(m[15...]) == [0, 0, 0, 1, 0], "alpha is left as it is")
-        #expect(b.tintMatrixString?.split(separator: ",").count == 20)
+        let tint = try #require(b.tint)
+        #expect(tint.engineString.split(separator: ",").count == 6)
         #expect(b.stylesheet.contains("sepia(") && b.stylesheet.contains("contrast("))
         let engine = b.stylesheet(engineTints: true)
         #expect(!engine.contains("sepia(") && !engine.contains("hue-rotate(") && engine.contains("contrast("),
                 "the engine draws the tint; the rest stays CSS")
 
-        // The CSS chain, step by step with its clamping, against the one matrix, for colours that stay in range.
-        func clamp(_ x: Double) -> Double { max(0, min(1, x)) }
-        func css(_ c: [Double]) -> [Double] {
-            var v = c
-            let steps: [Boost.Matrix3] = [Boost.sepia(0.6), Boost.hueRotate(degrees: 0.7 * 360 - 38), Boost.saturate(2.2)]
-            for step in steps {
-                var next: [Double] = [0, 0, 0]
-                for r in 0..<3 {
-                    var sum = 0.0
-                    for k in 0..<3 { sum += step[r][k] * v[k] }
-                    next[r] = clamp(sum)
-                }
-                v = next
+        // Arc 1.174's own pixels (offline Arc, 21 Nov 2026), the handle at three places: the swatch's sRGB colour in,
+        // Arc's out, within 4/255.
+        let arc: [(hue: Double, strength: Double, in: [Double], out: [Double])] = [
+            (0.5, 20.0 / 56, [0, 0, 0], [13, 14, 18]), (0.5, 20.0 / 56, [255, 255, 255], [246, 248, 248]),
+            (0.5, 20.0 / 56, [255, 0, 0], [51, 154, 211]), (0.5, 20.0 / 56, [128, 128, 0], [26, 70, 122]),
+            (0, 39.0 / 56, [128, 128, 128], [175, 127, 97]), (0, 39.0 / 56, [153, 255, 255], [245, 164, 150]),
+            (0, 39.0 / 56, [0, 0, 0], [45, 40, 23]), (0.8342, 1, [255, 255, 255], [242, 216, 242]),
+            (0.8342, 1, [0, 0, 0], [76, 26, 38]), (0.8342, 1, [128, 128, 128], [198, 83, 155]),
+            (0.8342, 1, [255, 0, 0], [255, 24, 167]), (0.8342, 1, [128, 128, 0], [192, 0, 83]),
+        ]
+        for c in arc {
+            var boost = Boost(host: "example.com")
+            boost.hue = c.hue
+            boost.strength = c.strength
+            let t = try #require(boost.tint)
+            let o = t.apply(c.in[0] / 255, c.in[1] / 255, c.in[2] / 255)
+            for (got, want) in zip([o.r, o.g, o.b], c.out) {
+                #expect(abs(got * 255 - want) <= 4, "\(c.hue) \(c.strength) \(c.in): \(got * 255) for Arc's \(want)")
             }
-            return v
         }
-        func matrix(_ c: [Double]) -> [Double] {
-            var out: [Double] = [0, 0, 0]
-            for r in 0..<3 {
-                var sum = m[r * 5 + 4]
-                for k in 0..<3 { sum += m[r * 5 + k] * c[k] }
-                out[r] = clamp(sum)
-            }
-            return out
-        }
-        for colour in [[0.2, 0.2, 0.2], [0.4, 0.3, 0.2], [0.1, 0.3, 0.5]] {
-            for (a, b) in zip(css(colour), matrix(colour)) { #expect(abs(a - b) < 0.002, "\(colour)") }
-        }
+        // Every saturated colour of one lightness comes out the same, as in Arc.
+        let red = tint.apply(1, 0, 0), blue = tint.apply(0, 0, 1)
+        #expect(abs(red.r - blue.r) < 1e-9 && abs(red.g - blue.g) < 1e-9 && abs(red.b - blue.b) < 1e-9)
     }
 
     @Test func eachControlWritesItsRule() {

@@ -118,11 +118,11 @@ using BlockRequestHook = bool (*)(const GURL& url,
                                   const url::Origin* top_frame);
 inline BlockRequestHook g_block_request = nullptr;
 
-// A Boost's colours for a page of Cra's: a 4x5 colour matrix as 20 comma-separated numbers that Blink draws every
-// colour of the page through but its images (GraphicsContext::SetCraTint), as Arc's Boosts do. Empty for none
+// A Boost's colours for a page of Cra's: Arc's colorize as 6 comma-separated numbers (Boost.tint) that Blink draws
+// every colour of the page through but its images (GraphicsContext::SetCraTint), as Arc's Boosts do. Empty for none
 // (patches/cra-boost-tint.patch, #602).
-using BoostColorMatrixHook = std::string (*)(content::WebContents* contents);
-inline BoostColorMatrixHook g_boost_color_matrix = nullptr;
+using BoostTintHook = std::string (*)(content::WebContents* contents);
+inline BoostTintHook g_boost_tint = nullptr;
 
 // A page's context menu, Arc's in Cra's pages (patches/cra-page-menu.patch): Cra changes the model Chrome built,
 // runs its own items (ids kCraMenuFirst to kCraMenuLast) and the Chrome ones it takes over (true: done), and

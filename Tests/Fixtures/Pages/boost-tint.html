@@ -1,6 +1,10 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Boost tint</title>
-<!-- A Boost's colours leave pictures alone (boost-tint scenario, #602): a grey page and a solid orange picture. -->
-<style>html,body{margin:0;background:#808080}img{position:absolute;left:300px;top:40px;width:200px;height:200px;image-rendering:pixelated}</style>
+<!-- A Boost's colours leave pictures alone (boost-tint scenario, #602): a grey page and a solid orange picture, and a
+     red and a blue patch, which Arc's colorize turns into the same colour. -->
+<style>html,body{margin:0;background:#808080}img{position:absolute;left:300px;top:40px;width:200px;height:200px;image-rendering:pixelated}
+.patch{position:absolute;top:300px;width:100px;height:100px}</style>
 <img src="icon-orange.png" alt="">
+<div class="patch" style="left:300px;background:#f00"></div>
+<div class="patch" style="left:450px;background:#00f"></div>
