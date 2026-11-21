@@ -1756,7 +1756,7 @@ final class SpaceCellView: NSView, ArcTooltipTarget {
         guard let i = store.spaceOrder.firstIndex(of: spaceID), i < 9 else { return [] }
         return KeyBindingRegistry.shared.action("space\(i + 1)")?.primary?.caps ?? []
     }
-    var badge: String? { store.profile(store.space(spaceID)?.profileID)?.name ?? "Default" }
+    var badge: String? { store.profileName(store.space(spaceID)?.profileID) }
     // Arc 1.171: ~0.62 s after the pointer stops (two 120 Hz recordings, 3 Nov 2026), sooner
     // than a control's tip. Cra's panel takes ~0.07 s more to reach the screen.
     var idleDelay: TimeInterval { 0.55 }

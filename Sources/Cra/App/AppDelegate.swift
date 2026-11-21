@@ -348,6 +348,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // A profile that loaded since the last pass gets the kept-active sites in Chromium's list, and
         // an edit on chrome://settings/performance comes back to Settings (#458).
         ChromeKeepActiveSites.apply(store: store)
+        // …and its name, as Cra shows it (#666).
+        ChromiumProfileNames.apply(store: store)
         for w in mainWindows {
             w.browsers.freezeIdleTabs(hiddenLongerThan: freezeAfter)
             w.releaseHiddenFrames(now: composition.clock.now)
@@ -381,6 +383,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                        apply: CraCEFRuntime.setFingerprintingProtectionEnabled)
         // Settings ▸ Tabs ▸ "Always keep these sites active" (#458), for Chromium's own freezing too.
         observeChanges(of: { [store] in store.settings.keepActiveSites }) { [store] _ in ChromeKeepActiveSites.apply(store: store) }
+        // Chromium calls each profile what Cra does, after a rename too (#666).
+        store.onProfileNamesChanged = { [store] in ChromiumProfileNames.apply(store: store) }
+        ChromiumProfileNames.apply(store: store)
     }
 
     /// Chromium's secure DNS setting (Settings > Privacy, chrome://settings/security), left on
@@ -388,7 +393,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// change (#110), and the Settings row follows it (#133).
     private func logSecureDNS() {
         var last: String?
-        CraCEFRuntime.setSecureDNSChangeHandler {
+        CraCEFRuntime.setSecureDNSChangeHandler { [store] in
+            // Called first once Chromium is ready: Default has loaded, so it takes its name now (#666).
+            ChromiumProfileNames.apply(store: store)
             let setting = SecureDNSSetting.shared
             setting.refresh()
             guard let line = setting.inEffect?.line else { return }
@@ -1205,6 +1212,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // httpsOnly=1|0: Settings ▸ Privacy's HTTPS-only switch, flipped while pages are open: Chromium takes the
             // change at once (#36: it crashed doing so once onboarding ended).
             // chromePref=<name>: the Default profile's Chrome pref as Chromium holds it now, as JSON (#625).
+            // renameProfile=<name>[&profile=<id>]: Settings ▸ Profiles' rename, of Default unless an id is given (#666).
+            if let name = dict["renameProfile"] {
+                let id = dict["profile"].flatMap(UUID.init(uuidString:))
+                store.renameProfile(id, to: name)
+                CraLog.note("profile renamed: \(store.profileName(id))")
+                return
+            }
             if let name = dict["chromePref"] {
                 CraLog.note("chrome pref \(name): " + (CraCEFRuntime.preference(name, forProfile: nil) ?? "none"))
                 return
@@ -1919,8 +1933,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     w.refreshTarget()   // as when it takes focus
                     let state: LittleWindowState = w.state
                     space = store.space(state.targetSpaceID)?.title ?? "-"
-                    let named: BrowserProfile? = store.profile(state.profileID)
-                    profile = named?.name ?? "Default"
+                    profile = store.profileName(state.profileID)
                     shown = " \(w.debugCard) \(w.debugReadout)"
                     // The window server's order, front to back.
                     let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []

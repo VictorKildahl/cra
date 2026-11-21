@@ -37,14 +37,14 @@ struct ProfilesPane: View {
     // MARK: List
 
     private func list(current: UUID?) -> some View {
-        let name = current == nil ? "Default" : (store.profile(current)?.name ?? "Default")
+        let name = store.profileName(current)
         return VStack(spacing: 0) {
             Text("Your Profiles").font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
                 .padding(.leading, 12)
                 .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             Rectangle().fill(Color.settingsHairline).frame(height: 1)
             VStack(spacing: 0) {
-                profileRow("Default", id: nil, current: current)
+                profileRow(store.profileName(nil), id: nil, current: current)
                 ForEach(store.profiles) { profileRow($0.name, id: $0.id, current: current) }
             }
             .padding(.horizontal, 10).padding(.top, 10)
@@ -53,15 +53,13 @@ struct ProfilesPane: View {
             HStack(spacing: 0) {
                 barButton("plus", help: "Create Profile…") { actions.newProfile() }
                 barDivider
-                barButton("minus", help: current == nil ? "The Default Profile cannot be deleted." : "Delete “\(name)”…") {
+                barButton("minus", help: current == nil ? "The default Profile cannot be deleted." : "Delete “\(name)”…") {
                     if let p = store.profile(current) { delete(p) }
                 }
                 .disabled(current == nil || !store.spaces(usingProfile: current).isEmpty)
                 barDivider
-                barButton("rectangle.and.pencil.and.ellipsis", help: "Rename “\(name)”…") {
-                    if let p = store.profile(current) { rename(p) }
-                }
-                .disabled(current == nil)
+                // Arc renames every profile, its default one too (#666).
+                barButton("rectangle.and.pencil.and.ellipsis", help: "Rename “\(name)”…") { rename(current) }
                 Spacer(minLength: 0)
             }
             .frame(height: 33)
@@ -195,7 +193,7 @@ struct ProfilesPane: View {
     private func downloadPicker(_ profileID: UUID?) -> some View {
         let location = store.settings.downloadLocation(profileID: profileID)
         let folder = DownloadDestinations.folder(profileID: profileID)
-        let name = profileID == nil ? "Default" : (store.profile(profileID)?.name ?? "this Profile")
+        let name = store.profileName(profileID)
         let choice = Binding<DownloadChoice>(
             get: { location.askWhereToSave ? .ask : .folder },
             set: { picked in
@@ -270,15 +268,15 @@ struct ProfilesPane: View {
             .flatMap(BrowserLanguages.codes(preferencesFile:)) ?? []
     }
 
-    private func rename(_ profile: BrowserProfile) {
+    private func rename(_ id: UUID?) {
         guard let window = AppDialog.parentWindow else { return }
         let dialog = AppDialog(title: "Rename your Profile",
                                message: "This won’t affect the names of any of the Spaces associated with this Profile.",
-                               actions: [DialogAction("Save"), .cancel], input: profile.name, placeholder: "Profile name", requiresInput: true,
+                               actions: [DialogAction("Save"), .cancel], input: store.profileName(id), placeholder: "Profile name", requiresInput: true,
                                icon: .none, width: 496, buttonSpacing: 30, buttonOutset: 0)
         dialog.present(over: window) { response in
             guard response == .alertFirstButtonReturn, let name = dialog.input else { return }
-            store.renameProfile(profile.id, to: name.trimmingCharacters(in: .whitespacesAndNewlines))
+            store.renameProfile(id, to: name)
         }
     }
 

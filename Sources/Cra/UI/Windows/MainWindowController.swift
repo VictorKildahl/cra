@@ -5690,7 +5690,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let profilePath = space.flatMap { store.profilePath(space: $0.id) } ?? store.profilePath(profile: initialProfile)
         let defaultEngine = SearchEngines.shared.defaultEngine(profilePath: profilePath, legacy: store.settings.searchEngine)
         let engines = ChromiumSearchEngine.spaceChoices(among: SearchEngines.shared.keywords(profilePath: profilePath))
-        let view = SpaceEditorView(existing: space, profiles: store.profiles, initialProfile: initialProfile, searchEngines: engines,
+        let view = SpaceEditorView(existing: space, profiles: store.profiles, defaultProfileName: store.profileName(nil), initialProfile: initialProfile, searchEngines: engines,
                                    defaultEngineName: defaultEngine.name, onSave: { [weak panel] title, icon, theme, profile, newName, searchEngine in
             let id: UUID
             if let sid = space?.id, var s = store.space(sid) {

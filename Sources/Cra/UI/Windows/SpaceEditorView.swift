@@ -12,6 +12,8 @@ enum SpaceProfileChoice: Hashable {
 struct SpaceEditorView: View {
     let existing: Space?
     let profiles: [BrowserProfile]
+    /// The Default profile's name (#666).
+    let defaultProfileName: String
     /// The Search Engine picker's rows (#306) and the name of the default it falls back to.
     let searchEngines: [ChromiumSearchEngine]
     let defaultEngineName: String
@@ -34,12 +36,13 @@ struct SpaceEditorView: View {
                                  "📈", "🧠", "❤️", "⭐️", "🌙", "☕️", "🏃", "📷", "🎬", "🧩", "🪴", "🏔️", "🛠️", "💰", "📝", "🎯"]
 
     /// `initialProfile` is a new space's starting profile (Arc: the focused space's).
-    init(existing: Space?, profiles: [BrowserProfile], initialProfile: UUID? = nil,
+    init(existing: Space?, profiles: [BrowserProfile], defaultProfileName: String = ProfileNames.defaultName, initialProfile: UUID? = nil,
          searchEngines: [ChromiumSearchEngine] = [], defaultEngineName: String = "Google",
          onSave: @escaping (String, SpaceIcon, SpaceTheme, SpaceProfileChoice, String, String?) -> Void, onCancel: @escaping () -> Void,
          onPreview: @escaping (SpaceTheme) -> Void = { _ in }) {
         self.existing = existing
         self.profiles = profiles
+        self.defaultProfileName = defaultProfileName
         self.defaultEngineName = defaultEngineName
         // An engine no longer listed (removed on the settings page) still shows as the space's.
         let own = existing?.searchEngine ?? ""
@@ -167,7 +170,7 @@ struct SpaceEditorView: View {
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 6) {
                 Picker("Profile", selection: $profile) {
-                    Text("Default").tag(SpaceProfileChoice.existing(nil))
+                    Text(defaultProfileName).tag(SpaceProfileChoice.existing(nil))
                     ForEach(profiles) { p in Text(p.name).tag(SpaceProfileChoice.existing(p.id)) }
                     Divider()
                     Text("New Profile…").tag(SpaceProfileChoice.new)

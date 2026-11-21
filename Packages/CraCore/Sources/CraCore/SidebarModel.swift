@@ -406,12 +406,14 @@ public struct SidebarDocument: Codable, Equatable {
     public var items: [SidebarItem]
     /// Profiles besides Default (missing in files from before profiles).
     public var profiles: [BrowserProfile]?
+    /// The Default profile's name once renamed (ProfileNames, #666); missing while it is "Default".
+    public var defaultProfileName: String?
     /// Arc's favorites per profile (topApps{profile}), with AppSettings.sharedFavorites on: the
     /// list each profile's spaces show. A list outlives its spaces, as in Arc (#154).
     public var profileFavorites: [ProfileFavorites]?
 
     public init(version: Int = 1, spaceOrder: [UUID], spaces: [Space], favoritesContainerID: UUID? = nil, items: [SidebarItem],
-                profiles: [BrowserProfile]? = nil, profileFavorites: [ProfileFavorites]? = nil) {
+                profiles: [BrowserProfile]? = nil, profileFavorites: [ProfileFavorites]? = nil, defaultProfileName: String? = nil) {
         self.version = version
         self.spaceOrder = spaceOrder
         self.spaces = spaces
@@ -419,6 +421,7 @@ public struct SidebarDocument: Codable, Equatable {
         self.items = items
         self.profiles = profiles
         self.profileFavorites = profileFavorites
+        self.defaultProfileName = defaultProfileName
     }
 
     public static func fresh() -> SidebarDocument {

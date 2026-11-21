@@ -83,7 +83,7 @@ extension MainWindowController {
         guard let window, let space = store.space(id) else { return }
         let store = self.store
         DialogPanel.present(over: window) { close in
-            ChangeProfileDialog(space: space, profiles: store.profiles, spaces: profileSpaces, onChange: { p in
+            ChangeProfileDialog(space: space, profiles: store.profiles, defaultName: store.profileName(nil), spaces: profileSpaces, onChange: { p in
                 store.setProfile(p, forSpace: id)
                 close()
             }, onCreate: { [weak self] name, ids in

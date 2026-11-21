@@ -706,7 +706,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
             }
             sections.append(.init(title: "Where was the tab?", chips: places))
         } else {
-            var chips = [Chip(id: "Default", label: "Default", on: downloadFilter.profiles.contains("Default"))]
+            var chips = [Chip(id: "Default", label: store.profileName(nil), on: downloadFilter.profiles.contains("Default"))]
             for p in store.profiles { chips.append(Chip(id: p.directoryName, label: p.name, on: downloadFilter.profiles.contains(p.directoryName))) }
             sections.append(.init(title: "Profiles", chips: chips))
         }

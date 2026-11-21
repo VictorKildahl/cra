@@ -1468,6 +1468,11 @@
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::widthFollowsTheAddress  79805ff882f9
 #663   Tests/Scenarios/sidebar-address-panel.scenario  47c1675a154a
 #664   Tests/ExtensionPopupWindowTests.swift::keepsADragWithARealMouse  6a0e405853da
+#666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::aRenameIsTrimmedAndNeverEmpty  a39efd93ca0c
+#666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::chromiumGetsTheSameName  5df19de3a607
+#666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::defaultHasANameOfItsOwn  e0de71ee2e1b
+#666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::sidebarKeepsDefaultsName  a5ee177c86bd
+#666   Tests/Scenarios/profile-names.scenario  d12822edd448
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

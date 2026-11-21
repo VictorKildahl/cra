@@ -133,7 +133,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate, NSPopoverDelegate {
         if name.stringValue != draft.title, name.currentEditor() == nil { name.stringValue = draft.title }
         iconButton.icon = draft.icon
         create.isOn = draft.canCreate
-        pill.title = draft.profile.flatMap { id in store.profiles.first { $0.id == id }?.name } ?? "Default"
+        pill.title = store.profileName(draft.profile)
         let engines = engineChoices(for: draft)
         enginePill.title = draft.searchEngine.flatMap { k in engines.choices.first { $0.keyword == k }?.name } ?? "Default (\(engines.defaultName))"
         needsLayout = true
@@ -306,7 +306,7 @@ final class SpaceCreationView: NSView, NSTextFieldDelegate, NSPopoverDelegate {
             i.state = id == current ? .on : .off
             return i
         }
-        menu.addItem(item("Default", nil))
+        menu.addItem(item(store.profileName(nil), nil))
         for p in store.profiles { menu.addItem(item(p.name, p.id)) }
         menu.addItem(.separator())
         let new = NSMenuItem(title: "New Profile…", action: #selector(newProfile), keyEquivalent: "")

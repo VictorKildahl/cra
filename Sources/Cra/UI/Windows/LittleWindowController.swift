@@ -1666,14 +1666,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// (LittleBrowser.State.shouldShowProfileIndicators).
     var showsProfile: Bool { !store.profiles.isEmpty }
 
-    var profileName: String { store.profile(state.profileID)?.name ?? "Default" }
+    var profileName: String { store.profileName(state.profileID) }
 
     /// The indicator's menu (LittleBrowserToolbarAction.showChangeProfileMenu): every profile,
     /// the page's ticked (ChangeProfileMenuOption.isCurrent).
     func showProfileMenu(from view: NSView) {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let options: [(UUID?, String)] = [(nil, "Default")] + store.profiles.map { ($0.id, $0.name) }
+        let options: [(UUID?, String)] = [(nil, store.profileName(nil))] + store.profiles.map { ($0.id, $0.name) }
         for (id, name) in options {
             MenuItems.add(menu, name, on: id == state.profileID) { [weak self] in self?.changeProfile(to: id) }
         }
@@ -1687,7 +1687,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func changeProfile(to id: UUID?) {
         guard id != state.profileID, let window else { return }
         if UserDefaults.standard.bool(forKey: Self.bypassProfileDialogKey) { reload(inProfile: id); return }
-        let alert = AppDialog(title: "Open this page in \(store.profile(id)?.name ?? "Default")?",
+        let alert = AppDialog(title: "Open this page in \(store.profileName(id))?",
                               message: "Each Profile has different browser data, so this webpage might look a little different.",
                               actions: [DialogAction("Change Profile"), .cancel], suppressionTitle: "Don’t ask again")
         alert.present(over: window) { [weak self, weak alert] resp in
@@ -3089,7 +3089,7 @@ final class LittleToolbarView: NSView {
         let (url, hover, popupOpen, space, spaces, profile, waiting) = withObservationTracking {
             (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace, store.spaceOrder.count,
              // Arc's shouldShowProfileIndicators: only once there is a profile besides Default.
-             store.profiles.isEmpty ? nil : store.profile(state.profileID)?.name ?? "Default", state.awaitsFirstResponse)
+             store.profiles.isEmpty ? nil : store.profileName(state.profileID), state.awaitsFirstResponse)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }

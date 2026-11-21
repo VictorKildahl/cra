@@ -323,7 +323,7 @@ final class ImportFlowModel {
     func profileNames(of e: ImportableExtension) -> [String]? {
         guard let plan else { return nil }
         var map = ImportProfileMap()
-        var names = ["Default": "Default"]
+        var names = ["Default": store.profileName(nil)]
         for sp in plan.selecting(spaces: selectedSpaces, favorites: false).spaces {
             if let p = sp.profile { map.folders[p.folder] = p.folder; names[p.folder] = p.name } else { map.folders["Default"] = "Default" }
         }

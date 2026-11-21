@@ -1,0 +1,22 @@
+# promise: #666
+# Every profile can be renamed, Default too, as in Arc, and Chromium calls it the same: Cra writes the
+# name into the profile's `profile.name` pref (Chromium copies it into Local State's profile list), as
+# Arc's Chromium has its names. Before, Default couldn't be renamed and Chromium called it "Your Chromium".
+budget rss=600 stalls50=6
+cra://open?url=${PAGE}?n=names
+wait 3
+cra://debug?chromePref=profile.name
+expect-log chrome pref profile.name: "Default"
+cra://debug?chromePref=profile.using_default_name
+expect-log chrome pref profile.using_default_name: false
+cra://debug?renameProfile=%20HEXA%20
+expect-log profile renamed: HEXA$
+wait 1
+cra://debug?chromePref=profile.name
+expect-log chrome pref profile.name: "HEXA"
+cra://debug?renameProfile=%20%20
+expect-log profile renamed: HEXA$
+relaunch
+wait 3
+cra://debug?chromePref=profile.name
+expect-log chrome pref profile.name: "HEXA"

@@ -494,7 +494,7 @@ enum SpaceMenu {
             MenuItems.add(m, "Edit Theme Color…") { open(); actions.editSpaceTheme(space) }
         case .setProfile:
             let profiles = MenuItems.submenu(m, "Set Profile")
-            MenuItems.add(profiles, "Default", on: space.profileID == nil) { store.setProfile(nil, forSpace: id) }
+            MenuItems.add(profiles, store.profileName(nil), on: space.profileID == nil) { store.setProfile(nil, forSpace: id) }
             for p in store.profiles {
                 MenuItems.add(profiles, p.name, on: space.profileID == p.id) { store.setProfile(p.id, forSpace: id) }
             }
@@ -1907,7 +1907,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
     private static func moveToProfile(_ menu: NSMenu, _ id: UUID, _ store: SidebarStore) {
         guard let list = store.profileList(ofItem: id) else { return }
         let profiles = MenuItems.submenu(MenuItems.submenu(menu, "Move to"), "Profile")
-        MenuItems.add(profiles, "Default", on: list.profileID == nil) { store.moveFavorite(id, toProfile: nil) }
+        MenuItems.add(profiles, store.profileName(nil), on: list.profileID == nil) { store.moveFavorite(id, toProfile: nil) }
         for p in store.profiles {
             MenuItems.add(profiles, p.name, on: list.profileID == p.id) { store.moveFavorite(id, toProfile: p.id) }
         }
