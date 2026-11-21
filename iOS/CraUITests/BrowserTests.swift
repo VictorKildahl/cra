@@ -280,6 +280,24 @@ final class SettingsTests: BrowserTestCase {
         XCTAssertEqual(app.switches["setting-block-ads"].value as? String, "1", "the site's choice leaves the global one alone")
     }
 
+    // promise: #674
+    func testAppSettingsOpensTallOnIPadAndHalfOnIPhone() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
+        sleep(1)
+        keep("app-settings-open")
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTAssertLessThan(app.buttons["Done"].frame.minY, app.frame.height / 3,
+                              "App Settings opened as a short card on iPad")
+        } else {
+            XCTAssertGreaterThan(app.buttons["Done"].frame.minY, app.frame.height * 0.4,
+                                 "App Settings did not open at medium height on iPhone")
+        }
+    }
+
     /// The bottom of App Settings as in Arc Search 1.49: Sync, the share capsule, Contact the
     /// Team, Show Onboarding, Privacy Policy, Open Source Licenses (the block list's notices) and
     /// the version.

@@ -1500,6 +1500,8 @@
 #670   iOS/CraUITests/BrowserTests.swift::testTheSharePromptLeadsToTheHowTo  c2a3b1894f34
 #670   iOS/CraUITests/LinkMenuTests.swift::testShareFromALinksMenu  8d893605c190
 #673   Tests/StoreTests.swift::importedTabsKeepTheirOwnIcons  6b33b1cf8f28
+#674   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::appSettingsUsesFullHeightOnIPadAndKeepsMediumOnIPhone  ab096e56dcb8
+#674   iOS/CraUITests/BrowserTests.swift::testAppSettingsOpensTallOnIPadAndHalfOnIPhone  1f7ec8f0e34a
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
 #679   Tests/Scenarios/library-swipe-out-still-pointer-fullscreen.scenario  26456a6874d0
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae

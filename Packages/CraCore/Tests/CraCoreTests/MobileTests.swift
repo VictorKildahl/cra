@@ -367,6 +367,11 @@ struct MobileTabsTests {
 }
 
 struct MobileSettingsTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/674")) func appSettingsUsesFullHeightOnIPadAndKeepsMediumOnIPhone() {
+        #expect(MobileSettingsSheet.appSettingsHeights(onPad: true) == [.large])
+        #expect(MobileSettingsSheet.appSettingsHeights(onPad: false) == [.medium, .large])
+    }
+
     @Test func aMissingOrOlderFileIsTheDefaults() throws {
         let loaded = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"searchEngine":"duckduckgo","archiveAfter":"someday"}"#.utf8))
         #expect(loaded.searchEngine == .duckduckgo)
