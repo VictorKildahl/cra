@@ -52,6 +52,11 @@ final class SidebarView: NSView {
     private var libraryHost: LibraryView?
     /// Scenarios (#649): the Library's first download row hovered, its ••• and menu.
     var debugLibraryDownloadMore: String { libraryHost?.debugDownloadMore() ?? "no library" }
+    /// cra://debug?libraryRail=<page>: see LibraryRailView.debug.
+    func debugLibraryRail(page: LibraryPage, hover: Bool?, press: Bool?, done: @escaping (String) -> Void) {
+        guard let libraryHost else { return done("no library") }
+        libraryHost.debugRail(page: page, hover: hover, press: press, done: done)
+    }
     /// Arc's Create a Space page, over the space's column while one is being made.
     private var creationHost: SpaceCreationView?
     var debugSpaceCreation: String { creationHost?.debugLine ?? "none" }

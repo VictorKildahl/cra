@@ -1574,6 +1574,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 library.debugHover(on == "1") { CraLog.note("library glyph: \($0)") }
                 return
             }
+            // libraryRail=<page>[&hover=1|0][&press=1|0]&as=<label>: the pointer on that page's tile of the
+            // Library's rail or gone, the button down or up; a second later cra.log says, under that label,
+            // which frame its icon rests on and in how many it got there since it was picked, and the tile's
+            // colours and wash.
+            if let name = dict["libraryRail"] {
+                guard let page = LibraryPage(rawValue: name), let sidebar = main.shell.sidebarHost as? SidebarView else {
+                    CraLog.note("library rail: none"); return
+                }
+                let label = dict["as"] ?? ""
+                sidebar.debugLibraryRail(page: page, hover: dict["hover"].map { $0 == "1" }, press: dict["press"].map { $0 == "1" }) {
+                    CraLog.note("library rail \(label): \($0)")
+                }
+                return
+            }
             // easelTileHover=1|0: the pointer over Library ▸ Easels' first tile, or gone; cra.log says
             // how large it is drawn and how bright its backing is.
             if let on = dict["easelTileHover"] {

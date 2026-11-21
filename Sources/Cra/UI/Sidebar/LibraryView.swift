@@ -26,12 +26,15 @@ enum LibraryPage: String, CaseIterable {
         case .archive: "archivebox"
         }
     }
-    var selectedSymbol: String {
+    /// Its icon on the rail (Cra's own drawing, moving as Arc's does).
+    var railIcon: LibraryRailIcon {
         switch self {
-        case .media: "photo.fill.on.rectangle.fill"
-        case .easels: symbol
-        case .boosts: "paintbrush.pointed.fill"
-        default: symbol + ".fill"
+        case .media: .media
+        case .downloads: .downloads
+        case .easels: .easels
+        case .spaces: .spaces
+        case .boosts: .boosts
+        case .archive: .archive
         }
     }
     var searchPrompt: String {
@@ -50,9 +53,8 @@ enum LibraryPage: String, CaseIterable {
 /// 1728×1084 window, 27 Oct 2026):
 /// - The sidebar becomes 417 pt whatever the tab sidebar's width (LibraryWidth): a 113 pt rail (a faint white wash brightening
 ///   toward its right edge, ending in a 1 pt hairline) and the page's list.
-/// - Rail buttons 97×80 at x 8, 100 pt apart, the group centred vertically: an 18 pt glyph
-///   22 pt from the top, the 12 pt semibold label under it (white 60 %). The page shown gets
-///   a white 7 % fill and its glyph filled in the space's accent.
+/// - Rail tiles 97×80 at x 8, 100 pt apart, the group centred vertically; what is on a tile and how it
+///   looks is `LibraryRailTile` and `LibraryRailIcons` in CraCore (Arc 1.174's rules, from its code).
 /// - The list column: a 36 pt search field ("Search Archive…") from x 120 and a Filter button
 ///   at the top, 10 pt from the window top; day headers ("Today", 13 pt semibold); rows 56 pt
 ///   apart with a 24 pt icon at x 130, the title at x 164 (14 pt) and the URL under it (12 pt).
@@ -102,6 +104,11 @@ final class LibraryView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Scenarios: see LibraryRailView.debug.
+    func debugRail(page: LibraryPage, hover: Bool?, press: Bool?, done: @escaping (String) -> Void) {
+        rail.debug(page: page, hover: hover, press: press, done: done)
+    }
+
     /// Scenarios (#649): see LibraryListView.debugDownloadMore.
     func debugDownloadMore() -> String { list.debugDownloadMore() }
 
@@ -130,7 +137,10 @@ final class LibraryView: NSView {
     }
 
     private func apply() {
-        rail.accent = accent
+        // The icons take Arc's maxContrastColor and cutoutColor of the space's theme.
+        let tones = LibraryRailTile.iconColors(theme: store.focusedSpace(window: ui.windowID).theme.shown, dark: palette.isDark)
+        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: min(1, max(0, c.r)), green: min(1, max(0, c.g)), blue: min(1, max(0, c.b)), alpha: 1) }
+        rail.tones = (ink(tones.lines), ink(tones.inside))
         spaces?.accent = accent
         rail.colors = SidebarColors(palette)
         // Light themes: Arc's switch is the folder's shaded dark with a tinted-light knob.
@@ -165,8 +175,8 @@ private final class LibraryRailView: NSView {
     var pageMenu: (LibraryPage) -> NSMenu? = { _ in nil }
     var onBack: () -> Void = {}
     var colors = SidebarColors() { didSet { refresh() } }
-    /// The selected page's glyph: the space's accent pair, not the Mac's accent colour (Arc).
-    var accent: (fill: NSColor, ink: NSColor) = (.controlAccentColor, .white) { didSet { refresh() } }
+    /// The icons' two colours, from the space's theme: their lines, and what fills the shown page's.
+    var tones: (lines: NSColor, inside: NSColor) = (.white, .black) { didSet { refresh() } }
     private let wash = CAGradientLayer()
     private let hairline = CALayer()
     private var buttons: [LibraryRailButton] = []
@@ -194,18 +204,29 @@ private final class LibraryRailView: NSView {
     override var isFlipped: Bool { true }
 
     func show(page: LibraryPage) {
+        // A change of page while the rail is on screen is the user's pick, and its icon plays for it.
+        let picked = page != self.page && window != nil
         self.page = page
-        refresh()
+        refresh(picked: picked)
     }
 
-    private func refresh() {
+    /// cra://debug?libraryRail=<page>[&hover=1|0][&press=1|0]: the pointer on that page's tile or gone,
+    /// the button down or up; then, a second later (an icon picked just before has played out by then),
+    /// what the tile shows.
+    func debug(page: LibraryPage, hover: Bool?, press: Bool?, done: @escaping (String) -> Void) {
+        guard let b = buttons.first(where: { $0.page == page }) else { return done("none") }
+        b.debug(hover: hover, press: press)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { done(b.readout) }
+    }
+
+    private func refresh(picked: Bool = false) {
         let ink: NSColor = colors.isDark ? .white : .black
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         wash.colors = [ink.withAlphaComponent(0.02).cgColor, ink.withAlphaComponent(0.045).cgColor]
         hairline.backgroundColor = ink.withAlphaComponent(0.09).cgColor
         CATransaction.commit()
-        for b in buttons { b.show(selected: b.page == page, ink: ink, accent: accent) }
+        for b in buttons { b.show(selected: b.page == page, picked: picked, dark: colors.isDark, tones: tones) }
         if back == nil {
             let b = SidebarGlyphButton(symbol: "arrow.left", size: 32, height: 32, iconSize: 15, weight: .regular,
                                        help: "Exit the Library (Esc)", colors: colors) { [weak self] in self?.onBack() }
@@ -225,11 +246,12 @@ private final class LibraryRailView: NSView {
         hairline.frame = NSRect(x: w, y: 0, width: 1, height: h)
         CATransaction.commit()
         // Spacer(minLength: title area), the buttons 20 apart, Spacer, the back arrow 8 pt in.
-        let group = CGFloat(buttons.count) * 80 + CGFloat(max(0, buttons.count - 1)) * 20
-        let free = max(0, h - group - 40)
-        let top = max(CraMetrics.titleAreaHeight, free / 2)
+        // The tiles between the title area and the back arrow; a short window shrinks them and drops their labels.
+        let column = LibraryRailTile.column(count: buttons.count, height: h, topInset: CraMetrics.titleAreaHeight, bottomInset: 40)
+        let width = LibraryRailTile.size.width
         for (i, b) in buttons.enumerated() {
-            b.frame = NSRect(x: (w - 97) / 2, y: top + CGFloat(i) * 100, width: 97, height: 80)
+            b.showsLabel = column.showsLabel
+            b.frame = NSRect(x: (w - width) / 2, y: column.top + CGFloat(i) * column.slot, width: width, height: column.tileHeight)
         }
         back?.frame = NSRect(x: 8, y: h - 8 - 32, width: 32, height: 32)
     }
@@ -241,20 +263,41 @@ private final class LibraryRailButton: NSView {
     var menuProvider: (() -> NSMenu?)?
 
     override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
-    private let glyph = NSImageView()
-    private let label = NSTextField.sidebarLabel(size: 12, weight: .semibold)
-    private var selected = false
-    private var ink = NSColor.white
+    /// The tile's fill: a layer of its own, because it alone draws in while the tile is pressed.
+    private let wash = CALayer()
+    private let icon: LibraryRailIconView
+    private let label = NSTextField.sidebarLabel(size: LibraryRailTile.labelSize, weight: .bold)
+    private(set) var selected = false
+    private var dark = true
+    private var tones: (lines: NSColor, inside: NSColor) = (.white, .black)
     private var hovering = false { didSet { if hovering != oldValue { refresh() } } }
+    private(set) var pressed = false { didSet { if pressed != oldValue { placeWash(animated: true) } } }
+    /// Off in a window too short for it: the icon alone, and the page's name as a tooltip (Arc's small style).
+    var showsLabel = true {
+        didSet {
+            guard showsLabel != oldValue else { return }
+            label.isHidden = !showsLabel
+            tip?.removeFromSuperview()
+            tip = nil
+            if !showsLabel {
+                let t = ArcTooltipAnchorView.attach(to: self, help: page.title)
+                t.delay = LibraryRailTile.tooltipDelay
+                tip = t
+            }
+            needsLayout = true
+        }
+    }
+    private var tip: ArcTooltipAnchorView?
 
     init(page: LibraryPage) {
         self.page = page
+        icon = LibraryRailIconView(icon: page.railIcon)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 12
-        layer?.cornerCurve = .continuous
-        glyph.imageScaling = .scaleNone
-        addSubview(glyph)
+        wash.cornerRadius = LibraryRailTile.cornerRadius
+        wash.cornerCurve = .continuous
+        layer?.addSublayer(wash)
+        addSubview(icon)
         label.stringValue = page.title
         label.alignment = .center
         addSubview(label)
@@ -266,35 +309,59 @@ private final class LibraryRailButton: NSView {
 
     override var isFlipped: Bool { true }
 
-    private var accent: (fill: NSColor, ink: NSColor) = (.controlAccentColor, .white)
-
-    func show(selected: Bool, ink: NSColor, accent: (fill: NSColor, ink: NSColor)) {
+    /// `picked`: the page was chosen just now (a click, a shortcut), so its icon plays; a rail that only
+    /// shows which page is up doesn't. `tones`: the theme's two icon colours.
+    func show(selected: Bool, picked: Bool, dark: Bool, tones: (lines: NSColor, inside: NSColor)) {
+        let becameSelected = selected && !self.selected
         self.selected = selected
-        self.ink = ink
-        self.accent = accent
+        self.dark = dark
+        self.tones = tones
         refresh()
+        if becameSelected, picked { icon.playSelection() }
     }
 
     private func refresh() {
-        let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .medium)
-        if selected {
-            // The filled glyph in palette mode: the space's dark mark on its light tint (Arc 1.172.1).
-            glyph.image = NSImage(systemSymbolName: page.selectedSymbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(config.applying(.init(paletteColors: [accent.ink, accent.fill])))
-            glyph.contentTintColor = nil
-        } else {
-            glyph.image = NSImage(systemSymbolName: page.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config)
-            glyph.contentTintColor = ink.withAlphaComponent(0.6)
+        let look = LibraryRailTile.look(selected: selected, hovered: hovering)
+        // The system's label colour, as Arc's Color.primary: the wash and the label are shares of it.
+        let ink = (dark ? NSColor.white : NSColor.black).withAlphaComponent(LibraryRailTile.inkStrength)
+        icon.primary = tones.lines.withAlphaComponent(look.lines)
+        icon.secondary = look.filled ? tones.inside : nil
+        label.textColor = ink.withAlphaComponent(ink.alphaComponent * look.label)
+        // No fade: Arc's wash comes and goes at once.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wash.backgroundColor = ink.withAlphaComponent(ink.alphaComponent * look.wash).cgColor
+        CATransaction.commit()
+    }
+
+    /// The wash fills the tile, drawn in 2 pt all round while pressed, on Arc's spring.
+    private func placeWash(animated: Bool) {
+        let inset = pressed ? LibraryRailTile.pressedInset : 0
+        let to = bounds.insetBy(dx: inset, dy: inset)
+        let from = wash.presentation()?.frame ?? wash.frame
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wash.frame = to
+        CATransaction.commit()
+        guard animated, window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, from != to else {
+            wash.removeAnimation(forKey: "press")
+            return
         }
-        label.textColor = ink.withAlphaComponent(selected ? 0.82 : 0.6)
-        layer?.backgroundColor = ink.withAlphaComponent(selected ? 0.07 : (hovering ? 0.04 : 0)).cgColor
+        let spring = CASpringAnimation(perceptualDuration: LibraryRailTile.pressResponse, bounce: 1 - LibraryRailTile.pressDamping)
+        spring.keyPath = "bounds.size"
+        spring.fromValue = NSValue(size: from.size)
+        spring.toValue = NSValue(size: to.size)
+        spring.duration = spring.settlingDuration
+        wash.add(spring, forKey: "press")
     }
 
     override func layout() {
         super.layout()
-        // The glyph in a 20 pt band 21 pt down, the label 9 pt under it.
-        glyph.frame = NSRect(x: 0, y: 21, width: bounds.width, height: 20)
-        label.frame = NSRect(x: 0, y: 50, width: bounds.width, height: 15)
+        placeWash(animated: false)
+        let box = LibraryRailTile.iconBox
+        icon.frame = NSRect(x: (bounds.width - box) / 2, y: LibraryRailTile.iconTop(tileHeight: bounds.height, showsLabel: showsLabel), width: box, height: box)
+        // AppKit sets an 11 pt line half a point lower in its field than SwiftUI does in Arc's.
+        label.frame = NSRect(x: 0, y: LibraryRailTile.labelTop(tileHeight: bounds.height) - 0.5, width: bounds.width, height: 14)
     }
 
     override func updateTrackingAreas() {
@@ -305,9 +372,28 @@ private final class LibraryRailButton: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
-    override func mouseDown(with event: NSEvent) {}
+    override func mouseDown(with event: NSEvent) { pressed = true }
+    override func mouseDragged(with event: NSEvent) { pressed = bounds.contains(convert(event.locationInWindow, from: nil)) }
     override func mouseUp(with event: NSEvent) {
+        pressed = false
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress() }
+    }
+
+    /// cra://debug?libraryRail: the pointer on the tile or gone, and the button down or up.
+    func debug(hover: Bool?, press: Bool?) {
+        if let hover { hovering = hover }
+        if let press { pressed = press }
+    }
+
+    /// For cra://debug?libraryRail: what the tile shows.
+    var readout: String {
+        func hex(_ c: NSColor?) -> String {
+            guard let c = c?.usingColorSpace(.sRGB) else { return "none" }
+            return String(format: "%02X%02X%02X/%.3f", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
+                          Int((c.blueComponent * 255).rounded()), c.alphaComponent)
+        }
+        return "\(icon.readout) selected=\(selected ? "yes" : "no") tile=\(Int(bounds.width))x\(Int(bounds.height)) label=\(showsLabel ? "shown" : "dropped") tip=\(tip?.text ?? "none") wash=\(hex(wash.backgroundColor.flatMap(NSColor.init(cgColor:)))) "
+            + "washSize=\(Int(wash.frame.width))x\(Int(wash.frame.height)) ink=\(hex(label.textColor)) lines=\(hex(icon.primary)) inside=\(hex(icon.secondary))"
     }
 }
 

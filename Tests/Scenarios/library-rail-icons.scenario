@@ -1,0 +1,51 @@
+# The Library rail's tiles look and play as Arc 1.174's (its rules, read from its code). The page shown
+# has the label colour at 10 % behind it, its label whole and its icon in the theme's two colours; the
+# others have a label and icon lines at 70 % and nothing inside; the pointer puts 5 % behind a tile and
+# changes nothing else; a pressed tile's wash draws in 2 pt all round. Picking a page plays its icon once,
+# from frame 1 to its selection's end (35; Boosts 45), over a run of frames, and the page left behind
+# shows nothing playing. The ink is white on a dark theme and black on a light one. A short window
+# shrinks the tiles and then drops their labels.
+
+cra://action/viewMedia
+wait 1
+cra://debug?libraryRail=media&as=shown
+expect-log library rail shown: media frame=1 frames=[0-9]+ selected=yes tile=97x80 label=shown tip=none wash=(FFFFFF|000000)/0\.085 washSize=97x80 ink=(FFFFFF|000000)/0\.850 lines=[0-9A-F]{6}/1\.000 inside=[0-9A-F]{6}/1\.000
+cra://debug?libraryRail=downloads&as=rest
+expect-log library rail rest: downloads frame=1 frames=[0-9]+ selected=no tile=97x80 label=shown tip=none wash=(FFFFFF|000000)/0\.000 washSize=97x80 ink=(FFFFFF|000000)/0\.595 lines=[0-9A-F]{6}/0\.700 inside=none
+
+# The pointer: the wash, and nothing else.
+cra://debug?libraryRail=downloads&hover=1&as=hover
+expect-log library rail hover: downloads frame=1 frames=[0-9]+ selected=no tile=97x80 label=shown tip=none wash=(FFFFFF|000000)/0\.043 washSize=97x80 ink=(FFFFFF|000000)/0\.595 lines=[0-9A-F]{6}/0\.700 inside=none
+cra://debug?libraryRail=downloads&hover=0&as=left
+expect-log library rail left: downloads frame=1 .* wash=(FFFFFF|000000)/0\.000
+
+# Pressed: the wash alone draws in.
+cra://debug?libraryRail=spaces&press=1&as=down
+expect-log library rail down: spaces frame=1 .* washSize=93x76
+cra://debug?libraryRail=spaces&press=0&as=up
+expect-log library rail up: spaces frame=1 .* washSize=97x80
+
+# Picked: the icon plays to selection-end in many frames (a jump would be one or two).
+cra://action/viewDownloads
+wait 1
+cra://debug?libraryRail=downloads&as=picked
+expect-log library rail picked: downloads frame=35 frames=([2-9][0-9]|[1-9][0-9]{2,}) selected=yes tile=97x80 label=shown tip=none wash=(FFFFFF|000000)/0\.085 .* inside=[0-9A-F]{6}/1\.000
+cra://debug?libraryRail=media&as=dropped
+expect-log library rail dropped: media frame=1 frames=[0-9]+ selected=no tile=97x80 label=shown tip=none wash=(FFFFFF|000000)/0\.000 .* inside=none
+
+# Boosts' selection is the longer one.
+cra://action/viewBoosts
+wait 1
+cra://debug?libraryRail=boosts&as=boosts
+expect-log library rail boosts: boosts frame=45 frames=([2-9][0-9]|[1-9][0-9]{2,}) selected=yes
+
+# A window too short for 100 pt a page: the tiles shrink, and at 64 pt or less they drop their labels
+# and name their page in a tooltip instead (Arc's small style).
+cra://debug?windowSize=1100x440
+wait 1
+cra://debug?libraryRail=media&as=short
+expect-log library rail short: media frame=1 .* tile=97x59 label=dropped tip=Media
+cra://debug?windowSize=1100x800
+wait 1
+cra://debug?libraryRail=media&as=tall
+expect-log library rail tall: media frame=1 .* tile=97x80 label=shown tip=none
