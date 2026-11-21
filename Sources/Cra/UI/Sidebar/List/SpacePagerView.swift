@@ -25,14 +25,14 @@ final class SpacePagerView: NSView {
     private var spring: Spring?
     private var link: CADisplayLink?
 
-    /// Dia's zero-bounce spring (CASpringAnimation perceptualDuration 0.4, bounce 0): critically
-    /// damped, so the offset from the page is (x0 + (v0 + ω·x0)·t)·e^(−ω·t).
+    /// Arc's page settle (LibrarySwipe.omega, #613; Dia's 0.4 s spring until then): critically damped,
+    /// so the offset from the page is (x0 + (v0 + ω·x0)·t)·e^(−ω·t).
     private struct Spring {
         let index: Int
         let start: CFTimeInterval
         let x0: CGFloat
         let v0: CGFloat
-        static let omega: CGFloat = 2 * .pi / 0.4
+        static let omega = LibrarySwipe.omega
 
         func offset(at time: CFTimeInterval) -> CGFloat {
             let t = CGFloat(max(0, time - start))

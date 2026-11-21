@@ -78,6 +78,19 @@ struct LibrarySwipeTests {
         #expect(LibrarySwipe.isSettled(from: 0.6, velocity: 0, to: 1, at: 1, width: 347))
     }
 
+    /// A swipe settles as fast as Arc's: within 1 % of the way in 0.22 s and not before 0.15 s (Arc's spring,
+    /// measured at ω ≈ 30.6). Cra used Dia's 0.4 s spring, still 14 % short at 0.22 s: on #613's side-by-side
+    /// recording every Cra swipe took ~330 ms to land and every Arc swipe ~215 ms.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/613"))
+    func settlesAsFastAsArcs() {
+        let left = { (t: CGFloat) in 1 - LibrarySwipe.settle(from: 0, velocity: 0, to: 1, at: t) }
+        #expect(left(0.22) < 0.01)
+        #expect(left(0.15) > 0.02)
+        #expect(abs(LibrarySwipe.omega - 30.6) < 0.2)
+        // At rest within a quarter point of a 347 pt sidebar page by a third of a second (Arc: ~0.27 s to rest).
+        #expect(LibrarySwipe.isSettled(from: 0, velocity: 0, to: 1, at: 0.34, width: 347))
+    }
+
     /// The Library button turns a settle around at the speed it is moving.
     @Test func settleVelocityIsTheSlope() {
         #expect(LibrarySwipe.settleVelocity(from: 0, velocity: 2, to: 1, at: 0) == 2)

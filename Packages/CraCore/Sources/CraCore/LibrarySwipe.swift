@@ -10,8 +10,11 @@ import Foundation
 /// swipe's rubber band, release rule and spring.
 /// The reveal is 0 on the space, 1 with the Library in, past 1 while it rubber-bands.
 public enum LibrarySwipe {
-    /// The space swipe's settle (Dia's zero-bounce spring, perceptual duration 0.4 s).
-    public static let omega: CGFloat = 2 * .pi / 0.4
+    /// The space swipe's settle, which the Library's shares: Arc's PageSwipeController spring, critically damped
+    /// at ω ≈ 30.6 rad/s (SwiftUI's response 0.205), within 1 % of its travel in about 0.2 s (docs/arc-reverse-
+    /// engineering.md, "Swiping into the Library"). Cra settled on Dia's (perceptual duration 0.4 s), half as fast:
+    /// in a side-by-side recording on #613 Arc's swipes settled in ~215 ms and Cra's took ~330 ms.
+    public static let omega: CGFloat = 2 * .pi / 0.205
     /// A release faster than this (pages per second) goes its way whatever the position.
     public static let flickSpeed: CGFloat = 0.8
 
