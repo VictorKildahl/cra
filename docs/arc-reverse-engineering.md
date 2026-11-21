@@ -5243,3 +5243,50 @@ Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window record
   for 2–3 frames); Cra doesn't copy that.
 - Cra: `LibraryGlyph` (CraCore) and `LibraryGlyphView`; `cra://debug?libraryHover=1|0`, scenario
   library-glyph-hover.
+
+### Library rail tiles and their icons (Arc 1.174.0, 20 Nov 2026, arm64 disassembly of `HomeButton/PageSidebarItem.swift` and `HomePageView`, and a 2x capture)
+- [O code] A tile is `PageSidebarItemButtonStyle`'s `RoundedRectangle(cornerRadius: 12, style: .continuous)`
+  filled with `Color.primary` at 0.1 behind the page shown, 0.05 under the pointer (not shown), clear
+  otherwise; no outline. `Color.primary` is the system's label colour, so on a dark sidebar the capture
+  reads white 8.6 % and 4.3 %. The pointer changes nothing else, and the fill comes and goes at once.
+- [O code] Pressed, the fill alone gets `.padding(2)` on every side (97×80 → 93×76) on
+  `.spring(response: 0.18, dampingFraction: 0.8)`; no scale, and the icon and label stay put.
+- [O code] The label is `.system(size: 11, weight: .bold)`, centred, `Color.primary` at 1.0 on the page
+  shown and 0.7 otherwise. (Cra had 12 pt semibold: 5 % wider, as the capture shows.)
+- [O code] The icon is a 28×28 pt Lottie view (`_AnimatedPageSidebarItemView`, aspect fit; the files are
+  128×128 at 60 fps with layers named `primaryColor` and `secondaryColor`). `primaryColor` gets the
+  palette's `maxContrastColor` at alpha 0.7, 1.0 on the page shown; `secondaryColor` gets `cutoutColor` at
+  alpha 0, 1.0 on the page shown. Dark sidebar: tintedLight over shadedDark; light: the other way round.
+- [O code] The animation: when the item becomes the page shown, is in a window, and Reduce Motion is
+  off, `play(fromMarker: "hover-start", toMarker: "selection-end", loopMode: .playOnce)` at speed 1:
+  frames 1 → 35 (0.57 s), Boosts 1 → 45 (0.73 s). Nothing plays when it stops being shown (the colours
+  change at once), nothing when it is already shown as the Library opens, and nothing under the pointer:
+  `isHovered` is always passed false in 1.174, and the `hover-end` mark (11) is never used.
+- [O code] Layout: the rail is 112 pt with insets 48 / 8 / 8 / 7 (top, leading, bottom, trailing), so a tile
+  is 97 pt wide; each page has a slot of up to 100 pt and its tile is at most 80 pt tall; inside,
+  `VStack(spacing: 4)` of the icon and the label, centred. A slot of 64 pt or less drops the label (a
+  tooltip instead). [O capture] Icon ink centred 31.5 pt under the tile's top, the label's baseline at 60.
+- [O files] How the parts move is in the animations' transform keys (positions in the 128-unit
+  canvas, 28/128 pt a unit; rotations; scales; one opacity), each with its own easing handles, many
+  overshooting. Per page: Media, both photographs press down (the back one 7.5 units, to +3°), the
+  front one jumps 15 units and nods 9.3° at frame 20, its sun (a layer of its own) 15.9, the back one
+  swings to −18.6° at 22. Downloads, the ring gives 2.5 and jumps 11.5 at 19; the arrow goes 10 down
+  and loses 12 of its 47.3 units of length, then is 10.8 up at 21. Easels, the canvas tips 6.07° and
+  sinks 5 while its squiggle shrinks to 70/90, then is 6 up at 18. Spaces, the back card (drawn 8° over
+  inside a layer at −9.5°, so −17.5° at rest) leans to +6° by 13 and −27.8° by 23, and the front one is
+  20 units up and 29° round at 19. Boosts (to 45), the tile rocks −15° → −23° → −5.4°, the brush swings
+  +12° then −16.6° about its handle's end, its bristles trailing, and each spark sinks, is gone for
+  five frames and comes back from above. Archive, the lid presses 8.3 down as the slot sags 2.5, then
+  flies 20 up at −5.6°, the box jumps 15.8 after it, and the box's rim shows from 17 to 33.
+- [O files] The insides are the bottom layers and the lines the top ones, so a part in front hides
+  lines behind it and never their fill. Lines are 8 units wide (1.75 pt).
+- [O recording, 20 Nov, 4096-px screen recording of Arc 1.174 and of CraDev] Cra's frames against Arc's
+  at 20 a second from each selection's start: the same poses frame for frame.
+- Cra: `LibraryRailTile` (looks, layout, the short-window column, the theme's two colours) and
+  `LibraryRailIcons` (the timeline, the keys and the drawings) in CraCore, `LibraryRailIconView` and
+  `LibraryRailButton` in the app; `cra://debug?libraryRail=<page>`, scenario library-rail-icons. The
+  motion is Arc's key for key. The six drawings are Cra's own, on Arc's centres and sizes (rounded
+  rectangles, a ring, an arrow, a brush): Arc's files come with no licence, so none of their shapes are
+  copied, and where one of Arc's shapes changes form Cra's is moved by the same amount. The short
+  window is built (slots share the room, a tile is as tall as its slot up to 80 pt, 64 pt or less drops
+  the label for a tooltip after 0.45 s); Arc's slide of the label on that change is not.
