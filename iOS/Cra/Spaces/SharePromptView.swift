@@ -94,7 +94,8 @@ extension Font.Weight {
 /// Arc's on the 440 pt screen: the sheet's top is at 72, its fixed header 54 tall.
 struct ShareGuideView: View {
     var close: () -> Void
-    var showShareMenu: () -> Void
+    var showShareMenu: (CGRect) -> Void
+    @State private var shareFrame = CGRect.zero
 
     private let grey = Color(white: 0x5E / 255)
     private static let header: CGFloat = 54
@@ -140,7 +141,7 @@ struct ShareGuideView: View {
                     .accessibilityHidden(true)
             }
             Rectangle().fill(Color(white: 0xEF / 255)).frame(height: 1)
-            Button(action: showShareMenu) {
+            Button { showShareMenu(shareFrame) } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 18, weight: .medium))
                     Text(MobileSyncIntro.guideButton).font(.system(size: 19, weight: .semibold))
@@ -151,6 +152,7 @@ struct ShareGuideView: View {
                 .background(SharePromptView.blue, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { shareFrame = $0 }
             .padding(.leading, 27)
             .padding(.trailing, 32)
             .padding(.top, 862 - 832)

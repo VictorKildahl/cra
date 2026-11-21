@@ -101,6 +101,7 @@ Xcode ▸ Settings ▸ Accounts, or with an App Store Connect API key given as `
 `ASC_KEY_ID` and `ASC_ISSUER_ID` (the .p8 stays in `~/.appstoreconnect/private_keys`, never in
 the repo). The app record for `dk.kildahl.cra` has to exist in App Store Connect before the
 first upload. Builds are for iPhone and iPad (`TARGETED_DEVICE_FAMILY = 1,2`); `CRA_IOS_SIM="Cra iPad" scripts/ios.sh test …` runs the UI tests on an iPad simulator.
+Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <type id>`; names must not contain parentheses.
 
 ## Share extension
 

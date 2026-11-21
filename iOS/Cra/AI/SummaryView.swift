@@ -15,7 +15,7 @@ final class SummaryModel: ObservableObject {
     /// The page's address, named under a copied or shared summary.
     var address: String?
     var close: () -> Void = {}
-    var share: (String) -> Void = { _ in }
+    var share: (String, CGRect) -> Void = { _, _ in }
 
     init(title: String, favicon: UIImage?, snapshot: UIImage?) {
         self.title = title
@@ -37,6 +37,7 @@ struct SummaryView: View {
     /// The card unfolds into place as the screen comes in (off with Reduce Motion).
     var unfolds = false
     @Environment(\.colorScheme) private var scheme
+    @State private var shareFrame = CGRect.zero
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -132,7 +133,8 @@ struct SummaryView: View {
                     UIPasteboard.general.string = text
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
-                footerButton("square.and.arrow.up", label: "Share", id: "summary-share") { model.share(text) }
+                footerButton("square.and.arrow.up", label: "Share", id: "summary-share") { model.share(text, shareFrame) }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { shareFrame = $0 }
             }
             Button(action: model.close) {
                 Image(systemName: "xmark")
