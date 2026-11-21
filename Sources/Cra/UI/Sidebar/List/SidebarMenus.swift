@@ -295,6 +295,7 @@ enum SidebarMenus {
                 toast("Copied Folder URL")
             }
         }
+        moveToItems(menu, [id], list: list)
         menu.addItem(.separator())
         add(menu, "Delete Folder (archives tabs)") { store.deleteFolder(id) }
         return menu

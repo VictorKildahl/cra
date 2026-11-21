@@ -2893,6 +2893,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"], split: true)
                 return
             }
+            // folderMenu=<n>[&label=][&run=<row>]: the n-th visible folder's menu (#662).
+            if let n = dict["folderMenu"].flatMap(Int.init) {
+                main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"], folder: true)
+                return
+            }
             // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387).
             if let n = dict["favoriteMenu"].flatMap(Int.init) {
                 main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])

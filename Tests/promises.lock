@@ -1461,6 +1461,8 @@
 #658   Packages/CraCore/Tests/CraCoreTests/EaselObjectsTests.swift::thePickerShowsOverTextOrShapesNotBoth  32e2f573da8c
 #658   Tests/Scenarios/easel-text-colour.scenario  5e2fb83621eb
 #660   Tests/Scenarios/extension-store-copy-install-type.scenario  4b8996fb57e7
+#662   Tests/Scenarios/folder-menu-move-to.scenario  3a945485c54c
+#662   Tests/StoreTests.swift::moveFolderToSpace  9ed4ea1a093d
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::heightHoldsTheRows  a6e40310f510
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::narrowWindowKeepsItInside  e06afe457fa5
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::widthFollowsTheAddress  79805ff882f9
