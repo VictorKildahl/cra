@@ -839,10 +839,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         weak var guide: UIViewController?
         let view = ShareGuideView(
             close: { guide?.dismiss(animated: true) },
-            showShareMenu: {
+            showShareMenu: { rect in
                 guard let guide, let url = URL(string: "https://crabrowser.app") else { return }
                 let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
                 share.popoverPresentationController?.sourceView = guide.view
+                share.popoverPresentationController?.sourceRect = guide.view.convert(rect, from: guide.view.window)
                 guide.present(share, animated: true)
             })
         let controller = UIHostingController(rootView: view)
@@ -902,16 +903,20 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         model.showDownloads = { [weak self] in self?.showDownloads() }
         model.showSpaces = { [weak self] in self?.showSpaces() }
-        model.shareCra = { [weak self] in
+        model.shareCra = { [weak self] rect in
             guard let self, let link = URL(string: "https://crabrowser.app") else { return }
             let share = UIActivityViewController(activityItems: [link], applicationActivities: nil)
-            share.popoverPresentationController?.sourceView = self.bar
+            guard let source = self.topPresenter.view else { return }
+            share.popoverPresentationController?.sourceView = source
+            share.popoverPresentationController?.sourceRect = source.convert(rect, from: source.window)
             self.topPresenter.present(share, animated: true)
         }
-        model.exportData = { [weak self] in
+        model.exportData = { [weak self] rect in
             guard let self else { return }
             let share = UIActivityViewController(activityItems: [self.store.document.exportText], applicationActivities: nil)
-            share.popoverPresentationController?.sourceView = self.bar
+            guard let source = self.topPresenter.view else { return }
+            share.popoverPresentationController?.sourceView = source
+            share.popoverPresentationController?.sourceRect = source.convert(rect, from: source.window)
             self.topPresenter.present(share, animated: true)
         }
         model.clearData = { [weak self] history, siteData in

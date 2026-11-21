@@ -12,12 +12,12 @@ final class SettingsModel: ObservableObject {
     var showArchive: () -> Void = {}
     var showDownloads: () -> Void = {}
     var clearData: (_ history: Bool, _ siteData: Bool) -> Void = { _, _ in }
-    var exportData: () -> Void = {}
+    var exportData: (CGRect) -> Void = { _ in }
     var showOnboarding: () -> Void = {}
     var showWidgetGuide: () -> Void = {}
     var showIconDock: () -> Void = {}
     var showSpaces: () -> Void = {}
-    var shareCra: () -> Void = {}
+    var shareCra: (CGRect) -> Void = { _ in }
     var done: () -> Void = {}
 
     init(store: MobileSettingsStore, host: String?, canSummarize: Bool) {
@@ -226,6 +226,8 @@ struct AppSettingsView: View {
 struct AppSettingsList: View {
     @ObservedObject var model: SettingsModel
     @State private var clearing = false
+    @State private var exportFrame = CGRect.zero
+    @State private var shareFrame = CGRect.zero
     @State private var editingCustom = false
     @State private var customAddress = ""
 
@@ -299,8 +301,9 @@ struct AppSettingsList: View {
                 ActionRow(label: SettingLabel(title: "Clear Browsing Data...", symbol: "eraser.fill", color: .red), chevron: false) { clearing = true }
                     .accessibilityIdentifier("setting-clear-data")
                 ActionRow(label: SettingLabel(title: "Export Data", symbol: "square.and.arrow.up", color: .blue,
-                                              subtitle: "Share your open tab URLs"), chevron: false) { model.exportData() }
+                                              subtitle: "Share your open tab URLs"), chevron: false) { model.exportData(exportFrame) }
                     .accessibilityIdentifier("setting-export-data")
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { exportFrame = $0 }
             }
             .settingsRow()
             // Arc Search's "Sync with Arc Desktop / Sign in": Cra's Mac shares its Spaces through iCloud.
@@ -312,7 +315,7 @@ struct AppSettingsList: View {
             .settingsRow()
             // Arc Search's "Gift Arc to a friend" capsule; Cra has nothing to gift, so it shares the app.
             Section {
-                Button { model.shareCra() } label: {
+                Button { model.shareCra(shareFrame) } label: {
                     HStack(spacing: 14) {
                         Image(systemName: "gift.fill").font(.system(size: 19, weight: .semibold))
                         Text("Share Cra with a friend").font(.body.weight(.semibold))
@@ -329,6 +332,7 @@ struct AppSettingsList: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .accessibilityIdentifier("setting-share-cra")
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { shareFrame = $0 }
             }
             Section {
                 ActionRow(label: SettingLabel(title: "Contact the Team", symbol: "envelope.fill", color: .gray), chevron: false) {

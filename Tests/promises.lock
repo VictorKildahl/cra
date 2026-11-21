@@ -1481,6 +1481,13 @@
 #667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::nothingTypedLeavesItToTheOtherRows  badf4c81b43f
 #667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::theSiteTypedMostWins  b9abfbc31341
 #667   Tests/Scenarios/command-bar-typed-site.scenario  e4d91307fdfe
+#670   iOS/CraUITests/BrowserTests.swift::testExportDataFromSettings  9136fb7a2661
+#670   iOS/CraUITests/BrowserTests.swift::testHoldingTheMenuSharesThePage  4e043df42329
+#670   iOS/CraUITests/BrowserTests.swift::testShareCraFromSettings  a52f15fe60c6
+#670   iOS/CraUITests/BrowserTests.swift::testShareFromThePageMenu  74e41bf21e96
+#670   iOS/CraUITests/BrowserTests.swift::testSummarizeShowsTheSummaryAndClosesBackToThePage  311ce4c56309
+#670   iOS/CraUITests/BrowserTests.swift::testTheSharePromptLeadsToTheHowTo  c2a3b1894f34
+#670   iOS/CraUITests/LinkMenuTests.swift::testShareFromALinksMenu  8d893605c190
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
