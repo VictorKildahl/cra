@@ -1481,6 +1481,8 @@
 #667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::nothingTypedLeavesItToTheOtherRows  badf4c81b43f
 #667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::theSiteTypedMostWins  b9abfbc31341
 #667   Tests/Scenarios/command-bar-typed-site.scenario  e4d91307fdfe
+#674   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::appSettingsUsesFullHeightOnIPadAndKeepsMediumOnIPhone  ab096e56dcb8
+#674   iOS/CraUITests/BrowserTests.swift::testAppSettingsOpensTallOnIPadAndHalfOnIPhone  1f7ec8f0e34a
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

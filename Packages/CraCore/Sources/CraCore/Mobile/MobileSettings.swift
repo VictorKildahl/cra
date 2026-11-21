@@ -1,5 +1,15 @@
 import Foundation
 
+public enum MobileSheetHeight {
+    case medium, large
+}
+
+public enum MobileSettingsSheet {
+    public static func appSettingsHeights(onPad: Bool) -> [MobileSheetHeight] {
+        onPad ? [.large] : [.medium, .large]
+    }
+}
+
 /// What Arc Search's Site Settings sheet switches: the three blockers, then how the page behaves.
 /// Each has a value for every site (Global Site Settings) that a single site can override.
 public struct MobileSiteOptions: Codable, Equatable {
