@@ -1,0 +1,15 @@
+# A drag that takes the window to another display and back left AppKit's frame for it where it was:
+# CraWindow skips AppKit's screen-layout adjustment for a move the window server reports
+# (window-frame-adjust), and at a display crossing that adjustment is what records the moved frame.
+# Every menu then opened away from the window: a <select>'s popup sat a display's width from its
+# control (21 Nov 2026). frameAfterMove sends the window the report a drag onto another display
+# sends; AppKit's frame must be the reported one afterwards. On a Mac with one display it can't cross.
+budget rss=900 stalls50=40
+pace 0.5
+
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?frameAfterMove=1
+expect-log frame after move: (recorded|one display)$
+reject-log frame after move: stale
