@@ -1465,6 +1465,7 @@
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::narrowWindowKeepsItInside  e06afe457fa5
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::widthFollowsTheAddress  79805ff882f9
 #663   Tests/Scenarios/sidebar-address-panel.scenario  47c1675a154a
+#664   Tests/ExtensionPopupWindowTests.swift::keepsADragWithARealMouse  6a0e405853da
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

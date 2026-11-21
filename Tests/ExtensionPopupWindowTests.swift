@@ -61,6 +61,7 @@ enum ExtensionPopupWindowTests {
 
         closesOnAClickElsewhere()
         hangsUnderItsButtonUntilDragged()
+        keepsADragWithARealMouse()
         print("Extension popup window: \(checks) checks passed")
     }
 
@@ -191,6 +192,71 @@ enum ExtensionPopupWindowTests {
                "a move after the drag ended doesn't replace where the user dropped it")
         frame.performClose(nil)
         _ = page
+    }
+
+    // promise: #664
+    /// A drag of the title bar with a real mouse or trackpad stays where it was dropped. Measured on a test copy
+    /// with events posted as the hardware's are (HID source, click state, deltas): willMove on the first
+    /// leftMouseDragged, then a didMove for every step of the drag with an appKitDefined event current and the
+    /// button held, while Chrome's bubble moving with the frame asks for a layout. On 0.1.52 (01a099af) the
+    /// first of those ended the drag, the bubble's move put the frame back under its button, and it flashed
+    /// back there on release (the same drag on a test copy: 1210,94 before and after). cliclick's drags,
+    /// which #634 was checked with, give one didMove on the leftMouseUp instead. A carried move (the pointer
+    /// still) stays no drag (#634).
+    @MainActor
+    private static func keepsADragWithARealMouse() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "extensionPopupWindowOffset")
+        defer { defaults.removeObject(forKey: "extensionPopupWindowOffset") }
+        var pointer = NSPoint(x: -9900, y: -9690), held = false
+        ExtensionPopupWindow.pointer = { pointer }
+        ExtensionPopupWindow.leftButtonDown = { held }
+        defer {
+            ExtensionPopupWindow.pointer = { NSEvent.mouseLocation }
+            ExtensionPopupWindow.leftButtonDown = { NSEvent.pressedMouseButtons & 1 != 0 }
+        }
+        let anchor = NSPoint(x: -9800, y: -9700)
+        let (page, frame) = presentPopup(anchor: anchor)
+        let titleBar = NSPoint(x: frame.frame.width / 2, y: frame.frame.height - 6)
+        let start = frame.frame.origin, size = frame.frame.size
+
+        // The press and the first drag, then AppKit moves the frame with the pointer; the bubble comes along.
+        held = true
+        makeCurrent(.leftMouseDragged, at: titleBar, in: frame)
+        NotificationCenter.default.post(name: NSWindow.willMoveNotification, object: frame)
+        makeCurrentAppKitDefined(in: frame)
+        for step in 1...4 {
+            let d = NSPoint(x: CGFloat(step) * -40, y: CGFloat(step) * -20)
+            pointer = NSPoint(x: -9900 + d.x, y: -9690 + d.y)
+            frame.setFrameOrigin(NSPoint(x: start.x + d.x, y: start.y + d.y))
+            page.setFrameOrigin(NSPoint(x: page.frame.minX - 40, y: page.frame.minY - 20))
+            expect(frame.frame.origin == NSPoint(x: start.x + d.x, y: start.y + d.y),
+                   "the frame stays with the pointer while the title bar is dragged (step \(step))")
+        }
+        // The release: the button comes up, the current event still AppKit's own, and the bubble moves once more.
+        held = false
+        page.setFrameOrigin(NSPoint(x: page.frame.minX, y: page.frame.minY))
+        NotificationCenter.default.post(name: NSWindow.didMoveNotification, object: page)
+        // (Its frame is then placed by that offset, kept on a screen: this one is far off any.)
+        let dropped = NSPoint(x: start.x - 160, y: start.y - 80)
+        let wanted = NSPoint(x: anchor.x - 300 + (dropped.x - (anchor.x - size.width)), y: dropped.y + size.height)
+        expect(ExtensionPopupWindow.placement(anchor: anchor, width: 300) == wanted, "later popups hang where it was dropped")
+
+        // Afterwards the frame carried along with its window (the pointer still) doesn't replace that place.
+        NotificationCenter.default.post(name: NSWindow.willMoveNotification, object: frame)
+        frame.setFrameOrigin(NSPoint(x: frame.frame.minX + 300, y: frame.frame.minY + 50))
+        expect(ExtensionPopupWindow.placement(anchor: anchor, width: 300) == wanted, "a carried move after the drop changes nothing")
+        frame.performClose(nil)
+    }
+
+    /// Makes an appKitDefined event in `window` NSApp.currentEvent, as it is while AppKit moves a dragged window.
+    @MainActor
+    private static func makeCurrentAppKitDefined(in window: NSWindow) {
+        let event = NSEvent.otherEvent(with: .appKitDefined, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: window.windowNumber, context: nil, subtype: 0, data1: 0, data2: 0)!
+        NSApp.postEvent(event, atStart: true)
+        _ = NSApp.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true)
+        expect(NSApp.currentEvent?.type == .appKitDefined, "AppKit's own event is current")
     }
 
     /// Makes a mouse event of `type` in `window`, timed now, NSApp.currentEvent (as AppKit's own are when it

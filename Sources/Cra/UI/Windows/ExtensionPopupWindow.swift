@@ -34,8 +34,12 @@ final class ExtensionPopupWindow: NSWindow {
     private var anchor = NSPoint.zero
     /// Where the user dragged the frame, from hanging right under the anchor.
     private var offset = NSPoint.zero
-    /// The frame's top-left when a title-bar drag began.
+    /// The frame's top-left when a title-bar drag began, and the pointer then.
     private var dragStart = NSPoint.zero
+    private var dragPointer = NSPoint.zero
+    /// The pointer (screen) and whether the left button is down, as the hardware has them; a test stands in.
+    static var pointer: () -> NSPoint = { NSEvent.mouseLocation }
+    static var leftButtonDown: () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }
     private var observers: [NSObjectProtocol] = []
     private var clickMonitor: Any?
     private var placing = false
@@ -131,6 +135,7 @@ final class ExtensionPopupWindow: NSWindow {
                 guard let w, w.isUserGesture(NSApp.currentEvent, [.leftMouseDown, .leftMouseDragged]) else { return }
                 w.dragging = true
                 w.dragStart = NSPoint(x: w.frame.minX, y: w.frame.maxY)
+                w.dragPointer = Self.pointer()
             }
         })
         w.observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: w, queue: .main) { [weak w] _ in
@@ -146,7 +151,9 @@ final class ExtensionPopupWindow: NSWindow {
         // frame stays where it was dropped.
         if dragging {
             // Through the drop too: the frame's own didMove comes on the leftMouseUp, maybe after the bubble's.
-            if NSEvent.pressedMouseButtons != 0 || isUserGesture(NSApp.currentEvent, [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { return }
+            if Self.leftButtonDown() || isUserGesture(NSApp.currentEvent, [.leftMouseDragged, .leftMouseUp]) { return }
+            // The button is up: where the pointer took the frame is where the user dropped it (#664).
+            if followsPointer() { keepDrop() }
             dragging = false
         }
         placing = true
@@ -175,9 +182,29 @@ final class ExtensionPopupWindow: NSWindow {
         // until the next layout, and a move after that (the window carrying the frame along, into full
         // screen or across a display) became the offset every later popup hung by, away from its
         // button (#634). Only a move inside the gesture counts, and the gesture ends with the button.
+        // A drag with a real mouse or trackpad runs in the window server: AppKit's current event stays the
+        // leftMouseDown, so 0.1.52 took every one for a carried move and snapped the popup back (#664).
+        // The frame went with the pointer, then, and a carried move doesn't move the pointer.
         let event = NSApp.currentEvent
-        guard isUserGesture(event, [.leftMouseDragged, .leftMouseUp]) else { dragging = false; return }
-        if event?.type == .leftMouseUp { dragging = false }
+        let gesture = isUserGesture(event, [.leftMouseDragged, .leftMouseUp])
+        let held = Self.leftButtonDown()
+        guard gesture || followsPointer() else {
+            if !held { dragging = false }
+            return
+        }
+        if event?.type == .leftMouseUp || (!gesture && !held) { dragging = false }
+        keepDrop()
+    }
+
+    /// The frame moved by as much as the pointer since the drag began.
+    private func followsPointer() -> Bool {
+        let p = Self.pointer()
+        let frameMove = NSPoint(x: frame.minX - dragStart.x, y: frame.maxY - dragStart.y)
+        return hypot(frameMove.x - (p.x - dragPointer.x), frameMove.y - (p.y - dragPointer.y)) < 3
+    }
+
+    /// Where the frame is now becomes where popups hang, unless it barely moved.
+    private func keepDrop() {
         let moved = NSPoint(x: frame.minX, y: frame.maxY)
         // A click on the title bar that barely moved it is not a new place.
         guard hypot(moved.x - dragStart.x, moved.y - dragStart.y) > 4 else { return }
