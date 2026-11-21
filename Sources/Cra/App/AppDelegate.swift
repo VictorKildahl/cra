@@ -1758,6 +1758,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 w.performMiniaturize(nil)
                 return
             }
+            // frameAfterMove=1: the window server's report of a drag onto another display.
+            if dict["frameAfterMove"] != nil, let w = main.window as? CraWindow {
+                CraLog.note(w.frameAfterMoveReadout())
+                return
+            }
             if let size = dict["windowSize"]?.split(separator: "x").compactMap({ Double($0) }), size.count == 2, let w = main.window {
                 w.setFrame(NSRect(x: w.frame.minX, y: w.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
                 return

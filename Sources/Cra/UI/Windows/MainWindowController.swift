@@ -6187,26 +6187,51 @@ final class CraWindow: NSWindow {
     /// two callbacks while its move loop drags a tab across displays. Here the adjustment is skipped
     /// for every move the server reports, drags and their release; a display change, which comes
     /// another way, still gets AppKit's own adjustment.
+    ///
+    /// At a display crossing that adjustment is also what records the moved frame in AppKit. Skipped,
+    /// AppKit kept the frame from before the crossing while the window was on the other display, and
+    /// every menu opened away from the window: a `<select>`'s popup sat a display's width from its
+    /// control (21 Nov 2026). So the frame the server reports is recorded here instead, where the
+    /// window already is.
     @objc(_setFrameAfterMove:)
     func setFrameAfterMove(_ frameRect: NSRect) {
         guard let method = class_getInstanceMethod(NSWindow.self, Self.frameAfterMoveSelector) else { return }
         inFrameAfterMove = true
-        defer { inFrameAfterMove = false }
+        skippedAdjustment = false
         typealias After = @convention(c) (NSWindow, Selector, NSRect) -> Void
         unsafeBitCast(method_getImplementation(method), to: After.self)(self, Self.frameAfterMoveSelector, frameRect)
+        inFrameAfterMove = false
+        if skippedAdjustment, frame != frameRect { setFrame(frameRect, display: false) }
     }
 
     @objc(_setFrame:fromAdjustmentToScreen:anchorIfNeeded:animate:)
     func setFrame(_ frameRect: NSRect, fromAdjustmentToScreen screen: NSScreen?, anchorIfNeeded anchor: UnsafePointer<CGPoint>?, animate: Bool) {
-        if inFrameAfterMove { return }
+        if inFrameAfterMove {
+            skippedAdjustment = true
+            return
+        }
         guard let method = class_getInstanceMethod(NSWindow.self, Self.frameAdjustmentSelector) else { return }
         typealias Adjust = @convention(c) (NSWindow, Selector, NSRect, NSScreen?, UnsafePointer<CGPoint>?, Bool) -> Void
         unsafeBitCast(method_getImplementation(method), to: Adjust.self)(self, Self.frameAdjustmentSelector, frameRect, screen, anchor, animate)
     }
 
     private var inFrameAfterMove = false
+    private var skippedAdjustment = false
     private static let frameAfterMoveSelector = NSSelectorFromString("_setFrameAfterMove:")
     private static let frameAdjustmentSelector = NSSelectorFromString("_setFrame:fromAdjustmentToScreen:anchorIfNeeded:animate:")
+
+    /// `cra://debug?frameAfterMove=1`: the report the window server sends after a drag, for a move
+    /// onto another display, and whether AppKit's frame is the reported frame afterwards. A menu,
+    /// a `<select>`'s popup or a tooltip opens where AppKit thinks the window is.
+    func frameAfterMoveReadout() -> String {
+        guard let here = screen, let there = NSScreen.screens.first(where: { $0 != here }) else {
+            return "frame after move: one display"
+        }
+        let moved = NSRect(origin: NSPoint(x: there.visibleFrame.minX + 40, y: there.visibleFrame.maxY - 40 - frame.height), size: frame.size)
+        setFrameAfterMove(moved)
+        let result = frame == moved ? "recorded" : "stale \(NSStringFromRect(frame)) for \(NSStringFromRect(moved))"
+        return "frame after move: \(result)"
+    }
 
     /// For the windowState readout: `own` when this class answers the adjustment and AppKit still
     /// has both callbacks, `appkit` when AppKit's run, `none` when AppKit no longer has them.
