@@ -1492,6 +1492,13 @@
 #667   Tests/Scenarios/command-bar-typed-site.scenario  e4d91307fdfe
 #669   Packages/CraCore/Tests/CraCoreTests/CardVeilTests.swift::aWindowWithNoTabFollowsArcsAppearance  616c231bd123
 #669   Tests/Scenarios/empty-card-appearance.scenario  929ad9bec480
+#670   iOS/CraUITests/BrowserTests.swift::testExportDataFromSettings  9136fb7a2661
+#670   iOS/CraUITests/BrowserTests.swift::testHoldingTheMenuSharesThePage  4e043df42329
+#670   iOS/CraUITests/BrowserTests.swift::testShareCraFromSettings  a52f15fe60c6
+#670   iOS/CraUITests/BrowserTests.swift::testShareFromThePageMenu  74e41bf21e96
+#670   iOS/CraUITests/BrowserTests.swift::testSummarizeShowsTheSummaryAndClosesBackToThePage  311ce4c56309
+#670   iOS/CraUITests/BrowserTests.swift::testTheSharePromptLeadsToTheHowTo  c2a3b1894f34
+#670   iOS/CraUITests/LinkMenuTests.swift::testShareFromALinksMenu  8d893605c190
 #673   Tests/StoreTests.swift::importedTabsKeepTheirOwnIcons  6b33b1cf8f28
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
 #679   Tests/Scenarios/library-swipe-out-still-pointer-fullscreen.scenario  26456a6874d0

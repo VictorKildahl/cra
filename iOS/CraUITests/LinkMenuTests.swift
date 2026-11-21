@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// A long press on a link, and editing a page's address (GitHub #572).
 final class LinkMenuTests: BrowserTestCase {
@@ -14,6 +15,29 @@ final class LinkMenuTests: BrowserTestCase {
         "data:text/html,<meta name=viewport content=width=device-width><title>First</title>"
             + "<h1 style=font-family:-apple-system;padding:24px>First</h1>"
             + "<a href=\(linkedPage(title)) style=font-size:48px;padding:24px>Read later</a>"
+    }
+
+    // promise: #670
+    func testShareFromALinksMenu() {
+        launch(["-CraOpenURL", Self.pageLinking(to: "Later"), "-CraSearch", "NO"])
+        waitForPage("First")
+        let link = app.webViews.links["Read later"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.press(forDuration: 1.5)
+        let share = app.buttons["Share..."]
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+        share.tap()
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let activity = app.otherElements["ActivityListView"]
+            XCTAssertTrue(activity.waitForExistence(timeout: 5))
+            let source = link.frame
+            let popover = activity.frame
+            // Accessibility rounds the link frame outwards; the popover frame includes its arrow.
+            XCTAssertFalse(popover.intersects(source.insetBy(dx: 2, dy: 2)), "the share popover \(popover) must not cover the pressed link \(source)")
+        }
+        closeShareSheet(openedFrom: link)
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
     }
 
     /// The search sheet's eyes on, then a private page typed in with a link to `title`.

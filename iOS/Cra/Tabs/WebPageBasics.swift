@@ -4,7 +4,7 @@ import WebKit
 
 /// What every browser has to answer for a page: its dialogs, its sign-in prompts, a certificate
 /// it can't check, a file it wants to hand over, and a long press on a link.
-extension WebPage: WKDownloadDelegate {
+extension WebPage: WKDownloadDelegate, UIGestureRecognizerDelegate {
     private var presenter: UIViewController? {
         var top = webView.window?.rootViewController
         while let next = top?.presentedViewController, !next.isBeingDismissed { top = next }
@@ -165,17 +165,41 @@ extension WebPage: WKDownloadDelegate {
 
     // MARK: Long press on a link
 
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        linkPressPoint = touch.location(in: webView)
+        // Observe the initial touch without competing with WebKit's own recognizers.
+        return false
+    }
+
     func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo) async -> UIContextMenuConfiguration? {
         guard let url = elementInfo.linkURL else { return nil }
+        var sourceRect: CGRect?
+        if let point = linkPressPoint {
+            // DOM viewport coordinates exclude the web view's safe-area content inset.
+            let inset = webView.scrollView.adjustedContentInset
+            let result = try? await webView.callAsyncJavaScript("""
+                const scale = window.innerWidth / width;
+                const link = document.elementFromPoint(x * scale, y * scale)?.closest('a');
+                if (!link) return null;
+                const range = document.createRange();
+                range.selectNodeContents(link);
+                const rect = range.getBoundingClientRect();
+                return [rect.x / scale, rect.y / scale, rect.width / scale, rect.height / scale];
+                """, arguments: ["x": point.x - inset.left, "y": point.y - inset.top, "width": webView.bounds.width],
+                in: nil, contentWorld: .defaultClient)
+            if let rect = result as? [Double], rect.count == 4 {
+                sourceRect = CGRect(x: rect[0] + inset.left, y: rect[1] + inset.top, width: rect[2], height: rect[3])
+            }
+        }
         let items = MobileLinkMenu.items(incognito: isIncognito)
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
             UIMenu(children: items.map { item in
-                UIAction(title: item.title, image: UIImage(systemName: item.symbol)) { _ in self?.linkMenu(picked: item, url: url) }
+                UIAction(title: item.title, image: UIImage(systemName: item.symbol)) { _ in self?.linkMenu(picked: item, url: url, from: sourceRect) }
             })
         }
     }
 
-    private func linkMenu(picked item: MobileLinkMenu.Item, url: URL) {
+    private func linkMenu(picked item: MobileLinkMenu.Item, url: URL, from sourceRect: CGRect?) {
         switch item {
         case .open:
             webView.load(URLRequest(url: url))
@@ -191,6 +215,9 @@ extension WebPage: WKDownloadDelegate {
             guard let presenter else { return }
             let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
             share.popoverPresentationController?.sourceView = webView
+            if let sourceRect {
+                share.popoverPresentationController?.sourceRect = sourceRect
+            }
             presenter.present(share, animated: true)
         }
     }

@@ -50,10 +50,11 @@ extension BrowserViewController {
                                      snapshot: image ?? self.store.snapshot(id))
             model.close = { [weak self] in self?.closeSummary() }
             model.address = page.webView.url?.absoluteString
-            model.share = { [weak self] text in
+            model.share = { [weak self] text, rect in
                 guard let self else { return }
                 let share = UIActivityViewController(activityItems: [text], applicationActivities: nil)
                 share.popoverPresentationController?.sourceView = self.view
+                share.popoverPresentationController?.sourceRect = self.view.convert(rect, from: self.view.window)
                 self.topPresenter.present(share, animated: true)
             }
             let folds = !UIAccessibility.isReduceMotionEnabled
