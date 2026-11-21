@@ -2036,6 +2036,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.commandBar.commit(row)
                 return
             }
+            // commandBarReturn=<label>: Return in the browser window's open bar, on the selected row (#667).
+            if let label = dict["commandBarReturn"] {
+                CraLog.note("command bar return \(label): \(main.commandBar.isOpen ? "pressed" : "no bar")")
+                main.commandBar.commit()
+                return
+            }
             // libraryMore=<label> (#649): the Library's first download row hovered, its ••• and menu.
             if let label = dict["libraryMore"] {
                 CraLog.note("library more \(label): " + ((main.shell.sidebarHost as? SidebarView)?.debugLibraryDownloadMore ?? "no sidebar"))
@@ -2064,8 +2070,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         }
                         return "\(kind):\(row.url ?? row.title)"
                     }
-                    NSLog("Cra command bar rows %@: open=%d mode=%@ selected=%d %@", name, bar.isOpen ? 1 : 0,
-                          bar.mode == .newTab ? "newTab" : "editURL", bar.selectedIndex, rows.joined(separator: " | "))
+                    // completion=: the grey text the bar completes to, "-" for none (#667).
+                    NSLog("Cra command bar rows %@: open=%d mode=%@ selected=%d %@ completion=%@", name, bar.isOpen ? 1 : 0,
+                          bar.mode == .newTab ? "newTab" : "editURL", bar.selectedIndex, rows.joined(separator: " | "),
+                          bar.result.inlineCompletion ?? "-")
                 }
                 line(label, main.commandBar)
                 for l in littleWindows where l.commandBar.isOpen { line("\(label) \(l.isPeek ? "peek" : "little")", l.commandBar) }

@@ -3024,6 +3024,19 @@ final class SidebarStore {
         historyFile.save(Array(history.values), delay: 5)
     }
 
+    /// An address entered in the command bar in `profile` (typed, or an Open URL or visited-page row picked;
+    /// not a search): counted on its page, as Chromium's typed_count, so ⌘T completes the site's name to it
+    /// (TypedCompletion, #667). A page not visited yet gets its entry now; its visit comes as it loads.
+    func recordTyped(url: String, profile: UUID?) {
+        guard url.hasPrefix("http"), !window().isIncognito else { return }
+        let key = TypedCompletion.key(url)
+        var e = history[key] ?? HistoryEntry(url: key, title: "", lastVisit: clock.now, visitCount: 0)
+        e.visited(in: profile)
+        e.typedCount = (e.typedCount ?? 0) + 1
+        history[key] = e
+        historyFile.save(Array(history.values), delay: 5)
+    }
+
     func recordQuerySelection(query: String, url: String) {
         let q = query.lowercased().trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty, !window().isIncognito else { return }

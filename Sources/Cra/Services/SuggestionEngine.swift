@@ -103,7 +103,8 @@ final class SuggestionEngine {
 
         // Arc's order: the row that supplies the inline completion comes first,
         // then what you typed, then everything else.
-        let completion = inlineCompletion(q, candidates: items)
+        let completion = incognito ? inlineCompletion(q, candidates: items)
+            : typedCompletion(q, items: &items) ?? inlineCompletion(q, candidates: items)
         if let completion, let idx = items.firstIndex(where: { $0.id == completion.candidateID }) {
             let c = items.remove(at: idx)
             items.insert(c, at: 0)
@@ -193,6 +194,9 @@ final class SuggestionEngine {
         var dedupeKeys: [String: [String]] = [:]
         /// Each row's Suggestion id ("tab:<uuid>"…), made once per opening, in the order of `tabs`, `archive`, `history`.
         var tabIDs: [String] = [], archiveIDs: [String] = [], historyIDs: [String] = []
+        /// The visited pages whose address was entered in the bar, for TypedCompletion (#667), with their entries.
+        var typedPages: [TypedCompletion.Page] = []
+        var typedEntries: [String: HistoryEntry] = [:]
     }
 
     private var index: SearchIndex?
@@ -244,6 +248,11 @@ final class SuggestionEngine {
         i.history = Array(zip(rows.history, keys[(t + a)...]))
         i.openURLs = Set(rows.tabs.compactMap { $0.tab?.url })
         i.profile = rows.profile
+        for h in rows.history {
+            guard let n = h.typedCount, n > 0, let page = TypedCompletion.Page(url: h.url, typedCount: n) else { continue }
+            i.typedPages.append(page)
+            i.typedEntries[h.url] = h
+        }
         return i
     }
 
@@ -606,6 +615,26 @@ final class SuggestionEngine {
             s.score = kept.score
             return s
         }
+    }
+
+    /// Arc's (Chromium's) completion of a site's name (#667): to the address typed most on that site, its
+    /// row first. An open tab on that very page is the row, so Return switches to it; otherwise the
+    /// visited page's, made here if dedupe kept another row for it (an archived tab: Return opens the
+    /// page, as Arc's does). nil when nothing on a matching site was typed.
+    private func typedCompletion(_ q: String, items: inout [Suggestion]) -> (text: String, candidateID: String)? {
+        guard !Self.looksLikeURL(q) || !q.contains("/") else { return nil }
+        let index = searchIndex
+        guard !index.typedPages.isEmpty, let lead = TypedCompletion.lead(for: q, pages: index.typedPages) else { return nil }
+        let page = CommandBarDedupe.comparableURL(lead.url)
+        func on(_ s: Suggestion) -> Bool { index.dedupeKeys[s.id]?.first == page }
+        if let tab = items.first(where: { $0.tabID != nil && on($0) }) { return (lead.completion, tab.id) }
+        if let row = items.first(where: { $0.kind == .history && on($0) }) { return (lead.completion, row.id) }
+        guard let entry = index.typedEntries[lead.url] else { return nil }
+        items.removeAll { if case .archived = $0.kind { return on($0) } else { return false } }
+        let row = Suggestion(id: "hist:\(entry.url)", kind: .history, title: entry.title.isEmpty ? Self.humanURL(entry.url) : entry.title,
+                             subtitle: "", url: entry.url, faviconKey: nil, symbol: "clock", trailing: nil, score: 100)
+        items.append(row)
+        return (lead.completion, row.id)
     }
 
     private func inlineCompletion(_ q: String, candidates: [Suggestion]) -> (text: String, candidateID: String)? {

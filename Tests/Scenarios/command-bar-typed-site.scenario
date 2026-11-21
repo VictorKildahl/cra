@@ -1,0 +1,48 @@
+# promise: #667
+# ⌘T completes a site's name to the address entered most on that site, as Arc's (Chromium's) omnibox does
+# from history's typed counts. With pages deeper in the site open, Cra completed to one of them and Return
+# switched to it; the site's own address had no row (GitHub #667, "youtube" with YouTube videos open). The
+# test server stands in for the site: three of its pages open, then its own address typed once.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://open?url=${PAGE}?n=video-a
+expect-log loaded 127\.0\.0\.1
+cra://open?url=${PAGE}?n=video-b
+cra://open?url=${PAGE}?n=video-c
+wait 2
+
+# Nothing typed on the site yet: an open page leads, as before (Arc 1.171's semrush, CommandBarDedupe).
+cra://commandbar?query=127.0
+wait 1
+cra://debug?commandBarRows=before
+expect-log Cra command bar rows before: open=1 mode=newTab selected=0 tab:\S*n=video
+cra://dismiss
+wait 1
+
+# The site's own address, typed and entered, then its tab closed.
+cra://commandbar?query=${ORIGIN}/
+wait 1
+cra://debug?commandBarReturn=site
+expect-log command bar return site: pressed
+wait 2
+cra://action/closeTab
+wait 1
+
+# Now the site's name completes to its address, and that row leads, not the open pages.
+cra://commandbar?query=127.0
+wait 1
+cra://debug?commandBarRows=typed
+expect-log Cra command bar rows typed: open=1 mode=newTab selected=0 history:http://127\.0\.0\.1:[0-9]+/ \| .* completion=127\.0\.0\.1:[0-9]+$
+
+# Return opens it. With its tab open behind another page, that tab leads, so Return switches to it.
+cra://debug?commandBarReturn=open
+expect-log command bar return open: pressed
+wait 2
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://commandbar?query=127.0
+wait 1
+cra://debug?commandBarRows=open
+expect-log Cra command bar rows open: open=1 mode=newTab selected=0 tab:http://127\.0\.0\.1:[0-9]+/ \| .* completion=127\.0\.0\.1:[0-9]+$

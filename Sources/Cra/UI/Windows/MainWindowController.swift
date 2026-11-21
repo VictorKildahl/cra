@@ -5236,15 +5236,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
         let query = commandBar.query
-        func open(_ url: String) {
-            var url = url
+        // address: what opens is an address entered, not a search; counted for the completion (#667).
+        func open(_ url: String, address: Bool = false) {
+            var url = url, entered = address
             // Another app's address opens that app, with no tab (#604).
             switch AppLinkPrompt.openTyped(url) {
             case .load: break
             case .openApp, .refuse: return
-            case .search: url = commandBar.engine.searchURL(typed)
+            case .search: url = commandBar.engine.searchURL(typed); entered = false
             }
             store.recordQuerySelection(query: query, url: url)
+            if entered { store.recordTyped(url: url, profile: store.profileID(space: focusedSpaceID)) }
             let fillsEmptyPane = selectedTab?.isEmptyTab == true
             // A pinned tab keeps to its host: another host's address opens a Today tab (Arc).
             let leavesPinned = !fillsEmptyPane && selectedTabID.map(store.isPinned) == true
@@ -5262,7 +5264,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         guard let s else {
             if typed.isEmpty { return }
-            open(SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed))
+            let address = SuggestionEngine.looksLikeURL(typed)
+            open(address ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed), address: address)
             return
         }
         switch s.kind {
@@ -5283,11 +5286,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .archived(let id):
             store.restoreArchived(id)
         case .navigate:
-            open(TypedURL.navigation(typed: typed, rowURL: s.url, rowIsForTyped: typed == commandBar.query) ?? commandBar.engine.searchURL(typed))
+            let address = TypedURL.navigation(typed: typed, rowURL: s.url, rowIsForTyped: typed == commandBar.query)
+            open(address ?? commandBar.engine.searchURL(typed), address: address != nil)
         case .search:
             open(s.url ?? commandBar.engine.searchURL(typed))
         case .history, .topDomain:
-            open(s.url ?? "")
+            open(s.url ?? "", address: true)
         case .command(let id):
             app.perform(id)
         case .switchSpace(let id):

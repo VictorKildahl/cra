@@ -939,6 +939,10 @@ public struct HistoryEntry: Codable, Equatable {
     /// space on one profile doesn't suggest what was browsed on another (#609). nil for an entry
     /// saved before Cra kept them: its profile isn't known, and it is suggested everywhere as before.
     public var profiles: [String]? = nil
+    /// How often the address was entered in the command bar (typed, or an Open URL or visited-page row
+    /// picked; not a search), as Chromium's typed_count: ⌘T completes a site's name to the address typed
+    /// most on it (TypedCompletion, #667). nil for never, so older files load and save as they were.
+    public var typedCount: Int? = nil
 
     public init(url: String, title: String, lastVisit: Date, visitCount: Int) {
         self.url = url

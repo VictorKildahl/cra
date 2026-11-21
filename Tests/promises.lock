@@ -1473,6 +1473,13 @@
 #666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::defaultHasANameOfItsOwn  e0de71ee2e1b
 #666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::sidebarKeepsDefaultsName  a5ee177c86bd
 #666   Tests/Scenarios/profile-names.scenario  d12822edd448
+#667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::aHostWithAPortCompletesWithIt  5f7ebaac9761
+#667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::aSitesNameLeadsToItsMostTypedShortestAddress  4654e5e8c9ba
+#667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::anEnteredAddressIsCountedUnderItsPagesKey  e275e3b88ecd
+#667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::historyKeepsItsTypedCountsAndOldFilesStayAsTheyWere  21e4c19b3f90
+#667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::nothingTypedLeavesItToTheOtherRows  badf4c81b43f
+#667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::theSiteTypedMostWins  b9abfbc31341
+#667   Tests/Scenarios/command-bar-typed-site.scenario  e4d91307fdfe
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

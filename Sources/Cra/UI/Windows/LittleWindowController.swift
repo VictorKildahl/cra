@@ -1377,20 +1377,23 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     private func handleCommit(_ s: Suggestion?, typed: String, mode: CommandBarMode) {
         let query = commandBar.query
-        func open(_ url: String) {
-            var url = url
+        // address: what opens is an address entered, not a search; counted for the completion (#667).
+        func open(_ url: String, address: Bool = false) {
+            var url = url, entered = address
             // Another app's address opens that app, with no page (#604).
             switch AppLinkPrompt.openTyped(url) {
             case .load: break
             case .openApp, .refuse: return
-            case .search: url = commandBar.engine.searchURL(typed)
+            case .search: url = commandBar.engine.searchURL(typed); entered = false
             }
             store.recordQuerySelection(query: query, url: url)
+            if entered { store.recordTyped(url: url, profile: state.profileID) }
             navigate(url)
         }
         guard let s else {
             if typed.isEmpty { return }
-            open(SuggestionEngine.looksLikeURL(typed) ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed))
+            let address = SuggestionEngine.looksLikeURL(typed)
+            open(address ? SuggestionEngine.urlFromInput(typed) : commandBar.engine.searchURL(typed), address: address)
             return
         }
         switch s.kind {
@@ -1404,11 +1407,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             store.restoreArchived(id)
             app.main.showWindow(nil)
         case .navigate:
-            open(TypedURL.navigation(typed: typed, rowURL: s.url, rowIsForTyped: typed == query) ?? commandBar.engine.searchURL(typed))
+            let address = TypedURL.navigation(typed: typed, rowURL: s.url, rowIsForTyped: typed == query)
+            open(address ?? commandBar.engine.searchURL(typed), address: address != nil)
         case .search:
             open(s.url ?? commandBar.engine.searchURL(typed))
         case .history, .topDomain:
-            open(s.url ?? "")
+            open(s.url ?? "", address: true)
         case .command(let id):
             app.perform(id)
         case .switchSpace(let id):
