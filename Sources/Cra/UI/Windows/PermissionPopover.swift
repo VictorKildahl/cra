@@ -52,7 +52,7 @@ final class PermissionPopover: NSObject {
         pageRect = rect
         let card = PermissionCardView(title: title, actions: actions.buttons) { [weak self] index in self?.finish(index) }
         self.card = card
-        let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let p = PermissionCardPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
@@ -320,4 +320,12 @@ final class PermissionCardButton: NSView {
         pressed = false
         if bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
+}
+
+/// The card's panel reaches its margin above the card, so on a page right under the menu bar it crosses
+/// it, and AppKit moved it down below it: the card sat 2 pt lower than 12 pt from the page's top on a
+/// built-in display with a notch (the web-features gate's `permission-card` and `page-permission-prompts`
+/// failed there and on GitHub's VM). Its frame is left as asked, as `SplashPanel`'s and the sidebar's are.
+private final class PermissionCardPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
