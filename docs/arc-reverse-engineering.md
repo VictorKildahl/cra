@@ -5020,6 +5020,10 @@ screen on a click.
   comes from `_setFrameAfterMove:` (a move the window server reports: a drag and its release); a display coming or going reaches
   the adjustment another way and keeps it (checked 17 Nov 2026 with a 2x virtual display removed under a probe window). Moving the window by hand on each event instead drew the window at both scales at the crossing and
   flickered; Peter turned it down.
+- [O Cra, 21 Nov 2026] At a display crossing that adjustment is also what records the moved frame. Skipped, AppKit kept the
+  frame from before the crossing (Accessibility read (-268, 198), the window server (556, 241)), and every menu, a `<select>`'s
+  popup too, opened that far from the window. `CraWindow` now records the frame `_setFrameAfterMove:` reports when it skips the
+  adjustment; the window is already there (scenario `window-frame-after-move`).
 
 ## The hidden sidebar from past the window's edge (Arc 1.172.2, 11 Nov 2026, GitHub #350, live Arc, real pointer at 120 fps)
 
