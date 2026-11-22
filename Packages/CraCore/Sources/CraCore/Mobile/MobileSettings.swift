@@ -1,10 +1,14 @@
 import Foundation
 
+/// A sheet's resting heights, as UIKit's detents: half the screen, or all of it.
 public enum MobileSheetHeight {
     case medium, large
 }
 
+/// How tall App Settings (the tab switcher's gear) opens.
 public enum MobileSettingsSheet {
+    /// On iPhone Arc Search's half sheet that drags up to full; on iPad the form sheet's full height only,
+    /// where half of it showed two rows and left the rest of the card empty (#674).
     public static func appSettingsHeights(onPad: Bool) -> [MobileSheetHeight] {
         onPad ? [.large] : [.medium, .large]
     }
