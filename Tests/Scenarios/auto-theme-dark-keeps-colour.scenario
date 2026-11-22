@@ -1,0 +1,17 @@
+# promise: #677
+# An Auto space while macOS is dark keeps its colour over the dark material, as Arc on Automatic draws a picked
+# colour, the same as the space's Dark (GitHub #677: a pastel on Auto turned nearly black, with white text, and
+# looked nothing like Arc). The space was saved by the editor before #677, with that darkened half: loading it
+# swaps in today's. It still follows macOS (#155): the light material while macOS is light.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Pastel","emoji":"🌸","theme":{"accent":"#F2C4CE","appearance":"auto","colors":["#F2C4CE","#F2C4CE"],"dark":{"accent":"#1B060A","colors":["#1B060A","#1B060A"],"intensity":0.8,"noise":0,"solid":true,"vibrant":false},"intensity":0.8,"key":["#F2C4CE"],"noise":0,"solid":true,"vibrant":false},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}}]}
+cra://debug?systemAppearance=dark
+wait 1
+cra://debug?themeShown=pastel-dark
+expect-log Cra theme shown pastel-dark: space=Pastel follows=1 theme=light shell=[a-z]+ sidebar=light library=- material=dark
+cra://debug?systemAppearance=light
+wait 1
+cra://debug?themeShown=pastel-light
+expect-log Cra theme shown pastel-light: space=Pastel follows=1 theme=light shell=[a-z]+ sidebar=light library=- material=light
+cra://debug?systemAppearance=system

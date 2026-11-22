@@ -248,10 +248,10 @@
 #154   Packages/CraCore/Tests/CraCoreTests/FavoritesSharingTests.swift::twoOfAPageInOneSpaceBothStay  95492abd0d48
 #154   Tests/StoreTests.swift::sharedFavorites  db5eca7d0a92
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoShowsTheHalfMacOSAsksFor  73a172a01086
-#155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnAutoFollowsMacOS  2abd1f76b828
+#155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnAutoFollowsMacOS  03285b37afa2
 #155   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::everySwatchOnLightOrDarkKeepsOneLook  6628c520301a
 #155   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::autoSpacesKeepBothHalves  89e5047a5e96
-#155   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::newSpaceIsOneColourOnAuto  32095d76196a
+#155   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::newSpaceIsOneColourOnAuto  02618fe7a87d
 #155   Tests/Scenarios/auto-theme.scenario  ecf687c1ce39
 #156   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::activeLookFollowsTheWindowLikeAppKit  d175c47f026e
 #156   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::floatingSidebarDropsItsLiftUnderReduceTransparency  74009e2249b1
@@ -747,7 +747,7 @@
 #391   Tests/DockedWindowAccessibilityTests.swift::movingADockedWindowMovesTheBrowser  2138e64da85d
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkColoursKeepTheirOwnTone  180984317a3e
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::darkGradientFollowsTheSlider  fd13db337106
-#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  1afc110bfec4
+#392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::greysStayNeutralInTheDark  108d3170efef
 #392   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::lightAndDarkKeepThePickedColourAsArcDoes  aff895b8b551
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPageContentTests.swift::quoteResultsRequireCompletedBoundedDOMEvidence  324bbcbcf216
 #393   Packages/CraCore/Tests/CraCoreTests/AskOnPagePromptTests.swift::promptRetainsArcsQuoteGuessLanguageAndTransformationContract  fb98bef0e493
@@ -1513,6 +1513,8 @@
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aButtonTicksAsTheFingerComesDownAndAgainAsItLetsGo  5e1d23faefe8
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::everyBarButtonTicksTheNewTabPillToo  6bed583c490a
 #675   iOS/CraUITests/BrowserTests.swift::testBarButtonsTickOnPressAndOnRelease  1a7789f226e9
+#677   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoSpacesSavedBeforeKeepTheirColoursInTheDark  6a757e6f3485
+#677   Tests/Scenarios/auto-theme-dark-keeps-colour.scenario  70e97e843df1
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
 #679   Tests/Scenarios/library-swipe-out-still-pointer-fullscreen.scenario  26456a6874d0
 #680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::aDraggedWidthStays  d79840edd63e

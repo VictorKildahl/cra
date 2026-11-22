@@ -3742,6 +3742,13 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   (black came out #2F2A36), Dark darkened every colour and Light lifted dark ones. Pinned by
   `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`, `darkGradientFollowsTheSlider` and
   `lightAndDarkKeepThePickedColourAsArcDoes`.
+- Cra (#677, Victor 22 Nov 2026): Auto's half for a dark Mac no longer darkens. It is the pad's colours as they
+  are over the dark material, as Arc on Automatic draws a picked colour while macOS is dark, so the same as the
+  space's Dark: a pastel stays a muted pastel with dark text. The light half still lifts a dark colour to HSL 0.9.
+  An Auto space saved with the old darkened half gets today's when sidebar.json loads
+  (`SpaceThemeVariants.upgradedDarkHalf`; Arc imports' own halves are left alone). #155's promise (Auto follows
+  macOS) holds through the material. Pinned by `everySwatchOnAutoFollowsMacOS` (changed with Victor's OK),
+  `autoSpacesSavedBeforeKeepTheirColoursInTheDark` and the `auto-theme-dark-keeps-colour` scenario.
 - [O video] The pad's drag and + (16 Nov 2026, issue #455, the reporter's side-by-side recording of their Arc, colours sampled from
   the video so ±10/255): a Drab red dragged round Arc's pad stayed dark, HSB brightness ≈ 0.4 through #682D33,
   #203B5F, #1B3D5A and #273A6D: the drag turns hue and saturation and keeps the colour's brightness. Arc's +
