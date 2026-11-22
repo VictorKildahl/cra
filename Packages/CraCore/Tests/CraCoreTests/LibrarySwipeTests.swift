@@ -125,7 +125,10 @@ struct LibrarySwipeTests {
         #expect(LibrarySwipe.floatingRetreat(reveal: 1, library: library) >= 256)
     }
 
-    @Test func thePageStaysAgainstTheLibraryFromItsHiddenPlace() {
+    /// From a hidden sidebar the Library comes in docked at its full width and pushes the page before it, as Arc
+    /// 1.173.1's does (a 120 Hz recording, 18 Nov 2026): #679 asked for less of a push, and Arc's is this one.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/679"))
+    func thePageStaysAgainstTheLibraryFromItsHiddenPlace() {
         let library: CGFloat = 417
         let rest: CGFloat = 10
         #expect(LibrarySwipe.pageEdgeFromHidden(reveal: 0, library: library, inset: rest) == rest)

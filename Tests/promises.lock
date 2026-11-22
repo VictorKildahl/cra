@@ -1493,6 +1493,8 @@
 #669   Packages/CraCore/Tests/CraCoreTests/CardVeilTests.swift::aWindowWithNoTabFollowsArcsAppearance  616c231bd123
 #669   Tests/Scenarios/empty-card-appearance.scenario  929ad9bec480
 #673   Tests/StoreTests.swift::importedTabsKeepTheirOwnIcons  6b33b1cf8f28
+#679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
+#679   Tests/Scenarios/library-swipe-out-still-pointer-fullscreen.scenario  26456a6874d0
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
