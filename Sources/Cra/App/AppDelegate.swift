@@ -1828,6 +1828,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleKey=<n>: the nth Little Window (oldest first) picked as Mission Control picks one (#581);
             // littleOrder=<label>: Cra's browser and Little Windows, front to back, as the window server has them.
             if let n = dict["littleKey"].flatMap(Int.init), littleWindows.indices.contains(n) { littleWindows[n].debugPick(); return }
+            // mainFrame=x,y,w,h / littleFrame=x,y,w,h: the browser window or the newest Little Window placed at that
+            // frame, in points from the top left of its screen's visible area, so a scenario can keep them apart
+            // (#659). littleClose=point: where the newest Little Window's close button is, in the top-left screen
+            // points scenario.sh's `click` uses: "little close point: <x> <y>".
+            if let spec = dict["mainFrame"] ?? dict["littleFrame"] {
+                let n = spec.split(separator: ",").compactMap { Double($0) }
+                let target = dict["mainFrame"] != nil ? main.window : littleWindows.last(where: { !$0.isPeek })?.window
+                if n.count == 4, let w = target, let screen = w.screen ?? NSScreen.main {
+                    let v = screen.visibleFrame
+                    w.setFrame(NSRect(x: v.minX + n[0], y: v.maxY - n[1] - n[3], width: n[2], height: n[3]), display: true)
+                }
+                return
+            }
+            if dict["littleClose"] != nil {
+                guard let w = littleWindows.last(where: { !$0.isPeek })?.window, let button = w.standardWindowButton(.closeButton),
+                      let top = NSScreen.screens.first?.frame.maxY else { CraLog.note("little close point: none"); return }
+                let r = w.convertToScreen(button.convert(button.bounds, to: nil))
+                CraLog.note("little close point: \(Int(r.midX)) \(Int(top - r.midY))")
+                return
+            }
             // keyOnComingForward=1: the browser window made key the next time Cra comes forward, before the window
             // AppKit gives the keyboard back to, as AppKit does by itself at times (#659).
             if dict["keyOnComingForward"] != nil { debugKeyOnComingForward = true; return }

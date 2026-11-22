@@ -85,3 +85,23 @@ public struct LittleWindowReturn: Equatable {
         closingKeyWindow && craActive && !movedToTab && littleWindowsLeft
     }
 }
+
+/// How a Little Window's close counts toward its way back (#430, #659): whether it closed as the key window with
+/// Cra in front, which `LittleWindowReturn.target` asks.
+public struct LittleWindowClose: Equatable, Sendable {
+    public let closingKeyWindow: Bool
+    public let craActive: Bool
+
+    /// `keyIsThisWindow`: Cra's key window is the closing window (or its command bar or popup); `craActive`:
+    /// NSApp.isActive; `craFrontmost`: the window server already has Cra in front (NSWorkspace's frontmost app);
+    /// `clickedInWindow`: a click in the closing window closes it (its close button).
+    /// A click on the close button of a Little Window while another app is in front brings Cra forward, but the
+    /// button acts on the mouse-up, before AppKit makes Cra active: the window closed as an inactive one, nothing
+    /// went back, and AppKit then gave the keyboard to the browser window, which came forward on its own display
+    /// over the app the user was in (#659). That click is the Little Window in use, with Cra coming to the front.
+    public init(keyIsThisWindow: Bool, craActive: Bool, craFrontmost: Bool, clickedInWindow: Bool) {
+        let clickBringsCraForward = !craActive && craFrontmost && clickedInWindow
+        closingKeyWindow = keyIsThisWindow || clickBringsCraForward
+        self.craActive = craActive || clickBringsCraForward
+    }
+}

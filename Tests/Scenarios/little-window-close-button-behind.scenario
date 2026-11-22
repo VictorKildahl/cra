@@ -1,0 +1,37 @@
+# promise: #659
+# The Little Window's close button clicked while the app its link came from is in front: Cra comes forward for the
+# click, but the button closes the window on the mouse-up, before AppKit makes Cra active. Nothing went back, and
+# AppKit gave the keyboard to the browser window, which came forward over that app (GitHub #659: Slack and the
+# Little Window on one display, the browser window on the other). It goes back to that app now, and the browser
+# window stays behind it. The browser window sits on the left under `cover`, the Little Window on the right, clear
+# of it; the click is a real one (scripts/hid-click/click.m).
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?mainFrame=0,0,800,700
+wait 1
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+cra://debug?littleFrame=880,80,700,560
+wait 1
+cra://debug?littleFocus=open
+expect-log little focus open: active=1 key=little0 over=0 windows=1 mainOver=[1-9]
+cra://debug?yieldTo=${COVER}
+wait 1
+cra://debug?littleFocus=behind
+expect-log little focus behind: active=0 key=none over=0 windows=1 mainOver=[1-9]
+click little-close
+wait 2
+cra://debug?littleFocus=clicked
+expect-log little focus clicked: active=0 key=none over=- windows=0 mainOver=[1-9]

@@ -1953,17 +1953,24 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         handedBack = true
         var key = NSApp.keyWindow
         while let parent = key?.parent { key = parent }
-        let hadKeyboard = key === window || key === commandPanel || key === popup
+        // key != nil: with no key window and no popup, `key === popup` was nil === nil.
+        let keyIsThis = key != nil && (key === window || key === commandPanel || key === popup)
+        // A click on its close button while another app is in front closes it before AppKit makes Cra active (#659).
+        let event = NSApp.currentEvent
+        let clicked = event.map { ($0.type == .leftMouseUp || $0.type == .leftMouseDown) && $0.window === window } ?? false
+        let close = LittleWindowClose(keyIsThisWindow: keyIsThis, craActive: NSApp.isActive,
+                                      craFrontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier,
+                                      clickedInWindow: clicked)
         // Other Little Windows still open (#646): the front one takes the keyboard, as in Arc, and the app
         // the window was opened over comes back only after the last.
         let next = isPeek ? nil : frontLittleWindow()
-        if LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: hadKeyboard, craActive: NSApp.isActive, movedToTab: movedToTab,
+        if LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: close.closingKeyWindow, craActive: close.craActive, movedToTab: movedToTab,
                                                 littleWindowsLeft: next != nil), let next {
             CraLog.note("Little Window closed: the next one takes the keyboard (#646)")
             next.takeKeyboard()
             return
         }
-        guard let pid = focusReturn.target(closingKeyWindow: hadKeyboard, craActive: NSApp.isActive, movedToTab: movedToTab,
+        guard let pid = focusReturn.target(closingKeyWindow: close.closingKeyWindow, craActive: close.craActive, movedToTab: movedToTab,
                                            littleWindowsLeft: next != nil),
               let other = NSRunningApplication(processIdentifier: pid), !other.isTerminated else { return }
         CraLog.note("Little Window closed: the app it was opened over comes forward (#430)")

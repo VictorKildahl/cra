@@ -29,12 +29,15 @@ wait 2
 cra://debug?littleFocus=closed
 expect-log little focus closed: active=0 key=none over=- windows=0 mainOver=[1-9]
 
-# The other app in front again, then a click in the Little Window to read on (Cra comes forward, and AppKit
-# makes the browser window key for a moment): closing it still goes back to that app.
+# The other app in front again, then back to Cra and a click in the Little Window to read on (Cra comes forward,
+# and AppKit makes the browser window key for a moment): closing it still goes back to that app. `cover link` hands
+# Cra the front as a click would: the posted click below goes to the window, not through the window server.
 cover link
 cra://debug?externalURL=${PAGE}?n=little-two
 wait 2
 cra://debug?yieldTo=${COVER}
+wait 1
+cover link
 wait 1
 cra://debug?clickAt=200,120&target=little
 wait 1.5
