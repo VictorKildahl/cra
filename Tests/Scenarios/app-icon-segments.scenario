@@ -1,0 +1,6 @@
+# An explicit Segments choice supplies the Dock tile with Cra's bundled artwork on launch.
+# The argument domain leaves the user's Finder icon and saved selection alone.
+arg -appIcon
+arg segments
+cra://debug?dockTile=segments
+expect-log dock tile segments: view=\S+ draws=bundle

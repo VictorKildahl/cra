@@ -12,9 +12,9 @@ struct IconPane: View {
     var body: some View {
         SettingsCardPane {
             SettingsCard {
-                ForEach(Array(AppIconManager.presets.enumerated()), id: \.element.id) { i, option in
+                ForEach(Array(icons.presets.enumerated()), id: \.element.id) { i, option in
                     if i > 0 { divider }
-                    IconRow(name: option.name, image: icons.image(for: option.id), selected: icons.selectedID == option.id) {
+                    IconRow(name: option.name, image: option.image, selected: icons.selectedID == option.id) {
                         icons.select(option.id)
                     } trailing: { EmptyView() }
                 }
@@ -34,6 +34,7 @@ struct IconPane: View {
                 }
             }
             SettingsFootnote("Pick any image or drop one on “Your own icon”. It’s sized to match the other icons in the Dock, and a photo or a logo on a background fills the rounded tile. The Dock keeps the icon after Cra quits.")
+            if icons.fileIconFailed { SettingsFootnote("To update the Finder icon too, run a writable copy of Cra from Applications.").foregroundStyle(.red) }
             if let error { SettingsFootnote(error).foregroundStyle(.red) }
         }
     }

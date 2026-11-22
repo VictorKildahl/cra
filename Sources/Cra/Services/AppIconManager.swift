@@ -1,4 +1,5 @@
 import AppKit
+import CraAppIcons
 import Observation
 import UniformTypeIdentifiers
 
@@ -13,19 +14,33 @@ import UniformTypeIdentifiers
 final class AppIconManager {
     static let shared = AppIconManager()
 
-    struct Option: Identifiable, Equatable {
+    final class Option: Identifiable {
         let id: String
         let name: String
+        private(set) lazy var image = AppIconResources.image(named: id, in: .main)
+
+        init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
     }
 
     static let defaultID = "segments"
     static let customID = "custom"
-    static let presets = [
-        Option(id: defaultID, name: "Segments"),
-        Option(id: "midnight", name: "Midnight"),
-        Option(id: "mono", name: "Mono"),
-        Option(id: "violet", name: "Violet"),
-    ]
+    private static func makeOptions() -> [Option] {
+        [
+            Option(id: defaultID, name: "Segments"),
+            Option(id: "midnight", name: "Midnight"),
+            Option(id: "mono", name: "Mono"),
+            Option(id: "violet", name: "Violet"),
+            Option(id: "arc", name: "Arc"),
+            Option(id: "chromatic", name: "Chromatic"),
+        ]
+    }
+
+    private var options: [Option]
+    var presets: [Option] { options.filter { $0.image != nil } }
+    @ObservationIgnored private var appearanceObservation: AppIconAppearanceObservation?
 
     // Shared with Sources/CraDockTile.
     private enum Keys {
@@ -37,6 +52,7 @@ final class AppIconManager {
     }
 
     private(set) var selectedID: String
+    private(set) var fileIconFailed = false
     /// The user's own icon, kept even while a preset is selected.
     private(set) var customImage: NSImage?
 
@@ -44,19 +60,26 @@ final class AppIconManager {
 
     private init() {
         let stored = UserDefaults.standard.string(forKey: Keys.selected) ?? Self.defaultID
-        let custom = NSImage(contentsOf: Self.customURL)
-        let known = Self.presets.contains { $0.id == stored } || (stored == Self.customID && custom != nil)
-        selectedID = known ? stored : Self.defaultID
-        customImage = custom
+        options = Self.makeOptions()
+        customImage = NSImage(contentsOf: Self.customURL)
+        selectedID = stored
+        if stored != Self.defaultID && image(for: stored) == nil { selectedID = Self.defaultID }
+        if #available(macOS 26, *) {
+            appearanceObservation = AppIconAppearanceObservation { [weak self] in
+                guard let self else { return }
+                self.options = Self.makeOptions()
+                if ["arc", "chromatic"].contains(self.selectedID) { self.applyFileAndDockIcons() }
+            }
+        }
     }
 
-    /// The picked icon as the Dock tile gets it, nil for the bundle's own (Segments). Chromium's
-    /// download view draws it too (ChromiumDockTile).
+    /// Chromium's download view also draws this image underneath its progress badge.
     @ObservationIgnored private(set) var dockImage: NSImage?
 
     /// At start-up, before the Dock first draws the running app's tile.
-    func applyAtLaunch() {
-        if selectedID != Self.defaultID { setDockImage() }
+    static func applyAtLaunch() {
+        guard let stored = UserDefaults.standard.string(forKey: Keys.selected) else { return }
+        if stored == defaultID { shared.setDockImage() } else { shared.applyFileAndDockIcons() }
     }
 
     /// Cra just came back to the Dock (Keep Cra in the menu bar, #231). macOS registers the app
@@ -68,10 +91,7 @@ final class AppIconManager {
     }
 
     func image(for id: String) -> NSImage? {
-        // app-icons/segments.png is the bundled icon on the grid, for the picker; the Dock
-        // gets AppIcon.icns itself (apply()).
-        id == Self.customID ? customImage
-            : Bundle.main.url(forResource: id, withExtension: "png", subdirectory: "app-icons").flatMap(NSImage.init(contentsOf:))
+        id == Self.customID ? customImage : options.first { $0.id == id }?.image
     }
 
     func select(_ id: String) {
@@ -101,15 +121,25 @@ final class AppIconManager {
     }
 
     private func apply() {
-        setDockImage()
+        applyFileAndDockIcons()
         notifyDockTile()
     }
 
+    private func applyFileAndDockIcons() {
+        setDockImage()
+        // A temporary -appIcon override belongs to this process alone.
+        if UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[Keys.selected] == nil {
+            let image = selectedID == Self.defaultID ? nil : dockImage
+            fileIconFailed = !AppIconResources.setFileIcon(image, on: .main)
+        }
+    }
+
     private func setDockImage() {
-        dockImage = selectedID == Self.defaultID ? nil : image(for: selectedID)
+        // Passing nil immediately after clearing the Finder override can leave a folder on the Dock tile.
+        dockImage = image(for: selectedID)
         // Setting applicationIconImage puts AppKit's image view on the tile in place of
         // Chromium's download view, whose badge would then be gone until Cra quits; it goes
-        // back, drawing the new icon. nil puts the bundle's icon back.
+        // back, drawing the new icon.
         let chromiumView = NSApp.dockTile.contentView.flatMap { ChromiumDockTile.isChromiumView($0) ? $0 : nil }
         NSApp.applicationIconImage = dockImage
         if let chromiumView {
@@ -193,17 +223,24 @@ final class AppIconManager {
             view.cacheDisplay(in: view.bounds, to: rep)
             rep.draw(in: rect)
         }
-        let bundleIcon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+        let bundleIcon = image(for: Self.defaultID) ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
         let picked = Self.pixels(px) { (self.image(for: self.selectedID) ?? bundleIcon).draw(in: $0) }
         let bundle = Self.pixels(px) { bundleIcon.draw(in: $0) }
         func distance(_ a: [UInt8], _ b: [UInt8]) -> Int {
             a.isEmpty || a.count != b.count ? Int.max : zip(a, b).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) } / a.count
         }
         let toPicked = distance(drawn, picked), toBundle = distance(drawn, bundle)
+        let draws: String
+        if selectedID == Self.defaultID {
+            let folder = Self.pixels(px) { NSWorkspace.shared.icon(for: .folder).draw(in: $0) }
+            draws = toBundle < distance(drawn, folder) ? "bundle" : "folder"
+        } else {
+            draws = toPicked < toBundle ? "picked" : "bundle"
+        }
         // downloads: the count on Chromium's badge, 0 while its view isn't on the tile. A Web Store
         // install's CRX download, which no list shows, must not be one (#491).
         let downloads = ChromiumDockTile.isChromiumView(view) ? (view.value(forKey: "downloads") as? Int ?? 0) : 0
-        return "view=\(type(of: view)) draws=\(toPicked < toBundle ? "picked" : "bundle") (\(toPicked) vs \(toBundle)) downloads=\(downloads)"
+        return "view=\(type(of: view)) draws=\(draws) (\(toPicked) vs \(toBundle)) downloads=\(downloads)"
     }
 
     private static func pixels(_ px: Int, _ draw: (NSRect) -> Void) -> [UInt8] {

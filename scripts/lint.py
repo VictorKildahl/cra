@@ -23,9 +23,8 @@ gains a finding fails, one that loses one is reported so the baseline can come d
   importer-without-fixture
       An importer (enum …Importer) without a checked-in profile under Tests/Fixtures/<Name>:
       parsers are tested against files in the source browser's format, not dictionaries.
-  app-icon-without-png
-      An AppIconManager preset without resources/app-icons/<id>.png (scripts/make-app-icons.swift
-      writes them): the picker would show an empty tile and the Dock would keep the old icon.
+  app-icon-without-source
+      An AppIconManager preset without a matching PNG or Icon Composer document in resources/app-icons.
   app-icon-size
       A resources/app-icons PNG that isn't 512×512 px. The generator once followed the display's
       scale and wrote 256 px icons on a 1x screen, which the Dock would draw blurry.
@@ -128,8 +127,10 @@ def findings():
                     hit("importer-without-fixture", f"{rel}:{name}", i)
             if rel == "Services/AppIconManager.swift":
                 for icon in re.findall(r'\bOption\(id: "(\w+)"', line):
-                    if not os.path.isfile(os.path.join(ROOT, "resources", "app-icons", f"{icon}.png")):
-                        hit("app-icon-without-png", f"{rel}:{icon}", i)
+                    png = os.path.join(ROOT, "resources", "app-icons", f"{icon}.png")
+                    composer = os.path.join(ROOT, "resources", "app-icons", f"AppIcon-{icon.capitalize()}.icon", "icon.json")
+                    if not (os.path.isfile(png) or os.path.isfile(composer)):
+                        hit("app-icon-without-source", f"{rel}:{icon}", i)
     icons = os.path.join(ROOT, "resources", "app-icons")
     for n in sorted(os.listdir(icons)) if os.path.isdir(icons) else []:
         if n.endswith(".png"):

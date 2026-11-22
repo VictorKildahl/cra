@@ -1129,11 +1129,13 @@ struct MobileOnboardingTests {
     }
 
     @Test func iconsMapToTheirAlternateNames() {
-        #expect(MobileAppIcon.allCases.map(\.alternateName) == [nil, "AppIcon-Midnight", "AppIcon-Mono", "AppIcon-Violet"])
-        #expect(MobileAppIcon(alternateName: "AppIcon-Violet") == .violet)
+        #expect(MobileAppIcon.allCases.map(\.alternateName) == [nil, "AppIcon-Midnight", "AppIcon-Mono", "AppIcon-Violet", "AppIcon-Arc", "AppIcon-Chromatic"])
+        for icon in MobileAppIcon.allCases { #expect(MobileAppIcon(alternateName: icon.alternateName) == icon) }
         #expect(MobileAppIcon(alternateName: nil) == .segments)
         #expect(MobileAppIcon(alternateName: "Gone") == .segments)
         #expect(MobileAppIcon.mono.previewName == "AppIcon-Mono-Preview")
+        #expect(MobileAppIcon.arc.previewName == "AppIcon-Arc-Preview")
+        #expect(MobileAppIcon.chromatic.previewName == "AppIcon-Chromatic-Preview")
     }
 }
 

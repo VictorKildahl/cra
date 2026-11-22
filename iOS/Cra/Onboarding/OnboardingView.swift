@@ -5,19 +5,16 @@ final class OnboardingModel: ObservableObject {
     let steps: [MobileOnboarding.Step]
     @Published var index = 0
     @Published var blocksAdsAndTrackers = true
-    @Published var icon: MobileAppIcon
     /// The Browse for Me, Pinch and blocking steps' phones: tried, working, done.
     @Published var progress: MockProgress = .idle
     /// The last step's inset sheet, "How to change your default browser".
     @Published var showsHowTo = false
-    var setIcon: (MobileAppIcon) -> Void = { _ in }
     /// Called with whether ads and trackers are to be blocked.
     var finish: (Bool) -> Void = { _ in }
     var openDefaultBrowserSettings: () -> Void = {}
 
-    init(canUseAI: Bool, icon: MobileAppIcon) {
+    init(canUseAI: Bool) {
         steps = MobileOnboarding.steps(canUseAI: canUseAI)
-        self.icon = icon
     }
 
     var step: MobileOnboarding.Step { steps[index] }
@@ -57,6 +54,7 @@ final class OnboardingModel: ObservableObject {
 /// last on the vivid gradient.
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
+    private let icons = AppIconSelection.shared
 
     private var tried: Bool { model.progress == .done }
 
@@ -105,7 +103,7 @@ struct OnboardingView: View {
                 Color.black.opacity(0.35).ignoresSafeArea()
                     .transition(.opacity)
                     .onTapGesture { model.later() }
-                HowToSheet(icon: model.icon, open: model.openSettings, later: model.later)
+                HowToSheet(icon: icons.selected, open: model.openSettings, later: model.later)
                     .transition(.move(edge: .bottom))
             }
         }
@@ -157,11 +155,9 @@ struct OnboardingView: View {
         case .icon:
             VStack(spacing: 30) {
                 OnboardingTitle(text: MobileOnboarding.iconTitle)
-                AppIconGrid(selected: model.icon, onVivid: true) { icon in
-                    model.icon = icon
-                    model.setIcon(icon)
-                }
-                .padding(.horizontal, 60)
+                AppIconGrid(selected: icons.selected, onVivid: true, pick: icons.select)
+                    .padding(.horizontal, 40)
+                    .frame(maxWidth: 480)
             }
             .padding(.top, 50)
         case .blocking:
@@ -174,7 +170,7 @@ struct OnboardingView: View {
         case .defaultBrowser:
             VStack(spacing: 18) {
                 Spacer().frame(height: 110)
-                Image(model.icon.previewName)
+                icons.selected.previewImage
                     .resizable()
                     .frame(width: 128, height: 128)
                     .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
@@ -292,7 +288,7 @@ private struct HowToSheet: View {
             Image(systemName: "gearshape.fill").font(.system(size: 16)).foregroundStyle(.white)
                 .frame(width: 28, height: 28).background(Color(white: 0.55), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         case 2:
-            Image(icon.previewName).resizable().clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            icon.previewImage.resizable().clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         default:
             Color.clear
         }
@@ -307,11 +303,11 @@ struct AppIconGrid: View {
     let pick: (MobileAppIcon) -> Void
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 22) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: onVivid ? 3 : 2), spacing: 22) {
             ForEach(MobileAppIcon.allCases) { icon in
                 Button { pick(icon) } label: {
                     VStack(spacing: 10) {
-                        Image(icon.previewName)
+                        icon.previewImage
                             .resizable()
                             .aspectRatio(1, contentMode: .fit)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -345,24 +341,16 @@ struct AppIconGrid: View {
 
 /// Settings ▸ App Icon.
 struct AppIconPicker: View {
-    @State private var selected = MobileAppIcon(alternateName: UIApplication.shared.alternateIconName)
+    private let icons = AppIconSelection.shared
 
     var body: some View {
         ScrollView {
-            AppIconGrid(selected: selected) { icon in
-                selected = icon
-                AppIconPicker.apply(icon)
-            }
-            .padding(40)
+            AppIconGrid(selected: icons.selected, pick: icons.select)
+                .padding(40)
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("App Icon")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    static func apply(_ icon: MobileAppIcon) {
-        guard UIApplication.shared.supportsAlternateIcons, UIApplication.shared.alternateIconName != icon.alternateName else { return }
-        UIApplication.shared.setAlternateIconName(icon.alternateName)
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import CraAppIcons
 
 /// Cra's Dock tile plug-in (NSDockTilePlugIn in Info.plist): the Dock loads it while Cra
 /// is in the Dock but not running, so the icon picked in Settings stays after Cra quits.
@@ -9,6 +10,7 @@ import AppKit
 final class CraDockTilePlugIn: NSObject, NSDockTilePlugIn {
     private var tile: NSDockTile?
     private var observer: NSObjectProtocol?
+    private var appearanceObservation: AppIconAppearanceObservation?
     /// Cra.app, three levels up from Contents/PlugIns/CraDockTile.docktileplugin.
     private let app: Bundle? = Bundle(url: Bundle(for: CraDockTilePlugIn.self).bundleURL
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent())
@@ -17,7 +19,11 @@ final class CraDockTilePlugIn: NSObject, NSDockTilePlugIn {
         tile = dockTile
         if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
         observer = nil
+        appearanceObservation = nil
         guard dockTile != nil, let id = app?.bundleIdentifier else { return }
+        if #available(macOS 26, *) {
+            appearanceObservation = AppIconAppearanceObservation { [weak self] in self?.update() }
+        }
         observer = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name(id + ".appIconChanged"), object: nil, queue: .main) { [weak self] _ in self?.update() }
         update()
@@ -37,14 +43,14 @@ final class CraDockTilePlugIn: NSObject, NSDockTilePlugIn {
         tile.display()
     }
 
-    /// The keys AppIconManager writes; nil for the bundled icon.
+    /// An explicit Segments selection draws its bundled image here, just as in the running app.
     private func selectedImage() -> NSImage? {
         guard let app, let id = app.bundleIdentifier as CFString? else { return nil }
         CFPreferencesAppSynchronize(id)
-        guard let selected = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String, selected != "segments" else { return nil }
+        guard let selected = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String else { return nil }
         if selected == "custom" {
             return (CFPreferencesCopyAppValue("appIconCustomPath" as CFString, id) as? String).flatMap(NSImage.init(contentsOfFile:))
         }
-        return app.url(forResource: selected, withExtension: "png", subdirectory: "app-icons").flatMap(NSImage.init(contentsOf:))
+        return AppIconResources.image(named: selected, in: app)
     }
 }

@@ -1,8 +1,8 @@
 import Foundation
 
-/// The iPhone app's icons: the Mac app's four.
+/// The built-in presets shared with the Mac app.
 public enum MobileAppIcon: String, CaseIterable, Identifiable {
-    case segments, midnight, mono, violet
+    case segments, midnight, mono, violet, arc, chromatic
 
     public var id: String { rawValue }
 
@@ -12,6 +12,8 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
         case .midnight: return "Midnight"
         case .mono: return "Mono"
         case .violet: return "Violet"
+        case .arc: return "Arc"
+        case .chromatic: return "Chromatic"
         }
     }
 
@@ -22,6 +24,8 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
         case .midnight: return "AppIcon-Midnight"
         case .mono: return "AppIcon-Mono"
         case .violet: return "AppIcon-Violet"
+        case .arc: return "AppIcon-Arc"
+        case .chromatic: return "AppIcon-Chromatic"
         }
     }
 

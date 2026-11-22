@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 
 /// The app driven by real taps in the simulator. Pages are `data:` addresses, so nothing here
@@ -1125,7 +1126,7 @@ final class VoiceFromFieldTests: BrowserTestCase {
 final class OnboardingTests: BrowserTestCase {
     /// First launch walks through Arc Search's steps; the blocking switch decides the global
     /// blockers, and afterwards the app is ready to type.
-    func testOnboardingWalksThroughAndLeavesTheAppReadyToType() {
+    func testOnboardingWalksThroughAndLeavesTheAppReadyToType() throws {
         launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
         let next = app.buttons["onboarding-next"]
         XCTAssertTrue(next.waitForExistence(timeout: 10))
@@ -1159,9 +1160,20 @@ final class OnboardingTests: BrowserTestCase {
         keep("onboarding-pinch-done")
         next.tap()
         XCTAssertTrue(app.staticTexts["Pick an icon for your home screen"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["icon-violet"].exists)
+        for icon in ["violet", "arc", "chromatic"] { XCTAssertTrue(app.buttons["icon-\(icon)"].exists) }
         sleep(1)
         keep("onboarding-icon")
+        for icon in ["arc", "chromatic"] {
+            let tile = try XCTUnwrap(app.buttons["icon-\(icon)"].screenshot().image.cgImage)
+            let context = try XCTUnwrap(CGContext(data: nil, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 64,
+                                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+            context.draw(tile, in: CGRect(x: 0, y: 0, width: 16, height: 16))
+            let rgb = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+            // The left stroke of the C and the open space to its right, clear of the selection ring.
+            let stroke = (6 * 16 + 4) * 4, openSpace = (6 * 16 + 10) * 4
+            XCTAssertTrue((0..<3).contains { abs(Int(rgb[stroke + $0]) - Int(rgb[openSpace + $0])) > 65 },
+                          "The \(icon) button should display its artwork during onboarding")
+        }
         next.tap()
         XCTAssertTrue(app.staticTexts["Get what you need, without the noise"].waitForExistence(timeout: 3))
         XCTAssertEqual(next.label, "Let\u{2019}s go")
@@ -1574,12 +1586,32 @@ final class AppIconDockTests: BrowserTestCase {
         for _ in 0..<3 where !row.isHittable { app.swipeUp() }
         row.tap()
         XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
-        for icon in ["segments", "midnight", "mono", "violet"] {
+        let ids = ["segments", "midnight", "mono", "violet", "arc", "chromatic"]
+        for icon in ids {
             XCTAssertTrue(app.buttons["icon-\(icon)"].exists, icon)
         }
-        XCTAssertTrue(app.buttons["icon-segments"].isSelected, "the current icon is marked")
+        let selected = ids.filter { app.buttons["icon-\($0)"].isSelected }
+        XCTAssertEqual(selected.count, 1, "the current icon is marked")
         sleep(1)
         keep("icon-dock")
+        guard let original = selected.first else { return }
+        func pick(_ id: String) {
+            let button = app.buttons["icon-\(id)"]
+            if button.isSelected { return }
+            let shelf = app.scrollViews["app-icon-shelf"]
+            for _ in 0..<4 where !button.isHittable { shelf.swipeLeft() }
+            for _ in 0..<4 where !button.isHittable { shelf.swipeRight() }
+            button.tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let confirm = springboard.alerts.buttons["OK"]
+            if confirm.waitForExistence(timeout: 2) { confirm.tap() }
+            else if app.alerts.buttons["OK"].exists { app.alerts.buttons["OK"].tap() }
+            expectation(for: NSPredicate(format: "selected == true"), evaluatedWith: button)
+            waitForExpectations(timeout: 5)
+        }
+        defer { pick(original) }
+        pick("arc")
+        pick("chromatic")
     }
 }
 

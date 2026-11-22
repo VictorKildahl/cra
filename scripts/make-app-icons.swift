@@ -1,7 +1,7 @@
 // Renders the alternate app icons in Settings ▸ General ▸ App Icon from the brand marks
 // (brand/*.svg) into resources/app-icons/<id>.png, 512 px (Dock tiles top out at 128 pt), on Apple's icon grid:
 // the tile is 824 of 1024 px, centred, the size the Dock gives the edge-to-edge AppIcon.icns.
-// segments.png is only the picker's preview of the bundled icon.
+// The picker and the Dock use segments.png when the user selects the bundled icon.
 // WebKit draws them so the ribbons' multiply blending survives (see brand/README.md).
 //   swift scripts/make-app-icons.swift
 // With --ios it renders the same four for the iPhone app instead: 1024 px, square and opaque

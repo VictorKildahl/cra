@@ -753,8 +753,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // MARK: Onboarding and launch actions
 
     func showOnboarding() {
-        let model = OnboardingModel(canUseAI: BrowseForMe.isOffered, icon: MobileAppIcon(alternateName: UIApplication.shared.alternateIconName))
-        model.setIcon = { AppIconPicker.apply($0) }
+        let model = OnboardingModel(canUseAI: BrowseForMe.isOffered)
         model.openDefaultBrowserSettings = {
             if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
         }

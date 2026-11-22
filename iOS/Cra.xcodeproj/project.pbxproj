@@ -14,6 +14,8 @@
 		C0A0000000000000000000B1 /* CraShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000B0 /* CraShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C0A0000000000000000000B9 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000B8 /* CraCore */; };
 		C0A0000000000000000000A1 /* CraWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000A0 /* CraWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0A000000000000000000059 /* AppIcon-Arc.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000057 /* AppIcon-Arc.icon */; };
+		C0A00000000000000000005A /* AppIcon-Chromatic.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000058 /* AppIcon-Chromatic.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +66,8 @@
 		C0A000000000000000000055 /* filters.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = filters.txt; path = ../resources/blocklist/filters.txt; sourceTree = "<group>"; };
 		C0A0000000000000000000A0 /* CraWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A0000000000000000000B0 /* CraShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0A000000000000000000057 /* AppIcon-Arc.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Arc.icon"; sourceTree = "<group>"; };
+		C0A000000000000000000058 /* AppIcon-Chromatic.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Chromatic.icon"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -131,6 +135,8 @@
 				C0A0000000000000000000A5 /* CraWidgets */,
 				C0A0000000000000000000B5 /* CraShare */,
 				C0A000000000000000000005 /* Support */,
+				C0A000000000000000000057 /* AppIcon-Arc.icon */,
+				C0A000000000000000000058 /* AppIcon-Chromatic.icon */,
 				C0A000000000000000000054 /* Blocklist */,
 				C0A000000000000000000006 /* Products */,
 			);
@@ -167,6 +173,7 @@
 				C0A000000000000000000012 /* Sources */,
 				C0A000000000000000000013 /* Frameworks */,
 				C0A000000000000000000014 /* Resources */,
+				C0A00000000000000000005B /* Icon picker previews */,
 				C0A0000000000000000000A3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -305,6 +312,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0A000000000000000000059 /* AppIcon-Arc.icon in Resources */,
+				C0A00000000000000000005A /* AppIcon-Chromatic.icon in Resources */,
 				C0A000000000000000000052 /* domains.txt in Resources */,
 				C0A000000000000000000053 /* NOTICE.txt in Resources */,
 				C0A000000000000000000056 /* filters.txt in Resources */,
@@ -333,6 +342,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C0A00000000000000000005B /* Icon picker previews */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/../resources/app-icons/AppIcon-Arc.icon",
+				"$(SRCROOT)/../resources/app-icons/AppIcon-Chromatic.icon",
+			);
+			name = "Icon picker previews";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Arc-Preview.png",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Chromatic-Preview.png",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n# UIKit cannot draw an Icon Composer document as a picker thumbnail.\nictool=\"$DEVELOPER_DIR/../Applications/Icon Composer.app/Contents/Executables/ictool\"\npreview() {\n    \"$ictool\" \"$1\" --export-image --platform iOS --rendition Default --width 384 --height 384 --scale 1 --output-file \"$2\"\n}\npreview \"$SCRIPT_INPUT_FILE_0\" \"$SCRIPT_OUTPUT_FILE_0\"\npreview \"$SCRIPT_INPUT_FILE_1\" \"$SCRIPT_OUTPUT_FILE_1\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C0A000000000000000000012 /* Sources */ = {
@@ -436,6 +465,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 673A7J2J54;
@@ -462,6 +492,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 673A7J2J54;

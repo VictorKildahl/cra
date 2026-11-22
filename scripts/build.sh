@@ -106,7 +106,7 @@ cp resources/Cra.sdef "$APP/Contents/Resources/Cra.sdef"
 [ -d resources/brand ] && cp -R resources/brand "$APP/Contents/Resources/brand"
 [ -d resources/blocklist ] && cp -R resources/blocklist "$APP/Contents/Resources/blocklist"
 [ -d resources/browsers ] && cp -R resources/browsers "$APP/Contents/Resources/browsers"
-[ -d resources/app-icons ] && cp -R resources/app-icons "$APP/Contents/Resources/app-icons"
+scripts/build-app-icons.sh "$APP" "$ARCH" "${CRA_SIGN_IDENTITY:--}"
 [ -d resources/licenses ] && cp -R resources/licenses "$APP/Contents/Resources/licenses"
 [ -d resources/fonts ] && cp -R resources/fonts "$APP/Contents/Resources/fonts"
 cp -R resources/live-folder-plugins "$APP/Contents/Resources/live-folder-plugins"
@@ -178,7 +178,8 @@ fi
 # Every app in the bundle shows Cra's icon. macOS takes a bundle's icon from its asset catalog (CFBundleIconName)
 # before its .icns, and Chrome's alerts helpers carry Chromium's: the "Cra" notification prompt and every page's
 # notification showed Chromium's icon (0.1.44, a user's screenshot).
-for plist in $(find "$APP" -path '*.app/Contents/Info.plist' | tr ' ' '\001'); do
+# The icon picker helpers each declare their own themed artwork.
+for plist in $(find "$APP" -path "$APP/Contents/Helpers/CraIcon-*.app" -prune -o -path '*.app/Contents/Info.plist' -print | tr ' ' '\001'); do
   plist="$(tr '\001' ' ' <<<"$plist")"
   if /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$plist" >/dev/null 2>&1 ||
      [ -e "$(dirname "$plist")/Resources/Assets.car" ]; then

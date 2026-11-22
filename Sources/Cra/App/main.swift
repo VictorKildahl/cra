@@ -25,7 +25,7 @@ MainActor.assumeIsolated {
     NewestCopy.replaceOlderRunningCopy()
 
     // The icon picked in Settings, before the Dock first shows the running app.
-    AppIconManager.shared.applyAtLaunch()
+    AppIconManager.applyAtLaunch()
 
     // Passwords and cookies staged by the import go into the profile while no
     // Chromium has it open: before initializing, and only when no other Cra runs.

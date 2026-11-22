@@ -97,11 +97,12 @@ build() {
   cp "$bin/Cra" "$APP/Contents/MacOS/$NAME" || return 1
   cp "$bin/CraPluginHost" "$APP/Contents/MacOS/CraPluginHost" || return 1
   codesign --force --sign - "$APP/Contents/MacOS/CraPluginHost" || return 1
-  for d in web brand blocklist browsers app-icons licenses fonts live-folder-plugins; do
+  for d in web brand blocklist browsers licenses fonts live-folder-plugins; do
     if [ -d "resources/$d" ]; then
       rsync -a --delete "resources/$d/" "$APP/Contents/Resources/$d/" || return 1
     fi
   done
+  scripts/build-app-icons.sh "$APP" || return 1
   codesign --force --sign - --entitlements resources/Cra.entitlements "$APP"
 }
 

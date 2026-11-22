@@ -8,7 +8,7 @@ import SwiftUI
 /// 78 pt icons 110 pt apart, a 41 pt shelf with a 17 pt front edge.
 struct AppIconDock: View {
     var done: () -> Void = {}
-    @State private var selected = MobileAppIcon(alternateName: UIApplication.shared.alternateIconName)
+    private let icons = AppIconSelection.shared
 
     private static let icon: CGFloat = 78
     private static let gap: CGFloat = 32
@@ -42,6 +42,7 @@ struct AppIconDock: View {
                 }
             }
             .scrollClipDisabled()
+            .accessibilityIdentifier("app-icon-shelf")
             Spacer(minLength: 30)
         }
         .background(LinearGradient(colors: [Color(white: 0.965), Color(red: 0.95, green: 0.94, blue: 0.99)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
@@ -55,7 +56,7 @@ struct AppIconDock: View {
                 LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.9)], startPoint: .top, endPoint: .bottom)
                 HStack(spacing: Self.gap) {
                     ForEach(MobileAppIcon.allCases) { icon in
-                        Image(icon.previewName).resizable().frame(width: Self.icon, height: Self.icon)
+                        icon.previewImage.resizable().frame(width: Self.icon, height: Self.icon)
                             .clipShape(RoundedRectangle(cornerRadius: Self.icon * 0.225, style: .continuous))
                             .scaleEffect(x: 1, y: -1)
                             .opacity(0.13).blur(radius: 1.5)
@@ -75,14 +76,13 @@ struct AppIconDock: View {
     }
 
     private func iconView(_ icon: MobileAppIcon) -> some View {
-        let isSelected = icon == selected
+        let isSelected = icon == icons.selected
         return Button {
             guard !isSelected else { return }
             UISelectionFeedbackGenerator().selectionChanged()
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { selected = icon }
-            AppIconPicker.apply(icon)
+            icons.select(icon)
         } label: {
-            Image(icon.previewName).resizable().frame(width: Self.icon, height: Self.icon)
+            icon.previewImage.resizable().frame(width: Self.icon, height: Self.icon)
                 .clipShape(RoundedRectangle(cornerRadius: Self.icon * 0.225, style: .continuous))
                 .shadow(color: .black.opacity(0.18), radius: 6, y: 4)
                 .scaleEffect(isSelected ? 1.08 : 1)
@@ -92,6 +92,7 @@ struct AppIconDock: View {
                 }
         }
         .buttonStyle(.plain)
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isSelected)
         .accessibilityLabel(icon.label)
         .accessibilityIdentifier("icon-\(icon.rawValue)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
