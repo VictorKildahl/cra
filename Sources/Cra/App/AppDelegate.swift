@@ -3451,12 +3451,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21), or undoes
     /// the last Tidy, unless the keyboard is in something with text to undo: a text field, or an editable
-    /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none).
+    /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none). On an Easel,
+    /// ⌘Z undoes canvas edits instead.
     private func undoClosedTab(_ event: NSEvent) -> Bool {
-        guard Shortcut("z", .command).matches(event), !textFieldHasKey(event) else { return false }
+        guard Shortcut("z", .command).matches(event), !textFieldHasKey(event), !easelHasKey(event) else { return false }
         // The last thing to undo may be a tidy (Arc's "Undo Tidy Tabs"); a tab closed since comes first.
         if !store.undoTidy() { perform("reopenClosedTab") }
         return true
+    }
+
+    private func easelHasKey(_ event: NSEvent) -> Bool { easelHasKey(in: event.window ?? NSApp.keyWindow) }
+
+    private func easelHasKey(in window: NSWindow?) -> Bool {
+        let responder = window?.firstResponder
+        if responder is EaselSheetView || responder is EaselCanvasView { return true }
+        if let view = responder as? NSView {
+            var curr: NSView? = view
+            while let c = curr {
+                if c is EaselSheetView || c is EaselCanvasView { return true }
+                curr = c.superview
+            }
+        }
+        if let main = window?.windowController as? MainWindowController, main.currentBrowser is EaselBrowser {
+            return true
+        }
+        if let little = window?.windowController as? LittleWindowController, little.browser is EaselBrowser {
+            return true
+        }
+        return false
     }
 
     func perform(_ id: String) {
