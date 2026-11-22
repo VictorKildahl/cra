@@ -97,6 +97,37 @@ class WebFeaturesTests(unittest.TestCase):
         root, _ = self.layout(tsv=MAP + "feature\tfolder upload\tscenarios upload-picker\twebkitdirectory\n")
         self.assertEqual(web_features.all_scenarios(root), ["upload-picker"])
 
+    # Tests/release-gate.tsv: what a release once shipped broken, run by every release with the map's scenarios.
+
+    def gate(self, root, rows):
+        (root / "Tests/release-gate.tsv").write_text("# scenario\tissue\twhat broke\n" + rows)
+
+    def test_the_release_gate_runs_after_the_map_each_scenario_once(self):
+        root, src = self.layout()
+        (root / "Tests/Scenarios/devtools-draws.scenario").write_text("# promise: #468\n")
+        self.gate(root, "devtools-draws\t#468\tDevTools stayed blank after 0.1.44\n"
+                        "upload-picker\t#571\tupload buttons did nothing\n")
+        self.assertEqual(web_features.check(root, src), [])
+        self.assertEqual(web_features.all_scenarios(root), ["upload-picker", "devtools-draws"])
+
+    def test_without_a_release_gate_only_the_map_runs(self):
+        root, _ = self.layout()
+        self.assertEqual(web_features.all_scenarios(root), ["upload-picker"])
+
+    def test_a_release_gate_scenario_that_does_not_exist_fails(self):
+        root, src = self.layout()
+        self.gate(root, "devtools-gone\t#468\tDevTools stayed blank\n")
+        self.assertEqual(web_features.check(root, src),
+                         ["release-gate.tsv:2 devtools-gone: no scenario Tests/Scenarios/devtools-gone.scenario"])
+
+    def test_a_release_gate_row_names_its_issue_and_what_broke(self):
+        root, src = self.layout()
+        self.gate(root, "upload-picker\tsome day\tupload buttons did nothing\nupload-picker\t#571\t\n")
+        problems = web_features.check(root, src)
+        self.assertEqual(len(problems), 2)
+        self.assertIn("release-gate.tsv:2 upload-picker: issue is 'some day'", problems[0])
+        self.assertIn("release-gate.tsv:3 upload-picker: says nothing about what broke", problems[1])
+
 
 if __name__ == "__main__":
     unittest.main()

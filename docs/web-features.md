@@ -49,8 +49,10 @@ installed web apps only, no UI).
 
 ## The gates
 
-- **Every release** (`scripts/release.sh`): `scripts/scenario.sh web-features` runs every scenario the map names
-  on a copy of the release's own build (this Mac's CPU), in the background while Apple notarizes. One failure
+- **Every release** (`scripts/release.sh`): `scripts/scenario.sh web-features` runs every scenario the map names,
+  and those in `Tests/release-gate.tsv` (what a release once shipped broken outside the map: DevTools after
+  0.1.44, a profile switch on 0.1.45, a page's new tab, Extensions' Remove…; a row per issue, added once its fix is
+  locked), on a copy of the release's own build (this Mac's CPU), in the background while Apple notarizes. One failure
   stops the release. The result goes into the release as `web-features-arm64.txt`.
   `CRA_SKIP_WEB_FEATURES="<why>"` releases without it; the notes say why.
 - **Stable** (`scripts/promote.sh`): only a release whose `web-features-arm64.txt` says `result: passed`.
