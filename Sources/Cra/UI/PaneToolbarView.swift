@@ -187,7 +187,8 @@ final class PaneToolbarView: NSView {
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
-        let entries = extensions.entries(inProfile: profile)
+        let incognito = item.map { store.isIncognito(item: $0.id) } ?? store.isIncognito(space: store.focusedSpaceID(window: ui.windowID))
+        let entries = extensions.entries(inProfile: profile, incognito: incognito)
         m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),

@@ -685,7 +685,8 @@ final class SidebarTopBarView: NSView {
             let ext = ExtensionStore.shared
             let profile = tab.map { store.profileDirectoryName(item: $0.id) }
                 ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
-            let entries = ext.entries(inProfile: profile)
+            let incognito = tab.map { store.isIncognito(item: $0.id) } ?? store.isIncognito(space: store.focusedSpaceID(window: ui.windowID))
+            let entries = ext.entries(inProfile: profile, incognito: incognito)
             let pinned = ext.pinnedIDs(inProfile: profile).compactMap { id in
                 entries.first { $0.extensionID == id }.map {
                     (id, $0.name, ext.badged(ext.toolbarIcon(for: $0, profile: profile, tab: tab?.id),

@@ -33,9 +33,15 @@ final class ExtensionStore {
         /// Profile folders where it is turned off in chrome://extensions. Chromium keeps it off
         /// there across launches, also when --load-extension loads the folder again.
         var disabledProfiles: Set<String> = []
+        /// Profile folders that allow it in incognito (chrome://extensions ▸ Allow in Incognito, GitHub #620).
+        var incognitoProfiles: Set<String> = []
 
         func isInstalled(inProfile name: String) -> Bool { profiles?.contains(name) ?? true }
         func isEnabled(inProfile name: String) -> Bool { isInstalled(inProfile: name) && !disabledProfiles.contains(name) }
+        /// Turned on in the profile and, in an incognito window, allowed in incognito there.
+        func isEnabled(inProfile name: String, incognito: Bool) -> Bool {
+            isEnabled(inProfile: name) && ExtensionIncognito.lists(allowedInIncognito: incognitoProfiles.contains(name), incognito: incognito)
+        }
     }
 
     /// The menu bar's Extensions menu and the toolbar read this one.
@@ -402,6 +408,7 @@ final class ExtensionStore {
         dropRemovedCopies(profiles: profiles, live: live)
         let names = (try? fm.contentsOfDirectory(atPath: ExtensionStore.directory.path)) ?? []
         let disabled = settings.mapValues(ExtensionImporter.disabledIDs(settings:))
+        let incognito = settings.mapValues(ExtensionIncognito.allowedIDs(settings:))
         let scopes = Self.loadProfiles()
         var list = names.sorted().compactMap { name -> Entry? in
             guard var entry = Self.entry(id: name, folder: ExtensionStore.directory.appendingPathComponent(name, isDirectory: true),
@@ -418,6 +425,7 @@ final class ExtensionStore {
                 if entry.profiles?.isEmpty == true { return nil }
             }
             entry.disabledProfiles = Set(profiles.filter { disabled[$0]?.contains(entry.extensionID) == true })
+            entry.incognitoProfiles = Set(profiles.filter { incognito[$0]?.contains(entry.extensionID) == true })
             return entry
         }
         let loaded = Set(list.map(\.extensionID))
@@ -431,6 +439,7 @@ final class ExtensionStore {
                     guard let i = list.firstIndex(where: { $0.extensionID == e.id }), list[i].profiles?.contains(profile) == false else { continue }
                     list[i].profiles?.insert(profile)
                     if !e.isEnabled { list[i].disabledProfiles.insert(profile) }
+                    if incognito[profile]?.contains(e.id) == true { list[i].incognitoProfiles.insert(profile) }
                     continue
                 }
                 var i = managed.firstIndex(where: { $0.extensionID == e.id })
@@ -443,6 +452,7 @@ final class ExtensionStore {
                 guard let i else { continue }
                 managed[i].profiles?.insert(profile)
                 if !e.isEnabled { managed[i].disabledProfiles.insert(profile) }
+                if incognito[profile]?.contains(e.id) == true { managed[i].incognitoProfiles.insert(profile) }
             }
         }
         let next = list + managed.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -492,8 +502,11 @@ final class ExtensionStore {
 
     /// The extensions a page in this Chromium profile folder can run; running another
     /// profile's extension there, or one turned off there, crashes Chromium. Arc's toolbar and
-    /// Site Control Center leave turned-off extensions out (Chrome's toolbar model).
-    func entries(inProfile name: String) -> [Entry] { entries.filter { $0.isEnabled(inProfile: name) } }
+    /// Site Control Center leave turned-off extensions out (Chrome's toolbar model), and an incognito
+    /// window the ones its profile doesn't allow in incognito (#620).
+    func entries(inProfile name: String, incognito: Bool = false) -> [Entry] {
+        entries.filter { $0.isEnabled(inProfile: name, incognito: incognito) }
+    }
 
     // MARK: Installed, turned on and off in chrome://extensions (GitHub #41, #43)
 

@@ -4451,17 +4451,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// The extensions installed in the focused page's profile, turned on or not.
     private var profileExtensions: [ExtensionLaunch.Extension] {
-        let profile = profileDirectoryName
+        let profile = profileDirectoryName, incognito = pageIsIncognito
         return ExtensionStore.shared.entries.filter { $0.isInstalled(inProfile: profile) }.map {
-            ExtensionLaunch.Extension(id: $0.extensionID, popupPath: $0.popupPath, optionsPath: $0.optionsPath, enabled: $0.isEnabled(inProfile: profile))
+            ExtensionLaunch.Extension(id: $0.extensionID, popupPath: $0.popupPath, optionsPath: $0.optionsPath,
+                                      enabled: $0.isEnabled(inProfile: profile, incognito: incognito))
         }
     }
 
     /// The Chromium profile folder the focused page loads in.
     var profileDirectoryName: String { selectedTabID.map(store.profileDirectoryName(item:)) ?? store.profileDirectoryName(space: focusedSpaceID) }
 
-    /// The extensions installed in the focused page's profile.
-    var extensionEntries: [ExtensionStore.Entry] { ExtensionStore.shared.entries(inProfile: profileDirectoryName) }
+    /// Whether the focused page is incognito: then only the extensions its profile allows in
+    /// incognito are listed and run (#620).
+    var pageIsIncognito: Bool { selectedTabID.map(store.isIncognito(item:)) ?? store.isIncognito(space: focusedSpaceID) }
+
+    /// The extensions turned on in the focused page's profile (in incognito, those allowed there).
+    var extensionEntries: [ExtensionStore.Entry] {
+        ExtensionStore.shared.entries(inProfile: profileDirectoryName, incognito: pageIsIncognito)
+    }
 
     /// The pinned-extension button under the pointer (screen rect), in the toolbar or the
     /// sidebar's grid (also in the floating sidebar's panel), so a popup hangs from the same
@@ -4595,7 +4602,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let show = { [weak self] (safariEngine: SafariEngineRow?) in
             guard let self, let window = self.window, window.isVisible else { return }
             self.siteControlCenter.show(relativeTo: rect, of: content, url: url, secure: secure, dark: SystemAppearance.shared.isDark,
-                                        profile: self.profileDirectoryName, tab: self.selectedTabID,
+                                        profile: self.profileDirectoryName, incognito: self.pageIsIncognito, tab: self.selectedTabID,
                                         protectedMedia: self.browsers.visibleTabID.flatMap { self.sidebarUI.navState(for: $0).protectedMedia },
                                         safariEngine: safariEngine, toggleChecked: true, store: self.store, actions: actions)
         }

@@ -195,6 +195,54 @@ enum ExtensionStoreMigrationTests {
         }
     }
 
+    /// An incognito window lists, pins and runs only the extensions its profile allows in incognito
+    /// (chrome://extensions ▸ Allow in Incognito, `incognito` in extensions.settings), as Chrome's toolbar
+    /// does for an off-the-record profile. Cra listed every turned-on one there, and those did nothing.
+    // promise: #620
+    static func incognitoListsOnlyAllowed() throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CRA_DATA_DIR"]!, isDirectory: true)
+        AppPaths.supportDir = root.appendingPathComponent("incognito-allowed", isDirectory: true)
+        CraCEFRuntime.settingsByProfile = [:]
+        let fm = FileManager.default
+        var ids: [String: String] = [:]
+        for name in ["ublock", "proton-pass", "dark-reader"] {
+            let folder = ExtensionStore.directory.appendingPathComponent(name, isDirectory: true)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: ["manifest_version": 3, "name": name, "version": "1.0"])
+                .write(to: folder.appendingPathComponent("manifest.json"))
+            ids[name] = ExtensionStore.chromiumID(key: nil, folder: folder)
+        }
+        func loaded(_ name: String, _ extra: [String: Any] = [:]) -> [String: Any] {
+            ["location": 8, "path": ExtensionStore.directory.appendingPathComponent(name).path].merging(extra) { _, b in b }
+        }
+        // uBlock allowed in incognito, Proton Pass not, Dark Reader allowed but turned off.
+        let settings: [String: Any] = [
+            ids["ublock"]!: loaded("ublock", ["incognito": true]),
+            ids["proton-pass"]!: loaded("proton-pass"),
+            ids["dark-reader"]!: loaded("dark-reader", ["incognito": true, "state": 0, "disable_reasons": [1]]),
+        ]
+        let profile = AppPaths.chromiumCache.appendingPathComponent("Default", isDirectory: true)
+        try writeSettings(settings, in: profile)
+        // Profile 1 allows Proton Pass in incognito and nothing else.
+        let work = AppPaths.chromiumCache.appendingPathComponent("Profile 1", isDirectory: true)
+        try writeSettings([ids["ublock"]!: loaded("ublock"), ids["proton-pass"]!: loaded("proton-pass", ["incognito": true])], in: work)
+
+        let store = ExtensionStore()
+        let names = { (profile: String, incognito: Bool) in
+            Set(store.entries(inProfile: profile, incognito: incognito).map(\.name))
+        }
+        check(names("Default", false) == ["ublock", "proton-pass"], "a normal window lists every turned-on extension")
+        check(names("Default", true) == ["ublock"], "an incognito window lists only the ones allowed in incognito (#620)")
+        check(names("Profile 1", true) == ["proton-pass"], "and that is its own profile's Allow in Incognito")
+
+        // Allow in Incognito switched on in chrome://extensions: the live settings say so at once.
+        var live = settings
+        live[ids["proton-pass"]!] = loaded("proton-pass", ["incognito": true])
+        CraCEFRuntime.settingsByProfile["Default"] = String(decoding: try JSONSerialization.data(withJSONObject: live), as: UTF8.self)
+        store.reload()
+        check(names("Default", true) == ["ublock", "proton-pass"], "switching Allow in Incognito on lists it in incognito")
+    }
+
     static func main() throws {
         try removedCopiesStayRemoved()
 
@@ -371,6 +419,7 @@ enum ExtensionStoreMigrationTests {
         }
 
         try unpackedCopiesStepAside()
+        try incognitoListsOnlyAllowed()
 
         print("ExtensionStoreMigrationTests: \(checks) checks, \(failures.count) failures")
         if !failures.isEmpty { exit(1) }

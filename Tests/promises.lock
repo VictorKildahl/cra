@@ -1357,6 +1357,10 @@
 #618   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::theLazyAnswerIsTheOldOne  55fd280fbe76
 #618   Tests/Scenarios/sidebar-long-list.scenario  d8917fd58f10
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
+#620   Packages/CraCore/Tests/CraCoreTests/ExtensionIncognitoTests.swift::allowedIDsReadAllowInIncognito  8ca862c5ef25
+#620   Packages/CraCore/Tests/CraCoreTests/ExtensionIncognitoTests.swift::incognitoListsOnlyAllowed  c7c2cb1e7de5
+#620   Tests/ExtensionStoreMigrationTests.swift::incognitoListsOnlyAllowed  dbcee588063f
+#620   Tests/Scenarios/incognito-extension-list.scenario  25db6fe8b583
 #620   Tests/Scenarios/incognito-space-profile.scenario  2e76ee02603e
 #620   Tests/StoreTests.swift::incognitoKeepsItsSpacesProfile  c9a5e854a829
 #621   Tests/Scenarios/extension-action-other-profiles.scenario  b337359c249a

@@ -1646,6 +1646,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // pinExtension=<id>: pinned to the toolbar on the Default profile, as the Extensions menu's pin does.
             if let id = dict["pinExtension"] { ExtensionStore.shared.setPinned(id, true, inProfile: "Default"); return }
+            // extensionList=<label>[&window=incognito]: the extensions the window's Extensions menu and
+            // toolbar offer (in incognito, only those allowed there, #620), or the newest incognito window's.
+            if let label = dict["extensionList"] {
+                let target = dict["window"] == "incognito" ? mainWindows.last(where: \.isIncognito) : main
+                guard let target else { CraLog.note("extension list \(label): no window"); return }
+                ExtensionStore.shared.reload()
+                let names = target.extensionEntries.map(\.name).sorted().joined(separator: ", ")
+                CraLog.note("extension list \(label): incognito=\(target.pageIsIncognito ? 1 : 0) [\(names)]")
+                return
+            }
             if let id = dict["removeExtension"] {
                 if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionStore.shared.remove(e) }
                 return

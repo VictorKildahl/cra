@@ -59,6 +59,8 @@ final class SiteControlCenterView: NSView {
     private let store: SidebarStore
     /// The page's Chromium profile folder: only its extensions are offered.
     private let profile: String
+    /// An incognito page: only the extensions its profile allows in incognito are offered (#620).
+    private let incognito: Bool
     /// The page's tab, whose extension icons the tiles show.
     private let tab: UUID?
     /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place,
@@ -70,13 +72,14 @@ final class SiteControlCenterView: NSView {
     /// The tiles by extension ID, whose icons follow the extensions' own changes in place.
     private var extensionTiles: [String: SiteExtensionTile] = [:]
 
-    init(url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?, protectedMedia: String? = nil,
+    init(url: String, secure: Bool, dark: Bool, profile: String, incognito: Bool = false, tab: UUID?, protectedMedia: String? = nil,
          safariEngine: SafariEngineRow? = nil, actions: SiteControlCenterActions, store: SidebarStore) {
         self.protectedMedia = protectedMedia
         self.safariEngine = safariEngine
         self.url = url
         self.secure = secure
         self.profile = profile
+        self.incognito = incognito
         self.tab = tab
         colors = SiteControlCenterColors(dark: dark)
         self.actions = actions
@@ -100,7 +103,7 @@ final class SiteControlCenterView: NSView {
 
     /// Arc: pinned extensions in toolbar order, then the rest by name.
     private var orderedExtensions: [ExtensionStore.Entry] {
-        extensions.pinned.menuOrder(extensions.entries(inProfile: profile), inProfile: profile, id: \.extensionID, name: \.name)
+        extensions.pinned.menuOrder(extensions.entries(inProfile: profile, incognito: incognito), inProfile: profile, id: \.extensionID, name: \.name)
     }
 
     private func observe() {
@@ -827,7 +830,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         return closedByThisClick
     }
 
-    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, tab: UUID?,
+    func show(relativeTo rect: NSRect, of view: NSView, url: String, secure: Bool, dark: Bool, profile: String, incognito: Bool = false, tab: UUID?,
               protectedMedia: String? = nil, safariEngine: SafariEngineRow? = nil, toggleChecked: Bool = false,
               store: SidebarStore, actions: SiteControlCenterActions) {
         if !toggleChecked, closesInstead() { return }
@@ -857,7 +860,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.newBoost = actions.newBoost.map(closing)
         acts.editBoost = { [weak p] id in p?.performClose(nil); actions.editBoost(id) }
         acts.manageBoosts = closing(actions.manageBoosts)
-        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, tab: tab, protectedMedia: protectedMedia,
+        let content = SiteControlCenterView(url: url, secure: secure, dark: dark, profile: profile, incognito: incognito, tab: tab, protectedMedia: protectedMedia,
                                             safariEngine: safariEngine, actions: acts, store: store)
         let host = NSViewController()
         host.view = content
