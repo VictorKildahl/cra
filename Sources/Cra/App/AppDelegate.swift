@@ -2600,6 +2600,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // What the last look at the sync folder found, and whether a mix is being waited out (#378).
             if let label = dict["sync"] { CraLog.note("sync \(label): \(composition.sync.readout())"); return }
             if let label = dict["dockTile"] { CraLog.note("dock tile \(label): \(AppIconManager.shared.dockTileReadout())"); return }
+            // appIcon=<id>: picks an icon without remembering it; bundleIcon=<label>: Finder's icon on the app.
+            if let id = dict["appIcon"] { AppIconManager.shared.select(id, remember: false); return }
+            if let label = dict["bundleIcon"] { AppIconManager.shared.logBundleIcon(label); return }
             // How far the open downloads list's hover reaches below its rows, and what a press there hits (#575).
             if let label = dict["downloadsTray"] {
                 let tray = (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.hoverReadout ?? "none"

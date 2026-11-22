@@ -5413,3 +5413,14 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   double click that stayed a click (CraCore `TitleBarDoubleClick`, which also reads the setting), as the sidebar's
   top and the strip above the card already did. Pinned by `TitleBarDoubleClickTests` and the
   `toolbar-double-click-zoom` scenario.
+
+
+## The app icon on the app (Arc 1.174.1, Victor's Arc, 22 Nov 2026)
+- [O] With an icon picked (`currentAppIconName = "arc.schoolbook"` in company.thebrowser.Browser's defaults),
+  /Applications/Arc.app carries Finder's custom icon: an empty `Icon\r` file at the bundle's root with the icon in
+  its resource fork, and the custom icon flag in the bundle's com.apple.FinderInfo. The file was written that
+  day, so Arc puts it back after updates replace the bundle. The main binary has
+  `ARCClients/Sources/AppIconClient/UI_macOS/AppIconApplier.swift` and calls `setIcon:forFile:`, with
+  `AppIconDockTile` for the Dock after Arc quits.
+- Cra: AppIconManager puts the picked icon on the bundle with NSWorkspace.setIcon at the pick and at launch, and
+  takes it off for Segments (AppIconBundle). Scenario app-icon-finder.

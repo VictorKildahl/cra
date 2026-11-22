@@ -1,0 +1,29 @@
+# The app icon picked in Settings goes on Cra.app too, so Finder, /Applications, Launchpad and Spotlight show
+# it, not only the Dock (X, 20 Nov 2026: "it changes in the Dock but not elsewhere (e.g., ~/Applications)").
+# Arc does the same: its AppIconApplier puts the picked icon on Arc.app (an Icon\r file and Finder's custom
+# icon flag) and puts it back at launch, since an update replaces the bundle. Picking the bundle's own icon
+# takes it off. Midnight comes in through the argument domain and appIcon= picks without remembering, so the
+# run never writes the defaults the installed Cra reads. It ends on Segments: the build is left as it was.
+# The app writes its bundle off the main thread, one change after another; bundleIcon= reads it after them.
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+arg -appIcon
+arg midnight
+expect-log app icon: midnight put on the app
+cra://debug?bundleIcon=launch
+expect-log bundle icon launch: custom=1 file=1
+
+# Segments, the bundle's own: off the app again.
+cra://debug?appIcon=segments
+expect-log app icon: segments taken off the app
+cra://debug?bundleIcon=segments
+expect-log bundle icon segments: custom=0 file=0
+
+# Another pick goes on, then off.
+cra://debug?appIcon=mono
+expect-log app icon: mono put on the app
+cra://debug?bundleIcon=mono
+expect-log bundle icon mono: custom=1 file=1
+cra://debug?appIcon=segments
+cra://debug?bundleIcon=end
+expect-log bundle icon end: custom=0 file=0
