@@ -767,6 +767,26 @@ struct MobileSwipeTests {
         #expect(MobileSwipe.refreshes(pullAtRelease: 100))
         #expect(!MobileSwipe.refreshes(pullAtRelease: 60))
     }
+
+    /// #655: the open sheet dragged down keeps its top under the finger (the keyboard goes as the drag starts) and
+    /// sinks into the pill when let go far enough down or flicked; a short, slow drag lets it rise back open.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/655"))
+    func theOpenSheetGoesDownTheWayItCameUp() {
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: 0) == 420)
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: 150) == 270)
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: 600) == 0)
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: -30) == 450, "back up past where it started")
+        #expect(MobileSwipe.sheetDragDownCloses(dragDown: 120, velocityDown: 0))
+        #expect(MobileSwipe.sheetDragDownCloses(dragDown: 30, velocityDown: 900))
+        #expect(!MobileSwipe.sheetDragDownCloses(dragDown: 40, velocityDown: 100))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/655"))
+    func aSheetBelowTheKeyboardsTopIsOutOfSight() {
+        #expect(MobileSwipe.sheetUnderKeyboard(sheetTop: 600, keyboardTop: 583))
+        #expect(!MobileSwipe.sheetUnderKeyboard(sheetTop: 300, keyboardTop: 583))
+        #expect(!MobileSwipe.sheetUnderKeyboard(sheetTop: 700, keyboardTop: nil), "no keyboard: nothing covers it")
+    }
 }
 
 struct MobileSummaryTests {

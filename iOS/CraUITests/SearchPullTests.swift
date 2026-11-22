@@ -73,4 +73,27 @@ final class SearchPullTests: BrowserTestCase {
         waitForBarOnScreen()
         keep("dragged down by a suggestion")
     }
+
+    // promise: #655
+    /// The open sheet, keyboard up, dragged down slowly stays in sight under the finger all the way, as a pull out of the
+    /// pill does, and sinks into the pill when let go. Before, it slid down under the keyboard, out of sight, and the
+    /// keyboard only went once the finger lifted (the reporter's recording).
+    func testTheOpenSheetDraggedDownStaysInSight() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceSheetDrag", "YES"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 3.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 320)), withVelocity: .slow, thenHoldForDuration: 0.3)
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.keyboards.firstMatch)
+        wait(for: [gone], timeout: 5)
+        waitForBarOnScreen()
+        let trace = app.descendants(matching: .any)["sheet-drag-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 2))
+        let value = trace.value as? String ?? ""
+        XCTAssertTrue(value.hasPrefix("under the keyboard 0 of "), "the sheet stayed in sight: \(value)")
+        XCTAssertGreaterThan(Int(value.split(separator: " ").last ?? "") ?? 0, 10, "the drag was followed frame by frame: \(value)")
+    }
 }

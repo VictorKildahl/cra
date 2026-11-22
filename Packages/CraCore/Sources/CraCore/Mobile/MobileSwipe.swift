@@ -78,6 +78,26 @@ public enum MobileSwipe {
         return !onList || listOffset <= 0.5
     }
 
+    /// The open sheet dragged down goes back the way a pull brought it up (#655): the keyboard goes as the drag
+    /// starts and the sheet's top stays under the finger, this far above the bar (`searchPull`), its field shrinking
+    /// back into the pill. Before, the sheet slid down under the keyboard, out of sight until the finger lifted.
+    /// `startPull` is how far above the bar the sheet's top was when the drag started.
+    public static func sheetDragDownPull(startPull: CGFloat, dragDown: CGFloat) -> CGFloat {
+        max(0, startPull - dragDown)
+    }
+
+    /// Whether letting go of that drag puts the sheet away: dragged far enough down, or flicked down. Otherwise it
+    /// rises back open with the keyboard.
+    public static func sheetDragDownCloses(dragDown: CGFloat, velocityDown: CGFloat) -> Bool {
+        dragDown > 70 || velocityDown > 700
+    }
+
+    /// Whether the sheet is out of sight under the keyboard: its top at or below the keyboard's.
+    /// `keyboardTop` is nil with no keyboard up.
+    public static func sheetUnderKeyboard(sheetTop: CGFloat, keyboardTop: CGFloat?) -> Bool {
+        keyboardTop.map { sheetTop >= $0 - 1 } ?? false
+    }
+
     /// A drag up that starts on the tab button brings the previous tab (`MobileTabsDocument.previousTab`)
     /// out of the button under the finger (#537). Its card is the whole page at this share of
     /// the way: a 500 pt drag would get there, so mid-screen it is about half grown, as in Arc Search.

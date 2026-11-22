@@ -387,23 +387,43 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
 
     // MARK: The search sheet, dragged down
 
+    /// The open sheet dragged down goes back the way a pull out of the pill brought it up (#655): the keyboard goes
+    /// as the drag starts, the sheet's top stays under the finger and its field shrinks back into the pill. Let go
+    /// far enough down (or flicked) it sinks into the pill; otherwise it rises back open with the keyboard.
     @objc func sheetDragged(_ pan: UIPanGestureRecognizer) {
-        let y = max(0, pan.translation(in: view).y)
+        let down = pan.translation(in: view).y
         switch pan.state {
+        case .began:
+            sheetDragTrace = (0, 0)
+            let start = max(0, bar.frame.minY - sheet.frame.minY)
+            sheetDragStartPull = start
+            setSearching(false, keepingPull: MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down))
         case .changed:
-            sheet.transform = CGAffineTransform(translationX: 0, y: y)
+            guard let start = sheetDragStartPull else { return }
+            searchPull = MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down)
+            layoutChrome()
+            sheet.layoutIfNeeded()
+            traceSheetDrag()
         case .ended, .cancelled:
-            let leaves = pan.state == .ended && (y > 70 || pan.velocity(in: view).y > 700)
-            if leaves {
-                setSearching(false)
-                UIView.animate(withDuration: 0.25) { self.sheet.transform = .identity }
+            sheetDragTraceView.accessibilityValue = "under the keyboard \(sheetDragTrace.hidden) of \(sheetDragTrace.frames)"
+            guard sheetDragStartPull != nil else { return }
+            sheetDragStartPull = nil
+            if pan.state == .ended, !MobileSwipe.sheetDragDownCloses(dragDown: down, velocityDown: pan.velocity(in: view).y) {
+                setSearching(true)
             } else {
-                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: []) {
-                    self.sheet.transform = .identity
-                }
+                searchPull = nil
+                animateChrome(duration: 0.3, options: .curveEaseOut)
             }
         default: break
         }
+    }
+
+    /// One frame of a drag down on the sheet, for `-CraTraceSheetDrag`: whether the sheet was in sight.
+    func traceSheetDrag() {
+        let keyboardTop = keyboardHeight > view.safeAreaInsets.bottom ? view.bounds.height - keyboardHeight : nil
+        let top = sheet.frame.minY + sheet.transform.ty
+        sheetDragTrace.frames += 1
+        if MobileSwipe.sheetUnderKeyboard(sheetTop: top, keyboardTop: keyboardTop) { sheetDragTrace.hidden += 1 }
     }
 
     // MARK: Holding the pill: voice search
