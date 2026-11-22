@@ -1517,6 +1517,9 @@
 #680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::picturesShapesAndTextResize  7cfe766b4a77
 #680   Tests/EaselCanvasTests.swift::resizeLikeArc  ff3c93986c44
 #680   Tests/Scenarios/easel-undo.scenario  d3b84fe62a39
+#682   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aCloseGoesToTheAreaOnlyWhenTheLinkIsGone  57bb6b052275
+#682   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aRecycledLinkIsFoundAgainByItsAddress  ac3da1d9abc1
+#682   Tests/Scenarios/peek-close-recycled-link.scenario  340e0a70fc20
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

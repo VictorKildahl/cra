@@ -2805,27 +2805,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
     }
 
-    /// Where the link a Peek came from is now (the page may have scrolled), in this window's
-    /// coordinates; nil when it's gone, off the page or Chromium doesn't answer in time.
-    func peekSourceAgain(_ source: PeekSource, completion: @escaping (NSRect?) -> Void) {
-        guard let window, let rt = browsers.runtimes[source.tabID], rt.pageWindow === window, rt.pageScreenFrame != nil,
-              rt.browser.isCreated, !rt.browser.isClosed else { completion(nil); return }
+    /// Where the link a Peek came from is now (the page may have scrolled), in this window's coordinates: gone when
+    /// the page has no such link or has it off the page, no answer when Chromium is late or the script fails (#682).
+    func peekSourceAgain(_ source: PeekSource, completion: @escaping (PeekLayout.SourceAnswer) -> Void) {
+        guard let window, let rt = browsers.runtimes[source.tabID], rt.pageWindow === window, let pageFrame = rt.pageScreenFrame,
+              rt.browser.isCreated, !rt.browser.isClosed else { completion(.noAnswer); return }
         var answered = false
-        let params = (try? JSONSerialization.data(withJSONObject: ["expression": PeekLayout.sourceAgainScript, "returnByValue": true]))
+        // Where it grew from, as the page measures it: a link to the same address there stands in for one the page
+        // re-rendered meanwhile (X's timeline).
+        let near = PeekLayout.fraction(of: source.rect, in: window.convertFromScreen(pageFrame))
+        let params = (try? JSONSerialization.data(withJSONObject: ["expression": PeekLayout.sourceAgainScript(near: near), "returnByValue": true]))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak window, weak rt] result, _ in
-            let found = PeekSource.value(result).flatMap(PeekLayout.fraction(fromScript:))
+            let answer = PeekSource.answer(result)
             DispatchQueue.main.async {
                 guard !answered else { return }
                 answered = true
-                guard let window, let frame = rt?.pageScreenFrame, let found else { completion(nil); return }
-                completion(PeekLayout.source(fraction: found, in: window.convertFromScreen(frame)))
+                guard let window, let frame = rt?.pageScreenFrame else { completion(.noAnswer); return }
+                switch answer {
+                case .some(.some(let f)):
+                    completion(PeekLayout.source(fraction: f, in: window.convertFromScreen(frame)).map { .found($0) } ?? .gone)
+                case .some(.none): completion(.gone)
+                case .none: completion(.noAnswer)
+                }
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + PeekSource.wait) {
             guard !answered else { return }
             answered = true
-            completion(nil)
+            completion(.noAnswer)
         }
     }
 

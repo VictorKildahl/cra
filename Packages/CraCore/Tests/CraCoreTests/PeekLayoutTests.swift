@@ -201,4 +201,43 @@ struct PeekLayoutTests {
         #expect(!PeekLayout.sourceScript(pointer: nil).contains("nan"))
         #expect(PeekLayout.sourceScript(pointer: CGPoint(x: 0.25, y: 0.5)).contains("0.25 * vv.width"))
     }
+
+    /// #682: on X the timeline re-renders while a Peek is open and swaps the link's element for a new one in the same
+    /// place; the close asked for the old element, got null and grew out to the whole area. A script that fails is
+    /// not a link that's gone either.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/682"))
+    func aCloseGoesToTheAreaOnlyWhenTheLinkIsGone() {
+        let stored = CGRect(x: 100, y: 500, width: 129, height: 18)
+        let moved = CGRect(x: 100, y: 420, width: 129, height: 18)
+        let area = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        #expect(PeekLayout.closeTarget(.found(moved), stored: stored, area: area) == .link(moved))
+        #expect(PeekLayout.closeTarget(.gone, stored: stored, area: area) == .area(area))
+        // No answer in time, or an exception: where the link was at open, not the area.
+        #expect(PeekLayout.closeTarget(.noAnswer, stored: stored, area: area) == .link(stored))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/682"))
+    func aRecycledLinkIsFoundAgainByItsAddress() {
+        let open = PeekLayout.sourceScript(pointer: CGPoint(x: 0.25, y: 0.5))
+        #expect(open.contains("__craPeekHref"))
+        let again = PeekLayout.sourceAgainScript(near: CGRect(x: 0.1, y: 0.2, width: 0.2, height: 0.1))
+        // The same element while it's there; else a link to the same address at the old spot, else the nearest one.
+        #expect(again.contains("a.isConnected"))
+        #expect(again.contains("__craPeekHref"))
+        #expect(again.contains("elementFromPoint"))
+        #expect(again.contains("querySelectorAll"))
+        #expect(again.contains("0.2 * vv.width"))
+        #expect(!PeekLayout.sourceAgainScript(near: nil).contains("nan"))
+    }
+
+    /// The rect a Peek grew from, back as the page measures it (the inverse of `source(fraction:in:)`).
+    @Test func aRectGoesBackToItsFraction() {
+        let page = CGRect(x: 300, y: 10, width: 1000, height: 800)
+        let f = CGRect(x: 0.1, y: 0.2, width: 0.2, height: 0.05)
+        let r = PeekLayout.source(fraction: f, in: page)!
+        let back = PeekLayout.fraction(of: r, in: page)!
+        #expect(abs(back.minX - f.minX) < 1e-9 && abs(back.minY - f.minY) < 1e-9)
+        #expect(abs(back.width - f.width) < 1e-9 && abs(back.height - f.height) < 1e-9)
+        #expect(PeekLayout.fraction(of: r, in: .zero) == nil)
+    }
 }
