@@ -969,7 +969,7 @@
 #483   Tests/FloatingSidebarTests.swift::dockingARevealedSidebarCanBeSuperseded  396e400e26b7
 #483   Tests/FloatingSidebarTests.swift::dockingFromHeldOpenHasOneOwner  79224a679332
 #483   Tests/FloatingSidebarTests.swift::heldOpenComesOutInPlace  cecb3cc9f3a7
-#483   Tests/Scenarios/empty-window-card.scenario  0362e2c759bd
+#483   Tests/Scenarios/empty-window-card.scenario  6c98b7ac2308
 #483   Tests/Scenarios/sidebar-dock-floating.scenario  0c4b6820eb2b
 #483   Tests/Scenarios/sidebar-empty-held-open.scenario  6a29debe38e4
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
@@ -1481,6 +1481,8 @@
 #667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::nothingTypedLeavesItToTheOtherRows  badf4c81b43f
 #667   Packages/CraCore/Tests/CraCoreTests/TypedCompletionTests.swift::theSiteTypedMostWins  b9abfbc31341
 #667   Tests/Scenarios/command-bar-typed-site.scenario  e4d91307fdfe
+#669   Packages/CraCore/Tests/CraCoreTests/CardVeilTests.swift::aWindowWithNoTabFollowsArcsAppearance  616c231bd123
+#669   Tests/Scenarios/empty-card-appearance.scenario  929ad9bec480
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

@@ -114,6 +114,10 @@ final class ShellView: NSView {
             refreshLoadingInk()
         }
     }
+    /// The space's Auto, Light or Dark and how light its colours are, for a card with no tab (CardVeil.noTabCard, #669).
+    var cardGround: (appearance: String, lightness: Double) = ("auto", 0.5) {
+        didSet { for c in paneCards { c.ground = cardGround } }
+    }
     /// The ring around the focused split pane: the space's shadedDark (PaneCardView.focusRing).
     var focusRingColor: NSColor? { didSet { if focusRingColor != oldValue { updateFocusRings() } } }
     /// Each tab's page background ("#RRGGBB"), painted under its page window (PaneCardView.pageColor).
@@ -510,6 +514,7 @@ final class ShellView: NSView {
             } else {
                 let card = PaneCardView(tabID: id, toolbar: makeToolbar?(id == ShellView.noTabID ? nil : id) ?? NSView())
                 card.isDark = isDarkTheme
+                card.ground = cardGround
                 card.pageColor = pageColors[id]
                 card.toolbarColor = toolbarColors[id]
                 card.showToolbar = barsShown(panes: shownIDs.count, fullscreen: contentFullscreen)

@@ -644,6 +644,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
             shell.isDarkTheme = palette.isDark
+            shell.cardGround = (space.theme.appearance, CardVeil.lightness(of: space.theme.shown.colors))
             // The space's light or dark goes to the window's content (sidebar, toolbar, pages'
             // frame), not to the window: AppKit hands a window's appearance to every menu, sheet,
             // alert and popover it presents, and those follow macOS as Arc's do, whatever the

@@ -16,10 +16,10 @@ wait 1
 cra://debug?selectedTab=docked
 expect-log selected tab docked: none
 cra://debug?emptyCard=docked
-expect-log empty card docked: veil=0\.(65|10) shadow=1
+expect-log empty card docked: veil=0\.(65|[0-4][0-9]) shadow=1
 
 # The sidebar hidden and held open over the window: the card stays as it is.
 cra://action/toggleSidebar
 wait 1
 cra://debug?emptyCard=held
-expect-log empty card held: veil=0\.(65|10) shadow=1
+expect-log empty card held: veil=0\.(65|[0-4][0-9]) shadow=1

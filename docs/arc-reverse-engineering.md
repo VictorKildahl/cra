@@ -3122,6 +3122,23 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   at once), on tab and space switches alike. Now the bar takes ToolbarColor (CraCore): the page's report,
   else TabData.themeColor, else white, and fades to a new report over 0.18 s (14–15 frames).
 
+## The empty card and the gradient's direction (Arc 1.174, 21 Nov 2026, issue #669, offline Arc)
+- [O live] Offline Arc on a fake home, Spaces ▸ Edit Theme… over AX, a full-screen white window right below Arc's
+  (scratch `backdrop`), 2x captures; the card with no tab sampled 24 pt right of the sidebar's edge against the sidebar
+  4 pt left of it, at four heights. A window with tabs but none selected and a new window read the same.
+- [O] The card follows Arc's appearance (View ▸ Appearance), not the theme: on Light it is nearly white over every
+  theme (a white veil of 0.69 drab, 0.73 red/teal, 0.80 pastel); on Dark it is the theme plus an even +17 to +22 on
+  each channel (pastel +18, red/teal +19–21, navy +22), an addition, not a blend. Cra's #483 values (0.65 light, 0.10
+  dark) were keyed on the theme's colours, so a light theme on a dark Mac got the white card.
+- Cra (#669): CardVeil.noTabCard picks by Arc's appearance (SpaceTheme.isLight: the space's Light/Dark, macOS on
+  Auto): 0.65 on Light, and on Dark a white veil of 0.08 / (1 − the theme's lightness), 0.08 to 0.35, as near Arc's
+  even +20 as one blend gets (Cra's pastel card +14 to +23 over its sidebar; it was +25 to +42). Pinned by
+  CardVeilTests.aWindowWithNoTabFollowsArcsAppearance and the empty-card-appearance scenario.
+- [O, not built] The space gradient runs from the top left (first colour) toward the bottom right: over white, a
+  red/teal theme's R channel falls across the window and down it, the bottom edge reaching the second colour by
+  x ≈ 1200 of 1728 while the top edge is 0.68 of the way at the right end; the steps grow toward the end (0.11, 0.13,
+  0.17, 0.21 per 400 pt along the top), so it is no linear sRGB ramp. Cra's runs top to bottom (SpaceBackground).
+
 ## The address panel from the sidebar (Arc 1.174, 20 Nov 2026, issue #663, offline Arc)
 - [O live] Offline Arc on a fake home (network denied, pages from a loopback server), `topBarURLEnabled` NO so the
   address is in the sidebar, the toolbar hidden; AX frames and 2x window captures. A click on the sidebar's
