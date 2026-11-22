@@ -5402,3 +5402,14 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   keeps its rounded outline. Not matched: the text shrinking when narrowed by a corner, and the 283 pt first wrap
   (Cra's box grows to 560 pt, #580). Pinned by `EaselResizeTests` (#680) and `resizeLikeArc` in
   scripts/test-easel-canvas.sh.
+
+## Double click on the toolbar (Arc 1.174.1, 22 Nov 2026, issue #685, offline Arc)
+- [O live] Toolbar shown, an ordinary site (site.lvh.me), the window set to 1200 × 800 over AX: a real double click
+  (cliclick) on the toolbar's empty part, between the reload button and the address, zoomed the window to the
+  screen's visible frame (1728 × 1084); a second double click there put it back at 1200 × 800. That is macOS's
+  "Double-click a window's title bar to" (Zoom here, the setting unset). A first try right after bringing Arc
+  forward did nothing; every later one zoomed.
+- Cra (#685): the toolbar's empty part runs CraWindow.performTitleDoubleClickAction on the second click of a
+  double click that stayed a click (CraCore `TitleBarDoubleClick`, which also reads the setting), as the sidebar's
+  top and the strip above the card already did. Pinned by `TitleBarDoubleClickTests` and the
+  `toolbar-double-click-zoom` scenario.

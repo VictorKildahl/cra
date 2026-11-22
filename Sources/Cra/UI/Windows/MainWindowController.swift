@@ -6187,11 +6187,10 @@ final class CraWindow: NSWindow {
     /// "double-click a window's title bar" action from System Settings.
     func performTitleDoubleClickAction() {
         guard !styleMask.contains(.fullScreen) else { return }
-        let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
-        switch action {
-        case "None": break
-        case "Minimize": miniaturize(nil)
-        default: zoom(nil)   // "Maximize" and "Fill"
+        switch TitleBarDoubleClick(setting: UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick")) {
+        case .nothing: break
+        case .minimize: miniaturize(nil)
+        case .zoom: zoom(nil)
         }
     }
 

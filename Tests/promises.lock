@@ -1537,6 +1537,9 @@
 #682   Packages/CraCore/Tests/CraCoreTests/PeekLayoutTests.swift::aRecycledLinkIsFoundAgainByItsAddress  ac3da1d9abc1
 #682   Tests/Scenarios/peek-close-recycled-link.scenario  340e0a70fc20
 #683   Tests/Scenarios/session-restore-no-duplicates.scenario  ebae4800601d
+#685   Packages/CraCore/Tests/CraCoreTests/TitleBarDoubleClickTests.swift::followsTheSystemSetting  b39f48d01d29
+#685   Packages/CraCore/Tests/CraCoreTests/TitleBarDoubleClickTests.swift::onlyTheSecondClickOfADoubleClick  cbd2ce996855
+#685   Tests/Scenarios/toolbar-double-click-zoom.scenario  e5a054fce232
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

@@ -645,6 +645,10 @@ final class PaneToolbarView: NSView {
         guard press.finish() else { return }
         if !placeholderLabel.isHidden, placeholderLabel.frame.contains(convert(event.locationInWindow, from: nil)) {
             editURL()
+        } else if TitleBarDoubleClick.runs(clickCount: event.clickCount, dragged: false) {
+            // The bar stands in for the hidden title bar: a double click on its empty part zooms (or minimizes) the
+            // window as macOS is set to, as the sidebar's top and the strip above the card do (#685).
+            (window as? CraWindow)?.performTitleDoubleClickAction()
         } else if let id = paneTabID {
             actions.focusPane(id)
         }

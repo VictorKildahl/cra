@@ -1866,6 +1866,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleFocus=<label> (#646, #641): whether Cra is the active app, which Little Window (oldest first) has
             // the keys, and how many other apps' windows are over the newest one
             // and (mainOver, #659) the browser window.
+            // toolbarDoubleClick=<label> (#685): a double click on the focused page's toolbar where no button is, through the
+            // app's event queue as a mouse sends it; cra.log says whether the window zoomed.
+            if let label = dict["toolbarDoubleClick"] {
+                guard let bar = main.shell.focusedCard?.toolbarHost as? PaneToolbarView, let w = main.window else {
+                    CraLog.note("toolbar double click \(label): no toolbar"); return
+                }
+                let y = bar.bounds.midY
+                let empty = stride(from: bar.bounds.maxX - 1, to: bar.bounds.minX, by: -4).first { x in
+                    bar.hitTest(bar.convert(NSPoint(x: x, y: y), to: bar.superview)) === bar
+                }
+                guard let x = empty else { CraLog.note("toolbar double click \(label): no empty spot"); return }
+                let at = bar.convert(NSPoint(x: x, y: y), to: nil)
+                let before = w.frame
+                for clicks in [1, 2] {
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        if let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                      windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: clicks, pressure: 1) {
+                            NSApp.postEvent(e, atStart: false)
+                        }
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    CraLog.note("toolbar double click \(label): zoomed=\(w.isZoomed ? 1 : 0) grew=\(w.frame.width > before.width + 1 || w.frame.height > before.height + 1 ? 1 : 0)")
+                }
+                return
+            }
             if let label = dict["littleFocus"] {
                 var key = NSApp.keyWindow
                 while let parent = key?.parent { key = parent }
