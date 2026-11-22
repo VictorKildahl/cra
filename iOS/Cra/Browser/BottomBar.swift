@@ -156,6 +156,7 @@ final class BarButton: UIControl {
 
     override var isHighlighted: Bool {
         didSet {
+            PressHaptics.play(for: self, from: oldValue, to: isHighlighted)
             UIView.animate(withDuration: isHighlighted ? 0.08 : 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
                 self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.94, y: 0.94) : .identity
             }
@@ -235,10 +236,38 @@ final class TabStackButton: UIControl {
     }
 
     override var isHighlighted: Bool {
-        didSet { alpha = isHighlighted ? 0.6 : 1 }
+        didSet {
+            PressHaptics.play(for: self, from: oldValue, to: isHighlighted)
+            alpha = isHighlighted ? 0.6 : 1
+        }
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         bounds.insetBy(dx: -6, dy: -6).contains(point)
+    }
+}
+
+/// Arc Search's ticks under a finger on the bar's buttons (MobilePressHaptics, #675): a light one as the finger comes
+/// down, a soft one as it lets go. iOS leaves them out when System Haptics is off. With `-CraCountHaptics YES` a
+/// button also counts the ticks it played in its accessibility value ("ticks 2"), for a UI test: the simulator plays none.
+@MainActor
+enum PressHaptics {
+    private static let counts = LaunchOptions.value("CraCountHaptics") == "YES"
+    private static let press = UIImpactFeedbackGenerator(style: .light)
+    private static let release = UIImpactFeedbackGenerator(style: .soft)
+
+    static func play(for control: UIControl, from was: Bool, to now: Bool) {
+        guard let id = control.accessibilityIdentifier, MobilePressHaptics.barButtons.contains(id),
+              let tick = MobilePressHaptics.tick(from: was, to: now) else { return }
+        switch tick {
+        case .press:
+            press.impactOccurred()
+            release.prepare()
+        case .release:
+            release.impactOccurred()
+        }
+        guard counts else { return }
+        let played = control.accessibilityValue.flatMap { Int($0.split(separator: " ").last ?? "") } ?? 0
+        control.accessibilityValue = "ticks \(played + 1)"
     }
 }

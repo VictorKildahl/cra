@@ -1723,3 +1723,21 @@ struct MobileRecentTabsTests {
         #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document, limit: 10).map(\.title) == ["In the loop"])
     }
 }
+
+/// The bottom bar's buttons tick under the finger as Arc Search's do (#675).
+struct MobilePressHapticsTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
+    func aButtonTicksAsTheFingerComesDownAndAgainAsItLetsGo() {
+        #expect(MobilePressHaptics.tick(from: false, to: true) == .press)
+        #expect(MobilePressHaptics.tick(from: true, to: false) == .release)
+        // A finger moving on the button sets the highlight again: no tick for that.
+        #expect(MobilePressHaptics.tick(from: true, to: true) == nil)
+        #expect(MobilePressHaptics.tick(from: false, to: false) == nil)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
+    func everyBarButtonTicksTheNewTabPillToo() {
+        #expect(MobilePressHaptics.barButtons == ["bar-tabs", "bar-search", "bar-menu", "bar-spaces", "bar-settings"])
+        #expect(MobilePressHaptics.barButtons.contains("bar-search"))
+    }
+}

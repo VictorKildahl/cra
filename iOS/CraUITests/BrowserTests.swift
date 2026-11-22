@@ -152,6 +152,43 @@ final class TabSwitcherTests: BrowserTestCase {
     }
 }
 
+/// The bottom bar's buttons tick under the finger as Arc Search's do (#675). The simulator plays no haptics, so with
+/// `-CraCountHaptics YES` each button counts the ticks it played.
+final class BarHapticsTests: BrowserTestCase {
+    // promise: #675
+    func testBarButtonsTickOnPressAndOnRelease() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraCountHaptics", "YES"])
+        waitForPage("First")
+        // The New Tab pill, which gave nothing before: one tick down, one up (read once the sheet has gone and
+        // the pill is back on screen).
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
+        waitForBarOnScreen()
+        XCTAssertEqual(app.buttons["bar-search"].value as? String, "ticks 2")
+        // The menu button.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["bar-menu"].value as? String, "ticks 2")
+        // The tab stack, then Settings in the tab switcher.
+        app.buttons["bar-tabs"].tap()
+        let settings = app.buttons["bar-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        XCTAssertEqual(settings.value as? String, "ticks 2")
+        // Back on the page by its card, where the tab stack shows again.
+        app.buttons["tab-card-0"].tap()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["bar-tabs"].value as? String, "ticks 2")
+    }
+}
+
 final class PageMenuTests: BrowserTestCase {
     // promise: #670
     func testShareFromThePageMenu() {

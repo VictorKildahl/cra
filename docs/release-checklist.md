@@ -463,6 +463,10 @@ built release app with a test profile. Note anything that fails in the release's
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
   lists Cra too. Needs a real iPhone and Apple's signing: the policy test only sees the file.
 
+- **#675:** on a TestFlight build on a real iPhone with System Haptics on, press and hold the New Tab pill, the
+  tab stack and the up arrow: a light tick as the finger comes down, a softer one as it lets go, and nothing with
+  System Haptics off. The simulator plays no haptics; `BarHapticsTests` only counts them.
+
 - **#536:** on a TestFlight build, sign in to a site with a passkey saved in iCloud Keychain and
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in
   completes. The simulator only reaches the sheet (it has no Face ID enrolled or passkeys saved).
