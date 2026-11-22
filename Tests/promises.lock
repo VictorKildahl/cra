@@ -1336,7 +1336,10 @@
 #609   Tests/StoreTests.swift::visitsRememberTheirProfile  5d9666d4f210
 #610   Packages/CraCore/Tests/CraCoreTests/PasteAndGoTests.swift::opensTheClipboardUnlessTyping  2617bef71028
 #610   Tests/Scenarios/paste-and-go.scenario  fe3adef6d714
+#613   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::aSlowReleaseDoesNotJumpTheSettle  b83b49397f19
 #613   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::settlesAsFastAsArcs  79538f7479dc
+#613   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theTintSettlesOnTheSameSpring  8ae2c3afbeba
+#613   Tests/Scenarios/space-swipe-settle-no-jump.scenario  681b3e0c8ce9
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
 #614   Tests/Scenarios/command-bar-whole-archive.scenario  757726fdd663
 #614   Tests/StoreTests.swift::clearTodayArchivesInOnePass  6edf309ca7f0

@@ -415,7 +415,8 @@ final class PagedGradientView: NSView {
         let sameSpaces = placed?.ids == ids
         placed = (index, ids, swipe)
         if swipe == 0, moved, sameSpaces, let from = gradient.presentation()?.colors ?? gradient.colors {
-            let spring = CASpringAnimation(perceptualDuration: 0.4, bounce: 0)
+            // The strip's spring, Arc's (LibrarySwipe.response, #613): on Dia's 0.4 s the tint trailed the sidebar.
+            let spring = CASpringAnimation(perceptualDuration: LibrarySwipe.response, bounce: 0)
             spring.keyPath = "colors"
             spring.fromValue = from
             spring.toValue = target

@@ -2707,7 +2707,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Create a Space page, one step on it, and what it and the dock then show.
             if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
-                main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]))
+                // &releaseStall=<ms>: the main thread held that long after the release, as a busy space switch holds it (#613).
+                main.debugSpaceSwipe(dx: g[0], steps: Int(g[1]), stall: Int(dict["releaseStall"] ?? "") ?? 0)
                 return
             }
             // hiddenLibraryReveal=<0…1>: the Library held that far in from a hidden sidebar, and where

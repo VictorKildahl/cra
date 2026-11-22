@@ -47,7 +47,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var librarySwipeFrom: CGFloat?
     /// Where the Library was sliding when the swipe caught it (LibrarySwipe.reveal's `toward`).
     private var librarySwipeToward: CGFloat?
-    private var librarySettleSpring: (start: CFTimeInterval, from: CGFloat, velocity: CGFloat, target: CGFloat)?
+    private var librarySettleSpring: (clock: SettleClock, from: CGFloat, velocity: CGFloat, target: CGFloat)?
     private var librarySettleLink: CADisplayLink?
     /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
     private var swipeKnobReveal: DispatchWorkItem?
@@ -3830,7 +3830,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Library button: the same spring from rest, or turned around from where a settle is.
     private func slideLibrary(to target: CGFloat) {
         if let s = librarySettleSpring {
-            let t = CGFloat(CACurrentMediaTime() - s.start)
+            let t = CGFloat(s.clock.elapsed(now: CACurrentMediaTime()))
             let r = LibrarySwipe.settle(from: s.from, velocity: s.velocity, to: s.target, at: t)
             settleLibrary(from: r, velocity: LibrarySwipe.settleVelocity(from: s.from, velocity: s.velocity, to: s.target, at: t), to: target)
             return
@@ -3843,7 +3843,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func settleLibrary(from r: CGFloat, velocity: CGFloat, to target: CGFloat) {
-        librarySettleSpring = (start: CACurrentMediaTime(), from: r, velocity: velocity, target: target)
+        librarySettleSpring = (clock: SettleClock(started: CACurrentMediaTime()), from: r, velocity: velocity, target: target)
         if librarySettleLink == nil {
             let link = shell.displayLink(target: self, selector: #selector(stepLibrarySettle))
             link.add(to: .main, forMode: .common)
@@ -3852,8 +3852,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     @objc private func stepLibrarySettle(_ link: CADisplayLink) {
-        guard let s = librarySettleSpring else { return stopLibrarySettle() }
-        let t = CGFloat(link.targetTimestamp - s.start)
+        guard var s = librarySettleSpring else { return stopLibrarySettle() }
+        // Timed from its first frame, as the space pager's (SettleClock, #613).
+        let t = CGFloat(s.clock.elapsed(atFrame: link.targetTimestamp, interval: link.targetTimestamp - link.timestamp))
+        librarySettleSpring = s
         if LibrarySwipe.isSettled(from: s.from, velocity: s.velocity, to: s.target, at: t, width: sidebarUI.libraryRevealWidth) {
             stopLibrarySettle()
             finishLibrarySwipe(at: s.target)
@@ -4002,14 +4004,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// A space swipe of `steps` trackpad samples `dx` apart, 8 ms apart (cra://debug?swipe=).
-    func debugSpaceSwipe(dx: CGFloat, steps: Int) {
+    /// `stall` holds the main thread that many milliseconds right after the release, as a busy space switch does (#613).
+    func debugSpaceSwipe(dx: CGFloat, steps: Int, stall: Int = 0) {
         beginSpaceSwipe()
         for i in 1...max(1, steps) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.008 * Double(i)) { [weak self] in
                 self?.trackSpaceSwipe(by: dx, at: ProcessInfo.processInfo.systemUptime)
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.008 * Double(steps + 1)) { [weak self] in self?.endSpaceSwipe() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.008 * Double(steps + 1)) { [weak self] in
+            self?.endSpaceSwipe()
+            if stall > 0 {
+                self?.shell.layoutSubtreeIfNeeded()
+                Thread.sleep(forTimeInterval: Double(min(stall, 2000)) / 1000)
+            }
+        }
     }
 
     private func trackSpaceSwipe(by dx: CGFloat, at time: TimeInterval) {
