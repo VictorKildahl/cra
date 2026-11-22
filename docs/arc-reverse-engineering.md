@@ -247,7 +247,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Command bar: ~766pt wide, vertically centered, dark translucent in dark mode. Input row 60pt with the top match's
   favicon; rows 50pt single-line "Title — url"; the completion row comes first, then the typed query, then matches; open
   tabs show "Switch to Tab" + arrow box (other-space tabs show the space name); the selected row is tinted with the
-  space color. (Re-measured 9 Nov 2026: input row 64, rows 46 on a 50 pt pitch; see the ⌘T entry.) ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
+  space color. (Re-measured 9 Nov 2026: input row 64, rows 46 on a 50 pt pitch; see the ⌘T entry.) ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width
+  (corrected 22 Nov 2026: that is a local page's developer bar; on an ordinary site ⌘L opens the centred bar, see
+  "The address panel from the sidebar").
   Arc draws the bar inside the window, so it is light or dark with the space's theme; Cra's bar is a child panel,
   which takes macOS' appearance unless given the window's (it was dark over light spaces on a dark Mac until 4 Nov).
 
@@ -3163,8 +3165,11 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
 - [O live] Offline Arc on a fake home (network denied, pages from a loopback server), `topBarURLEnabled` NO so the
   address is in the sidebar, the toolbar hidden; AX frames and 2x window captures. A click on the sidebar's
   address opens a compact command bar hanging from it: its top left on the field's (window x 8, y 45), not the
-  centred bar. ⌘L in the same state opens Arc's bar across the top of the page card instead (field 1431 pt wide),
-  as with the toolbar shown (above). With no tab the click opens the same panel, empty, "Search or Enter URL…".
+  centred bar. With no tab the click opens the same panel, empty, "Search or Enter URL…".
+- [O live] Corrected 22 Nov 2026 (Arc 1.174.1, real ⌘L keystrokes): on an ordinary site (site.lvh.me) ⌘L opens
+  the centred command bar, with the address in the sidebar and with the toolbar shown alike. The "bar across the top
+  of the page card" noted here before was a page on 127.0.0.1: Arc shows its developer bar on local pages, and there
+  ⌘L edits the developer bar's address in place, its suggestions dropping across the page card (1431 pt wide).
 - [O] Width: the field is the address in 13 pt medium + ~2 pt, at least 240 (22–40 characters) and at most 610
   (101 characters, truncated); the panel is the field + 110 (glyph centred 32 pt in, field at 53, ⓘ 10 pt after
   the field and 21 from the edge): 350 to 720 pt. The reporter's 1x capture agrees (717 pt). Fit within 2.3 pt
@@ -3175,7 +3180,9 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   rows keep "Switch to Tab" and its arrow.
 - Cra (#663): CraCore `SidebarAddressPanel` holds the numbers; `CommandBarController.compact` lays the bar out
   that way and MainWindowController hangs it from `SidebarView.addressFrameOnScreen`. #344's "Edit the address
-  in the sidebar" still edits in place, and ⌘L keeps Cra's centred bar (Arc's top-of-page bar is not built).
+  in the sidebar" still edits in place, and ⌘L opens Cra's centred bar as Arc's does on an ordinary site. Not
+  built: ⌘L on a local page editing the developer bar in place with suggestions under it (Cra's developer bar edits
+  in place on a click, without suggestions, #42; ⌘L there opens the centred bar).
   Pinned by `SidebarAddressPanelTests` and the `sidebar-address-panel` scenario. Not measured: whether Arc's
   panel grows while typing (Cra keeps the width it opened with).
 
