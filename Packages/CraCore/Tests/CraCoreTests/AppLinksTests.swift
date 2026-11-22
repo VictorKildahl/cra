@@ -39,6 +39,28 @@ struct AppLinksTests {
 
     // Slack's "Launching…" page after a browser sign-in redirects to slack: with no click; a
     // Chromium page dropped it, and there is no button to click instead.
+    /// A mail link without a click of its own (a new window a page opened, then sent to mailto:, or a page's
+    /// own redirect after a send) gets Chrome's one go per page load, as another app's link does: Chrome's
+    /// flood guard lets mailto: through once without a gesture. Cra opened nothing (#684).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/684")) func mailGetsOneGoWithoutAClick() {
+        #expect(AppLinks.mayGoWithoutClick("mailto:a@example.com"))
+        #expect(AppLinks.mayGoWithoutClick("spotify:album:1"))
+        #expect(!AppLinks.mayGoWithoutClick("https://example.com"), "a page loads, nothing to guard")
+        #expect(!AppLinks.mayGoWithoutClick("afp://server/share"), "a refused scheme never goes")
+        #expect(!AppLinks.mayGoWithoutClick("cra://action/closeTab"))
+    }
+
+    /// A new tab or window that never showed a page, only sent to another app's address, closes once that is
+    /// handed to macOS, as Chrome closes it (external_protocol_handler.cc: IsInitialNavigation). It stayed as an
+    /// empty about:blank window over the page (#684). A page that loaded, or has history, stays.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/684")) func aBlankRequesterCloses() {
+        #expect(AppLinks.closesRequester(currentURL: "about:blank", canGoBack: false))
+        #expect(AppLinks.closesRequester(currentURL: "", canGoBack: false))
+        #expect(!AppLinks.closesRequester(currentURL: "https://example.com/contact", canGoBack: false))
+        #expect(!AppLinks.closesRequester(currentURL: "about:blank", canGoBack: true), "back to a page it showed")
+        #expect(AppLinks.closesRequester(currentURL: "about:blank#x", canGoBack: false), "still the blank page")
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/560")) func aPagesOwnRedirectAsksOncePerPageLoad() {
         var guarded = AppLinks.RedirectGuard()
         enum Step { case redirect, click, load }

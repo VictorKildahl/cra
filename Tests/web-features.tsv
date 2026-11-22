@@ -158,7 +158,7 @@ feature	client certificate	checklist	a site asking for a TLS client certificate
 feature	share picker	scenarios page-share-picker	navigator.share
 feature	Cast dialog	scenarios page-cast-dialog	View ▸ Cast…, the page menu's Cast… and PresentationRequest.start(): Chrome's Cast dialog, on the page's top edge as in Arc
 feature	FedCM sign-in	scenarios fedcm-sign-in-dialog	navigator.credentials.get({identity})
-feature	external app link	scenarios external-app-links	mailto:, zoommtg: and other apps' links
+feature	external app link	scenarios external-app-links,app-link-blank-window	mailto:, zoommtg: and other apps' links
 feature	downloads	scenarios download-actions,download-history-quiet,download-stuck-bin	a link that downloads, <a download>
 feature	translate	scenarios translate	a page in another language
 feature	infobars	scenarios debugger-infobar	Chrome's bars over a page

@@ -45,10 +45,10 @@ enum AppLinkPrompt {
         redirectGuards.object(forKey: browser)?.value.pageLoaded()
     }
 
-    /// Only another app's address spends the page's one question; a refused scheme doesn't, and a
+    /// Only another app's address or mail spends the page's one go (#684); a refused scheme doesn't, and a
     /// boost still needs a click.
     private static func mayAskWithoutClick(_ url: String, from browser: CraBrowser) -> Bool {
-        guard AppLinks.kind(of: url) == .asksFirst, !BoostInstall.isBoostLink(url) else { return false }
+        guard AppLinks.mayGoWithoutClick(url), !BoostInstall.isBoostLink(url) else { return false }
         return redirectGuard(for: browser).value.mayAsk(userGesture: false)
     }
 
@@ -85,12 +85,14 @@ enum AppLinkPrompt {
         // No app for it: nothing happens, as in Chrome.
         guard let app = NSWorkspace.shared.urlForApplication(toOpen: target) else {
             CraLog.note("page \(page) wants \(scheme), no app opens it")
+            closeIfBlank(browser, scheme: scheme)
             return true
         }
         let name = FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
         if kind == .opens {
             CraLog.note("page \(page) opens \(name) for \(scheme)")
             NSWorkspace.shared.open(target)
+            closeIfBlank(browser, scheme: scheme)
             return true
         }
         // One question at a time: a page asking again while it is up gets nothing.
@@ -103,8 +105,20 @@ enum AppLinkPrompt {
                               message: "\(URL(string: browser.currentURL)?.host ?? "This site") wants to open this application.",
                               actions: [DialogAction("Open \(name)"), .cancel])
         alert.present(over: window) { response in
-            if response == .alertFirstButtonReturn { NSWorkspace.shared.open(target) }
+            if response == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(target)
+                closeIfBlank(browser, scheme: scheme)
+            }
         }
         return true
+    }
+
+    /// A new tab or window that never showed a page and was only sent to the app's address goes, as Chrome
+    /// closes it (AppLinks.closesRequester, #684). It closes itself, as a finished sign-in pop-up does, so its
+    /// tab or Little Window goes the way window.close() takes it.
+    private static func closeIfBlank(_ browser: CraBrowser, scheme: String) {
+        guard AppLinks.closesRequester(currentURL: browser.currentURL, canGoBack: browser.canGoBack) else { return }
+        CraLog.note("blank page closes: it only took \(scheme) to an app")
+        browser.executeJavaScript("window.close()")
     }
 }
