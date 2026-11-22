@@ -1,0 +1,10 @@
+# promise: crash-code-sign-clone-cleanup-after-update
+# Chrome's code sign clone stays off in Cra (engine/chromium/cra/bridge.mm): its cleanup helper, started from
+# Versions/<old>/Helpers as Cra quits, crashed whenever a Sparkle update moved Chrome's version and took that folder
+# away (127 "Cra Helper" crash reports after 0.1.52, 20–22 Nov 2026). chrome://version lists the engine's command line.
+budget rss=600
+cra://open?url=chrome://version
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'code sign clone '.concat(/--disable-features=[^ ]*MacAppCodeSignClone/.test(document.body.innerText) ? 'off' : 'on')"}
+expect-log Cra cdp Runtime.evaluate .*code sign clone off
+reject-log code sign clone on

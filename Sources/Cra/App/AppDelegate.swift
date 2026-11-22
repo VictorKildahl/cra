@@ -2639,6 +2639,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // The sidebar as if Cra were in front (1) or behind (0), until the app's next activation change:
             // a background test copy is in either state depending on what it was sent.
             if let v = dict["appActive"] { main.sidebarUI.appActive = v == "1"; return }
+            // raise=firstResponderAfterResigning: AppKit's "-_newFirstResponderAfterResigning is not a valid
+            // message outside of …" from the run loop, as a focus change raised it in 0.1.53's crash reports
+            // (crash-first-responder-after-resigning); Cra logs it and keeps running.
+            if dict["raise"] == "firstResponderAfterResigning" {
+                let window = main.window
+                RunLoop.main.perform(inModes: [.common]) {
+                    _ = window?.perform(NSSelectorFromString("_newFirstResponderAfterResigning"))
+                }
+                return
+            }
             // Settings ▸ Privacy sharing now, not in 30 s or tomorrow (only with CRA_SHARING_ENDPOINT
             // in a test copy): stats sends the usage report, checkin the daily install check-in,
             // crash looks for new crash reports, on and off tick and untick onboarding's

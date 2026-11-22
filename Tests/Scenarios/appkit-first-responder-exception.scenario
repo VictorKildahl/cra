@@ -1,0 +1,14 @@
+# promise: crash-first-responder-after-resigning
+# AppKit raises "-_newFirstResponderAfterResigning is not a valid message outside of a responder's implementation of
+# -resignFirstResponder" when a popover's or panel's focused text field gives up focus as another window takes the key
+# window. Chrome's NSApplicationCrashOnExceptions made Cra quit on it (0.1.53 crash reports: the crash-report
+# question's sheet, a page window, the space icon popover). -[CraApplication reportException:] logs it and drops it;
+# the hook raises the same exception from the run loop. Cra must keep running and loading pages.
+budget rss=900
+cra://open?url=${PAGE}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?raise=firstResponderAfterResigning
+wait 2
+expect-log AppKit exception dropped: .*_newFirstResponderAfterResigning
+cra://open?url=${PAGE}?n=after
+expect-log GET /page\.html\?n=after

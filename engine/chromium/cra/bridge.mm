@@ -3548,7 +3548,13 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
       // Chrome unloads a profile once its last Chrome window closes. Cra's pages and spares live outside Chrome's
       // windows, so a profile whose hidden host closed went with pages still in it: ~WebContentsOfBrowserContext
       // from ProfileDestroyer::Timeout (0.1.44 crash reports). Cra's profiles stay loaded until it quits.
-      "DestroyProfileOnBrowserClose";
+      "DestroyProfileOnBrowserClose,"
+      // Chrome's code sign clone: at quit it starts a cleanup helper from Versions/<old>/Helpers, and Sparkle,
+      // waiting on that quit, replaces the bundle. When the update moves Chrome's version (158 → 159 in 0.1.52)
+      // the folder is gone, so the helper dies at dlopen, the framework bundle CHECK or ICU: 127 "Cra Helper"
+      // crash reports, 20–22 Nov 2026, each leaving a whole-app clone in $TMPDIR/../X. Chrome's own updater keeps
+      // old version folders; Sparkle installs after Cra quits, so Cra doesn't need the clone's protection.
+      "MacAppCodeSignClone";
   // CraEngineMain adds AperitifHelpers to this one.
   std::vector<std::string> enabled = {"ForceWebRequestProxyForTest", "WebContentsDiscard", "InfiniteTabsFreezing",
                                       "VideoPipForceTrustedForMediaPlaybackForTesting", "HideDelegatedFrameHostMac"};
@@ -4078,6 +4084,37 @@ BOOL CraIsSystemHotKey(NSEvent* event) {
 
 }  // namespace
 
+namespace {
+
+// AppKit raises "-_newFirstResponderAfterResigning is not a valid message outside of a responder's implementation
+// of -resignFirstResponder" when a text field in a popover or panel gives up focus while another window takes the
+// key window: the crash-report question's sheet, a page window, the space icon popover (0.1.53 crash reports,
+// crash-first-responder-after-resigning). Other Mac apps get it logged; with Chrome's NSApplicationCrashOnExceptions
+// (content/app/mac_init.mm) AppKit's event loop throws it on after -reportException: and Cra quit. It's caught where
+// it's raised: the method answers nil (no new first responder) and the focus change goes on. Every other exception
+// still reaches Chrome's handling.
+void DropFirstResponderAfterResigningException() {
+  SEL sel = NSSelectorFromString(@"_newFirstResponderAfterResigning");
+  Method method = class_getInstanceMethod([NSWindow class], sel);
+  if (!method || strcmp(method_getTypeEncoding(method), "@16@0:8") != 0) {
+    return;
+  }
+  auto original = reinterpret_cast<id (*)(id, SEL)>(method_getImplementation(method));
+  method_setImplementation(method, imp_implementationWithBlock(^id(NSWindow* window) {
+    @try {
+      return original(window, sel);
+    } @catch (NSException* exception) {
+      if (![exception.name isEqualToString:NSInternalInconsistencyException]) {
+        @throw;
+      }
+      NSLog(@"Cra: AppKit exception dropped: %@", exception.reason);
+      return nil;
+    }
+  }));
+}
+
+}  // namespace
+
 @implementation CraApplication {
   NSHashTable<NSEvent*>* _forwardedKeyEvents;
 }
@@ -4094,6 +4131,7 @@ BOOL CraIsSystemHotKey(NSEvent* event) {
   if (!base::CommandLine::InitializedForCurrentProcess()) {
     base::CommandLine::Init(0, nullptr);
   }
+  DropFirstResponderAfterResigningException();
 }
 
 + (NSInteger)backgroundActivations {
