@@ -154,6 +154,9 @@ public struct Easel: Codable, Equatable, Sendable {
         public var shade: Shade?
         /// A picture's description for VoiceOver (Arc's Add Alt Text…).
         public var altText: String?
+        /// A text box whose width a drag on its edge or corner set (Arc keeps it in the text's frame): its text wraps at
+        /// that width rather than the box growing with its longest line (#680). nil: the box fits its text (#580).
+        public var fixedWidth: Bool?
 
         public init(id: UUID = UUID(), kind: Kind, frame: Rect, color: String? = nil) {
             (self.id, self.kind, self.frame, self.color) = (id, kind, frame, color)

@@ -1,0 +1,31 @@
+# promise: #680
+# ⌘Z on an easel undoes its last edit and Edit ▸ Redo (⇧⌘Z) redoes it, as on Arc's easel. ⌘Z reopened
+# the tab closed last instead (Arc's ⌘Z off a text field), because the canvas isn't a text field (GitHub #680).
+# The tab closed first is there to be reopened by mistake; the easel's tab stays the only one. Edit ▸ Undo
+# goes to the key window's canvas, so this copy takes the screen (a background copy has no key window). Redo is
+# chosen from the menu: a posted ⇧⌘Z doesn't match the menu as a typed one does (a typed one redoes, checked by hand).
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=closed
+wait 3
+cra://action/closeTab
+wait 1
+cra://action/newEasel
+wait 2
+cra://debug?activate=1
+wait 1
+cra://debug?easelDraw=1
+wait 1
+cra://debug?easels=open&as=drawn
+expect-log easel open drawn: shown=4 
+cra://debug?key=z,6,1048576
+wait 1
+cra://debug?easels=open&as=undone
+expect-log easel open undone: shown=3 
+cra://debug?browserWindows=undone
+expect-log browser windows undone: kind=normal .*tabs=\[easel://[0-9A-F-]{36}\] open=easel://
+cra://debug?menuPress=Edit/Redo
+wait 1
+cra://debug?easels=open&as=redone
+expect-log easel open redone: shown=4 

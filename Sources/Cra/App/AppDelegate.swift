@@ -1534,7 +1534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // field; cra.log lists its rows, then the row titled <row> is chosen.
             if let typed = dict["captureMenu"] { main.debugCaptureMenu(typed: typed == "-" ? "" : typed, run: dict["run"]); return }
             // easels=list: the easels Library ▸ Easels and the capture menu list, the latest edited first;
-            // easels=open: what the open easel shows and what its file holds; easels=tiles: how many
+            // easels=open (as=<label>): what the open easel shows and what its file holds; easels=tiles: how many
             // tiles Library ▸ Easels shows.
             if let what = dict["easels"] {
                 if what == "tiles" {
@@ -1545,7 +1545,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     CraLog.note("easel tiles: \(main.window?.contentView.map(count(in:)) ?? 0)")
                 } else if what == "open", let canvas = (main.currentBrowser as? EaselBrowser)?.canvasView {
                     let id = canvas.document.id
-                    CraLog.note("easel open: shown=\(canvas.document.items.count) saved=\(EaselFiles.load(id).items.count) title=\(canvas.document.title)")
+                    // as=<label> names the line, for a scenario that reads the easel more than once (#680).
+                    CraLog.note("easel open\(dict["as"].map { " " + $0 } ?? ""): shown=\(canvas.document.items.count) saved=\(EaselFiles.load(id).items.count) title=\(canvas.document.title)")
                 } else {
                     let all = EaselFiles.all()
                     CraLog.note("easels listed: \(all.count) titles=\(all.map(\.title).joined(separator: "|"))")
@@ -2240,6 +2241,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     if let id = store.spaceOrder.first { store.deleteSpace(id) }
                 default:
                     CraLog.note("spaces menu change: unknown \(change)")
+                }
+                return
+            }
+            // menuPress=<menu>/<row>: the row chosen from the menu bar as a click chooses it, once AppKit has validated it
+            // (#680: Edit ▸ Redo on an easel; a posted ⇧⌘Z doesn't match the menu as a typed one does).
+            if let path = dict["menuPress"]?.split(separator: "/").map(String.init), path.count == 2 {
+                let menu = NSApp.mainMenu?.items.first { $0.title == path[0] }?.submenu
+                menu?.update()
+                if let menu, let i = menu.items.firstIndex(where: { $0.title == path[1] }), menu.items[i].isEnabled {
+                    menu.performActionForItem(at: i)
+                } else {
+                    CraLog.note("menu press \(path.joined(separator: "/")): no enabled row")
                 }
                 return
             }

@@ -1509,6 +1509,14 @@
 #675   iOS/CraUITests/BrowserTests.swift::testBarButtonsTickOnPressAndOnRelease  1a7789f226e9
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
 #679   Tests/Scenarios/library-swipe-out-still-pointer-fullscreen.scenario  26456a6874d0
+#680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::aDraggedWidthStays  d79840edd63e
+#680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::aShapeResizesFromAnEdge  2aa0d1be75f3
+#680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::aTextBoxTakesItsWidthFromADrag  e5887d543664
+#680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::edgesGrabAlongTheirWholeLength  fed21f801f2a
+#680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::onlyTheCornersHaveDots  0a63cd1290d3
+#680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::picturesShapesAndTextResize  7cfe766b4a77
+#680   Tests/EaselCanvasTests.swift::resizeLikeArc  ff3c93986c44
+#680   Tests/Scenarios/easel-undo.scenario  d3b84fe62a39
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

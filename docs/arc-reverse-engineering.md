@@ -5325,3 +5325,28 @@ Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window record
 - [O] After View ▸ Cast the active tab's sidebar row got a dashed yellow outline that stayed after the dialog
   closed (Esc) and seconds later. Cause not followed up (no Cast device here); Cra draws none.
 
+
+## Easel resize handles (Arc 1.174.1, 22 Nov 2026, issue #680, offline Arc)
+Measured with real pointer input (a HID drag after moving the pointer onto the spot first; Arc's drag handles
+ignore a press with no hover before it), read off full-screen 2x captures with the pointer shown (`screencapture
+-C`; a window capture's shadow margin shifts its coordinates). Binary: EaselUI `AspectRatioControlPoints`,
+`FrameControlPoint`, `ArrowControlPoint`, `DragHandle` (+ `CursorProvider`) and `ExtendedDragArea`.
+- [O live] A picked rectangle: the 2 pt outline and four corner dots, no dots on the edges. The pointer over any
+  part of the left or right edge, right up to the corners, shows the left-right resize cursor, and over the top
+  or bottom edge the up-down one. The right edge dragged 100 pt widened it 100 pt, its left edge and height
+  unchanged; the corner dragged (+100, +50) grew it both ways.
+- [O live] A text box: a rounded outline with four corner rings and the Aa size pill on its left, no edge dots,
+  picked or being typed in. A fresh one wrapped at about 283 pt. The right edge shows the left-right cursor and the
+  corners the diagonal one; the corner dragged 150 pt right widened it and the text reflowed onto one line, the box
+  then as tall as that line, its top fixed. The left edge dragged 100 pt left widened it leftwards, the right
+  edge fixed. The bottom edge shows the up-down cursor, but dragging it 80 pt down changed nothing, nor did the
+  corner dragged straight down: the height is always the text's.
+- [O live] Once, the corner dragged in until the box was narrower than its one line (to about 234 pt) made the
+  text itself smaller, still on one line; widening again didn't bring the size back. The rule wasn't worked out.
+- Cra (#680, PR #681 by DHIRENSACHER): `Easel.corner(of:at:kind:)` grabs the corners and, for shapes and text,
+  each edge along its whole length; `Easel.resized` moves one side for an edge; `Easel.resizedText` sets a text
+  box's width from a corner or the left or right edge and ignores the top and bottom (`fixedWidth` on the item keeps
+  that width as it's typed in and after a reopen, `Easel.textBoxWidth`). Four corner dots on everything; a text box
+  keeps its rounded outline. Not matched: the text shrinking when narrowed by a corner, and the 283 pt first wrap
+  (Cra's box grows to 560 pt, #580). Pinned by `EaselResizeTests` (#680) and `resizeLikeArc` in
+  scripts/test-easel-canvas.sh.
