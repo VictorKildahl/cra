@@ -187,14 +187,15 @@ final class FloatingSidebarController {
             let t = now()
             guard sidebarHidden(), isKey else {
                 offEdge.reset()
-                wait(atEdge: false, over: dwell.sample(inStrip: false, at: t))
+                wait(atEdge: false, over: dwell.sample(inStrip: false, at: t), why: "the edge strip", at: p)
                 return
             }
             let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow, side: side)
             // Thrown past the edge, out of the window: it comes out there as well (#350).
             let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, side: side, at: t)
             let stripOver = dwell.sample(inStrip: inStrip, at: t)
-            wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal)
+            wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal,
+                 why: stripOver ? "the edge strip" : "past the window's edge", at: p)
         } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
                                                      pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow,
                                                      side: side) {
@@ -368,15 +369,15 @@ final class FloatingSidebarController {
     /// reveal, it held the first frame back ~90 ms. Leaving before the wait is over puts it back.
     func edgeSample(inStrip: Bool) {
         // The wait runs from the sample, not from after the staging: that takes ~90 ms on the main thread.
-        wait(atEdge: inStrip, over: dwell.sample(inStrip: inStrip, at: now()))
+        wait(atEdge: inStrip, over: dwell.sample(inStrip: inStrip, at: now()), why: "the edge strip", at: pointerInShell)
     }
 
     /// The pointer is at the edge (in the strip, or thrown past it) or not, and its wait is over or not.
-    private func wait(atEdge: Bool, over: Bool) {
+    private func wait(atEdge: Bool, over: Bool, why: String, at p: CGPoint) {
         guard !isShown else { return }
         if atEdge, !shell.sidebarDetached { stage() }
         if !atEdge, staged { unstage() }
-        if over { show() }
+        if over { show(why: "\(why), pointer at \(Int(p.x)),\(Int(p.y))") }
     }
 
     /// Whether the sidebar waits in its panel, tucked away, for the pointer's wait to end.
@@ -642,8 +643,11 @@ final class FloatingSidebarController {
         lift.layer?.backgroundColor = NSColor(white: 1, alpha: SidebarBackdrop.floatingLift(dark: pal.isDark, reduceTransparency: reduce, lift: t.liftActive)).cgColor
     }
 
-    func show() {
+    /// `why`, for cra.log: what brought it out (#679 asks what brought it back after a swipe out of the
+    /// Library on a reporter's Mac, where no test made it come back).
+    func show(why: String = "asked") {
         guard !isShown, sidebarHidden() else { return }
+        CraLog.note("floating sidebar out: \(why)")
         // Not staged by the pointer's wait (a scripted or remote reveal): stage now, a beat before the
         // spring, because the panel reaches the screen a few frames after it is ordered in.
         let fresh = !shell.sidebarDetached
@@ -748,6 +752,7 @@ final class FloatingSidebarController {
         // A synchronous hide also finishes a hide already in flight (for example,
         // before a traffic-light action). Repeated animated exits do not restart it.
         guard isShown || (!animated && shell.sidebarDetached), panel != nil else { return }
+        if isShown { CraLog.note("floating sidebar in\(animated ? "" : " at once")") }
         revealRoom = 0
         isShown = false
         staged = false

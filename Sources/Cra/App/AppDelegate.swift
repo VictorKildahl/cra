@@ -2810,7 +2810,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let step = dict["extensionPopup"] { main.debugExtensionPopup(step); return }
             if let f = dict["floatingSidebar"] {
                 main.floatingSidebar?.heldOut = f == "hold"
-                if f == "1" || f == "hold" { main.floatingSidebar?.show() } else { main.floatingSidebar?.hide(animated: true) }
+                if f == "1" || f == "hold" { main.floatingSidebar?.show(why: "a scenario") } else { main.floatingSidebar?.hide(animated: true) }
                 return
             }
             if let method = dict["bcdp"] {

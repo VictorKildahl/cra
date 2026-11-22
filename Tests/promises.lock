@@ -1520,6 +1520,7 @@
 #677   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoSpacesSavedBeforeKeepTheirColoursInTheDark  6a757e6f3485
 #677   Tests/Scenarios/auto-theme-dark-keeps-colour.scenario  70e97e843df1
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
+#679   Tests/FloatingSidebarTests.swift::aPointerInsideTheSidebarBringsNothingOut  e2e76d6c89d2
 #679   Tests/Scenarios/library-swipe-out-still-pointer-fullscreen.scenario  26456a6874d0
 #680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::aDraggedWidthStays  d79840edd63e
 #680   Packages/CraCore/Tests/CraCoreTests/EaselResizeTests.swift::aShapeResizesFromAnEdge  2aa0d1be75f3

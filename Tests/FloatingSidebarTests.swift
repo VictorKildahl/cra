@@ -109,6 +109,7 @@ enum FloatingSidebarTests {
         dockingARevealedSidebarCanBeSuperseded(window: window, sidebar: sidebar, panel: panel)
         comesOutOnTheRight(window: window, sidebar: sidebar, shell: shell)
         aStillPointerWaitsToMove(window: window, sidebar: sidebar)
+        aPointerInsideTheSidebarBringsNothingOut(window: window, sidebar: sidebar)
 
         // #136: the pointer is sampled only while Cra is the active app.
         sidebar.install()
@@ -161,6 +162,41 @@ enum FloatingSidebarTests {
         sample(CGPoint(x: edge.x, y: edge.y + 3), at: 903.2)
         expect(sidebar.isShown && sidebar.stillPointer == nil, "moved inside the strip, it comes out after the usual wait")
         sidebar.hide(animated: false)
+        sidebar.now = { ProcessInfo.processInfo.systemUptime }
+    }
+
+    // promise: #679
+    /// The reporter's steps: the floating sidebar out, the pointer moved in over it (not left at the
+    /// screen's edge), into the Library and out with two fingers. The sidebar goes with the pointer
+    /// resting over where it was; only the edge strip (or a throw past the window's edge) brings it out
+    /// again, and cra.log now says what did, with the pointer's place, so a report can show it.
+    @MainActor
+    private static func aPointerInsideTheSidebarBringsNothingOut(window: NSWindow, sidebar: FloatingSidebarController) {
+        var clock: TimeInterval = 950
+        sidebar.now = { clock }
+        sidebar.keyWindow = { window }
+        sidebar.hide(animated: false)
+        CraLog.notes = []
+        let inside = CGPoint(x: 150, y: sidebar.shell.bounds.midY)
+        func sample(_ p: CGPoint, at t: TimeInterval) {
+            clock = t
+            sidebar.pointerSample(at: p)
+        }
+        sidebar.waitForPointerToMove(from: inside)
+        for t in [950.0, 950.3, 951.0, 952.0] { sample(inside, at: t) }
+        expect(!sidebar.isShown, "the pointer resting over where the sidebar was brings nothing out")
+        for (i, x) in [150.0, 120, 90, 60, 30].enumerated() { sample(CGPoint(x: x, y: inside.y), at: 953 + Double(i) * 0.1) }
+        expect(!sidebar.isShown && !CraLog.notes.contains { $0.hasPrefix("floating sidebar out") },
+               "moving over the page, short of the edge strip, brings nothing out either")
+        let edge = CGPoint(x: 3, y: inside.y)
+        sample(edge, at: 954)
+        sample(edge, at: 954.3)
+        expect(sidebar.isShown, "the edge strip brings it out after its wait")
+        expect(CraLog.notes.contains { $0.hasPrefix("floating sidebar out: the edge strip, pointer at 3,") },
+               "cra.log says the strip brought it out, and where the pointer was: \(CraLog.notes)")
+        sidebar.hide(animated: true)
+        expect(CraLog.notes.last == "floating sidebar in", "and that it went in")
+        drainAnimations()
         sidebar.now = { ProcessInfo.processInfo.systemUptime }
     }
 
@@ -726,6 +762,12 @@ enum FloatingSidebarTests {
 
 // Lightweight dependencies for compiling the production controller without CEF.
 // They provide layout/theme data only; lifecycle and animation code is not copied.
+/// cra.log, kept for the checks.
+enum CraLog {
+    static var notes: [String] = []
+    static func note(_ s: String) { notes.append(s) }
+}
+
 struct SpacePalette {
     var vibrant = false
     var isDark = false

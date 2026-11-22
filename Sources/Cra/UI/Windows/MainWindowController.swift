@@ -4116,7 +4116,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.windowsMakingSpace.insert(windowID)
         sidebarUI.spaceCreation = draft
         // With the sidebar hidden it comes out over the page and stays while the page is up.
-        if !sidebarVisible, !shell.contentFullscreen { floatingSidebar?.show() }
+        if !sidebarVisible, !shell.contentFullscreen { floatingSidebar?.show(why: "a new space's page") }
         CraLog.note("space creation opens")
     }
 
