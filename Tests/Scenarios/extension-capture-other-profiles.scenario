@@ -1,0 +1,22 @@
+# promise: #621
+# GoFullPage's button in a space on a second profile crashed Cra (GitHub #621): two spaces, each on a profile of its
+# own, no space on Default, as the reporter has them. A capture extension's button (Tests/Fixtures/CaptureExtension:
+# a script run in the page, chrome.tabs.captureVisibleTab, its result page opened from the extension, as GoFullPage
+# does) works in the first space's profile and in the second's, and Cra stays up.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Work","emoji":"\ud83d\udcbc","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Hobbies","emoji":"\ud83c\udfb2","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000002"}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Work"},{"id":"B0000000-0000-0000-0000-000000000002","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?installExtension=${FIXTURES}/CaptureExtension
+relaunch
+cra://open?url=${PAGE}?n=work&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?extensionAction=${CAPTURE_EXTENSION_ID}
+wait 6
+expect-log n=capture-ok-work-png
+cra://open?url=${PAGE}?n=hobbies&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?extensionAction=${CAPTURE_EXTENSION_ID}
+wait 6
+expect-log n=capture-ok-hobbies-png
+reject-log n=capture-failed
+reject-log extension action .* failed

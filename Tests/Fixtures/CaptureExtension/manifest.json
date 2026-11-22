@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Capture Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a full-page capture extension's toolbar button, as GoFullPage's (GitHub #621): it injects a script into the page, captures the visible tab, and opens its result page from the extension with the picture.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm2/NryZ17Pca04+Y6PUs9Hz/AVDhdi8+RLde8j7YbguLftrcBha1r45w6bSYEQFvBFu6mbkA00CgrJXuX2mPDaF5HzDV+aoWDc8xJW5+EtYDAI4PUFC+c8bIKkSAryhKVSWGMputGsGvJCGplnV+kd+/NrIN/A65r4RqLbEFcOB6LmXxhuyPWpmraSOxP/FAL1X070rKqyH5VzfW+t0wO937AC7epcyoI99//T5nCo8sGEuc2OnwhEld/qFVpt/B2vlVeZDp1YnHCzIGmpwW62ljWH6P2fTHCclHnh2atk0TVxpbkgGQ4nDPcJhfc0wMmf0oiLCJ+whos4DADPEqxQIDAQAB",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_title": "Cra Capture Fixture" }
+}
