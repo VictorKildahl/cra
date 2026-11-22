@@ -1661,6 +1661,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // pinExtension=<id>: pinned to the toolbar on the Default profile, as the Extensions menu's pin does.
             if let id = dict["pinExtension"] { ExtensionStore.shared.setPinned(id, true, inProfile: "Default"); return }
+            // spaceGradient=<label>: the window's space gradient axis and colour count (#669).
+            if let label = dict["spaceGradient"] {
+                func find(_ v: NSView) -> PagedGradientView? {
+                    if let g = v as? PagedGradientView { return g }
+                    for c in v.subviews { if let g = find(c) { return g } }
+                    return nil
+                }
+                let g = main.window?.contentView.flatMap(find)
+                CraLog.note("space gradient \(label): " + (g?.debugReadout ?? "none"))
+                return
+            }
             // extensionList=<label>[&window=incognito]: the extensions the window's Extensions menu and
             // toolbar offer (in incognito, only those allowed there, #620), or the newest incognito window's.
             if let label = dict["extensionList"] {

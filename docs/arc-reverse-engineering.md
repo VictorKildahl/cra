@@ -3134,10 +3134,30 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   Auto): 0.65 on Light, and on Dark a white veil of 0.08 / (1 − the theme's lightness), 0.08 to 0.35, as near Arc's
   even +20 as one blend gets (Cra's pastel card +14 to +23 over its sidebar; it was +25 to +42). Pinned by
   CardVeilTests.aWindowWithNoTabFollowsArcsAppearance and the empty-card-appearance scenario.
-- [O, not built] The space gradient runs from the top left (first colour) toward the bottom right: over white, a
+- [O] The space gradient runs from the top left (first colour) toward the bottom right: over white, a
   red/teal theme's R channel falls across the window and down it, the bottom edge reaching the second colour by
   x ≈ 1200 of 1728 while the top edge is 0.68 of the way at the right end; the steps grow toward the end (0.11, 0.13,
-  0.17, 0.21 per 400 pt along the top), so it is no linear sRGB ramp. Cra's runs top to bottom (SpaceBackground).
+  0.17, 0.21 per 400 pt along the top), so it is no linear sRGB ramp.
+- [O live, 22 Nov 2026, cra-22] The same fake home with the Victor space set to `blendedGradient` #D94F4F / #3FBFBF
+  (no overlay colours, intensity 0.8, no grain), captured over white with Window ▸ Move & Resize at 1728×1084
+  (Fill), 927×1069 (Left and Right) and 927×531 (Top Left), plus #D94F4F / #E0C040 / #3F6FD0. Fitted per capture
+  (P3 → sRGB, 7×7 means, the command bar, its shadow and the sunset banner masked out):
+  - Lines of one colour are straight and parallel (nine levels on the earlier 1728×1084 capture: slope −0.92 ± 0.002),
+    so it is one linear gradient. Their angle is 45–46° on the 927-wide windows and on the unveiled sidebar of the
+    1728-wide one (45.6°; 45° fits within 0.01/255 rms). The card's veil tilts its own fit to 42.7°.
+  - It is window-relative (Left and Right agree) and scales with the window: the last colour arrives 0.76 of the
+    way from the top left to the far corner along the axis on every size (0.757, 0.760, 0.761, 0.73), and stays flat
+    past it. The start is at the top left corner (the sidebar's colour still changes from 130 pt down; where t = 0
+    lies within ~60 pt of the corner can't be told from the colours).
+  - The blend is Oklab: rms 1.2/255 against 1.5 for linear light and 3.0 for sRGB (which also needs end colours
+    past 255). Red stays up longer and turns faster near the teal; green rises fast first.
+- Cra (#669): SpaceGradient (CraCore) holds the axis (45° from the top left, `reach` 0.76) and the Oklab blend;
+  the window's PagedGradientView, PaletteBackgroundView and SwiftUI's SpaceBackground draw nine Oklab samples
+  between the theme's stops along it. A gradient layer blends perpendicular to its axis in unit space, so the end
+  point is 2d·(w, h)/(w² + h²) of the frame (`unitEnd`); the axis divided by the frame ran at 68° on a 1728×1084
+  window. Same theme imported into Cra and captured the same way, each image's channels scaled to its own range:
+  1728×1084 rms 0.016–0.017 of the range from Arc's (max 0.067), was 0.28–0.32 (max 0.82) top to bottom; 927×531
+  0.06–0.12, was 0.34–0.36. Pinned by SpaceGradientTests and the space-gradient-axis scenario.
 
 ## The address panel from the sidebar (Arc 1.174, 20 Nov 2026, issue #663, offline Arc)
 - [O live] Offline Arc on a fake home (network denied, pages from a loopback server), `topBarURLEnabled` NO so the
