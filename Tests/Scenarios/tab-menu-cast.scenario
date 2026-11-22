@@ -1,0 +1,37 @@
+# promise: web-tab-menu-cast
+# A sidebar tab's right-click menu has Cast…, after Mute: it shows that tab and opens Chrome's Cast dialog for it
+# (X DM 22 Nov 2026: "is it possible to add a Cast option on right click on tabs?"). Arc 1.174.1's tab menu has no
+# Cast row (docs/arc-reverse-engineering.md, 21-22 Nov); Victor chose to add it (22 Nov). Only web pages get the
+# row. What the dialog lists depends on the network ("No devices found" here), so only its title and Close are checked.
+budget rss=1000 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=a
+expect-log GET /features.html\?n=a
+cra://open?url=${ORIGIN}/features.html?n=b
+expect-log GET /features.html\?n=b
+wait 2
+
+# Listed: b (open), then a. Cast… on a shows a, and the Cast dialog opens over its page.
+cra://debug?tabMenu=2&label=cast&run=Cast…
+expect-log tab menu cast: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Mute \(off\)\|Cast…\|──\|
+expect-log tab menu cast ran Cast…: .* open: n=a$
+wait 2
+cra://debug?pageDialogs=cast-tab
+expect-log page dialog cast-tab: chrome [0-9]{3}x[0-9]{3} at=page front=1 text=.* buttons=Close.* title=Cast tab$
+cra://debug?pageDialogs=cast-tab-close&press=Close
+expect-log page dialogs cast-tab-close: pressed Close
+wait 1
+cra://debug?pageDialogs=cast-tab-gone
+expect-log page dialogs cast-tab-gone: n=0
+
+# Now a is the open tab (still listed second): its Cast… opens the dialog at once, over the page it shows.
+cra://debug?tabMenu=2&label=cast-open&run=Cast…
+expect-log tab menu cast-open ran Cast…: .* open: n=a$
+wait 2
+cra://debug?pageDialogs=cast-open
+expect-log page dialog cast-open: chrome [0-9]{3}x[0-9]{3} at=page front=1 text=.* buttons=Close.* title=Cast tab$
+cra://debug?pageDialogs=cast-open-close&press=Close
+expect-log page dialogs cast-open-close: pressed Close
+reject-log fault:

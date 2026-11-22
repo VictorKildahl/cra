@@ -156,7 +156,7 @@ feature	security key dialog	scenarios page-webauthn	navigator.credentials.get wi
 feature	passkey with Touch ID	checklist	navigator.credentials.create/get with a platform passkey (macOS's own sheet)
 feature	client certificate	checklist	a site asking for a TLS client certificate
 feature	share picker	scenarios page-share-picker	navigator.share
-feature	Cast dialog	scenarios page-cast-dialog	View ▸ Cast…, the page menu's Cast… and PresentationRequest.start(): Chrome's Cast dialog, on the page's top edge as in Arc
+feature	Cast dialog	scenarios page-cast-dialog,tab-menu-cast	View ▸ Cast…, the page menu's Cast…, a sidebar tab's Cast… and PresentationRequest.start(): Chrome's Cast dialog, on the page's top edge as in Arc
 feature	FedCM sign-in	scenarios fedcm-sign-in-dialog	navigator.credentials.get({identity})
 feature	external app link	scenarios external-app-links,app-link-blank-window	mailto:, zoommtg: and other apps' links
 feature	downloads	scenarios download-actions,download-history-quiet,download-stuck-bin	a link that downloads, <a download>

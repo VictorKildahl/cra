@@ -594,6 +594,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.performAction = { [weak self] id in
             if id.hasPrefix("openInSplit:"), let uuid = UUID(uuidString: String(id.dropFirst(12))) {
                 self?.openTabInSplit(uuid)
+            } else if id.hasPrefix("castTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
+                self?.castTab(uuid)
             } else if id.hasPrefix("muteTab:"), let uuid = UUID(uuidString: String(id.dropFirst(8))) {
                 let muted = self?.store.item(uuid)?.tab?.muted ?? false
                 self?.app.runtime(for: uuid)?.browser.setAudioMuted(muted)
@@ -1245,6 +1247,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard store.addEmptyPane(nextTo: current) != nil else { return }
         refresh()
         openCommandBar(.editURL)
+    }
+
+    /// A sidebar tab's Cast… (Cra's row, not Arc's): the tab shows, then Chrome's Cast dialog opens for its
+    /// page, as View ▸ Cast… does for the tab in front. A sleeping tab's page is made by the refresh.
+    func castTab(_ id: UUID) {
+        if selectedTabID != id {
+            store.selectTab(id, window: windowID)
+            refresh()
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let browser = app.runtime(for: id)?.browser ?? currentBrowser
+            if browser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { showToast("Nothing to Cast") }
+        }
     }
 
     /// Arc's "Open in Split View" on a sidebar tab: that tab joins the open one in a split, as the

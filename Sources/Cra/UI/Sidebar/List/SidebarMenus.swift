@@ -81,7 +81,8 @@ enum SidebarMenus {
     /// Copy Link, Share ▸ | Change Icon…, Rename…, Mute, Customize Page… (the open tab), Edit Pinned
     /// Page ▸ (pinned) | Add/Open in Split View, Duplicate, Move to ▸ | Archive Tab (⌥ Archive Other
     /// Tabs), Archive Tabs Below (⌥ Archive Tabs Above) on Today, Remove Pin on a pinned tab.
-    /// Cra keeps Use Site Icon and Use Page Title, which have no other way in, beside their rows.
+    /// Cra keeps Use Site Icon and Use Page Title, which have no other way in, beside their rows, and
+    /// adds Cast… after Mute on a web page (tab-menu-cast).
     static func tab(_ m: TabRowModel, list: SpaceListView) -> NSMenu {
         let store = list.store, ui = list.ui, actions = list.actions
         let id = m.id
@@ -97,6 +98,8 @@ enum SidebarMenus {
         add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
         muteItem(menu, id, tab, ui: ui, store: store, actions: actions)
+        // Not in Arc's tab menu (View ▸ Cast there): Cra's, on Victor's call after an X DM (22 Nov 2026).
+        if web != nil { add(menu, action: "cast", "Cast…") { actions.performAction("castTab:\(id.uuidString)") } }
         if open, web?.host != nil { add(menu, "Customize Page…") { actions.performAction("newBoost") } }
         if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
         menu.addItem(.separator())
