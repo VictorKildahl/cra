@@ -1689,6 +1689,25 @@ final class WidgetGuideTests: BrowserTestCase {
 }
 
 final class AppIconDockTests: BrowserTestCase {
+    // promise: #686
+    func testChangeIconQuickActionOpensTallOnIPadAndHalfOnIPhone() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+        let navigationBar = app.navigationBars["App Icon"]
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 5))
+        for icon in ["segments", "midnight", "mono", "violet"] {
+            XCTAssertTrue(app.buttons["icon-\(icon)"].exists, icon)
+        }
+        sleep(1)
+        keep("app-icon-picker-open")
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTAssertLessThan(navigationBar.frame.minY, app.frame.height / 3,
+                              "the App Icon picker opened as a short card on iPad")
+        } else {
+            XCTAssertGreaterThan(navigationBar.frame.minY, app.frame.height * 0.4,
+                                 "the App Icon picker did not open at medium height on iPhone")
+        }
+    }
+
     /// App Settings ▸ Change App Icon opens Arc Search's dock sheet with every icon on its shelf,
     /// the current one marked.
     func testChangeAppIconShowsTheDock() {

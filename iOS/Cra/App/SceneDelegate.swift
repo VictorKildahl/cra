@@ -23,7 +23,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             browser.loadViewIfNeeded()
             browser.open(url)
         }
-        if let item = connectionOptions.shortcutItem, let action = LaunchAction(shortcutType: item.type) {
+        if let action = (connectionOptions.shortcutItem?.type ?? LaunchOptions.value("CraShortcut")).flatMap(LaunchAction.init(shortcutType:)) {
             LaunchAction.pending = action
         }
     }

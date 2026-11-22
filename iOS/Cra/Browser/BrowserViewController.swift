@@ -820,7 +820,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             showSpaces()
         case .changeIcon:
             let picker = UINavigationController(rootViewController: UIHostingController(rootView: AppIconPicker()))
-            picker.sheetPresentationController?.detents = [.medium(), .large()]
+            picker.sheetPresentationController?.detents = appSettingsDetents()
             topPresenter.present(picker, animated: true)
         }
     }
@@ -948,11 +948,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.sheetPresentationController?.detents = [.custom { _ in 465 }, .large()]
         } else {
             sheet = UIHostingController(rootView: AppSettingsView(model: model))
-            sheet.sheetPresentationController?.detents = MobileSettingsSheet.appSettingsHeights(onPad: traitCollection.userInterfaceIdiom == .pad).map { ($0 == .medium ? UISheetPresentationController.Detent.medium : UISheetPresentationController.Detent.large)() }
+            sheet.sheetPresentationController?.detents = appSettingsDetents()
         }
         sheet.sheetPresentationController?.prefersGrabberVisible = true
         sheet.view.backgroundColor = .clear
         topPresenter.present(sheet, animated: true)
+    }
+
+    private func appSettingsDetents() -> [UISheetPresentationController.Detent] {
+        MobileSettingsSheet.appSettingsHeights(onPad: traitCollection.userInterfaceIdiom == .pad).map { ($0 == .medium ? UISheetPresentationController.Detent.medium : UISheetPresentationController.Detent.large)() }
     }
 
     // MARK: Handoff
