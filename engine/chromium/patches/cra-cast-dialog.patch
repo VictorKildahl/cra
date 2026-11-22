@@ -81,7 +81,7 @@ index d9930a5b59..99295ac3d2 100644
    // Once the anchor for ShowDialogWithToolbarAction() becomes visible, this
    // method is called to actually show the dialog anchored to `anchor`.
 diff --git a/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc b/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
-index fff22177ea..3686da3288 100644
+index fff22177ea..a6799b0c70 100644
 --- a/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
 +++ b/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
 @@ -33,6 +33,8 @@
@@ -93,7 +93,39 @@ index fff22177ea..3686da3288 100644
  
  using content::WebContents;
  
-@@ -124,6 +126,18 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
+@@ -46,6 +48,18 @@ MediaRouterUIService* GetMediaRouterUIService(WebContents* web_contents) {
+   return MediaRouterUIService::Get(profile);
+ }
+ 
++// Cra: whether the page is one Cra shows in its own window, whose Browser's window is a never-seen strip
++// (ui/views/controls/webview/cra_hosted_page.h).
++bool IsCraHostedPage(WebContents* web_contents) {
++  BrowserWindowInterface* browser =
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(web_contents);
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  return browser_view && browser_view->GetWidget() &&
++         browser_view->GetWidget()->GetNativeWindowProperty(
++             views::kCraPageHostWindow);
++}
++
+ }  // namespace
+ 
+ MediaRouterDialogControllerViews::~MediaRouterDialogControllerViews() {
+@@ -55,6 +69,12 @@ MediaRouterDialogControllerViews::~MediaRouterDialogControllerViews() {
+ 
+ bool MediaRouterDialogControllerViews::ShowMediaRouterDialogForPresentation(
+     std::unique_ptr<StartPresentationContext> context) {
++  // Cra: a page's PresentationRequest.start() opens the Cast dialog ("<site> wants to cast content"), as in
++  // Arc, not Chrome's media controls dialog.
++  if (IsCraHostedPage(initiator())) {
++    return MediaRouterDialogController::ShowMediaRouterDialogForPresentation(
++        std::move(context));
++  }
+   // Block tab fullscreen to prevent UI spoofing. The GMC device picker is a
+   // trusted browser surface that should not coexist with attacker-controlled
+   // fullscreen content.
+@@ -124,6 +144,18 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
  
    BrowserView* browser_view =
        browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
@@ -112,7 +144,7 @@ index fff22177ea..3686da3288 100644
    if (browser_view) {
      // Show the Cast dialog anchored to the Cast toolbar button.
      if (browser_view->toolbar_button_provider()
-@@ -145,7 +159,7 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
+@@ -145,7 +177,7 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
      anchor_bounds.set_height(0);
      cast_dialog_coordinator_.ShowDialogCentered(
          anchor_bounds, ui_.get(), profile, dialog_creation_time,

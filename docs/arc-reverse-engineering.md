@@ -5319,11 +5319,19 @@ Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window record
   Share ▸ (AirDrop, Mail, Notes), Change Icon…, Rename…, Mute, Customize Page…, Open in / Add Split View, Duplicate,
   Move to ▸, Archive Tab, Archive Tabs Below. No Cast row and no share row; the call's switch is only the hover
   button ("Share this tab instead"). The page's own right-click menu keeps Chromium's Cast… in a call as outside one.
-- [O] View ▸ Cast opens Chromium's Cast dialog ("Cast tab", "No devices found", Sources ▾, ✕), 320 × 176 pt,
+- [O] View ▸ Cast opens Chromium's Cast dialog ("Cast tab", "No devices found", Sources ▾, ✕; a device row each when
+  some are on the network), 320 × 176 pt,
   centred on the page (x 831 on a page from 264 to 1718) with its top on the page's top edge (y 83, the web area's
   top). Cra: `cra-cast-dialog.patch`, scenario page-cast-dialog.
-- [O] After View ▸ Cast the active tab's sidebar row got a dashed yellow outline that stayed after the dialog
-  closed (Esc) and seconds later. Cause not followed up (no Cast device here); Cra draws none.
+- [O] A page's `PresentationRequest.start()` (a button click, 22 Nov) opens the same Cast dialog, 320 × 196 pt at the
+  same place, headed "Cast <site>" with a "<site> wants to cast content" line above the devices. Chrome 159 sends a
+  page's request to its media controls dialog instead; Cra keeps Arc's (`cra-cast-dialog.patch`). Esc with no device
+  turned the page down with NotFoundError (Chrome's answer when no device can show the page; NotAllowedError when one
+  can and the dialog is closed).
+- [O] A dashed yellow outline on the selected tab's row showed in a Blank Window ("This Window") on 22 Nov, before any
+  Cast and after it, following the selection to another tab and staying with focus in the page; the same Arc's main
+  window had none, and a Blank Window on 21 Nov had none either. Not Cast's: the hover tooltip is the usual "<title> /
+  Double-click to rename". Cause unknown (first seen the day Arc's "30 days" sunset banner appeared); Cra draws none.
 
 
 ## Easel resize handles (Arc 1.174.1, 22 Nov 2026, issue #680, offline Arc)
