@@ -4,13 +4,15 @@
 #   CRA_TEST_SCREEN="Cra Test Display" scripts/scenario.sh …
 # GitHub's macOS runners have one small 1x screen: a scenario's 1200x800 window didn't fit (the page came out
 # 862x657 at 1x), so the geometry the scenarios check and their 2x snapshots failed there, though Cra was right.
-# Prints vdisplay's "ready <id> <origin> <size>"; exits 1 when macOS won't make the display.
+# Prints vdisplay's "ready <id> <origin> <size>"; exits 1 when macOS won't make the display. Its pid is in
+# build/vdisplay.pid, so whoever started it can end it without touching another checkout's.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build
 clang -fobjc-arc -framework Foundation -framework CoreGraphics -Wno-objc-property-no-attribute \
   scripts/test-display/vdisplay.m -o build/vdisplay || exit 1
 nohup build/vdisplay "$@" > build/vdisplay.log 2>&1 &
+echo $! > build/vdisplay.pid
 for _ in $(seq 1 60); do
   if grep -q '^ready' build/vdisplay.log 2>/dev/null; then
     grep '^ready' build/vdisplay.log

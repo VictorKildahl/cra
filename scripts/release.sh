@@ -65,16 +65,28 @@ for ARCH in $ARCHS; do
   # the background while Apple notarizes it. 0.1.49 shipped with every upload button dead (#571) and print preview
   # 3 pt tall (#574) because nothing tried them. On a copy (stapling writes into the app), for this Mac's CPU
   # (the other CPU's app is the same code). CRA_SKIP_WEB_FEATURES="<why>" releases without it; say why in the notes.
+  # Then the snapshots (scripts/scenario.sh snapshots): every scenario's snapshots against Tests/Snapshots on a 2x
+  # screen, one at a time, on the same copy. Two broke on main unseen when a PR gave a fixture its icons (22 Nov
+  # 2026): nothing ran them. CRA_SKIP_SNAPSHOTS="<why>" releases without them.
   WEB_FEATURES_PID=""
-  if [ "$ARCH" = "$(uname -m)" ] && [ -z "${CRA_SKIP_WEB_FEATURES:-}" ]; then
+  if [ "$ARCH" = "$(uname -m)" ] && { [ -z "${CRA_SKIP_WEB_FEATURES:-}" ] || [ -z "${CRA_SKIP_SNAPSHOTS:-}" ]; }; then
     rm -rf build/web-features && mkdir -p build/web-features
     ditto "$APP" build/web-features/Cra.app
-    CRA_APP="$PWD/build/web-features/Cra.app" CRA_BUDGETS=report scripts/scenario.sh web-features \
-      > build/web-features/run.log 2>&1 &
+    (
+      # Each writes 0 or 1 (set -e would end the subshell on the first failure, before the snapshots ran).
+      if [ -z "${CRA_SKIP_WEB_FEATURES:-}" ]; then
+        if CRA_APP="$PWD/build/web-features/Cra.app" CRA_BUDGETS=report scripts/scenario.sh web-features \
+          > build/web-features/run.log 2>&1; then echo 0; else echo 1; fi > build/web-features/web-features.status
+      fi
+      if [ -z "${CRA_SKIP_SNAPSHOTS:-}" ]; then
+        if CRA_APP="$PWD/build/web-features/Cra.app" scripts/scenario.sh snapshots \
+          > build/web-features/snapshots.log 2>&1; then echo 0; else echo 1; fi > build/web-features/snapshots.status
+      fi
+    ) &
     WEB_FEATURES_PID=$!
-  elif [ -n "${CRA_SKIP_WEB_FEATURES:-}" ]; then
-    echo "web features skipped: $CRA_SKIP_WEB_FEATURES" | tee "build/dist/web-features-$ARCH.txt"
   fi
+  [ -z "${CRA_SKIP_WEB_FEATURES:-}" ] || echo "web features skipped: $CRA_SKIP_WEB_FEATURES" | tee "build/dist/web-features-$ARCH.txt"
+  [ -z "${CRA_SKIP_SNAPSHOTS:-}" ] || echo "snapshots skipped: $CRA_SKIP_SNAPSHOTS" | tee "build/dist/snapshots-$ARCH.txt"
 
   if [ "$IDENTITY" != "-" ]; then
     # One submission per CPU: the DMG, whose ticket covers the app inside it. Stapled to the DMG
@@ -90,19 +102,31 @@ for ARCH in $ARCHS; do
     echo "Ad-hoc build: not notarized. Set CRA_SIGN_IDENTITY and notary credentials for a distributable build." >&2
   fi
   if [ -n "$WEB_FEATURES_PID" ]; then
-    echo "Waiting for the web features on $ARCH (build/web-features/run.log)"
-    if wait "$WEB_FEATURES_PID"; then WEB_FEATURES=0; else WEB_FEATURES=1; fi
-    cp build/scenarios/web-features.txt "build/dist/web-features-$ARCH.txt"
-    cat "build/dist/web-features-$ARCH.txt"
+    echo "Waiting for the web features and snapshots on $ARCH (build/web-features/run.log, snapshots.log)"
+    wait "$WEB_FEATURES_PID" || true
     # Never left registered next to the installed Cra.
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
       -u build/web-features/Cra.app 2>/dev/null || true
     rm -rf build/web-features/Cra.app
-    if [ "$WEB_FEATURES" != 0 ]; then
-      tail -40 build/web-features/run.log >&2
-      echo "Release stopped: a web feature is broken on this build (docs/web-features.md)." >&2
-      echo "Fix it, or CRA_SKIP_WEB_FEATURES=\"<why>\" to release anyway and say so in the notes." >&2
-      exit 1
+    if [ -z "${CRA_SKIP_WEB_FEATURES:-}" ]; then
+      cp build/scenarios/web-features.txt "build/dist/web-features-$ARCH.txt"
+      cat "build/dist/web-features-$ARCH.txt"
+      if [ "$(cat build/web-features/web-features.status 2>/dev/null)" != 0 ]; then
+        tail -40 build/web-features/run.log >&2
+        echo "Release stopped: a web feature is broken on this build (docs/web-features.md)." >&2
+        echo "Fix it, or CRA_SKIP_WEB_FEATURES=\"<why>\" to release anyway and say so in the notes." >&2
+        exit 1
+      fi
+    fi
+    if [ -z "${CRA_SKIP_SNAPSHOTS:-}" ]; then
+      cp build/scenarios/snapshots.txt "build/dist/snapshots-$ARCH.txt" 2>/dev/null || true
+      cat build/web-features/snapshots.log
+      if [ "$(cat build/web-features/snapshots.status 2>/dev/null)" != 0 ]; then
+        echo "Release stopped: a snapshot differs from Tests/Snapshots on this build (build/scenarios/<name>/snapshots/*.diff.png)." >&2
+        echo "Fix it, re-record an intended change (CRA_SNAPSHOT_RECORD=1 scripts/scenario.sh <name>, on a Retina screen)," >&2
+        echo "or CRA_SKIP_SNAPSHOTS=\"<why>\" to release anyway and say so in the notes." >&2
+        exit 1
+      fi
     fi
   fi
   SUFFIX_LOWER="$(echo "$SUFFIX" | tr '[:upper:]' '[:lower:]')"

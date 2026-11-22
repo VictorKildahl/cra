@@ -9,13 +9,15 @@
 #   scripts/scenario.sh fifty-tabs        one scenario
 #   scripts/scenario.sh all               every scenario, one after another
 #   scripts/scenario.sh web-features      the web features' scenarios (Tests/web-features.tsv), a release's gate
+#   scripts/scenario.sh snapshots         every scenario that takes a snapshot, compared strictly on a 2x screen, a release's gate
 #
 # CRA_APP (default build/Cra.app) picks the build; CRA_FLAGS (FeatureFlags) is passed on, so
 # CRA_FLAGS=backdrop=material runs the NSVisualEffectView path. Scenarios marked
 # "requires screen" (they take over a Space) run only with CRA_SCENARIO_SCREEN=1, as in CI.
 # CRA_BUDGETS=report (the nightly on GitHub's runners) prints budgets and snapshot differences
 # without failing on them: they were set on a Mac, and a runner VM's numbers differ. What the app
-# does (expect-log, faults, crashes, helpers, quitting) fails everywhere.
+# does (expect-log, faults, crashes, helpers, quitting) fails everywhere. CRA_SNAPSHOTS=strict fails
+# on a snapshot that differs or couldn't be compared (a 1x display) even then: the snapshots gate.
 # Logs land in build/scenarios/<name>/.
 #
 # Scenario lines: a cra:// command (sent through CRA_COMMAND_FILE, then `pace` seconds),
@@ -143,7 +145,54 @@ if [ "${1:-}" = "web-features" ]; then
   exit
 fi
 
-NAME="${1:?usage: scripts/scenario.sh <name>|all|web-features}"
+# snapshots: every scenario with a snapshot line, one at a time (some serve their pages on a fixed port), with
+# CRA_SNAPSHOTS=strict and CRA_BUDGETS=report: a snapshot that differs from Tests/Snapshots, or couldn't be compared,
+# fails; budgets are only noted. References are 2x, so the copies open on a 2x display: CRA_TEST_SCREEN when it
+# names one, else the first one connected, else the virtual 2x "Cra Test Display" (scripts/test-display.sh), taken
+# away afterwards. What scripts/release.sh runs after the web features: component-snapshots broke on main when
+# PR #678 gave the Arc fixture its icons (22 Nov 2026), and nothing ran it. build/scenarios/snapshots.txt says how it went.
+if [ "${1:-}" = "snapshots" ]; then
+  mkdir -p build/scenarios
+  REPORT=build/scenarios/snapshots.txt
+  xcrun swiftc -O scripts/retina-screen.swift -o build/scenarios/retina-screen 2>/dev/null || { echo "snapshots: can't build scripts/retina-screen.swift"; exit 2; }
+  screens="$(build/scenarios/retina-screen)"
+  VDISPLAY=""
+  if [ -n "${CRA_TEST_SCREEN:-}" ] && grep -qiF -- "$CRA_TEST_SCREEN" <<< "$screens"; then SCREEN="$CRA_TEST_SCREEN"
+  elif [ -n "$screens" ]; then SCREEN="$(head -1 <<< "$screens")"
+  else
+    scripts/test-display.sh >/dev/null || { echo "snapshots: no 2x display, and macOS wouldn't make the virtual one"; exit 2; }
+    VDISPLAY="$(cat build/vdisplay.pid)"; SCREEN="Cra Test Display"
+    trap 'kill "$VDISPLAY" 2>/dev/null' EXIT
+  fi
+  # A failure runs once more: sidebar-parity's dark tiles drew a pixel apart once in about ten runs (22 Nov 2026),
+  # where a real change (a fixture's new icons) fails every time. One that passed only the second time is listed.
+  failed=() passed=() flaky=()
+  one() { CRA_TEST_SCREEN="$SCREEN" CRA_SNAPSHOTS=strict CRA_BUDGETS=report "$0" "$1" > "build/scenarios/$1.out" 2>&1; }
+  for f in $(grep -l '^snapshot ' Tests/Scenarios/*.scenario); do
+    n="$(basename "$f" .scenario)"
+    if one "$n"; then passed+=("$n")
+    else
+      cp "build/scenarios/$n.out" "build/scenarios/$n.first.out"
+      if one "$n"; then passed+=("$n"); flaky+=("$n"); else failed+=("$n"); fi
+    fi
+  done
+  APP_FOR_REPORT="${CRA_APP:-$ROOT/build/Cra.app}"
+  {
+    echo "snapshots on $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_FOR_REPORT/Contents/Info.plist" 2>/dev/null || echo '?')" \
+         "($(uname -m), on \"$SCREEN\"$([ -n "$VDISPLAY" ] && echo ', virtual'))"
+    echo "passed ${#passed[@]}, failed ${#failed[@]}"
+    [ ${#failed[@]} -eq 0 ] || echo "failed: ${failed[*]}"
+    [ ${#flaky[@]} -eq 0 ] || echo "passed only the second time: ${flaky[*]}"
+    [ ${#failed[@]} -eq 0 ] && echo "result: passed" || echo "result: failed"
+  } > "$REPORT"
+  cat "$REPORT"
+  for n in ${failed[@]+"${failed[@]}"}; do echo "--- $n"; grep -E '✗' "build/scenarios/$n.out"; done
+  for n in ${flaky[@]+"${flaky[@]}"}; do echo "--- $n, the first time"; grep -E '✗' "build/scenarios/$n.first.out"; done
+  [ ${#failed[@]} -eq 0 ]
+  exit
+fi
+
+NAME="${1:?usage: scripts/scenario.sh <name>|all|web-features|snapshots}"
 FILE="Tests/Scenarios/$NAME.scenario"
 [ -f "$FILE" ] || { echo "No scenario $FILE"; exit 2; }
 # The app's executable: Cra, or CraEngine for a build on Chrome's own framework (CRA_ENGINE=chromium).
@@ -464,13 +513,16 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       # are only scaled up, so every one would differ; say that instead, and never record it.
       if [ -s "$shot1x" ]; then
         if [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then problem "snapshot $3: the window is on a 1x display; record on a Retina one"
+        elif [ "${CRA_SNAPSHOTS:-}" = "strict" ]; then problem "snapshot $3: not compared, the window is on a 1x display (references are 2x; use a Retina screen)"
         else budget_problem "snapshot $3: not compared, the window is on a 1x display (references are 2x; use a Retina screen)"; fi
       elif [ ! -s "$shot" ]; then problem "no snapshot of $2"
       elif [ "${CRA_SNAPSHOT_RECORD:-}" = "1" ]; then mkdir -p "$ROOT/Tests/Snapshots"; cp "$shot" "$ref"; echo "  recorded $3"
       elif [ ! -f "$ref" ]; then problem "no reference Tests/Snapshots/$3.png (CRA_SNAPSHOT_RECORD=1 records one)"
       else
         [ -x "$OUT/compare-png" ] || xcrun swiftc -O "$ROOT/scripts/compare-png.swift" -o "$OUT/compare-png" 2>"$OUT/compare-png.log"
-        verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1) || budget_problem "snapshot $3: $verdict"
+        if ! verdict=$("$OUT/compare-png" "$ref" "$shot" "$OUT/snapshots/$3.diff.png" 2>&1); then
+          if [ "${CRA_SNAPSHOTS:-}" = "strict" ]; then problem "snapshot $3: $verdict"; else budget_problem "snapshot $3: $verdict"; fi
+        fi
       fi ;;
     cover)
       if [ "${2:-}" = "link" ]; then

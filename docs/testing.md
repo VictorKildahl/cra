@@ -56,7 +56,7 @@ Commands for each piece are in [development.md](development.md#tests).
 | L0 static | `scripts/lint.py`: the bug classes below as rules | `scripts/test.sh` | every PR |
 | L1 unit | `Packages/CraCore`: pure types, `swift test` | `scripts/test.sh` | every PR |
 | L2 contract | production files compiled against fakes: browser manager, store and importers on a manual clock, policies | `scripts/test-*.sh` | every PR |
-| L3 component | Arc-specified views drawn from the running app and compared with `Tests/Snapshots` | `component-snapshots` scenario | nightly |
+| L3 component | Arc-specified views drawn from the running app and compared with `Tests/Snapshots` | `scripts/scenario.sh snapshots` | release, nightly |
 | L4 scenario | the real app driven through a journey, invariants only | `scripts/scenario.sh` | one per PR, all nightly |
 | L5 human | the sidebar blur, fullscreen Spaces, GPU, real sites | the PR description | each PR, release |
 
@@ -173,6 +173,16 @@ References are drawn at 2x, so snapshots are judged and recorded only with the t
 Retina screen. On a 1x display (an external monitor that `CRA_TEST_SCREEN` picks) the view's text
 and images are drawn at 1x and scaled up, so the scenario writes `<name>.1x.png`, notes "not
 compared" and refuses `CRA_SNAPSHOT_RECORD=1`.
+
+`scripts/scenario.sh snapshots` runs every scenario with a `snapshot` line, one at a time, with
+`CRA_SNAPSHOTS=strict`: a snapshot that differs, or couldn't be compared, fails even though budgets are
+only noted; a scenario that fails runs once more, and one that passes then is listed as "passed only the second
+time" (sidebar-parity's dark tiles drew a pixel apart once in about ten runs). It opens the copies on a 2x display: `CRA_TEST_SCREEN` when it names one, else the first one
+connected, else the virtual 2x "Cra Test Display" (`scripts/test-display.sh`), taken away afterwards.
+`scripts/release.sh` runs it after the web features, while Apple notarizes, and stops the release on a
+failure (`CRA_SKIP_SNAPSHOTS="<why>"` releases anyway; say why in the notes). Before it, nothing ran these
+scenarios before a release: two references went stale on main unseen when PR #678 gave the Arc fixture its
+icons (22 Nov 2026). A fixture change (`Tests/Fixtures/Arc`, imports) or a drawing change runs it too.
 
 A reference is Cra's own drawing, so it can only be as right as Cra was when it was recorded.
 Before recording one again (`CRA_SNAPSHOT_RECORD=1 scripts/scenario.sh component-snapshots`),
