@@ -49,6 +49,7 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraOpenURL <address>` | Starts with that page in a tab |
 | `-CraType <text>` | Starts with that typed in the search field |
 | `-CraSearch NO` | Launches without the search sheet |
+| `-CraShortcut <type>` | Starts as the home-screen quick action of that type would (`change-icon`, `voice-search`, `search`) |
 | `-CraFakeModel YES` | Canned answers in place of the on-device model |
 | `-CraSummarize YES` | Summarizes the first page once it has loaded |
 | `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
