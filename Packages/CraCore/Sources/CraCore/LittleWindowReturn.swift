@@ -54,8 +54,12 @@ public struct LittleWindowReturn: Equatable {
 
     /// Another Cra window that isn't a panel (the browser window, Settings) took the keyboard: the
     /// browser is in use, so closing the Little Window goes back to it as before.
-    public mutating func otherWindowBecameKey() {
-        if hadKeyboard { app = nil }
+    /// `whileComingForward`: AppKit made it key as Cra came forward (between applicationWillBecomeActive and
+    /// applicationDidBecomeActive), before the window it gives the keyboard back to. That isn't the browser in
+    /// use, and it took the way back from a Little Window opened earlier: a second link from Slack, then ⌘W on
+    /// the first window, brought the browser window forward instead of Slack (#659).
+    public mutating func otherWindowBecameKey(whileComingForward: Bool = false) {
+        if hadKeyboard, !whileComingForward { app = nil }
     }
 
     /// Cra came forward again (⌘Tab, a click on the Little Window) from `previous`: that's where

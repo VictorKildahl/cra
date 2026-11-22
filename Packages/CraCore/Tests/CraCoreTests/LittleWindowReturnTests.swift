@@ -46,6 +46,22 @@ struct LittleWindowReturnTests {
         #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false) == nil)
     }
 
+    /// #659: another link, or a click back from another app, brings Cra forward, and AppKit makes the browser
+    /// window key on the way, before the Little Window it gives the keyboard back to. That isn't the browser in
+    /// use: a Little Window that already had the keyboard still closes back to the app.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/659"))
+    func theBrowserWindowKeyWhileCraComesForwardIsNotUse() {
+        var back = LittleWindowReturn(app: Self.slack)
+        back.littleWindowBecameKey()
+        back.otherWindowBecameKey(whileComingForward: true)
+        back.craCameForward(from: Self.slack)
+        back.littleWindowBecameKey()
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false) == Self.slack)
+        // Once Cra is in front, the browser window taking the keyboard is the browser in use, as before (#430).
+        back.otherWindowBecameKey(whileComingForward: false)
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false) == nil)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/430"))
     func comingBackFromAnotherAppReturnsThere() {
         var back = LittleWindowReturn(app: Self.slack)

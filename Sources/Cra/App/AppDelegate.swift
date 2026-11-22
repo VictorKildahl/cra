@@ -469,14 +469,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                                                      forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
     }
 
-    func applicationDidBecomeActive(_ notification: Notification) { installURLEventHandler() }
+    func applicationDidBecomeActive(_ notification: Notification) {
+        comingForward = false
+        installURLEventHandler()
+    }
 
     /// The window order as Cra comes forward, before AppKit raises its key and main window: a link clicked in
     /// another app brings Cra forward (LaunchServices) before it arrives, so the browser window had already risen
     /// over that app when the Little Window opened (#607).
     private var stackBeforeActivation: (at: Date, stack: [StackedWindow])?
+    /// Cra is coming forward (from applicationWillBecomeActive to applicationDidBecomeActive): AppKit picks its key
+    /// window then, the browser window at times before a Little Window, which isn't the browser in use (#659).
+    private var comingForward = false
+    /// cra://debug?keyOnComingForward=1: the next time Cra comes forward, the browser window is made key on the
+    /// way, as AppKit does by itself at times (#659).
+    private var debugKeyOnComingForward = false
     func applicationWillBecomeActive(_ notification: Notification) {
         stackBeforeActivation = (store.clock.now, StackedWindow.onScreen())
+        comingForward = true
+        if debugKeyOnComingForward {
+            debugKeyOnComingForward = false
+            main?.window?.makeKey()
+        }
     }
 
     /// Arc's frontmostApplicationHistory: which app was in front before Cra (#430).
@@ -504,7 +518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
         guard !(top is NSPanel), top.isVisible, top.alphaValue > 0 else { return }
-        for w in littleWindows { w.focusReturn.otherWindowBecameKey() }
+        for w in littleWindows { w.focusReturn.otherWindowBecameKey(whileComingForward: comingForward) }
     }
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
@@ -1809,8 +1823,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleKey=<n>: the nth Little Window (oldest first) picked as Mission Control picks one (#581);
             // littleOrder=<label>: Cra's browser and Little Windows, front to back, as the window server has them.
             if let n = dict["littleKey"].flatMap(Int.init), littleWindows.indices.contains(n) { littleWindows[n].debugPick(); return }
+            // keyOnComingForward=1: the browser window made key the next time Cra comes forward, before the window
+            // AppKit gives the keyboard back to, as AppKit does by itself at times (#659).
+            if dict["keyOnComingForward"] != nil { debugKeyOnComingForward = true; return }
             // littleFocus=<label> (#646, #641): whether Cra is the active app, which Little Window (oldest first) has
-            // the keys, and how many other apps' windows are over the newest one.
+            // the keys, and how many other apps' windows are over the newest one
+            // and (mainOver, #659) the browser window.
             if let label = dict["littleFocus"] {
                 var key = NSApp.keyWindow
                 while let parent = key?.parent { key = parent }
@@ -1818,7 +1836,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let i = lw.firstIndex { $0.window === key }
                 let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
                 let over = lw.last?.window.map { String(LittleWindowRaise.othersOver($0.windowNumber, in: info)) } ?? "-"
-                CraLog.note("little focus \(label): active=\(NSApp.isActive ? 1 : 0) key=\(i.map { "little\($0)" } ?? "none") over=\(over) windows=\(lw.count)")
+                // mainOver (#659): other apps' windows over the browser window; 0 once it came forward.
+                let mainOver = main.window.map { String(LittleWindowRaise.othersOver($0.windowNumber, in: info)) } ?? "-"
+                let mainKey = key != nil && key === main.window ? 1 : 0
+                CraLog.note("little focus \(label): active=\(NSApp.isActive ? 1 : 0) key=\(i.map { "little\($0)" } ?? (mainKey == 1 ? "main" : "none")) over=\(over) windows=\(lw.count) mainOver=\(mainOver)")
                 return
             }
             if let label = dict["littleOrder"] {
