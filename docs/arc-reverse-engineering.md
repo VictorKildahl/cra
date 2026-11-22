@@ -5307,3 +5307,17 @@ Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window record
   copied, and where one of Arc's shapes changes form Cra's is moved by the same amount. The short
   window is built (slots share the room, a tile is as tall as its slot up to 80 pt, 64 pt or less drops
   the label for a tooltip after 0.45 s); Arc's slide of the label on that change is not.
+
+## Cast and a call's tab menus (Arc 1.174.1, 21–22 Nov 2026, Victor's Arc, Blank Window, HID right-clicks)
+
+- [O] In a Google Meet call presenting a tab (Share screen ▸ Arc Tab), and with a plain getDisplayMedia tab share,
+  the sidebar tab menu of the presented tab, the Meet tab and any other tab is the usual twelve rows: Copy Link,
+  Share ▸ (AirDrop, Mail, Notes), Change Icon…, Rename…, Mute, Customize Page…, Open in / Add Split View, Duplicate,
+  Move to ▸, Archive Tab, Archive Tabs Below. No Cast row and no share row; the call's switch is only the hover
+  button ("Share this tab instead"). The page's own right-click menu keeps Chromium's Cast… in a call as outside one.
+- [O] View ▸ Cast opens Chromium's Cast dialog ("Cast tab", "No devices found", Sources ▾, ✕), 320 × 176 pt,
+  centred on the page (x 831 on a page from 264 to 1718) with its top on the page's top edge (y 83, the web area's
+  top). Cra: `cra-cast-dialog.patch`, scenario page-cast-dialog.
+- [O] After View ▸ Cast the active tab's sidebar row got a dashed yellow outline that stayed after the dialog
+  closed (Esc) and seconds later. Cause not followed up (no Cast device here); Cra draws none.
+

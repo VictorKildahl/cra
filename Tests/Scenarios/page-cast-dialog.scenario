@@ -1,0 +1,33 @@
+# promise: web-page-cast-dialog
+# web-features: Chrome's Cast dialog, from View ▸ Cast… (and the page menu's Cast…, the same command), and the
+# media dialog a page's PresentationRequest.start() opens. X DM 21 Nov 2026 asked where Cast is. On the engine Chrome centred the dialog on
+# the Browser's top container, which lives in the never-seen strip along the top of Cra's window (#346), so it
+# opened at the window's top left, over the sidebar. Arc 1.174 (measured 22 Nov) centres it on the page and hangs it
+# from the page's top edge, which is Chrome's own placement for a page without a Browser (cra-cast-dialog.patch).
+# With no Cast device on the network it says "Looking for devices", then "No devices found": enough to see it.
+budget rss=1000 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=cast
+expect-log GET /features.html\?n=cast
+wait 2
+
+# View ▸ Cast…: over the page, in front, and Close closes it.
+cra://action/cast
+wait 2
+cra://debug?pageDialogs=cast-menu
+expect-log page dialog cast-menu: chrome [0-9]{3}x[0-9]{3} at=page front=1 text=.* buttons=Close\|Sources
+cra://debug?pageDialogs=cast-menu-close&press=Close
+expect-log page dialogs cast-menu-close: pressed Close
+wait 1
+cra://debug?pageDialogs=cast-menu-gone
+expect-log page dialogs cast-menu-gone: n=0
+
+# A page's PresentationRequest.start() opens Chrome's media dialog (the page's media, Live Caption) over the page.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"settle('present',new PresentationRequest(['https://example.com/receiver.html']).start())","userGesture":true}
+expect-log "value":"present asked"
+wait 2
+cra://debug?pageDialogs=cast-page
+expect-log page dialog cast-page: chrome [0-9]{3}x[0-9]{3} at=page front=1 text=.*Live Caption
+reject-log fault:
