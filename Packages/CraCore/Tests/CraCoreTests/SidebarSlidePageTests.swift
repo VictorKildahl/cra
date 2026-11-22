@@ -56,4 +56,22 @@ struct SidebarSlidePageTests {
         slide.record(CGRect(x: 10, y: 0, width: 130, height: 10))
         #expect(slide.drift == 30)
     }
+
+    /// A live slide (Arc's): the page's edge beside the sidebar follows the card, the far edge stays.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/613"))
+    func aLiveSlideMovesOnlyTheNearEdge() {
+        var slide = SidebarSlidePage()
+        for x in [260.0, 152, 80, 37, 17, 10] { slide.record(CGRect(x: x, y: 10, width: 1390 - x, height: 800)) }
+        #expect(slide.nearEdgeDrift(sidebarOnLeft: true) == 250)
+        #expect(slide.farEdgeDrift(sidebarOnLeft: true) == 0)
+        #expect(slide.farEdgeDrift(sidebarOnLeft: false) == 250)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/613"))
+    func arcsSlideResizesThePageAsItGoes() {
+        #expect(SidebarSlidePages.arcs == .live)
+        #expect(!SidebarSlidePages.live.freezesPages)
+        #expect(SidebarSlidePages.frozen.freezesPages)
+        #expect(SidebarSlidePages(rawValue: "frozen") == .frozen)
+    }
 }

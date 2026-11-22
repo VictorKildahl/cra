@@ -1,5 +1,7 @@
 # ⌘S: the page stays where it ends up in the window while its card slides over it.
 # promise: #317
+# The frozen slide (CRA_FLAGS sidebarSlide=frozen); Arc's live slide is sidebar-slide-live's (#613).
+env CRA_FLAGS=sidebarSlide=frozen
 budget rss=700 stalls50=10
 pace 0.5
 cra://open?url=${PAGE}?n=slide

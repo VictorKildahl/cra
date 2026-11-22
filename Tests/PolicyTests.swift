@@ -222,7 +222,11 @@ enum PolicyTests {
         expect(FeatureFlags(parsing: "x=1&backdrop=material&y").backdrop == .material, "other keys around it are ignored")
         expect(FeatureFlags(parsing: "backdrop=glass").backdrop == .layer && FeatureFlags(parsing: "backdrop").backdrop == .layer,
                "an unknown value or a bare key keeps the default")
-        expect(FeatureFlags(parsing: "backdrop=material").summary == "backdrop=material", "the log line names the path")
+        expect(FeatureFlags(parsing: "backdrop=material").summary == "backdrop=material sidebarSlide=live", "the log line names the paths")
+        // #613: ⌘S resizes the page as the sidebar slides, as Arc does; frozen keeps #317's page sized up front.
+        expect(FeatureFlags(parsing: "").sidebarSlide == .live, "the sidebar's slide resizes the page live by default (Arc's)")
+        expect(FeatureFlags(parsing: "sidebarSlide=frozen&backdrop=material").sidebarSlide == .frozen, "CRA_FLAGS picks the frozen slide")
+        expect(FeatureFlags(parsing: "sidebarSlide=fast").sidebarSlide == .live, "an unknown slide keeps the default")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {

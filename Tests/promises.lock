@@ -566,7 +566,7 @@
 #316   Tests/Scenarios/little-window-space-pick.scenario  052a6261ccd6
 #317   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::onceDrawnEverySampleCounts  52a6340f01e3
 #317   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::thePictureFromBeforeTheSlideIsNotMovement  84e7b8b52fd7
-#317   Tests/Scenarios/sidebar-slide.scenario  dd44e90d466a
+#317   Tests/Scenarios/sidebar-slide.scenario  82fe5223e29a
 #319   Tests/Scenarios/app-icon-dock-return.scenario  32316d80e199
 #319   Tests/Scenarios/app-icon-download.scenario  55c47e7e0e5b
 #322   Packages/CraCore/Tests/CraCoreTests/CleanURLTests.swift::noPicksCopyTheOpenTab  d5ac544933e5
@@ -971,7 +971,7 @@
 #483   Tests/FloatingSidebarTests.swift::dockingFromHeldOpenHasOneOwner  79224a679332
 #483   Tests/FloatingSidebarTests.swift::heldOpenComesOutInPlace  cecb3cc9f3a7
 #483   Tests/Scenarios/empty-window-card.scenario  6c98b7ac2308
-#483   Tests/Scenarios/sidebar-dock-floating.scenario  0c4b6820eb2b
+#483   Tests/Scenarios/sidebar-dock-floating.scenario  6773f52549d7
 #483   Tests/Scenarios/sidebar-empty-held-open.scenario  6a29debe38e4
 #484   Tests/Scenarios/chromium-locale.scenario  d356c5c5b6ba
 #484   Tests/Scenarios/extension-remove.scenario  ce468889560a
@@ -1341,6 +1341,9 @@
 #613   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::aSlowReleaseDoesNotJumpTheSettle  b83b49397f19
 #613   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::settlesAsFastAsArcs  79538f7479dc
 #613   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theTintSettlesOnTheSameSpring  8ae2c3afbeba
+#613   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::aLiveSlideMovesOnlyTheNearEdge  1c22b98f9602
+#613   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::arcsSlideResizesThePageAsItGoes  b5417150d202
+#613   Tests/Scenarios/sidebar-slide-live.scenario  7b95f1a0aa33
 #613   Tests/Scenarios/space-swipe-settle-no-jump.scenario  681b3e0c8ce9
 #614   Packages/CraCore/Tests/CraCoreTests/ArchiveLimitTests.swift::theArchiveKeepsTenThousandTabs  4495b07e73e7
 #614   Tests/Scenarios/command-bar-whole-archive.scenario  757726fdd663

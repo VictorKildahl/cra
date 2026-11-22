@@ -3,6 +3,8 @@
 # own panel on the window's slide, squaring its corners as its shadow fades, and the window takes it
 # back once it is there. Swapped into the window first, it lost its corners, shadow and backdrop in
 # one frame and jumped by the floating margin. The page stays where it ends up, as for ⌘S (#317).
+# The frozen slide; the live one (Arc's, #613) docks in sidebar-slide-live.
+env CRA_FLAGS=sidebarSlide=frozen
 budget rss=700 stalls50=10
 cra://debug?windowSize=1280x800
 cra://open?url=${PAGE}?n=dock

@@ -1345,10 +1345,12 @@ final class ShellView: NSView {
         slideAlongside = alongside
         slideCompletion = completion
         let target = frames(sidebarVisible: visible, floating: floating, fullscreen: fullscreen, width: width)
-        // Size the pages for their destination once, up front; the cards then just slide over them.
+        // Frozen (#317): size the pages for their destination once, up front; the cards then just slide over them.
+        // Live (Arc's, #613): no freezing, so each frame's layout sizes the pages to their cards as the edge moves.
+        let freeze = FeatureFlags.current.sidebarSlide.freezesPages
         let targetLayout = paneLayout(in: NSRect(origin: .zero, size: target.content.size))
         var webTargets: [UUID: NSRect] = [:]
-        for c in paneCards where c.tabID != ShellView.noTabID {
+        for c in paneCards where freeze && c.tabID != ShellView.noTabID {
             guard let f = targetLayout.frames[c.tabID] else { continue }
             var w = f.width
             if c.tabID == focusedPaneID, devToolsVisible, !devToolsFrontendDocked, f.width > 640 { w -= min(max(320, devToolsWidth), f.width * 0.7) }
@@ -1367,7 +1369,7 @@ final class ShellView: NSView {
         // after frames 1–4.
         let c = SidebarMotion.curve
         let timing = CAMediaTimingFunction(controlPoints: Float(c.0), Float(c.1), Float(c.2), Float(c.3))
-        onAnimatePaneFrames?(webTargets, duration, timing)
+        if freeze { onAnimatePaneFrames?(webTargets, duration, timing) }
         // Real frames each display frame: a layer animation left the toolbar and page at their final size.
         sidebarSlide = SidebarSlide(fromSidebar: sidebarHost.frame, toSidebar: target.sidebar, fromContent: contentContainer.frame,
                                     toContent: target.content, start: CACurrentMediaTime(), duration: duration,
@@ -1469,7 +1471,9 @@ final class ShellView: NSView {
         if let slide = slidingPage, !slide.isEmpty {
             let drift = Int(slide.drift.rounded())
             lastSidebarSlidePageDrift = drift
-            CraLog.note("sidebar slide: page moved \(drift) pt over \(slide.samples) frames")
+            let onLeft = window?.sidebarSide != .right
+            let near = Int(slide.nearEdgeDrift(sidebarOnLeft: onLeft).rounded()), far = Int(slide.farEdgeDrift(sidebarOnLeft: onLeft).rounded())
+            CraLog.note("sidebar slide: page moved \(drift) pt over \(slide.samples) frames (near edge \(near) pt, far edge \(far) pt, \(FeatureFlags.current.sidebarSlide.rawValue))")
         }
         slidingPage = nil
     }

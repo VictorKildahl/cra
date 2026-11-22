@@ -1,0 +1,27 @@
+# promise: #613
+# ⌘S as Arc does it (the reporter's 120 fps side-by-side, measured frame by frame): the page is resized to its card
+# every frame of the sidebar's slide and reflows as the edge moves, instead of being sized for where it ends up and
+# jumping when the slide ends. The page's edge beside the sidebar travels with the card; the far edge stays put, so
+# the right side doesn't jump (#317's point).
+budget rss=700 stalls50=10
+pace 0.5
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=slide
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+expect-log sidebar slide: page moved [0-9]+ pt over [0-9]+ frames \(near edge ([3-9][0-9]|[1-9][0-9]{2,}) pt, far edge [01] pt, live\)
+cra://action/toggleSidebar
+wait 0.5
+reject-log sidebar slide: .*far edge ([2-9]|[1-9][0-9]+) pt
+# Docking the sidebar from over the page (#483's path) resizes the page as it goes too, its far edge still put.
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=1
+wait 1
+cra://debug?windowState=out
+expect-log window state out: main0 .* sidebar=left edge=floating
+cra://action/toggleSidebar
+wait 1
+expect-log sidebar docked in place: page moved ([3-9][0-9]|[1-9][0-9]{2,}) pt$
+reject-log sidebar slide: .*far edge ([2-9]|[1-9][0-9]+) pt
