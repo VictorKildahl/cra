@@ -3180,9 +3180,19 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   rows keep "Switch to Tab" and its arrow.
 - Cra (#663): CraCore `SidebarAddressPanel` holds the numbers; `CommandBarController.compact` lays the bar out
   that way and MainWindowController hangs it from `SidebarView.addressFrameOnScreen`. #344's "Edit the address
-  in the sidebar" still edits in place, and ⌘L opens Cra's centred bar as Arc's does on an ordinary site. Not
-  built: ⌘L on a local page editing the developer bar in place with suggestions under it (Cra's developer bar edits
-  in place on a click, without suggestions, #42; ⌘L there opens the centred bar).
+  in the sidebar" still edits in place, and ⌘L opens Cra's centred bar as Arc's does on an ordinary site.
+- [O live] Arc's ⌘L over the developer bar (Arc 1.174.1, 22 Nov 2026, 127.0.0.1, 2x full-screen captures): one panel
+  covers the bar and drops across the page card, exactly the card's width (x 228–1718 in a 1728 pt window), its top on
+  the bar's (y 43.5) with a 1 px dark outline and a light rim inside it. The field row is the bar's 40 pt: the bar's
+  glyph where the bar draws it, the address selected in the bar's monospaced font; a 0.5 pt hairline the panel's whole
+  width under it; then the full bar's rows (titles with their addresses), the first highlight 6 pt under the hairline,
+  46 pt tall, inset 10, on a 50 pt pitch, and 11.5 pt under the last row: 303.5 pt for five rows. No ⓘ at the field's
+  end. A long soft shadow over the page below (≈169/255 on white just under it, back to ≈218 50 pt down).
+- Cra (#663 follow-up, Victor 22 Nov 2026): ⌘L on a page that shows the developer bar opens that panel
+  (CraCore `DeveloperBarPanel`; CommandBarController.developer lays CommandBarView out over the bar, the bar's glyph
+  and monospaced 12 pt address where `PaneToolbarView.developerBarOnScreen` reports them). A click on the bar's
+  address still edits it in place without suggestions (#42); Arc's click wasn't measured. Pinned by
+  `DeveloperBarPanelTests` and the `developer-bar-command-l` scenario.
   Pinned by `SidebarAddressPanelTests` and the `sidebar-address-panel` scenario. Not measured: whether Arc's
   panel grows while typing (Cra keeps the width it opened with).
 

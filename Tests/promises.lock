@@ -1475,9 +1475,12 @@
 #660   Tests/Scenarios/extension-store-copy-install-type.scenario  4b8996fb57e7
 #662   Tests/Scenarios/folder-menu-move-to.scenario  3a945485c54c
 #662   Tests/StoreTests.swift::moveFolderToSpace  9ed4ea1a093d
+#663   Packages/CraCore/Tests/CraCoreTests/DeveloperBarPanelTests.swift::heightIsArcs  7de41cb263bd
+#663   Packages/CraCore/Tests/CraCoreTests/DeveloperBarPanelTests.swift::onlyTheDeveloperBarEditsInPlace  e871845b80d7
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::heightHoldsTheRows  a6e40310f510
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::narrowWindowKeepsItInside  e06afe457fa5
 #663   Packages/CraCore/Tests/CraCoreTests/SidebarAddressPanelTests.swift::widthFollowsTheAddress  79805ff882f9
+#663   Tests/Scenarios/developer-bar-command-l.scenario  0793fbea1c49
 #663   Tests/Scenarios/sidebar-address-panel.scenario  47c1675a154a
 #664   Tests/ExtensionPopupWindowTests.swift::keepsADragWithARealMouse  6a0e405853da
 #666   Packages/CraCore/Tests/CraCoreTests/ProfileNamesTests.swift::aRenameIsTrimmedAndNeverEmpty  a39efd93ca0c

@@ -28,6 +28,9 @@ final class CommandBarController {
     /// Arc's address panel (#663): opened by a click on the sidebar's address, it hangs from that
     /// field, sized to the address (CraCore SidebarAddressPanel), not centred in the window.
     var compact = false
+    /// Arc's ⌘L on a page with the developer bar (#663 follow-up): the bar's address edited in place, the panel over the
+    /// bar and across the card (CraCore DeveloperBarPanel). nil for every other bar.
+    var developer: CommandBarDeveloperInput?
     /// The space whose palette colours the selected row and the info badge (CraCore CommandBarTones).
     var theme: SpaceTheme?
     var focusedSpaceID: UUID?

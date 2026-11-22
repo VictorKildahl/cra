@@ -59,6 +59,18 @@ final class PaneToolbarView: NSView {
     }
 
     private var model = Model()
+
+    /// The developer bar as the panel Arc's ⌘L opens covers it (#663 follow-up): the card's top 40 pt and the bar's glyph
+    /// centre and address start, on screen; nil unless this pane shows the developer bar.
+    var developerBarOnScreen: (bar: NSRect, glyphCenterX: CGFloat, textX: CGFloat, glyph: NSImage?, tint: NSColor?, cardRadius: CGFloat)? {
+        guard model.kind == .developer, !isHiddenOrHasHiddenAncestor, let window, let card = superview as? PaneCardView,
+              let parts = urlButton.developerParts else { return nil }
+        let cardFrame = window.convertToScreen(card.convert(card.bounds, to: nil))
+        let h = CGFloat(DeveloperBarPanel.inputHeight)
+        let bar = NSRect(x: cardFrame.minX, y: cardFrame.maxY - h, width: cardFrame.width, height: h)
+        let icon = window.convertToScreen(parts.icon), text = window.convertToScreen(parts.text)
+        return (bar, icon.midX, text.minX + SidebarText.inset, parts.image, parts.tint, card.layer?.cornerRadius ?? 8)
+    }
     private var syncQueued = false
     private var buttons: [String: ToolbarGlyphButton] = [:]
     /// Left group, then trailing items, as laid out.
@@ -853,6 +865,12 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     private let tip: ArcTooltipAnchorView
     private let copyTip: ArcTooltipAnchorView
     private var developer = false
+
+    /// The developer bar's glyph and address in window coordinates, for the panel ⌘L opens over them (#663 follow-up).
+    var developerParts: (icon: NSRect, text: NSRect, image: NSImage?, tint: NSColor?)? {
+        guard developer, window != nil, field == nil else { return nil }
+        return (icon.convert(icon.bounds, to: nil), label.convert(label.bounds, to: nil), icon.image, icon.contentTintColor)
+    }
     private var hover = NSColor.white.withAlphaComponent(0.08)
     private var copyHover = NSColor.white.withAlphaComponent(0.1)
     /// Arc's normal bar (1.171, #88): the glyph is a 24 pt button of its own and the host has its

@@ -68,6 +68,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var commandBarOpenedAt = Date.distantPast
     /// The sidebar address the open bar hangs from (#663), nil while it is the centred bar.
     private var commandBarAnchor: NSRect?
+    /// ⌘L opened Arc's panel over the focused page's developer bar (#663 follow-up).
+    private var commandBarOverDeveloperBar = false
     private var commandBarClosingClick = DismissingClick()
     /// The window that took the keys from the bar and closed it (#429); nil when the bar closed itself.
     private var commandBarLostKeysTo: CommandBarClosing.KeyHolder?
@@ -4744,6 +4746,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// address (its top left on the field's), "panel centred w=<pt>" otherwise.
     private var debugCommandPanelPlace: String {
         let f = commandPanel.frame
+        if commandBarOverDeveloperBar {
+            let bar = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.developerBarOnScreen?.bar
+            let at = bar.map { abs($0.minX - f.minX) < 0.5 && abs($0.maxY - f.maxY) < 0.5 && abs($0.width - f.width) < 0.5 } == true
+            return "panel developer w=\(Int(f.width.rounded())) h=\(Int(f.height.rounded())) " + (at ? "at bar" : "away from bar")
+        }
         guard commandBar.compact else { return "panel centred w=\(Int(f.width))" }
         let field = (shell.sidebarHost as? SidebarView)?.addressFrameOnScreen
         let at = field.map { abs($0.minX - f.minX) < 0.5 && abs($0.maxY - f.maxY) < 0.5 } == true
@@ -5135,6 +5142,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let effectiveMode: CommandBarMode = (mode == .editURL && (selectedTab == nil || fillingEmptyPane)) ? .newTab : mode
         commandBarAnchor = fromSidebarAddress ? (shell.sidebarHost as? SidebarView)?.addressFrameOnScreen : nil
         commandBar.compact = commandBarAnchor != nil
+        // Arc's ⌘L on a page that shows the developer bar edits it in place, the suggestions across the card.
+        let devBar = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.developerBarOnScreen
+        commandBarOverDeveloperBar = DeveloperBarPanel.opens(editingURL: effectiveMode == .editURL && !fromSidebarAddress && prefill != nil,
+                                                            barIsDeveloper: devBar != nil, barShown: devBar != nil)
+        commandBar.developer = commandBarOverDeveloperBar ? devBar.map {
+            CommandBarDeveloperInput(glyphCenterX: $0.glyphCenterX - $0.bar.minX, textX: $0.textX - $0.bar.minX, glyph: $0.glyph,
+                                     glyphTint: $0.tint, topRadius: $0.cardRadius)
+        } : nil
         commandBar.theme = focusedSpace.theme.shown
         commandBar.focusedSpaceID = focusedSpaceID
         commandBar.open(mode: effectiveMode, prefill: prefill)
@@ -5144,7 +5159,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Centred in the window, also when opened from the toolbar; from the sidebar's address, Arc's
         // panel over the top of the sidebar, as wide as the address (#663).
         commandBar.attached = false
-        if let anchor = commandBarAnchor {
+        if commandBarOverDeveloperBar, let devBar {
+            commandBar.panelWidth = devBar.bar.width
+        } else if let anchor = commandBarAnchor {
             let address = (prefill ?? "") as NSString
             let textWidth = address.size(withAttributes: [.font: NSFont.systemFont(ofSize: CGFloat(SidebarAddressPanel.fontSize), weight: .medium)]).width
             commandBar.panelWidth = CGFloat(SidebarAddressPanel.width(textWidth: Double(textWidth), available: Double(window.frame.maxX - anchor.minX)))
@@ -5180,6 +5197,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     private func positionCommandPanel() {
         guard let window else { return }
+        if commandBarOverDeveloperBar, let bar = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.developerBarOnScreen?.bar {
+            // Its top on the developer bar's, the card's width; the rows drop across the page (#663 follow-up).
+            let h = CGFloat(DeveloperBarPanel.height(rows: commandBar.rowPlaces))
+            commandPanel.setFrame(NSRect(x: bar.minX, y: bar.maxY - h, width: bar.width, height: h), display: true)
+            return
+        }
         if let opened = commandBarAnchor {
             // Its top left on the address field's, where the field is now; the rows hang below (#663).
             let anchor = (shell.sidebarHost as? SidebarView)?.addressFrameOnScreen ?? opened

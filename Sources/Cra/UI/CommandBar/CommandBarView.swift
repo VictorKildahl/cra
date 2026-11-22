@@ -36,6 +36,8 @@ final class CommandBarView: NSView {
     private var attached = false
     /// Arc's address panel from the sidebar (#663): a 45 pt input row, 13 pt type, titles only.
     private var compact = false
+    /// Arc's panel over the developer bar (#663 follow-up).
+    private var developer: CommandBarDeveloperInput?
     /// The card ⌥⌘N opens (#337): the bar is the whole Little Window, with a ✕ at the field's end.
     var card: CommandBarCard? { didSet { scheduleSync(); needsLayout = true } }
     /// The card's ✕: closes the bar, and with it the card.
@@ -164,7 +166,8 @@ final class CommandBarView: NSView {
         text.update()
         attached = c.attached
         compact = c.compact && card == nil
-        text.setCompact(compact)
+        developer = card == nil && !compact ? c.developer : nil
+        text.setCompact(compact, developer: developer != nil)
         // Arc's dark bar shows the page through it: 26 over black, ≈ 47 over white (CraCore CommandBarTones.panel, #502).
         material.material = dark ? .hudWindow : .popover
         let panel = CommandBarTones.panel(dark: dark)
@@ -216,6 +219,8 @@ final class CommandBarView: NSView {
         // Arc keeps the badge while typing ("alpha", "golf"); a site's "Search …  Tab" takes its place,
         // and so does the banner it opens (CraCore SearchSuggestionsNotice).
         info.isHidden = !c.showsNoticeBadge
+        // Arc's developer panel has no ⓘ at the field's end.
+        if developer != nil { info.isHidden = true }
         notice.isHidden = !c.showsNoticeBanner
         if !notice.isHidden { notice.apply(tones: tones) }
         keycap.isHidden = offered == nil
@@ -235,7 +240,14 @@ final class CommandBarView: NSView {
             // Actions run the row, not a search: Arc shows the row's glyph once something is typed.
             scoped: scope != nil && scope != .actions, pageFaviconKey: c.openedPrefill.flatMap(FaviconKey.key(for:)),
             row: row.map { ($0.faviconKey, $0.symbol) }, hasFavicon: { [favicons] in favicons.image(forKey: $0) != nil })
-        if case .favicon(let key) = glyph, let img = favicons.image(forKey: key) {
+        if let developer {
+            // The developer bar's own glyph, where the bar draws it: the address is edited in place (#663 follow-up).
+            leadingIcon.imageScaling = .scaleNone
+            leadingIcon.image = developer.glyph
+            leadingIcon.contentTintColor = developer.glyphTint
+            leadingIcon.layer?.masksToBounds = false
+            leadingIcon.frame.size = NSSize(width: 22, height: 22)
+        } else if case .favicon(let key) = glyph, let img = favicons.image(forKey: key) {
             leadingIcon.imageScaling = .scaleProportionallyUpOrDown
             leadingIcon.image = img
             leadingIcon.contentTintColor = nil
@@ -283,18 +295,19 @@ final class CommandBarView: NSView {
         material.frame = b
         tint.frame = b
         let radius = CGFloat(SidebarAddressPanel.cornerRadius)
-        let top: CGFloat = card?.top ?? (compact ? radius : attached ? 10 : 12)
-        let path = Self.path(b, top: top, bottom: card?.bottom ?? (compact ? radius : 12))
+        let top: CGFloat = card?.top ?? developer?.topRadius ?? (compact ? radius : attached ? 10 : 12)
+        let path = Self.path(b, top: top, bottom: card?.bottom ?? (developer != nil ? CGFloat(DeveloperBarPanel.bottomRadius) : compact ? radius : 12))
         shape.frame = b
         shape.path = path
         border.frame = b
         border.path = path
         // The magnifier and row favicons share a centre; input and result titles align.
-        let fh = compact ? CGFloat(SidebarAddressPanel.inputHeight) : Self.fieldHeight
+        let fh = developer != nil ? CGFloat(DeveloperBarPanel.inputHeight) : compact ? CGFloat(SidebarAddressPanel.inputHeight) : Self.fieldHeight
         // Arc's panel centres its glyph, address and ⓘ 24 pt down its 45 pt row (#663).
         let mid = compact ? 24 : fh / 2
         let icon = leadingIcon.frame.size
-        leadingIcon.frame = NSRect(x: 21 + (22 - icon.width) / 2, y: mid - icon.height / 2, width: icon.width, height: icon.height)
+        let iconX = developer.map { $0.glyphCenterX - icon.width / 2 } ?? 21 + (22 - icon.width) / 2
+        leadingIcon.frame = NSRect(x: iconX, y: mid - icon.height / 2, width: icon.width, height: icon.height)
         var right = b.width - 22
         var end = b.width
         if let card {
@@ -327,7 +340,11 @@ final class CommandBarView: NSView {
             pillLabel.frame = NSRect(x: 10.5 - SidebarText.inset, y: (23 - lh) / 2, width: lw + 2 * SidebarText.inset, height: lh)
             x = pill.frame.maxX + 11
         }
-        if compact {
+        if let developer {
+            // The bar's address, where the bar draws it.
+            let th = ceil(text.field.intrinsicContentSize.height)
+            text.field.frame = NSRect(x: developer.textX - 2, y: mid - th / 2, width: max(0, right - developer.textX), height: th)
+        } else if compact {
             let th = ceil(text.field.intrinsicContentSize.height)
             text.field.frame = NSRect(x: x - 1.5, y: mid - th / 2, width: max(0, right - x), height: th)
         } else {
@@ -337,6 +354,9 @@ final class CommandBarView: NSView {
             // A hairline: one pixel.
             let px = 1 / (window?.backingScaleFactor ?? 2)
             divider.frame = NSRect(x: card.dividerInset, y: fh - px, width: max(0, b.width - 2 * card.dividerInset), height: px)
+        } else if developer != nil {
+            // Arc: a hairline the panel's whole width under the bar's row.
+            divider.frame = NSRect(x: 0, y: fh - 0.5, width: b.width, height: 0.5)
         } else {
             divider.frame = NSRect(x: 16, y: fh, width: max(0, b.width - 32), height: 1)
         }
