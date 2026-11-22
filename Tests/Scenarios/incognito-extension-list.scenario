@@ -1,0 +1,21 @@
+# promise: #620
+# An incognito window offers only the extensions its profile allows in incognito (chrome://extensions ▸ Allow in
+# Incognito), as Chrome's toolbar and extensions menu do for an off-the-record profile. Cra listed every turned-on
+# extension there, and the ones not allowed in incognito did nothing on its pages (GitHub #620, falchion10: Proton
+# Pass listed beside uBlock in incognito though only uBlock was allowed). The fixture is allowed, the side panel one
+# isn't: the normal window lists both, the incognito one only the fixture.
+budget rss=800 stalls50=12
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?installExtension=${FIXTURES}/Extension
+cra://debug?installExtension=${FIXTURES}/SidePanelExtension
+relaunch
+cra://open?url=chrome://extensions/
+wait 3
+cra://debug?pageJS=chrome.developerPrivate.updateExtensionConfiguration({extensionId:"${EXTENSION_ID}",incognitoAccess:true})
+wait 3
+cra://debug?extensionList=normal
+cra://debug?incognitoWindow=${PAGE}?n=private
+wait 3
+cra://debug?extensionList=incognito&window=incognito
+expect-log extension list normal: incognito=0 \[Cra Scenario Fixture, Cra Side Panel Fixture\]
+expect-log extension list incognito: incognito=1 \[Cra Scenario Fixture\]

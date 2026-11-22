@@ -1,0 +1,23 @@
+# promise: #669
+# A window with no tab shows Arc's card as Arc's appearance says, not as dark as the theme's colours read: white
+# (0.65) on Light, faint on Dark, a light theme too. Arc 1.174 measured on a white backdrop: a pastel space's card on
+# Dark is its sidebar plus about +19 per channel, on Light nearly white; Cra gave a light theme the white card on a
+# dark Mac. The pastel space is on Auto (it follows macOS); the navy one is set to Dark.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Pastel","emoji":"\ud83c\udf38","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#FFCBD1","#FFCBD1"],"intensity":0.8,"noise":0,"appearance":"auto","accent":"#FFCBD1","solid":true,"key":["#FFCBD1"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Navy","emoji":"\ud83c\udf0a","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#26456B","#26456B"],"intensity":0.8,"noise":0,"appearance":"dark","accent":"#26456B","solid":true,"key":["#26456B"]}}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+wait 1
+cra://debug?systemAppearance=light
+wait 1
+cra://debug?emptyCard=pastel-light
+expect-log empty card pastel-light: veil=0\.65 shadow=1
+cra://debug?systemAppearance=dark
+wait 1
+cra://debug?emptyCard=pastel-dark
+expect-log empty card pastel-dark: veil=0\.35 shadow=1
+cra://action/nextSpace
+wait 1
+cra://debug?emptyCard=navy-dark
+expect-log empty card navy-dark: veil=0\.1[0-2] shadow=1
+cra://debug?systemAppearance=system

@@ -1132,20 +1132,27 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // The card's screenshot and the link's place now, asked together.
         var shot: CGImage??
         // No link to look for again: the area, or the place the Peek was clicked open (#359).
-        var linkNow: NSRect?? = peekSource.map { $0.fromLink ? nil : .some($0.rect) } ?? .some(nil)
+        var linkNow: PeekLayout.SourceAnswer? = peekSource.map { $0.fromLink ? nil : .found($0.rect) } ?? .gone
         let start: (CGImage?) -> Void = { [weak self] page in
             guard let self, !started else { return }
             started = true
             let card = pw.convertFromScreen(window.frame)
             let pageRect = self.shell.page.frame
-            // Into the link where the page has it now; where it was when Chromium is late; out to
-            // the whole area, fading, when it's gone.
+            // Into the link where the page has it now; where it was when Chromium is late or its
+            // script fails; out to the whole area, fading, only when it's gone (#682).
             let area = pw.convertFromScreen(parent.peekArea())
-            let back: (rect: NSRect, image: CGImage?) = switch linkNow {
-            case .none: (self.peekSource?.rect ?? area, self.peekSource?.image)
-            case .some(.some(let r)): (r, self.peekSource?.image)
-            case .some(.none): (area, nil)
+            let back: (rect: NSRect, image: CGImage?)
+            switch PeekLayout.closeTarget(linkNow ?? .noAnswer, stored: self.peekSource?.rect ?? area, area: area) {
+            case .link(let r): back = (r, self.peekSource?.image)
+            case .area(let a): back = (a, nil)
             }
+            let how: String = switch linkNow ?? .noAnswer {
+            case _ where self.peekSource == nil: "out to the area (it opened from there)"
+            case .found: "into the link where it is now"
+            case .noAnswer: "into the link where it was (no answer)"
+            case .gone: "out to the area (the link is gone)"
+            }
+            CraLog.note("peek closes \(how)")
             let t = PeekTransition(over: pw, card: card,
                                    cardImage: PeekTransition.picture(of: self.shell, page: page, pageRect: pageRect),
                                    column: self.controls.map { pw.convertFromScreen($0.frame) } ?? .zero,
@@ -1169,8 +1176,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             start(shot ?? nil)
         }
         if let source = peekSource, source.fromLink {
-            parent.peekSourceAgain(source) { r in
-                if linkNow == nil { linkNow = .some(r) }
+            parent.peekSourceAgain(source) { answer in
+                if linkNow == nil { linkNow = answer }
                 ready(false)
             }
         }
@@ -1953,17 +1960,24 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         handedBack = true
         var key = NSApp.keyWindow
         while let parent = key?.parent { key = parent }
-        let hadKeyboard = key === window || key === commandPanel || key === popup
+        // key != nil: with no key window and no popup, `key === popup` was nil === nil.
+        let keyIsThis = key != nil && (key === window || key === commandPanel || key === popup)
+        // A click on its close button while another app is in front closes it before AppKit makes Cra active (#659).
+        let event = NSApp.currentEvent
+        let clicked = event.map { ($0.type == .leftMouseUp || $0.type == .leftMouseDown) && $0.window === window } ?? false
+        let close = LittleWindowClose(keyIsThisWindow: keyIsThis, craActive: NSApp.isActive,
+                                      craFrontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier,
+                                      clickedInWindow: clicked)
         // Other Little Windows still open (#646): the front one takes the keyboard, as in Arc, and the app
         // the window was opened over comes back only after the last.
         let next = isPeek ? nil : frontLittleWindow()
-        if LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: hadKeyboard, craActive: NSApp.isActive, movedToTab: movedToTab,
+        if LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: close.closingKeyWindow, craActive: close.craActive, movedToTab: movedToTab,
                                                 littleWindowsLeft: next != nil), let next {
             CraLog.note("Little Window closed: the next one takes the keyboard (#646)")
             next.takeKeyboard()
             return
         }
-        guard let pid = focusReturn.target(closingKeyWindow: hadKeyboard, craActive: NSApp.isActive, movedToTab: movedToTab,
+        guard let pid = focusReturn.target(closingKeyWindow: close.closingKeyWindow, craActive: close.craActive, movedToTab: movedToTab,
                                            littleWindowsLeft: next != nil),
               let other = NSRunningApplication(processIdentifier: pid), !other.isTerminated else { return }
         CraLog.note("Little Window closed: the app it was opened over comes forward (#430)")

@@ -1,0 +1,31 @@
+# promise: #682
+# A Peek closes back into the link it came from, where the page has it now (Arc, #204). On X the timeline re-renders
+# while a Peek is open and swaps the link's element for a new one in the same place; the close asked for the old
+# element, got null and grew out to the whole area instead, blank and fading. A link to the same address where the
+# Peek grew from stands in for it now. Only a link that is really gone sends the close out to the area.
+budget rss=900 stalls50=40
+
+cra://open?url=${ORIGIN}/peek-origin.html
+wait 2
+cra://action/pinTab
+wait 0.5
+
+# Opened from the focused link, which the page then swaps for a copy of itself.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('plain').focus();String(!!window.open('${PAGE}?n=recycled'))","userGesture":true}
+expect-log peek: from a link at
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"const a=document.getElementById('plain');a.replaceWith(a.cloneNode(true));'swapped'","returnByValue":true}
+wait 0.3
+cra://debug?peekClose=recycled&attempt=closeButton
+expect-log peek closes into the link where it is now
+wait 1.5
+cra://debug?peeks=after-recycled
+expect-log Cra peeks after-recycled: none$
+
+# Opened from the link again, which the page then takes away: out to the area.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('plain').focus();String(!!window.open('${PAGE}?n=removed'))","userGesture":true}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('plain').remove();'removed'","returnByValue":true}
+wait 0.3
+cra://debug?peekClose=removed&attempt=closeButton
+expect-log peek closes out to the area \(the link is gone\)

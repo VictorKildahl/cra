@@ -46,6 +46,42 @@ struct LittleWindowReturnTests {
         #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false) == nil)
     }
 
+    /// #659: another link, or a click back from another app, brings Cra forward, and AppKit makes the browser
+    /// window key on the way, before the Little Window it gives the keyboard back to. That isn't the browser in
+    /// use: a Little Window that already had the keyboard still closes back to the app.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/659"))
+    func theBrowserWindowKeyWhileCraComesForwardIsNotUse() {
+        var back = LittleWindowReturn(app: Self.slack)
+        back.littleWindowBecameKey()
+        back.otherWindowBecameKey(whileComingForward: true)
+        back.craCameForward(from: Self.slack)
+        back.littleWindowBecameKey()
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false) == Self.slack)
+        // Once Cra is in front, the browser window taking the keyboard is the browser in use, as before (#430).
+        back.otherWindowBecameKey(whileComingForward: false)
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false) == nil)
+    }
+
+    /// #659: Slack in front, the Little Window beside it on another display, its close button clicked. The window
+    /// server brings Cra forward for the click, but the button closes the window before AppKit makes Cra active.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/659"))
+    func closeButtonClickedFromAnotherAppGoesBackToIt() {
+        let close = LittleWindowClose(keyIsThisWindow: false, craActive: false, craFrontmost: true, clickedInWindow: true)
+        #expect(close.closingKeyWindow && close.craActive)
+        var back = LittleWindowReturn(app: Self.slack)
+        back.littleWindowBecameKey()
+        #expect(back.target(closingKeyWindow: close.closingKeyWindow, craActive: close.craActive, movedToTab: false) == Self.slack)
+        // Closed in the background without a click (archived, the page's window.close()): Cra stays behind.
+        let idle = LittleWindowClose(keyIsThisWindow: false, craActive: false, craFrontmost: false, clickedInWindow: false)
+        #expect(!idle.closingKeyWindow && !idle.craActive)
+        // A click elsewhere while Cra comes forward isn't this window in use.
+        let other = LittleWindowClose(keyIsThisWindow: false, craActive: false, craFrontmost: true, clickedInWindow: false)
+        #expect(!other.closingKeyWindow && !other.craActive)
+        // In front as usual: as before.
+        let usual = LittleWindowClose(keyIsThisWindow: true, craActive: true, craFrontmost: true, clickedInWindow: false)
+        #expect(usual.closingKeyWindow && usual.craActive)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/430"))
     func comingBackFromAnotherAppReturnsThere() {
         var back = LittleWindowReturn(app: Self.slack)

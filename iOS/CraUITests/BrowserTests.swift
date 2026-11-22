@@ -1,5 +1,6 @@
 import CoreGraphics
 import XCTest
+import UIKit
 
 /// The app driven by real taps in the simulator. Pages are `data:` addresses, so nothing here
 /// needs the network. `scripts/ios.sh test` runs these and saves the screenshots they attach.
@@ -33,6 +34,26 @@ class BrowserTestCase: XCTestCase {
 
     func waitForPage(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.webViews.staticTexts[title].waitForExistence(timeout: 20), "page \(title) never showed", file: file, line: line)
+    }
+
+    func closeShareSheet(openedFrom button: XCUIElement) {
+        let activity = app.otherElements["ActivityListView"]
+        let navigation = app.navigationBars["UIActivityContentView"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 5) || navigation.waitForExistence(timeout: 2),
+                      "the share sheet opens")
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let popover = activity.exists ? activity : navigation
+            XCTAssertTrue(popover.frame.insetBy(dx: -40, dy: -40).intersects(button.frame),
+                          "the share popover is attached to its source button")
+            let outside = app.coordinate(withNormalizedOffset: .zero).withOffset(
+                CGVector(dx: app.frame.midX, dy: app.frame.maxY - 20))
+            XCTAssertFalse(popover.frame.contains(CGPoint(x: app.frame.midX, y: app.frame.maxY - 20)))
+            outside.tap()
+        } else {
+            app.swipeDown(velocity: .fast)
+        }
+        XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(navigation.waitForNonExistence(timeout: 5))
     }
 
     /// The bottom bar is back on screen once the keyboard is gone (GitHub #505: a keyboard that
@@ -132,7 +153,67 @@ final class TabSwitcherTests: BrowserTestCase {
     }
 }
 
+/// The bottom bar's buttons tick under the finger as Arc Search's do (#675). The simulator plays no haptics, so with
+/// `-CraCountHaptics YES` each button counts the ticks it played.
+final class BarHapticsTests: BrowserTestCase {
+    // promise: #675
+    func testBarButtonsTickOnPressAndOnRelease() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraCountHaptics", "YES"])
+        waitForPage("First")
+        // The New Tab pill, which gave nothing before: one tick down, one up (read once the sheet has gone and
+        // the pill is back on screen).
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
+        waitForBarOnScreen()
+        XCTAssertEqual(app.buttons["bar-search"].value as? String, "ticks 2")
+        // The menu button.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["bar-menu"].value as? String, "ticks 2")
+        // The tab stack, then Settings in the tab switcher.
+        app.buttons["bar-tabs"].tap()
+        let settings = app.buttons["bar-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        XCTAssertEqual(settings.value as? String, "ticks 2")
+        // Back on the page by its card, where the tab stack shows again.
+        app.buttons["tab-card-0"].tap()
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["bar-tabs"].value as? String, "ticks 2")
+    }
+}
+
 final class PageMenuTests: BrowserTestCase {
+    // promise: #670
+    func testShareFromThePageMenu() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        let menu = app.buttons["bar-menu"]
+        menu.tap()
+        app.buttons["menu-tile-share"].tap()
+        closeShareSheet(openedFrom: menu)
+        menu.tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
+    }
+
+    // promise: #670
+    func testHoldingTheMenuSharesThePage() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        let menu = app.buttons["bar-menu"]
+        menu.press(forDuration: 1.5)
+        closeShareSheet(openedFrom: menu)
+        menu.tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
+    }
+
     /// The up arrow opens the menu on the page's site, with Arc Search's tiles and rows.
     func testTheMenuShowsThePageAndItsControls() {
         launch(["-CraOpenURL", "https://example.com/", "-CraSearch", "NO"])
@@ -177,6 +258,33 @@ final class PageMenuTests: BrowserTestCase {
 }
 
 final class SettingsTests: BrowserTestCase {
+    // promise: #670
+    func testShareCraFromSettings() {
+        openSettingsShare("setting-share-cra")
+    }
+
+    // promise: #670
+    func testExportDataFromSettings() {
+        openSettingsShare("setting-export-data")
+    }
+
+    private func openSettingsShare(_ identifier: String) {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        let button = app.buttons[identifier]
+        for _ in 0..<8 {
+            if button.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(button.isHittable)
+        button.tap()
+        closeShareSheet(openedFrom: button)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+    }
+
     /// Site Settings opens from the page menu on the page's site, and a switch flipped there is
     /// still flipped when the sheet is opened again.
     func testSiteSettingsKeepsASitesChoice() {
@@ -208,6 +316,24 @@ final class SettingsTests: BrowserTestCase {
         sleep(1)
         keep("default-site-settings")
         XCTAssertEqual(app.switches["setting-block-ads"].value as? String, "1", "the site's choice leaves the global one alone")
+    }
+
+    // promise: #674
+    func testAppSettingsOpensTallOnIPadAndHalfOnIPhone() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
+        sleep(1)
+        keep("app-settings-open")
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTAssertLessThan(app.buttons["Done"].frame.minY, app.frame.height / 3,
+                              "App Settings opened as a short card on iPad")
+        } else {
+            XCTAssertGreaterThan(app.buttons["Done"].frame.minY, app.frame.height * 0.4,
+                                 "App Settings did not open at medium height on iPhone")
+        }
     }
 
     /// The bottom of App Settings as in Arc Search 1.49: Sync, the share capsule, Contact the
@@ -700,6 +826,7 @@ final class ReadingTests: BrowserTestCase {
             + "<nav>Menu Home Shop</nav><article><h1>About Pizza</h1>\(body)</article><footer>Copyright</footer>"
     }()
 
+    // promise: #670
     /// The Summarize tile shrinks the page into its card and shows the summary with its credit;
     /// the close button brings the page back.
     func testSummarizeShowsTheSummaryAndClosesBackToThePage() {
@@ -718,10 +845,7 @@ final class ReadingTests: BrowserTestCase {
         // Copy and Share once it is written.
         XCTAssertTrue(app.buttons["summary-copy"].exists)
         app.buttons["summary-share"].tap()
-        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5) || app.navigationBars["UIActivityContentView"].waitForExistence(timeout: 2),
-                      "the share sheet opens")
-        app.swipeDown(velocity: .fast)
-        sleep(1)
+        closeShareSheet(openedFrom: app.buttons["summary-share"])
         keep("summary")
         app.buttons["summary-close"].tap()
         XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
@@ -901,6 +1025,7 @@ final class SpacesTests: BrowserTestCase {
         waitForPage("Inbox")
     }
 
+    // promise: #670
     /// "Set up" on the share prompt opens the how-to sheet; closed, the Spaces are there and the
     /// prompt doesn't come back.
     func testTheSharePromptLeadsToTheHowTo() {
@@ -914,7 +1039,10 @@ final class SpacesTests: BrowserTestCase {
         setUp.tap()
         XCTAssertTrue(app.staticTexts["share-guide-title"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["share-guide-title"].label, "Save to Cra from any app")
-        XCTAssertTrue(app.buttons["share-guide-show"].exists)
+        let share = app.buttons["share-guide-show"]
+        XCTAssertTrue(share.exists)
+        share.tap()
+        closeShareSheet(openedFrom: share)
         app.buttons["share-guide-close"].tap()
         XCTAssertTrue(app.buttons["space-tab-Inbox"].waitForExistence(timeout: 5))
         app.buttons["spaces-close"].tap()

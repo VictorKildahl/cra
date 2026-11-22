@@ -1,0 +1,43 @@
+# promise: web-page-cast-dialog
+# web-features: Chrome's Cast dialog, from View ▸ Cast… (and the page menu's Cast…, the same command) and from a
+# page's PresentationRequest.start(). X DM 21 Nov 2026 asked where Cast is. On the engine Chrome centred the dialog on
+# the Browser's top container, which lives in the never-seen strip along the top of Cra's window (#346), so it
+# opened at the window's top left, over the sidebar. Arc 1.174 (measured 22 Nov) centres it on the page and hangs it
+# from the page's top edge, which is Chrome's own placement for a page without a Browser (cra-cast-dialog.patch).
+# What it lists depends on the network ("No devices found" here, a TV elsewhere), so only Close is checked.
+budget rss=1000 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/features.html?n=cast
+expect-log GET /features.html\?n=cast
+wait 2
+
+# View ▸ Cast…: over the page, in front, and Close closes it.
+cra://action/cast
+wait 2
+cra://debug?pageDialogs=cast-menu
+expect-log page dialog cast-menu: chrome [0-9]{3}x[0-9]{3} at=page front=1 text=.* buttons=Close.* title=Cast tab$
+cra://debug?pageDialogs=cast-menu-close&press=Close
+expect-log page dialogs cast-menu-close: pressed Close
+wait 1
+cra://debug?pageDialogs=cast-menu-gone
+expect-log page dialogs cast-menu-gone: n=0
+
+# A page's PresentationRequest.start() opens the same Cast dialog headed "Cast <site>", as in Arc 1.174.1 (320 x 196 with
+# its "<site> wants to cast content" line)
+# (Chrome 159 would show its media controls dialog instead). Closing it turns the page down as Chrome decides:
+# NotFoundError with no device that can show the page (Arc's answer with none), NotAllowedError (cancelled) with one.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.req=new PresentationRequest(['https://example.com/receiver.html']);settle('present',req.start())","userGesture":true}
+expect-log "value":"present asked"
+wait 2
+cra://debug?pageDialogs=cast-page
+expect-log page dialog cast-page: chrome [0-9]{3}x[0-9]{3} at=page front=1 text=.* buttons=Close.* title=Cast 127\.0\.0\.1:[0-9]+$
+cra://debug?pageDialogs=cast-page-close&press=Close
+expect-log page dialogs cast-page-close: pressed Close
+wait 1
+cra://debug?pageDialogs=cast-page-gone
+expect-log page dialogs cast-page-gone: n=0
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'present '+state.present"}
+expect-log "value":"present (NotFoundError|NotAllowedError)"
+reject-log fault:

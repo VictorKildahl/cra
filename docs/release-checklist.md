@@ -24,7 +24,9 @@ built release app with a test profile. Note anything that fails in the release's
   back, several times, by the strip above the toolbar, by the toolbar's URL and by the sidebar's top next to the traffic lights:
   the window stays under the pointer the whole way, with no jump at the crossing and no flicker. AppKit's screen-layout adjustment
   ran mid-drag for a window a window controller owns (16 Nov 2026); `CraWindow` skips it for moves the window server reports. The
-  `window-frame-adjust` scenario only checks that answer is in place; a test copy never crosses a display.
+  `window-frame-adjust` scenario only checks that answer is in place; a test copy never crosses a display. After the drag, open a
+  `<select>` on a page: its menu opens on the control, not a display's width away (21 Nov 2026). The
+  `window-frame-after-move` scenario sends the window the server's report of such a move, not a real drag.
 
 - **#155:** a space on Auto, with one colour or two, changes look when macOS switches between
   light and dark. A space on Light or Dark doesn't.
@@ -460,6 +462,10 @@ built release app with a test profile. Note anything that fails in the release's
   Default Browser opens Cra's page in iOS Settings with a "Default Browser App" row; picking Cra
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
   lists Cra too. Needs a real iPhone and Apple's signing: the policy test only sees the file.
+
+- **#675:** on a TestFlight build on a real iPhone with System Haptics on, press and hold the New Tab pill, the
+  tab stack and the up arrow: a light tick as the finger comes down, a softer one as it lets go, and nothing with
+  System Haptics off. The simulator plays no haptics; `BarHapticsTests` only counts them.
 
 - **#536:** on a TestFlight build, sign in to a site with a passkey saved in iCloud Keychain and
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in

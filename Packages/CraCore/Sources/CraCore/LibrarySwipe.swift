@@ -14,7 +14,10 @@ public enum LibrarySwipe {
     /// at ω ≈ 30.6 rad/s (SwiftUI's response 0.205), within 1 % of its travel in about 0.2 s (docs/arc-reverse-
     /// engineering.md, "Swiping into the Library"). Cra settled on Dia's (perceptual duration 0.4 s), half as fast:
     /// in a side-by-side recording on #613 Arc's swipes settled in ~215 ms and Cra's took ~330 ms.
-    public static let omega: CGFloat = 2 * .pi / 0.205
+    public static let omega: CGFloat = 2 * .pi / CGFloat(response)
+    /// The spring's response (SwiftUI's, a CASpringAnimation's perceptual duration): the window tint settles on it
+    /// too, with the strip (it stayed on Dia's 0.4 s and trailed the sidebar after #613's first fix).
+    public static let response: TimeInterval = 0.205
     /// A release faster than this (pages per second) goes its way whatever the position.
     public static let flickSpeed: CGFloat = 0.8
 
@@ -110,5 +113,28 @@ public enum LibrarySwipe {
         let x = settle(from: r, velocity: velocity, to: target, at: t)
         let speed = abs(x - settle(from: r, velocity: velocity, to: target, at: t - 0.01)) * 100 * width
         return abs(x - target) * width < 0.25 && speed < 5
+    }
+}
+
+/// When a settle's time starts: at the first frame it draws, as if it had begun one frame before (#613). A release
+/// switches the space, which can keep the main thread from drawing for a frame or two; a spring timed from the
+/// release had run that long when it first drew, so the strip stood still for a frame and then jumped (25 to 46
+/// points in one frame on the reporter's recording), where Arc's picks up speed from where the fingers left it.
+public struct SettleClock: Sendable, Equatable {
+    /// When the settle was asked for, and when its time counts from once it has drawn.
+    public let started: TimeInterval
+    public private(set) var origin: TimeInterval?
+
+    public init(started: TimeInterval) { self.started = started }
+
+    /// The settle's time for the frame shown at `frame` (a display link's target timestamp), `interval` apart.
+    public mutating func elapsed(atFrame frame: TimeInterval, interval: TimeInterval) -> TimeInterval {
+        if origin == nil { origin = frame - max(0, min(interval, frame - started)) }
+        return max(0, frame - origin!)
+    }
+
+    /// The settle's time now, outside a frame (turning it around): none before it has drawn.
+    public func elapsed(now: TimeInterval) -> TimeInterval {
+        origin.map { max(0, now - $0) } ?? 0
     }
 }

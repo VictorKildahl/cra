@@ -59,13 +59,24 @@ struct TabsPane: View {
                                   detail: "The sidebar, with the window’s close, minimize and zoom buttons, sits on the right of the window. Hidden, it slides in from the right edge.",
                                   isOn: Binding(get: { store.settings.sidebarSide == .right },
                                                 set: { store.settings.sidebarSide = $0 ? .right : .left })) { SettingsArt.sidebarOnRight }
+                SettingsCardDivider()
+                // Ideas #366, not in Arc: the space's colours thin over a glass (SidebarGlass).
+                SettingsSwitchRow("Translucent sidebar",
+                                  detail: "The sidebar and the window around your pages turn to glass, so what’s behind the window shows through, darkened on a dark theme. The floating sidebar lets the page under it show through.",
+                                  isOn: $store.settings.translucentSidebar) { SettingsArt.translucentSidebar }
             }
 
             SettingsHeader("Pages").padding(.top, 20)
             SettingsFeatureCard {
                 SettingsSwitchRow("Edge to edge",
-                                  detail: "Pages fill the window, with no margin or rounded corners around them.",
+                                  detail: "Pages fill the window, with no margin around them and square corners, unless Rounded corners is on.",
                                   isOn: $store.settings.edgeToEdgeContent) { SettingsArt.edgeToEdge }
+                SettingsCardDivider()
+                // Ideas #582, not in Arc: edge to edge keeps the round (CardFill.cornerRadius).
+                SettingsSwitchRow("Rounded corners",
+                                  detail: "Edge to edge, pages keep rounded corners, still with no margin or shadow around them. In a split every page is rounded.",
+                                  isOn: $store.settings.edgeToEdgeRoundedCorners,
+                                  enabled: store.settings.edgeToEdgeContent) { SettingsArt.edgeToEdgeRounded }
                 SettingsCardDivider()
                 // Not in Arc (#404): the toolbar floats over the page (ToolbarAutoHide).
                 SettingsSwitchRow("Hide the toolbar until you need it",

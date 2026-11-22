@@ -29,6 +29,9 @@ device() {
     runtime="$(xcrun simctl list runtimes | awk '/^iOS/ { id = $NF } END { print id }')"
     type="$(xcrun simctl list devicetypes | awk -F '[()]' '/^iPhone 17 \(/ { print $2; exit }')"
     [ -n "$type" ] || type="$(xcrun simctl list devicetypes | awk -F '[()]' '/^iPhone/ { id = $2 } END { print id }')"
+    if [[ "$SIM_NAME" == *iPad* ]]; then
+      type="$(xcrun simctl list devicetypes | awk -F '[()]' '/^iPad Pro 11-inch/ { print $(NF-1); exit }')"
+    fi
     udid="$(xcrun simctl create "$SIM_NAME" "$type" "$runtime")"
   fi
   echo "$udid"

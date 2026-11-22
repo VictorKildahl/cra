@@ -22,6 +22,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private var statusBandFill: String?
     var pagePushedBack = false
     let dismissArea = UIControl()
+    /// For UI tests (`-CraTraceSheetDrag YES`): of the last drag down on the open sheet, how many frames had the sheet
+    /// out of sight under the keyboard (#655).
+    let sheetDragTraceView = UIView()
+    var sheetDragTrace = (frames: 0, hidden: 0)
+    /// How far above the bar the open sheet's top was when a drag down on it started (#655).
+    var sheetDragStartPull: CGFloat?
     /// Over the home indicator's strip while scrolling has put the bar away: a tap there brings
     /// it back (#509). A button, since a plain control there loses its tap to the page's gestures.
     let barReveal = UIButton(type: .custom)
@@ -106,6 +112,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         dismissArea.isHidden = true
         dismissArea.accessibilityIdentifier = "search-dismiss"
         view.addSubview(dismissArea)
+        if LaunchOptions.value("CraTraceSheetDrag") == "YES" {
+            sheetDragTraceView.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
+            sheetDragTraceView.isAccessibilityElement = true
+            sheetDragTraceView.accessibilityIdentifier = "sheet-drag-trace"
+            sheetDragTraceView.isUserInteractionEnabled = false
+            view.addSubview(sheetDragTraceView)
+        }
 
         bar.tabsButton.addTarget(self, action: #selector(showTabs), for: .touchUpInside)
         bar.pill.addTarget(self, action: #selector(startSearch), for: .touchUpInside)
@@ -371,11 +384,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         setSearching(false)
     }
 
-    func setSearching(_ searching: Bool, incognito: Bool? = nil) {
+    /// `keepingPull`: closing, the sheet stays this far above the bar under the finger (a drag down on it, #655)
+    /// instead of going into the pill; the drag moves it on from there.
+    func setSearching(_ searching: Bool, incognito: Bool? = nil, keepingPull: CGFloat? = nil) {
         guard searching != isSearching else { return }
         // A sheet pulled out of the pill is already laid out under the finger: it goes on from there.
         let pulled = searchPull != nil
-        searchPull = nil
+        searchPull = searching ? nil : keepingPull
         pulledSheetHold = searching && pulled ? (sheet.frame.minY, sheet.openness) : nil
         if searching, !pulled {
             prepareSearchSheet(incognito: incognito)
@@ -838,10 +853,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         weak var guide: UIViewController?
         let view = ShareGuideView(
             close: { guide?.dismiss(animated: true) },
-            showShareMenu: {
+            showShareMenu: { rect in
                 guard let guide, let url = URL(string: "https://crabrowser.app") else { return }
                 let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
                 share.popoverPresentationController?.sourceView = guide.view
+                share.popoverPresentationController?.sourceRect = guide.view.convert(rect, from: guide.view.window)
                 guide.present(share, animated: true)
             })
         let controller = UIHostingController(rootView: view)
@@ -901,16 +917,20 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         model.showDownloads = { [weak self] in self?.showDownloads() }
         model.showSpaces = { [weak self] in self?.showSpaces() }
-        model.shareCra = { [weak self] in
+        model.shareCra = { [weak self] rect in
             guard let self, let link = URL(string: "https://crabrowser.app") else { return }
             let share = UIActivityViewController(activityItems: [link], applicationActivities: nil)
-            share.popoverPresentationController?.sourceView = self.bar
+            guard let source = self.topPresenter.view else { return }
+            share.popoverPresentationController?.sourceView = source
+            share.popoverPresentationController?.sourceRect = source.convert(rect, from: source.window)
             self.topPresenter.present(share, animated: true)
         }
-        model.exportData = { [weak self] in
+        model.exportData = { [weak self] rect in
             guard let self else { return }
             let share = UIActivityViewController(activityItems: [self.store.document.exportText], applicationActivities: nil)
-            share.popoverPresentationController?.sourceView = self.bar
+            guard let source = self.topPresenter.view else { return }
+            share.popoverPresentationController?.sourceView = source
+            share.popoverPresentationController?.sourceRect = source.convert(rect, from: source.window)
             self.topPresenter.present(share, animated: true)
         }
         model.clearData = { [weak self] history, siteData in
@@ -927,7 +947,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheet.sheetPresentationController?.detents = [.custom { _ in 465 }, .large()]
         } else {
             sheet = UIHostingController(rootView: AppSettingsView(model: model))
-            sheet.sheetPresentationController?.detents = [.medium(), .large()]
+            sheet.sheetPresentationController?.detents = MobileSettingsSheet.appSettingsHeights(onPad: traitCollection.userInterfaceIdiom == .pad).map { ($0 == .medium ? UISheetPresentationController.Detent.medium : UISheetPresentationController.Detent.large)() }
         }
         sheet.sheetPresentationController?.prefersGrabberVisible = true
         sheet.view.backgroundColor = .clear

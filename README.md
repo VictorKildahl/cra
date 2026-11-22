@@ -33,8 +33,8 @@ that remember where they started, favorites, a command bar that searches everyth
 Today tabs that archive themselves, split view, Little Windows and Arc's keyboard
 shortcuts. Import your Arc sidebar in one go and carry on where you left off.
 
-The app is Swift (AppKit and SwiftUI) and the engine is Chromium, through the Chromium
-Embedded Framework, so sites and Chrome extensions work as they do in Chrome.
+The app is Swift (AppKit and SwiftUI) and the engine is Chrome's own framework, with Cra's
+layer built in, so sites and Chrome extensions work as they do in Chrome.
 
 ## Install
 

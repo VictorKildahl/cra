@@ -40,6 +40,10 @@ final class AppIconManager {
 
     private var options: [Option]
     var presets: [Option] { options.filter { $0.image != nil } }
+    private var usesSystemAppearance: Bool {
+        guard #available(macOS 26, *) else { return false }
+        return selectedID == "arc" || selectedID == "chromatic"
+    }
     @ObservationIgnored private var appearanceObservation: AppIconAppearanceObservation?
 
     // Shared with Sources/CraDockTile.
@@ -68,7 +72,7 @@ final class AppIconManager {
             appearanceObservation = AppIconAppearanceObservation { [weak self] in
                 guard let self else { return }
                 self.options = Self.makeOptions()
-                if ["arc", "chromatic"].contains(self.selectedID) { self.applyFileAndDockIcons() }
+                if self.usesSystemAppearance { self.apply() }
             }
         }
     }
@@ -78,8 +82,10 @@ final class AppIconManager {
 
     /// At start-up, before the Dock first draws the running app's tile.
     static func applyAtLaunch() {
-        guard let stored = UserDefaults.standard.string(forKey: Keys.selected) else { return }
-        if stored == defaultID { shared.setDockImage() } else { shared.applyFileAndDockIcons() }
+        guard UserDefaults.standard.string(forKey: Keys.selected) != nil else { return }
+        shared.setDockImage()
+        // Finder keeps a rendered icon. The system appearance may have changed while Cra was closed.
+        shared.applyToBundle(atLaunch: !shared.usesSystemAppearance)
     }
 
     /// Cra just came back to the Dock (Keep Cra in the menu bar, #231). macOS registers the app
@@ -94,10 +100,11 @@ final class AppIconManager {
         id == Self.customID ? customImage : options.first { $0.id == id }?.image
     }
 
-    func select(_ id: String) {
-        guard id != Self.customID || customImage != nil else { return }
+    /// Debug selections can exercise the app icon without overwriting the user's preference.
+    func select(_ id: String, remember: Bool = true) {
+        guard id == Self.defaultID || image(for: id) != nil else { return }
         selectedID = id
-        UserDefaults.standard.set(id, forKey: Keys.selected)
+        if remember { UserDefaults.standard.set(id, forKey: Keys.selected) }
         apply()
     }
 
@@ -121,17 +128,60 @@ final class AppIconManager {
     }
 
     private func apply() {
-        applyFileAndDockIcons()
+        setDockImage()
         notifyDockTile()
+        applyToBundle()
     }
 
-    private func applyFileAndDockIcons() {
-        setDockImage()
-        // A temporary -appIcon override belongs to this process alone.
-        if UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[Keys.selected] == nil {
-            let image = selectedID == Self.defaultID ? nil : dockImage
-            fileIconFailed = !AppIconResources.setFileIcon(image, on: .main)
+    /// Cra.app's own changes, off the main thread and one after another (AppIconBundle).
+    private static let bundleQueue = DispatchQueue(label: "dk.kildahl.cra.app-icon-bundle", qos: .utility)
+
+    /// The picked icon on Cra.app, for Finder, /Applications, Launchpad and Spotlight, which never draw the
+    /// Dock tile's (X, 20 Nov 2026); the bundle's own icon takes it off. Finder keeps it as a custom icon
+    /// (an `Icon\r` file and a FinderInfo flag) outside Contents: `codesign --strict` names the attribute,
+    /// but Gatekeeper accepts the app, as it does Arc.app carrying its picked icon the same way.
+    private func applyToBundle(atLaunch: Bool = false) {
+        // A command-line icon is temporary unless the Finder scenario explicitly exercises the bundle.
+        if UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[Keys.selected] != nil,
+           ProcessInfo.processInfo.environment["CRA_TEST_BUNDLE_ICON"] != "1" { return }
+        let app = Bundle.main
+        guard AppIconResources.canUpdateFileIcon(at: app.bundleURL) else {
+            fileIconFailed = true
+            return
         }
+        let id = selectedID, defaultID = Self.defaultID
+        let image = id == defaultID ? nil : dockImage?.copy() as? NSImage
+        Self.bundleQueue.async {
+            let done: Bool
+            switch AppIconBundle.change(picked: id, defaultID: defaultID, bundleHasCustomIcon: Self.hasCustomIcon(app.bundleURL), atLaunch: atLaunch) {
+            case .none:
+                done = true
+            case .put:
+                done = image.map { AppIconResources.setFileIcon($0, on: app) } ?? false
+                CraLog.note("app icon: \(id) \(done ? "put on the app" : "not put on the app (can't write \(app.bundlePath))")")
+            case .takeOff:
+                done = AppIconResources.setFileIcon(nil, on: app)
+                CraLog.note("app icon: \(id) \(done ? "taken off the app" : "not taken off the app (can't write \(app.bundlePath))")")
+            }
+            DispatchQueue.main.async { self.fileIconFailed = !done }
+        }
+    }
+
+    /// For cra://debug?bundleIcon=<label>: Finder's custom icon flag on the app, and whether its `Icon\r`
+    /// file holds an icon, read after the changes queued before it.
+    func logBundleIcon(_ label: String) {
+        let bundle = Bundle.main.bundleURL
+        Self.bundleQueue.async {
+            let fork = bundle.appendingPathComponent("Icon\r").path + "/..namedfork/rsrc"
+            let size = ((try? FileManager.default.attributesOfItem(atPath: fork))?[.size] as? Int) ?? 0
+            CraLog.note("bundle icon \(label): custom=\(Self.hasCustomIcon(bundle) ? 1 : 0) file=\(size > 0 ? 1 : 0)")
+        }
+    }
+
+    nonisolated private static func hasCustomIcon(_ bundle: URL) -> Bool {
+        var info = [UInt8](repeating: 0, count: 32)
+        let n = getxattr(bundle.path, "com.apple.FinderInfo", &info, info.count, 0, 0)
+        return n > 0 && AppIconBundle.hasCustomIcon(finderInfo: Array(info.prefix(n)))
     }
 
     private func setDockImage() {

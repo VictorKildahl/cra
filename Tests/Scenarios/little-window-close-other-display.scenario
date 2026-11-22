@@ -1,0 +1,73 @@
+# promise: #659
+# A Little Window opened by a link from another app on one display, the browser window on another: closing it
+# gives the keyboard back to that app (#430) and leaves the browser window where it was, behind that app's
+# windows. The browser window came forward on its own display instead (GitHub #659). `cover` is the other app,
+# with a window over the browser window; mainOver counts other apps' windows still over it. Last, a second link
+# while the first Little Window is open, with the browser window made key as Cra comes forward for it.
+# The Little Window opens on the main display and the browser window on the test display (CRA_TEST_SCREEN; the
+# nightly's virtual one).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+env CRA_TEST_LITTLE_SCREEN=main
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+cra://debug?littleFocus=open
+expect-log little focus open: active=1 key=little0 over=0 windows=1 mainOver=[1-9]
+
+cra://action/closeTab
+wait 2
+cra://debug?littleFocus=closed
+expect-log little focus closed: active=0 key=none over=- windows=0 mainOver=[1-9]
+
+# The other app in front again, then back to Cra and a click in the Little Window to read on (Cra comes forward,
+# and AppKit makes the browser window key for a moment): closing it still goes back to that app. `cover link` hands
+# Cra the front as a click would: the posted click below goes to the window, not through the window server.
+cover link
+cra://debug?externalURL=${PAGE}?n=little-two
+wait 2
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+wait 1
+cra://debug?clickAt=200,120&target=little
+wait 1.5
+cra://debug?littleFocus=clicked
+expect-log little focus clicked: active=1 key=little0 .* mainOver=[1-9]
+cra://action/closeTab
+wait 2
+cra://debug?littleFocus=closedAfterClick
+expect-log little focus closedAfterClick: active=0 key=none over=- windows=0 mainOver=[1-9]
+
+# A second link while the first Little Window is open: AppKit made the browser window key as Cra came forward
+# for it, before the Little Window (seen once in little-window-close-next: the last ⌘W left key=main
+# mainOver=0). That counted as the browser in use, so the first window, closed last, brought the browser window
+# forward instead of the app (#659). keyOnComingForward makes AppKit's choice every time.
+cover link
+cra://debug?externalURL=${PAGE}?n=first
+wait 2
+cra://debug?yieldTo=${COVER}
+wait 1
+cra://debug?keyOnComingForward=1
+cover link
+cra://debug?externalURL=${PAGE}?n=second
+wait 2
+cra://debug?littleFocus=secondOpen
+expect-log little focus secondOpen: active=1 key=little1 over=[0-9] windows=2
+cra://action/closeTab
+wait 2
+cra://debug?littleFocus=secondClosed
+expect-log little focus secondClosed: active=1 key=little0 over=[0-9] windows=1
+cra://action/closeTab
+wait 2
+cra://debug?littleFocus=firstClosed
+expect-log little focus firstClosed: active=0 key=none over=- windows=0 mainOver=[1-9]

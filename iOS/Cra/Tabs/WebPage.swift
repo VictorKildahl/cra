@@ -59,6 +59,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     private var requestedURL: URL?
     /// The address the error page is being put up at: its own navigation is let through.
     var errorPageAddress: URL?
+    /// Captured before WebKit opens the link menu; its interaction location is no longer reliable afterwards.
+    var linkPressPoint: CGPoint?
 
     init(tab: MobileTab, configuration supplied: WKWebViewConfiguration? = nil, opener: WebPage? = nil) {
         tabID = tab.id
@@ -90,6 +92,11 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         }
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let press = UILongPressGestureRecognizer()
+            press.delegate = self
+            webView.addGestureRecognizer(press)
+        }
         webView.scrollView.delegate = self
         pullIndicator.alpha = 0
         pullIndicator.sizeToFit()

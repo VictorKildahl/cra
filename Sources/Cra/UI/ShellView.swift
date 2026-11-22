@@ -33,6 +33,8 @@ final class ShellView: NSView {
     private(set) var solidLightMaterial = false
     /// The material under a gradient whose colours read dark (SidebarBackdrop.solidActiveDarkGradient, #643).
     private(set) var solidDarkGradient = false
+    /// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366): SidebarGlass's material in place of Arc's.
+    private(set) var glass = false
     /// System Settings ▸ Accessibility ▸ Display ▸ Reduce transparency (or Increase contrast):
     /// AppKit's materials, and Arc's sidebar, go opaque. The backdrop layer path follows (GitHub #156).
     private var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -114,6 +116,10 @@ final class ShellView: NSView {
             refreshLoadingInk()
         }
     }
+    /// The space's Auto, Light or Dark and how light its colours are, for a card with no tab (CardVeil.noTabCard, #669).
+    var cardGround: (appearance: String, lightness: Double) = ("auto", 0.5) {
+        didSet { for c in paneCards { c.ground = cardGround } }
+    }
     /// The ring around the focused split pane: the space's shadedDark (PaneCardView.focusRing).
     var focusRingColor: NSColor? { didSet { if focusRingColor != oldValue { updateFocusRings() } } }
     /// Each tab's page background ("#RRGGBB"), painted under its page window (PaneCardView.pageColor).
@@ -147,6 +153,8 @@ final class ShellView: NSView {
     var contentFullscreen = false { didSet { needsLayout = true } }
     /// Settings ▸ "Pages fill the window edge to edge" (GitHub #24): no margin, square cards.
     var edgeToEdge = false { didSet { needsLayout = true } }
+    /// Settings ▸ Tabs ▸ "Rounded corners" (Ideas #582): edge to edge, the cards keep their round.
+    var edgeToEdgeRoundedCorners = false { didSet { if edgeToEdgeRoundedCorners != oldValue { needsLayout = true } } }
     /// Settings ▸ Sidebar on the right (GitHub #464): the window's layout in a mirror (SidebarSide).
     var sidebarSide: SidebarSide = .left {
         didSet {
@@ -244,12 +252,14 @@ final class ShellView: NSView {
 
     /// A space's theme in one refresh: set one flag at a time, a switch from a vibrant to a solid
     /// space drew a frame with the vibrant calibration (two cra.log lines, dim 0.36 then 0.30).
-    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool, lightMaterial: Bool = false, darkGradient: Bool = false) {
+    func setTheme(vibrantDark: Bool, vibrantLight: Bool, solid: Bool, lightMaterial: Bool = false, darkGradient: Bool = false,
+                  glass: Bool = false) {
         self.vibrantDark = vibrantDark
         self.vibrantLight = vibrantLight
         solidBackdrop = solid
         solidLightMaterial = lightMaterial
         solidDarkGradient = darkGradient
+        self.glass = glass
         refreshLift()
     }
 
@@ -306,12 +316,15 @@ final class ShellView: NSView {
             vibrancyLift.isHidden = true
             backdropHost.isHidden = false
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            let backdrop = SidebarBackdrop.resolve(
-                solid: solidBackdrop, active: windowActive, fullscreen: windowFullscreen,
-                reduceTransparency: reduceTransparency, tintAvailable: desktopTintLayer != nil,
-                vibrant: .init(dim: t.blurDim, liftTop: t.liftActive, liftBottom: t.liftActiveBottom,
-                               dimInactive: t.blurDimInactive, liftInactive: t.liftInactive),
-                lightMaterial: solidLightMaterial, darkGradient: solidDarkGradient)
+            let backdrop = glass
+                ? SidebarGlass.backdrop(dark: !solidLightMaterial, fullscreen: windowFullscreen,
+                                        reduceTransparency: reduceTransparency, tintAvailable: desktopTintLayer != nil)
+                : SidebarBackdrop.resolve(
+                    solid: solidBackdrop, active: windowActive, fullscreen: windowFullscreen,
+                    reduceTransparency: reduceTransparency, tintAvailable: desktopTintLayer != nil,
+                    vibrant: .init(dim: t.blurDim, liftTop: t.liftActive, liftBottom: t.liftActiveBottom,
+                                   dimInactive: t.blurDimInactive, liftInactive: t.liftInactive),
+                    lightMaterial: solidLightMaterial, darkGradient: solidDarkGradient)
             dimLayer.opacity = Float(backdrop.dim)
             // The desktop tint stays in the tree, as in AppKit's material: at 0.05 windowed, active or not,
             // and in place of the blur in full screen. Only Reduce transparency takes it out. Inserted
@@ -328,7 +341,7 @@ final class ShellView: NSView {
             }
             liftLayer.colors = [NSColor(white: 1, alpha: backdrop.liftTop).cgColor, NSColor(white: 1, alpha: backdrop.liftBottom).cgColor]
             CATransaction.commit()
-            let state = backdrop.logLine(active: windowActive, reduceTransparency: reduceTransparency)
+            let state = (glass ? "glass, " : "") + backdrop.logLine(active: windowActive, reduceTransparency: reduceTransparency)
             if state != loggedBackdrop {
                 loggedBackdrop = state
                 CraLog.note("sidebar backdrop: " + state)
@@ -510,6 +523,7 @@ final class ShellView: NSView {
             } else {
                 let card = PaneCardView(tabID: id, toolbar: makeToolbar?(id == ShellView.noTabID ? nil : id) ?? NSView())
                 card.isDark = isDarkTheme
+                card.ground = cardGround
                 card.pageColor = pageColors[id]
                 card.toolbarColor = toolbarColors[id]
                 card.showToolbar = barsShown(panes: shownIDs.count, fullscreen: contentFullscreen)
@@ -716,7 +730,7 @@ final class ShellView: NSView {
 
     private func layoutDropRegion(_ layout: SplitPaneLayout.Result, animated: Bool) {
         guard !animatingPanes, let f = layout.frames[Self.dropRegionID] else { return }
-        dropRegion.cornerRadius = fillsWindow ? 0 : CraMetrics.contentCornerRadius
+        dropRegion.cornerRadius = fillsWindow ? paneCornerRadius : CraMetrics.contentCornerRadius
         if animated { dropRegion.animator().frame = f } else if dropRegion.frame != f { dropRegion.frame = f }
         dropRegion.alphaValue = 1
     }
@@ -1043,7 +1057,7 @@ final class ShellView: NSView {
         // corners round it where they meet. Full screen with the sidebar hidden too (Arc, #315).
         let fill = fills(sidebarVisible: sidebarVisible)
         let inset = fill ? 0 : CraMetrics.contentInset
-        let radius = fill ? 0 : CraMetrics.contentCornerRadius
+        let radius = cardRadius(sidebarVisible: sidebarVisible)
         if sidebarVisible {
             var pageWidth = b.width - width - inset
             if let kept = pageBesideLibrary() {
@@ -1076,6 +1090,21 @@ final class ShellView: NSView {
     }
 
     private var cardCornerRadius: CGFloat = CraMetrics.contentCornerRadius
+
+    /// A card's corner radius in the window (CraCore CardFill.cornerRadius): rounded in its inset,
+    /// square where it fills the window, unless edge to edge keeps the round (#582). Edge to edge the
+    /// round is the window's own: a page's corner that meets the window's corner can only take one
+    /// radius (its window is a child, not clipped by this one), and the inner corners then match it.
+    private func cardRadius(sidebarVisible: Bool) -> CGFloat {
+        let round = edgeToEdge ? window.map(LittleWindow.cornerRadius(of:)) ?? CraMetrics.contentCornerRadius : CraMetrics.contentCornerRadius
+        return CGFloat(CardFill.cornerRadius(edgeToEdge: edgeToEdge, roundedCorners: edgeToEdgeRoundedCorners, fullScreen: windowFullscreen,
+                                             sidebarShown: sidebarVisible, radius: Double(round)))
+    }
+    /// The same for the window as it stands, 0 while a page is in full screen.
+    var paneCornerRadius: CGFloat { contentFullscreen ? 0 : cardRadius(sidebarVisible: sidebarVisible) }
+    /// Edge to edge with Rounded corners (#582): the cards fill the window but keep a round, so the
+    /// pages are clipped to it rather than only at the window's corners.
+    var roundsFilledCards: Bool { fillsWindow && paneCornerRadius > 0 }
 
     override func layout() {
         super.layout()
@@ -1176,8 +1205,9 @@ final class ShellView: NSView {
             // Arc's cards cast a soft shadow on the window; edge to edge there is no margin for it.
             c.castsShadow = !fillsWindow && !contentFullscreen
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
-            // Edge to edge every card is square.
-            c.cornerRadius = paneCards.count + (dropPreview == nil ? 0 : 1) > 1 && !fillsWindow ? CraMetrics.contentCornerRadius : cardCornerRadius
+            // Edge to edge every card is square, unless Rounded corners keeps the round (#582).
+            let several = paneCards.count + (dropPreview == nil ? 0 : 1) > 1
+            c.cornerRadius = several ? (fillsWindow ? paneCornerRadius : CraMetrics.contentCornerRadius) : cardCornerRadius
             if !animatingPanes, let f = layout.frames[c.tabID] {
                 if animated { c.animator().frame = f } else if c.frame != f { c.frame = f }
             }
@@ -1249,7 +1279,7 @@ final class ShellView: NSView {
         let gap = SplitPaneLayout.Constants.gap
         let f = NSRect(x: cb.maxX - w, y: cb.minY, width: w, height: cb.height)
         if sidePanel.frame != f { sidePanel.frame = f }
-        sidePanel.cornerRadius = fillsWindow ? 0 : CraMetrics.contentCornerRadius
+        sidePanel.cornerRadius = fillsWindow ? paneCornerRadius : CraMetrics.contentCornerRadius
         sidePanel.castsShadow = !fillsWindow
         sidePanel.layoutSubtreeIfNeeded()
         // The handle covers the gap and reaches a little into the cards on both sides.

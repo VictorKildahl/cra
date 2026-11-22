@@ -15,7 +15,9 @@ docs/release-checklist.md, or says why a page can't reach it on a Mac.
                                            method is in the map, and the map has none Chrome dropped
                                            (scripts/build-chromium.sh and scripts/publish-engine.sh, so a new
                                            Chrome's new page hook stops the engine until someone decides its test)
-  scripts/web-features.py --scenarios      the scenarios, one per line (scripts/scenario.sh web-features)
+  scripts/web-features.py --scenarios      the scenarios, one per line (scripts/scenario.sh web-features): the
+                                           map's, then Tests/release-gate.tsv's (what a release once shipped
+                                           broken outside the map: DevTools, profiles, a page's new tab…)
 """
 import re
 import sys
@@ -35,6 +37,19 @@ def read_map(path):
         cols = raw.split("\t")
         if len(cols) != 4:
             sys.exit(f"{path.name}:{n}: four tab-separated columns (kind, name, how, what), got {len(cols)}")
+        rows.append((n, *[c.strip() for c in cols]))
+    return rows
+
+
+def read_gate(path):
+    """Rows of (line number, scenario, issue, what broke) from Tests/release-gate.tsv; none when it isn't there."""
+    if not path.is_file():
+        return []
+    rows = []
+    for n, raw in enumerate(path.read_text().splitlines(), 1):
+        if not raw.strip() or raw.startswith("#"):
+            continue
+        cols = (raw.split("\t") + ["", ""])[:3]
         rows.append((n, *[c.strip() for c in cols]))
     return rows
 
@@ -87,6 +102,15 @@ def check(root, chromium=None):
                 problems.append(f"{where}: n/a needs a reason")
         else:
             problems.append(f"{where}: how is {how!r}: 'scenarios a,b', 'checklist' or 'n/a: <why>'")
+    gate = root / "Tests/release-gate.tsv"
+    for n, scenario, issue, what in read_gate(gate):
+        where = f"{gate.name}:{n} {scenario}"
+        if not (scenario_dir / f"{scenario}.scenario").is_file():
+            problems.append(f"{where}: no scenario Tests/Scenarios/{scenario}.scenario")
+        if not re.fullmatch(r"#\d+|crash-[\w-]+", issue):
+            problems.append(f"{where}: issue is {issue!r}, not '#<n>' or 'crash-<what-crashed>'")
+        if not what:
+            problems.append(f"{where}: says nothing about what broke")
     if chromium is not None:
         header = Path(chromium) / DELEGATE_HEADER
         if not header.is_file():
@@ -105,11 +129,15 @@ def check(root, chromium=None):
 
 
 def all_scenarios(root):
+    """The map's scenarios, then the release gate's, each once."""
     names = []
     for _, _, _, how, _ in read_map(root / "Tests/web-features.tsv"):
         for s in scenarios_of(how):
             if s not in names:
                 names.append(s)
+    for _, s, _, _ in read_gate(root / "Tests/release-gate.tsv"):
+        if s and s not in names:
+            names.append(s)
     return names
 
 
@@ -130,7 +158,9 @@ def main(argv):
         return 1
     rows = read_map(ROOT / "Tests/web-features.tsv")
     tested = sum(1 for r in rows if r[3].startswith("scenarios "))
-    print(f"web features: {len(rows)} rows, {tested} tested by {len(all_scenarios(ROOT))} scenarios"
+    gate = len(read_gate(ROOT / "Tests/release-gate.tsv"))
+    print(f"web features: {len(rows)} rows, {tested} tested; {len(all_scenarios(ROOT))} scenarios with the "
+          f"release gate's {gate}"
           + (", every WebContentsDelegate method of this Chrome mapped" if chromium else ""))
     return 0
 

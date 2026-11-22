@@ -76,3 +76,4 @@ cra-exclusive-access-notice.patch
 cra-extension-popup-window.patch
 extension-store-copies-install-type.patch
 cra-boost-tint.patch
+cra-cast-dialog.patch

@@ -1,0 +1,155 @@
+diff --git a/chrome/browser/ui/views/media_router/BUILD.gn b/chrome/browser/ui/views/media_router/BUILD.gn
+index 9185dd611d..0a66a60676 100644
+--- a/chrome/browser/ui/views/media_router/BUILD.gn
++++ b/chrome/browser/ui/views/media_router/BUILD.gn
+@@ -106,6 +106,7 @@ source_set("impl") {
+     "//ui/base",
+     "//ui/base/interaction",
+     "//ui/views",
++    "//ui/views/controls/webview",
+   ]
+ 
+   if (is_mac) {
+diff --git a/chrome/browser/ui/views/media_router/cast_dialog_coordinator.cc b/chrome/browser/ui/views/media_router/cast_dialog_coordinator.cc
+index 7a32b999b8..f3597cd744 100644
+--- a/chrome/browser/ui/views/media_router/cast_dialog_coordinator.cc
++++ b/chrome/browser/ui/views/media_router/cast_dialog_coordinator.cc
+@@ -99,10 +99,11 @@ void CastDialogCoordinator::ShowDialogCentered(
+     Profile* profile,
+     const base::Time& start_time,
+     MediaRouterDialogActivationLocation activation_location,
+-    AfterShownCallback after_shown_callback) {
++    AfterShownCallback after_shown_callback,
++    gfx::NativeView parent) {
+   Show(views::BubbleAnchor(), views::BubbleBorder::TOP_CENTER, controller,
+        profile, start_time, activation_location, nullptr,
+-       std::move(after_shown_callback));
++       std::move(after_shown_callback), parent);
+   GetCastDialogView()->SetAnchorRect(bounds);
+ }
+ 
+@@ -127,7 +128,8 @@ void CastDialogCoordinator::Show(
+     const base::Time& start_time,
+     MediaRouterDialogActivationLocation activation_location,
+     actions::ActionItem* action_item,
+-    AfterShownCallback after_shown_callback) {
++    AfterShownCallback after_shown_callback,
++    gfx::NativeView parent) {
+   CHECK(!start_time.is_null(), base::NotFatalUntil::M162);
+   // Hide the previous dialog instance if it exists, since there can only be one
+   // instance at a time.
+@@ -136,6 +138,9 @@ void CastDialogCoordinator::Show(
+       anchor, anchor_position, controller, profile, start_time,
+       activation_location, action_item);
+   cast_dialog_view_tracker_.SetView(cast_dialog_view.get());
++  if (parent) {
++    cast_dialog_view->set_parent_window(parent);
++  }
+   views::Widget* widget = views::BubbleDialogDelegateView::CreateBubble(
+       std::move(cast_dialog_view));
+   widget->Show();
+diff --git a/chrome/browser/ui/views/media_router/cast_dialog_coordinator.h b/chrome/browser/ui/views/media_router/cast_dialog_coordinator.h
+index d9930a5b59..99295ac3d2 100644
+--- a/chrome/browser/ui/views/media_router/cast_dialog_coordinator.h
++++ b/chrome/browser/ui/views/media_router/cast_dialog_coordinator.h
+@@ -10,6 +10,7 @@
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions.h"
+ #include "components/media_router/browser/media_router_metrics.h"
++#include "ui/gfx/native_ui_types.h"
+ #include "ui/views/bubble/bubble_anchor.h"
+ #include "ui/views/bubble/bubble_border.h"
+ #include "ui/views/view_tracker.h"
+@@ -87,7 +88,8 @@ class CastDialogCoordinator {
+       Profile* profile,
+       const base::Time& start_time,
+       MediaRouterDialogActivationLocation activation_location,
+-      AfterShownCallback after_shown_callback);
++      AfterShownCallback after_shown_callback,
++      gfx::NativeView parent = gfx::NativeView());  // Cra: its page-host window
+ 
+   // No-op if the dialog is currently not shown.
+   void Hide();
+@@ -111,7 +113,8 @@ class CastDialogCoordinator {
+             const base::Time& start_time,
+             MediaRouterDialogActivationLocation activation_location,
+             actions::ActionItem* action_item,
+-            AfterShownCallback after_shown_callback);
++            AfterShownCallback after_shown_callback,
++            gfx::NativeView parent = gfx::NativeView());
+ 
+   // Once the anchor for ShowDialogWithToolbarAction() becomes visible, this
+   // method is called to actually show the dialog anchored to `anchor`.
+diff --git a/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc b/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
+index fff22177ea..a6799b0c70 100644
+--- a/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
++++ b/chrome/browser/ui/views/media_router/media_router_dialog_controller_views.cc
+@@ -33,6 +33,8 @@
+ #include "ui/base/interaction/element_tracker.h"
+ #include "ui/display/types/display_constants.h"
+ #include "ui/views/bubble/bubble_anchor.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
++#include "ui/views/widget/widget.h"
+ 
+ using content::WebContents;
+ 
+@@ -46,6 +48,18 @@ MediaRouterUIService* GetMediaRouterUIService(WebContents* web_contents) {
+   return MediaRouterUIService::Get(profile);
+ }
+ 
++// Cra: whether the page is one Cra shows in its own window, whose Browser's window is a never-seen strip
++// (ui/views/controls/webview/cra_hosted_page.h).
++bool IsCraHostedPage(WebContents* web_contents) {
++  BrowserWindowInterface* browser =
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(web_contents);
++  BrowserView* browser_view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  return browser_view && browser_view->GetWidget() &&
++         browser_view->GetWidget()->GetNativeWindowProperty(
++             views::kCraPageHostWindow);
++}
++
+ }  // namespace
+ 
+ MediaRouterDialogControllerViews::~MediaRouterDialogControllerViews() {
+@@ -55,6 +69,12 @@ MediaRouterDialogControllerViews::~MediaRouterDialogControllerViews() {
+ 
+ bool MediaRouterDialogControllerViews::ShowMediaRouterDialogForPresentation(
+     std::unique_ptr<StartPresentationContext> context) {
++  // Cra: a page's PresentationRequest.start() opens the Cast dialog ("<site> wants to cast content"), as in
++  // Arc, not Chrome's media controls dialog.
++  if (IsCraHostedPage(initiator())) {
++    return MediaRouterDialogController::ShowMediaRouterDialogForPresentation(
++        std::move(context));
++  }
+   // Block tab fullscreen to prevent UI spoofing. The GMC device picker is a
+   // trusted browser surface that should not coexist with attacker-controlled
+   // fullscreen content.
+@@ -124,6 +144,18 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
+ 
+   BrowserView* browser_view =
+       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  // Cra: a page Cra shows in its own window belongs to a Browser whose window is a never-seen strip along
++  // that window's top (cra_hosted_page.h), so "centred on the browser window's top container" put the
++  // dialog at the window's top left, over Cra's sidebar. Arc's sits on the page's top edge, centred on the
++  // page: Chrome's own placement for a page without a Browser, kept a child of the strip's window so it
++  // moves with Cra's window.
++  gfx::NativeView cra_parent = gfx::NativeView();
++  if (browser_view && browser_view->GetWidget() &&
++      browser_view->GetWidget()->GetNativeWindowProperty(
++          views::kCraPageHostWindow)) {
++    cra_parent = browser_view->GetWidget()->GetNativeView();
++    browser_view = nullptr;
++  }
+   if (browser_view) {
+     // Show the Cast dialog anchored to the Cast toolbar button.
+     if (browser_view->toolbar_button_provider()
+@@ -145,7 +177,7 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
+     anchor_bounds.set_height(0);
+     cast_dialog_coordinator_.ShowDialogCentered(
+         anchor_bounds, ui_.get(), profile, dialog_creation_time,
+-        activation_location, std::move(callback));
++        activation_location, std::move(callback), cra_parent);
+   }
+ }
+ 

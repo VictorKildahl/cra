@@ -8,3 +8,6 @@ Client" only in Profile 2, and "Fixture Personal Off" in Default, turned off.
 StorableLinkRouting.json holds three Air Traffic Control routes: Google Meet to the most recent
 space, work.example.com to a Little Arc in Work (written by hand in Arc, #258) and an
 "Is equal to" route to Home, with Little Arc as the default.
+SidebarItemsFaviconCache holds an icon each for the pinned folder's two tabs (orange for
+home-p1, blue for home-p2), named md5(item id) as Arc names them: two tabs on one host with
+different icons (#673).

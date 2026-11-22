@@ -367,6 +367,11 @@ struct MobileTabsTests {
 }
 
 struct MobileSettingsTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/674")) func appSettingsUsesFullHeightOnIPadAndKeepsMediumOnIPhone() {
+        #expect(MobileSettingsSheet.appSettingsHeights(onPad: true) == [.large])
+        #expect(MobileSettingsSheet.appSettingsHeights(onPad: false) == [.medium, .large])
+    }
+
     @Test func aMissingOrOlderFileIsTheDefaults() throws {
         let loaded = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"searchEngine":"duckduckgo","archiveAfter":"someday"}"#.utf8))
         #expect(loaded.searchEngine == .duckduckgo)
@@ -761,6 +766,26 @@ struct MobileSwipeTests {
     @Test func pullToRefreshActsOnRelease() {
         #expect(MobileSwipe.refreshes(pullAtRelease: 100))
         #expect(!MobileSwipe.refreshes(pullAtRelease: 60))
+    }
+
+    /// #655: the open sheet dragged down keeps its top under the finger (the keyboard goes as the drag starts) and
+    /// sinks into the pill when let go far enough down or flicked; a short, slow drag lets it rise back open.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/655"))
+    func theOpenSheetGoesDownTheWayItCameUp() {
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: 0) == 420)
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: 150) == 270)
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: 600) == 0)
+        #expect(MobileSwipe.sheetDragDownPull(startPull: 420, dragDown: -30) == 450, "back up past where it started")
+        #expect(MobileSwipe.sheetDragDownCloses(dragDown: 120, velocityDown: 0))
+        #expect(MobileSwipe.sheetDragDownCloses(dragDown: 30, velocityDown: 900))
+        #expect(!MobileSwipe.sheetDragDownCloses(dragDown: 40, velocityDown: 100))
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/655"))
+    func aSheetBelowTheKeyboardsTopIsOutOfSight() {
+        #expect(MobileSwipe.sheetUnderKeyboard(sheetTop: 600, keyboardTop: 583))
+        #expect(!MobileSwipe.sheetUnderKeyboard(sheetTop: 300, keyboardTop: 583))
+        #expect(!MobileSwipe.sheetUnderKeyboard(sheetTop: 700, keyboardTop: nil), "no keyboard: nothing covers it")
     }
 }
 
@@ -1718,5 +1743,23 @@ struct MobileRecentTabsTests {
         folder.children = [folder.id, inFolder.id]
         let document = Self.sidebar(today: [folder, inFolder])
         #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document, limit: 10).map(\.title) == ["In the loop"])
+    }
+}
+
+/// The bottom bar's buttons tick under the finger as Arc Search's do (#675).
+struct MobilePressHapticsTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
+    func aButtonTicksAsTheFingerComesDownAndAgainAsItLetsGo() {
+        #expect(MobilePressHaptics.tick(from: false, to: true) == .press)
+        #expect(MobilePressHaptics.tick(from: true, to: false) == .release)
+        // A finger moving on the button sets the highlight again: no tick for that.
+        #expect(MobilePressHaptics.tick(from: true, to: true) == nil)
+        #expect(MobilePressHaptics.tick(from: false, to: false) == nil)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
+    func everyBarButtonTicksTheNewTabPillToo() {
+        #expect(MobilePressHaptics.barButtons == ["bar-tabs", "bar-search", "bar-menu", "bar-spaces", "bar-settings"])
+        #expect(MobilePressHaptics.barButtons.contains("bar-search"))
     }
 }

@@ -1,0 +1,21 @@
+# promise: #663
+# Arc's ⌘L on a page with the developer bar (a local page, GitHub #42) edits the bar's address in place: the panel
+# covers the bar, the card's width with its top on the bar's, and the suggestions drop across the page (Arc 1.174.1,
+# 22 Nov 2026). Scenarios start with Developer Mode off for the fixture server, so ⌘L first opens the centred bar, as
+# Arc's does on an ordinary site; with Developer Mode on, the panel over the developer bar.
+budget rss=600 stalls50=6
+cra://open?url=${PAGE}?n=local
+wait 3
+cra://debug?key=l,37,1048576
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar open, panel centred w=
+cra://dismiss
+wait 1
+cra://action/toggleDeveloperMode
+wait 1
+cra://debug?key=l,37,1048576
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar open, panel developer w=[0-9]+ h=[0-9]+ at bar
+cra://dismiss

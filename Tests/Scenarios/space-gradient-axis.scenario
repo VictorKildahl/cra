@@ -1,0 +1,15 @@
+# promise: #669
+# The space gradient runs as Arc 1.174's does: from the window's top left at 45°, whatever the window's shape,
+# reaching the last colour 0.76 of the way to the far corner (measured 22 Nov 2026 on four Arc windows; see
+# docs/arc-reverse-engineering.md). Cra's ran top to bottom. On a 1728x1084 window the top right is 0.81 of the
+# way and the bottom left 0.51, and nine Oklab samples make the colours (Arc blends in Oklab; SpaceGradientTests).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1728x1084
+wait 2
+cra://debug?spaceGradient=wide
+cra://debug?windowSize=900x900
+wait 2
+cra://debug?spaceGradient=square
+expect-log space gradient wide: size 1728x1084 start 0\.000,1\.000 end .* topRight 0\.8(0|1)\d bottomLeft 0\.50\d colours 9
+expect-log space gradient square: size 900x900 start 0\.000,1\.000 end 0\.760,0\.240 topRight 0\.658 bottomLeft 0\.658 colours 9

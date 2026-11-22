@@ -8,7 +8,7 @@ import CraCEF
 /// (`<input type=color>`) count too, and the AppKit alerts Chrome shows for "Leave site?", and macOS's share
 /// picker (`navigator.share`). Each line gives its size, where it sits (CraCore
 /// PageDialogPlacement: on the page, the window, a sliver or off), whether it is in front there among
-/// Cra's windows, and what it says: its text, buttons and fields, read through accessibility.
+/// Cra's windows, and what it says: its text, buttons and fields, read through accessibility, and its title.
 /// `press=<title>` presses that button and `fill=<a,b>` types into its fields in order, both the way
 /// VoiceOver does, so no pointer or key goes anywhere.
 @MainActor
@@ -56,10 +56,13 @@ enum PageDialogs {
         let text = all.filter { $0.accessibilityRole() == .staticText }
             .compactMap { ($0.accessibilityValue() as? String) ?? $0.accessibilityLabel() }
             .map { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }.filter { !$0.isEmpty }
-        let buttons = all.filter { $0.accessibilityRole() == .button }.compactMap { $0.accessibilityTitle() ?? $0.accessibilityLabel() }.filter { !$0.isEmpty }
+        let buttons = all.filter { $0.accessibilityRole() == .button }.compactMap { $0.accessibilityTitle() ?? $0.accessibilityLabel() }
+            .map { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }.filter { !$0.isEmpty }
         let fields = all.filter { $0.accessibilityRole() == .textField }.count
         return "page dialog \(label): \(kind) \(Int(w.frame.width))x\(Int(w.frame.height)) at=\(at.rawValue) front=\(inFront(w) ? 1 : 0)"
             + " text=\(text.joined(separator: "|")) buttons=\(buttons.joined(separator: "|")) fields=\(fields)"
+            // The window's own title: a Chrome bubble's heading ("Cast <site>") sits in its frame, outside the content.
+            + " title=\(w.title)"
     }
 
     /// Whether it is the first of Cra's windows at its centre that shows and takes clicks.

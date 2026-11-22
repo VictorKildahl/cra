@@ -1,0 +1,14 @@
+# What a release once shipped broken, outside the web features map (docs/web-features.md, "The gates"): each
+# release runs these scenarios with the map's, so the same thing can't ship broken twice. Add a row when an
+# update breaks something users had, once its fix is locked (CLAUDE.md rule 6).
+# scenario	issue	what broke
+devtools-draws	#468	DevTools stayed blank after the 0.1.44 update
+engine-host-closes-profile-stays	#476	switching profiles crashed Cra on 0.1.45
+page-opened-tab-shows	#597	a tab a page opened was selected but showed nothing, since 0.1.45
+extension-remove	#484	Remove in Extensions did nothing on the Chrome engine
+chromium-locale	#484	the engine came up in English whatever the Mac's language
+library-swipe-out-still-pointer	#635	another space's sidebar flashed after swiping back from the Library
+page-fullscreen-close-tab	#636	⌘W on a full-screen video left the window in full screen
+floating-sidebar-extension-popup-fullscreen	#634	an extension's popup sat in the wrong place in full screen
+code-sign-clone-off	crash-code-sign-clone-cleanup-after-update	Cra Helper crashed after a version-changing update (0.1.52, 127 reports)
+appkit-first-responder-exception	crash-first-responder-after-resigning	Cra quit on AppKit's first-responder exception from a popover's field (0.1.53)

@@ -54,8 +54,12 @@ public struct LittleWindowReturn: Equatable {
 
     /// Another Cra window that isn't a panel (the browser window, Settings) took the keyboard: the
     /// browser is in use, so closing the Little Window goes back to it as before.
-    public mutating func otherWindowBecameKey() {
-        if hadKeyboard { app = nil }
+    /// `whileComingForward`: AppKit made it key as Cra came forward (between applicationWillBecomeActive and
+    /// applicationDidBecomeActive), before the window it gives the keyboard back to. That isn't the browser in
+    /// use, and it took the way back from a Little Window opened earlier: a second link from Slack, then ⌘W on
+    /// the first window, brought the browser window forward instead of Slack (#659).
+    public mutating func otherWindowBecameKey(whileComingForward: Bool = false) {
+        if hadKeyboard, !whileComingForward { app = nil }
     }
 
     /// Cra came forward again (⌘Tab, a click on the Little Window) from `previous`: that's where
@@ -79,5 +83,25 @@ public struct LittleWindowReturn: Equatable {
     /// keyboard while Cra was in front, and its page didn't move into a tab (the browser window has it then).
     public static func nextTakesKeyboard(closingKeyWindow: Bool, craActive: Bool, movedToTab: Bool, littleWindowsLeft: Bool) -> Bool {
         closingKeyWindow && craActive && !movedToTab && littleWindowsLeft
+    }
+}
+
+/// How a Little Window's close counts toward its way back (#430, #659): whether it closed as the key window with
+/// Cra in front, which `LittleWindowReturn.target` asks.
+public struct LittleWindowClose: Equatable, Sendable {
+    public let closingKeyWindow: Bool
+    public let craActive: Bool
+
+    /// `keyIsThisWindow`: Cra's key window is the closing window (or its command bar or popup); `craActive`:
+    /// NSApp.isActive; `craFrontmost`: the window server already has Cra in front (NSWorkspace's frontmost app);
+    /// `clickedInWindow`: a click in the closing window closes it (its close button).
+    /// A click on the close button of a Little Window while another app is in front brings Cra forward, but the
+    /// button acts on the mouse-up, before AppKit makes Cra active: the window closed as an inactive one, nothing
+    /// went back, and AppKit then gave the keyboard to the browser window, which came forward on its own display
+    /// over the app the user was in (#659). That click is the Little Window in use, with Cra coming to the front.
+    public init(keyIsThisWindow: Bool, craActive: Bool, craFrontmost: Bool, clickedInWindow: Bool) {
+        let clickBringsCraForward = !craActive && craFrontmost && clickedInWindow
+        closingKeyWindow = keyIsThisWindow || clickBringsCraForward
+        self.craActive = craActive || clickBringsCraForward
     }
 }

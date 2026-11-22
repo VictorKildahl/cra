@@ -192,6 +192,14 @@ public enum PeekLayout {
         return r.isNull || r.width < 1 || r.height < 1 ? nil : r
     }
 
+    /// The fraction of the page's view `rect` covers (y down, as a page script measures it): the inverse of
+    /// `source(fraction:in:)`, for asking the page about a place in it again (#682).
+    public static func fraction(of rect: CGRect, in page: CGRect) -> CGRect? {
+        guard page.width > 0, page.height > 0 else { return nil }
+        return CGRect(x: (rect.minX - page.minX) / page.width, y: (page.maxY - rect.maxY) / page.height,
+                      width: rect.width / page.width, height: rect.height / page.height)
+    }
+
     /// Where a Peek grows from and closes back into: the link the page found, or the place it was
     /// clicked when the page couldn't say which link that was (GitHub #359).
     public enum Origin: Equatable, Sendable {
@@ -242,18 +250,78 @@ public enum PeekLayout {
           let a = isFinite(px) ? link(deep(r => r.elementFromPoint(px, py))) : null;
           if (!a) a = link(deep(r => r.activeElement));
           window.__craPeekSource = a || null;
+          window.__craPeekHref = a ? a.href : null;
           return a ? \(sourceRectJS) : null;
         })()
         """
     }
 
-    /// The same link's rect again as the Peek closes (it may have moved), or null when it's gone.
-    public static let sourceAgainScript = """
+    /// The same link's rect again as the Peek closes (it may have moved), or null when it's gone. A page that
+    /// re-renders while the Peek is open (X's timeline, #682) swaps the link's element for a new one; then a link
+    /// to the same address at the place the Peek grew from (`near`, fractions of the view, y down) stands in for
+    /// it, else the nearest link to that address on the page.
+    public static func sourceAgainScript(near: CGRect?) -> String {
+        let x = near.map { "\(Double($0.midX))" } ?? "NaN", y = near.map { "\(Double($0.midY))" } ?? "NaN"
+        return """
         (() => {
-          const a = window.__craPeekSource, vv = visualViewport;
-          return a && a.isConnected ? \(sourceRectJS) : null;
+          const vv = visualViewport;
+          let a = window.__craPeekSource;
+          if (!(a && a.isConnected)) {
+            a = null;
+            const href = window.__craPeekHref;
+            if (href) {
+              const up = e => e.parentElement || (e.parentNode && e.parentNode.host) || null;
+              const link = e => { for (; e; e = up(e)) if (e.matches && e.matches('a[href], area[href]')) return e; return null; };
+              const deep = find => { let e = find(document); while (e && e.shadowRoot) { const i = find(e.shadowRoot); if (!i || i === e) break; e = i; } return e; };
+              const px = \(x) * vv.width + vv.offsetLeft, py = \(y) * vv.height + vv.offsetTop;
+              const here = isFinite(px) ? link(deep(r => r.elementFromPoint(px, py))) : null;
+              if (here && here.href === href) a = here;
+              else {
+                let best = Infinity;
+                for (const c of document.querySelectorAll('a[href], area[href]')) {
+                  if (c.href !== href) continue;
+                  const r = c.getBoundingClientRect();
+                  if (!r.width || !r.height) continue;
+                  const d = isFinite(px) ? Math.hypot(r.left + r.width / 2 - px, r.top + r.height / 2 - py) : 0;
+                  if (d < best) { best = d; a = c; }
+                }
+              }
+              window.__craPeekSource = a;
+            }
+          }
+          return a ? \(sourceRectJS) : null;
         })()
         """
+    }
+
+    /// What the page answered when a Peek closing asked where its link is now.
+    public enum SourceAnswer: Equatable, Sendable {
+        /// The link, here now (in the window's coordinates).
+        case found(CGRect)
+        /// No such link on the page any more: the script answered null.
+        case gone
+        /// No answer in time, or the script failed: nothing is known about the link.
+        case noAnswer
+    }
+
+    /// Where a closing Peek goes back to.
+    public enum CloseTarget: Equatable, Sendable {
+        /// Into the link (or the place it grew from), with the link's picture.
+        case link(CGRect)
+        /// Out to the whole area, fading, without one.
+        case area(CGRect)
+    }
+
+    /// Arc closes a Peek into the link it came from, where the page has it now, and out to the whole area only
+    /// when the link is gone. A page that doesn't answer (late, or the script failed) leaves the link where it
+    /// was at open (#682: a failed answer counted as gone).
+    public static func closeTarget(_ answer: SourceAnswer, stored: CGRect, area: CGRect) -> CloseTarget {
+        switch answer {
+        case .found(let r): .link(r)
+        case .gone: .area(area)
+        case .noAnswer: .link(stored)
+        }
+    }
 
     static let sourceRectJS = """
         (() => { const r = a.getBoundingClientRect(); \

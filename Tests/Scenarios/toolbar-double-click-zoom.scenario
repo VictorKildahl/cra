@@ -1,0 +1,11 @@
+# promise: #685
+# A double click on the toolbar's empty part does what macOS is set to do for a title bar ("Double-click a window's
+# title bar to": unset is Zoom), as the sidebar's top and the strip above the card already did, and as Arc and other
+# Mac apps do. It did nothing: the toolbar took the press as a click that focuses its pane (GitHub #685). The double
+# click goes through the window as a mouse sends it, where no button is.
+budget rss=600 stalls50=6
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://open?url=${PAGE}?n=zoom
+wait 3
+cra://debug?toolbarDoubleClick=once
+expect-log toolbar double click once: zoomed=1 grew=1

@@ -8,7 +8,7 @@ public enum AppIconResources {
         return NSWorkspace.shared.setIcon(image, forFile: app.bundlePath, options: [])
     }
 
-    static func canUpdateFileIcon(at url: URL) -> Bool {
+    public static func canUpdateFileIcon(at url: URL) -> Bool {
         // Writing Finder metadata on a development build inside Documents can trigger a folder-access prompt.
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return url.pathExtension == "app" && !documents.contains { url.pathComponents.starts(with: $0.pathComponents) }

@@ -40,13 +40,11 @@ struct SpacePalette {
     var lightMaterial = false
     /// A gradient whose colours read dark, over Arc's darker material for those (#643).
     var darkGradient = false
+    /// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366): the colours over SidebarGlass's material.
+    var glass = false
 
     /// Arc's one-colour opacity (SpaceTheme.solidAlpha, where the measurements are).
     static func solidAlpha(intensity: Double) -> Double { SpaceTheme.solidAlpha(intensity: intensity) }
-
-    var gradient: LinearGradient {
-        LinearGradient(colors: gradientColors, startPoint: .top, endPoint: .bottom)
-    }
 
     /// Outline and fill for a folder glyph; nil (Auto) is the theme's pair.
     func folderColors(_ style: FolderIconStyle?) -> (tint: Color, fill: Color, back: Color) {
@@ -101,35 +99,40 @@ extension SpaceTheme {
 
     var palette: SpacePalette {
         let systemDark = SystemAppearance.shared.isDark
-        var p = resolved(systemDark: systemDark).fixedPalette(lightMaterial: usesLightMaterial(systemDark: systemDark))
-        p.lightMaterial = usesLightMaterial(systemDark: systemDark)
-        p.darkGradient = resolved(systemDark: systemDark).drawnOverDarkGradientMaterial
+        let glass = SidebarGlassSetting.shared.isOn
+        let theme = resolved(systemDark: systemDark)
+        var p = theme.fixedPalette(lightMaterial: usesLightMaterial(systemDark: systemDark), glass: glass)
+        // The glass's own material follows the theme's colours (SidebarGlass), not Arc's light/dark pick.
+        p.lightMaterial = glass ? !theme.isDark : usesLightMaterial(systemDark: systemDark)
+        p.darkGradient = !glass && theme.drawnOverDarkGradientMaterial
+        p.glass = glass
         return p
     }
 
     /// The palette of a resolved theme (its appearance is light or dark, or judged by colour).
-    private func fixedPalette(lightMaterial: Bool) -> SpacePalette {
+    /// `glass`: Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366), every theme thin over SidebarGlass.
+    private func fixedPalette(lightMaterial: Bool, glass: Bool = false) -> SpacePalette {
         let dark = isDark
         let base = colors.isEmpty ? ["#DDDDDD"] : colors
         // Over Arc's material (one colour, or a gradient made in the editor, #643): the colours at
         // Arc's one-colour opacity. Vibrant (an imported Arc theme): its stops at `intensity` over the blur.
         // Opaque: intensity 1 = the raw colors; lower pulls toward white/black.
-        let overMaterial = drawnOverMaterial
-        let pull = vibrant || solid ? 0 : (1 - intensity) * (dark ? 0.35 : 0.6)
+        let overMaterial = drawnOverMaterial || glass
+        let pull = vibrant || solid || glass ? 0 : (1 - intensity) * (dark ? 0.35 : 0.6)
         var stops = base.map { SpaceTheme.mix($0, towardWhite: !dark, amount: pull) }
         if stops.count == 1 { stops.append(SpaceTheme.mix(base[0], towardWhite: !dark, amount: pull + 0.15)) }
 
         let folder = FolderTones(themeColor: self.accent ?? base[0], dark: dark)
-        let alphaTop = overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
+        let alphaTop = glass ? SidebarGlass.alpha(intensity: intensity) : overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
             : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1
-        let alphaBottom = overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
+        let alphaBottom = glass ? SidebarGlass.alpha(intensity: intensity) : overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
             : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 2.35)) : 1
         // Dark themes: Arc's palette tones (shadedDark front, midTone back) read wrong next to Cra's
         // dark sidebar (Victor, 4 Nov), so the folder keeps the earlier white-over-sidebar look, made
         // opaque. Under a translucent theme the sidebar is the top colour over the dark material
         // (underWindowBackground with ShellView's lift), about 20 % white; a solid one on Light is over
         // Arc's light material instead, about 75 % white over a typical desktop (#455).
-        let material = overMaterial && lightMaterial ? 0.75 : 0.2
+        let material = glass ? SidebarGlass.ground(dark: dark) : overMaterial && lightMaterial ? 0.75 : 0.2
         let ground = alphaTop < 1 ? Color(white: material).blendedToward(stops[0], alphaTop) : stops[0]
         let darkFill = ground.blendedToward(.white, 0.14)
         return SpacePalette(
@@ -163,10 +166,19 @@ extension SpaceTheme {
             // opacity 0.43 top / 0.59 bottom then matches Arc within ±5 over white and black.
             gradientAlpha: alphaTop,
             gradientAlphaBottom: alphaBottom,
-            vibrant: vibrant || solid,
+            vibrant: vibrant || solid || glass,
             solid: overMaterial
         )
     }
+}
+
+/// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366), which every palette reads: the windows'
+/// refresh copies it from the store, and views drawn from a palette redraw when it changes.
+@Observable
+final class SidebarGlassSetting: @unchecked Sendable {
+    static let shared = SidebarGlassSetting()
+    /// Written on the main thread only.
+    var isOn = false
 }
 
 /// The app's light or dark appearance, which an Auto space theme follows (Arc: appearanceBased):
@@ -227,23 +239,43 @@ struct SpaceBackground: View {
     }
 
     private var gradient: some View {
-        let scale = palette.vibrant ? CraTuning.shared.gradientAlphaScale : 1
-        let n = palette.gradientColors.count
-        let stops = palette.gradientColors.enumerated().map { i, c -> Gradient.Stop in
-            let t = n > 1 ? Double(i) / Double(n - 1) : 0
-            let top = palette.gradientAlpha * (palette.vibrant ? CraTuning.shared.gradientAlphaTopScale : 1)
-            let bottom = palette.gradientAlphaBottom * (palette.vibrant ? CraTuning.shared.gradientAlphaBottomScale : 1)
-            let a = (top + (bottom - top) * t) * scale
-            return Gradient.Stop(color: c.opacity(min(1, a)), location: t)
+        let colors = Self.samples(palette)
+        let stops = colors.enumerated().map { i, c in
+            Gradient.Stop(color: Color(nsColor: c), location: Double(i) / Double(max(1, colors.count - 1)))
         }
         return ZStack {
-            LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
+            // Arc's axis (#669): 45° from the top left, the last colour 0.76 of the way to the far corner.
+            GeometryReader { g in
+                let e = SpaceGradient.unitEnd(width: g.size.width, height: g.size.height)
+                LinearGradient(stops: stops, startPoint: .topLeading, endPoint: UnitPoint(x: e.x, y: e.y))
+            }
             NoiseOverlay(amount: palette.noise, isDark: palette.isDark)
         }
         .ignoresSafeArea()
     }
 
-    /// Gradient stops as drawn: each colour carries the palette's top-to-bottom alpha.
+    /// Colours sampled evenly along the gradient, blended in Oklab as Arc's are (#669); a gradient
+    /// layer's straight blend between this many is within 1/255 of the curve.
+    static let sampleCount = 9
+
+    static func samples(_ palette: SpacePalette) -> [NSColor] {
+        let stops = stops(palette).map { s -> SpaceGradient.RGBA in
+            let c = s.color.usingColorSpace(.sRGB) ?? .gray
+            return SpaceGradient.RGBA(r: c.redComponent, g: c.greenComponent, b: c.blueComponent, a: c.alphaComponent)
+        }
+        return SpaceGradient.samples(stops, count: sampleCount).map {
+            NSColor(srgbRed: $0.r, green: $0.g, blue: $0.b, alpha: $0.a)
+        }
+    }
+
+    /// A gradient layer's start and end for a frame of `size` (unit points, y up as Core Animation has them).
+    static func layerAxis(_ size: CGSize) -> (start: CGPoint, end: CGPoint) {
+        guard size.width > 0, size.height > 0 else { return (CGPoint(x: 0.5, y: 1), CGPoint(x: 0.5, y: 0)) }
+        let e = SpaceGradient.unitEnd(width: size.width, height: size.height)
+        return (CGPoint(x: 0, y: 1), CGPoint(x: e.x, y: 1 - e.y))
+    }
+
+    /// The theme's colours as drawn: each carries the palette's alpha from the first stop to the last.
     static func stops(_ palette: SpacePalette) -> [(color: NSColor, location: Double)] {
         let scale = palette.vibrant ? CraTuning.shared.gradientAlphaScale : 1
         let n = palette.gradientColors.count
@@ -312,8 +344,6 @@ final class PaletteBackgroundView: NSView {
         self.palette = palette
         super.init(frame: .zero)
         wantsLayer = true
-        gradient.startPoint = CGPoint(x: 0.5, y: 1)
-        gradient.endPoint = CGPoint(x: 0.5, y: 0)
         layer?.addSublayer(gradient)
         addSubview(noise)
         apply()
@@ -324,11 +354,11 @@ final class PaletteBackgroundView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     private func apply() {
-        let stops = SpaceBackground.stops(palette)
+        let colors = SpaceBackground.samples(palette)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        gradient.colors = stops.map(\.color.cgColor)
-        gradient.locations = stops.map { NSNumber(value: $0.location) }
+        gradient.colors = colors.map(\.cgColor)
+        gradient.locations = colors.indices.map { NSNumber(value: Double($0) / Double(max(1, colors.count - 1))) }
         CATransaction.commit()
         noise.apply(palette)
     }
@@ -338,6 +368,9 @@ final class PaletteBackgroundView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradient.frame = bounds
+        let axis = SpaceBackground.layerAxis(bounds.size)
+        gradient.startPoint = axis.start
+        gradient.endPoint = axis.end
         CATransaction.commit()
         noise.frame = bounds
     }
@@ -354,7 +387,7 @@ final class PagedGradientView: NSView {
     private let gradient = CAGradientLayer()
     private var placed: (index: Int, ids: [UUID], swipe: CGFloat)?
     private var pendingVelocity = 0.0
-    private static let samples = 5
+    private static let samples = SpaceBackground.sampleCount
     private static let settleKey = "settle"
 
     init(store: SidebarStore, ui: SidebarUIState) {
@@ -362,8 +395,6 @@ final class PagedGradientView: NSView {
         self.ui = ui
         super.init(frame: .zero)
         wantsLayer = true
-        gradient.startPoint = CGPoint(x: 0.5, y: 1)
-        gradient.endPoint = CGPoint(x: 0.5, y: 0)
         gradient.locations = (0..<Self.samples).map { NSNumber(value: Double($0) / Double(Self.samples - 1)) }
         layer?.addSublayer(gradient)
         ui.observeSpaceSwipe { [weak self] in self?.swipeChanged() }
@@ -379,6 +410,7 @@ final class PagedGradientView: NSView {
             _ = store.pagedSpaces(window: ui.windowID).map(\.theme)
             _ = store.focusedSpaceID(window: ui.windowID)
             _ = CraTuning.shared.gradientAlphaScale
+            _ = SidebarGlassSetting.shared.isOn
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.placed = nil
@@ -399,6 +431,10 @@ final class PagedGradientView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradient.frame = bounds
+        // Arc's axis across the whole window (#669).
+        let axis = SpaceBackground.layerAxis(bounds.size)
+        gradient.startPoint = axis.start
+        gradient.endPoint = axis.end
         CATransaction.commit()
         update()
     }
@@ -415,7 +451,8 @@ final class PagedGradientView: NSView {
         let sameSpaces = placed?.ids == ids
         placed = (index, ids, swipe)
         if swipe == 0, moved, sameSpaces, let from = gradient.presentation()?.colors ?? gradient.colors {
-            let spring = CASpringAnimation(perceptualDuration: 0.4, bounce: 0)
+            // The strip's spring, Arc's (LibrarySwipe.response, #613): on Dia's 0.4 s the tint trailed the sidebar.
+            let spring = CASpringAnimation(perceptualDuration: LibrarySwipe.response, bounce: 0)
             spring.keyPath = "colors"
             spring.fromValue = from
             spring.toValue = target
@@ -430,6 +467,20 @@ final class PagedGradientView: NSView {
         }
     }
 
+    /// `cra://debug?spaceGradient=<label>`: the layer's axis and colours, which run at Arc's 45° from
+    /// the top left, the last colour 0.76 of the way to the far corner (#669).
+    var debugReadout: String {
+        let w = bounds.width, h = bounds.height
+        let s = gradient.startPoint, e = gradient.endPoint
+        // Where the layer puts the far corner and the top right / bottom left, as `SpaceGradient.position` does.
+        func at(_ x: Double, _ y: Double) -> Double {
+            let ex = e.x - s.x, ey = (1 - e.y) - (1 - s.y), n = ex * ex + ey * ey
+            return n > 0 ? max(0, min(1, (x / w * ex + y / h * ey) / n)) : 0
+        }
+        return String(format: "size %dx%d start %.3f,%.3f end %.3f,%.3f topRight %.3f bottomLeft %.3f colours %d",
+                      Int(w), Int(h), s.x, s.y, e.x, e.y, at(w, 0), at(0, h), gradient.colors?.count ?? 0)
+    }
+
     private func setColors(_ colors: [CGColor]) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -442,21 +493,8 @@ final class PagedGradientView: NSView {
         let p = min(max(position, 0), Double(last))
         let lo = Int(p.rounded(.down)), hi = min(last, lo + 1)
         let f = p - Double(lo)
-        let a = palettes[lo], b = palettes[hi]
-        return (0..<samples).map { k in
-            let t = Double(k) / Double(samples - 1)
-            return mix(color(a, at: t), color(b, at: t), f).cgColor
-        }
-    }
-
-    private static func color(_ palette: SpacePalette, at t: Double) -> NSColor {
-        let stops = SpaceBackground.stops(palette)
-        guard let first = stops.first else { return .clear }
-        guard stops.count > 1 else { return first.color }
-        for (s, e) in zip(stops, stops.dropFirst()) where t <= e.location {
-            return mix(s.color, e.color, (t - s.location) / max(0.0001, e.location - s.location))
-        }
-        return stops[stops.count - 1].color
+        let a = SpaceBackground.samples(palettes[lo]), b = SpaceBackground.samples(palettes[hi])
+        return zip(a, b).map { mix($0, $1, f).cgColor }
     }
 
     private static func mix(_ x: NSColor, _ y: NSColor, _ f: Double) -> NSColor {

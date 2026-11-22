@@ -40,8 +40,8 @@ struct SpaceColorPresetsTests {
     }
 
     /// A new space starts on one colour (#170) on Auto, so it follows macOS like every Auto space
-    /// (#155): the colour, flat, while macOS is light (a pastel of it when it reads dark) and the
-    /// colour's hue, dark, while macOS is dark.
+    /// (#155): the colour, flat, while macOS is light (a pastel of it when it reads dark), and the colour
+    /// itself over the dark material while macOS is dark, as Arc keeps it (#677).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/155"), arguments: 0..<9)
     func newSpaceIsOneColourOnAuto(index: Int) {
         let hex = SpaceColorPresets.brand[index]
@@ -49,7 +49,7 @@ struct SpaceColorPresetsTests {
         #expect(theme.key == [hex] && theme.appearance == "auto" && theme.dark != nil)
         let light = theme.resolved(systemDark: false), dark = theme.resolved(systemDark: true)
         #expect(light.solid && light.colors.count == 2 && light.colors[0] == light.colors[1] && !light.isDark)
-        #expect(dark.colors.count == 2 && dark.colors[0] == dark.colors[1] && dark.isDark)
+        #expect(dark.colors == [hex.uppercased(), hex.uppercased()] && dark.solid && !dark.usesLightMaterial(systemDark: true))
     }
 
     /// Arc's page-2 sets: each Brand colour with the second and third colours Arc saved for it, at

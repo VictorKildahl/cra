@@ -453,6 +453,16 @@ struct PeekSource {
             .flatMap { ($0["result"] as? [String: Any])?["value"] as? [String: Any] }
     }
 
+    /// A source script's answer: the rect (fractions), nil inside when the script answered null (no such link),
+    /// nil outside when it didn't answer (an exception, or no result at all, #682).
+    static func answer(_ result: String?) -> CGRect?? {
+        guard let json = result.flatMap({ try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }),
+              json["exceptionDetails"] == nil, let r = json["result"] as? [String: Any] else { return .none }
+        if let v = r["value"] as? [String: Any] { return .some(PeekLayout.fraction(fromScript: v)) }
+        if r["subtype"] as? String == "null" || r["value"] is NSNull { return .some(nil) }
+        return .none
+    }
+
     /// Page.captureScreenshot's picture.
     static func image(fromScreenshot shot: String?) -> CGImage? {
         shot.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }

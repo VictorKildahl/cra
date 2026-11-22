@@ -1,0 +1,26 @@
+# promise: #684
+# A page opens a blank window (window.open()) and then sends it to mailto:. Chrome hands the address to the mail
+# app once without a click of its own (its flood guard) and closes the tab it opened only for that
+# (external_protocol_handler.cc). Cra refused it without a click and left the empty about:blank window over the
+# page, and Mail never opened (GitHub #684). news: stands in for mailto: here: Cra opens it the same way
+# (AppLinks.openedSchemes), and no app on a Mac opens it, so the test opens no mail window.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=mail
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?back=start
+expect-log back start: selected=.*page\.html\?n=mail .*today=1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(w=>(w.location.href='news:blank','opened'))(window.open())","userGesture":true}
+expect-log page about: wants news:, no app opens it
+expect-log blank page closes: it only took news: to an app
+wait 2
+cra://debug?back=after
+expect-log back after: selected=.*page\.html\?n=mail .*today=1
+# The page's own redirect with no click gets one go per load, as in Chrome, then nothing until a page loads.
+cra://debug?pageJS=location.href='news:redirect1'
+expect-log page 127\.0\.0\.1 wants news:, no app opens it
+cra://debug?pageJS=location.href='news:redirect2'
+expect-log page 127\.0\.0\.1 can't open news: \(no click\)
+reject-log page about: can't open news: \(no click\)

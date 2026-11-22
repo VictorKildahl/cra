@@ -105,6 +105,7 @@ enum EaselCanvasTests {
         drawingAndMenus(window)
         longText()
         severalItems()
+        resizeLikeArc()
         endlessCanvas()
         window.close()
         print("Easel canvas: selection, movement, editing and deletion passed")
@@ -228,6 +229,65 @@ enum EaselCanvasTests {
         frame = sheet.document.items[0].frame
         precondition(frame.width == 560 && frame.height > 2 * 27, "past 560 pt the text wraps and the box grows down: \(frame)")
         print("Easel canvas: long text widens, wraps and takes Return (#580)")
+    }
+
+    // promise: #680
+    /// Arc 1.174.1's handles (22 Nov 2026): a shape resizes from anywhere along an edge, that side only; a text box takes
+    /// its width from its left or right edge and wraps at it, stays as tall as its text (its bottom edge moves nothing),
+    /// and keeps that width as it's typed in. Before, text didn't resize and shapes only from their corners.
+    @MainActor
+    static func resizeLikeArc() {
+        let shape = Easel.Item(kind: .rectangle, frame: .init(x: 100, y: 150, width: 200, height: 100))
+        let note = Easel.Item(kind: .text("Hello there, a note on the easel", size: 18), frame: .init(x: 100, y: 450, width: 240, height: 27))
+        let sheet = EaselSheetView(document: Easel(items: [shape, note]))
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = sheet
+        sheet.layoutSubtreeIfNeeded()
+        defer { window.close() }
+        let field = sheet.subviews.compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == note.id.uuidString }!
+        func event(_ type: NSEvent.EventType, _ p: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: sheet.convert(p, to: nil), modifierFlags: [], timestamp: 1,
+                               windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+        }
+        func click(_ p: NSPoint) { sheet.mouseDown(with: event(.leftMouseDown, p)); sheet.mouseUp(with: event(.leftMouseUp, p)) }
+        func drag(_ from: NSPoint, _ to: NSPoint) {
+            sheet.mouseDown(with: event(.leftMouseDown, from))
+            sheet.mouseDragged(with: event(.leftMouseDragged, NSPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)))
+            sheet.mouseDragged(with: event(.leftMouseDragged, to))
+            sheet.mouseUp(with: event(.leftMouseUp, to))
+        }
+        func item(_ id: UUID) -> Easel.Item { sheet.document.items.first { $0.id == id }! }
+
+        // The shape: its right edge near the top (not its middle) widens it; its top edge raises it.
+        click(NSPoint(x: 200, y: 200))
+        drag(NSPoint(x: 300, y: 165), NSPoint(x: 400, y: 165))
+        precondition(item(shape.id).frame == .init(x: 100, y: 150, width: 300, height: 100), "a shape's edge resizes that side: \(item(shape.id).frame)")
+        drag(NSPoint(x: 330, y: 150), NSPoint(x: 330, y: 120))
+        precondition(item(shape.id).frame == .init(x: 100, y: 120, width: 300, height: 130), "its top edge too: \(item(shape.id).frame)")
+
+        // The text box: wider from its right edge, on one line, as tall as before.
+        click(NSPoint(x: 150, y: 460))
+        let fitted = item(note.id).frame
+        drag(NSPoint(x: fitted.x + fitted.width, y: fitted.y + 4), NSPoint(x: fitted.x + fitted.width + 200, y: fitted.y + 4))
+        let wide = item(note.id)
+        precondition(wide.fixedWidth == true && wide.frame.x == fitted.x && wide.frame.width == fitted.width + 200 && wide.frame.height == fitted.height,
+                     "a text box's right edge sets its width: \(fitted) → \(wide.frame)")
+        // Narrower than its line: it wraps and grows down, its height still its text's.
+        drag(NSPoint(x: wide.frame.x + wide.frame.width, y: wide.frame.y + 4), NSPoint(x: wide.frame.x + 120, y: wide.frame.y + 4))
+        let narrow = item(note.id)
+        precondition(narrow.frame.width == 120 && narrow.frame.height > fitted.height * 1.5, "narrowed, the text wraps: \(narrow.frame)")
+        // Its bottom edge moves nothing.
+        drag(NSPoint(x: narrow.frame.x + 60, y: narrow.frame.y + narrow.frame.height), NSPoint(x: narrow.frame.x + 60, y: narrow.frame.y + narrow.frame.height + 80))
+        precondition(item(note.id).frame == narrow.frame, "a text box's bottom edge leaves it as tall as its text: \(item(note.id).frame)")
+        // Typing keeps the width the drag set (Easel.textBoxWidth): the box grows down, not across.
+        field.stringValue = "Hello there, a note on the easel, now a good deal longer than before"
+        sheet.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        precondition(item(note.id).frame.width == 120 && item(note.id).frame.height > narrow.frame.height, "typing keeps the width: \(item(note.id).frame)")
+        // Undo goes back through the drags; the first one takes the box back to fitting its text.
+        sheet.undo(nil); sheet.undo(nil); sheet.undo(nil)
+        precondition(item(note.id).fixedWidth == nil && item(note.id).frame.width == fitted.width, "Undo takes the width back: \(item(note.id))")
+        print("Easel canvas: shapes resize from their edges, text boxes take a dragged width and keep it (#680)")
     }
 
     // promise: #580

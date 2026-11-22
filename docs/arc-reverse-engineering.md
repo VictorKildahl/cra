@@ -247,7 +247,9 @@ Legend: [O] observed in shipped artifact or data file, [I] inference, [U] unknow
 - [O] Command bar: ~766pt wide, vertically centered, dark translucent in dark mode. Input row 60pt with the top match's
   favicon; rows 50pt single-line "Title — url"; the completion row comes first, then the typed query, then matches; open
   tabs show "Switch to Tab" + arrow box (other-space tabs show the space name); the selected row is tinted with the
-  space color. (Re-measured 9 Nov 2026: input row 64, rows 46 on a 50 pt pitch; see the ⌘T entry.) ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width.
+  space color. (Re-measured 9 Nov 2026: input row 64, rows 46 on a 50 pt pitch; see the ⌘T entry.) ⌘L with the toolbar visible edits inline: dropdown hangs under the toolbar across the content width
+  (corrected 22 Nov 2026: that is a local page's developer bar; on an ordinary site ⌘L opens the centred bar, see
+  "The address panel from the sidebar").
   Arc draws the bar inside the window, so it is light or dark with the space's theme; Cra's bar is a child panel,
   which takes macOS' appearance unless given the window's (it was dark over light spaces on a dark Mac until 4 Nov).
 
@@ -3122,12 +3124,52 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   at once), on tab and space switches alike. Now the bar takes ToolbarColor (CraCore): the page's report,
   else TabData.themeColor, else white, and fades to a new report over 0.18 s (14–15 frames).
 
+## The empty card and the gradient's direction (Arc 1.174, 21 Nov 2026, issue #669, offline Arc)
+- [O live] Offline Arc on a fake home, Spaces ▸ Edit Theme… over AX, a full-screen white window right below Arc's
+  (scratch `backdrop`), 2x captures; the card with no tab sampled 24 pt right of the sidebar's edge against the sidebar
+  4 pt left of it, at four heights. A window with tabs but none selected and a new window read the same.
+- [O] The card follows Arc's appearance (View ▸ Appearance), not the theme: on Light it is nearly white over every
+  theme (a white veil of 0.69 drab, 0.73 red/teal, 0.80 pastel); on Dark it is the theme plus an even +17 to +22 on
+  each channel (pastel +18, red/teal +19–21, navy +22), an addition, not a blend. Cra's #483 values (0.65 light, 0.10
+  dark) were keyed on the theme's colours, so a light theme on a dark Mac got the white card.
+- Cra (#669): CardVeil.noTabCard picks by Arc's appearance (SpaceTheme.isLight: the space's Light/Dark, macOS on
+  Auto): 0.65 on Light, and on Dark a white veil of 0.08 / (1 − the theme's lightness), 0.08 to 0.35, as near Arc's
+  even +20 as one blend gets (Cra's pastel card +14 to +23 over its sidebar; it was +25 to +42). Pinned by
+  CardVeilTests.aWindowWithNoTabFollowsArcsAppearance and the empty-card-appearance scenario.
+- [O] The space gradient runs from the top left (first colour) toward the bottom right: over white, a
+  red/teal theme's R channel falls across the window and down it, the bottom edge reaching the second colour by
+  x ≈ 1200 of 1728 while the top edge is 0.68 of the way at the right end; the steps grow toward the end (0.11, 0.13,
+  0.17, 0.21 per 400 pt along the top), so it is no linear sRGB ramp.
+- [O live, 22 Nov 2026, cra-22] The same fake home with the Victor space set to `blendedGradient` #D94F4F / #3FBFBF
+  (no overlay colours, intensity 0.8, no grain), captured over white with Window ▸ Move & Resize at 1728×1084
+  (Fill), 927×1069 (Left and Right) and 927×531 (Top Left), plus #D94F4F / #E0C040 / #3F6FD0. Fitted per capture
+  (P3 → sRGB, 7×7 means, the command bar, its shadow and the sunset banner masked out):
+  - Lines of one colour are straight and parallel (nine levels on the earlier 1728×1084 capture: slope −0.92 ± 0.002),
+    so it is one linear gradient. Their angle is 45–46° on the 927-wide windows and on the unveiled sidebar of the
+    1728-wide one (45.6°; 45° fits within 0.01/255 rms). The card's veil tilts its own fit to 42.7°.
+  - It is window-relative (Left and Right agree) and scales with the window: the last colour arrives 0.76 of the
+    way from the top left to the far corner along the axis on every size (0.757, 0.760, 0.761, 0.73), and stays flat
+    past it. The start is at the top left corner (the sidebar's colour still changes from 130 pt down; where t = 0
+    lies within ~60 pt of the corner can't be told from the colours).
+  - The blend is Oklab: rms 1.2/255 against 1.5 for linear light and 3.0 for sRGB (which also needs end colours
+    past 255). Red stays up longer and turns faster near the teal; green rises fast first.
+- Cra (#669): SpaceGradient (CraCore) holds the axis (45° from the top left, `reach` 0.76) and the Oklab blend;
+  the window's PagedGradientView, PaletteBackgroundView and SwiftUI's SpaceBackground draw nine Oklab samples
+  between the theme's stops along it. A gradient layer blends perpendicular to its axis in unit space, so the end
+  point is 2d·(w, h)/(w² + h²) of the frame (`unitEnd`); the axis divided by the frame ran at 68° on a 1728×1084
+  window. Same theme imported into Cra and captured the same way, each image's channels scaled to its own range:
+  1728×1084 rms 0.016–0.017 of the range from Arc's (max 0.067), was 0.28–0.32 (max 0.82) top to bottom; 927×531
+  0.06–0.12, was 0.34–0.36. Pinned by SpaceGradientTests and the space-gradient-axis scenario.
+
 ## The address panel from the sidebar (Arc 1.174, 20 Nov 2026, issue #663, offline Arc)
 - [O live] Offline Arc on a fake home (network denied, pages from a loopback server), `topBarURLEnabled` NO so the
   address is in the sidebar, the toolbar hidden; AX frames and 2x window captures. A click on the sidebar's
   address opens a compact command bar hanging from it: its top left on the field's (window x 8, y 45), not the
-  centred bar. ⌘L in the same state opens Arc's bar across the top of the page card instead (field 1431 pt wide),
-  as with the toolbar shown (above). With no tab the click opens the same panel, empty, "Search or Enter URL…".
+  centred bar. With no tab the click opens the same panel, empty, "Search or Enter URL…".
+- [O live] Corrected 22 Nov 2026 (Arc 1.174.1, real ⌘L keystrokes): on an ordinary site (site.lvh.me) ⌘L opens
+  the centred command bar, with the address in the sidebar and with the toolbar shown alike. The "bar across the top
+  of the page card" noted here before was a page on 127.0.0.1: Arc shows its developer bar on local pages, and there
+  ⌘L edits the developer bar's address in place, its suggestions dropping across the page card (1431 pt wide).
 - [O] Width: the field is the address in 13 pt medium + ~2 pt, at least 240 (22–40 characters) and at most 610
   (101 characters, truncated); the panel is the field + 110 (glyph centred 32 pt in, field at 53, ⓘ 10 pt after
   the field and 21 from the edge): 350 to 720 pt. The reporter's 1x capture agrees (717 pt). Fit within 2.3 pt
@@ -3138,7 +3180,19 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
   rows keep "Switch to Tab" and its arrow.
 - Cra (#663): CraCore `SidebarAddressPanel` holds the numbers; `CommandBarController.compact` lays the bar out
   that way and MainWindowController hangs it from `SidebarView.addressFrameOnScreen`. #344's "Edit the address
-  in the sidebar" still edits in place, and ⌘L keeps Cra's centred bar (Arc's top-of-page bar is not built).
+  in the sidebar" still edits in place, and ⌘L opens Cra's centred bar as Arc's does on an ordinary site.
+- [O live] Arc's ⌘L over the developer bar (Arc 1.174.1, 22 Nov 2026, 127.0.0.1, 2x full-screen captures): one panel
+  covers the bar and drops across the page card, exactly the card's width (x 228–1718 in a 1728 pt window), its top on
+  the bar's (y 43.5) with a 1 px dark outline and a light rim inside it. The field row is the bar's 40 pt: the bar's
+  glyph where the bar draws it, the address selected in the bar's monospaced font; a 0.5 pt hairline the panel's whole
+  width under it; then the full bar's rows (titles with their addresses), the first highlight 6 pt under the hairline,
+  46 pt tall, inset 10, on a 50 pt pitch, and 11.5 pt under the last row: 303.5 pt for five rows. No ⓘ at the field's
+  end. A long soft shadow over the page below (≈169/255 on white just under it, back to ≈218 50 pt down).
+- Cra (#663 follow-up, Victor 22 Nov 2026): ⌘L on a page that shows the developer bar opens that panel
+  (CraCore `DeveloperBarPanel`; CommandBarController.developer lays CommandBarView out over the bar, the bar's glyph
+  and monospaced 12 pt address where `PaneToolbarView.developerBarOnScreen` reports them). A click on the bar's
+  address still edits it in place without suggestions (#42); Arc's click wasn't measured. Pinned by
+  `DeveloperBarPanelTests` and the `developer-bar-command-l` scenario.
   Pinned by `SidebarAddressPanelTests` and the `sidebar-address-panel` scenario. Not measured: whether Arc's
   panel grows while typing (Cra keeps the width it opened with).
 
@@ -3705,6 +3759,13 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   (black came out #2F2A36), Dark darkened every colour and Light lifted dark ones. Pinned by
   `greysStayNeutralInTheDark`, `darkColoursKeepTheirOwnTone`, `darkGradientFollowsTheSlider` and
   `lightAndDarkKeepThePickedColourAsArcDoes`.
+- Cra (#677, Victor 22 Nov 2026): Auto's half for a dark Mac no longer darkens. It is the pad's colours as they
+  are over the dark material, as Arc on Automatic draws a picked colour while macOS is dark, so the same as the
+  space's Dark: a pastel stays a muted pastel with dark text. The light half still lifts a dark colour to HSL 0.9.
+  An Auto space saved with the old darkened half gets today's when sidebar.json loads
+  (`SpaceThemeVariants.upgradedDarkHalf`; Arc imports' own halves are left alone). #155's promise (Auto follows
+  macOS) holds through the material. Pinned by `everySwatchOnAutoFollowsMacOS` (changed with Victor's OK),
+  `autoSpacesSavedBeforeKeepTheirColoursInTheDark` and the `auto-theme-dark-keeps-colour` scenario.
 - [O video] The pad's drag and + (16 Nov 2026, issue #455, the reporter's side-by-side recording of their Arc, colours sampled from
   the video so ±10/255): a Drab red dragged round Arc's pad stayed dark, HSB brightness ≈ 0.4 through #682D33,
   #203B5F, #1B3D5A and #273A6D: the drag turns hue and saturation and keeps the colour's brightness. Arc's +
@@ -5003,6 +5064,10 @@ screen on a click.
   comes from `_setFrameAfterMove:` (a move the window server reports: a drag and its release); a display coming or going reaches
   the adjustment another way and keeps it (checked 17 Nov 2026 with a 2x virtual display removed under a probe window). Moving the window by hand on each event instead drew the window at both scales at the crossing and
   flickered; Peter turned it down.
+- [O Cra, 21 Nov 2026] At a display crossing that adjustment is also what records the moved frame. Skipped, AppKit kept the
+  frame from before the crossing (Accessibility read (-268, 198), the window server (556, 241)), and every menu, a `<select>`'s
+  popup too, opened that far from the window. `CraWindow` now records the frame `_setFrameAfterMove:` reports when it skips the
+  adjustment; the window is already there (scenario `window-frame-after-move`).
 
 ## The hidden sidebar from past the window's edge (Arc 1.172.2, 11 Nov 2026, GitHub #350, live Arc, real pointer at 120 fps)
 
@@ -5290,3 +5355,72 @@ Observed live in Arc 1.173.1 (90936), Chromium 157.0.8103.79, with window record
   copied, and where one of Arc's shapes changes form Cra's is moved by the same amount. The short
   window is built (slots share the room, a tile is as tall as its slot up to 80 pt, 64 pt or less drops
   the label for a tooltip after 0.45 s); Arc's slide of the label on that change is not.
+
+## Cast and a call's tab menus (Arc 1.174.1, 21–22 Nov 2026, Victor's Arc, Blank Window, HID right-clicks)
+
+- [O] In a Google Meet call presenting a tab (Share screen ▸ Arc Tab), and with a plain getDisplayMedia tab share,
+  the sidebar tab menu of the presented tab, the Meet tab and any other tab is the usual twelve rows: Copy Link,
+  Share ▸ (AirDrop, Mail, Notes), Change Icon…, Rename…, Mute, Customize Page…, Open in / Add Split View, Duplicate,
+  Move to ▸, Archive Tab, Archive Tabs Below. No Cast row and no share row; the call's switch is only the hover
+  button ("Share this tab instead"). The page's own right-click menu keeps Chromium's Cast… in a call as outside one.
+- [O] View ▸ Cast opens Chromium's Cast dialog ("Cast tab", "No devices found", Sources ▾, ✕; a device row each when
+  some are on the network), 320 × 176 pt,
+  centred on the page (x 831 on a page from 264 to 1718) with its top on the page's top edge (y 83, the web area's
+  top). Cra: `cra-cast-dialog.patch`, scenario page-cast-dialog.
+- [O] A page's `PresentationRequest.start()` (a button click, 22 Nov) opens the same Cast dialog, 320 × 196 pt at the
+  same place, headed "Cast <site>" with a "<site> wants to cast content" line above the devices. Chrome 159 sends a
+  page's request to its media controls dialog instead; Cra keeps Arc's (`cra-cast-dialog.patch`). Esc with no device
+  turned the page down with NotFoundError (Chrome's answer when no device can show the page; NotAllowedError when one
+  can and the dialog is closed).
+- [O] A dashed yellow outline on the selected tab's row showed in a Blank Window ("This Window") on 22 Nov, before any
+  Cast and after it, following the selection to another tab and staying with focus in the page; the same Arc's main
+  window had none, and a Blank Window on 21 Nov had none either. Not Cast's: the hover tooltip is the usual "<title> /
+  Double-click to rename". Cause unknown (first seen the day Arc's "30 days" sunset banner appeared); Cra draws none.
+
+
+## Easel resize handles (Arc 1.174.1, 22 Nov 2026, issue #680, offline Arc)
+Measured with real pointer input (a HID drag after moving the pointer onto the spot first; Arc's drag handles
+ignore a press with no hover before it), read off full-screen 2x captures with the pointer shown (`screencapture
+-C`; a window capture's shadow margin shifts its coordinates). Binary: EaselUI `AspectRatioControlPoints`,
+`FrameControlPoint`, `ArrowControlPoint`, `DragHandle` (+ `CursorProvider`) and `ExtendedDragArea`.
+- [O live] A picked rectangle: the 2 pt outline and four corner dots, no dots on the edges. The pointer over any
+  part of the left or right edge, right up to the corners, shows the left-right resize cursor, and over the top
+  or bottom edge the up-down one. The right edge dragged 100 pt widened it 100 pt, its left edge and height
+  unchanged; the corner dragged (+100, +50) grew it both ways.
+- [O live] A text box: a rounded outline with four corner rings and the Aa size pill on its left, no edge dots,
+  picked or being typed in. A fresh one wrapped at about 283 pt. The right edge shows the left-right cursor and the
+  corners the diagonal one; the corner dragged 150 pt right widened it and the text reflowed onto one line, the box
+  then as tall as that line, its top fixed. The left edge dragged 100 pt left widened it leftwards, the right
+  edge fixed. The bottom edge shows the up-down cursor, but dragging it 80 pt down changed nothing, nor did the
+  corner dragged straight down: the height is always the text's.
+- [O live] Once, the corner dragged in until the box was narrower than its one line (to about 234 pt) made the
+  text itself smaller, still on one line; widening again didn't bring the size back. The rule wasn't worked out.
+- Cra (#680, PR #681 by DHIRENSACHER): `Easel.corner(of:at:kind:)` grabs the corners and, for shapes and text,
+  each edge along its whole length; `Easel.resized` moves one side for an edge; `Easel.resizedText` sets a text
+  box's width from a corner or the left or right edge and ignores the top and bottom (`fixedWidth` on the item keeps
+  that width as it's typed in and after a reopen, `Easel.textBoxWidth`). Four corner dots on everything; a text box
+  keeps its rounded outline. Not matched: the text shrinking when narrowed by a corner, and the 283 pt first wrap
+  (Cra's box grows to 560 pt, #580). Pinned by `EaselResizeTests` (#680) and `resizeLikeArc` in
+  scripts/test-easel-canvas.sh.
+
+## Double click on the toolbar (Arc 1.174.1, 22 Nov 2026, issue #685, offline Arc)
+- [O live] Toolbar shown, an ordinary site (site.lvh.me), the window set to 1200 × 800 over AX: a real double click
+  (cliclick) on the toolbar's empty part, between the reload button and the address, zoomed the window to the
+  screen's visible frame (1728 × 1084); a second double click there put it back at 1200 × 800. That is macOS's
+  "Double-click a window's title bar to" (Zoom here, the setting unset). A first try right after bringing Arc
+  forward did nothing; every later one zoomed.
+- Cra (#685): the toolbar's empty part runs CraWindow.performTitleDoubleClickAction on the second click of a
+  double click that stayed a click (CraCore `TitleBarDoubleClick`, which also reads the setting), as the sidebar's
+  top and the strip above the card already did. Pinned by `TitleBarDoubleClickTests` and the
+  `toolbar-double-click-zoom` scenario.
+
+
+## The app icon on the app (Arc 1.174.1, Victor's Arc, 22 Nov 2026)
+- [O] With an icon picked (`currentAppIconName = "arc.schoolbook"` in company.thebrowser.Browser's defaults),
+  /Applications/Arc.app carries Finder's custom icon: an empty `Icon\r` file at the bundle's root with the icon in
+  its resource fork, and the custom icon flag in the bundle's com.apple.FinderInfo. The file was written that
+  day, so Arc puts it back after updates replace the bundle. The main binary has
+  `ARCClients/Sources/AppIconClient/UI_macOS/AppIconApplier.swift` and calls `setIcon:forFile:`, with
+  `AppIconDockTile` for the Dock after Arc quits.
+- Cra: AppIconManager puts the picked icon on the bundle with NSWorkspace.setIcon at the pick and at launch, and
+  takes it off for Segments (AppIconBundle). Scenario app-icon-finder.

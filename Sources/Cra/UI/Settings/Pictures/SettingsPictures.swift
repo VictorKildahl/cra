@@ -80,6 +80,31 @@ extension SettingsArt {
         }
     }
 
+    /// Edge to edge, the page keeps its rounded corners: no margin, only the round (#582).
+    static var edgeToEdgeRounded: some View {
+        let t = ArtTint.lavender
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t, edgeToEdge: true, roundedPage: true) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+        }
+    }
+
+    /// The sidebar a dark glass, the desktop's colours showing through it (#366).
+    static var translucentSidebar: some View {
+        let t = ArtTint.rose
+        return ArtCanvas(tint: t) {
+            // The desktop behind the window: two soft shapes the glass lets through.
+            Circle().fill(ArtTint.lemon.theme).frame(width: 26, height: 26).blur(radius: 1).at(4, 22)
+            Circle().fill(ArtTint.sky.theme).frame(width: 22, height: 22).blur(radius: 1).at(-2, 2)
+            ArtWindow(tint: t, glass: true) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+        }
+    }
+
     /// The page fills the card, and the toolbar slides in over its top where the pointer is.
     static var autoHideToolbar: some View {
         let t = ArtTint.mint

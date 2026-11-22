@@ -53,6 +53,25 @@ public enum AppLinks {
         }
     }
 
+    /// Whether a request to `url` with no click of its own may still go, once per page load (RedirectGuard):
+    /// another app's address, asked about, and mail, opened. Chrome's flood guard lets either through once
+    /// without a gesture; Cra let only the first through, so a new window a page sent to mailto: opened
+    /// nothing (#684).
+    public static func mayGoWithoutClick(_ url: String) -> Bool {
+        let k = kind(of: url)
+        return k == .asksFirst || k == .opens
+    }
+
+    /// Whether the page that asked for another app's address is a new tab or window that never showed a page
+    /// (window.open(), then sent to mailto:): it closes once the address is handed to macOS, as Chrome closes
+    /// a tab whose first navigation went to an app (external_protocol_handler.cc). It stayed as an empty
+    /// about:blank window (#684).
+    public static func closesRequester(currentURL: String, canGoBack: Bool) -> Bool {
+        guard !canGoBack else { return false }
+        return currentURL.isEmpty || currentURL == "about:blank" || currentURL.hasPrefix("about:blank#")
+            || currentURL.hasPrefix("about:blank?")
+    }
+
     /// What `url` is for a link or window.open that wants a new tab, or a WebKit page's own
     /// navigation to a scheme WebKit doesn't load.
     public static func kind(of url: String) -> Kind {

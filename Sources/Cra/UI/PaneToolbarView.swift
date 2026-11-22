@@ -59,6 +59,18 @@ final class PaneToolbarView: NSView {
     }
 
     private var model = Model()
+
+    /// The developer bar as the panel Arc's ⌘L opens covers it (#663 follow-up): the card's top 40 pt and the bar's glyph
+    /// centre and address start, on screen; nil unless this pane shows the developer bar.
+    var developerBarOnScreen: (bar: NSRect, glyphCenterX: CGFloat, textX: CGFloat, glyph: NSImage?, tint: NSColor?, cardRadius: CGFloat)? {
+        guard model.kind == .developer, !isHiddenOrHasHiddenAncestor, let window, let card = superview as? PaneCardView,
+              let parts = urlButton.developerParts else { return nil }
+        let cardFrame = window.convertToScreen(card.convert(card.bounds, to: nil))
+        let h = CGFloat(DeveloperBarPanel.inputHeight)
+        let bar = NSRect(x: cardFrame.minX, y: cardFrame.maxY - h, width: cardFrame.width, height: h)
+        let icon = window.convertToScreen(parts.icon), text = window.convertToScreen(parts.text)
+        return (bar, icon.midX, text.minX + SidebarText.inset, parts.image, parts.tint, card.layer?.cornerRadius ?? 8)
+    }
     private var syncQueued = false
     private var buttons: [String: ToolbarGlyphButton] = [:]
     /// Left group, then trailing items, as laid out.
@@ -187,7 +199,8 @@ final class PaneToolbarView: NSView {
         let extensions = ExtensionStore.shared
         let profile = item.map { store.profileDirectoryName(item: $0.id) }
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
-        let entries = extensions.entries(inProfile: profile)
+        let incognito = item.map { store.isIncognito(item: $0.id) } ?? store.isIncognito(space: store.focusedSpaceID(window: ui.windowID))
+        let entries = extensions.entries(inProfile: profile, incognito: incognito)
         m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
@@ -632,6 +645,10 @@ final class PaneToolbarView: NSView {
         guard press.finish() else { return }
         if !placeholderLabel.isHidden, placeholderLabel.frame.contains(convert(event.locationInWindow, from: nil)) {
             editURL()
+        } else if TitleBarDoubleClick.runs(clickCount: event.clickCount, dragged: false) {
+            // The bar stands in for the hidden title bar: a double click on its empty part zooms (or minimizes) the
+            // window as macOS is set to, as the sidebar's top and the strip above the card do (#685).
+            (window as? CraWindow)?.performTitleDoubleClickAction()
         } else if let id = paneTabID {
             actions.focusPane(id)
         }
@@ -852,6 +869,12 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     private let tip: ArcTooltipAnchorView
     private let copyTip: ArcTooltipAnchorView
     private var developer = false
+
+    /// The developer bar's glyph and address in window coordinates, for the panel ⌘L opens over them (#663 follow-up).
+    var developerParts: (icon: NSRect, text: NSRect, image: NSImage?, tint: NSColor?)? {
+        guard developer, window != nil, field == nil else { return nil }
+        return (icon.convert(icon.bounds, to: nil), label.convert(label.bounds, to: nil), icon.image, icon.contentTintColor)
+    }
     private var hover = NSColor.white.withAlphaComponent(0.08)
     private var copyHover = NSColor.white.withAlphaComponent(0.1)
     /// Arc's normal bar (1.171, #88): the glyph is a 24 pt button of its own and the host has its
