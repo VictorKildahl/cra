@@ -459,7 +459,8 @@ extension SidebarStore {
             Set(tabs(under: container).flatMap { [$0.tab?.url, $0.tab?.savedURL].compactMap { $0 } })
         }
 
-        // Favicons first, for every item (also ones skipped as duplicates).
+        // Each host's favicon first, for every item (also ones skipped as duplicates): what
+        // suggestions and a tab imported with no icon show.
         func copyFavicons(_ items: [ImportedItem]) {
             for it in items {
                 if it.isFolder { copyFavicons(it.children); continue }
@@ -472,6 +473,16 @@ extension SidebarStore {
         }
         copyFavicons(plan.favorites)
         for sp in plan.spaces { copyFavicons(sp.favorites); copyFavicons(sp.pinned); copyFavicons(sp.today) }
+
+        // The icon the other browser had for this very tab, under the tab's own key (FaviconKey, #211).
+        // Arc keeps one per sidebar item, so a Google Doc and a Sheet come with different ones; under
+        // the host alone they all showed one icon, and that of whichever page there loaded last (#673).
+        func ownIconKey(_ it: ImportedItem, tabID: UUID) -> String? {
+            guard let src = it.faviconPath, let site = it.url.flatMap(FaviconKey.key(for:)) else { return nil }
+            let key = FaviconKey.key(site: site, tabID: tabID)
+            let dst = AppPaths.favicons.appendingPathComponent(FaviconCache.fileName(key))
+            return (try? FileManager.default.copyItem(atPath: src, toPath: dst.path)) != nil ? key : nil
+        }
 
         func insert(_ items: [ImportedItem], into parent: UUID, skip: Set<String>, pinned: Bool) {
             var skip = skip
@@ -500,6 +511,7 @@ extension SidebarStore {
                     if var t = tab.tab {
                         t.timeLastActiveAt = pinned ? it.createdAt : clock.now
                         if self.items[parent]?.isLiveFolder == true { t.liveItemURL = it.liveItemURL }
+                        if let key = ownIconKey(it, tabID: tab.id) { t.faviconKey = key }
                         tab.data = .tab(t)
                     }
                     insertItem(tab, into: parent, at: nil)

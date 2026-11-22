@@ -23,6 +23,7 @@ enum StoreTests {
         setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
 
         try arcImport()
+        try importedTabsKeepTheirOwnIcons()
         try diaImport()
         try ardiaImport()
         try yabImport()
@@ -143,6 +144,73 @@ enum StoreTests {
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
         arcLinkRoutes(store: composition.store)
         arcProfiles(plan: plan, store: composition.store)
+    }
+
+    // promise: #673
+    /// Arc keeps one favicon per sidebar item, and the importer has each one's file. They were all
+    /// copied under the host alone, so every imported Google Doc, Sheet and Slide showed one icon,
+    /// and the icon of whichever page on the host loaded last (#673). Each imported tab keeps its own.
+    @MainActor
+    private static func importedTabsKeepTheirOwnIcons() throws {
+        func saved(_ key: String?) -> Data? {
+            key.flatMap { try? Data(contentsOf: AppPaths.favicons.appendingPathComponent(FaviconCache.fileName($0))) }
+        }
+        // From Arc's own files: the fixture's pinned folder has two tabs on example.com, with an icon
+        // each in SidebarItemsFaviconCache.
+        let arc = AppComposition(clock: ManualScheduler()).store
+        let home = arc.apply(try ArcImporter.plan(), includeArchive: false, includeSettings: false).spaceIDs[0]
+        let fromArc = (arc.space(home)?.pinnedContainerID).map(arc.tabs(under:)) ?? []
+        let news = fromArc.first { $0.tab?.url == "https://example.com/news" }, blog = fromArc.first { $0.tab?.url == "https://example.com/blog" }
+        let cached = { (item: String) in ArcImporter.faviconFile(forItemID: item).flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) } }
+        expect(cached("home-p1") != nil && cached("home-p1") != cached("home-p2"), "the fixture has a different icon for each of the two tabs")
+        expect(news?.tab?.faviconKey == news.map { FaviconKey.key(site: "example.com", tabID: $0.id) }
+               && saved(news?.tab?.faviconKey) == cached("home-p1") && saved(blog?.tab?.faviconKey) == cached("home-p2"),
+               "each tab imported from Arc keeps the icon Arc cached for it")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-import-icons-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func icon(_ name: String, _ color: NSColor) -> (path: String, data: Data) {
+            let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in color.setFill(); r.fill(); return true }
+            let data = ZenImporter.faviconPNG(image) ?? Data()
+            let file = dir.appendingPathComponent(name)
+            try? data.write(to: file)
+            return (file.path, data)
+        }
+        let doc = icon("doc", .blue), sheet = icon("sheet", .green), other = icon("other", .red)
+        let docURL = "https://docs.example.com/document/d/1/edit", sheetURL = "https://docs.example.com/spreadsheets/d/2/edit"
+        var plan = ImportPlan(source: "Arc")
+        plan.spaces = [ImportedSpace(title: "Icons", emoji: "📄", pinned: [
+            ImportedItem(customTitle: "Files", pageTitle: "Files", isFolder: true, children: [
+                ImportedItem(pageTitle: "Doc", url: docURL, faviconPath: doc.path),
+                ImportedItem(pageTitle: "Sheet", url: sheetURL, faviconPath: sheet.path),
+            ]),
+            ImportedItem(pageTitle: "No icon", url: "https://docs.example.com/presentation/d/3/edit"),
+            ImportedItem(pageTitle: "Elsewhere", url: "https://other.example.com/", faviconPath: other.path),
+        ])]
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs[0]
+        guard let pinned = store.space(space)?.pinnedContainerID else { return expect(false, "the imported space is there") }
+        let tabs = store.tabs(under: pinned)
+        func tab(_ url: String) -> SidebarItem? { tabs.first { $0.tab?.url == url } }
+        guard let d = tab(docURL), let s = tab(sheetURL) else { return expect(false, "both tabs on the host are imported") }
+        expect(d.tab?.faviconKey == FaviconKey.key(site: "docs.example.com", tabID: d.id)
+               && s.tab?.faviconKey == FaviconKey.key(site: "docs.example.com", tabID: s.id),
+               "an imported tab's icon goes under the tab's own key, not its host's")
+        expect(saved(d.tab?.faviconKey) == doc.data && saved(s.tab?.faviconKey) == sheet.data,
+               "two imported tabs on one host each keep the icon Arc had for them")
+        // Another page on the host loads: its icon becomes the host's (BrowserManager's didLoadFavicon).
+        let cache = FaviconCache()
+        cache.store(NSImage(contentsOfFile: other.path) ?? NSImage(), forKey: "docs.example.com", persist: false)
+        func pixels(_ image: NSImage?) -> Data? { image.flatMap { ZenImporter.faviconPNG($0) } }
+        expect(pixels(cache.image(forKey: d.tab?.faviconKey)) == pixels(NSImage(contentsOfFile: doc.path))
+               && pixels(cache.image(forKey: s.tab?.faviconKey)) == pixels(NSImage(contentsOfFile: sheet.path)),
+               "and neither changes when another page on the host loads its icon")
+        expect(saved("docs.example.com") == doc.data, "the host still has an icon, for suggestions and tabs with none")
+        expect(tab("https://docs.example.com/presentation/d/3/edit")?.tab?.faviconKey == "docs.example.com",
+               "a tab imported with no icon shows its host's until its page loads")
+        expect(saved(tab("https://other.example.com/")?.tab?.faviconKey) == other.data, "a tab alone on its host keeps its icon too")
+        expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
     }
 
     // promise: #258
