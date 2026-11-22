@@ -40,6 +40,8 @@ struct SpacePalette {
     var lightMaterial = false
     /// A gradient whose colours read dark, over Arc's darker material for those (#643).
     var darkGradient = false
+    /// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366): the colours over SidebarGlass's material.
+    var glass = false
 
     /// Arc's one-colour opacity (SpaceTheme.solidAlpha, where the measurements are).
     static func solidAlpha(intensity: Double) -> Double { SpaceTheme.solidAlpha(intensity: intensity) }
@@ -97,35 +99,40 @@ extension SpaceTheme {
 
     var palette: SpacePalette {
         let systemDark = SystemAppearance.shared.isDark
-        var p = resolved(systemDark: systemDark).fixedPalette(lightMaterial: usesLightMaterial(systemDark: systemDark))
-        p.lightMaterial = usesLightMaterial(systemDark: systemDark)
-        p.darkGradient = resolved(systemDark: systemDark).drawnOverDarkGradientMaterial
+        let glass = SidebarGlassSetting.shared.isOn
+        let theme = resolved(systemDark: systemDark)
+        var p = theme.fixedPalette(lightMaterial: usesLightMaterial(systemDark: systemDark), glass: glass)
+        // The glass's own material follows the theme's colours (SidebarGlass), not Arc's light/dark pick.
+        p.lightMaterial = glass ? !theme.isDark : usesLightMaterial(systemDark: systemDark)
+        p.darkGradient = !glass && theme.drawnOverDarkGradientMaterial
+        p.glass = glass
         return p
     }
 
     /// The palette of a resolved theme (its appearance is light or dark, or judged by colour).
-    private func fixedPalette(lightMaterial: Bool) -> SpacePalette {
+    /// `glass`: Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366), every theme thin over SidebarGlass.
+    private func fixedPalette(lightMaterial: Bool, glass: Bool = false) -> SpacePalette {
         let dark = isDark
         let base = colors.isEmpty ? ["#DDDDDD"] : colors
         // Over Arc's material (one colour, or a gradient made in the editor, #643): the colours at
         // Arc's one-colour opacity. Vibrant (an imported Arc theme): its stops at `intensity` over the blur.
         // Opaque: intensity 1 = the raw colors; lower pulls toward white/black.
-        let overMaterial = drawnOverMaterial
-        let pull = vibrant || solid ? 0 : (1 - intensity) * (dark ? 0.35 : 0.6)
+        let overMaterial = drawnOverMaterial || glass
+        let pull = vibrant || solid || glass ? 0 : (1 - intensity) * (dark ? 0.35 : 0.6)
         var stops = base.map { SpaceTheme.mix($0, towardWhite: !dark, amount: pull) }
         if stops.count == 1 { stops.append(SpaceTheme.mix(base[0], towardWhite: !dark, amount: pull + 0.15)) }
 
         let folder = FolderTones(themeColor: self.accent ?? base[0], dark: dark)
-        let alphaTop = overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
+        let alphaTop = glass ? SidebarGlass.alpha(intensity: intensity) : overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
             : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 1.70)) : 1
-        let alphaBottom = overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
+        let alphaBottom = glass ? SidebarGlass.alpha(intensity: intensity) : overMaterial ? SpacePalette.solidAlpha(intensity: intensity)
             : vibrant ? (dark ? max(0.35, min(0.9, intensity * 2.2)) : min(0.95, intensity * 2.35)) : 1
         // Dark themes: Arc's palette tones (shadedDark front, midTone back) read wrong next to Cra's
         // dark sidebar (Victor, 4 Nov), so the folder keeps the earlier white-over-sidebar look, made
         // opaque. Under a translucent theme the sidebar is the top colour over the dark material
         // (underWindowBackground with ShellView's lift), about 20 % white; a solid one on Light is over
         // Arc's light material instead, about 75 % white over a typical desktop (#455).
-        let material = overMaterial && lightMaterial ? 0.75 : 0.2
+        let material = glass ? SidebarGlass.ground(dark: dark) : overMaterial && lightMaterial ? 0.75 : 0.2
         let ground = alphaTop < 1 ? Color(white: material).blendedToward(stops[0], alphaTop) : stops[0]
         let darkFill = ground.blendedToward(.white, 0.14)
         return SpacePalette(
@@ -159,10 +166,19 @@ extension SpaceTheme {
             // opacity 0.43 top / 0.59 bottom then matches Arc within ±5 over white and black.
             gradientAlpha: alphaTop,
             gradientAlphaBottom: alphaBottom,
-            vibrant: vibrant || solid,
+            vibrant: vibrant || solid || glass,
             solid: overMaterial
         )
     }
+}
+
+/// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366), which every palette reads: the windows'
+/// refresh copies it from the store, and views drawn from a palette redraw when it changes.
+@Observable
+final class SidebarGlassSetting: @unchecked Sendable {
+    static let shared = SidebarGlassSetting()
+    /// Written on the main thread only.
+    var isOn = false
 }
 
 /// The app's light or dark appearance, which an Auto space theme follows (Arc: appearanceBased):
@@ -394,6 +410,7 @@ final class PagedGradientView: NSView {
             _ = store.pagedSpaces(window: ui.windowID).map(\.theme)
             _ = store.focusedSpaceID(window: ui.windowID)
             _ = CraTuning.shared.gradientAlphaScale
+            _ = SidebarGlassSetting.shared.isOn
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.placed = nil

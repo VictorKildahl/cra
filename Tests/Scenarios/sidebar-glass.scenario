@@ -1,0 +1,19 @@
+# Settings ▸ Tabs ▸ Translucent sidebar (Ideas #366): every theme, a preset that Arc draws opaque too,
+# turns to glass over the desktop: the window is see-through, and the material is the glass's dark one
+# under a dark theme and its pale one under a light theme, whatever macOS shows.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "translucentSidebar": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Phantom","emoji":"🫧","theme":{"colors":["#181818","#262626"],"intensity":0.9,"noise":0.12,"appearance":"dark"},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Parchment","emoji":"☀️","theme":{"colors":["#F4F1EA","#E6DCC8"],"intensity":0.6,"noise":0.15,"appearance":"light"},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+wait 2
+cra://debug?themeShown=glass-dark-preset
+expect-log Cra theme shown glass-dark-preset: space=Phantom .* theme=dark .* material=glass-dark seeThrough=1
+expect-log sidebar backdrop: glass, (blur|desktop tint), (active|inactive), dim 0.68
+cra://action/space2
+wait 1
+cra://debug?themeShown=glass-light-preset
+expect-log Cra theme shown glass-light-preset: space=Parchment .* theme=light .* material=glass-light seeThrough=1
+cra://debug?systemAppearance=dark
+wait 1
+cra://debug?themeShown=glass-light-on-dark-mac
+expect-log Cra theme shown glass-light-on-dark-mac: space=Parchment .* material=glass-light seeThrough=1
+cra://debug?systemAppearance=system

@@ -1,4 +1,5 @@
 import CraCore
+import Foundation
 import Testing
 
 /// Full screen with the sidebar hidden fills the screen edge to edge, as in Arc (issue #315).
@@ -25,5 +26,40 @@ struct CardFillTests {
                 #expect(CardFill.fillsWindow(edgeToEdge: true, fullScreen: fullScreen, sidebarShown: sidebarShown))
             }
         }
+    }
+
+    /// Edge to edge the card is square (#24), as is Arc's full screen with the sidebar hidden (#315).
+    @Test func edgeToEdgeIsSquareByDefault() {
+        for fullScreen in [false, true] {
+            for sidebarShown in [false, true] {
+                #expect(CardFill.cornerRadius(edgeToEdge: true, roundedCorners: false, fullScreen: fullScreen,
+                                              sidebarShown: sidebarShown, radius: 6) == 0)
+            }
+        }
+        #expect(CardFill.cornerRadius(edgeToEdge: false, roundedCorners: false, fullScreen: true, sidebarShown: false, radius: 6) == 0)
+    }
+
+    /// Ideas #582: with Rounded corners, edge to edge keeps the pages' round, sidebar shown or not.
+    @Test func roundedCornersKeepTheRoundEdgeToEdge() {
+        for fullScreen in [false, true] {
+            for sidebarShown in [false, true] {
+                #expect(CardFill.cornerRadius(edgeToEdge: true, roundedCorners: true, fullScreen: fullScreen,
+                                              sidebarShown: sidebarShown, radius: 6) == 6)
+                // The margin stays gone: only the corners change.
+                #expect(CardFill.fillsWindow(edgeToEdge: true, fullScreen: fullScreen, sidebarShown: sidebarShown))
+            }
+        }
+    }
+
+    /// Without edge to edge the setting changes nothing: Arc's inset card is rounded, its full-screen fill square.
+    @Test func roundedCornersOnlyActsEdgeToEdge() {
+        #expect(CardFill.cornerRadius(edgeToEdge: false, roundedCorners: true, fullScreen: false, sidebarShown: true, radius: 6) == 6)
+        #expect(CardFill.cornerRadius(edgeToEdge: false, roundedCorners: true, fullScreen: true, sidebarShown: false, radius: 6) == 0)
+    }
+
+    @Test func roundedCornersIsOffByDefault() throws {
+        #expect(!AppSettings().edgeToEdgeRoundedCorners)
+        #expect(!(try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))).edgeToEdgeRoundedCorners)
+        #expect(UsageStats.unreportedSettings.contains("edgeToEdgeRoundedCorners"))
     }
 }

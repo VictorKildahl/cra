@@ -771,6 +771,7 @@ enum CraLog {
 struct SpacePalette {
     var vibrant = false
     var isDark = false
+    var glass = false
 }
 
 final class PaletteBackgroundView: NSView {

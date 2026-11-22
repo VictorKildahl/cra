@@ -16,4 +16,14 @@ public enum CardFill {
     public static func fillsWindow(edgeToEdge: Bool, fullScreen: Bool, sidebarShown: Bool) -> Bool {
         edgeToEdge || (fullScreen && !sidebarShown)
     }
+
+    /// The card's corner radius: `radius` in its inset, square where it fills the window (Arc's full
+    /// screen with the sidebar hidden, and edge to edge), except that edge to edge keeps the round
+    /// with Settings ▸ Tabs ▸ "Rounded corners" (not in Arc, Ideas #582). The card stays where edge
+    /// to edge puts it, with no margin and no shadow; only its corners round, every pane's in a split.
+    public static func cornerRadius(edgeToEdge: Bool, roundedCorners: Bool, fullScreen: Bool, sidebarShown: Bool,
+                                    radius: Double) -> Double {
+        if edgeToEdge { return roundedCorners ? radius : 0 }
+        return fillsWindow(edgeToEdge: false, fullScreen: fullScreen, sidebarShown: sidebarShown) ? 0 : radius
+    }
 }

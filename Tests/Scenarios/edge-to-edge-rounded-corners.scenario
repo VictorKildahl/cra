@@ -1,0 +1,13 @@
+# Settings ▸ Tabs ▸ Edge to edge with Rounded corners (Ideas #582): the card still fills what the sidebar
+# leaves, with no margin, but keeps a round (the window's own corner radius), sidebar shown or hidden.
+# Without Rounded corners edge to edge stays square (#24).
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "edgeToEdgeContent": true, "edgeToEdgeRoundedCorners": true}
+cra://open?url=${ORIGIN}/page.html
+wait 3
+cra://debug?windowState=rounded-sidebar
+expect-log window state rounded-sidebar: main0 .* card=[0-9]+,0,0,0 r([1-9][0-9]*) fills=1
+cra://action/toggleSidebar
+wait 2
+cra://debug?windowState=rounded-no-sidebar
+expect-log window state rounded-no-sidebar: main0 .* card=0,0,0,0 r([1-9][0-9]*) fills=1

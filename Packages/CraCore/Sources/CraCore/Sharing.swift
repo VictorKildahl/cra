@@ -182,12 +182,12 @@ public struct UsageStats: Codable, Equatable, Sendable {
 
     /// Lists, folders, sites and one-time marks: never in a report. Sharing itself is always on
     /// when a report goes out. `autoHideToolbar`, `autoHideLittleWindowToolbar`, `autoHidePeekToolbar`,
-    /// `commandBarSiteColor` and `sidebarSide` are here because a feature Arc never had adds nothing to what a report says (CONTRIBUTING.md).
+    /// `commandBarSiteColor`, `sidebarSide`, `edgeToEdgeRoundedCorners` and `translucentSidebar` are here because a feature Arc never had adds nothing to what a report says (CONTRIBUTING.md).
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "keepActiveSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar", "autoHideLittleWindowToolbar", "autoHidePeekToolbar",
-        "commandBarSiteColor", "sidebarSide", "customBlocklists",
+        "commandBarSiteColor", "sidebarSide", "customBlocklists", "edgeToEdgeRoundedCorners", "translucentSidebar",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {

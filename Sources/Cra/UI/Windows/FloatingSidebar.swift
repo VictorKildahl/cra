@@ -637,10 +637,15 @@ final class FloatingSidebarController {
         gradientHost?.palette = pal
         blur.isHidden = !pal.vibrant
         lift.isHidden = !pal.vibrant
-        blur.material = pal.isDark ? .underWindowBackground : t.material
-        blur.appearance = NSAppearance(named: t.darkBlur ? .darkAqua : .aqua)
+        // Translucent sidebar (#366): the HUD material, which lets the page under the panel through;
+        // underWindowBackground is close to opaque.
+        blur.material = pal.glass ? .hudWindow : pal.isDark ? .underWindowBackground : t.material
+        blur.appearance = NSAppearance(named: pal.glass ? (pal.isDark ? .darkAqua : .aqua) : t.darkBlur ? .darkAqua : .aqua)
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        lift.layer?.backgroundColor = NSColor(white: 1, alpha: SidebarBackdrop.floatingLift(dark: pal.isDark, reduceTransparency: reduce, lift: t.liftActive)).cgColor
+        // Translucent sidebar (#366): the page under the panel shows through, darkened rather than greyed.
+        let amount = pal.glass ? SidebarGlass.floatingLift(dark: pal.isDark, reduceTransparency: reduce, lift: t.liftActive)
+            : SidebarBackdrop.floatingLift(dark: pal.isDark, reduceTransparency: reduce, lift: t.liftActive)
+        lift.layer?.backgroundColor = NSColor(white: 1, alpha: amount).cgColor
     }
 
     /// `why`, for cra.log: what brought it out (#679 asks what brought it back after a swipe out of the
