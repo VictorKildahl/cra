@@ -237,6 +237,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     private var soloOnUp: UUID?
     /// A corner of the picked item being dragged (Arc's AspectRatioControlPoints).
     private var resizing: (corner: Easel.Corner, from: Easel.Rect)?
+    /// Explicit widths for text boxes that were resized by dragging handles.
+    private var explicitTextWidths: [UUID: Double] = [:]
+    /// Explicit heights for text boxes that were resized by dragging handles.
+    private var explicitTextHeights: [UUID: Double] = [:]
     /// The title box is being typed in: the pill acts on it.
     private var titlePicked = false { didSet { placeSizePill() } }
     /// Arc's black pill beside a picked text box: +, Aa, − (text size).
@@ -347,6 +351,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         for (id, f) in texts where !ids.contains(id) { f.removeFromSuperview(); texts[id] = nil }
         for item in easel.items {
             guard case .text(let string, let size) = item.kind else { continue }
+            if explicitTextWidths[item.id] != nil { explicitTextWidths[item.id] = item.frame.width }
+            if explicitTextHeights[item.id] != nil { explicitTextHeights[item.id] = item.frame.height }
             if let f = texts[item.id] {
                 if f.stringValue != string { f.stringValue = string }
                 f.font = Self.font(item.style, size: size, title: false)
@@ -388,9 +394,21 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
                 let path = NSBezierPath(rect: r.insetBy(dx: -1, dy: -1))
                 path.lineWidth = 2
                 path.stroke()
-                // Corner handles only when it is picked alone: a group doesn't resize.
+                // Handles only when it is picked alone: a group doesn't resize.
                 guard picked.count == 1 else { continue }
-                for c in [NSPoint(x: r.minX, y: r.minY), NSPoint(x: r.maxX, y: r.minY), NSPoint(x: r.minX, y: r.maxY), NSPoint(x: r.maxX, y: r.maxY)] {
+                var handlePoints = [
+                    NSPoint(x: r.minX, y: r.minY),
+                    NSPoint(x: r.maxX, y: r.minY),
+                    NSPoint(x: r.minX, y: r.maxY),
+                    NSPoint(x: r.maxX, y: r.maxY)
+                ]
+                if case .text = item.kind {
+                    handlePoints.append(NSPoint(x: r.midX, y: r.minY))
+                    handlePoints.append(NSPoint(x: r.midX, y: r.maxY))
+                    handlePoints.append(NSPoint(x: r.minX, y: r.midY))
+                    handlePoints.append(NSPoint(x: r.maxX, y: r.midY))
+                }
+                for c in handlePoints {
                     Self.arcSelection.setFill()
                     NSBezierPath(ovalIn: NSRect(x: c.x - 3.75, y: c.y - 3.75, width: 7.5, height: 7.5)).fill()
                     NSColor.black.setFill()
@@ -526,8 +544,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
                 if let hit, !picked.contains(hit.id) { dragStart = nil }
                 return
             }
-            // A corner of the picked picture or shape resizes it; anywhere else picks (and moves).
-            if let item = item(selected), Easel.resizes(item.kind), let corner = Easel.corner(of: item.frame, at: p) {
+            // A corner or edge handle of the picked picture, shape or text resizes it; anywhere else picks (and moves).
+            if let item = item(selected), Easel.resizes(item.kind), let corner = Easel.corner(of: item.frame, at: p, kind: item.kind) {
                 resizing = (corner, item.frame)
                 return
             }
@@ -609,8 +627,29 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
             soloOnUp = nil
             if dragBefore == nil { dragBefore = document }
             if let r = resizing, let id = selected, let i = document.items.firstIndex(where: { $0.id == id }) {
+                if case .text(let string, let size) = document.items[i].kind {
+                    let resized = Easel.resized(r.from, corner: r.corner, to: p, keepRatio: false)
+                    let minFitted = fittedTextFrame(document.items[i], string: string, size: size, explicitWidth: resized.width)
+                    let isVertical = (r.corner == .top || r.corner == .bottom || r.corner == .topLeft || r.corner == .topRight || r.corner == .bottomLeft || r.corner == .bottomRight)
+                    let finalHeight = (isVertical && (r.corner == .top || r.corner == .bottom || abs(resized.height - r.from.height) > 2))
+                        ? max(minFitted.height, resized.height)
+                        : (explicitTextHeights[id].map { max($0, minFitted.height) } ?? minFitted.height)
+                    let isTopAnchor = (r.corner == .top || r.corner == .topLeft || r.corner == .topRight)
+                    let finalY = isTopAnchor ? (r.from.y + r.from.height - finalHeight) : r.from.y
+                    document.items[i].frame = Easel.Rect(x: resized.x, y: finalY, width: resized.width, height: finalHeight)
+                    explicitTextWidths[id] = resized.width
+                    if isVertical && (r.corner == .top || r.corner == .bottom || abs(resized.height - r.from.height) > 2) {
+                        explicitTextHeights[id] = finalHeight
+                    }
+                    texts[id]?.frame = rect(document.items[i].frame)
+                    placeSizePill()
+                    placeColorPicker()
+                    needsDisplay = true
+                    return
+                }
                 let keep = Easel.keepsRatio(document.items[i].kind) || event.modifierFlags.contains(.shift)
                 document.items[i].frame = Easel.resized(r.from, corner: r.corner, to: p, keepRatio: keep)
+                placeColorPicker()
                 needsDisplay = true
                 return
             }
@@ -706,7 +745,11 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     func deleteSelected() {
         let ids = picked
         guard !ids.isEmpty else { return }
-        for id in ids { texts.removeValue(forKey: id)?.removeFromSuperview() }
+        for id in ids {
+            texts.removeValue(forKey: id)?.removeFromSuperview()
+            explicitTextWidths.removeValue(forKey: id)
+            explicitTextHeights.removeValue(forKey: id)
+        }
         picked = []
         commit("Delete") { $0.items.removeAll { ids.contains($0.id) } }
     }
@@ -1042,7 +1085,13 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
             pasted.append(copy)
         }
         commit("Paste") { $0.items.append(contentsOf: pasted) }
-        for item in pasted { if case .text = item.kind { addTextField(for: item) } }
+        for item in pasted {
+            if case .text = item.kind { addTextField(for: item) }
+        }
+        for (original, copy) in zip(items, pasted) {
+            if let w = explicitTextWidths[original.id] { explicitTextWidths[copy.id] = w }
+            if let h = explicitTextHeights[original.id] { explicitTextHeights[copy.id] = h }
+        }
         picked = pasted.map(\.id)
     }
 
@@ -1067,6 +1116,10 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         }
         commit("Duplicate") { $0.items.append(contentsOf: copies) }
         for copy in copies { if case .text = copy.kind { addTextField(for: copy) } }
+        for (original, copy) in zip(items, copies) {
+            if let w = explicitTextWidths[original.id] { explicitTextWidths[copy.id] = w }
+            if let h = explicitTextHeights[original.id] { explicitTextHeights[copy.id] = h }
+        }
         picked = copies.map(\.id)
     }
 
@@ -1254,10 +1307,12 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         guard let id = selected, let i = document.items.firstIndex(where: { $0.id == id }),
               case .text(let string, let size) = document.items[i].kind else { return }
         let new = min(96, max(10, size + step))
-        let frame = fittedTextFrame(document.items[i], string: string, size: new)
+        let frame = fittedTextFrame(document.items[i], string: string, size: new, explicitWidth: explicitTextWidths[id])
+        let height = explicitTextHeights[id].map { max($0, frame.height) } ?? frame.height
+        let updatedFrame = Easel.Rect(x: frame.x, y: frame.y, width: frame.width, height: height)
         commit("Change Text Size") {
             $0.items[i].kind = .text(string, size: new)
-            $0.items[i].frame = frame
+            $0.items[i].frame = updatedFrame
         }
         texts[id]?.font = Self.font(document.items[i].style, size: new, title: false)
         texts[id]?.frame = rect(document.items[i].frame)
@@ -1324,47 +1379,76 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         guard let id = f.identifier.flatMap({ UUID(uuidString: $0.rawValue) }),
               let i = document.items.firstIndex(where: { $0.id == id }), case .text(_, let size) = document.items[i].kind else { return }
         // An editable field has no intrinsic width, so the box stayed 240 pt and cut the rest off (#580).
-        let frame = fittedTextFrame(document.items[i], string: f.stringValue, size: size)
+        let explicit = explicitTextWidths[id]
+        let frame = fittedTextFrame(document.items[i], string: f.stringValue, size: size, explicitWidth: explicit)
+        let height = explicitTextHeights[id].map { max($0, frame.height) } ?? frame.height
+        let updatedFrame = Easel.Rect(x: frame.x, y: frame.y, width: frame.width, height: height)
         commit(record: false) {
             $0.items[i].kind = .text(f.stringValue, size: size)
-            $0.items[i].frame = frame
+            $0.items[i].frame = updatedFrame
         }
-        f.frame = rect(frame)
+        f.frame = rect(updatedFrame)
         placeSizePill()
     }
 
     /// `item`'s frame fitted to `string` at `size` in its font: as wide as its longest line up to Easel's
-    /// widest text, then wrapped, and as tall as its lines (#580).
-    private func fittedTextFrame(_ item: Easel.Item, string: String, size: Double) -> Easel.Rect {
+    /// widest text, then wrapped, and as tall as its lines (#580). If `explicitWidth` is given, wrapped to that width.
+    private func fittedTextFrame(_ item: Easel.Item, string: String, size: Double, explicitWidth: Double? = nil) -> Easel.Rect {
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.font(item.style, size: size, title: false)]
         let longest = string.components(separatedBy: "\n").map { ($0 as NSString).size(withAttributes: attrs).width }.max() ?? 0
         // A last empty line counts: it is where the caret is after Return.
         let measured = (string.isEmpty || string.hasSuffix("\n") ? string + " " : string) as NSString
-        return Easel.fittedText(item.frame, longestLine: Double(longest), size: size) { width in
-            let bounds = NSSize(width: width - Easel.textPadding, height: .greatestFiniteMagnitude)
-            return Double(measured.boundingRect(with: bounds, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs).height) + 4
-        }
+        let width = explicitWidth ?? Easel.textWidth(longestLine: Double(longest))
+        let bounds = NSSize(width: max(Easel.minimumSide, width - Easel.textPadding), height: .greatestFiniteMagnitude)
+        let wrappedHeight = Double(measured.boundingRect(with: bounds, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attrs).height) + 4
+        let height = Easel.textHeight(wrappedHeight: wrappedHeight, size: size)
+        return Easel.Rect(x: item.frame.x, y: item.frame.y, width: width, height: height)
     }
 
     /// The text box `id` fitted to its text again, after its font changed.
     private func refitText(_ id: UUID, record: Bool) {
         guard let i = document.items.firstIndex(where: { $0.id == id }), case .text(let string, let size) = document.items[i].kind else { return }
-        let frame = fittedTextFrame(document.items[i], string: string, size: size)
-        guard frame != document.items[i].frame else { return }
-        commit(record: record) { $0.items[i].frame = frame }
-        texts[id]?.frame = rect(frame)
+        let explicit = explicitTextWidths[id]
+        let frame = fittedTextFrame(document.items[i], string: string, size: size, explicitWidth: explicit)
+        let height = explicitTextHeights[id].map { max($0, frame.height) } ?? frame.height
+        let updatedFrame = Easel.Rect(x: frame.x, y: frame.y, width: frame.width, height: height)
+        guard updatedFrame != document.items[i].frame else { return }
+        commit(record: record) { $0.items[i].frame = updatedFrame }
+        texts[id]?.frame = rect(updatedFrame)
         placeSizePill()
     }
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: tool == .pointer ? .arrow : (tool == .text ? .iBeam : .crosshair))
-        // The picked picture's or shape's corners: the diagonal resize cursors.
+        // The picked picture's, shape's or text's handles: the appropriate resize cursors.
         guard tool == .pointer, let id = selected, let item = document.items.first(where: { $0.id == id }), Easel.resizes(item.kind) else { return }
         let f = item.frame, g = Easel.cornerGrab
-        for (corner, x, y) in [(Easel.Corner.topLeft, f.x, f.y), (.topRight, f.x + f.width, f.y),
-                               (.bottomLeft, f.x, f.y + f.height), (.bottomRight, f.x + f.width, f.y + f.height)] {
-            let falling = corner == .topLeft || corner == .bottomRight
-            addCursorRect(NSRect(x: x - g, y: y - g, width: 2 * g, height: 2 * g), cursor: falling ? Self.nwseCursor : Self.neswCursor)
+        let handles = Easel.handles(for: item.kind)
+        let handlePoints: [(Easel.Corner, Double, Double)] = [
+            (.topLeft, f.x, f.y),
+            (.top, f.x + f.width / 2, f.y),
+            (.topRight, f.x + f.width, f.y),
+            (.right, f.x + f.width, f.y + f.height / 2),
+            (.bottomRight, f.x + f.width, f.y + f.height),
+            (.bottom, f.x + f.width / 2, f.y + f.height),
+            (.bottomLeft, f.x, f.y + f.height),
+            (.left, f.x, f.y + f.height / 2)
+        ]
+        for (corner, x, y) in handlePoints where handles.contains(corner) {
+            let cursor: NSCursor
+            switch corner {
+            case .topLeft, .bottomRight: cursor = Self.nwseCursor
+            case .topRight, .bottomLeft: cursor = Self.neswCursor
+            case .left, .right: cursor = .resizeLeftRight
+            case .top, .bottom: cursor = .resizeUpDown
+            }
+            addCursorRect(NSRect(x: x - g, y: y - g, width: 2 * g, height: 2 * g), cursor: cursor)
+        }
+        if case .text = item.kind {
+            addCursorRect(NSRect(x: f.x - g, y: f.y + g, width: 2 * g, height: max(0, f.height - 2 * g)), cursor: .resizeLeftRight)
+            addCursorRect(NSRect(x: f.x + f.width - g, y: f.y + g, width: 2 * g, height: max(0, f.height - 2 * g)), cursor: .resizeLeftRight)
+            addCursorRect(NSRect(x: f.x + g, y: f.y - g, width: max(0, f.width - 2 * g), height: 2 * g), cursor: .resizeUpDown)
+            addCursorRect(NSRect(x: f.x + g, y: f.y + f.height - g, width: max(0, f.width - 2 * g), height: 2 * g), cursor: .resizeUpDown)
         }
     }
 
