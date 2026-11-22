@@ -1,0 +1,36 @@
+# promise: #683
+# Tabs a space had open come back once after a relaunch, not twice. Cra on CEF wrote Chrome's "Continue where you
+# left off" into every profile, and Chrome restores its last session when a profile's first tabbed window opens:
+# Cra's page host, at launch or the first switch to a space on another profile. Every page Cra had open came back
+# from Chrome's session and became a Cra tab again, in the background (GitHub #683: three tabs became six). The
+# engine now sets On startup to Chrome's default (the New Tab page) as each profile loads (profile_prefs.mm).
+# Work is on its own profile (Tests/Fixtures/TwoProfiles); its On startup is set through chrome://settings, as a
+# CEF-era profile had it, since Chrome resets that pref when it's written into the file by hand.
+budget rss=900 stalls50=40
+pace 0.5
+profile ${FIXTURES}/TwoProfiles
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=home
+expect-log loaded 127\.0\.0\.1
+wait 1
+cra://action/nextSpace
+wait 1
+cra://open?url=chrome://settings/
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>chrome.settingsPrivate.setPref('session.restore_on_startup',1,'',ok=>r('restore set:'+ok)))","awaitPromise":true,"returnByValue":true}
+expect-log Cra cdp Runtime.evaluate .*restore set:true
+cra://open?url=${PAGE}?n=work-one
+wait 1
+cra://open?url=${PAGE}?n=work-two
+wait 2
+cra://debug?browserWindows=before
+expect-log browser windows before: kind=normal listed=1 tabs=3 
+cra://action/previousSpace
+wait 1
+relaunch
+# Past the first ten seconds, when Cra drops stray pages anyway (extension welcome pages).
+wait 13
+cra://action/nextSpace
+wait 6
+cra://debug?browserWindows=work-after
+expect-log browser windows work-after: kind=normal listed=1 tabs=3 

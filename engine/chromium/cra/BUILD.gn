@@ -25,6 +25,7 @@ source_set("core") {
   deps = [
     "//base",
     "//chrome/browser",
+    "//chrome/browser/prefs:util",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/permissions/system",
     "//chrome/browser/ui/browser_window",

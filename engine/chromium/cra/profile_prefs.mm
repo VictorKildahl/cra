@@ -14,6 +14,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
@@ -120,6 +121,15 @@ void ApplySettings(Profile* profile) {
   ApplyHttpsFirst(prefs);
   if (prefs->FindPreference(kFingerprintingProtection)) {
     prefs->SetBoolean(kFingerprintingProtection, g_fingerprinting);
+  }
+  // Cra restores its own tabs. Chrome restores its last session when a profile's first tabbed window opens
+  // (SessionService::WindowOpened) if On startup is "Continue where you left off", which Cra on CEF wrote into
+  // every profile (patches/settings-no-on-startup.patch). That window is Cra's page host, so at launch or the
+  // first switch to a space on another profile every page Cra had open came back from Chrome's session, and
+  // StrayWindows made each one a Cra tab again: the duplicates of GitHub #683. Chrome's default (the New Tab
+  // page) restores nothing; session cookies are kept regardless (patches/cra-session-cookies.patch).
+  if (!profile->IsOffTheRecord() && SessionStartupPref::GetStartupPref(prefs).ShouldRestoreLastSession()) {
+    SessionStartupPref::SetStartupPref(prefs, SessionStartupPref(SessionStartupPref::DEFAULT));
   }
 }
 
