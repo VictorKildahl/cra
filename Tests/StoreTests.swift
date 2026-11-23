@@ -401,7 +401,7 @@ enum StoreTests {
     @MainActor
     private static func yabImport() throws {
         expect(YabImporter.isAvailable, "spaces.json counts as Yab data")
-        let plan = try YabImporter.plan()
+        let plan = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: nil)
         expect(plan.source == "Yab" && plan.spaces.map(\.title) == ["Personal", "Work"], "Yab's spaces come over in its order")
         let personal = plan.spaces[0], work = plan.spaces[1]
         expect(personal.favorites.compactMap(\.url) == ["https://mail.example.com/"] && personal.favorites[0].pageTitle == "Inbox",
@@ -422,8 +422,14 @@ enum StoreTests {
         expect(work.symbol == "briefcase" && work.theme?.accent == "#7FB8A3" && work.theme?.noise == 0.4,
                "an Icon-tab symbol and a colour of its own with grain")
         let shared = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: true)
-        expect(shared.spaces[0].favorites.compactMap(\.url) == ["https://calendar.example.com/"],
-               "with pins in every space on, every space shows the shared tiles")
+        expect(shared.spaces[0].favorites.compactMap(\.url) == ["https://mail.example.com/"],
+               "with pins in every space on, a space with tiles of its own keeps them")
+        expect(shared.spaces[1].favorites.compactMap(\.url) == ["https://calendar.example.com/"],
+               "with pins in every space on, a space without tiles of its own gets the shared ones")
+        let apart = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: false)
+        expect(apart.spaces[0].favorites.compactMap(\.url) == ["https://mail.example.com/"],
+               "with pins in every space off, a space keeps its own tiles")
+        expect(apart.spaces[1].favorites.isEmpty, "with pins in every space off, no space gets the shared tiles")
 
         let yab = ImportSource.allCases.first { $0.id == "yab" }, ardia = ImportSource.allCases.first { $0.id == "ardia" }
         expect(yab?.isAvailable == true && ardia?.isAvailable == true, "both are listed in the picker from their data alone")
