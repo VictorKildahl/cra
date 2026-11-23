@@ -1594,6 +1594,8 @@
 #704   Packages/CraCore/Tests/CraCoreTests/SharedBoostTests.swift::theCSSTheSiteShowsLeavesTheTintToTheEngine  0cd8f7e4da8a
 #705   Tests/Scenarios/site-storage-after-close.scenario  66e22ff47082
 #706   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
+#707   Packages/CraCore/Tests/CraCoreTests/WheelSpaceSwitchTests.swift::theMenuKeysReachTheLibraryLikeASwipe  f8e7fa428732
+#707   Tests/Scenarios/space-keys-library.scenario  0f26f2767a46
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

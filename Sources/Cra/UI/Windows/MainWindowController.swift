@@ -4029,14 +4029,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The sidebar's previous or next page, as the wheel turns it: the Library is the page before
-    /// the first space, and the ends don't wrap (Arc).
-    func stepSidebarPage(_ step: Int) {
+    /// the first space, and the ends don't wrap (Arc). `menu`: Spaces ▸ Previous/Next Space, which reach the
+    /// Library the same way but wrap where the wheel stops (WheelSpaceSwitch.menuTarget, #707).
+    func stepSidebarPage(_ step: Int, menu: Bool = false) {
         let order = store.spaceOrder
         // Where the Library is headed, if it is sliding.
         let inLibrary = librarySettleSpring.map { $0.target >= 1 } ?? (sidebarUI.libraryPage != nil)
-        switch WheelSpaceSwitch.target(step: step, index: order.firstIndex(of: focusedSpaceID) ?? 0, count: order.count,
-                                       inLibrary: inLibrary,
-                                       libraryAllowed: shell.floatingSidebar ? floatingSidebar?.isShown == true : shell.sidebarVisible) {
+        let index = order.firstIndex(of: focusedSpaceID) ?? 0
+        let libraryAllowed = shell.floatingSidebar ? floatingSidebar?.isShown == true : shell.sidebarVisible
+        let page = menu
+            ? WheelSpaceSwitch.menuTarget(step: step, index: index, count: order.count, inLibrary: inLibrary, libraryAllowed: libraryAllowed)
+            : WheelSpaceSwitch.target(step: step, index: index, count: order.count, inLibrary: inLibrary, libraryAllowed: libraryAllowed)
+        switch page {
         case .space(let i): store.focusSpace(order[i], window: windowID)
         case .openLibrary where shell.floatingSidebar: slideLibraryFromHidden()
         case .openLibrary, .closeLibrary: toggleLibrary()

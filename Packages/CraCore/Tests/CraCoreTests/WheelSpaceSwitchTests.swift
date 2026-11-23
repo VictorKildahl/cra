@@ -93,4 +93,21 @@ struct WheelSpaceSwitchTests {
     func pagesLikeASwipeWithoutWrapping(step: Int, index: Int, count: Int, inLibrary: Bool, libraryAllowed: Bool, target: WheelSpaceSwitch.Target?) {
         #expect(WheelSpaceSwitch.target(step: step, index: index, count: count, inLibrary: inLibrary, libraryAllowed: libraryAllowed) == target)
     }
+
+    /// Spaces ▸ Previous/Next Space (⌥⌘←/→) page like the wheel: the first space's previous page is the Library, and
+    /// Next Space takes it back out (#707: the keys wrapped past it while a swipe and the mouse buttons opened it).
+    /// Where the Library can't come in (a hidden sidebar) they still wrap, and the last space's next is the first.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/707"))
+    func theMenuKeysReachTheLibraryLikeASwipe() {
+        typealias W = WheelSpaceSwitch
+        #expect(W.menuTarget(step: -1, index: 0, count: 3, inLibrary: false, libraryAllowed: true) == .openLibrary)
+        #expect(W.menuTarget(step: 1, index: 0, count: 3, inLibrary: true, libraryAllowed: true) == .closeLibrary)
+        #expect(W.menuTarget(step: -1, index: 0, count: 3, inLibrary: true, libraryAllowed: true) == nil, "nothing before the Library")
+        #expect(W.menuTarget(step: -1, index: 2, count: 3, inLibrary: false, libraryAllowed: true) == .space(1))
+        #expect(W.menuTarget(step: 1, index: 1, count: 3, inLibrary: false, libraryAllowed: true) == .space(2))
+        #expect(W.menuTarget(step: 1, index: 2, count: 3, inLibrary: false, libraryAllowed: true) == .space(0), "the last space wraps to the first")
+        #expect(W.menuTarget(step: -1, index: 0, count: 3, inLibrary: false, libraryAllowed: false) == .space(2), "no Library: wraps as before")
+        #expect(W.menuTarget(step: -1, index: 0, count: 1, inLibrary: false, libraryAllowed: true) == .openLibrary, "one space still has its Library")
+        #expect(W.menuTarget(step: 1, index: 0, count: 1, inLibrary: false, libraryAllowed: true) == nil, "nowhere to go")
+    }
 }

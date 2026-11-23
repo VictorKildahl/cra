@@ -3896,8 +3896,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "recentTabBackward": main.cycleRecentTabs(-1, event: NSApp.currentEvent)
         case "recentTabAllSpaces": main.cycleRecentTabs(1, event: NSApp.currentEvent, allSpaces: true)
         case "recentTabAllSpacesBackward": main.cycleRecentTabs(-1, event: NSApp.currentEvent, allSpaces: true)
-        case "nextSpace": store.focusSpace(offset: 1)
-        case "previousSpace": store.focusSpace(offset: -1)
+        // The Library is the page before the first space, as for a swipe or a mouse's back button (#707).
+        case "nextSpace": main.stepSidebarPage(1, menu: true)
+        case "previousSpace": main.stepSidebarPage(-1, menu: true)
         case "addSplitView": main.addSplitPane()
         case "closeSplitPane": if let c = current { main.closeSplitPane(c) }
         case "separateFromSplit": if let c = current { main.separatePane(c) }
