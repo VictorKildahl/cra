@@ -63,6 +63,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **PR #269:** in Settings, the selected source-list row is inset 10 pt from both sidebar edges
   (glyph 20 pt and label 49 pt from the edge, as in Dia 1.55.1), and scrolling Performance or Advanced
   never draws under the back/forward pill or the pane title.
+- **#701:** open an extension's popup from the toolbar (Element Remover or 1Password) on macOS 26 and 27: the page
+  sits inside the window's thin border on both sides and the bottom, and its bottom corners follow the window's
+  rounded ones (no square corner past the border). The scenario checks the geometry and the mask; the pixels need an eye.
 - **#400 (macOS 27 only):** a white page with DevTools docked right and set to dark, toolbar shown,
   Edge to edge on and off: no white shows at any corner of the page or DevTools. This Mac runs
   macOS 26, where the test stands in for 27 with AppKit's own window radius; ask the reporter to confirm.

@@ -1,0 +1,18 @@
+# promise: #701
+# An extension's popup sits inside the titled window Cra puts around it (Arc's BrowserExtensionWindow):
+# its page right under the title bar, 1 pt inside the window's sides and bottom so the window's border
+# shows, with its bottom corners rounded to follow the window's (15 pt in macOS 26's 16). Until 0.1.54
+# the page sat on the window's edges with square corners: it covered the border and the round corners.
+# Where the page is comes from Chrome's view (RenderWidgetHostViewCocoa), not a fixed margin.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=popup-frame
+wait 2
+cra://debug?extensionAction=${EXTENSION_ID}
+wait 3
+cra://debug?extensionPopup=frame
+expect-log extension popup frame geometry: left=1 right=1 bottom=1 top=(28|32) margin=[0-9]+ page=[0-9]+x[0-9]+ corners=([1-9]|1[0-9])$
+expect-log extension popup frame frame: dx=0 dy=0

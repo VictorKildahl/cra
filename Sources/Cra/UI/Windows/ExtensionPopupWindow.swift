@@ -163,7 +163,12 @@ final class ExtensionPopupWindow: NSWindow {
         // macOS 26 (32 pt). With 28 Chrome's window, which takes clicks in its transparent
         // margin too, covered the bottom of the close button.
         let titleHeight = max(Self.titleBarHeight, frame.height - contentLayoutRect.maxY)
-        let size = NSSize(width: bubble.frame.width - 2 * inset, height: bubble.frame.height - 2 * inset + titleHeight)
+        // Where the page is in Chrome's bubble, measured (the engine's margin isn't CEF's 7 pt all round),
+        // and the frame around it: the page 1 pt inside the frame's sides and bottom, so the window's
+        // border shows, and its bottom corners rounded as the frame's are (#701).
+        let page = pageRectInBubble ?? NSRect(x: inset, y: inset, width: bubble.frame.width - 2 * inset, height: bubble.frame.height - 2 * inset)
+        let border = ExtensionPopupFrame.border
+        let size = NSSize(width: page.width + 2 * border, height: page.height + border + titleHeight)
         // Right edge on the anchor whatever width the page reports (Bitwarden grows after it loads).
         var topLeft = NSPoint(x: anchor.x - size.width + offset.x, y: anchor.y + offset.y)
         if let screen = (Self.screen(at: anchor) ?? bubble.screen ?? NSScreen.main)?.visibleFrame {
@@ -172,8 +177,47 @@ final class ExtensionPopupWindow: NSWindow {
         }
         let frame = NSRect(x: topLeft.x, y: topLeft.y - size.height, width: size.width, height: size.height)
         if self.frame != frame { setFrame(frame, display: true) }
-        let origin = NSPoint(x: frame.minX - inset, y: frame.minY - inset)
+        let origin = NSPoint(x: frame.minX + border - page.minX, y: frame.minY + border - page.minY)
         if bubble.frame.origin != origin { bubble.setFrameOrigin(origin) }
+        roundPageCorners()
+    }
+
+    /// The popup page's view (Chromium's RenderWidgetHostViewCocoa) in Chrome's bubble.
+    private var pageView: NSView? {
+        guard let root = bubble?.contentView else { return nil }
+        func find(_ v: NSView) -> NSView? {
+            if NSStringFromClass(type(of: v)) == "RenderWidgetHostViewCocoa" { return v }
+            return v.subviews.lazy.compactMap(find).first
+        }
+        return find(root)
+    }
+
+    /// The page's rect in the bubble window, nil until Chrome has made its view.
+    private var pageRectInBubble: NSRect? {
+        guard let page = pageView, page.bounds.width > 0, page.bounds.height > 0 else { return nil }
+        return page.convert(page.bounds, to: nil)
+    }
+
+    /// The page's bottom corners follow the frame's, which macOS rounds (16 pt on macOS 26): Chrome's
+    /// square page covered them (#701).
+    private func roundPageCorners() {
+        guard let page = pageView else { return }
+        page.wantsLayer = true
+        guard let layer = page.layer else { return }
+        let radius = ExtensionPopupFrame.pageCornerRadius(windowRadius: windowCornerRadius)
+        if layer.cornerRadius != radius { layer.cornerRadius = radius }
+        // A layer's minY is the view's bottom (AppKit's layers aren't flipped for an unflipped view).
+        let bottom: CACornerMask = page.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        if layer.maskedCorners != bottom { layer.maskedCorners = bottom }
+        if !layer.masksToBounds { layer.masksToBounds = true }
+        layer.cornerCurve = .continuous
+    }
+
+    /// The radius macOS gives this titled window's corners; macOS 26's 16 pt if it doesn't say.
+    private var windowCornerRadius: CGFloat {
+        let key = "_cornerRadius"
+        guard responds(to: NSSelectorFromString(key)), let r = value(forKey: key) as? CGFloat, r > 0 else { return 16 }
+        return r
     }
 
     private func userMoved() {
@@ -267,6 +311,24 @@ final class ExtensionPopupWindow: NSWindow {
     static var shownAnchor: NSPoint? { current.map { $0.anchor } }
     /// The frame (screen) of the popup on screen, nil while none is.
     static var shownFrame: NSRect? { current?.frame }
+
+    /// The popup page's own view (Chromium's RenderWidgetHostViewCocoa) in the bubble, screen rect.
+    var pageFrameOnScreen: NSRect? {
+        guard let bubble, let rect = pageRectInBubble else { return nil }
+        return bubble.convertToScreen(rect)
+    }
+
+    /// Scenarios (#701): where the page sits against the frame, in points: its left, right and bottom
+    /// edges from the frame's (positive: inside it), the title bar's height and the bubble's margin.
+    static var debugGeometry: String {
+        guard let w = current, let bubble = w.bubble else { return "closed" }
+        guard let page = w.pageFrameOnScreen else { return "no page" }
+        let f = w.frame
+        return "left=\(Int((page.minX - f.minX).rounded())) right=\(Int((f.maxX - page.maxX).rounded())) "
+            + "bottom=\(Int((page.minY - f.minY).rounded())) top=\(Int((f.maxY - page.maxY).rounded())) "
+            + "margin=\(Int((page.minX - bubble.frame.minX).rounded())) page=\(Int(page.width))x\(Int(page.height)) "
+            + "corners=\(w.pageView?.layer.map { "\(Int($0.cornerRadius))" + ($0.masksToBounds ? "" : "-unmasked") } ?? "-")"
+    }
 
     private func dismiss(closingBubble: Bool) {
         if let e = NSApp.currentEvent, e.type == .leftMouseDown { Self.closingClick = e.timestamp }
