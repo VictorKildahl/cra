@@ -1568,6 +1568,9 @@
 #693   Packages/CraCore/Tests/CraCoreTests/ProfileAutoArchiveTests.swift::eachProfileKeepsItsOwnTimer  739585095060
 #693   Packages/CraCore/Tests/CraCoreTests/ProfileAutoArchiveTests.swift::theTimersSurviveTheFileAndAnUnknownOneArchivesLater  69c7bf730123
 #693   Tests/StoreTests.swift::profileAutoArchive  3915a5e88140
+#694   Packages/CraCore/Tests/CraCoreTests/ToolbarHoverTests.swift::aDarkBarKeepsItsWhiteHover  eb26d033280c
+#694   Packages/CraCore/Tests/CraCoreTests/ToolbarHoverTests.swift::aLightBarGetsADarkHover  d4e8a35b35ac
+#694   Tests/Scenarios/toolbar-hover-light.scenario  c8f115f92a86
 #697   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::aTabOnAPullRequestsOwnPagesStillShowsIt  f913bea636c6
 #697   Tests/Scenarios/live-folder-closed-request-pages.scenario  bbecb6b6f7ef
 #697   Tests/StoreTests.swift::closedPullRequestsLeaveFromTheirOwnPages  7471cc27d91a

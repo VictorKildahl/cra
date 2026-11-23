@@ -48,9 +48,11 @@ final class PaneToolbarView: NSView {
         var closeTint = NSColor.secondaryLabelColor
         var hairline: NSColor?
         var dividerColor = NSColor.clear
-        /// Icon hover fill. White everywhere, as in Arc, where it doesn't show on a white bar either;
-        /// the developer bar is no longer white (GitHub #42).
+        /// Icon hover fill: white 10 % on a dark bar, black 6 % on a light one (ToolbarColor.hover, #694);
+        /// the developer bar's own white 8 % (GitHub #42).
         var hover = NSColor.white.withAlphaComponent(0.1)
+        /// The address's hover: white 8 % on a dark bar, the icons' black 6 % on a light one (#694).
+        var urlHover = NSColor.white.withAlphaComponent(0.08)
         /// Arc's diagonal stripes behind the developer bar.
         var stripes = false
         /// The developer address field's selected text.
@@ -212,7 +214,11 @@ final class PaneToolbarView: NSView {
         // The tab's own colour counts until its page is live: retarget builds this before it is.
         let onCard = m.kind == .normal || m.kind == .developer
         let cardHex = ToolbarColor.hex(reported: nav.themeColor, remembered: item?.tab?.themeColor)
-        let light = (cardHex.flatMap(HexColor.luminance) ?? 1) > 0.6
+        let light = ToolbarColor.isLight(hex: cardHex)
+        // The hover shows on the bar it's on: dark on a light bar, where white didn't show (#694).
+        let hover = ToolbarColor.hover(light: onCard ? light : !palette.isDark)
+        m.hover = NSColor(white: hover.white, alpha: hover.alpha)
+        if hover.white == 0 { m.urlHover = m.hover }
         if onCard {
             m.fill = cardHex.map { NSColor(hex: $0) } ?? .white
             m.fg = light ? NSColor.black.withAlphaComponent(0.8) : NSColor(hex: "#E4E0D4")
@@ -243,6 +249,15 @@ final class PaneToolbarView: NSView {
             m.stripes = true
         }
         return m
+    }
+
+    /// Scenarios (#694): "hover=black 6% url=black 6%", the fills under the pointer on this bar.
+    var debugHover: String {
+        func name(_ c: NSColor) -> String {
+            guard let g = c.usingColorSpace(.genericGray) else { return "?" }
+            return "\(g.whiteComponent > 0.5 ? "white" : "black") \(Int((g.alphaComponent * 100).rounded()))%"
+        }
+        return "hover=\(name(model.hover)) url=\(name(model.urlHover))"
     }
 
     /// A pinned extension's button (screen rect), for popups opened from the menu bar or a shortcut.
@@ -422,7 +437,7 @@ final class PaneToolbarView: NSView {
             urlButton.isHidden = false
             placeholderLabel.isHidden = true
             // Arc's developer URL has no hover fill (it edits in place on a click).
-            let urlHover = m.kind == .developer ? NSColor.clear : NSColor.white.withAlphaComponent(0.08)
+            let urlHover = m.kind == .developer ? NSColor.clear : m.urlHover
             urlButton.show(host: m.host, path: m.path, url: m.url, developer: m.kind == .developer,
                            fg: m.fg, fgDim: m.fgDim, hover: urlHover, copyHover: m.hover)
             urlButton.selection = m.selection

@@ -1249,6 +1249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let command = dict["toolbar"] { CraLog.note(main.shell.debugToolbar(command)); return }
             // toolbarColor=<label>: the colour the first pane's bar is painted in (#629).
             if let label = dict["toolbarColor"] { CraLog.note(main.shell.toolbarColorReadout(label)); return }
+            if let label = dict["toolbarHover"] { CraLog.note(main.shell.toolbarHoverReadout(label)); return }
             if let label = dict["findBar"] { CraLog.note(main.debugFindBar(label)); return }
             // chromiumDialogs=1: the Chromium dialogs showing and where (#349); chromiumDialogs=<button>: that
             // read, then the button with that title pressed (#484).

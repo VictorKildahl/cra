@@ -991,6 +991,12 @@ final class ShellView: NSView {
         "toolbar colour \(label): bar=\(paneCards.first?.toolbarColor.map { $0.replacingOccurrences(of: "#", with: "") } ?? "white")"
     }
 
+    /// Scenarios (#694): the first pane's bar colour and the fill its buttons and address show under the pointer.
+    func toolbarHoverReadout(_ label: String) -> String {
+        let bar = paneCards.first?.toolbarColor.map { $0.replacingOccurrences(of: "#", with: "") } ?? "white"
+        return "toolbar hover \(label): bar=\(bar) " + ((paneCards.first?.toolbarHost as? PaneToolbarView)?.debugHover ?? "no bar")
+    }
+
     func debugToolbar(_ command: String) -> String {
         switch command {
         case "out": bringFloatingToolbarOut()
