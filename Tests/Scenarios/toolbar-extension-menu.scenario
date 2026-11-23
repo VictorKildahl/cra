@@ -1,0 +1,35 @@
+# promise: #695
+# A right-click on a pinned extension in the toolbar shows Arc's menu for it (Chromium's extension
+# action menu, as Arc 1.17x shows it): its name, Options for an extension with an options page,
+# Unpin, Manage Extension and View Web Permissions, with Cra's icon choices under Icon. Until 0.1.54 it
+# showed only the icon choices. Manage Extension opens Chrome's page for the one extension; Options
+# its options page; Unpin takes the button off the bar. The extension's own action items, the site
+# access line and Remove are the engine's menu model and not here yet.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/Extension
+relaunch
+cra://open?url=${PAGE}?n=menu
+wait 3
+cra://debug?pinExtension=${EXTENSION_ID}
+wait 2
+cra://debug?extensionMenu=${EXTENSION_ID}&label=rows
+expect-log extension menu rows: Cra Scenario Fixture \(off\) \| - \| Options \| Unpin \| - \| Manage Extension \| View Web Permissions \| - \| Icon ▸$
+cra://debug?extensionMenu=${EXTENSION_ID}&label=manage&press=Manage%20Extension
+wait 2
+cra://debug?extensionMenu=${EXTENSION_ID}&label=after-manage
+expect-log extension tab after-manage: manage$
+cra://debug?extensionMenu=${EXTENSION_ID}&label=options&press=Options
+wait 2
+cra://debug?extensionMenu=${EXTENSION_ID}&label=after-options
+expect-log extension tab after-options: options$
+cra://debug?extensionMenu=${EXTENSION_ID}&label=permissions&press=View%20Web%20Permissions
+wait 2
+cra://debug?extensionMenu=${EXTENSION_ID}&label=after-permissions
+expect-log extension tab after-permissions: webPermissions$
+cra://debug?extensionMenu=${EXTENSION_ID}&label=unpin&press=Unpin
+expect-log extension pinned unpin: 0$
+wait 1
+cra://debug?extensionMenu=${EXTENSION_ID}&label=gone
+expect-log extension menu gone: no menu$
+reject-log fault:

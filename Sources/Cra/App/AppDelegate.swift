@@ -1674,6 +1674,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // pinExtension=<id>: pinned to the toolbar on the Default profile, as the Extensions menu's pin does.
             if let id = dict["pinExtension"] { ExtensionStore.shared.setPinned(id, true, inProfile: "Default"); return }
+            // extensionMenu=<id>: the toolbar's right-click menu for that pinned extension (#695); press=<row> chooses one.
+            if let id = dict["extensionMenu"], let bar = main.shell.paneCards.first?.toolbarHost as? PaneToolbarView {
+                CraLog.note("extension menu \(dict["label"] ?? id): " + bar.debugExtensionMenu(id, press: dict["press"]))
+                CraLog.note("extension pinned \(dict["label"] ?? id): \(ExtensionStore.shared.pinnedIDs(inProfile: "Default").contains(id) ? 1 : 0)")
+                // Which of the menu's pages the selected tab is now, not its address (cra.log keeps no addresses).
+                let url = main.store.selectedTabID(window: main.windowID).flatMap { main.store.item($0)?.tab?.url } ?? ""
+                let options = ExtensionStore.shared.entries.first { $0.extensionID == id }?.optionsPath.map { ExtensionActionMenu.optionsPage(id: id, path: $0) }
+                let page = url == ExtensionActionMenu.managePage(id: id) ? "manage" : url == options ? "options"
+                    : url == ExtensionActionMenu.webPermissionsPage(id: id) ? "webPermissions" : "other"
+                CraLog.note("extension tab \(dict["label"] ?? id): \(page)")
+                return
+            }
             // spaceGradient=<label>: the window's space gradient axis and colour count (#669).
             if let label = dict["spaceGradient"] {
                 func find(_ v: NSView) -> PagedGradientView? {

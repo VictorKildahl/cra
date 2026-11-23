@@ -1571,6 +1571,9 @@
 #694   Packages/CraCore/Tests/CraCoreTests/ToolbarHoverTests.swift::aDarkBarKeepsItsWhiteHover  eb26d033280c
 #694   Packages/CraCore/Tests/CraCoreTests/ToolbarHoverTests.swift::aLightBarGetsADarkHover  d4e8a35b35ac
 #694   Tests/Scenarios/toolbar-hover-light.scenario  c8f115f92a86
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::arcsRowsInArcsOrder  16bbcbdab5c5
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::eachRowOpensChromesPage  5c91641395f2
+#695   Tests/Scenarios/toolbar-extension-menu.scenario  90640d771fa9
 #697   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::aTabOnAPullRequestsOwnPagesStillShowsIt  f913bea636c6
 #697   Tests/Scenarios/live-folder-closed-request-pages.scenario  bbecb6b6f7ef
 #697   Tests/StoreTests.swift::closedPullRequestsLeaveFromTheirOwnPages  7471cc27d91a

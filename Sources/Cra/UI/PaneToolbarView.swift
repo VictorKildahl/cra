@@ -58,6 +58,8 @@ final class PaneToolbarView: NSView {
         /// The developer address field's selected text.
         var selection = NSColor.selectedTextBackgroundColor
         var tabID: UUID?
+        /// The Chromium profile folder the bar's pinned extensions are listed for ("Default", "Profile <id>").
+        var extensionProfile = "Default"
     }
 
     private var model = Model()
@@ -203,6 +205,7 @@ final class PaneToolbarView: NSView {
             ?? store.profileDirectoryName(space: store.focusedSpaceID(window: ui.windowID))
         let incognito = item.map { store.isIncognito(item: $0.id) } ?? store.isIncognito(space: store.focusedSpaceID(window: ui.windowID))
         let entries = extensions.entries(inProfile: profile, incognito: incognito)
+        m.extensionProfile = profile
         m.pinned = extensions.pinnedIDs(inProfile: profile).compactMap { id in
             entries.first { $0.extensionID == id }.map {
                 Model.Ext(id: id, name: $0.name, icon: extensions.toolbarIcon(for: $0, profile: profile, tab: m.tabID),
@@ -258,6 +261,18 @@ final class PaneToolbarView: NSView {
             return "\(g.whiteComponent > 0.5 ? "white" : "black") \(Int((g.alphaComponent * 100).rounded()))%"
         }
         return "hover=\(name(model.hover)) url=\(name(model.urlHover))"
+    }
+
+    /// Scenarios (#695): a pinned extension's right-click menu as its rows ("-" a separator, "▸" a
+    /// submenu, "(off)" a row that does nothing), then the row titled `press` chosen, if any.
+    func debugExtensionMenu(_ id: String, press: String?) -> String {
+        guard let menu = buttons["ext:" + id]?.menuProvider?() else { return "no menu" }
+        let rows = menu.items.map { item -> String in
+            if item.isSeparatorItem { return "-" }
+            return item.title + (item.submenu != nil ? " ▸" : item.action == nil ? " (off)" : "")
+        }
+        if let press, let i = menu.items.firstIndex(where: { $0.title == press }) { menu.performActionForItem(at: i) }
+        return rows.joined(separator: " | ")
     }
 
     /// A pinned extension's button (screen rect), for popups opened from the menu bar or a shortcut.
@@ -384,7 +399,13 @@ final class PaneToolbarView: NSView {
                 b.action = { [weak self] in
                     if let pane { self?.actions.paneRunExtension(pane, id) } else { self?.actions.runExtension(id) }
                 }
-                b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
+                // Arc's menu for the pinned extension (#695), Cra's icon choices in it.
+                let profile = m.extensionProfile
+                b.menuProvider = { [weak self] in
+                    ExtensionStore.shared.entries.first { $0.extensionID == id }.map {
+                        ExtensionsMenu.actionMenu(for: $0, profile: profile, open: { self?.actions.openURL($0) })
+                    }
+                }
                 return b
             case .blockedPopups:
                 // Chrome's blocked pop-ups icon in the address bar: a window crossed out (#357).
