@@ -429,6 +429,16 @@ CRA_EXPORT @interface CraBrowser : NSObject
 /// Chrome's ExtensionKeybindingRegistry delivers it (#701). Chrome catches the key on its own browser window, which
 /// Cra never shows. NO when the extension isn't enabled in this page's profile.
 - (BOOL)runExtensionCommand:(NSString *)command extension:(NSString *)extensionID NS_SWIFT_NAME(runExtensionCommand(_:extension:));
+/// An extension's own rows in its toolbar button's menu (chrome.contextMenus with an "action" context), as
+/// Chrome's extension menu lists them above its own rows (#695): dictionaries with "id", "title", "enabled" and
+/// "checked" (NSNumber), "kind" ("normal", "checkbox", "radio", "separator") and "children" (the same, for a
+/// submenu). Empty when the extension isn't enabled in this page's profile or has none.
+- (NSArray<NSDictionary<NSString *, id> *> *)extensionActionMenuItems:(NSString *)extensionID NS_SWIFT_NAME(extensionActionMenuItems(_:));
+/// Runs one of those rows ("id") as Chrome's menu does: contextMenus.onClicked with this page as the tab.
+- (BOOL)runExtensionMenuItem:(NSString *)itemID extension:(NSString *)extensionID NS_SWIFT_NAME(runExtensionMenuItem(_:extension:));
+/// Removes the extension from this page's profile, as chrome://extensions' Remove does (no dialog: the app asks).
+/// NO when Chromium can't (a policy-installed extension) or it isn't installed there.
+- (BOOL)uninstallExtension:(NSString *)extensionID NS_SWIFT_NAME(uninstallExtension(_:));
 - (void)executeJavaScript:(NSString *)script;
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.

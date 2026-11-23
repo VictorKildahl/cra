@@ -1696,6 +1696,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // pinExtension=<id>: pinned to the toolbar on the Default profile, as the Extensions menu's pin does.
             if let id = dict["pinExtension"] { ExtensionStore.shared.setPinned(id, true, inProfile: "Default"); return }
+            // extensionRemove=<id>: Remove from Cra as its menu row does once the dialog says Remove (#695).
+            if let id = dict["extensionRemove"] {
+                if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionsMenu.remove(e) }
+                // Chromium's own record of the profile's extensions, and Cra's list.
+                let chromium = CraCEFRuntime.extensionSettings(forProfile: nil)?.contains(id) == true
+                let cra = ExtensionStore.shared.entries.contains { $0.extensionID == id }
+                CraLog.note("extension remove \(id.prefix(8)): in chromium=\(chromium ? 1 : 0) in cra=\(cra ? 1 : 0)")
+                return
+            }
             // extensionMenu=<id>: the toolbar's right-click menu for that pinned extension (#695); press=<row> chooses one.
             if let id = dict["extensionMenu"], let bar = main.shell.paneCards.first?.toolbarHost as? PaneToolbarView {
                 CraLog.note("extension menu \(dict["label"] ?? id): " + bar.debugExtensionMenu(id, press: dict["press"]))

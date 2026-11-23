@@ -1,0 +1,20 @@
+# promise: #695
+# A pinned extension's right-click menu has its own rows (chrome.contextMenus for its action) and Remove from Cra,
+# as Arc's (Chromium's extension menu) has: the fixture's "Say hello" is listed under its name, a click on it fires
+# contextMenus.onClicked with the page as the tab, and Remove takes it out of Chromium's profile and Cra's list.
+# The rows come from the engine (CraBrowser.extensionActionMenuItems, engine -20).
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/CommandsExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=menu-page
+wait 3
+cra://debug?pinExtension=${COMMANDS_EXTENSION_ID}
+wait 2
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=rows
+expect-log extension menu rows: Cra Commands Fixture \(off\) \| - \| Say hello \| - \| Remove from Cra \| Unpin \| - \| Manage Extension \| View Web Permissions \| - \| Icon ▸$
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=hello&press=Say%20hello
+expect-log "GET /page\.html\?n=commands-menu-cra-hello-menu-page HTTP
+cra://debug?extensionRemove=${COMMANDS_EXTENSION_ID}
+expect-log extension remove [a-p]{8}: in chromium=0 in cra=0

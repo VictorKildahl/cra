@@ -1,4 +1,5 @@
 import AppKit
+import CraCEF
 import UniformTypeIdentifiers
 
 /// The menu bar's Extensions menu, after Dia 1.54 (Extensions, between History and
@@ -86,6 +87,15 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
                 item.image = menuIcon(e.icon)
                 if !opensWebStore { item.action = nil }
                 menu.addItem(item)
+            case .ownItems:
+                // The extension's own rows (chrome.contextMenus for its action), from the engine (#695).
+                guard let page = Self.page(), page.responds(to: #selector(CraBrowser.extensionActionMenuItems(_:))) else { break }
+                let own = Self.ownMenuItems(page.extensionActionMenuItems(id), extension: id, page: page)
+                guard !own.isEmpty else { break }
+                own.forEach(menu.addItem)
+                menu.addItem(.separator())
+            case .remove:
+                menu.addItem(BlockMenuItem(title: row.title) { Self.confirmRemove(e) })
             case .options:
                 if let path = e.optionsPath { menu.addItem(BlockMenuItem(title: row.title) { open(ExtensionActionMenu.optionsPage(id: id, path: path)) }) }
             case .unpin:
@@ -101,6 +111,49 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
             }
         }
         return menu
+    }
+
+    /// The page the menu acts on: the browser window's current page.
+    @MainActor static func page() -> CraBrowser? { (NSApp.delegate as? AppDelegate)?.main?.currentBrowser }
+
+    /// The engine's rows (`extensionActionMenuItems`) as menu items: a click runs the row for the page (#695).
+    static func ownMenuItems(_ rows: [[String: Any]], extension id: String, page: CraBrowser) -> [NSMenuItem] {
+        rows.map { row in
+            let kind = row["kind"] as? String ?? "normal"
+            guard kind != "separator" else { return .separator() }
+            let title = row["title"] as? String ?? ""
+            let itemID = row["id"] as? String ?? ""
+            let children = row["children"] as? [[String: Any]] ?? []
+            if !children.isEmpty {
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                let sub = NSMenu(title: title)
+                ownMenuItems(children, extension: id, page: page).forEach(sub.addItem)
+                item.submenu = sub
+                return item
+            }
+            let item = BlockMenuItem(title: title) { [weak page] in _ = page?.runExtensionMenuItem(itemID, extension: id) }
+            if (row["enabled"] as? Bool) == false { item.action = nil }
+            if (row["checked"] as? Bool) == true { item.state = .on }
+            return item
+        }
+    }
+
+    /// Remove from Cra: asked first, as Chrome's "Remove from Chrome…" does (#695).
+    static func confirmRemove(_ e: ExtensionStore.Entry) {
+        let dialog = AppDialog(title: "Remove “\(e.name)”?",
+                               message: "It will be removed from this profile, with its data.",
+                               actions: [DialogAction("Remove", role: .destructive), .cancel])
+        let remove = { (r: NSApplication.ModalResponse) in if r == .alertFirstButtonReturn { Self.remove(e) } }
+        if let window = AppDialog.parentWindow { dialog.present(over: window, completion: remove) } else { remove(dialog.runModal()) }
+    }
+
+    /// Chromium uninstalls it from the page's profile; a copy Cra loads itself from its folder goes too, or it
+    /// would load again at the next launch.
+    @MainActor static func remove(_ e: ExtensionStore.Entry) {
+        let page = page()
+        let uninstalled = page?.responds(to: #selector(CraBrowser.uninstallExtension(_:))) == true && page?.uninstallExtension(e.extensionID) == true
+        if !e.managedByChrome { ExtensionStore.shared.remove(e) }
+        CraLog.note("extension removed \(e.extensionID.prefix(8)): engine=\(uninstalled ? 1 : 0) folder=\(e.managedByChrome ? 0 : 1)")
     }
 
     static func iconMenu(for e: ExtensionStore.Entry) -> NSMenu {

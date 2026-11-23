@@ -14,7 +14,7 @@ wait 3
 cra://debug?pinExtension=${EXTENSION_ID}
 wait 2
 cra://debug?extensionMenu=${EXTENSION_ID}&label=rows
-expect-log extension menu rows: Cra Scenario Fixture \(off\) \| - \| Options \| Unpin \| - \| Manage Extension \| View Web Permissions \| - \| Icon ▸$
+expect-log extension menu rows: Cra Scenario Fixture \(off\) \| - \| Options \| Remove from Cra \| Unpin \| - \| Manage Extension \| View Web Permissions \| - \| Icon ▸$
 cra://debug?extensionMenu=${EXTENSION_ID}&label=manage&press=Manage%20Extension
 wait 2
 cra://debug?extensionMenu=${EXTENSION_ID}&label=after-manage

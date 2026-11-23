@@ -149,6 +149,9 @@
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/browser/permissions/active_tab_permission_granter.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/common/api/extension_action/action_info.h"
+#include "extensions/browser/extension_registrar.h"
+#include "chrome/browser/extensions/menu_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "extensions/common/mojom/view_type.mojom.h"
@@ -3399,6 +3402,101 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
     dispatch(_contents->GetWeakPtr(), extension_id, name);
   }
   return YES;
+}
+// The extension's items for its action's menu (#695), as ExtensionContextMenuModel's MenuItemMatchesAction picks them.
+static bool CraItemFitsAction(const extensions::Extension* extension, const extensions::MenuItem* item) {
+  const extensions::ActionInfo* info = extensions::ActionInfo::GetExtensionActionInfo(extension);
+  if (!info) {
+    return false;
+  }
+  const extensions::MenuItem::ContextList& contexts = item->contexts();
+  return contexts.Contains(extensions::MenuItem::ALL) ||
+         (contexts.Contains(extensions::MenuItem::PAGE_ACTION) && info->type == extensions::ActionInfo::Type::kPage) ||
+         (contexts.Contains(extensions::MenuItem::BROWSER_ACTION) && info->type == extensions::ActionInfo::Type::kBrowser) ||
+         (contexts.Contains(extensions::MenuItem::ACTION) && info->type == extensions::ActionInfo::Type::kAction);
+}
+static NSString* CraMenuItemID(const extensions::MenuItem* item) {
+  return item->id().string_uid.empty() ? [NSString stringWithFormat:@"#%d", item->id().uid] : NS(item->id().string_uid);
+}
+static NSDictionary* CraMenuRow(extensions::MenuItem* item);
+static NSArray<NSDictionary*>* CraMenuRows(const extensions::MenuItem::OwnedList& items) {
+  NSMutableArray* out = [NSMutableArray array];
+  for (const auto& item : items) {
+    if (item->visible()) {
+      [out addObject:CraMenuRow(item.get())];
+    }
+  }
+  return out;
+}
+static NSDictionary* CraMenuRow(extensions::MenuItem* item) {
+  NSString* kind = item->type() == extensions::MenuItem::CHECKBOX    ? @"checkbox"
+                   : item->type() == extensions::MenuItem::RADIO     ? @"radio"
+                   : item->type() == extensions::MenuItem::SEPARATOR ? @"separator"
+                                                                     : @"normal";
+  return @{
+    @"id" : CraMenuItemID(item),
+    @"title" : base::SysUTF8ToNSString(item->title()),
+    @"enabled" : @(item->enabled()),
+    @"checked" : @(item->checked()),
+    @"kind" : kind,
+    @"children" : CraMenuRows(item->children()),
+  };
+}
+static extensions::MenuItem* CraFindMenuItem(const extensions::MenuItem::OwnedList& items, NSString* itemID) {
+  for (const auto& item : items) {
+    if ([CraMenuItemID(item.get()) isEqualToString:itemID]) {
+      return item.get();
+    }
+    if (extensions::MenuItem* child = CraFindMenuItem(item->children(), itemID)) {
+      return child;
+    }
+  }
+  return nullptr;
+}
+- (NSArray<NSDictionary<NSString*, id>*>*)extensionActionMenuItems:(NSString*)extensionID {
+  if (!_contents) {
+    return @[];
+  }
+  content::BrowserContext* context = _contents->GetBrowserContext();
+  std::string extension_id = base::SysNSStringToUTF8(extensionID);
+  const extensions::Extension* extension =
+      extensions::ExtensionRegistry::Get(context)->enabled_extensions().GetByID(extension_id);
+  const extensions::MenuItem::OwnedList* all =
+      extension ? extensions::MenuManager::Get(context)->MenuItems(extensions::MenuItem::ExtensionKey(extension_id)) : nullptr;
+  if (!all) {
+    return @[];
+  }
+  // Only the top-level rows meant for the action's menu, as Chrome's ContextMenuMatcher keeps them.
+  NSMutableArray* rows = [NSMutableArray array];
+  for (const auto& item : *all) {
+    if (item->visible() && CraItemFitsAction(extension, item.get())) {
+      [rows addObject:CraMenuRow(item.get())];
+    }
+  }
+  return rows;
+}
+- (BOOL)runExtensionMenuItem:(NSString*)itemID extension:(NSString*)extensionID {
+  if (!_contents) {
+    return NO;
+  }
+  content::BrowserContext* context = _contents->GetBrowserContext();
+  std::string extension_id = base::SysNSStringToUTF8(extensionID);
+  extensions::MenuManager* manager = extensions::MenuManager::Get(context);
+  const extensions::MenuItem::OwnedList* all = manager->MenuItems(extensions::MenuItem::ExtensionKey(extension_id));
+  extensions::MenuItem* item = all ? CraFindMenuItem(*all, itemID) : nullptr;
+  if (!item || !item->enabled()) {
+    return NO;
+  }
+  manager->ExecuteCommand(context, _contents, nullptr, content::ContextMenuParams(), item->id());
+  return YES;
+}
+- (BOOL)uninstallExtension:(NSString*)extensionID {
+  if (!_contents) {
+    return NO;
+  }
+  std::u16string error;
+  return extensions::ExtensionRegistrar::Get(_contents->GetBrowserContext())
+      ->UninstallExtension(base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
 }
 - (void)probeBackgroundColor {
   if (_contents) {
