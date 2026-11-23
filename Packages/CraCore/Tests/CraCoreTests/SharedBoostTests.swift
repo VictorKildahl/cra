@@ -147,6 +147,29 @@ struct SharedBoostTests {
         a { color: red }
         """
 
+    /// The CSS Cra puts on a page for a shared boost: the engine draws its tint (#602), so no sepia or
+    /// hue-rotate filter for it. The share page's "Show the CSS" shows this string (boost-link.ts's
+    /// stylesheet with engineTints); it showed the old filter, and pasting that into a boost brought
+    /// #602's tinted images back (#704). Only the gallery's pictures, drawn without Cra's engine, keep it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/704"))
+    func theCSSTheSiteShowsLeavesTheTintToTheEngine() throws {
+        let boost = try #require(SharedBoost.from(json: Data(Self.everyField.utf8)))
+        #expect(boost.boost().stylesheet(engineTints: true) == Self.everyFieldEngineSheet)
+        let tintOnly = try #require(SharedBoost.from(json: Data(#"{"v":1,"name":"Blue","host":"example.com","hue":0.6,"strength":0.4}"#.utf8)))
+        #expect(tintOnly.boost().stylesheet(engineTints: true) == "", "a boost that only tints puts no CSS on the page")
+        #expect(tintOnly.boost().tint != nil, "the engine draws its tint")
+    }
+
+    static let everyFieldEngineSheet = """
+        html { filter: invert(1) hue-rotate(180deg) contrast(1.2) brightness(0.9) saturate(1.1) !important; }
+        img, video, picture, canvas, iframe, svg image { filter: invert(1) hue-rotate(180deg) !important; }
+        body, body * { font-family: "Georgia", sans-serif !important; }
+        html { zoom: 1.15 !important; }
+        body, body * { text-transform: uppercase !important; }
+        .ad, #promo { display: none !important; }
+        a { color: red }
+        """
+
     /// Every boost in the gallery (boosts/<slug>/boost.json at the repo's root) is one Cra installs.
     @Test func everyGalleryBoostInstalls() throws {
         let root = URL(fileURLWithPath: #filePath)
