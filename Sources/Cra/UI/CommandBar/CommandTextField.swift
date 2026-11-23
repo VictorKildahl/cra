@@ -78,7 +78,7 @@ final class CommandTextField {
             DispatchQueue.main.async {
                 field.window?.makeFirstResponder(field)
                 guard let editor = field.currentEditor() else { return }
-                if selected { editor.selectAll(nil) } else { editor.selectedRange = NSRange(location: (field.stringValue as NSString).length, length: 0) }
+                if selected { editor.selectAllShowingStart() } else { editor.selectedRange = NSRange(location: (field.stringValue as NSString).length, length: 0) }
             }
         }
         if coord.appliedPreview != controller.previewVersion {
