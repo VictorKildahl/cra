@@ -166,6 +166,15 @@ for exe in "$APP/Contents/MacOS/$EXE" "$APP/Contents/MacOS/CraPluginHost" "$APP"
   lipo "$exe" -verify_arch "$ARCH" || { echo "$exe has no $ARCH code: $(lipo -archs "$exe")" >&2; exit 1; }
 done
 
+# SwiftPM links Cra's own binaries with an rpath into the toolchain that built them
+# (/Applications/Xcode….app/…/usr/lib/swift-6.2/macosx, for back-deployed Swift libraries Cra doesn't load).
+# Sparkle loads through @rpath, so that path comes first: syspolicy_check calls it a fatal "Bad Load Command" and
+# macOS's malware check could fail on a Mac without that Xcode (GitHub #720, 0.1.54 for Intel). It goes before
+# signing; nothing in the bundle may point outside it and the system after that.
+scripts/check-load-paths.sh --strip "$APP/Contents/MacOS/$EXE" "$APP/Contents/MacOS/CraPluginHost" \
+  "$APP"/Contents/Frameworks/*.app/Contents/MacOS/* "$DOCK_TILE/Contents/MacOS/CraDockTile"
+scripts/check-load-paths.sh "$APP"
+
 # Helpers link the framework at launch (Sources/CraHelper/main.cc says why: ~12 MB less in each
 # page, GPU and utility process). The path has to resolve inside the bundle or no page starts.
 if [ "$ENGINE" = cef ]; then
