@@ -3,6 +3,12 @@
  {"id":"b","url":"https://tasks.example.com/board","title":"Board","kept":true,"name":"Tasks","home":"https://tasks.example.com/",
   "folder":"F2","folderName":"Work","folderOpen":true,"folderPath":[{"id":"F1","name":"Clients","open":true}]},
  {"id":"c","url":"https://code.example.com/","title":"Code","kept":true},
+ {"id":"k","url":"file:///Users/me/notes.html","title":"Notes","kept":true},
+ {"id":"s","url":"https://status.example.com/now","title":"Status now","kept":true,"home":"about:newtab","homeTitle":"New Tab"},
  {"id":"d","url":"https://news.example.com/","title":"News","seen":1763400000},
- {"id":"e","url":"about:blank","title":""}],
- "active":3,"pairs":[{"first":2,"second":3,"share":0.5}]}
+ {"id":"e","url":"about:blank","title":""},
+ {"id":"j","url":"javascript:void(document.title)","title":"Bookmarklet"},
+ {"id":"o","url":"chrome://settings/","title":"Settings"},
+ {"id":"n","url":"chrome://newtab/","title":"New Tab"},
+ {"id":"x","url":"blob:https://news.example.com/5f1c","title":"Download"}],
+ "active":5,"pairs":[{"first":2,"second":5,"share":0.5}]}
