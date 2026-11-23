@@ -3474,8 +3474,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         f.staysShown = { [weak self, weak f] in
             // While a space is being made in it (Arc's Create a Space page), it stays.
             if self?.sidebarUI.spaceCreation != nil { return true }
+            // Its address being edited keeps it too: Arc's panel hanging from it (#691), or in place (#692).
+            let addressOpen = (self?.commandBar.isOpen == true && self?.commandBar.compact == true)
+                || (self?.shell.sidebarHost as? SidebarView)?.isEditingAddress == true
             let keep = FloatingSidebarKeepOut(folderPreviewOpen: FolderPreviewController.shared.isOpen,
-                                              siteControlsOpen: self?.siteControlCenter.isShown == true,
+                                              siteControlsOpen: self?.siteControlCenter.isShown == true, addressOpen: addressOpen,
                                               popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
                                               popupAwaitedUntil: self?.floatingSidebarPopupHold)
             if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
@@ -3490,6 +3493,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         floatingSidebar = f
     }
 
+    /// A press outside the sidebar's address while it is open, which never moves the keys (#691, #692):
+    /// on the floating sidebar's empty space (its panel takes the keys only when a click needs them) it
+    /// closes the bar, Arc's address panel or the centred one, and the sidebar stays as the pointer
+    /// says; anywhere in the sidebar's window but the field it puts the address edited in place back.
+    private func sidebarAddressOutsideClick(_ event: NSEvent) {
+        guard let clicked = event.window else { return }
+        let floating = clicked === floatingSidebar?.panelWindow
+        if SidebarAddressOutsideClick.closesBar(barOpen: commandBar.isOpen, inFloatingSidebar: floating) {
+            if event.type == .leftMouseDown { commandBarClosingClick.panelClosed(byMouseDownAt: event.timestamp) }
+            commandBarLostKeysTo = .barsWindow
+            commandBar.close()
+        }
+        guard let sidebar = shell.sidebarHost as? SidebarView else { return }
+        let onField = sidebar.addressFrameOnScreen?.contains(clicked.convertPoint(toScreen: event.locationInWindow)) ?? false
+        if SidebarAddressOutsideClick.endsEdit(editing: sidebar.isEditingAddress, inSidebarsWindow: clicked === sidebar.window, onField: onField) {
+            sidebar.endAddressEditing()
+        }
+    }
+
     /// Pages and DevTools are separate Chromium child windows, and Chromium drops a
     /// click on a window that isn't key. In Chrome they share one window, so moving
     /// between the page and DevTools never costs a click: make the target key first.
@@ -3497,6 +3519,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// still just activates it, like Chrome.
     private func installChildClickMonitor() {
         childClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            self?.sidebarAddressOutsideClick(event)
             guard let self, let window = self.window, let target = event.window, target.parent === window,
                   target !== self.overlayPanel, !target.isKeyWindow, target.canBecomeKey, NSApp.isActive,
                   let key = NSApp.keyWindow, key === window || key.parent === window else { return event }

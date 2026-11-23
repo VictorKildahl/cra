@@ -2854,6 +2854,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if dict["floatingSidebar"] == "release" { main.floatingSidebar?.heldOut = false; return }
+            // floatingSidebar=pointerAway: the pointer left it, as the poll would find, so it goes unless something
+            // keeps it out (FloatingSidebarKeepOut: its address being edited, #691).
+            if dict["floatingSidebar"] == "pointerAway" { main.floatingSidebar?.requestAutomaticHide(); return }
             // extensionPopup=<step>: whether an extension's popup is up and where it hangs (#531).
             if let step = dict["extensionPopup"] { main.debugExtensionPopup(step); return }
             if let f = dict["floatingSidebar"] {

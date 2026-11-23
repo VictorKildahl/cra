@@ -1,0 +1,34 @@
+# promise: #691
+# With the sidebar hidden and the toolbar too, the sidebar that slides out at the window's edge stays
+# out while Arc's address panel hangs from its address, wherever the pointer goes, as in Arc 1.174.1.
+# A click on the sidebar's empty space closes the panel; the sidebar is then free to go as the pointer
+# says. Until 0.1.54 the sidebar slid away under the open panel, and a click on its empty space left
+# the panel open: the sidebar's panel takes the keys only when a click needs them, so the bar never
+# lost them. The pointer leaving is cra://debug?floatingSidebar=pointerAway, what the poll would do.
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=panel
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?urlFieldEdit=click
+expect-log url field click: not editing, command bar open, panel compact
+cra://debug?floatingSidebar=release
+cra://debug?floatingSidebar=pointerAway
+wait 1
+cra://debug?floatingSidebar=state:panel
+expect-log floating sidebar panel: out$
+
+# A click on the sidebar's empty space, below its tab.
+cra://debug?clickAt=120,600&target=floating
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar closed
+cra://debug?floatingSidebar=pointerAway
+wait 1
+cra://debug?floatingSidebar=state:closed
+expect-log floating sidebar closed: in$

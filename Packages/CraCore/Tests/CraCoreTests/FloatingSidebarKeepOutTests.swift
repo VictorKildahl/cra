@@ -83,4 +83,12 @@ import Testing
         // Nothing to hang from: the pointer, as before.
         #expect(SiteControlsPopupAnchor.buttonMidX(given: nil, underPointer: nil, sliders: nil, pointerX: 40) == 40)
     }
+
+    /// GitHub #691: Arc 1.174.1 keeps the floating sidebar out for as long as its address panel is
+    /// open, the pointer far into the page included; the in-place field (#692, Cra's option) as well,
+    /// so typing never goes into a sidebar that slid away.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/691")) func theAddressBeingEditedKeepsIt() {
+        #expect(FloatingSidebarKeepOut(addressOpen: true, panelFrame: panel).staysOut(now: now))
+        #expect(!FloatingSidebarKeepOut(addressOpen: false, panelFrame: panel).staysOut(now: now))
+    }
 }

@@ -30,6 +30,8 @@ final class SidebarView: NSView {
     var debugURLFieldState: String { topBar.debugURLFieldState }
     /// The URL field edited in place puts the address back (#344).
     func endAddressEditing() { topBar.endAddressEditing() }
+    /// The URL field is being edited in place (#344).
+    var isEditingAddress: Bool { topBar.isEditingAddress }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { topBar.debugURLFieldType(text, commit: commit) }
     /// Scenario hooks (#648): the header's address row, and a press on its ← → ↻.
     var debugAddressRow: String { topBar.debugAddressRow }
@@ -535,6 +537,7 @@ final class SidebarTopBarView: NSView {
     }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { !pill.isHidden && pill.debugType(text, commit: commit) }
     func endAddressEditing() { pill.endEditing(commit: false) }
+    var isEditingAddress: Bool { !pill.isHidden && pill.isEditing }
     var debugURLFieldState: String { pill.isHidden ? "hidden" : pill.editingText.map { "editing \($0)" } ?? "not editing" }
 
     /// Scenarios (#648): the address row as it stands, "url=<the field's address> back=1 forward=0".

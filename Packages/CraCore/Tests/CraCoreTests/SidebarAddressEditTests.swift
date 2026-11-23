@@ -47,3 +47,28 @@ struct SidebarAddressEditTests {
         #expect(try decoder.decode(AppSettings.self, from: JSONEncoder().encode(on)).editAddressInPlace)
     }
 }
+
+/// A press outside the sidebar's address while it is open (GitHub #691, #692).
+struct SidebarAddressOutsideClickTests {
+    /// Arc 1.174.1: a click on empty space in the floating sidebar closes the address panel and
+    /// leaves the sidebar out. That panel takes the keys only when a click needs them, so the bar
+    /// never lost them and stayed open.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/691"))
+    func aClickInTheFloatingSidebarClosesTheBar() {
+        #expect(SidebarAddressOutsideClick.closesBar(barOpen: true, inFloatingSidebar: true))
+        #expect(!SidebarAddressOutsideClick.closesBar(barOpen: true, inFloatingSidebar: false))
+        #expect(!SidebarAddressOutsideClick.closesBar(barOpen: false, inFloatingSidebar: true))
+    }
+
+    /// #344's promise: a click elsewhere puts the address back. A click in the sidebar's own window
+    /// (empty space, a row, the toolbar) never moved the keys, so the field kept them (#692). A click
+    /// on the field itself is editing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/692"))
+    func aClickElsewhereInTheSidebarsWindowEndsTheEdit() {
+        #expect(SidebarAddressOutsideClick.endsEdit(editing: true, inSidebarsWindow: true, onField: false))
+        #expect(!SidebarAddressOutsideClick.endsEdit(editing: true, inSidebarsWindow: true, onField: true))
+        // Another window (the page): its key change ends the edit already.
+        #expect(!SidebarAddressOutsideClick.endsEdit(editing: true, inSidebarsWindow: false, onField: false))
+        #expect(!SidebarAddressOutsideClick.endsEdit(editing: false, inSidebarsWindow: true, onField: false))
+    }
+}

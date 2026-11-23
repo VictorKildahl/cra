@@ -10,6 +10,9 @@ public struct FloatingSidebarKeepOut: Equatable {
     public var folderPreviewOpen = false
     /// The Site Control Center, opened from the sidebar's URL field.
     public var siteControlsOpen = false
+    /// The sidebar's address being edited: Arc's address panel hanging from it (#691; Arc 1.174.1
+    /// keeps the sidebar out under it wherever the pointer goes) or the field edited in place (#692).
+    public var addressOpen = false
     /// The point (screen) the extension popup on screen hangs from, nil while none is.
     public var popupAnchor: CGPoint?
     /// The floating sidebar's panel (screen), nil while it has none.
@@ -21,10 +24,11 @@ public struct FloatingSidebarKeepOut: Equatable {
     /// Chrome shows it a moment after the click, while the pointer is still over the closed menu.
     public static let popupWait: TimeInterval = 3
 
-    public init(folderPreviewOpen: Bool = false, siteControlsOpen: Bool = false, popupAnchor: CGPoint? = nil,
-                panelFrame: CGRect? = nil, popupAwaitedUntil: Date? = nil) {
+    public init(folderPreviewOpen: Bool = false, siteControlsOpen: Bool = false, addressOpen: Bool = false,
+                popupAnchor: CGPoint? = nil, panelFrame: CGRect? = nil, popupAwaitedUntil: Date? = nil) {
         self.folderPreviewOpen = folderPreviewOpen
         self.siteControlsOpen = siteControlsOpen
+        self.addressOpen = addressOpen
         self.popupAnchor = popupAnchor
         self.panelFrame = panelFrame
         self.popupAwaitedUntil = popupAwaitedUntil
@@ -33,7 +37,7 @@ public struct FloatingSidebarKeepOut: Equatable {
     /// Whether the sidebar stays out now. Once a popup is up, where it hangs decides, not the wait: one
     /// hanging from the sidebar keeps it, one under the toolbar (an extension's shortcut) doesn't.
     public func staysOut(now: Date) -> Bool {
-        if folderPreviewOpen || siteControlsOpen { return true }
+        if folderPreviewOpen || siteControlsOpen || addressOpen { return true }
         if let anchor = popupAnchor {
             return panelFrame.map { $0.insetBy(dx: -1, dy: -1).contains(anchor) } ?? false
         }
