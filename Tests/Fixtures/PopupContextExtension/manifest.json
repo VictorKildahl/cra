@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Popup Context Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: its toolbar popup asks chrome.tabs.query for the active tab of the current and of the last focused window, as ZeroOmega's popup does for its per-site section (GitHub #699), and loads a fixture page naming what it got.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2hc3GkpoWV/8Wf8cD4TBk+3UG62mRpul7ajaJYY+7Rvz7Iuq6hqudCXagpR2xI07grwYE1wUxUFerb8PxjrAMoEyMa1H6K1xTjvgOJtnC3jCDUaTb2rJQtUavX8gAcKQTDDMHFu7LASqgjEH2kQ+Rm1FRRaKzWGdcTPSMPGSNdIm9mQd65FMi7ry9pfrwA6q+1Z3i5ljRL3evZs8jUwwzYH2qrnzYhiHAN57N79eB0nDJ19d70ur6DARtz/6OTbL8P8O0gDdaUGM/a7D7JFG+mFKY3Kci0Srq7luJKfuSgmxXPvdrvwWyuRXEFBYHB3Xx7crh0lMRfOw/UxauHtGiwIDAQAB",
+  "permissions": ["tabs", "storage"],
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*"],
+    "js": ["origin.js"]
+  }],
+  "action": { "default_popup": "popup.html", "default_title": "Cra Popup Context Fixture" }
+}

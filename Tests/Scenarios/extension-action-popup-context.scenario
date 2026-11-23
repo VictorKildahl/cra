@@ -1,0 +1,16 @@
+# promise: #699
+# An extension's toolbar popup sees the page it was opened over as the active tab of its window, as in
+# Chrome and Arc: chrome.tabs.query({active: true, currentWindow: true}) and lastFocusedWindow both
+# give it. ZeroOmega's popup (#699) shows its per-site section only for that tab. The fixture popup
+# loads page.html?n=popup-context-current-<n>-last-<n> naming what each query gave ("none": no tab).
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/PopupContextExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=first
+wait 1
+cra://open?url=${PAGE}?n=site
+wait 2
+cra://debug?extensionAction=${POPUP_CONTEXT_EXTENSION_ID}
+expect-log "GET /page\.html\?n=popup-context-current-site-last-site HTTP
