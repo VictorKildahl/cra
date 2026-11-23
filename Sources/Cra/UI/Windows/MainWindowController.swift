@@ -103,6 +103,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     let windowID: UUID
     /// Pages load in the off-the-record profile; nothing is saved (WindowSession.isIncognito).
     let isIncognito: Bool
+    /// The link preview over the page's bottom left (#689).
+    private(set) var statusBubble: StatusBubbleView?
     /// Arc's Blank Window (#220): a sidebar of its own, "This Window", in the normal profile.
     var isBlank: Bool { store.isBlank(window: windowID) }
     /// Shows only a space of its own (incognito or Blank): no other spaces, no space switching.
@@ -161,17 +163,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let store = app.store
         SidebarGlassSetting.shared.isOn = store.settings.translucentSidebar
         let palette = focusedSpace.theme.palette
+        let statusBubble = StatusBubbleView(overlay: overlay)
+        self.statusBubble = statusBubble
         shell = ShellView(frame: window.contentView!.bounds,
                           background: SpaceBackgroundView(store: store, ui: sidebarUI),
                           sidebar: SidebarView(store: store, ui: sidebarUI, actions: sidebarActions, favicons: app.favicons),
                           toolbar: PaneToolbarView(paneTabID: nil, store: store, ui: sidebarUI, actions: sidebarActions),
-                          status: StatusBubbleView(overlay: overlay),
+                          status: statusBubble,
                           // In a conversation Ask on Page's field only asks: typing doesn't find.
                           find: FindBarView(overlay: overlay, onFind: { [weak self] q, fwd in
                                                 guard let self, self.askOnPage.findsWhileTyping else { return }
                                                 self.find(q, forward: fwd)
                                             },
                                             onClose: { [weak self] in self?.hideFindBar() }))
+        // ⇧ over a link says "in Peek" only where a Shift-click peeks (browserManagerOpensPeek, #689).
+        statusBubble.peekOnShiftClick = { [weak self] in
+            guard let self else { return false }
+            return !self.isIncognito && self.app.store.settings.peekOnShiftClick
+        }
         shell.sidebarWidth = CGFloat(store.prefs.sidebarWidth)
         shell.sidebarVisible = sidebarVisible
         shell.showToolbar = store.settings.showsBar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })

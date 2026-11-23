@@ -1369,6 +1369,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let st = dict["status"] { main.browserManager(statusMessage: st, tabID: nil); return }
+            // linkPreview=<label>: what the link preview over the page shows (#689). linkPreviewKeys=<modifier
+            // bits>: keys pressed or let go, as a flagsChanged event through the app's event queue.
+            if let label = dict["linkPreview"] { CraLog.note(main.statusBubble?.readout(label) ?? "Cra link preview \(label): none"); return }
+            if let bits = dict["linkPreviewKeys"].flatMap(UInt.init), let w = main.window {
+                TestGesture.flags(NSEvent.ModifierFlags(rawValue: bits), in: w)
+                return
+            }
             // key=<characters>,<key code>,<modifier bits>: a key press as a layout reports it
             // (Turkish Q's ⌘- is "-",24,1048576), through the app's event queue (#212); the
             // characters are percent-encoded. zoomLevel logs the page's zoom. page=1 (devtools=1: its DevTools'): straight to the

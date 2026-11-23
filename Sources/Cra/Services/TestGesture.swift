@@ -86,6 +86,16 @@ enum TestGesture {
     /// A key press through the app's event queue, routed as the keyboard's are (key equivalents,
     /// the page, then Cra's own keys), with the characters a layout gives: the test picks the
     /// layout's characters while the menu bar's key equivalents follow the selected one.
+    /// Modifier keys now held (empty: all let go), as the flagsChanged event a key press or release
+    /// posts, through the app's event queue so local monitors see it (#689).
+    static func flags(_ modifiers: NSEvent.ModifierFlags, in window: NSWindow) {
+        guard let e = NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: modifiers,
+                                       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                       context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false,
+                                       keyCode: 56) else { return }
+        NSApp.postEvent(e, atStart: false)
+    }
+
     static func key(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow) {
         for type in [NSEvent.EventType.keyDown, .keyUp] {
             guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,

@@ -23,29 +23,39 @@ final class OverlayState {
     var findActiveMatch = 0
 }
 
-/// The link under the pointer, bottom left over the page. AppKit: it changes on every link the
-/// pointer crosses.
+/// The link under the pointer, bottom left over the page, as Arc's link preview (#689): a black
+/// capsule with the address in dim 12 pt text, and while ⇧, ⌥ or ⌘ is held what a click will do
+/// ("Open <address> in Peek"), the address bright (LinkPreview). AppKit: it changes on every link
+/// the pointer crosses.
 final class StatusBubbleView: NSView {
+    /// Measured on the reporter's Arc screenshots (2x): 24 pt tall, 1 pt border at white 20 % on
+    /// black, 12 pt medium text 10 pt in from each end, dim text at 175/255 and the address white.
+    static let height: CGFloat = 24
+    static let padding: CGFloat = 10
+    static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    /// Opaque: the capsule is opaque black, and white at 69 % drew twice came out at 230.
+    static let dim = NSColor(srgbRed: 175.0 / 255, green: 175.0 / 255, blue: 175.0 / 255, alpha: 1)
+    static let bright = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+
     private let overlay: OverlayState
-    private let bubble = NSVisualEffectView()
-    private let label = NSTextField.sidebarLabel(size: 11)
+    private let bubble = NSView()
+    private let label = NSTextField.sidebarLabel(size: 12, weight: .medium)
+    /// Settings ▸ Links' Shift-click Peek for this window's pages; false in incognito (no Peek).
+    var peekOnShiftClick: () -> Bool = { true }
+    private var modifiers: NSEvent.ModifierFlags = []
+    private var flagsMonitor: Any?
+    private(set) var text = LinkPreview.Text(lead: "", emphasis: "", trail: "")
 
     init(overlay: OverlayState) {
         self.overlay = overlay
         super.init(frame: .zero)
-        bubble.material = .popover
-        bubble.blendingMode = .withinWindow
-        bubble.state = .active
         bubble.wantsLayer = true
-        bubble.layer?.cornerRadius = 6
+        bubble.layer?.backgroundColor = NSColor.black.cgColor
+        bubble.layer?.cornerRadius = Self.height / 2
         bubble.layer?.cornerCurve = .continuous
-        bubble.layer?.masksToBounds = true
         bubble.layer?.borderWidth = 1
+        bubble.layer?.borderColor = NSColor(white: 1, alpha: 0.2).cgColor
         label.lineBreakMode = .byTruncatingMiddle
-        label.textColor = .labelColor
-        // SwiftUI's .thinMaterial is lighter than any AppKit material: the popover material at
-        // about four fifths matches it over Cra's pages; the text stays on top at full strength.
-        bubble.alphaValue = 0.81
         addSubview(bubble)
         addSubview(label)
         observe()
@@ -53,26 +63,62 @@ final class StatusBubbleView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     private func observe() {
-        let text = withObservationTracking { overlay.status } onChange: { [weak self] in
+        let status = withObservationTracking { overlay.status } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
-        label.stringValue = text
-        bubble.isHidden = text.isEmpty
-        label.isHidden = text.isEmpty
+        // The keys held as the pointer comes onto a link, then each change while it is shown.
+        if !status.isEmpty, flagsMonitor == nil {
+            modifiers = NSEvent.modifierFlags
+            flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
+                self?.modifiers = e.modifierFlags
+                self?.render()
+                return e
+            }
+        } else if status.isEmpty, let monitor = flagsMonitor {
+            NSEvent.removeMonitor(monitor)
+            flagsMonitor = nil
+        }
+        render()
+    }
+
+    private func render() {
+        let status = overlay.status
+        text = LinkPreview.text(status, modifiers: modifiers.rawValue, peekOnShiftClick: peekOnShiftClick())
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        let shown = NSMutableAttributedString()
+        for (part, color) in [(text.lead, Self.dim), (text.emphasis, Self.bright), (text.trail, Self.dim)] where !part.isEmpty {
+            shown.append(NSAttributedString(string: part, attributes: [.font: Self.font, .foregroundColor: color, .paragraphStyle: paragraph]))
+        }
+        label.attributedStringValue = shown
+        bubble.isHidden = status.isEmpty
+        label.isHidden = status.isEmpty
         needsLayout = true
     }
 
     override func layout() {
         super.layout()
-        bubble.layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.1).cgColor
         let s = label.attributedStringValue.size()
-        let w = min(ceil(s.width) + 16, max(0, bounds.width - 12))
-        let h = ceil(s.height) + 8
+        let w = min(ceil(s.width) + 2 * Self.padding, max(0, bounds.width - 12))
+        let h = Self.height
         bubble.frame = NSRect(x: 6, y: 6, width: w, height: h)
-        label.frame = NSRect(x: 6 + 8 - SidebarText.inset, y: 6 + (h - ceil(s.height)) / 2, width: w - 16 + 2 * SidebarText.inset, height: ceil(s.height))
+        let th = ceil(s.height)
+        label.frame = NSRect(x: 6 + Self.padding - SidebarText.inset, y: 6 + (h - th) / 2,
+                             width: max(0, w - 2 * Self.padding) + 2 * SidebarText.inset, height: th)
+    }
+
+    /// For scenarios (#689): what the preview shows, its parts and its capsule.
+    func readout(_ label: String) -> String {
+        let shown = !bubble.isHidden && !overlay.status.isEmpty
+        return "Cra link preview \(label): shown=\(shown ? "yes" : "no") text=\(text.string) bright=\(text.emphasis.isEmpty ? "-" : text.emphasis)"
+            + " height=\(Int(bubble.frame.height)) radius=\(Int(bubble.layer?.cornerRadius ?? 0)) fill=\(bubble.layer?.backgroundColor == NSColor.black.cgColor ? "black" : "other")"
     }
 }
 

@@ -25,7 +25,7 @@ PYCODE
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   "$C/SpaceTheme.swift" "$C/AskOnPage.swift" "$C/AskOnPagePrompt.swift" "$C/ObserveChanges.swift" "$C/FindBarPlacement.swift" \
   Sources/Cra/Services/AskOnPageService.swift Sources/Cra/Services/Scheduler.swift \
-  Sources/Cra/UI/AskOnPageCard.swift Sources/Cra/UI/Overlays.swift Sources/Cra/UI/AppKitControls.swift "$C/FirstClick.swift" \
+  Sources/Cra/UI/AskOnPageCard.swift Sources/Cra/UI/Overlays.swift Sources/Cra/UI/AppKitControls.swift "$C/FirstClick.swift" "$C/LinkPreview.swift" "$C/KeyChord.swift" \
   Tests/Support/ManualScheduler.swift Tests/AskOnPageSupport/BrowserServices.swift Tests/AskOnPageSupport/AppServices.swift Tests/AskOnPageSupport/CardServices.swift \
   "$TEST_DIR/SelectionWindow+Production.swift" Tests/AskOnPageSelectionTests.swift \
   Tests/AskOnPageControllerTests.swift Tests/AskOnPageServiceTests.swift -o "$TEST_DIR/ask-service-tests"

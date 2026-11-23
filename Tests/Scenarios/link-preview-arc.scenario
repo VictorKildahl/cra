@@ -1,0 +1,50 @@
+# promise: #689
+# The link under the pointer shows at the page's bottom left as Arc's link preview: a black capsule,
+# 24 pt tall and fully round, with the address without its scheme or trailing slash. Holding ⇧, ⌥ or
+# ⌘ says what a click will do, "Open <the whole address> in Peek / in Split View / in a new tab" with
+# the address bright, and letting go puts the short address back. The keys come as flagsChanged
+# events through the app's event queue, as the keyboard's do; the pointer as the page sees it (CDP).
+budget rss=900 stalls50=40
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+cra://open?url=${ORIGIN}/link-hover.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":120,"y":70}
+wait 1
+cra://debug?linkPreview=plain
+expect-log Cra link preview plain: shown=yes text=example\.com/hovered bright=- height=24 radius=12 fill=black$
+snapshot StatusBubbleView link-preview-plain
+
+# ⇧ (1<<17): Peek.
+cra://debug?linkPreviewKeys=131072
+wait 0.5
+cra://debug?linkPreview=shift
+expect-log Cra link preview shift: shown=yes text=Open https://example\.com/hovered in Peek bright=https://example\.com/hovered height=24
+snapshot StatusBubbleView link-preview-shift
+
+# ⌥ (1<<19): Split View.
+cra://debug?linkPreviewKeys=524288
+wait 0.5
+cra://debug?linkPreview=option
+expect-log Cra link preview option: shown=yes text=Open https://example\.com/hovered in Split View bright=https://example\.com/hovered
+
+# ⌘ (1<<20): a new tab.
+cra://debug?linkPreviewKeys=1048576
+wait 0.5
+cra://debug?linkPreview=command
+expect-log Cra link preview command: shown=yes text=Open https://example\.com/hovered in a new tab bright=https://example\.com/hovered
+
+# Let go: the short address again.
+cra://debug?linkPreviewKeys=0
+wait 0.5
+cra://debug?linkPreview=released
+expect-log Cra link preview released: shown=yes text=example\.com/hovered bright=-
+
+# Off the link: no preview.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseMoved","x":20,"y":300}
+wait 1
+cra://debug?linkPreview=off
+expect-log Cra link preview off: shown=no
