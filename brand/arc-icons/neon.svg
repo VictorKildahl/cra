@@ -1,4 +1,4 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
 <g clip-path="url(#clip0_27_357)">
 <g filter="url(#filter0_dn_27_357)">
 <use xlink:href="#stroke0_27_357" fill="url(#paint0_linear_27_357)"/>
@@ -71,15 +71,14 @@
 <circle cx="515" cy="286.3" r="1.141" fill="white" fill-opacity="0.246"/>
 <circle cx="873.7" cy="537.2" r="1.994" fill="white" fill-opacity="0.725"/>
 <circle cx="816" cy="493.7" r="1.732" fill="white" fill-opacity="0.564"/>
-<g filter="url(#filter10_ddd_27_357)">
+<g transform="translate(500.5 512) scale(1.1) translate(-500.5 -512)"><g filter="url(#filter10_ddd_27_357)">
 <use xlink:href="#stroke1_27_357" fill="white"/>
 <mask id="stroke2_27_357" maskUnits="userSpaceOnUse" x="304.6" y="562.8" width="424" height="215" fill="black">
 <rect fill="white" x="304.6" y="562.8" width="424" height="215"/>
 <use xlink:href="#stroke1_27_357"/>
 </mask>
 <path d="M434.7 575.3C443.5 589.5 455.3 601.7 469.2 611.1C483.1 620.4 498.8 626.8 515.2 629.7C531.7 632.6 548.7 632 564.9 627.9C581.2 623.9 596.4 616.5 609.6 606.2L609.6 606.2L609.6 606.2C624.3 594.7 643 589.6 661.5 591.9C680 594.2 696.8 603.8 708.3 618.5C719.8 633.2 725 651.8 722.8 670.3C720.5 688.8 711.1 705.7 696.4 717.3L696.4 717.3C667.6 739.7 634.4 755.9 599 764.8C563.6 773.6 526.7 774.9 490.8 768.5C454.8 762.2 420.6 748.4 390.3 728C360.1 707.5 334.4 681 315.1 650L311.6 644.5L317.2 641C328.1 659.4 341.2 676.4 356.4 691.6C364.4 699.6 374.3 705.3 385.1 708.2C389.2 711.3 393.3 714.3 397.6 717.2C426.4 736.6 458.9 749.7 493 755.7C527.2 761.8 562.2 760.5 595.9 752.1C629.5 743.8 661 728.4 688.4 707C700.3 697.6 708 683.9 709.9 668.8C711.7 653.7 707.5 638.5 698.1 626.5C688.7 614.5 675 606.7 659.9 604.8C644.8 602.9 629.6 607.1 617.6 616.4C602.9 627.8 586.1 636.1 568.1 640.6C550 645.1 531.3 645.7 513 642.5C494.7 639.3 477.3 632.2 461.9 621.8C461.4 621.5 460.8 621.1 460.3 620.7C457.1 613.5 452.6 606.8 446.9 601.1C438.6 592.8 431.5 583.4 425.8 573.2L431.2 569.8L434.7 575.3Z" stroke-width="10" stroke="#FF3CB4" mask="url(#stroke2_27_357)"/>
-</g>
-<g filter="url(#filter11_ddd_27_357)">
+</g><g filter="url(#filter11_ddd_27_357)">
 <use xlink:href="#stroke3_27_357" fill="white"/>
 <use xlink:href="#stroke4_27_357" fill="white"/>
 <mask id="stroke5_27_357" maskUnits="userSpaceOnUse" x="270.5" y="246.5" width="282" height="416" fill="black">
@@ -88,47 +87,48 @@
 <use xlink:href="#stroke4_27_357"/>
 </mask>
 <path d="M406.7 285.8C447.4 262.6 493.7 250.7 540.5 251.5L547 251.7L546.9 258.2C533 257.6 519 258.2 505.1 259.9C493.8 261.3 483.2 265.6 474.3 272.3C453 277.8 432.4 286.1 413.2 297.1C374.5 319.2 342.5 351.4 320.6 390.1C298.7 428.9 287.6 472.9 288.6 517.4C288.9 532.6 290.6 547.7 293.7 562.5C291.7 573.1 292.4 584.2 295.8 594.7C302.8 615 312.3 634.3 324.1 652.1L318.5 655.6L315.1 650C290.2 610.3 276.6 564.6 275.6 517.7C274.5 470.8 286.2 424.5 309.3 383.7C332.4 342.9 366 309.1 406.7 285.8ZM496.9 385.4C504.6 387.4 512.6 387.9 520.6 386.9C528.6 386 536.7 385.7 544.7 386.3L544.6 392.6L538.1 392.5C516.6 392.1 495.4 397.6 476.7 408.3C458 418.9 442.6 434.4 432 453.2C421.4 471.9 416.1 493.1 416.5 514.6C417 536.1 423.3 557.1 434.7 575.3L438.1 580.8L432.7 584.2C426 574.6 420.7 564.1 416.9 553C414.2 545.6 410.2 538.7 405.2 532.8C404.2 526.9 403.7 520.9 403.5 514.9C403 491.1 408.9 467.5 420.7 446.8C432.4 426 449.6 408.8 470.3 397C478.7 392.1 487.7 388.3 496.9 385.4Z" stroke-width="10" stroke="#FF3CB4" mask="url(#stroke5_27_357)"/>
-</g>
-<g filter="url(#filter12_ddd_27_357)">
+</g><g filter="url(#filter12_ddd_27_357)">
 <use xlink:href="#stroke6_27_357" fill="white"/>
 <mask id="stroke7_27_357" maskUnits="userSpaceOnUse" x="281.1" y="499" width="197" height="223" fill="black">
 <rect fill="white" x="281.1" y="499" width="197" height="223"/>
 <use xlink:href="#stroke6_27_357"/>
 </mask>
 <path d="M459.1 646.4C459.1 631.1 453.1 616.5 442.3 605.7C428.1 591.5 417.3 574.2 410.7 555.2L410.5 554.5C405.3 540.6 394.9 529.1 381.5 522.7C367.9 516.1 352.2 515.2 337.8 520.1C323.5 525 311.7 535.4 305 549C298.3 562.6 297.2 578.3 302 592.6C314.2 628.2 334.4 660.4 361 687C371.8 697.8 386.4 703.9 401.6 703.9C416.9 703.9 431.5 697.8 442.3 687C453.1 676.2 459.1 661.6 459.1 646.4ZM472.1 646.4C472.1 665.1 464.7 683 451.5 696.2C438.3 709.4 420.3 716.9 401.6 716.9C382.9 716.9 365 709.4 351.8 696.2H351.8C323.8 668.2 302.6 634.2 289.7 596.8L289.7 596.8L289.7 596.7C283.8 579.1 285.1 559.9 293.4 543.3C301.6 526.6 316.1 513.9 333.6 507.8C351.2 501.8 370.4 502.9 387.1 511C403.6 518.9 416.4 532.9 422.7 550L423 550.8L423 550.9L423 550.9C428.9 568.1 438.7 583.7 451.5 596.5L452.1 597.1C464.9 610.3 472.1 627.9 472.1 646.4Z" stroke-width="10" stroke="#FF3CB4" mask="url(#stroke7_27_357)"/>
-</g>
-<g filter="url(#filter13_ddd_27_357)">
+</g><g filter="url(#filter13_ddd_27_357)">
 <use xlink:href="#stroke8_27_357" fill="white"/>
 <mask id="stroke9_27_357" maskUnits="userSpaceOnUse" x="437.3" y="246.5" width="291" height="192" fill="black">
 <rect fill="white" x="437.3" y="246.5" width="291" height="192"/>
 <use xlink:href="#stroke8_27_357"/>
 </mask>
 <path d="M504.3 253.4C572.3 245.1 640.9 263.9 695.1 305.7L696.4 306.7L696.4 306.7C711.1 318.3 720.5 335.2 722.8 353.7C725 372.2 719.8 390.8 708.3 405.5C696.8 420.2 680 429.8 661.5 432.1C643 434.4 624.3 429.3 609.6 417.8L609.6 417.8L609.6 417.8C597.2 408.2 583.1 401 567.9 396.8C553.3 392.8 538 391.6 522.9 393.2L521.4 393.4C502.9 395.7 484.2 390.5 469.4 379C454.7 367.5 445.1 350.6 442.9 332C440.6 313.4 445.8 294.7 457.3 280C468.8 265.3 485.7 255.7 504.3 253.4ZM688.4 317C636.6 276.6 571 258.3 505.8 266.3H505.8C490.7 268.2 476.9 276 467.5 288C458.1 300 453.9 315.3 455.8 330.4C457.6 345.6 465.4 359.3 477.4 368.7C489.5 378.1 504.7 382.3 519.8 380.5L521.5 380.3C538.2 378.5 555.2 379.8 571.4 384.3C588.2 389 603.8 396.9 617.6 407.6H617.6C629.6 416.9 644.8 421.1 659.9 419.2C675 417.3 688.7 409.5 698.1 397.5C707.5 385.5 711.7 370.3 709.9 355.2C708 340.1 700.3 326.4 688.4 317V317Z" stroke-width="10" stroke="#FF3CB4" mask="url(#stroke9_27_357)"/>
-</g>
-<g opacity="0.85" filter="url(#filter14_ddf_27_357)">
+</g><g opacity="0.85" filter="url(#filter14_ddf_27_357)">
 <path d="M703.4 299.7L705 330.1L735.4 331.7L705 333.3L703.4 363.7L701.8 333.3L671.4 331.7L701.8 330.1L703.4 299.7Z" fill="white"/>
-</g>
-<g filter="url(#filter15_d_27_357)">
+</g><g filter="url(#filter15_d_27_357)">
 <circle cx="703.4" cy="331.7" r="9" fill="white"/>
-</g>
-<g opacity="0.85" filter="url(#filter16_ddf_27_357)">
+</g><g opacity="0.85" filter="url(#filter16_ddf_27_357)">
 <path d="M379.6 680.2L381.2 710.6L411.6 712.2L381.2 713.7L379.6 744.2L378 713.7L347.6 712.2L378 710.6L379.6 680.2Z" fill="white"/>
-</g>
-<g filter="url(#filter17_d_27_357)">
+</g><g filter="url(#filter17_d_27_357)">
 <circle cx="379.6" cy="712.2" r="9" fill="white"/>
-</g>
-<g filter="url(#filter18_f_27_357)">
+</g><g filter="url(#filter18_f_27_357)">
 <ellipse cx="703.4" cy="331.7" rx="75" ry="2.5" fill="white" fill-opacity="0.75"/>
-</g>
-<g filter="url(#filter19_f_27_357)">
+</g><g filter="url(#filter19_f_27_357)">
 <circle cx="703.4" cy="331.7" r="23" fill="white" fill-opacity="0.8"/>
-</g>
-<g filter="url(#filter20_f_27_357)">
+</g><g filter="url(#filter20_f_27_357)">
 <ellipse cx="379.6" cy="712.2" rx="75" ry="2.5" fill="white" fill-opacity="0.75"/>
-</g>
-<g filter="url(#filter21_f_27_357)">
+</g><g filter="url(#filter21_f_27_357)">
 <circle cx="379.6" cy="712.2" r="23" fill="white" fill-opacity="0.8"/>
-</g>
+</g></g>
+
+
+
+
+
+
+
+
+
+
+
 </g>
 <defs>
 <filter id="filter0_dn_27_357" x="80" y="90" width="864" height="864" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
@@ -139,17 +139,17 @@
 <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.3 0"/>
 <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_27_357"/>
 <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
-<feTurbulence type="fractalNoise" baseFrequency="0.833 0.833" stitchTiles="stitch" numOctaves="3" result="noise" seed="0" />
-<feColorMatrix in="noise" type="luminanceToAlpha" result="alphaNoise" />
+<feTurbulence type="fractalNoise" baseFrequency="0.833 0.833" stitchTiles="stitch" numOctaves="3" result="noise" seed="0"/>
+<feColorMatrix in="noise" type="luminanceToAlpha" result="alphaNoise"/>
 <feComponentTransfer in="alphaNoise" result="coloredNoise1">
 <feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "/>
 </feComponentTransfer>
-<feComposite operator="in" in2="shape" in="coloredNoise1" result="noise1Clipped" />
-<feFlood flood-color="rgba(255, 255, 255, 0.08)" result="color1Flood" />
-<feComposite operator="in" in2="noise1Clipped" in="color1Flood" result="color1" />
+<feComposite operator="in" in2="shape" in="coloredNoise1" result="noise1Clipped"/>
+<feFlood flood-color="rgba(255, 255, 255, 0.08)" result="color1Flood"/>
+<feComposite operator="in" in2="noise1Clipped" in="color1Flood" result="color1"/>
 <feMerge result="effect2_noise_27_357">
-<feMergeNode in="shape" />
-<feMergeNode in="color1" />
+<feMergeNode in="shape"/>
+<feMergeNode in="color1"/>
 </feMerge>
 <feBlend mode="normal" in="effect2_noise_27_357" in2="effect1_dropShadow_27_357" result="effect2_noise_27_357"/>
 </filter>
