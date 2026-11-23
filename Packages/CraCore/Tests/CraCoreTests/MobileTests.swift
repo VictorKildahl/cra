@@ -1210,26 +1210,7 @@ struct MobileDownloadsTests {
     }
 }
 
-struct MobileFidgetTests {
-    @Test func theSpinSlowsDownAndStops() {
-        var angle = 0.0, speed = MobileFidget.launchSpeed(angularVelocity: 200)
-        #expect(speed == 60)
-        var seconds = 0.0
-        while MobileFidget.isSpinning(speed: speed) {
-            (angle, speed) = MobileFidget.step(angle: angle, speed: speed, elapsed: 1.0 / 60)
-            seconds += 1.0 / 60
-        }
-        #expect(seconds > 4 && seconds < 7)
-        #expect(angle > 60)
-    }
-
-    @Test func itSettlesUprightOnTheTurnItWasHeadingFor() {
-        #expect(abs(MobileFidget.restAngle(from: 7, speed: 1) - 4 * Double.pi) < 1e-9)
-        #expect(abs(MobileFidget.restAngle(from: 7, speed: -1) - 2 * Double.pi) < 1e-9)
-        #expect(MobileFidget.restAngle(from: -1, speed: -1) == -2 * Double.pi)
-        #expect(MobileFidget.quarterTurns(from: 0, to: 3.3) == 2)
-    }
-
+struct MobilePageBehindSearchTests {
     /// Arc Search pushes the page back as a card under the status bar while the sheet is up:
     /// 10 pt in from each side on a 393 pt screen.
     @Test func thePageSitsBehindTheSearchSheetAsACard() {

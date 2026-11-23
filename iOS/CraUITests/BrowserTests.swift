@@ -1378,23 +1378,24 @@ final class PageBasicsTests: BrowserTestCase {
 
 final class EmptyHomeTests: BrowserTestCase {
     /// With no tabs the search sheet can still be put away: what is left is the empty home
-    /// screen, whose logo spins when it is flicked, and the pill brings the sheet back.
-    func testTheEmptyHomeScreenHasALogoThatSpins() {
+    /// screen, a field of dots that sends a ring out wherever it is tapped, "Tap to search"
+    /// over the pill, and the pill brings the sheet back.
+    func testTheEmptyHomeScreenRipplesWhereItIsTapped() {
         launch()
         let field = app.textFields["search-field"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 200)), withVelocity: .fast, thenHoldForDuration: 0)
-        let logo = app.images["logo"]
-        XCTAssertTrue(logo.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Tap to search"].waitForExistence(timeout: 5))
+        let dots = app.otherElements["dot-field"]
+        XCTAssertTrue(dots.exists)
         XCTAssertTrue(app.buttons["bar-search"].exists)
-        XCTAssertEqual(logo.value as? String, "0.0 turns")
-        // A flick across its right-hand side, downwards: clockwise.
-        let from = logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.2))
-        from.press(forDuration: 0.05, thenDragTo: logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)), withVelocity: .fast, thenHoldForDuration: 0)
-        sleep(1)
+        XCTAssertEqual(dots.value as? String, "0 rings")
+        dots.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.2)).tap()
+        dots.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)).press(forDuration: 0.5)
+        XCTAssertEqual(dots.value as? String, "2 rings")
         keep("empty-home")
-        XCTAssertNotEqual(logo.value as? String, "0.0 turns")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "tapping the dots doesn't open the search")
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
     }

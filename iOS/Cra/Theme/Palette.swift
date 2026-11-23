@@ -56,5 +56,8 @@ enum Palette {
     static let switcherButtonFill = dynamic(light: UIColor(red: 71 / 255, green: 58 / 255, blue: 190 / 255, alpha: 0.08), dark: UIColor(white: 1, alpha: 0.12))
     /// Their glyphs: pure white on the dark backdrop (IMG_1896).
     static let switcherGlyph = dynamic(light: rgb(0x2e2e30), dark: .white)
+    /// The bar's controls floating over the empty home screen's dots: the recording's grey glass,
+    /// #2f2f2f on #121212 in dark.
+    static let homeButtonFill = dynamic(light: UIColor(white: 0, alpha: 0.07), dark: UIColor(white: 1, alpha: 0.13))
     static let barControlBorder = dynamic(light: UIColor(white: 0, alpha: 0.06), dark: UIColor(white: 1, alpha: 0.08))
 }

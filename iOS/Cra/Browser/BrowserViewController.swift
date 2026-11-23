@@ -13,7 +13,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     lazy var favorites = FavoritesStore(directory: LaunchOptions.dataDirectory)
 
     let backdrop = BackdropView()
-    let logo = FidgetLogoView(image: UIImage(named: "LaunchMark"))
+    /// The empty home screen: dots a finger stirs, and "Tap to search" over the pill.
+    let dotField = DotFieldView()
+    let searchHint = SearchHintView()
     let pageContainer = PassthroughView()
     /// Darkens the page while it sits pushed back behind the search sheet.
     let pageDim = UIView()
@@ -96,7 +98,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         view.addSubview(backdrop)
-        view.addSubview(logo)
+        view.addSubview(dotField)
+        view.addSubview(searchHint)
         view.addSubview(pageContainer)
         pageDim.backgroundColor = .black
         pageDim.alpha = 0
@@ -258,10 +261,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         switcher?.frame = bounds
         shownPage?.webView.frame = pageContainer.bounds
         pageDim.frame = pageContainer.bounds
+        dotField.frame = bounds
         updateStatusBand()
-        let logoSide: CGFloat = 132
-        logo.bounds = CGRect(x: 0, y: 0, width: logoSide, height: logoSide)
-        logo.center = CGPoint(x: bounds.midX, y: bounds.height * 0.505)
 
         // While the search sheet is up over a page, the page sits back as a dimmed card under
         // the status bar (Arc Search's look; `MobilePageBehindSearch`).
@@ -285,6 +286,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let keyboardUpForPage = keyboardHeight > safeBottom && !isSearching
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
+        // On the empty home screen the bar has no slab: its buttons float on the dots.
+        let home = store.selected == nil && switcher == nil
+        bar.overBackdrop = home
+        searchHint.place(centerX: bounds.midX, pillTop: frames.pill.minY + barFrame.minY - frames.bar.minY)
         // Pulled out of the pill (#623), the sheet's top follows the finger and its field grows
         // from the pill on the way up.
         let pull = isSearching ? nil : searchPull
@@ -305,7 +310,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.collapsedFieldFrame = bar.pillFrame
         sheet.openness = isSearching ? pulledSheetHold?.openness ?? 1 : pulled ?? 0
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))
-        logo.alpha = isSearching || store.selected != nil || switcher != nil ? 0 : 1
+        // The dots stay behind the sheet, as the backdrop does, but not behind incognito's grey.
+        dotField.alpha = home && !(isSearching && incognitoSearch) ? 1 : 0
+        searchHint.alpha = home && !isSearching && pull == nil ? 1 : 0
         layoutBrowseToggle(barTop: barFrame.minY)
         updatePageInsets()
     }
@@ -379,7 +386,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// Puts the sheet away. With no page behind it that leaves the empty home screen: the
-    /// backdrop, the logo and the bar.
+    /// backdrop and its dots, "Tap to search" and the bar.
     @objc func dismissSearch() {
         setSearching(false)
     }
