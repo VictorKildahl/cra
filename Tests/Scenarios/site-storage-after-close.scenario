@@ -1,0 +1,49 @@
+# promise: #705
+# A site's sign-in outlives closing its tab: its cookie (one that expires in a year and a session one), its
+# localStorage (Discord keeps its token there) and its IndexedDB (WhatsApp Web's keys) are all there when the
+# site is opened again in a new tab, after the last tab on it closed with ⌘W, and again after ⇧⌘T.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+
+cra://open?url=${PAGE}?n=signin
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='cra_kept=1; max-age=31536000; path=/'; document.cookie='cra_session=1; path=/'; localStorage.setItem('token','kept'); new Promise(r=>{const q=indexedDB.open('cra',1); q.onupgradeneeded=()=>q.result.createObjectStore('keys'); q.onsuccess=()=>{const t=q.result.transaction('keys','readwrite'); t.objectStore('keys').put('kept','k'); t.oncomplete=()=>{q.result.close(); r('written:'+document.cookie+':'+localStorage.getItem('token'))}}})","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"written:
+wait 2
+cra://action/closeTab
+wait 2
+
+cra://open?url=${PAGE}?n=again
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\).*|loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const q=indexedDB.open('cra',1); q.onupgradeneeded=()=>q.result.createObjectStore('keys'); q.onsuccess=()=>{const g=q.result.transaction('keys').objectStore('keys').get('k'); g.onsuccess=()=>r('again cookie='+document.cookie+' ls='+localStorage.getItem('token')+' idb='+g.result)}})","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"again cookie=[^"]*cra_kept=1[^"]* ls=kept idb=kept"
+expect-log Cra cdp Runtime.evaluate .*"value":"again cookie=[^"]*cra_session=1
+
+# The same in Random, a space on its own profile (Hobbies).
+cra://open?url=${PAGE}?n=signin2&space=A0000000-0000-0000-0000-000000000002
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='cra_kept2=1; max-age=31536000; path=/'; document.cookie='cra_session2=1; path=/'; localStorage.setItem('token','kept2'); new Promise(r=>{const q=indexedDB.open('cra',1); q.onupgradeneeded=()=>q.result.createObjectStore('keys'); q.onsuccess=()=>{const t=q.result.transaction('keys','readwrite'); t.objectStore('keys').put('kept2','k'); t.oncomplete=()=>{q.result.close(); r('written:'+document.cookie+':'+localStorage.getItem('token'))}}})","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"written:[^"]*cra_kept2
+wait 2
+cra://action/closeTab
+wait 2
+
+cra://open?url=${PAGE}?n=again2&space=A0000000-0000-0000-0000-000000000002
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\).*|loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const q=indexedDB.open('cra',1); q.onupgradeneeded=()=>q.result.createObjectStore('keys'); q.onsuccess=()=>{const g=q.result.transaction('keys').objectStore('keys').get('k'); g.onsuccess=()=>r('again cookie='+document.cookie+' ls='+localStorage.getItem('token')+' idb='+g.result)}})","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"again cookie=[^"]*cra_kept2=1[^"]* ls=kept2 idb=kept2"
+expect-log Cra cdp Runtime.evaluate .*"value":"again cookie=[^"]*cra_session2=1
+
+# Closed again and brought back with ⇧⌘T (Random's tab): still signed in.
+cra://action/closeTab
+wait 2
+cra://action/reopenClosedTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const q=indexedDB.open('cra',1); q.onupgradeneeded=()=>q.result.createObjectStore('keys'); q.onsuccess=()=>{const g=q.result.transaction('keys').objectStore('keys').get('k'); g.onsuccess=()=>r('reopened cookie='+document.cookie+' ls='+localStorage.getItem('token')+' idb='+g.result)}})","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"reopened cookie=[^"]*cra_kept2=1[^"]* ls=kept2 idb=kept2"
