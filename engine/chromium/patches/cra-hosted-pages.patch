@@ -59,3 +59,26 @@ diff --git a/ui/views/controls/webview/webview.cc b/ui/views/controls/webview/we
  
    gfx::NativeView view_to_attach = web_contents()->GetNativeView();
    OnBoundsChanged(bounds());
+diff --git a/chrome/browser/ui/views/frame/contents_web_view.cc b/chrome/browser/ui/views/frame/contents_web_view.cc
+--- a/chrome/browser/ui/views/frame/contents_web_view.cc
++++ b/chrome/browser/ui/views/frame/contents_web_view.cc
+@@ -21,6 +21,7 @@
+ #include "ui/color/color_provider.h"
+ #include "ui/compositor/layer_solid_color.h"
+ #include "ui/compositor/layer_tree_owner.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/widget/widget.h"
+ 
+@@ -225,6 +226,11 @@ void ContentsWebView::UpdateBackgroundColor() {
+   background_layer->SetColor(
+       SkColor4f::FromColor(background_visible_ ? color : SK_ColorTRANSPARENT));
+ 
++  // Cra: a page Cra shows in its own windows takes Cra's canvas colour from Cra (Arc's black or white), whichever
++  // tab this never-shown window has active (cra_hosted_page.h).
++  if (web_contents() && web_contents()->GetUserData(views::CraHostedPageKey())) {
++    return;
++  }
+   SafeInvoke(web_contents())
+       .Then(&content::WebContents::GetRenderWidgetHostView)
+       .Then(&content::RenderWidgetHostView::SetBackgroundColor,

@@ -2904,6 +2904,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // pageColours=<label>&seconds=<s>[&target=little]: the colours on screen at the centre of the current page,
+            // or of the next Little Window or Peek to open, every frame for that long, as runs: a page opening on a
+            // dark site shows Arc's canvas until it draws, never Chromium's white (X, 22 Nov).
+            if let label = dict["pageColours"] {
+                let seconds = dict["seconds"].flatMap(Double.init) ?? 3
+                let before = littleWindows.count
+                let little = dict["target"] == "little"
+                WindowColourProbe.record(seconds: seconds, view: { [weak self] in
+                    guard let self else { return nil }
+                    if little { return self.littleWindows.count > before ? self.littleWindows.last?.browser?.containerView : nil }
+                    return self.main.currentBrowser?.containerView
+                }) { CraLog.note("Cra page colours \(label): \($0)") }
+                return
+            }
             if let method = dict["cdp"] {
                 // target=little: the newest Little Window's (or Peek's) page; tab=<id>: that tab's page.
                 let tab = dict["tab"].flatMap(UUID.init(uuidString:)).flatMap { main.browsers.runtime(for: $0)?.browser }

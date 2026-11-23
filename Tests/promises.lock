@@ -1604,6 +1604,7 @@ web-page-payment Tests/Scenarios/page-payment.scenario  45bf03c08871
 web-page-permission-prompts Tests/Scenarios/page-permission-prompts.scenario  178769e3e2b2
 web-page-pointer-lock Tests/Scenarios/page-pointer-lock.scenario  8c86862961e2
 web-page-popup-closes Tests/Scenarios/page-popup-closes.scenario  02d1ef71e3da
+web-page-pre-frame-canvas Tests/Scenarios/page-pre-frame-canvas.scenario  5ab409a44c04
 web-page-print-frame Tests/Scenarios/page-print-frame.scenario  63cf39432113
 web-page-repost Tests/Scenarios/page-repost.scenario  78d802860dd4
 web-page-resize-window Tests/Scenarios/page-resize-window.scenario  ded4382ff8dc

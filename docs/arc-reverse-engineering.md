@@ -3106,6 +3106,15 @@ canvas, an unstyled page (no background, no color-scheme) showed black text on b
 (4 s with a slow image). The page now reports its background on every frame while it is parsed
 (kLoadingBackgroundProbe; frames wait for render-blocking stylesheets), so it turns white with its first paint.
 
+On Chrome's engine (23 Nov 2026, X report on the Arc-vs-Cra video: a Peek of GitHub flashed white for ~150 ms)
+the page's own view covers that fill: until its renderer's first frame, Chromium's compositor draws the view's
+colour, white by default (BrowserCompositorMac), and Chrome's ContentsWebView set its theme's #3C3C3C only on the
+page active in Cra's never-shown Chrome window. The bridge now gives every page's main-frame view the canvas
+(`applyPageCanvasTo:`, at each new view and on View ▸ Appearance), and cra-hosted-pages.patch keeps
+ContentsWebView off Cra's pages. Sampled on screen at 60 fps (`cra://debug?pageColours=`, scenario
+page-pre-frame-canvas, dark-late-paint.html): a Peek went 000000 → 4D4D4D for the 1.5 s hold → page; now
+000000 → page, as in Arc. An unstyled page still paints white once it draws.
+
 ### The toolbar on a tab switch (Arc 1.171, 2 Nov 2026, issue #84, app-only recordings at 100 fps)
 
 New tabs (⌘T + a file:// URL) in a fresh main window, macOS Dark, test pages with a 1 s busy-wait in `<head>`;

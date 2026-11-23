@@ -172,6 +172,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageFocused;
 - (void)pageDestroyed;
 - (void)pageBackgroundColor;
+- (void)applyPageCanvasTo:(content::RenderWidgetHostView*)view;
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
 - (void)pagePictureInPicture:(BOOL)active;
@@ -340,6 +341,15 @@ void RunInFrames(content::WebContents* contents, NSString* script, bool gesture)
   });
 }
 
+// Whether pages see a dark Mac: View ▸ Appearance, or the Mac's own on Automatic.
+BOOL PagesAreDark() {
+  NSInteger mode = cra::WebsiteAppearance();
+  return mode == 2 || (mode == 0 && [NSApp.effectiveAppearance
+                                        bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua,
+                                                                             NSAppearanceNameDarkAqua ]] ==
+                                        NSAppearanceNameDarkAqua);
+}
+
 // "#RRGGBB", or "" for no colour.
 NSString* Hex(std::optional<SkColor> color) {
   if (!color) {
@@ -460,6 +470,19 @@ class PageObserver : public content::WebContentsObserver,
     }
   }
   void OnBackgroundColorChanged() override { [owner_ pageBackgroundColor]; }
+  // A main frame's new view (a new page, or a site that moves to another process) shows Arc's canvas until its
+  // first frame, not Chromium's white or Chrome's grey.
+  void RenderFrameCreated(content::RenderFrameHost* frame) override {
+    if (!frame->GetParent()) {
+      [owner_ applyPageCanvasTo:frame->GetView()];
+    }
+  }
+  void RenderFrameHostChanged(content::RenderFrameHost* old_host, content::RenderFrameHost* new_host) override {
+    if (new_host && !new_host->GetParent()) {
+      [owner_ applyPageCanvasTo:new_host->GetView()];
+    }
+  }
+  void RenderViewReady() override { [owner_ applyPageCanvasTo:web_contents()->GetRenderWidgetHostView()]; }
 
   void DidStartNavigation(content::NavigationHandle* handle) override {
     WatchInfoBars();
@@ -2358,6 +2381,7 @@ bool HandleDebugMethod(content::WebContents* contents,
   // pages never attach there (cra_hosted_page.h), so Cra unhides it: the page is shown and hidden with
   // Cra's container. Left hidden, such a tab stayed black whenever it was shown (0.1.44).
   page.hidden = NO;
+  [self applyPageCanvasTo:contents->GetRenderWidgetHostView()];
   [self installDocumentStartScripts];
   __weak CraBrowser* weakSelf = self;
   cra::WatchMediaSession(contents, ^(NSInteger state, bool controllable) {
@@ -3311,15 +3335,18 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   if (_contents) {
     [self pageBackgroundColor];
   }
-}
-// Arc's black while websites are dark, white while they are light.
+}// Arc's black while websites are dark, white while they are light.
 + (NSColor*)pageCanvasColor {
-  NSInteger mode = cra::WebsiteAppearance();
-  BOOL dark = mode == 2 || (mode == 0 && [NSApp.effectiveAppearance
-                                             bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua,
-                                                                                  NSAppearanceNameDarkAqua ]] ==
-                                             NSAppearanceNameDarkAqua);
-  return dark ? NSColor.blackColor : NSColor.whiteColor;
+  return PagesAreDark() ? NSColor.blackColor : NSColor.whiteColor;
+}
+// Until a page's renderer sends its first frame, Chromium's compositor fills the view with the view's own colour:
+// white unless the browser sets one. Chrome sets its theme's (ContentsWebView, which leaves Cra's pages alone:
+// cra-hosted-pages.patch); Cra sets Arc's canvas, so a Peek or a new tab of a dark site doesn't flash white (X,
+// 22 Nov). Only the colour before a frame: a page that paints nothing still paints white, as in Arc.
+- (void)applyPageCanvasTo:(content::RenderWidgetHostView*)view {
+  if (view) {
+    view->SetBackgroundColor(PagesAreDark() ? SK_ColorBLACK : SK_ColorWHITE);
+  }
 }
 - (void)executeJavaScript:(NSString*)script inDevTools:(BOOL)inDevTools {
   if (!inDevTools) {
@@ -3979,6 +4006,9 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
 }
 + (void)setWebsiteAppearance:(NSInteger)mode {
   cra::SetWebsiteAppearance(mode);
+  for (const auto& [contents, page] : PagesByContents()) {
+    [page applyPageCanvasTo:contents->GetRenderWidgetHostView()];
+  }
 }
 + (NSInteger)websiteAppearance {
   return cra::WebsiteAppearance();
