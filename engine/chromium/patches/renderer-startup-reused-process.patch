@@ -1,0 +1,26 @@
+diff --git a/extensions/browser/renderer_startup_helper.cc b/extensions/browser/renderer_startup_helper.cc
+--- a/extensions/browser/renderer_startup_helper.cc
++++ b/extensions/browser/renderer_startup_helper.cc
+@@ -291,8 +291,20 @@ void RendererStartupHelper::OnRenderProcessLaunched(
+       RegisterProcess(host);
+     }
+ #else
+-    CHECK(GetRenderer(host) != nullptr ||
+-          !client->IsSameContext(browser_context_, host->GetBrowserContext()));
++    // Cra: the same race on the Mac, where it CHECKed (Cra 0.1.52 and 0.1.54
++    // crash reports). A host that starts its next process inside the notice
++    // that the last one ended, ahead of this helper's turn in it, is created
++    // while process_mojo_map_ still holds the old process's entry, so
++    // InitializeProcess() sent the new one nothing; the entry then went with
++    // RenderProcessExited(). The new process has had nothing from here (what
++    // went before went down the old process's channel), so it gets all of it
++    // now, as at creation.
++    if (GetRenderer(host) == nullptr &&
++        client->IsSameContext(browser_context_, host->GetBrowserContext())) {
++      LOG(WARNING) << "Cra: extensions: a renderer launched untracked; "
++                      "initializing it";
++      InitializeProcess(host);
++    }
+ #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+     return;
+   }

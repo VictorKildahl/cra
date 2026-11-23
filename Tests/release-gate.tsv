@@ -12,3 +12,5 @@ page-fullscreen-close-tab	#636	⌘W on a full-screen video left the window in fu
 floating-sidebar-extension-popup-fullscreen	#634	an extension's popup sat in the wrong place in full screen
 code-sign-clone-off	crash-code-sign-clone-cleanup-after-update	Cra Helper crashed after a version-changing update (0.1.52, 127 reports)
 appkit-first-responder-exception	crash-first-responder-after-resigning	Cra quit on AppKit's first-responder exception from a popover's field (0.1.53)
+page-closes-while-loading	crash-page-closed-while-loading	Cra crashed when a page closed itself while its tab was still loading (0.1.52–0.1.54, toolbar colour)
+extensions-renderer-reused-on-exit	crash-extensions-renderer-reused-on-exit	Cra crashed when a renderer was restarted inside its own exit notice (0.1.52, 0.1.54)

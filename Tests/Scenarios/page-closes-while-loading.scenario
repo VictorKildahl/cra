@@ -1,0 +1,23 @@
+# promise: crash-page-closed-while-loading
+# A tab on screen whose page closes itself (window.close) while the tab is still loading the next address, as a
+# sign-in or payment page does when it finishes. Chrome ends the unfinished navigation while it takes the page
+# down, and Cra's layer passed that on as "loading ended" for a page that was still in its tab. The toolbar then
+# read the page's colour (#629) with a screenshot of a page half torn down: SIGSEGV in
+# VisibleTimeRequestTrigger::TakeRequest under Page.captureScreenshot (a 0.1.52 crash report). A page being torn
+# down now reports no loading change and takes no DevTools command.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=before
+wait 2
+cra://open?url=${ORIGIN}/close-while-loading.html?after=4000
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# An address that takes the connection and never answers: the navigation is still under way at the close.
+cra://navigate?url=${STALL}/never
+wait 5
+expect-log closed by its page
+cra://debug?back=after
+expect-log back after: selected=.*page\.html\?n=before
+reject-log fault:

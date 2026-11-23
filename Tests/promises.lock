@@ -1595,6 +1595,7 @@ crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileLoadFailur
 crash-1086-external-schemes iOS/CraUITests/ExternalLinkTests.swift::testARedirectToAnEmailAddressAsksFirstAndKeepsThePage  e51576186e09
 crash-1086-external-schemes iOS/CraUITests/ExternalLinkTests.swift::testATappedEmailOrPhoneLinkLeavesThePageAsItIs  4624193a89f0
 crash-1086-external-schemes iOS/CraUITests/ExternalLinkTests.swift::testATappedMessageLinkOpensMessages  f545b04da114
+crash-alert-tab-closed Tests/Scenarios/page-alert-tab-closed.scenario  57c0e6a2fa67
 crash-alerts-helper-bare-launch Tests/Scenarios/alerts-helper-launched-bare.scenario  1d21ddcbfb65
 crash-clear-browsing-data-cancel Tests/Scenarios/clear-browsing-data-cancel.scenario  3b19c444be85
 crash-closing-host-gets-page Tests/Scenarios/engine-host-closes-page-added.scenario  1d800cd68ef5
@@ -1603,10 +1604,12 @@ crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7
 crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::aPinSavedTwiceShowsOnce  1b99e50cdb2f
 crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::twoInstallsOfOneExtensionShowOnce  dd39be24ac7f
 crash-duplicate-extension-ids Tests/Scenarios/extensions-menu-one-each.scenario  46498caea716
+crash-extensions-renderer-reused-on-exit Tests/Scenarios/extensions-renderer-reused-on-exit.scenario  d08af40f6a0a
 crash-fedcm-dialog Tests/Scenarios/fedcm-sign-in-dialog.scenario  d1ccf325b5a7
 crash-first-responder-after-resigning Tests/Scenarios/appkit-first-responder-exception.scenario  b8e1773493da
 crash-hidden-page-closed-in-callback Tests/Scenarios/hidden-page-closes-in-callback.scenario  3e9967b994ed
 crash-mcp-bridge-closed-stderr Tests/MCPTransportTests.swift::bridgeWithoutStderr  28bfe7ac9a93
+crash-page-closed-while-loading Tests/Scenarios/page-closes-while-loading.scenario  315477abf178
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfSessionTests.swift::hugeCountersSaturateInsteadOfOverflowing  03ac411a6675
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfStateTests.swift::historyFootprintSaturatesInsteadOfOverflowing  2a8c526e26ad
 crash-sign-in-dialog-tab-closed Tests/Scenarios/page-dialog-sign-in-tab-closed.scenario  d3ee757e488c

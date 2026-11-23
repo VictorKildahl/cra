@@ -105,6 +105,11 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/child_process_termination_info.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_process_host_observer.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/common/result_codes.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
@@ -2438,7 +2443,15 @@ bool HandleDebugMethod(content::WebContents* contents,
   }
 }
 
+// A page being torn down (~WebContentsImpl) ends its unfinished navigation from FrameTree::Shutdown, after its view's
+// widget let go of the page (DetachDelegate). That is no finished navigation and no end of loading for the tab: the
+// app took it for a page that had loaded, and the toolbar's colour (#629) took a screenshot of it, which ended in
+// VisibleTimeRequestTrigger::TakeRequest on the page that was gone (crash-page-closed-while-loading). Nothing about
+// such a page reaches the app; browserDidClose follows.
 - (void)pageFinishedNavigation:(content::NavigationHandle*)handle {
+  if (_contents && _contents->IsBeingDestroyed()) {
+    return;
+  }
   if (handle->HasCommitted()) {
     if (!handle->IsSameDocument() && !_hasCommittedLoad) {
       _hasCommittedLoad = YES;
@@ -2459,7 +2472,7 @@ bool HandleDebugMethod(content::WebContents* contents,
 }
 
 - (void)pageLoadingChanged {
-  if (!_contents) {
+  if (!_contents || _contents->IsBeingDestroyed()) {
     return;
   }
   content::NavigationController& history = _contents->GetController();
@@ -3365,6 +3378,12 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
     completion(nil, @"no browser");
     return;
   }
+  // Page.captureScreenshot and the others act on the page's view, which a page being torn down no longer has
+  // (crash-page-closed-while-loading).
+  if (_contents->IsBeingDestroyed()) {
+    completion(nil, @"page closing");
+    return;
+  }
   if (!_session) {
     CraBrowser* __weak weakSelf = self;
     _session = std::make_unique<cra::PageSession>(_contents, ^(NSString* event, NSString* eventParams) {
@@ -3499,6 +3518,82 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
 }
 
 @end
+
+namespace {
+
+// Scenarios only (crash-extensions-renderer-reused-on-exit): a renderer host that starts its next process from inside
+// the notice that its last one ended, before the extensions system has heard of the end. Chrome's
+// RendererStartupHelper then still holds the old process's entry when the new one is created (and so sends it
+// nothing), drops the entry when its turn in the notice comes, and finds the new process untracked once it launches:
+// CHECK(GetRenderer(host) != nullptr || ...) in OnRenderProcessLaunched, two Cra crash reports (0.1.52, 0.1.54).
+// Chromium handles this on Android and ChromeOS only (renderer-startup-reused-process.patch does it on the Mac).
+// The helper's observer goes in when it registers a process, so the first end (the helper first, then this) puts
+// this one ahead of it for the second.
+class RendererReuseOnExit : public content::RenderProcessHostObserver {
+ public:
+  // A hidden page of its own gives it a renderer host through the public API (SiteInstance's
+  // GetOrCreateProcessForTesting is CHECK_IS_TEST in a shipping build).
+  explicit RendererReuseOnExit(Profile* profile)
+      : contents_(content::WebContents::Create(content::WebContents::CreateParams(
+            profile, content::SiteInstance::CreateForURL(profile, GURL("http://renderer-reuse.invalid/"))))) {
+    host_ = contents_->GetPrimaryMainFrame()->GetProcess();
+    host_->IncrementPendingReuseRefCount();
+    host_->AddObserver(this);
+    if (!host_->IsInitializedAndNotDead()) {
+      host_->Init();
+    } else if (host_->IsReady()) {
+      RenderProcessReady(host_);
+    }
+  }
+
+  void RenderProcessReady(content::RenderProcessHost* host) override {
+    if (step_ == 0 || step_ == 2) {
+      LOG(WARNING) << "Cra: renderer reuse: ends process " << step_ / 2 + 1;
+      ++step_;
+      host->Shutdown(content::RESULT_CODE_KILLED);
+    } else if (step_ == 4) {
+      LOG(WARNING) << "Cra: renderer reuse: the process started in the exit notice is running";
+      step_ = 5;
+      Later(base::BindOnce(&RendererReuseOnExit::Finish, base::Unretained(this)));
+    }
+  }
+
+  void RenderProcessExited(content::RenderProcessHost* host, const content::ChildProcessTerminationInfo&) override {
+    if (step_ == 1) {
+      // The extensions system heard first; its next registration comes after this observer.
+      step_ = 2;
+      Later(base::BindOnce([](content::RenderProcessHost* host) { host->Init(); }, base::Unretained(host)));
+    } else if (step_ == 3) {
+      LOG(WARNING) << "Cra: renderer reuse: starts the next process inside the exit notice";
+      step_ = 4;
+      host->Init();
+    }
+  }
+
+  void RenderProcessHostDestroyed(content::RenderProcessHost* host) override {
+    host_ = nullptr;
+    if (step_ != 5) {  // otherwise Finish, already posted, deletes it
+      // Not the page from inside its own process host's teardown.
+      base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE, std::move(contents_));
+      delete this;
+    }
+  }
+
+ private:
+  void Finish() {
+    if (host_) {
+      host_->RemoveObserver(this);
+      host_->DecrementPendingReuseRefCount();
+    }
+    delete this;
+  }
+
+  std::unique_ptr<content::WebContents> contents_;
+  raw_ptr<content::RenderProcessHost> host_ = nullptr;
+  int step_ = 0;
+};
+
+}  // namespace
 
 #pragma mark - CraCEFRuntime
 
@@ -3899,6 +3994,15 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
       view->SetVisible(!hidden);
     }
   }
+}
+// Scenarios only: a renderer process started inside the notice that the one before it ended
+// (crash-extensions-renderer-reused-on-exit, RendererReuseOnExit above). Its steps go to Chrome's log.
++ (void)reuseRendererInsideExitNotice {
+  if (Hosts().empty()) {
+    LOG(WARNING) << "Cra: renderer reuse: no profile";
+    return;
+  }
+  new RendererReuseOnExit(Hosts().begin()->first);
 }
 + (BOOL)hasBrowserDevTools {
   return g_cdp_write_fd >= 0;

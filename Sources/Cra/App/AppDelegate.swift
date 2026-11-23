@@ -2384,6 +2384,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // browsing data's Cancel crashed Cra 0.1.50 (crash-clear-browsing-data-cancel).
             if let label = dict["hostBrowserView"] { CraLog.note("host browser view \(label): \(CraCEFRuntime.pageHostBrowserViewReadout)"); return }
             if let hidden = dict["hostBrowserViewHidden"] { CraCEFRuntime.setPageHostBrowserViewsHidden(hidden == "1"); return }
+            // rendererReuse=1: a renderer process started inside the notice that the one before it ended
+            // (crash-extensions-renderer-reused-on-exit); its steps go to Chrome's log.
+            if dict["rendererReuse"] == "1" { CraCEFRuntime.reuseRendererInsideExitNotice(); return }
             // appWindows=<label>: every window of Cra's on screen, front to back, by class, size and parent: what
             // a page's feature put up when no other readout knows its window (the share picker, web features).
             if let label = dict["appWindows"] {
