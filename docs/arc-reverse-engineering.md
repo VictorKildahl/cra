@@ -943,6 +943,22 @@ to Chromium's `RenderWidgetHostViewCocoa` (the view AppKit gives real key presse
 once activation is reported. (Until 26 Oct test videos had to be VP9/Opus WebM: Spotify's CEF build
 has no H.264/AAC. Cra now ships its own CEF build with them; see docs/release.md.)
 
+Document Picture in Picture let go past the edge (Arc 1.173, live, 23 Nov 2026, GitHub #702). Victor's Arc,
+a file:// page that calls `documentPictureInPicture.requestWindow({width: 400, height: 240})` on a key
+press (posted to Arc's pid), dragged with real HID events by the window's top bar, frames read from
+CGWindowList (top-left coordinates, 1728 × 1117 display, menu bar 33 pt). Arc opened the page in Little Arc.
+- [O] The window has Arc's own top bar (Back to Tab, the address, a chat glyph, Close), layer 3.
+- [O] Let go half past the left edge at y = 186: 1.75 s later at x = 10, y = 186. Half below the bottom:
+  its bottom at 1107 (10 pt up), x kept. Half past the right edge: x = 1318 (its right edge at 1718), y
+  kept. So it slides back the shortest way, 10 pt in from the edge it crossed, at its own size; unlike
+  a video's PiP it doesn't go into a corner.
+- [O] Reopened, it came back where it was last left (10, 186): `LastDocumentPIPPosition`. Not built.
+- [O] Victor's Rectangle snaps Cra's Document PiP to half the screen when the pointer reaches the
+  screen's edge in a drag; it left Arc's alone in the same drag. Not looked into.
+- Cra: `DocumentPictureInPictureDrag` (CraCore) decides; `DocumentPictureInPictureSpring` watches the window
+  move with the button held and, once it's up, slides it on the video PiP's spring. Real drags on
+  Cra land on the same numbers (10 / 1107 / 1318).
+
 ### Hover, toolbar colour, library glyph (24 Oct, late evening)
 
 - Row hover (pointer moved onto "Google Search Console", screen capture, same backdrop):

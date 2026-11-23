@@ -195,6 +195,12 @@ final class PictureInPictureChrome {
         if let other { other.makeKey() } else if NSApp.isActive { NSApp.deactivate() }
     }
 
+    /// Whether `window` is the video's Picture in Picture window that Cra dresses as Arc's (not a
+    /// Document Picture in Picture one, #702).
+    func isVideoWindow(_ window: NSWindow) -> Bool {
+        overlays[ObjectIdentifier(window)] != nil || window is PictureInPictureOverlay
+    }
+
     /// `cra://debug?pip=<label>`: Chromium's PiP window as Cra keeps it, and the centre controls'
     /// size for its width (#262).
     func readout() -> String {

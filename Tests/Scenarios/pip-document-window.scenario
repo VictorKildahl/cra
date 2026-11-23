@@ -13,3 +13,18 @@ expect-log Cra cdp Runtime.evaluate .*"value":"docpip:open"
 wait 3
 cra://debug?pip=document
 expect-log Cra pip document: windows=0
+# Google Meet's Picture in Picture is this window. Dragged by its top bar half past the screen's left
+# edge, it stayed there; a video's springs back into a corner, as Arc's Document PiP does (GitHub #702).
+# promise: #702
+cra://debug?docPip=before
+expect-log Cra docPip before: windows=1 .*onScreen=1
+cra://debug?docPipDrop=left
+expect-log pip: document window let go at -
+wait 2
+cra://debug?docPip=after
+expect-log Cra docPip after: windows=1 frame=10,.* onScreen=1
+cra://debug?docPipDrop=bottom
+expect-log pip: document window let go at 10,-
+wait 2
+cra://debug?docPip=bottom
+expect-log Cra docPip bottom: windows=1 frame=10,10,.* onScreen=1

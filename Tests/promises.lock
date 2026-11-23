@@ -916,7 +916,7 @@
 #460   Packages/CraCore/Tests/CraCoreTests/PictureInPictureInputTests.swift::chromiumWindowTakesNoInput  21799270ef4a
 #460   Packages/CraCore/Tests/CraCoreTests/PictureInPictureInputTests.swift::systemEventsStillReachIt  7365a3f91d06
 #460   Tests/Scenarios/pip-chromium-controls-hidden.scenario  e0d8c9c092de
-#460   Tests/Scenarios/pip-document-window.scenario  a6c85b8fca7c
+#460   Tests/Scenarios/pip-document-window.scenario  da37af53be41
 #461   Packages/CraCore/Tests/CraCoreTests/EngineVersionTests.swift::theCopiedVersionNamesBuildAndEngine  d1f809bc9266
 #462   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::minimizeSitsBeforeCloseAtEverySize  732fadede9fa
 #463   Tests/PictureInPictureCornersTests.swift::hoverLayerKeepsTheCorners  226a463777da
@@ -1592,7 +1592,11 @@
 #700   Tests/Scenarios/appearance-every-space.scenario  37de53b90485
 #701   Packages/CraCore/Tests/CraCoreTests/ExtensionPopupFrameTests.swift::thePageSitsInsideTheWindowsBorderAndCorners  97ff0f05b53e
 #701   Tests/Scenarios/extension-popup-frame.scenario  1b63160f0d78
+#702   Packages/CraCore/Tests/CraCoreTests/DocumentPictureInPictureDragTests.swift::draggedPastTheEdgeSlidesBackOnScreen  d16753091b23
+#702   Packages/CraCore/Tests/CraCoreTests/DocumentPictureInPictureDragTests.swift::onlyAMouseDragSlidesIt  396d03e1af14
+#702   Packages/CraCore/Tests/CraCoreTests/DocumentPictureInPictureDragTests.swift::whichWindowsAreDocumentPictureInPicture  dbfcc1908620
 #702   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::draggedPastTheLeftOrBottomEdgeComesBackIntoView  d0049d8bc87a
+#702   Tests/Scenarios/pip-document-window.scenario  da37af53be41
 #702   Tests/Scenarios/pip-drop-corner.scenario  e5b8bd44d942
 #703   Packages/CraCore/Tests/CraCoreTests/AutoPictureInPictureMomentTests.swift::aTabSwitchOpensItAndASpaceSwitchDoesNot  7e042eea0fad
 #703   Tests/Scenarios/pip-space-switch.scenario  5f312b1e5a8e
