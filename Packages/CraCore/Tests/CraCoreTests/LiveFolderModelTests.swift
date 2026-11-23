@@ -89,4 +89,25 @@ struct LiveFolderModelTests {
         folder.serverURL = nil
         #expect(folder.repository(for: "https://git.example.test/company/app/-/merge_requests/12") == nil)
     }
+
+    /// A live tab still shows its pull request on any of the request's own pages, so it can leave the
+    /// folder once the request closes; another page or another request is somewhere else (#697).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/697"))
+    func aTabOnAPullRequestsOwnPagesStillShowsIt() {
+        let pr = "https://github.com/team/app/pull/9"
+        for page in [pr, pr + "/", pr + "/files", pr + "/commits/abc123", pr + "#issuecomment-42", pr + "?w=1",
+                     "https://github.com/Team/App/pull/9", "HTTPS://GitHub.com/team/app/pull/9/checks"] {
+            #expect(LiveItemPage.shows(page, item: pr), "\(page)")
+        }
+        for page in ["https://github.com/team/app/pull/90", "https://github.com/team/app/pull/9x", "https://github.com/team/app",
+                     "https://github.com/team/other/pull/9", "http://github.com/team/app/pull/9", "https://gist.github.com/team/app/pull/9",
+                     "https://example.test/reading", "about:blank", ""] {
+            #expect(!LiveItemPage.shows(page, item: pr), "\(page)")
+        }
+        let mr = "https://git.example.test:8443/gitlab/team/app/-/merge_requests/72"
+        #expect(LiveItemPage.shows(mr + "/diffs", item: mr))
+        #expect(!LiveItemPage.shows("https://git.example.test/gitlab/team/app/-/merge_requests/72", item: mr), "another port")
+        #expect(LiveItemPage.shows("https://jira.example.test/browse/CRA-1?focusedCommentId=3", item: "https://jira.example.test/browse/CRA-1"))
+        #expect(!LiveItemPage.shows("https://jira.example.test/browse/CRA-12", item: "https://jira.example.test/browse/CRA-1"))
+    }
 }

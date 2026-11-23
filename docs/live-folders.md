@@ -105,7 +105,10 @@ session permissions and the provider API are documented in [Live folder plugins]
 - Folder: `SidebarItem.liveFolder` (LiveFolderData), tabs carry `liveItemURL` and `liveSubtitle`.
   SidebarStore.applyPluginResults adds and updates tabs, moves a Today tab already on a new pull request into
   the folder, and marks ones that left the results (`liveGoneAt`); `expireLiveItems` removes them 120 s later
-  (a tab open in a window stays until it isn't). Closing or dragging a tab out adds it to `hiddenItems`.
+  (a tab open in a window stays until it isn't). A tab on one of its item's own pages (Files changed, a comment
+  link, a query, owner/repo in another case) still counts as on it and goes too; one on another page stays
+  (`LiveItemPage`, #697). Closing or dragging a tab out adds it to `hiddenItems`, and refreshes leave it out
+  as Arc's do (#697 asked for them to come back; Arc keeps them out); Reopen Closed Tab puts it back.
   Nothing can be dropped into a live folder.
 - Refresh, on Dia's schedule: at most every 120 s and only while Cra is the active app; when any Cra window
   becomes key; from the folder's button and menu (10 s apart); forced when a filter changes; forced 5 s and

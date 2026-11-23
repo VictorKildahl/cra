@@ -1553,6 +1553,10 @@
 #689   Packages/CraCore/Tests/CraCoreTests/LinkPreviewTests.swift::theHintFollowsWhatCraDoesWithTheClick  92e55c40efe3
 #689   Packages/CraCore/Tests/CraCoreTests/LinkPreviewTests.swift::withNoKeyHeldTheAddressShowsWithoutItsSchemeOrTrailingSlash  05b5fbd0e437
 #689   Tests/Scenarios/link-preview-arc.scenario  dc7d3ef9ce26
+#697   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::aTabOnAPullRequestsOwnPagesStillShowsIt  f913bea636c6
+#697   Tests/Scenarios/live-folder-closed-request-pages.scenario  bbecb6b6f7ef
+#697   Tests/StoreTests.swift::closedPullRequestsLeaveFromTheirOwnPages  7471cc27d91a
+#697   Tests/StoreTests.swift::closedPullRequestsStayOutAcrossRefreshes  2cba4265f7b8
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

@@ -223,3 +223,22 @@ public struct LivePullRequest: Codable, Equatable, Identifiable {
     public var url: String { webURL ?? "https://github.com/\(owner)/\(repo)/pull/\(number)" }
     public var repository: String { "\(owner)/\(repo)" }
 }
+
+/// Whether a live tab's page is still its item (a pull request, merge request or issue) or has gone
+/// somewhere else. A page under the item's address counts: its Files changed or Commits page, a comment
+/// link, a query, and owner and repository in another case (GitHub's own links don't always keep it).
+/// Another item whose number starts the same (pull/90 for pull/9) does not. A tab on its item leaves the
+/// folder when the item closes or merges; one on another page stays, as in Arc (#697).
+public enum LiveItemPage {
+    public static func shows(_ pageURL: String, item itemURL: String) -> Bool {
+        guard let page = URLComponents(string: pageURL), let item = URLComponents(string: itemURL),
+              let scheme = page.scheme?.lowercased(), scheme == item.scheme?.lowercased(),
+              page.host?.lowercased() == item.host?.lowercased(), page.port == item.port else { return false }
+        let path = trimmed(page.percentEncodedPath.lowercased()), base = trimmed(item.percentEncodedPath.lowercased())
+        return !base.isEmpty && (path == base || path.hasPrefix(base + "/"))
+    }
+
+    private static func trimmed(_ path: String) -> String {
+        path.hasSuffix("/") ? String(path.dropLast()) : path
+    }
+}

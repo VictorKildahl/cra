@@ -3067,6 +3067,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])
                 return
             }
+            // liveTabs=<label>: each live folder's tabs, the address each shows and its item's, so a scenario sees
+            // which ones a refresh or the expiry pass left (#697).
+            if let label = dict["liveTabs"] {
+                let rows = store.liveFolders.map { folder in
+                    "\(folder.title ?? "folder") [" + store.tabs(under: folder.id).compactMap { c in
+                        c.tab.map { "\($0.url)\($0.liveItemURL.map { " (item \($0))" } ?? "")" }
+                    }.joined(separator: ", ") + "]"
+                }
+                CraLog.note("live tabs \(label): \(rows.isEmpty ? "none" : rows.joined(separator: "; "))")
+                return
+            }
             // tabMute=<label>: every loaded page's mute, as the tab saved it and as its engine has the
             // page, so a muted tab that comes back (relaunch, sleep, a popup) is seen to stay quiet (#387).
             if let label = dict["tabMute"] {
