@@ -108,6 +108,15 @@ final class CommandBarController {
         if onInstantLinks != nil { InstantLinksService.shared.prewarm(store) }
     }
 
+    /// The window's space changed under the open bar: its tab list follows, as Arc's does (#721).
+    /// "Only this space's tabs" and the other-space labels both read the space when the bar lists.
+    func follow(space: UUID) {
+        guard isOpen, focusedSpaceID != space else { return }
+        focusedSpaceID = space
+        engine.spaceChanged()
+        if scope == .tabs { update(query: query, allowCompletion: allowCompletion) } else { relist() }
+    }
+
     /// Replace the typed text (scripting / tests).
     func setQuery(_ text: String) {
         fieldText = text

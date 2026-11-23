@@ -658,6 +658,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let palette = space.theme.palette
         // Its extensions belong to the space's profile.
         if siteControlCenter.isShown, siteControlCenterSpaceID != space.id { siteControlCenter.close() }
+        // A space change under an open ⌘T bar lists that space's tabs, as Arc's bar does (#721).
+        commandBar.follow(space: space.id)
         // refresh runs on every store change (each page title, each window move). A new root
         // view rebuilds its whole SwiftUI tree, and a new window appearance or background redraws
         // every view, so all of these follow the theme only when it changes. What the root
