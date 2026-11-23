@@ -47,6 +47,8 @@ struct ImportedArchiveEntry {
     var archivedAt: Date
     var reason: ArchiveReason
     var spaceTitle: String?
+    /// Cached favicon file in the source browser, if any.
+    var faviconPath: String? = nil
 }
 
 /// Air Traffic Control destinations name spaces by title; ids differ between browsers.
@@ -154,9 +156,9 @@ enum ArcImporter {
         return try plan(sidebar: data)
     }
 
-    /// The plan from a StorableSidebar.json's contents (favicons and profiles still come from
-    /// `supportDir`).
-    static func plan(sidebar data: Data) throws -> ImportPlan {
+    /// The plan from a StorableSidebar.json's contents (cached favicons still come from `supportDir`,
+    /// profiles and their Favicons databases from `userData`).
+    static func plan(sidebar data: Data, userData: URL = ArcImporter.userData) throws -> ImportPlan {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [[String: Any]] else { throw ImportError.unreadable("Arc's sidebar") }
@@ -241,7 +243,8 @@ enum ArcImporter {
                 var spaceTitle: String?
                 if let src = e["source"] as? [String: Any], let sp = src["space"] as? [String: Any], let id = sp["_0"] as? String { spaceTitle = spaceTitleByID[id] }
                 plan.archive.append(ImportedArchiveEntry(customTitle: si["title"] as? String, pageTitle: tab["savedTitle"] as? String ?? "",
-                                                         url: u, archivedAt: refDate(e["archivedAt"]), reason: reason, spaceTitle: spaceTitle))
+                                                         url: u, archivedAt: refDate(e["archivedAt"]), reason: reason, spaceTitle: spaceTitle,
+                                                         faviconPath: (si["id"] as? String).flatMap { faviconFile(forItemID: $0, in: "ArchiveItemsFaviconCache") }))
             }
             plan.archive.sort { $0.archivedAt > $1.archivedAt }
             if plan.archive.count > 1500 { plan.archive.removeLast(plan.archive.count - 1500) }
@@ -263,6 +266,7 @@ enum ArcImporter {
             plan.settings.defaultLinkDestination = linkDestination(lroot["defaultDestination"], spaceTitles: spaceTitleByID)
             plan.settings.linkRoutes = (lroot["rules"] as? [[String: Any]] ?? []).compactMap { linkRoute($0, spaceTitles: spaceTitleByID) }
         }
+        ImportFavicons.attach(to: &plan, folder: "cra-arc-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
         return plan
     }
 
@@ -312,10 +316,11 @@ enum ArcImporter {
         return title(space).map { .space(title: $0) } ?? .mostRecentSpace
     }
 
-    /// Arc caches sidebar favicons as 32x32 PNGs named md5(item id).
-    static func faviconFile(forItemID id: String) -> String? {
+    /// Arc caches favicons as 32x32 PNGs named md5(item id): the sidebar's in SidebarItemsFaviconCache,
+    /// archived tabs' in ArchiveItemsFaviconCache.
+    static func faviconFile(forItemID id: String, in cache: String = "SidebarItemsFaviconCache") -> String? {
         let digest = Insecure.MD5.hash(data: Data(id.utf8)).map { String(format: "%02x", $0) }.joined()
-        let path = supportDir.appendingPathComponent("SidebarItemsFaviconCache/\(digest)").path
+        let path = supportDir.appendingPathComponent("\(cache)/\(digest)").path
         return FileManager.default.fileExists(atPath: path) ? path : nil
     }
 }
@@ -338,17 +343,19 @@ enum DiaImporter {
     /// With the "Dia Safe Storage" secret the spaces come from Dia's sidebar database; without
     /// it (or from an older Dia) from the files Dia kept before 1.55, which no longer follow
     /// the sidebar: the open tabs as of then and the bookmarks bar. A secret that opens no
-    /// sidebar database throws rather than fall back to those stale files.
-    static func plan(secret: String? = nil) throws -> ImportPlan {
+    /// sidebar database throws rather than fall back to those stale files. The sidebar database and
+    /// favicons come from `userData`.
+    static func plan(secret: String? = nil, userData: URL = DiaImporter.userData) throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Dia") }
         var plan = ImportPlan(source: "Dia")
-        if let secret, hasEncryptedSidebar {
+        if let secret, !DiaSidebar.databases(userData: userData).isEmpty {
             plan.spaces = DiaSidebar.spaces(userData: userData, rootKey: ChromiumCrypto.key(fromSecret: secret))
             if plan.spaces.isEmpty { throw ImportError.unreadable("Dia's spaces and tabs") }
         } else {
             addLegacySidebar(to: &plan)
         }
         addArchive(to: &plan)
+        ImportFavicons.attach(to: &plan, folder: "cra-dia-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
         return plan
     }
 
@@ -461,26 +468,30 @@ extension SidebarStore {
 
         // Each host's favicon first, for every item (also ones skipped as duplicates): what
         // suggestions and a tab imported with no icon show.
+        func file(_ key: String) -> URL { AppPaths.favicons.appendingPathComponent(FaviconCache.fileName(key)) }
+        func copyFavicon(_ src: String?, url: String?) {
+            guard let src, let key = url.flatMap(FaviconKey.key(for:)) else { return }
+            let dst = file(key)
+            if !FileManager.default.fileExists(atPath: dst.path) {
+                try? FileManager.default.copyItem(atPath: src, toPath: dst.path)
+            }
+        }
         func copyFavicons(_ items: [ImportedItem]) {
             for it in items {
-                if it.isFolder { copyFavicons(it.children); continue }
-                guard let src = it.faviconPath, let url = it.url, let key = FaviconKey.key(for: url) else { continue }
-                let dst = AppPaths.favicons.appendingPathComponent(FaviconCache.fileName(key))
-                if !FileManager.default.fileExists(atPath: dst.path) {
-                    try? FileManager.default.copyItem(atPath: src, toPath: dst.path)
-                }
+                if it.isFolder { copyFavicons(it.children) } else { copyFavicon(it.faviconPath, url: it.url) }
             }
         }
         copyFavicons(plan.favorites)
         for sp in plan.spaces { copyFavicons(sp.favorites); copyFavicons(sp.pinned); copyFavicons(sp.today) }
+        if includeArchive { for e in plan.archive { copyFavicon(e.faviconPath, url: e.url) } }
 
         // The icon the other browser had for this very tab, under the tab's own key (FaviconKey, #211).
         // Arc keeps one per sidebar item, so a Google Doc and a Sheet come with different ones; under
         // the host alone they all showed one icon, and that of whichever page there loaded last (#673).
-        func ownIconKey(_ it: ImportedItem, tabID: UUID) -> String? {
-            guard let src = it.faviconPath, let site = it.url.flatMap(FaviconKey.key(for:)) else { return nil }
+        func ownIconKey(_ src: String?, url: String?, tabID: UUID) -> String? {
+            guard let src, let site = url.flatMap(FaviconKey.key(for:)) else { return nil }
             let key = FaviconKey.key(site: site, tabID: tabID)
-            let dst = AppPaths.favicons.appendingPathComponent(FaviconCache.fileName(key))
+            let dst = file(key)
             return (try? FileManager.default.copyItem(atPath: src, toPath: dst.path)) != nil ? key : nil
         }
 
@@ -511,7 +522,7 @@ extension SidebarStore {
                     if var t = tab.tab {
                         t.timeLastActiveAt = pinned ? it.createdAt : clock.now
                         if self.items[parent]?.isLiveFolder == true { t.liveItemURL = it.liveItemURL }
-                        if let key = ownIconKey(it, tabID: tab.id) { t.faviconKey = key }
+                        if let key = ownIconKey(it.faviconPath, url: it.url, tabID: tab.id) { t.faviconKey = key }
                         tab.data = .tab(t)
                     }
                     insertItem(tab, into: parent, at: nil)
@@ -577,6 +588,10 @@ extension SidebarStore {
             for e in plan.archive where !known.contains(e.url) {
                 var item = SidebarItem.tab(e.url, title: e.pageTitle, parent: nil)
                 item.title = e.customTitle
+                if var t = item.tab, let key = ownIconKey(e.faviconPath, url: e.url, tabID: item.id) {
+                    t.faviconKey = key
+                    item.data = .tab(t)
+                }
                 let sid = e.spaceTitle.flatMap(spaceID(titled:))
                 appendArchived(ArchivedItem(archivedAt: e.archivedAt, reason: e.reason, sourceSpaceID: sid, wasPinned: false, item: item))
                 result.archived += 1

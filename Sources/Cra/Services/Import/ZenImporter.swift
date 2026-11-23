@@ -69,10 +69,9 @@ enum ZenImporter {
             spaces[0].pinned.append(ImportedItem(customTitle: "Bookmarks", pageTitle: "Bookmarks", url: nil, isFolder: true, children: bookmarks))
         }
 
-        // Favicons from favicons.sqlite.
-        ImportFavicons.attach(to: &spaces, folder: "cra-zen-favicons") { FirefoxImporter.favicons(root: root, hosts: $0) }
-
         plan.spaces = spaces.filter { !$0.favorites.isEmpty || !$0.pinned.isEmpty || !$0.today.isEmpty }
+        // Favicons from favicons.sqlite.
+        ImportFavicons.attach(to: &plan, folder: "cra-zen-favicons") { FirefoxImporter.favicons(root: root, hosts: $0) }
         return plan
     }
 

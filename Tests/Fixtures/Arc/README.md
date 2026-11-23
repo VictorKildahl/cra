@@ -10,4 +10,5 @@ space, work.example.com to a Little Arc in Work (written by hand in Arc, #258) a
 "Is equal to" route to Home, with Little Arc as the default.
 SidebarItemsFaviconCache holds an icon each for the pinned folder's two tabs (orange for
 home-p1, blue for home-p2), named md5(item id) as Arc names them: two tabs on one host with
-different icons (#673).
+different icons (#673). ArchiveItemsFaviconCache holds a green icon for the archived tab a1,
+named md5(a1); a2 has none.
