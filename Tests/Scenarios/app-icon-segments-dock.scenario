@@ -1,0 +1,18 @@
+# Picking Segments, the bundle's own icon, after another one puts Segments in the Dock. Since a pick goes on Cra.app
+# too (app-icon-finder), the bundle's icon in the Dock's cache can be the icon picked before: the app left the tile to
+# the Dock for Segments, so Original stayed (Victor, 23 Nov 2026). The Dock is now given Segments' picture as it is
+# any other's (AppIconBundle.dockImage); the Dock tile plug-in, which draws it after Cra quits, does the same.
+# Original comes in through the argument domain and appIcon= picks without remembering, so the run never writes the
+# defaults the installed Cra reads.
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+arg -appIcon
+arg original
+expect-log app icon: original put on the app
+cra://debug?dockTile=original
+expect-log dock tile original: .* given=original$
+
+cra://debug?appIcon=segments
+expect-log app icon: segments taken off the app
+cra://debug?dockTile=segments
+expect-log dock tile segments: .* given=segments$

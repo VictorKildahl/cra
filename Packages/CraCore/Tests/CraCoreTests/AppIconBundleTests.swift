@@ -36,4 +36,14 @@ struct AppIconBundleTests {
         #expect(!AppIconBundle.hasCustomIcon(finderInfo: []))
         #expect(!AppIconBundle.hasCustomIcon(finderInfo: [0, 0, 0, 0, 0, 0, 0, 0, 0x04]))
     }
+
+    /// Segments, the bundle's own, is given to the Dock like any other pick. Left to the Dock, the bundle's icon came
+    /// from its cache: since a pick goes on Cra.app (056ae73b) that was the icon picked before, so picking Segments
+    /// after Original kept Original in the Dock (Victor, 23 Nov 2026).
+    @Test func theDockIsGivenSegmentsToo() {
+        #expect(AppIconBundle.dockImage(picked: "segments", defaultID: "segments") == "segments")
+        #expect(AppIconBundle.dockImage(picked: "original", defaultID: "segments") == "original")
+        #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments") == "custom")
+    }
 }
+

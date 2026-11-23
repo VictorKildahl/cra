@@ -37,11 +37,12 @@ final class CraDockTilePlugIn: NSObject, NSDockTilePlugIn {
         tile.display()
     }
 
-    /// The keys AppIconManager writes; nil for the bundled icon.
+    /// The keys AppIconManager writes. Segments, the bundle's own, is drawn too: left to the Dock, the bundle's icon
+    /// came from the Dock's cache, which can still be the icon a pick put on Cra.app before (AppIconBundle.dockImage).
     private func selectedImage() -> NSImage? {
         guard let app, let id = app.bundleIdentifier as CFString? else { return nil }
         CFPreferencesAppSynchronize(id)
-        guard let selected = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String, selected != "segments" else { return nil }
+        let selected = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String ?? "segments"
         if selected == "custom" {
             return (CFPreferencesCopyAppValue("appIconCustomPath" as CFString, id) as? String).flatMap(NSImage.init(contentsOfFile:))
         }

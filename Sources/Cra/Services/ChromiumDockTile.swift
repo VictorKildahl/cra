@@ -33,7 +33,7 @@ enum ChromiumDockTile {
         let originalNamed = unsafeBitCast(method_getImplementation(named), to: NamedIMP.self)
         let namedBlock: @convention(block) (AnyObject, NSString?) -> AnyObject? = { cls, name in
             // NSApp.applicationIconImage no longer says what was picked once another view is on
-            // the tile, so the picked icon comes from AppIconManager (nil for Segments).
+            // the tile, so the picked icon comes from AppIconManager (Segments too).
             if Thread.isMainThread, drawingTile, name as String? == NSImage.applicationIconName,
                let picked = MainActor.assumeIsolated({ AppIconManager.shared.dockImage }) {
                 return picked

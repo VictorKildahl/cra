@@ -28,4 +28,13 @@ public enum AppIconBundle {
     public static func hasCustomIcon(finderInfo: [UInt8]) -> Bool {
         finderInfo.count >= 10 && (UInt16(finderInfo[8]) << 8 | UInt16(finderInfo[9])) & 0x0400 != 0
     }
+
+    /// The picture the Dock tile is given for `picked` (the running app's applicationIconImage and the Dock tile
+    /// plug-in's view): always the picked one, Segments too (app-icons/segments.png, the bundle's icon on Apple's
+    /// grid). Left to the Dock, the bundle's own icon came from the Dock's cache, which since a pick goes on Cra.app
+    /// can be the icon picked before: Segments picked after Original kept Original (Victor, 23 Nov 2026).
+    public static func dockImage(picked: String, defaultID: String) -> String? {
+        picked
+    }
 }
+
