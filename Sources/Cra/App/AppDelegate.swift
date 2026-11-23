@@ -1487,6 +1487,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // instantLinks=<label>: the Instant Links row and the last run, as one line (#407).
             if let v = dict["instantLinksSetting"] { store.settings.instantLinks = v == "on"; return }
+            // pageMarginSetting=<points>: Settings ▸ Pages ▸ Margin moved to that value, as the slider does (Ideas #366).
+            if let v = dict["pageMarginSetting"].flatMap(Double.init) { store.settings.pageMargin = v; return }
             // sidebarSide=left|right: Settings ▸ Sidebar on the right, as its switch sets it (#464).
             if let v = dict["sidebarSide"].flatMap(SidebarSide.init(rawValue:)) { store.settings.sidebarSide = v; return }
             if let v = dict["instantLinksFail"] {

@@ -190,7 +190,8 @@ final class FloatingSidebarController {
                 wait(atEdge: false, over: dwell.sample(inStrip: false, at: t), why: "the edge strip", at: p)
                 return
             }
-            let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow, side: side)
+            let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow, side: side,
+                                                               pageMargin: shell.pageMargin)
             // Thrown past the edge, out of the window: it comes out there as well (#350).
             let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, side: side, at: t)
             let stripOver = dwell.sample(inStrip: inStrip, at: t)
@@ -198,7 +199,7 @@ final class FloatingSidebarController {
                  why: stripOver ? "the edge strip" : "past the window's edge", at: p)
         } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
                                                      pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow,
-                                                     side: side) {
+                                                     side: side, pageMargin: shell.pageMargin) {
             requestAutomaticHide()
         }
     }

@@ -80,6 +80,18 @@ extension SettingsArt {
         }
     }
 
+    /// The room round the page, drawn at the margin the slider sets (Ideas #366): 6 of the picture's points
+    /// at Arc's 10, less than one at 1.
+    static func pageMargin(_ margin: Double) -> some View {
+        let t = ArtTint.lemon
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t, margin: CGFloat(PageMargin.clamped(margin)) * 0.6) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+        }
+    }
+
     /// Edge to edge, the page keeps its rounded corners: no margin, only the round (#582).
     static var edgeToEdgeRounded: some View {
         let t = ArtTint.lavender

@@ -1,0 +1,22 @@
+# Settings ▸ General ▸ Pages ▸ Margin (Ideas #366, whyady): the room round the pages, 1 to 10 pt. A seeded 4 pt
+# puts the card 4 pt in from the window's top, right and bottom beside the sidebar, and on every side with the
+# sidebar hidden, still rounded and not filling the window. Moved while Cra runs, the window follows at once,
+# and Edge to edge still takes the margin away whatever the slider says.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "pageMargin": 4}
+cra://open?url=${ORIGIN}/page.html
+wait 3
+cra://debug?windowState=margin4-sidebar
+expect-log window state margin4-sidebar: main0 .* card=[0-9]+,4,4,4 r([1-9][0-9]*) fills=0
+cra://action/toggleSidebar
+wait 2
+cra://debug?windowState=margin4-hidden
+expect-log window state margin4-hidden: main0 .* card=4,4,4,4 r([1-9][0-9]*) fills=0
+cra://debug?pageMarginSetting=7
+wait 1
+cra://debug?windowState=margin7-hidden
+expect-log window state margin7-hidden: main0 .* card=7,7,7,7 r([1-9][0-9]*) fills=0
+cra://debug?pageMarginSetting=30
+wait 1
+cra://debug?windowState=margin-clamped
+expect-log window state margin-clamped: main0 .* card=10,10,10,10 r([1-9][0-9]*) fills=0

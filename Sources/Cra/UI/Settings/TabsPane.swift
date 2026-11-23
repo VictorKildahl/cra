@@ -68,6 +68,12 @@ struct TabsPane: View {
 
             SettingsHeader("Pages").padding(.top, 20)
             SettingsFeatureCard {
+                // Ideas #366, not in Arc: the room round the pages (PageMargin); Edge to edge is its zero.
+                SettingsFeatureRow("Margin",
+                                   detail: "How much room is left around your pages, from 1 pt to Arc’s 10 pt. Edge to edge takes it away.",
+                                   picture: { SettingsArt.pageMargin(store.settings.pageMargin) },
+                                   trailing: { SettingsMarginSlider(margin: $store.settings.pageMargin, enabled: !store.settings.edgeToEdgeContent) })
+                SettingsCardDivider()
                 SettingsSwitchRow("Edge to edge",
                                   detail: "Pages fill the window, with no margin around them and square corners, unless Rounded corners is on.",
                                   isOn: $store.settings.edgeToEdgeContent) { SettingsArt.edgeToEdge }

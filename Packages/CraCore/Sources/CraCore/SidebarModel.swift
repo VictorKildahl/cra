@@ -756,6 +756,9 @@ public struct AppSettings: Codable, Equatable {
     /// Ideas #582, not in Arc: edge to edge, the pages keep their rounded corners (CardFill.cornerRadius),
     /// still with no margin or shadow. Only means something while `edgeToEdgeContent` is on.
     public var edgeToEdgeRoundedCorners: Bool = false
+    /// Ideas #366, not in Arc: the room round the page card in a window, 1 to 10 pt (PageMargin). Arc's 10 by
+    /// default; edge to edge (`edgeToEdgeContent`) is its zero and wins while on.
+    public var pageMargin: Double = PageMargin.arc
     /// Ideas #366, not in Arc: the sidebar and the window's ground are a thin glass over what is behind
     /// the window, and the floating sidebar over the page it covers (SidebarGlass). Off by default.
     public var translucentSidebar: Bool = false
@@ -1077,6 +1080,7 @@ extension AppSettings {
         sharedFavorites = try c.decodeIfPresent(Bool.self, forKey: .sharedFavorites) ?? false
         edgeToEdgeContent = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeContent) ?? false
         edgeToEdgeRoundedCorners = try c.decodeIfPresent(Bool.self, forKey: .edgeToEdgeRoundedCorners) ?? false
+        pageMargin = (try? c.decodeIfPresent(Double.self, forKey: .pageMargin)) ?? PageMargin.arc
         translucentSidebar = try c.decodeIfPresent(Bool.self, forKey: .translucentSidebar) ?? false
         sidebarSide = (try? c.decodeIfPresent(SidebarSide.self, forKey: .sidebarSide)) ?? .left
         perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault

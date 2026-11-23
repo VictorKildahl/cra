@@ -155,6 +155,10 @@ final class ShellView: NSView {
     var edgeToEdge = false { didSet { needsLayout = true } }
     /// Settings ▸ Tabs ▸ "Rounded corners" (Ideas #582): edge to edge, the cards keep their round.
     var edgeToEdgeRoundedCorners = false { didSet { if edgeToEdgeRoundedCorners != oldValue { needsLayout = true } } }
+    /// Settings ▸ General ▸ Pages ▸ Margin (Ideas #366): the room round the card, Arc's 10 pt by default (PageMargin).
+    var pageMargin = PageMargin.arc { didSet { if pageMargin != oldValue { needsLayout = true } } }
+    /// The card's inset from the window's edges as it stands: 0 where it fills the window.
+    var cardInset: CGFloat { CGFloat(PageMargin.inset(margin: pageMargin, fillsWindow: fillsWindow)) }
     /// Settings ▸ Sidebar on the right (GitHub #464): the window's layout in a mirror (SidebarSide).
     var sidebarSide: SidebarSide = .left {
         didSet {
@@ -812,11 +816,12 @@ final class ShellView: NSView {
         super.mouseMoved(with: event)
         let p = convert(event.locationInWindow, from: nil)
         guard FloatingSidebarGeometry.mayReveal(sidebarShown: sidebarVisible, pageFullscreen: contentFullscreen) else { return }
-        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: fillsWindow, side: sidebarSide) {
+        if !floatingSidebar, FloatingSidebarGeometry.shouldReveal(at: p, in: bounds, edgeToEdge: fillsWindow, side: sidebarSide,
+                                                                              pageMargin: pageMargin) {
             onEdgeHover?(true)
         } else if floatingSidebar, FloatingSidebarGeometry.shouldHide(at: p, in: bounds, sidebarWidth: sidebarWidth,
                                                                      pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: fillsWindow,
-                                                                     side: sidebarSide) {
+                                                                     side: sidebarSide, pageMargin: pageMargin) {
             onEdgeHover?(false)
         }
     }
@@ -1062,7 +1067,7 @@ final class ShellView: NSView {
         // Edge to edge the card fills what the sidebar leaves, square; the window's own
         // corners round it where they meet. Full screen with the sidebar hidden too (Arc, #315).
         let fill = fills(sidebarVisible: sidebarVisible)
-        let inset = fill ? 0 : CraMetrics.contentInset
+        let inset = CGFloat(PageMargin.inset(margin: pageMargin, fillsWindow: fill))
         let radius = cardRadius(sidebarVisible: sidebarVisible)
         if sidebarVisible {
             var pageWidth = b.width - width - inset

@@ -87,6 +87,8 @@ struct ArtWindow<Page: View>: View {
     var edgeToEdge = false
     /// Edge to edge, the page keeps its rounded corners (#582).
     var roundedPage = false
+    /// The room round the page in the picture's points, in place of the usual 2 (Margin, #366).
+    var margin: CGFloat? = nil
     /// The sidebar and the window's ground a dark glass over what is behind the window (#366).
     var glass = false
     /// The sidebar, and the traffic lights in its top row, on the window's right (#464).
@@ -97,8 +99,8 @@ struct ArtWindow<Page: View>: View {
 
     var body: some View {
         let right = sidebar && sidebarOnRight
-        let inset: CGFloat = edgeToEdge ? 0 : 2
-        let x: CGFloat = right ? inset : sidebar ? sidebarWidth : (edgeToEdge ? 0 : 2)
+        let inset: CGFloat = edgeToEdge ? 0 : margin ?? 2
+        let x: CGFloat = right ? inset : sidebar ? sidebarWidth : inset
         // Where the sidebar's column starts.
         let column: CGFloat = right ? width - sidebarWidth : 0
         ZStack(alignment: .topLeading) {

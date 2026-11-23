@@ -457,3 +457,27 @@ struct SettingsTileRow: View {
         }
     }
 }
+
+/// Settings ▸ Pages ▸ Margin (Ideas #366): a slider over PageMargin.range in whole points, its value beside it.
+/// The window follows while it moves. Greyed while Edge to edge is on, which takes the margin away.
+struct SettingsMarginSlider: View {
+    @Binding var margin: Double
+    var enabled = true
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Slider(value: Binding(get: { PageMargin.clamped(margin) }, set: { margin = PageMargin.clamped($0) }),
+                   in: PageMargin.range, step: 1) { Text("Margin") }
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 120)
+            Text(enabled ? "\(Int(PageMargin.clamped(margin))) pt" : "0 pt")
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 32, alignment: .trailing)
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        .accessibilityElement(children: .combine)
+    }
+}

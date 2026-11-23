@@ -190,6 +190,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         shell.autoHideToolbar = store.settings.hidesToolbar(above: selectedTabID.flatMap { store.item($0)?.tab?.url })
         shell.edgeToEdge = store.settings.edgeToEdgeContent
         shell.edgeToEdgeRoundedCorners = store.settings.edgeToEdgeRoundedCorners
+        shell.pageMargin = store.settings.pageMargin
         shell.sidebarSide = store.settings.sidebarSide
         lastSidebarVisible = sidebarVisible
         window.trafficLightsHidden = !sidebarVisible
@@ -704,6 +705,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if shell.autoHideToolbar != hidesBar { shell.autoHideToolbar = hidesBar }
         if shell.edgeToEdge != store.settings.edgeToEdgeContent { shell.edgeToEdge = store.settings.edgeToEdgeContent }
         shell.edgeToEdgeRoundedCorners = store.settings.edgeToEdgeRoundedCorners
+        shell.pageMargin = store.settings.pageMargin
         if shell.sidebarSide != store.settings.sidebarSide { moveSidebar(to: store.settings.sidebarSide) }
         // Before setPanes: a pane whose page is not live yet gets its bar colour now, not white.
         let bars = toolbarColors(panes: panes)
@@ -2728,9 +2730,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let shown = store.window(windowID).sidebarVisible || shell.slidingSidebar
         if shell.sidebarSide == .right {
             let width = shell.bounds.width
-            return (0, shown && width - content.maxX > CraMetrics.contentInset ? content.maxX : nil)
+            let beside = PageMargin.besideSidebar(cardEdge: Double(width - content.maxX), margin: shell.pageMargin, fillsWindow: shell.fillsWindow)
+            return (0, shown && beside ? content.maxX : nil)
         }
-        return (shown && content.minX > CraMetrics.contentInset ? content.minX : 0, nil)
+        let beside = PageMargin.besideSidebar(cardEdge: Double(content.minX), margin: shell.pageMargin, fillsWindow: shell.fillsWindow)
+        return (shown && beside ? content.minX : 0, nil)
     }
 
     /// Where a click closes a Peek (screen coordinates): the page area, not the sidebar, whose rows
@@ -6378,8 +6382,10 @@ final class CraWindow: NSWindow {
     /// and the toolbar takes a click as "edit URL", so the strip's presses are handled
     /// here: a double-click runs the title bar action, anything else drags the window.
     /// Edge to edge there is no margin, so only the 4 pt reaching into the toolbar (or the page) is left.
+    /// The margin is the one Settings ▸ Pages ▸ Margin sets (Ideas #366, PageMargin.titleStrip).
     private var titleStripHeight: CGFloat {
-        (contentView as? ShellView)?.edgeToEdge == true ? 4 : CraMetrics.contentInset + 4
+        guard let shell = contentView as? ShellView else { return CGFloat(PageMargin.titleStrip(margin: PageMargin.arc, edgeToEdge: false)) }
+        return CGFloat(PageMargin.titleStrip(margin: shell.pageMargin, edgeToEdge: shell.edgeToEdge))
     }
 
     /// Full screen is the system's to place (#308): no drag moves the window inside its Space,

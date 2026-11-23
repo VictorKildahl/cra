@@ -52,10 +52,13 @@ public enum FloatingSidebarGeometry {
 
     /// The strip at the window's edge on the sidebar's side (the left one in Arc).
     /// On the right everything below sees the point in a mirror (SidebarSide, #464).
-    public static func shouldReveal(at point: CGPoint, in bounds: CGRect, edgeToEdge: Bool = false, side: SidebarSide = .left) -> Bool {
+    /// The strip takes the page margin (Ideas #366, `PageMargin.revealInside`): Arc's 10 pt by default.
+    public static func shouldReveal(at point: CGPoint, in bounds: CGRect, edgeToEdge: Bool = false, side: SidebarSide = .left,
+                                    pageMargin: Double = PageMargin.arc) -> Bool {
         let point = side.place(point, in: bounds)
+        let inside = CGFloat(PageMargin.revealInside(margin: pageMargin, fillsWindow: edgeToEdge))
         return point.y >= bounds.minY && point.y <= bounds.maxY
-            && point.x >= bounds.minX - revealOutside && point.x <= bounds.minX + (edgeToEdge ? revealInsideEdgeToEdge : revealInside)
+            && point.x >= bounds.minX - revealOutside && point.x <= bounds.minX + inside
     }
 
     /// Beside the window, left of its edge: where a pointer thrown past the edge lands (GitHub #350).
@@ -70,10 +73,11 @@ public enum FloatingSidebarGeometry {
     }
 
     public static func shouldHide(at point: CGPoint, in bounds: CGRect, sidebarWidth: CGFloat,
-                                  pressedMouseButtons: Int, edgeToEdge: Bool = false, side: SidebarSide = .left) -> Bool {
+                                  pressedMouseButtons: Int, edgeToEdge: Bool = false, side: SidebarSide = .left,
+                                  pageMargin: Double = PageMargin.arc) -> Bool {
         // Window movement can put the pointer outside the panel briefly. Preserve
         // the active drag/context gesture; the next released-pointer check dismisses.
-        guard pressedMouseButtons == 0, !shouldReveal(at: point, in: bounds, edgeToEdge: edgeToEdge, side: side) else { return false }
+        guard pressedMouseButtons == 0, !shouldReveal(at: point, in: bounds, edgeToEdge: edgeToEdge, side: side, pageMargin: pageMargin) else { return false }
         // A sidebar that is out stays out while the pointer is beside the window, as in Arc (#350).
         guard !isOffLeftEdge(point, in: bounds, sidebarWidth: sidebarWidth, side: side) else { return false }
         let point = side.place(point, in: bounds)

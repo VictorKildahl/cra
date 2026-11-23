@@ -813,6 +813,7 @@ final class ShellView: NSView {
     var edgeToEdge = false
     /// The app's: edge to edge, or full screen with the sidebar hidden (#315).
     var fillsWindow: Bool { edgeToEdge }
+    var pageMargin = PageMargin.arc
     var sidebarDetached = false
     var floatingSidebar = false
     var sidebarSide: SidebarSide = .left
