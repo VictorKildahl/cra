@@ -1,0 +1,16 @@
+# promise: #716
+# With Settings ▸ Advanced "Only this space’s tabs" on, ⌘T leaves out another space's pinned tabs too,
+# not only its open Today tabs: a pinned tab in Work never comes up from Home, so Return can't take the
+# window to Work. Off (the default since #307, Victor's call: Arc's bar finds a tab in any space) lists it.
+port 47126
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "commandBarCurrentSpaceOnly": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":["E0000000-0000-0000-0000-000000000022"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"E0000000-0000-0000-0000-000000000022","parentID":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"http://127.0.0.1:47126/page.html?n=work-pinned","savedTitle":"Work pinned"}}}}]}
+cra://open?url=${PAGE}?n=home-a
+wait 2
+cra://commandbar?query=work-pinned
+wait 1
+cra://debug?commandBarRows=home-pinned
+expect-log Cra command bar rows home-pinned: open=1
+reject-log Cra command bar rows home-pinned:.*tab:[^ ]*n=work-pinned
+cra://dismiss
