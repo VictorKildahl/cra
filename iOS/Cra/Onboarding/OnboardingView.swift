@@ -306,6 +306,11 @@ struct AppIconGrid: View {
     var onVivid = false
     let pick: (MobileAppIcon) -> Void
 
+    /// The widest the grid gets on an iPhone (Settings' picker on a Pro Max: 440 pt less its
+    /// padding). An iPad's wider sheet keeps that size, centred, instead of growing the icons
+    /// until the second row falls off the sheet.
+    static let maxWidth: CGFloat = 360
+
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 22) {
             ForEach(MobileAppIcon.allCases) { icon in
@@ -340,6 +345,8 @@ struct AppIconGrid: View {
                 .accessibilityAddTraits(icon == selected ? .isSelected : [])
             }
         }
+        .frame(maxWidth: Self.maxWidth)
+        .frame(maxWidth: .infinity)
     }
 }
 

@@ -1759,6 +1759,22 @@ final class AppIconDockTests: BrowserTestCase {
         }
     }
 
+    /// On iPad the Change App Icon picker shows all four icons whole, at an iPhone's size: its grid
+    /// once stretched to the wide sheet, so the icons grew past 250 pt and the second row was cut off.
+    func testIconPickerFitsEveryIconOnIPad() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the iPhone opens the picker as a half sheet")
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+        sleep(1)
+        let sheet = app.scrollViews.firstMatch.frame
+        for icon in ["segments", "midnight", "mono", "violet"] {
+            let frame = app.buttons["icon-\(icon)"].frame
+            XCTAssertTrue(sheet.contains(frame), "\(icon) at \(frame) is cut off by the picker \(sheet)")
+            XCTAssertLessThanOrEqual(frame.width, 200, "\(icon) grew to the iPad sheet's width")
+        }
+        keep("app-icon-picker-ipad")
+    }
+
     /// App Settings ▸ Change App Icon opens Arc Search's dock sheet with every icon on its shelf,
     /// the current one marked.
     func testChangeAppIconShowsTheDock() {
