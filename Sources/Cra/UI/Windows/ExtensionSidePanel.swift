@@ -248,7 +248,7 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         host.backgroundColor = .clear
         if let cv = host.contentView {
             cv.wantsLayer = true
-            cv.layer?.cornerRadius = CraMetrics.contentCornerRadius
+            cv.layer?.cornerRadius = shell.sidePanel.cornerRadius
             cv.layer?.cornerCurve = .continuous
             cv.layer?.maskedCorners = cv.isFlipped ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
             cv.layer?.masksToBounds = true
@@ -288,6 +288,8 @@ final class ExtensionSidePanelController: NSObject, @preconcurrency CraBrowserDe
         let target = mainWindow.convertToScreen(rect)
         if host.frame != target { host.setFrame(target, display: false) }
         if let cv = host.contentView, cv.frame.size != target.size { cv.frame = NSRect(origin: .zero, size: target.size) }
+        // The panel's round, which a narrow margin makes larger (#366).
+        if let layer = host.contentView?.layer, layer.cornerRadius != shell.sidePanel.cornerRadius { layer.cornerRadius = shell.sidePanel.cornerRadius }
         host.contentView?.isHidden = false
         if !host.isVisible {
             host.orderFront(nil)

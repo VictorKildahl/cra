@@ -734,7 +734,7 @@ final class ShellView: NSView {
 
     private func layoutDropRegion(_ layout: SplitPaneLayout.Result, animated: Bool) {
         guard !animatingPanes, let f = layout.frames[Self.dropRegionID] else { return }
-        dropRegion.cornerRadius = fillsWindow ? paneCornerRadius : CraMetrics.contentCornerRadius
+        dropRegion.cornerRadius = paneCornerRadius
         if animated { dropRegion.animator().frame = f } else if dropRegion.frame != f { dropRegion.frame = f }
         dropRegion.alphaValue = 1
     }
@@ -1107,7 +1107,12 @@ final class ShellView: NSView {
     /// round is the window's own: a page's corner that meets the window's corner can only take one
     /// radius (its window is a child, not clipped by this one), and the inner corners then match it.
     private func cardRadius(sidebarVisible: Bool) -> CGFloat {
-        let round = edgeToEdge ? window.map(LittleWindow.cornerRadius(of:)) ?? CraMetrics.contentCornerRadius : CraMetrics.contentCornerRadius
+        let windowRound = window.map(LittleWindow.cornerRadius(of:)) ?? CraMetrics.contentCornerRadius
+        // In a margin the round follows the window's, concentric, so a page window's corner stays inside the
+        // window's at a narrow margin (PageMargin.cardRadius, #366); Arc's 6 pt at Arc's 10.
+        let round = edgeToEdge ? windowRound
+            : CGFloat(PageMargin.cardRadius(margin: pageMargin, windowRadius: windowFullscreen ? 0 : Double(windowRound),
+                                            base: Double(CraMetrics.contentCornerRadius)))
         return CGFloat(CardFill.cornerRadius(edgeToEdge: edgeToEdge, roundedCorners: edgeToEdgeRoundedCorners, fullScreen: windowFullscreen,
                                              sidebarShown: sidebarVisible, radius: Double(round)))
     }
@@ -1218,7 +1223,7 @@ final class ShellView: NSView {
             // Several panes: every card is rounded; a single card follows the window state (square in fullscreen).
             // Edge to edge every card is square, unless Rounded corners keeps the round (#582).
             let several = paneCards.count + (dropPreview == nil ? 0 : 1) > 1
-            c.cornerRadius = several ? (fillsWindow ? paneCornerRadius : CraMetrics.contentCornerRadius) : cardCornerRadius
+            c.cornerRadius = several ? paneCornerRadius : cardCornerRadius
             if !animatingPanes, let f = layout.frames[c.tabID] {
                 if animated { c.animator().frame = f } else if c.frame != f { c.frame = f }
             }
@@ -1290,7 +1295,7 @@ final class ShellView: NSView {
         let gap = SplitPaneLayout.Constants.gap
         let f = NSRect(x: cb.maxX - w, y: cb.minY, width: w, height: cb.height)
         if sidePanel.frame != f { sidePanel.frame = f }
-        sidePanel.cornerRadius = fillsWindow ? paneCornerRadius : CraMetrics.contentCornerRadius
+        sidePanel.cornerRadius = paneCornerRadius
         sidePanel.castsShadow = !fillsWindow
         sidePanel.layoutSubtreeIfNeeded()
         // The handle covers the gap and reaches a little into the cards on both sides.

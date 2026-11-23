@@ -93,3 +93,28 @@ struct PageMarginRevealTests {
         #expect(!FloatingSidebarGeometry.shouldReveal(at: CGPoint(x: 1192, y: 400), in: bounds, side: .right, pageMargin: 3))
     }
 }
+
+/// Victor, trying the slider (23 Nov 2026): at a 3 pt margin the page's top-right and bottom-right corners stood out
+/// past the window's round corners. A page is a window of its own the main window doesn't clip, so its 6 pt round
+/// 3 pt in from a 16 pt window corner reaches outside it. The card's round follows the window's, concentric.
+struct PageMarginCornerTests {
+    /// At Arc's 10 pt in a 16 pt window corner the round is Arc's 6 pt: nothing changes by default.
+    @Test func arcsMarginKeepsArcsRound() {
+        #expect(PageMargin.cardRadius(margin: 10, windowRadius: 16, base: 6) == 6)
+    }
+
+    /// Narrower margins round the card more, so its corner stays inside the window's.
+    @Test(arguments: [(3.0, 13.0), (1, 15), (4, 12), (8, 8)])
+    func narrowerMarginsRoundTheCardWithTheWindow(margin: Double, round: Double) {
+        let r = PageMargin.cardRadius(margin: margin, windowRadius: 16, base: 6)
+        #expect(r == round)
+        #expect(r + margin >= 16, "concentric with the window's corner, or inside it")
+    }
+
+    /// Never squarer than Arc's round; a window with no round corners (full screen) keeps Arc's.
+    @Test func neverLessThanArcsRound() {
+        #expect(PageMargin.cardRadius(margin: 3, windowRadius: 0, base: 6) == 6)
+        #expect(PageMargin.cardRadius(margin: 10, windowRadius: 10, base: 6) == 6)
+        #expect(PageMargin.cardRadius(margin: 30, windowRadius: 16, base: 6) == 6)
+    }
+}

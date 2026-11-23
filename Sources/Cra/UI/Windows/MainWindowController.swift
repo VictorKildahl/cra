@@ -2266,6 +2266,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return p.pageRect(in: body)
     }
 
+    /// For `cra://debug?windowState`: the visible page window's clip round, the window's own corner round, and
+    /// whether the page's corner stays inside the window's (#366: at a narrow margin a 6 pt page corner stood out
+    /// past the window's). `inside` takes the card's inset from the window's top-right corner, where the sidebar
+    /// never is on the left. An embedded page (EmbeddedPages) is clipped by its pane card, so that card's round counts.
+    var pageCornerReadout: String {
+        guard let window, let id = browsers.visibleTabID,
+              let layer = browsers.runtime(for: id)?.hostWindow?.contentView?.layer
+                ?? shell.paneCards.first(where: { $0.tabID == id })?.layer
+        else { return "pageRound=- windowRound=- inside=-" }
+        let windowRound = window.styleMask.contains(.fullScreen) ? 0 : LittleWindow.cornerRadius(of: window)
+        let card = shell.contentContainer.frame
+        let inset = min(shell.bounds.maxX - card.maxX, shell.bounds.maxY - card.maxY)
+        let inside = layer.cornerRadius + inset >= windowRound - 0.5
+        return String(format: "pageRound=%.0f windowRound=%.0f inside=%d", layer.cornerRadius, windowRound, inside ? 1 : 0)
+    }
+
     /// Only the page corners that are card corners get rounded (a page docked beside
     /// DevTools meets it with a straight edge, like Arc).
     private func updatePageCorners(_ w: NSWindow, page: NSRect, body: NSRect) {
@@ -2293,7 +2309,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             roundAtWindowCorners(layer, rect: page, flipped: cv.isFlipped)
             return
         }
-        let radius = shell.contentFullscreen ? 0 : shell.fillsWindow ? shell.paneCornerRadius : CraMetrics.contentCornerRadius
+        // The card's round as ShellView has it: Arc's 6 pt in its margin, more at a narrow one (#366), 0 in full screen.
+        let radius = shell.paneCornerRadius
         if layer.cornerRadius != radius { layer.cornerRadius = radius }
         var corners: CACornerMask = []
         // A fullscreen card is square.
@@ -2541,7 +2558,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             roundAtWindowCorners(layer, rect: window.convertFromScreen(w.frame), flipped: cv.isFlipped)
             return
         }
-        layer.cornerRadius = shell.fillsWindow ? shell.paneCornerRadius : CraMetrics.contentCornerRadius
+        layer.cornerRadius = shell.paneCornerRadius
         // Frontend-docked: the window spans the card body, so both bottom corners are
         // card corners, and the top ones too without the toolbar (else they showed past the
         // page's rounded top corners). Shell-docked (Alloy): it sits right of the page.

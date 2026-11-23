@@ -23,6 +23,15 @@ public enum PageMargin {
         fillsWindow ? 0 : clamped(margin)
     }
 
+    /// The card's corner radius at a margin: Arc's `base` (6 pt), or more where the window's own round corner
+    /// needs it. A page is a window of its own that the main window doesn't clip, so a card corner that meets a
+    /// window corner has to stay inside it: concentric, `windowRadius` less the margin. At Arc's 10 pt in a 16 pt
+    /// window corner that is Arc's 6 pt; at 3 pt it is 13 (Victor, 23 Nov 2026: the page's corners stood out
+    /// past the window's at a 3 pt margin). A window with square corners (full screen) passes 0.
+    public static func cardRadius(margin: Double, windowRadius: Double, base: Double) -> Double {
+        max(base, windowRadius - clamped(margin))
+    }
+
     /// The strip under the window's top edge where a click is the title bar's (a double click zooms, a drag
     /// moves the window): the margin above the card and 4 pt of the card's top, 4 pt alone edge to edge.
     public static func titleStrip(margin: Double, edgeToEdge: Bool) -> Double {
