@@ -1,4 +1,5 @@
 import AppKit
+import Compression
 import CryptoKit
 import Foundation
 import Observation
@@ -23,11 +24,15 @@ enum StoreTests {
         setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
 
         try arcImport()
+        try arcKeepsAnyAddress()
         try importedTabsKeepTheirOwnIcons()
         try diaImport()
         try ardiaImport()
         try yabImport()
         chromiumProfile()
+        try firefoxImport()
+        try zenImport()
+        try safariImport()
         deletedBrowserStillImports()
         protectedBrowserAsksForFullDiskAccess()
         signedInChromeProfileImports()
@@ -135,7 +140,7 @@ enum StoreTests {
         expect(home.today.count == 3, "Today tabs come over")
         expect(work.pinned.isEmpty && work.today.count == 1 && work.today[0].isFolder && work.today[0].children.count == 2,
                "a split view is flattened into a folder of its tabs")
-        expect(plan.archive.map(\.pageTitle) == ["Old two", "Old one"], "archived tabs are newest first")
+        expect(plan.archive.map(\.pageTitle) == ["Old two", "Old one"], "archived tabs are newest first, about:blank and blob: ones left out")
         expect(plan.archive.map(\.reason) == [.manual, .auto] && plan.archive.map(\.spaceTitle) == ["Work", "Home"],
                "archive entries keep their reason and space")
         expect(plan.settings.sidebarWidth == 280, "the sidebar width comes from StorableWindows.json")
@@ -148,6 +153,34 @@ enum StoreTests {
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
         arcLinkRoutes(store: composition.store)
         arcProfiles(plan: plan, store: composition.store)
+    }
+
+    /// Arc import keeps a tab whatever its address, as it always has, and leaves out what every
+    /// importer leaves out: a blank or new tab page and a blob:.
+    private static func arcKeepsAnyAddress() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        var items = containers[main]["items"] as! [Any]
+        let tabs = ["file:///Users/me/notes.html", "javascript:void(document.title)", "chrome://extensions/",
+                    "about:blank", "chrome://newtab/", "blob:https://example.com/5f1c"]
+        let ids = tabs.indices.map { "work-t\($0)" }
+        for (id, url) in zip(ids, tabs) {
+            items += [id, ["id": id, "parentID": "work-today", "childrenIds": [String](), "isUnread": false, "originatingDevice": "FIXTURE",
+                           "createdAt": 800000000.0, "data": ["tab": ["savedURL": url, "savedTitle": id]]] as [String: Any]]
+        }
+        let today = items.firstIndex { ($0 as? String) == "work-today" }! + 1
+        var container = items[today] as! [String: Any]
+        container["childrenIds"] = (container["childrenIds"] as! [String]) + ids
+        items[today] = container
+        containers[main]["items"] = items
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+        expect(plan.spaces[1].today.compactMap(\.url) == Array(tabs.prefix(3)),
+               "Arc's Today tabs come over whatever their address; about:blank, a new tab page and blob: left out")
     }
 
     // promise: #673
@@ -331,14 +364,25 @@ enum StoreTests {
         let reading = home.pinned[1]
         expect(reading.isFolder && reading.children.count == 2 && reading.children[1].isFolder
                && reading.children[1].children.compactMap(\.url) == ["https://example.com/read/deep"], "folders nest")
-        expect(home.today.compactMap(\.url) == ["https://example.com/open", "https://example.com/left", "https://example.com/right"],
-               "open tabs come over, a split as its tabs, a new tab page left out")
+        expect(home.today.compactMap(\.url) == ["https://example.com/open", "https://example.com/left", "https://example.com/right",
+                                                "file:///Users/me/notes.html", "javascript:void(document.title)", "chrome://settings/"],
+               "open tabs come over whatever their address, a split as its tabs; a new tab page, about:blank and blob: left out")
         expect(work.pinned.count == 1 && work.pinned[0].customTitle == "Tools" && work.pinned[0].children.compactMap(\.url) == ["https://example.com/ci"],
                "edits still in the -wal come over")
 
         expect((try? DiaImporter.plan(secret: "wrong")) == nil,
                "a secret that opens no sidebar database fails instead of importing Dia's stale older files")
         expect((try? DiaImporter.plan())?.spaces.contains { $0.title == "Home" } == false, "without the secret nothing comes from the database")
+        let legacy = try DiaImporter.plan()
+        expect(legacy.favorites.compactMap(\.url) == ["https://example.com/mail", "chrome://settings/"],
+               "Dia's older files: favorites whatever their address, about:blank and a new tab page left out")
+        expect(legacy.spaces.first { $0.title == "Dia" }?.today.compactMap(\.url)
+               == ["https://example.com/open", "file:///Users/me/notes.html", "javascript:void(document.title)", "chrome://settings/"],
+               "Dia's older open tabs whatever their address; about:blank, a new tab page and blob: left out")
+        expect(legacy.spaces.first { $0.title == "Reading" }?.pinned.compactMap(\.url)
+               == ["https://example.com/read", "file:///Users/me/notes.html", "javascript:void(document.title)"],
+               "a bookmarks bar folder keeps its file: and javascript: bookmarks, about:blank and blob: left out")
+        expect(!legacy.spaces.contains { $0.title == "Blank" }, "a folder of only blank bookmarks is left out")
 
         let clock = ManualScheduler()
         let composition = AppComposition(clock: clock)
@@ -346,7 +390,7 @@ enum StoreTests {
         expect(result.spaces == 2 && result.folders == 3, "applying adds both spaces and their folders")
         let homeSpace = composition.store.orderedSpaces.first { $0.title == "Home" }
         let open = homeSpace.map { composition.store.tabs(under: $0.todayContainerID) } ?? []
-        expect(open.count == 3 && open.allSatisfy { $0.tab?.timeLastActiveAt == clock.now },
+        expect(open.count == 6 && open.allSatisfy { $0.tab?.timeLastActiveAt == clock.now },
                "open tabs count as active at the import, so auto-archive doesn't take weeks-old Dia tabs at once")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
     }
@@ -373,8 +417,12 @@ enum StoreTests {
                "unpinned tabs of every window come over, an empty new tab left out, an unpinned group flattened")
         expect(personal.profile == nil && personal.emoji == "" && personal.theme?.accent == "#C07A98",
                "the first profile stays on Default; no icon is a dot; its swatch becomes the theme")
-        expect(work.favorites.compactMap(\.url) == ["https://tasks.example.com/"] && work.today.compactMap(\.url) == ["https://design.example.com/"],
-               "a Top Apps folder's tiles come over as favorites")
+        expect(work.favorites.compactMap(\.url) == ["https://tasks.example.com/"], "a Top Apps folder's tiles come over as favorites")
+        expect(work.today.compactMap(\.url) == ["https://design.example.com/", "file:///Users/me/notes.html",
+                                                "javascript:void(document.title)", "chrome://settings/"],
+               "open tabs come over whatever their address; about:blank and blob: left out")
+        expect(work.pinned.compactMap(\.url) == ["https://status.example.com/now"] && work.pinned.first?.pageTitle == "Status now",
+               "a tab pinned with a new tab page comes over pinned, at the page it shows and that page's title")
         expect(work.profile == ImportedProfile(folder: "Profile p-work", name: "Work") && work.emoji == "💼",
                "a profile signs in on Chromium's \"Profile <id>\" folder")
         expect(side.pinned.count == 1 && side.pinned[0].pageTitle == "Talk" && side.pinned[0].children.compactMap(\.url) == ["https://chat.example.com/"],
@@ -464,18 +512,116 @@ enum StoreTests {
     private static func chromiumProfile() {
         let profile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Chromium/Default")
         let tabs = ChromiumImporter.openTabs(profile: profile)
-        expect(tabs.map(\.url) == ["https://example.com/one", "https://example.com/two-b"],
-               "open tabs: the selected navigation of each, closed tabs and chrome:// pages left out, in window order")
-        expect(tabs.map(\.pageTitle) == ["One", "Two, then Ü"], "titles come from the session's UTF-16 strings")
+        expect(tabs.map(\.url) == ["https://example.com/one", "https://example.com/two-b", "file:///Users/me/notes.html",
+                                   "javascript:void(document.title)", "chrome://settings/"],
+               "open tabs: the selected navigation of each, whatever its address, in window order; closed tabs, a new tab page, about:blank and blob: left out")
+        expect(tabs.prefix(2).map(\.pageTitle) == ["One", "Two, then Ü"], "titles come from the session's UTF-16 strings")
         let marks = ChromiumImporter.bookmarks(profile: profile)
-        expect(marks.bar.map(\.pageTitle) == ["Docs", "Reading"] && marks.bar[1].children.map(\.url) == ["https://example.com/read"],
-               "the bookmarks bar keeps folders with web pages, drops empty folders and file: links")
+        expect(marks.bar.map(\.pageTitle) == ["Docs", "Reading", "Local", "Tools"] && marks.bar[1].children.map(\.url) == ["https://example.com/read"],
+               "the bookmarks bar keeps file: links and folders with something in them, drops empty folders")
+        expect(marks.bar[2].url == "file:///etc/hosts", "a file: bookmark comes over")
+        expect(marks.bar[3].children.map(\.url) == ["javascript:void(document.title)", "chrome://settings/"],
+               "a folder of a bookmarklet and a browser page comes over with both")
         expect(marks.other.map(\.url) == ["https://example.com/other"], "other and mobile bookmarks come after")
         expect(ChromiumImporter.parseSession(Data("SNSS".utf8) + Data([4, 0, 0, 0]) + Data(repeating: 1, count: 16)).isEmpty,
                "an encrypted session (version 4) gives nothing rather than garbage")
         expect(ExtensionImporter.disabledIDs(inProfile: profile).contains("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
                && !ExtensionImporter.disabledIDs(inProfile: profile).contains("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
                "an extension with disable_reasons is off, one in state 1 is on")
+    }
+
+    /// Firefox (a profile made here, as Firefox writes it): bookmarks from places.sqlite and open
+    /// tabs from the session store come over whatever their address. Left out: a blank or new tab
+    /// page, a blob: and the place: queries Firefox keeps as smart bookmarks.
+    private static func firefoxImport() throws {
+        let root = try firefoxRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = try FirefoxImporter.plan(browser: "Firefox", root: root)
+        let marks = plan.spaces.first?.pinned ?? []
+        expect(marks.map(\.pageTitle) == ["News", "Notes", "Bookmarklet", "Settings", "Tools"],
+               "toolbar bookmarks come over whatever their address; place:, about:blank and blob: left out, and a folder of only place: ones")
+        expect(marks.compactMap(\.url) == ["https://example.com/news", "file:///Users/me/notes.html", "javascript:void(document.title)", "about:preferences"],
+               "each at its own address")
+        expect(marks.last?.children.compactMap(\.url) == ["javascript:alert(1)"], "a folder of a bookmarklet comes over")
+        expect(plan.spaces.first?.today.compactMap(\.url) == ["https://example.com/news", "file:///Users/me/notes.html",
+                                                              "javascript:void(document.title)", "about:preferences"],
+               "open tabs come over whatever their address; about:blank, about:newtab, about:home and blob: left out")
+    }
+
+    /// Zen (a profile made here): tabs come over whatever their address, and a pinned tab whose
+    /// pinned page is a new tab page comes over pinned, at the page it shows.
+    private static func zenImport() throws {
+        let root = try firefoxRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = try ZenImporter.plan(root: root)
+        let home = plan.spaces.first
+        expect(home?.today.compactMap(\.url) == ["file:///Users/me/notes.html", "javascript:void(document.title)", "about:preferences"],
+               "Zen's tabs come over whatever their address; about:blank, about:newtab and blob: left out")
+        expect(home?.pinned.compactMap(\.url) == ["https://status.example.com/now"] && home?.pinned.first?.pageTitle == "Status now",
+               "a tab pinned with a new tab page comes over pinned, at the page it shows and that page's title")
+    }
+
+    /// Safari's exported Bookmarks.html (Tests/Fixtures/Safari): bookmarks come over whatever
+    /// their address, and a folder of only blank ones is left out.
+    private static func safariImport() throws {
+        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Safari")
+        let pinned = try SafariImporter.read(folder).plan.spaces.first?.pinned ?? []
+        expect(pinned.map(\.pageTitle) == ["News", "Notes", "Bookmarklet", "Open in Safari", "Tools"],
+               "Favorites and folders come over whatever their address; about:blank and blob: left out, and a folder of only about:blank")
+        expect(pinned.compactMap(\.url) == ["https://example.com/news", "file:///Users/me/notes.html", "javascript:void(document.title)",
+                                            "x-safari-https://example.com/"], "each at its own address")
+    }
+
+    /// A Firefox root as Firefox and Zen write it: profiles.ini, then one profile with
+    /// places.sqlite, Firefox's session store and Zen's sidebar file, each with tabs and
+    /// bookmarks at every kind of address.
+    private static func firefoxRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-firefox-\(UUID().uuidString)", isDirectory: true)
+        let profile = root.appendingPathComponent("abc.default-release", isDirectory: true)
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        try Data("[Profile0]\nName=default-release\nIsRelative=1\nPath=abc.default-release\nDefault=1\n".utf8)
+            .write(to: root.appendingPathComponent("profiles.ini"))
+        var db: OpaquePointer?
+        sqlite3_open(profile.appendingPathComponent("places.sqlite").path, &db)
+        sqlite3_exec(db, """
+            CREATE TABLE moz_places (id INTEGER PRIMARY KEY, url TEXT, title TEXT);
+            CREATE TABLE moz_bookmarks (id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER, parent INTEGER, position INTEGER,
+                                        title TEXT, guid TEXT, dateAdded INTEGER);
+            INSERT INTO moz_places VALUES (1, 'https://example.com/news', 'News'), (2, 'file:///Users/me/notes.html', 'Notes'),
+                (3, 'javascript:void(document.title)', ''), (4, 'about:preferences', ''), (5, 'place:sort=8&maxResults=10', ''),
+                (6, 'about:blank', ''), (7, 'blob:https://example.com/5f1c', ''), (8, 'place:type=6', ''), (9, 'javascript:alert(1)', '');
+            INSERT INTO moz_bookmarks VALUES (1, 2, NULL, 0, 0, '', 'root________', 0), (3, 2, NULL, 1, 0, 'toolbar', 'toolbar_____', 0),
+                (10, 1, 1, 3, 0, 'News', 'b10', 0), (11, 1, 2, 3, 1, 'Notes', 'b11', 0), (12, 1, 3, 3, 2, 'Bookmarklet', 'b12', 0),
+                (13, 1, 4, 3, 3, 'Settings', 'b13', 0), (14, 1, 5, 3, 4, 'Most Visited', 'b14', 0), (15, 1, 6, 3, 5, 'Blank', 'b15', 0),
+                (16, 1, 7, 3, 6, 'Download', 'b16', 0), (17, 2, NULL, 3, 7, 'Smart', 'b17', 0), (18, 1, 8, 17, 0, 'Recent Tags', 'b18', 0),
+                (19, 2, NULL, 3, 8, 'Tools', 'b19', 0), (20, 1, 9, 19, 0, 'Alert', 'b20', 0);
+            """, nil, nil, nil)
+        sqlite3_close(db)
+        func entry(_ url: String) -> [String: Any] { ["entries": [["url": url, "title": url]], "index": 1, "zenWorkspace": "s1"] }
+        let addresses = ["https://example.com/news", "file:///Users/me/notes.html", "javascript:void(document.title)", "about:preferences",
+                         "about:blank", "about:newtab", "about:home", "blob:https://example.com/5f1c"]
+        try mozLz4(["windows": [["tabs": addresses.map(entry)]]]).write(to: profile.appendingPathComponent("sessionstore.jsonlz4"))
+        var pinned = entry("https://status.example.com/now")
+        pinned["entries"] = [["url": "https://status.example.com/now", "title": "Status now"]]
+        pinned["pinned"] = true
+        pinned["_zenPinnedInitialState"] = ["entry": ["url": "about:newtab", "title": "New Tab"]]
+        let zenTabs = [pinned] + ["file:///Users/me/notes.html", "javascript:void(document.title)", "about:preferences",
+                                  "about:blank", "about:newtab", "blob:https://example.com/5f1c"].map(entry)
+        try mozLz4(["spaces": [["uuid": "s1", "name": "Home", "position": 0]], "tabs": zenTabs, "folders": [Any]()])
+            .write(to: profile.appendingPathComponent("zen-sessions.jsonlz4"))
+        return root
+    }
+
+    /// Firefox's mozLz4: "mozLz40\0", the size as a little-endian uint32, one raw LZ4 block.
+    private static func mozLz4(_ object: Any) throws -> Data {
+        let json = try JSONSerialization.data(withJSONObject: object)
+        var block = Data(count: json.count + json.count / 255 + 64)
+        let n = block.withUnsafeMutableBytes { out in json.withUnsafeBytes { src in
+            compression_encode_buffer(out.bindMemory(to: UInt8.self).baseAddress!, out.count,
+                                      src.bindMemory(to: UInt8.self).baseAddress!, json.count, nil, COMPRESSION_LZ4_RAW)
+        } }
+        var size = UInt32(json.count).littleEndian
+        return Data("mozLz40\0".utf8) + Data(bytes: &size, count: 4) + block.prefix(n)
     }
 
     /// A browser someone has already deleted still leaves its profile behind, and the import
