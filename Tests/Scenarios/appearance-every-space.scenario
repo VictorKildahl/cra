@@ -1,0 +1,29 @@
+# promise: #700
+# View ▸ Appearance set to Light or Dark is Arc's one appearance setting (the theme editor's sun and
+# moon): every space's sidebar takes its material, a Dark space's as well as a Light one's, and keeps
+# its colours (offline Arc 1.172, #455). Automatic gives each space its own Light or Dark back. Until
+# 0.1.54 a Dark space's sidebar stayed dark with Cra set to Light, under a light command bar.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Dark","emoji":"🌙","theme":{"colors":["#3A2F5B","#3A2F5B"],"intensity":0.5,"noise":0,"appearance":"dark","accent":"#3A2F5B","solid":true,"key":["#3A2F5B"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Light","emoji":"☀️","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+wait 1
+cra://debug?themeShown=dark-space
+expect-log Cra theme shown dark-space: space=Dark follows=0 theme=dark .* material=dark 
+cra://action/appearanceLight
+wait 1
+cra://debug?themeShown=dark-space-cra-light
+expect-log Cra theme shown dark-space-cra-light: space=Dark follows=0 theme=dark .* material=light 
+cra://action/appearanceAutomatic
+wait 1
+cra://debug?themeShown=dark-space-automatic
+expect-log Cra theme shown dark-space-automatic: space=Dark follows=0 theme=dark .* material=dark 
+cra://action/space2
+wait 1
+cra://action/appearanceDark
+wait 1
+cra://debug?themeShown=light-space-cra-dark
+expect-log Cra theme shown light-space-cra-dark: space=Light follows=0 theme=light .* material=dark 
+cra://action/appearanceAutomatic
+wait 1
+cra://debug?themeShown=light-space-automatic
+expect-log Cra theme shown light-space-automatic: space=Light follows=0 theme=light .* material=light 

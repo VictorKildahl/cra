@@ -2706,16 +2706,14 @@ final class SidebarStore {
         return TodayClear.archived(rows, selected: selected, playing: playing)
     }
 
-    /// Today tabs idle longer than the threshold are archived (Arc:
-    /// ArchiveState+AutoArchive, autoArchiveTimeThreshold).
+    /// Today tabs idle longer than their space's profile's timer are archived (Arc:
+    /// ArchiveState+AutoArchive, autoArchiveTimeThreshold; per profile, #693).
     func runAutoArchive() {
-        guard settings.autoArchiveEnabled else { return }
-        let cutoff = clock.now.addingTimeInterval(-settings.autoArchive.seconds)
         for space in orderedSpaces {
             let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
-            archiveTabs(tabs(under: space.todayContainerID).filter { t in
-                !selected.contains(t.id) && (t.tab?.timeLastActiveAt ?? t.createdAt) < cutoff
-            }.map(\.id), reason: .auto)
+            let today = tabs(under: space.todayContainerID).map { AutoArchive.Tab(id: $0.id, lastActive: $0.tab?.timeLastActiveAt ?? $0.createdAt) }
+            archiveTabs(AutoArchive.due(today, selected: selected, choice: settings.autoArchive(profileID: space.profileID), now: clock.now),
+                        reason: .auto)
         }
     }
 

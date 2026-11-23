@@ -13,6 +13,8 @@ struct ProfilesPane: View {
     @Environment(SidebarStore.self) private var store
     /// The profile on the right; nil is Default.
     @State private var selected: UUID?
+    /// Bumped when the spell check switch writes Chromium's pref, so the row reads it again (#715).
+    @State private var spellCheckChanges = 0
 
     var body: some View {
         @Bindable var store = store
@@ -99,20 +101,15 @@ struct ProfilesPane: View {
 
     // MARK: Detail
 
-    private enum Archive: Hashable { case after(AutoArchiveThreshold), never }
     private enum DownloadChoice: Hashable { case folder, ask, other }
 
     @ViewBuilder private func detail(for profileID: UUID?) -> some View {
         @Bindable var store = store
         let path = store.profilePath(profile: profileID)
-        let archive = Binding<Archive>(
-            get: { store.settings.autoArchiveEnabled ? .after(store.settings.autoArchive) : .never },
-            set: {
-                switch $0 {
-                case .never: store.settings.autoArchiveEnabled = false
-                case .after(let t): store.settings.autoArchiveEnabled = true; store.settings.autoArchive = t
-                }
-            })
+        // This profile's own timer, as in Arc (#693).
+        let archive = Binding<AutoArchiveChoice>(
+            get: { store.settings.autoArchive(profileID: profileID) },
+            set: { store.settings.setAutoArchive($0, profileID: profileID, otherProfiles: store.profiles.map(\.id)) })
         VStack(alignment: .leading, spacing: 0) {
             SettingsCard {
                 SettingsCardRow { Text("Search engine").font(.system(size: 13)) } trailing: { SearchEnginePicker(store: store) }
@@ -129,9 +126,9 @@ struct ProfilesPane: View {
             SettingsCard {
                 SettingsCardRow { Text("Archive tabs after").font(.system(size: 13)) } trailing: {
                     Picker("Archive tabs after", selection: archive) {
-                        ForEach(AutoArchiveThreshold.allCases) { Text($0.label).tag(Archive.after($0)) }
+                        ForEach(AutoArchiveThreshold.allCases) { Text($0.label).tag(AutoArchiveChoice.after($0)) }
                         Divider()
-                        Text("Never").tag(Archive.never)
+                        Text("Never").tag(AutoArchiveChoice.never)
                     }
                     .labelsHidden().fixedSize()
                 }
@@ -143,6 +140,9 @@ struct ProfilesPane: View {
                 SettingsCardDivider()
                 // Not in Arc's card: the website languages are Chromium's, per profile (#209).
                 languageRow(profileID: profileID)
+                SettingsCardDivider()
+                // Not in Arc's card either: Chromium's spell check, per profile (#715).
+                spellCheckRow(profileID: profileID)
             }
             .padding(.top, 9)
 
@@ -253,6 +253,28 @@ struct ProfilesPane: View {
             Button("Change…") { actions.openProfilePage(BrowserLanguages.settingsPage, profileID) }
                 .disabled(!hasSpace)
                 .help(hasSpace ? "Open Chromium’s language settings for this Profile." : "Set this Profile on a Space first.")
+        }
+    }
+
+    /// Chromium's "Spell check" (chrome://settings/languages), per profile: off, text fields stop
+    /// underlining words their languages don't know (#715).
+    private func spellCheckRow(profileID: UUID?) -> some View {
+        let path = store.profilePath(profile: profileID)
+        let hasSpace = !store.spaces(usingProfile: profileID).isEmpty
+        _ = spellCheckChanges
+        let on = Binding<Bool>(
+            get: { SpellCheckSetting.isOn(profilePath: path) },
+            set: { SpellCheckSetting.set($0, profilePath: path); spellCheckChanges += 1 })
+        return SettingsCardRow {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Check spelling while typing").font(.system(size: 13))
+                Text("Underlines misspelled words in text fields, in the website languages above.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        } trailing: {
+            Toggle("Check spelling while typing", isOn: on).toggleStyle(.arcSwitch).labelsHidden()
+                .disabled(!hasSpace)
+                .help(hasSpace ? "" : "Set this Profile on a Space first.")
         }
     }
 

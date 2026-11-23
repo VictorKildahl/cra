@@ -1,0 +1,33 @@
+# promise: web-page-pre-frame-canvas
+# Until a new page's renderer sends its first frame, Chromium's compositor shows its view's own colour: white unless
+# the browser sets one (Chrome does in ContentsWebView; Cra's pages never go there). A Peek of a dark site flashed
+# white for ~150 ms before the page drew (X, 22 Nov: "I knew the one on the right was Cra because of the
+# flickering"). Arc shows its canvas there: black while websites are dark (docs/arc-reverse-engineering.md, "The page
+# area before a page paints"). dark-late-paint.html holds its first frame 1.5 s, then paints #0D1117; the colours
+# on screen at the page's centre are sampled every frame while it opens: no light colour (every channel 0x20 or
+# more: Chromium's white, Chrome's #3C3C3C grey) may show before the page's own (#0D1117, give or take the display's
+# colour profile).
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true, "websiteAppearance": "dark"}
+
+cra://open?url=${PAGE}?n=under
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# A Peek: window.open from a click (the cdp script counts as one) peeks with peekInEveryTab.
+cra://debug?pageColours=peek&target=little&seconds=4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${ORIGIN}/dark-late-paint.html?n=peek'))","userGesture":true}
+expect-log peek: from
+wait 5
+expect-log Cra page colours peek: 000000x[0-9]+ (.* )?(0[0-9A-F]|1[0-9A-F]){3}x[0-9]+$
+reject-log Cra page colours peek: (.* )?([2-9A-F][0-9A-F]){3}x
+cra://action/closeTab
+wait 1
+
+# A new tab of the same site (sampled once it is the tab in front).
+cra://open?url=${ORIGIN}/dark-late-paint.html?n=tab
+cra://debug?pageColours=tab&seconds=4
+wait 5
+expect-log Cra page colours tab: 000000x[0-9]+ (.* )?(0[0-9A-F]|1[0-9A-F]){3}x[0-9]+$
+reject-log Cra page colours tab: (.* )?([2-9A-F][0-9A-F]){3}x

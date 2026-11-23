@@ -1,0 +1,7 @@
+<!doctype html>
+<meta name="color-scheme" content="dark">
+<title>Dark late paint</title>
+<!-- Holds its first frame 1.5 s (a site whose page takes a moment to draw, as GitHub in a Peek), then paints #0D1117. -->
+<script>for (const end = Date.now() + 1500; Date.now() < end;) {}</script>
+<body style="margin:0;background:#0d1117;color:#e6edf3;font:16px sans-serif">
+<p>A dark page that draws late.</p>

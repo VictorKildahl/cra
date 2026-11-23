@@ -395,7 +395,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     }
 
     /// Show several tabs at once (split view); `focused` gets keyboard focus.
-    func show(_ tabIDs: [UUID], focused: UUID?, focus: Bool) {
+    /// `autoPictureInPicture` false: the pages going out of sight don't open their automatic Picture in Picture
+    /// (another space came on screen, #703).
+    func show(_ tabIDs: [UUID], focused: UUID?, focus: Bool, autoPictureInPicture: Bool = true) {
         let started = Perf.now()
         let previousFocus = visibleTabID
         let newSet = Set(tabIDs)
@@ -405,7 +407,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             saveHistory(previous)
             if tabIDs.contains(where: { !visibleTabIDs.contains($0) && isSplitCopy($0, of: previous) }) {
                 hibernate(previous)
-            } else {
+            } else if autoPictureInPicture {
                 leaveTab(previous)
             }
         }

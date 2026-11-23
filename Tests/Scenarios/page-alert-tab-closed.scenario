@@ -1,0 +1,27 @@
+# promise: crash-alert-tab-closed
+# A tab closed while its page's alert() is up. Closing the page closed the alert, the window under it became
+# key again and focused the page on its way out, whose view no longer had its page: SIGSEGV in
+# VisibleTimeRequestTrigger::TakeRequest under WebContentsImpl::SetInitialFocus, from
+# JavaScriptAppModalDialogCocoa::CloseAppModalDialog (0.1.50 crash reports, engine -27). Cra must keep
+# running, with the tab before it selected.
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=before
+wait 1
+cra://open?url=${ORIGIN}/dialogs.html?n=closed-tab
+expect-log GET /dialogs.html\?n=closed-tab
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask('alert')"}
+expect-log "value":"alert asked"
+wait 1
+cra://debug?pageDialogs=alert
+expect-log page dialog alert: chrome [0-9]+x[0-9]+ at=page front=1 text=.*Alert from the page.* buttons=OK
+cra://action/closeTab
+wait 2
+cra://debug?pageDialogs=after
+expect-log page dialogs after: n=0
+cra://debug?back=after
+expect-log back after: selected=.*page\.html\?n=before
+reject-log fault:

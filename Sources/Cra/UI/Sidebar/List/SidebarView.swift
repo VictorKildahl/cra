@@ -30,6 +30,8 @@ final class SidebarView: NSView {
     var debugURLFieldState: String { topBar.debugURLFieldState }
     /// The URL field edited in place puts the address back (#344).
     func endAddressEditing() { topBar.endAddressEditing() }
+    /// The URL field is being edited in place (#344).
+    var isEditingAddress: Bool { topBar.isEditingAddress }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { topBar.debugURLFieldType(text, commit: commit) }
     /// Scenario hooks (#648): the header's address row, and a press on its ← → ↻.
     var debugAddressRow: String { topBar.debugAddressRow }
@@ -535,6 +537,7 @@ final class SidebarTopBarView: NSView {
     }
     func debugURLFieldType(_ text: String, commit: Bool) -> Bool { !pill.isHidden && pill.debugType(text, commit: commit) }
     func endAddressEditing() { pill.endEditing(commit: false) }
+    var isEditingAddress: Bool { !pill.isHidden && pill.isEditing }
     var debugURLFieldState: String { pill.isHidden ? "hidden" : pill.editingText.map { "editing \($0)" } ?? "not editing" }
 
     /// Scenarios (#648): the address row as it stands, "url=<the field's address> back=1 forward=0".
@@ -699,6 +702,7 @@ final class SidebarTopBarView: NSView {
             let popups = tab.map { ui.navState(for: $0.id).blockedPopups } ?? 0
             let line = popups > 0 ? BlockedPopups.buttonTitle(count: popups)
                 : translation?.offersTranslation == true ? (narrowWidth ? "Translate" : "Translation Available") : nil
+            pill.pinsProfile = profile
             pill.show(text: text, url: url, hasTab: tab != nil, colors: colors, active: active,
                       pinned: pinned, protectedMedia: tab.flatMap { ui.navState(for: $0.id).protectedMedia },
                       translate: line,
@@ -855,6 +859,8 @@ enum ReloadMenu {
 /// The URL pill on the sidebar's second row while the toolbar is hidden.
 final class SidebarURLPill: NSView, NSTextFieldDelegate {
     var actions: SidebarActions?
+    /// The Chromium profile folder its pinned extensions are listed for, for their menus' Unpin (#695).
+    var pinsProfile = "Default"
     var showAccessories = false { didSet { if showAccessories != oldValue { refreshAccessories(animated: true) } } }
     private let label = NSTextField.sidebarLabel(size: 13)
     private let tip: ArcTooltipAnchorView
@@ -969,7 +975,12 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
                 b.configure(symbol: nil, image: icons[id] ?? nil, help: protectedMedia.map(ExtensionStore.offOnProtectedMedia) ?? "",
                             enabled: protectedMedia == nil, width: 28, iconSize: 16, tint: colors.textSecondary)
                 b.action = { actions.runExtension(id) }
-                b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
+                // Arc's menu for the pinned extension (#695).
+                b.menuProvider = { [weak self] in
+                    ExtensionStore.shared.entries.first { $0.extensionID == id }.map {
+                        ExtensionsMenu.actionMenu(for: $0, profile: self?.pinsProfile ?? "Default", open: { actions.openURL($0) })
+                    }
+                }
                 accessories.append(b)
             case .copyURL:
                 let copy = SidebarGlyphButton(symbol: "link", size: 28, height: 28, iconSize: 14, weight: .regular, help: "Copy URL (⇧⌘C)", colors: colors) {}

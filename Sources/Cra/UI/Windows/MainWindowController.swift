@@ -66,6 +66,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var shownTheme: SpaceTheme?
     /// Settings ▸ Tabs ▸ "Translucent sidebar" as the window last drew it (#366).
     private var shownGlass: Bool?
+    private var shownLightMaterial: Bool?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     /// The sidebar address the open bar hangs from (#663), nil while it is the centred bar.
@@ -658,9 +659,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // view rebuilds its whole SwiftUI tree, and a new window appearance or background redraws
         // every view, so all of these follow the theme only when it changes. What the root
         // views show beyond the palette they observe themselves.
-        if shownTheme != space.theme.shown || shownGlass != palette.glass {
+        // The material too: View ▸ Appearance picks it for every space without changing the theme (#700).
+        if shownTheme != space.theme.shown || shownGlass != palette.glass || shownLightMaterial != palette.lightMaterial {
             shownTheme = space.theme.shown
             shownGlass = palette.glass
+            shownLightMaterial = palette.lightMaterial
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
             shell.isDarkTheme = palette.isDark
@@ -727,8 +730,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if live != browsers.visibleTabIDs || liveFocus != browsers.visibleTabID
             || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false })
             || live.contains(where: browsers.waitsForItsPane) {
-            browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
+            // Arc: a tab switch puts a playing video in Picture in Picture, a space switch doesn't (#703).
+            let autoPiP = AutoPictureInPictureMoment.opensOnLeaving(from: pagesShownForSpace, to: focusedSpaceID)
+            browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen, autoPictureInPicture: autoPiP)
         }
+        pagesShownForSpace = focusedSpaceID
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
         shell.layoutContentChildren()
         // After browsers.show: the bar finds on the page now in front (showFindBar does). Typing stays with the page.
@@ -1667,6 +1673,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var findTabID: UUID?
     /// The find bar went away because that tab was switched away from, and comes back with it.
     private var findParked = false
+    /// The space whose pages the last refresh put on screen: a refresh for another space is a space switch (#703).
+    private var pagesShownForSpace: UUID?
     /// The focused page's screen rect the find panel was last placed on.
     private var lastFindPage: NSRect?
     /// Arc Max's Ask on Page: with the setting on, the find bar's panel shows this card instead (#393).
@@ -1928,6 +1936,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // A floating bar takes nothing from the page, so the band starts at the card's top.
             card?.barInset ?? 0
         }
+        grabber.fillsWindow = { [weak self] in self?.shell.fillsWindow ?? false }
+        grabber.titleDoubleClick = { [weak window] in (window as? CraWindow)?.performTitleDoubleClickAction() }
         grabber.attach(to: page, owner: window)
     }
 
@@ -3474,8 +3484,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         f.staysShown = { [weak self, weak f] in
             // While a space is being made in it (Arc's Create a Space page), it stays.
             if self?.sidebarUI.spaceCreation != nil { return true }
+            // Its address being edited keeps it too: Arc's panel hanging from it (#691), or in place (#692).
+            let addressOpen = (self?.commandBar.isOpen == true && self?.commandBar.compact == true)
+                || (self?.shell.sidebarHost as? SidebarView)?.isEditingAddress == true
             let keep = FloatingSidebarKeepOut(folderPreviewOpen: FolderPreviewController.shared.isOpen,
-                                              siteControlsOpen: self?.siteControlCenter.isShown == true,
+                                              siteControlsOpen: self?.siteControlCenter.isShown == true, addressOpen: addressOpen,
                                               popupAnchor: ExtensionPopupWindow.shownAnchor, panelFrame: f?.panelWindow?.frame,
                                               popupAwaitedUntil: self?.floatingSidebarPopupHold)
             if keep.popupArrived { self?.floatingSidebarPopupHold = nil }
@@ -3490,6 +3503,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         floatingSidebar = f
     }
 
+    /// A press outside the sidebar's address while it is open, which never moves the keys (#691, #692):
+    /// on the floating sidebar's empty space (its panel takes the keys only when a click needs them) it
+    /// closes the bar, Arc's address panel or the centred one, and the sidebar stays as the pointer
+    /// says; anywhere in the sidebar's window but the field it puts the address edited in place back.
+    private func sidebarAddressOutsideClick(_ event: NSEvent) {
+        guard let clicked = event.window else { return }
+        let floating = clicked === floatingSidebar?.panelWindow
+        if SidebarAddressOutsideClick.closesBar(barOpen: commandBar.isOpen, inFloatingSidebar: floating) {
+            if event.type == .leftMouseDown { commandBarClosingClick.panelClosed(byMouseDownAt: event.timestamp) }
+            commandBarLostKeysTo = .barsWindow
+            commandBar.close()
+        }
+        guard let sidebar = shell.sidebarHost as? SidebarView else { return }
+        let onField = sidebar.addressFrameOnScreen?.contains(clicked.convertPoint(toScreen: event.locationInWindow)) ?? false
+        if SidebarAddressOutsideClick.endsEdit(editing: sidebar.isEditingAddress, inSidebarsWindow: clicked === sidebar.window, onField: onField) {
+            sidebar.endAddressEditing()
+        }
+    }
+
     /// Pages and DevTools are separate Chromium child windows, and Chromium drops a
     /// click on a window that isn't key. In Chrome they share one window, so moving
     /// between the page and DevTools never costs a click: make the target key first.
@@ -3497,6 +3529,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// still just activates it, like Chrome.
     private func installChildClickMonitor() {
         childClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            self?.sidebarAddressOutsideClick(event)
             guard let self, let window = self.window, let target = event.window, target.parent === window,
                   target !== self.overlayPanel, !target.isKeyWindow, target.canBecomeKey, NSApp.isActive,
                   let key = NSApp.keyWindow, key === window || key.parent === window else { return event }
@@ -3999,14 +4032,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The sidebar's previous or next page, as the wheel turns it: the Library is the page before
-    /// the first space, and the ends don't wrap (Arc).
-    func stepSidebarPage(_ step: Int) {
+    /// the first space, and the ends don't wrap (Arc). `menu`: Spaces ▸ Previous/Next Space, which reach the
+    /// Library the same way but wrap where the wheel stops (WheelSpaceSwitch.menuTarget, #707).
+    func stepSidebarPage(_ step: Int, menu: Bool = false) {
         let order = store.spaceOrder
         // Where the Library is headed, if it is sliding.
         let inLibrary = librarySettleSpring.map { $0.target >= 1 } ?? (sidebarUI.libraryPage != nil)
-        switch WheelSpaceSwitch.target(step: step, index: order.firstIndex(of: focusedSpaceID) ?? 0, count: order.count,
-                                       inLibrary: inLibrary,
-                                       libraryAllowed: shell.floatingSidebar ? floatingSidebar?.isShown == true : shell.sidebarVisible) {
+        let index = order.firstIndex(of: focusedSpaceID) ?? 0
+        let libraryAllowed = shell.floatingSidebar ? floatingSidebar?.isShown == true : shell.sidebarVisible
+        let page = menu
+            ? WheelSpaceSwitch.menuTarget(step: step, index: index, count: order.count, inLibrary: inLibrary, libraryAllowed: libraryAllowed)
+            : WheelSpaceSwitch.target(step: step, index: index, count: order.count, inLibrary: inLibrary, libraryAllowed: libraryAllowed)
+        switch page {
         case .space(let i): store.focusSpace(order[i], window: windowID)
         case .openLibrary where shell.floatingSidebar: slideLibraryFromHidden()
         case .openLibrary, .closeLibrary: toggleLibrary()
@@ -4560,7 +4597,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func debugSiteControls() { showToolbarExtensionsMenu() }
 
     /// `cra://debug?switcher` (`=all`: ⌃⌥Tab's, #467).
-    func debugTabSwitcher(allSpaces: Bool = false) {
+    func debugTabSwitcher(allSpaces: Bool = false, held: NSEvent.ModifierFlags = []) {
         let theme = focusedSpace.theme
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         tabSwitcher.isDark = dark
@@ -4570,8 +4607,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // The cards, for a scenario: a tab by its title, a split as its panes' titles (#554).
         let cards = items.map { $0.panes.isEmpty ? $0.title : "split(" + $0.panes.map(\.title).joined(separator: " | ") + ")" }
         CraLog.note("tab switcher: \(items.count) cards: \(cards.joined(separator: ", "))")
-        tabSwitcher.debugOpen(items)
+        tabSwitcher.debugOpen(items, held: held)
     }
+
+    /// `cra://debug?switcher=state`: the open switcher's selected card (#696).
+    func debugTabSwitcherState() { CraLog.note("tab switcher state: " + tabSwitcher.debugState) }
 
     /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
     /// turn), so the focused card, the visible page and the profile are that pane's when the
@@ -4587,6 +4627,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Site Control Center as if its sliders button was clicked, wherever the request came from
     /// (the protected media toast's Why?): under the toolbar's button, else under the sidebar's URL
     /// field at its right end, where that button sits. The arrow shows where to find it next time.
+    /// The Open Extensions shortcut (⌘E). Held ⌘, it is Arc's extension picker (ExtensionPicker, #709): the Site
+    /// Control Center with its first extension ringed, the next one on each press, and the ringed one's popup when
+    /// ⌘ is let go. From the command bar (no ⌘ held) it opens or closes the Site Control Center as its button does.
+    func openExtensions(commandHeld: Bool, isPickerKey: @escaping (NSEvent) -> Bool) {
+        switch ExtensionPicker.press(commandHeld: commandHeld, picking: siteControlCenter.isPicking) {
+        case .step: siteControlCenter.step()
+        case .toggle: showSiteControlsFromTheirButton()
+        case .openPicking:
+            if !siteControlCenter.isShown { showSiteControlsFromTheirButton() }
+            siteControlCenter.startPicking(isPickerKey: isPickerKey)
+        }
+    }
+
     func showSiteControlsFromTheirButton() {
         if let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.siteControlsButtonFrameOnScreen() {
             return showToolbarExtensionsMenu(from: button, inToolbar: true)
@@ -4706,6 +4759,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // Where the frame went (#634): its right edge from the anchor, its top from under the URL field.
         let frame = ExtensionPopupWindow.shownFrame ?? .zero
         CraLog.note("extension popup \(step): shown, hangs from \(inSidebar ? "sidebar" : "page")")
+        CraLog.note("extension popup \(step) geometry: " + ExtensionPopupWindow.debugGeometry)
         CraLog.note("extension popup \(step) frame: dx=\(Int((frame.maxX - anchor.x).rounded())) dy=\(Int((frame.maxY - anchor.y).rounded())) "
                     + "minX=\(Int(frame.minX - (window?.screen?.frame.minX ?? 0))) fullscreen=\(window?.styleMask.contains(.fullScreen) == true ? 1 : 0) "
                     + "titleBar=\(Int(frame.midX)),\(Int((NSScreen.screens.first?.frame.maxY ?? 0) - frame.maxY + 10))")
@@ -4716,7 +4770,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         CraLog.note("floating sidebar \(step): \(floatingSidebar?.isShown == true ? "out" : "in")")
     }
 
-    func debugSiteControlsRead() { siteControlCenter.debugRead() }
+    func debugSiteControlsRead(label: String = "1") { siteControlCenter.debugRead(label: label) }
     func debugSiteControlsPress(_ label: String, accessory: Bool) { siteControlCenter.debugPress(label, accessory: accessory) }
 
     /// Cra's privacy page, where the command bar's search-suggestions banner says "Learn more".
@@ -5969,7 +6023,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// A locked screen covers every window and leaves nothing. macOS 27.2.1 called a window on a second
     /// display not visible when another app became active on the first, with nothing in front of it
     /// (#533): the windows in front decide (WindowCoverage).
-    private func leaveIfCovered() {
+    private func leaveIfCovered(settled: Bool = false) {
         guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked else { return }
         let coverage = Self.coverage(of: window)
         guard coverage.covered else {
@@ -5977,9 +6031,83 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             CraLog.note("window not visible to macOS, nothing in front covers it: \(coverage.summary)")
             return
         }
+        // Off screen: another desktop, the Dock, or the Mission Control or App Exposé grid, where the window is
+        // still in sight (#698: a full-screen video went to Picture in Picture and came back to full screen each
+        // time Mission Control opened). Decided after a moment, and once Mission Control has closed.
+        if !coverage.onScreen, !settled {
+            waitOffScreen()
+            return
+        }
         // What covered it, so a Picture in Picture nobody expected can be told apart (a test runner's window over Cra).
         CraLog.note("window out of sight: \(coverage.summary)")
         browsers.windowVisibilityChanged(covered: true)
+    }
+
+    /// Mission Control or App Exposé is up, by the Dock's windows over the displays (WindowCoverage).
+    private static func missionControlShowing() -> Bool {
+        WindowCoverage.missionControlShowing(CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? [])
+    }
+
+    /// Asks the window server a few times a second while this window is off screen and not key
+    /// (WindowCoverage.OffScreenWait), then decides as for any other change (leaveIfCovered). Back on screen
+    /// or key, the wait ends: windowDidBecomeKey brings a video home as before.
+    private func waitOffScreen() {
+        guard offScreenTimer == nil else { return }
+        offScreenWait = WindowCoverage.OffScreenWait()
+        offScreenTimer = Timer.scheduledTimer(withTimeInterval: WindowCoverage.OffScreenWait.interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.offScreenTick() }
+        }
+    }
+
+    private func offScreenTick() {
+        guard !isTornDown, let window, !window.isKeyWindow, !window.occlusionState.contains(.visible) else {
+            if offScreenWait.sawMissionControl, let window { CraLog.note("Mission Control closed: window \(window.isKeyWindow ? "key" : "visible")") }
+            return endOffScreenWait()
+        }
+        switch offScreenWait.tick(missionControl: Self.missionControlShowing()) {
+        case .wait: break
+        case .missionControl: CraLog.note("window in Mission Control: \(Self.coverage(of: window).summary), waits until it closes")
+        case .outOfSight:
+            let sawMissionControl = offScreenWait.sawMissionControl
+            endOffScreenWait()
+            if sawMissionControl { CraLog.note("Mission Control closed: window not visible") }
+            leaveIfCovered(settled: true)
+        }
+    }
+
+    private func endOffScreenWait() {
+        offScreenTimer?.invalidate()
+        offScreenTimer = nil
+    }
+
+    private var offScreenTimer: Timer?
+    private var offScreenWait = WindowCoverage.OffScreenWait()
+
+    /// `cra://debug?missionControl=open|close|state`: opens or closes Mission Control (Mission Control.app
+    /// toggles it), and says once the Dock's windows show it or are gone, for the #698 scenario.
+    func debugMissionControl(_ mode: String) {
+        let want: Bool
+        switch mode {
+        case "open": want = true
+        case "close": want = false
+        default:
+            CraLog.note("mission control: \(Self.missionControlShowing() ? "showing" : "not showing")")
+            return
+        }
+        if Self.missionControlShowing() != want {
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Mission Control.app"),
+                                               configuration: NSWorkspace.OpenConfiguration())
+        }
+        Self.sayMissionControl(when: want, after: mode, triesLeft: 50)
+    }
+
+    private static func sayMissionControl(when want: Bool, after mode: String, triesLeft: Int) {
+        let showing = missionControlShowing()
+        guard showing == want || triesLeft <= 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { sayMissionControl(when: want, after: mode, triesLeft: triesLeft - 1) }
+            return
+        }
+        CraLog.note("mission control: \(showing ? "showing" : "not showing") after \(mode)")
     }
 
     /// What the window server has in front of `window`, its own parts (its child windows, Chrome's page
@@ -6182,6 +6310,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// the sidebar) and it lets go of everything that would keep it alive.
     func tearDown() {
         isTornDown = true
+        endOffScreenWait()
         dismissTransientUI()
         sidePanel.hide()
         for p in peeks { p.closeWindow() }

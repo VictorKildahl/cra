@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>closes itself</title>
+<!-- A page that closes itself ?after=<ms> (3000 by default) after it loads, as a sign-in or payment page does when
+     it finishes. page-closes-while-loading sends its tab to an address that never answers first, so that
+     navigation is still under way when the page closes. -->
+<body style="background: #2a6">
+<script>
+  const after = Number(new URLSearchParams(location.search).get("after") || 3000);
+  setTimeout(() => { window.close(); }, after);
+</script>

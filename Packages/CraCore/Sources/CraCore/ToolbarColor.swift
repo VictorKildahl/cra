@@ -12,6 +12,28 @@ public enum ToolbarColor {
     public static func hex(reported: String?, remembered: String?) -> String? {
         [reported, remembered].lazy.compactMap { $0 }.first { HexColor.components($0) != nil }
     }
+
+    /// Whether a bar of this colour (nil: white) is light: dark ink on it, and a dark hover.
+    public static func isLight(hex: String?) -> Bool {
+        (hex.flatMap(HexColor.luminance) ?? 1) > 0.6
+    }
+
+    /// A grey and its opacity.
+    public struct Fill: Equatable, Sendable {
+        public var white: Double
+        public var alpha: Double
+        public init(white: Double, alpha: Double) {
+            self.white = white
+            self.alpha = alpha
+        }
+    }
+
+    /// The fill under the button the pointer is over (GitHub #694): white 10 % on a dark bar; on a
+    /// light one, where white didn't show, black 6 %, Arc's hover on light surfaces
+    /// (NewTabPageButtonHoveredBackground).
+    public static func hover(light: Bool) -> Fill {
+        light ? Fill(white: 0, alpha: 0.06) : Fill(white: 1, alpha: 0.1)
+    }
 }
 
 /// The colour a tab's toolbar takes from its page (Arc 1.173.1, measured on local pages for #629):

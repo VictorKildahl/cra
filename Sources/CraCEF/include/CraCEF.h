@@ -614,6 +614,10 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// Scenarios only: hides (or shows again) each hidden Browser's view, so Chrome finds no browser element, as on the
 /// Mac where Clear browsing data's Cancel crashed. Does nothing on CEF.
 + (void)setPageHostBrowserViewsHidden:(BOOL)hidden;
+/// Scenarios only: a renderer process started inside the notice that the one before it ended, before Chrome's
+/// extensions system heard of the end; it CHECKed once that process launched (0.1.52 and 0.1.54 crash reports).
+/// Its steps go to Chrome's log ("renderer reuse: …"). Does nothing on CEF.
++ (void)reuseRendererInsideExitNotice;
 + (NSString *)chromiumVersion;
 + (NSString *)cefVersion;
 /// YES when the browser-level DevTools pipe is up (it needs fds 3/4 free at start-up).

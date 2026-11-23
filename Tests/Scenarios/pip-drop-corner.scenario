@@ -3,7 +3,7 @@
 # left it half off the screen and opened the next video there too (GitHub #332). Here the window is
 # let go half past the right edge, then the left, the way a mouse drag ends (no pointer: the test
 # copy runs in the background), and must fly fully on screen; the next PiP must open on screen.
-# promise: #332
+# promise: #332 #702
 cra://open?url=file://${FIXTURES}/Pages/video.html
 expect-log loaded file:
 wait 2

@@ -31,8 +31,8 @@
 #   helpers baseline | helpers settle [slack]
 #   renderers <max>             at most that many renderer processes (within 5 s)
 #   relaunch                    cra://debug?relaunch=1, then follow the new process
-#   expect-log <regex>          a line Cra logged (cra.log or stdout), ${WS}'s "ws open" / "ws closed", or a
-#                               request the fixture server answered ("GET /page.html?n=1 HTTP/1.1")
+#   expect-log <regex>          a line Cra logged (cra.log, the engine's chromium.log or stdout), ${WS}'s "ws open" /
+#                               "ws closed", or a request the fixture server answered ("GET /page.html?n=1 HTTP/1.1")
 #   reject-log <regex>          no such line logged so far
 #   snapshot <View[,n]> <name>  the nth visible view of that class drawn to PNG and compared with
 #                               Tests/Snapshots/<name>.png (CRA_SNAPSHOT_RECORD=1 records it)
@@ -55,6 +55,8 @@
 #   click little-close          a real click (through the window server, scripts/hid-click/click.m) on the newest
 #                               Little Window's close button, only if that window is in front there; needs a screen
 #                               (requires screen), as Cra comes forward for it as for a mouse (#659)
+#   click toolbar-empty double  a real double click the same way on the focused page's toolbar where no button is (#685)
+#   click page-top double       the same 5 pt into the focused page's top (#685)
 #   bare-helper <suffix>        runs the engine's "Cra Helper (<suffix>)" with no arguments, as macOS launches the
 #                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   requires screen
@@ -71,7 +73,8 @@
 # ${SIDE_PANEL_EXTENSION_ID} (Tests/Fixtures/SidePanelExtension) and ${DOWNLOAD_EXTENSION_ID}
 # (Tests/Fixtures/DownloadExtension) and ${WEB_STORE_COPY_ID} (Tests/Fixtures/WebStoreCopy) and
 # ${TABS_CREATE_EXTENSION_ID} (Tests/Fixtures/TabsCreateExtension) and ${TABS_QUERY_EXTENSION_ID}
-# (Tests/Fixtures/TabsQueryExtension) and ${CAPTURE_EXTENSION_ID} (Tests/Fixtures/CaptureExtension) expand,
+# (Tests/Fixtures/TabsQueryExtension) and ${CAPTURE_EXTENSION_ID} (Tests/Fixtures/CaptureExtension) and
+# ${POPUP_CONTEXT_EXTENSION_ID} (Tests/Fixtures/PopupContextExtension) expand,
 # and ${STALL}, an address on 127.0.0.1 that takes connections and never answers (a download
 # that never ends), and ${TRICKLE}, one that answers with a 10 MB file to save, sends the first
 # 64 KB and holds the rest back (a download that stays in progress).
@@ -89,6 +92,7 @@ STORE_COPY_EXTENSION_ID="$(cat "$FIXTURES/StoreCopyExtension/ID")"
 TABS_CREATE_EXTENSION_ID="$(cat "$FIXTURES/TabsCreateExtension/ID")"
 TABS_QUERY_EXTENSION_ID="$(cat "$FIXTURES/TabsQueryExtension/ID")"
 CAPTURE_EXTENSION_ID="$(cat "$FIXTURES/CaptureExtension/ID")"
+POPUP_CONTEXT_EXTENSION_ID="$(cat "$FIXTURES/PopupContextExtension/ID")"
 
 if [ "${1:-}" = "all" ]; then
   # CRA_SCENARIO_SHARD=k/n runs every n-th scenario from the k-th (1-based), so n jobs share the list: one job
@@ -395,7 +399,7 @@ WS_SERVER=$!
 disown "$WS_SERVER"
 for _ in $(seq 1 50); do WS_PORT=$(head -1 "$OUT/ws.log"); [ -n "$WS_PORT" ] && break; sleep 0.1; done
 WS="ws://127.0.0.1:${WS_PORT:?WebSocket server did not start}"
-expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{LOCALNET\}/$LOCALNET}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{COVER\}/${COVER:-}}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{STORE_COPY_EXTENSION_ID\}/$STORE_COPY_EXTENSION_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; s="${s//\$\{CAPTURE_EXTENSION_ID\}/$CAPTURE_EXTENSION_ID}"; printf '%s' "$s"; }
+expand() { local s="$1"; s="${s//\$\{FIXTURES\}/$FIXTURES}"; s="${s//\$\{ORIGIN\}/$ORIGIN}"; s="${s//\$\{PAGE\}/$PAGE}"; s="${s//\$\{WEBKIT\}/$WEBKIT}"; s="${s//\$\{MUSIC\}/$MUSIC}"; s="${s//\$\{LOCALNET\}/$LOCALNET}"; s="${s//\$\{STALL\}/$STALL}"; s="${s//\$\{TRICKLE\}/$TRICKLE}"; s="${s//\$\{WS\}/$WS}"; s="${s//\$\{COVER\}/${COVER:-}}"; s="${s//\$\{EXTENSION_ID\}/$EXTENSION_ID}"; s="${s//\$\{SIDE_PANEL_EXTENSION_ID\}/$SIDE_PANEL_EXTENSION_ID}"; s="${s//\$\{DOWNLOAD_EXTENSION_ID\}/$DOWNLOAD_EXTENSION_ID}"; s="${s//\$\{WEB_STORE_COPY_ID\}/$WEB_STORE_COPY_ID}"; s="${s//\$\{STORE_COPY_EXTENSION_ID\}/$STORE_COPY_EXTENSION_ID}"; s="${s//\$\{TABS_CREATE_EXTENSION_ID\}/$TABS_CREATE_EXTENSION_ID}"; s="${s//\$\{TABS_QUERY_EXTENSION_ID\}/$TABS_QUERY_EXTENSION_ID}"; s="${s//\$\{CAPTURE_EXTENSION_ID\}/$CAPTURE_EXTENSION_ID}"; s="${s//\$\{POPUP_CONTEXT_EXTENSION_ID\}/$POPUP_CONTEXT_EXTENSION_ID}"; printf '%s' "$s"; }
 # AppKit asks "reopen windows?" after a test copy was killed, and that modal blocks every command;
 # Cra restores its own windows from windows.json, so AppKit's restoration is off.
 app_args=(-ApplePersistenceIgnoreState YES)
@@ -499,7 +503,8 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       sleep 2 ;;
     expect-log)
       shift; re="$*"; found=""
-      for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$OUT/stdout.log" "$OUT/ws.log" "$OUT/server.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
+      # chromium.log has the engine's own LOG lines (bridge hooks and patches; the app's go to stdout.log).
+      for _ in $(seq 1 150); do grep -Eq "$re" "$DATA"/cra*.log "$DATA/chromium.log" "$OUT/stdout.log" "$OUT/ws.log" "$OUT/server.log" 2>/dev/null && { found=1; break; }; sleep 0.2; done
       [ -n "$found" ] || problem "no log line matching: $re" ;;
     reject-log)
       shift; re="$*"
@@ -538,20 +543,26 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         grep -q '^covering' "$OUT/cover.log" && echo "  $(head -1 "$OUT/cover.log")" || problem "no cover window: $(cat "$OUT/cover.log")"
       fi ;;
     click)
-      [ "${2:-}" = "little-close" ] || { problem "click: unknown target ${2:-}"; continue; }
+      case "${2:-}" in
+        little-close) ask="littleClose=point"; mark="little close point:" ;;
+        toolbar-empty) ask="toolbarDoubleClick=point"; mark="toolbar empty point:" ;;
+        page-top) ask="pageTop=point"; mark="page top point:" ;;
+        *) problem "click: unknown target ${2:-}"; continue ;;
+      esac
+      count=1; [ "${3:-}" = "double" ] && count=2
       [ -x "$OUT/click" ] || clang -fobjc-arc -framework AppKit "$ROOT/scripts/hid-click/click.m" -o "$OUT/click" 2>"$OUT/click-build.log"
       [ -x "$OUT/click" ] || { problem "the click helper did not build (click-build.log)"; continue; }
-      seen=$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "little close point:")
-      send "cra://debug?littleClose=point"
+      seen=$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "$mark")
+      send "cra://debug?$ask"
       xy=""
       for _ in $(seq 1 50); do
-        [ "$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "little close point:")" -gt "$seen" ] && \
-          { xy=$(cat "$DATA"/cra*.log | grep "little close point:" | tail -1 | sed 's/.*little close point: //'); break; }
+        [ "$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "$mark")" -gt "$seen" ] && \
+          { xy=$(cat "$DATA"/cra*.log | grep "$mark" | tail -1 | sed "s/.*$mark //"); break; }
         sleep 0.2
       done
       case "$xy" in
-        [0-9]*" "[0-9]*) out=$("$OUT/click" "$PID" $xy) || problem "click little-close: $out"; echo "  $out" ;;
-        *) problem "click little-close: no close button (${xy:-no answer})" ;;
+        [0-9]*" "[0-9]*) out=$("$OUT/click" "$PID" $xy $count) || problem "click $2: $out"; echo "  $out" ;;
+        *) problem "click $2: nowhere to click (${xy:-no answer})" ;;
       esac ;;
     bare-helper)
       helper="Cra Helper (${line#bare-helper })"

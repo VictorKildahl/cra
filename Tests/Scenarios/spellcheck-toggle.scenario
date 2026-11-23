@@ -1,0 +1,22 @@
+# promise: #715
+# Settings ▸ Profiles ▸ "Check spelling while typing" turns Chromium's spell check off and on for the
+# profile: browser.enable_spellchecking, the pref chrome://settings/languages ▸ Spell check sets. Cra's
+# text-field menu has no Spelling and Grammar submenu (Chromium's Mac menu as Cra shows it), so before
+# this there was no switch in Cra for it. On by default, as in Chromium.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=spell
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?chromePref=browser.enable_spellchecking
+expect-log chrome pref browser\.enable_spellchecking: true
+cra://debug?spellCheck=state
+expect-log spell check setting: on$
+cra://debug?spellCheck=off
+expect-log spell check off in Default: set$
+expect-log spell check setting: off$
+cra://debug?chromePref=browser.enable_spellchecking
+expect-log chrome pref browser\.enable_spellchecking: false
+cra://debug?spellCheck=on
+expect-log spell check setting: on$
+cra://debug?chromePref=browser.enable_spellchecking
+expect-log chrome pref browser\.enable_spellchecking: true

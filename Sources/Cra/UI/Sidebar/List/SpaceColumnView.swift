@@ -823,7 +823,14 @@ final class FavoritesGridView: NSView {
             b.iconRowHeight = PinnedExtensionGrid.cellHeight
             let id = p.id
             b.action = { [weak self] in self?.actions.runExtension(id) }
-            b.menuProvider = { ExtensionStore.shared.entries.first { $0.extensionID == id }.map(ExtensionsMenu.iconMenu) }
+            // Arc's menu for the pinned extension (#695).
+            b.menuProvider = { [weak self] in
+                guard let self else { return nil }
+                let profile = self.store.profileDirectoryName(space: self.spaceID)
+                return ExtensionStore.shared.entries.first { $0.extensionID == id }.map {
+                    ExtensionsMenu.actionMenu(for: $0, profile: profile, open: { [weak self] in self?.actions.openURL($0) })
+                }
+            }
         }
         extensionOrder = ids
     }

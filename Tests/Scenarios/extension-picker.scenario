@@ -1,0 +1,49 @@
+# promise: #709
+# Arc's ⌘E ("Open pinned extensions picker."): held ⌘ and E opens the Site Control Center with its first extension
+# ringed, each E after it rings the next (round to the first again past the last), and letting go of ⌘ closes it
+# and opens the ringed extension's popup, as a click on its tile does. Cra's ⌘E only opened the Site Control
+# Center. The keys go through the app's event queue as typed ones do; from the command bar (no ⌘ held) it opens
+# as the sliders button does, nothing ringed. The decision is ExtensionPickerTests.
+budget rss=900 stalls50=30
+pace 0.5
+cra://debug?installExtension=${FIXTURES}/Extension
+cra://debug?installExtension=${FIXTURES}/SidePanelExtension
+relaunch
+cra://open?url=${PAGE}?n=picker
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# ⌘E: the first extension (by name: no pins) is ringed.
+cra://debug?key=e,14,1048576
+wait 1
+cra://debug?siteControlsRead=first
+expect-log site controls picked first: Cra Scenario Fixture$
+# E again, ⌘ still held: the next one, then round to the first.
+cra://debug?key=e,14,1048576
+wait 0.5
+cra://debug?siteControlsRead=second
+expect-log site controls picked second: Cra Side Panel Fixture$
+cra://debug?key=e,14,1048576
+wait 0.5
+cra://debug?siteControlsRead=round
+expect-log site controls picked round: Cra Scenario Fixture$
+# ⌘ let go: the Site Control Center closes and the ringed extension's popup opens.
+cra://debug?flags=0
+expect-log extension picker: runs Cra Scenario Fixture$
+expect-log extension popup shown
+wait 1
+cra://debug?siteControlsRead=after
+expect-log site controls: closed
+cra://dismiss
+wait 1
+
+# From the command bar's row (no ⌘ held): the Site Control Center as its button opens it, nothing ringed.
+cra://action/openExtensions
+wait 1
+cra://debug?siteControlsRead=bar
+expect-log site controls picked bar: none$
+# Letting go of ⌘ then runs nothing: it stays up.
+cra://debug?flags=0
+wait 1
+cra://debug?siteControlsRead=still
+expect-log site controls picked still: none$

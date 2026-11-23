@@ -1,0 +1,34 @@
+# promise: #692
+# Settings ▸ Tabs "Edit the address in the sidebar" (#344): a click on the sidebar's empty space ends
+# the edit and puts the address back, with the sidebar shown and with the hidden sidebar slid out at
+# the window's edge, which stays out while its address is edited. Until 0.1.54 only a click on the
+# page ended it: a click in the sidebar's own window never moved the keys from the field.
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "editAddressInPlace": true}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=edit
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing .*n=edit, command bar closed
+cra://debug?clickAt=120,600
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar closed
+
+# The hidden sidebar, out at the edge.
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=hold
+wait 1
+cra://debug?urlFieldEdit=click
+expect-log url field click: editing .*n=edit, command bar closed
+cra://debug?floatingSidebar=release
+cra://debug?floatingSidebar=pointerAway
+wait 1
+cra://debug?floatingSidebar=state:editing
+expect-log floating sidebar editing: out$
+cra://debug?clickAt=120,600&target=floating
+wait 1
+cra://debug?urlFieldEdit=state
+expect-log url field state: not editing, command bar closed

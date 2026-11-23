@@ -36,4 +36,29 @@ struct PageTopDragTests {
     func theCursorCountsOnlyOnceCraHasBeenActive(active: Bool, becameActiveAt: Double, pressedAt: Double, counts: Bool) {
         #expect(PageTopDrag.cursorIsCurrent(appActive: active, becameActiveAt: becameActiveAt, pressedAt: pressedAt) == counts)
     }
+
+    /// Edge to edge with no bar above the page (#685): nothing stands in for the title bar but the page's top, so a double
+    /// click in its top 10 pt (the margin edge to edge takes away) zooms the window as the strip above the card does with
+    /// the margin. Further down it stays the page's: a site's buttons show the arrow too.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/685"),
+          arguments: [(0.0, true), (5.0, true), (9.9, true), (10.0, false), (30.0, false), (-1.0, false)])
+    func edgeToEdgeADoubleClickInTheBandZooms(depth: Double, zooms: Bool) {
+        #expect(PageTopDrag.zooms(enabled: true, fillsWindow: true, barHeight: 0, depthIntoPage: depth,
+                                  clickCount: 2, modifiers: false) == zooms)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/685"))
+    func onlyAPlainDoubleClickEdgeToEdgeWithNoBar() {
+        #expect(!PageTopDrag.zooms(enabled: true, fillsWindow: false, barHeight: 0, depthIntoPage: 5, clickCount: 2, modifiers: false),
+                "with the margin, the strip above the card takes it")
+        #expect(!PageTopDrag.zooms(enabled: true, fillsWindow: true, barHeight: 32, depthIntoPage: 5, clickCount: 2, modifiers: false),
+                "the toolbar above the page takes it")
+        #expect(!PageTopDrag.zooms(enabled: false, fillsWindow: true, barHeight: 0, depthIntoPage: 5, clickCount: 2, modifiers: false),
+                "no window dragging from the page's top, no zoom from it either")
+        #expect(!PageTopDrag.zooms(enabled: true, fillsWindow: true, barHeight: 0, depthIntoPage: 5, clickCount: 1, modifiers: false))
+        #expect(!PageTopDrag.zooms(enabled: true, fillsWindow: true, barHeight: 0, depthIntoPage: 5, clickCount: 3, modifiers: false))
+        #expect(!PageTopDrag.zooms(enabled: true, fillsWindow: true, barHeight: 0, depthIntoPage: 5, clickCount: 2, modifiers: true))
+        #expect(!PageTopDrag.zooms(enabled: true, fillsWindow: true, barHeight: 0, depthIntoPage: 5, clickCount: 2, modifiers: false,
+                                   distanceFromRight: 10), "the scrollbar's strip stays with the page")
+    }
 }

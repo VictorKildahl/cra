@@ -1,0 +1,27 @@
+# Arc opens the automatic Picture in Picture when you switch tabs, not when you switch spaces (#703, as the report
+# describes Arc): a video playing aloud stays in its tab when Next Space (⌥⌘→) shows another space, and still goes
+# into Picture in Picture when you switch to another tab in its own space.
+# promise: #703
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version": 1, "spaceOrder": ["A0000000-0000-0000-0000-000000000001", "A0000000-0000-0000-0000-000000000002"], "spaces": [{"id": "A0000000-0000-0000-0000-000000000001", "title": "Home", "emoji": "\ud83c\udfe0", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C0000000-0000-0000-0000-000000000011", "pinnedContainerID": "C0000000-0000-0000-0000-000000000012", "todayContainerID": "C0000000-0000-0000-0000-000000000013", "createdAt": "2026-11-06T08:00:00Z"}, {"id": "A0000000-0000-0000-0000-000000000002", "title": "Work", "emoji": "\ud83d\udcbc", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C0000000-0000-0000-0000-000000000021", "pinnedContainerID": "C0000000-0000-0000-0000-000000000022", "todayContainerID": "C0000000-0000-0000-0000-000000000023", "createdAt": "2026-11-06T08:00:00Z"}], "items": [{"id": "C0000000-0000-0000-0000-000000000011", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000012", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000013", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000021", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000002"}}}}}, {"id": "C0000000-0000-0000-0000-000000000022", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000002"}}}}}, {"id": "C0000000-0000-0000-0000-000000000023", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000002"}}}}}]}
+
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>(v.muted=false,v.volume=1,'unmuted'))(document.getElementById('v'))","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"unmuted"
+# The unmute's own activation runs out after five seconds.
+wait 6
+
+# Another space: no Picture in Picture.
+cra://action/nextSpace
+wait 4
+reject-log enters Picture in Picture
+
+# Back, then another tab in the same space: Picture in Picture, as before.
+cra://action/previousSpace
+wait 2
+cra://open?url=${PAGE}?n=away
+expect-log enters Picture in Picture

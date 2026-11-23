@@ -1,0 +1,43 @@
+# promise: #696
+# With ⌃ held in the tab switcher (⌃Tab), ⌃` steps back through the cards, as ` does in macOS's ⌘Tab
+# switcher and in Arc, and ⌃⇧` forward again; both wrap. Letting go of ⌃ switches to the card. Until
+# 0.1.54 ⌃` did nothing, so going back meant cycling through every card. The switcher opens as if
+# ⌃Tab were pressed with ⌃ held (cra://debug?switcher=held) and the keys come through the app's queue.
+# Cards: n=4 (this tab) 0, n=3 1, n=2 2, n=1 3.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=1
+wait 1
+cra://open?url=${PAGE}?n=2
+wait 1
+cra://open?url=${PAGE}?n=3
+wait 1
+cra://open?url=${PAGE}?n=4
+wait 2
+cra://debug?switcher=held
+wait 0.5
+cra://debug?switcher=state
+expect-log tab switcher state: open=1 card=1/4
+cra://debug?key=%60,50,262144
+wait 0.3
+cra://debug?switcher=state
+expect-log tab switcher state: open=1 card=0/4
+cra://debug?key=%60,50,262144
+wait 0.3
+cra://debug?switcher=state
+expect-log tab switcher state: open=1 card=3/4
+cra://debug?key=~,50,393216
+wait 0.3
+cra://debug?switcher=state
+expect-log tab switcher state: open=1 card=0/4
+cra://debug?key=%60,50,262144
+wait 0.3
+cra://debug?switcher=state
+expect-log tab switcher state: open=1 card=3/4
+# Letting go of ⌃ switches to the card: the first tab.
+cra://debug?modifierFlags=0
+wait 1.5
+cra://debug?switcher=state
+expect-log tab switcher state: open=0
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'switched:'+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"switched:\?n=1"

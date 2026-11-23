@@ -64,9 +64,18 @@ public enum MouseButtonSpaceSwitch {
     /// someone renames a tab. Otherwise the sidebar switches spaces and a page goes back or
     /// forward. A repeat of a key acted on is swallowed, so a held button doesn't walk every space,
     /// while a held ⌥← in text keeps moving word by word.
-    public static func action(offset: Int, pointerOverSidebar: Bool, editingText: Bool, isRepeat: Bool) -> Action? {
-        if editingText { return nil }
+    /// `typedOnKeyboard`: the keystroke came from the keyboard, not from another app that posted it. Then it is the
+    /// page's or the field's, as in Arc, Chrome and Safari (YouTube's chapters, #714): only a mouse driver's goes
+    /// back, forward or to another space.
+    public static func action(offset: Int, pointerOverSidebar: Bool, editingText: Bool, isRepeat: Bool, typedOnKeyboard: Bool = false) -> Action? {
+        if editingText || typedOnKeyboard { return nil }
         if isRepeat { return .swallow }
         return pointerOverSidebar ? .switchSpace(offset) : .history(offset)
+    }
+
+    /// Whether a keystroke was typed on the keyboard: its source process is the window server's (0), not another
+    /// app's (#714).
+    public static func typedOnKeyboard(sourcePID: Int64) -> Bool {
+        sourcePID == 0
     }
 }

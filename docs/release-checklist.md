@@ -63,6 +63,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **PR #269:** in Settings, the selected source-list row is inset 10 pt from both sidebar edges
   (glyph 20 pt and label 49 pt from the edge, as in Dia 1.55.1), and scrolling Performance or Advanced
   never draws under the back/forward pill or the pane title.
+- **#701:** open an extension's popup from the toolbar (Element Remover or 1Password) on macOS 26 and 27: the page
+  sits inside the window's thin border on both sides and the bottom, and its bottom corners follow the window's
+  rounded ones (no square corner past the border). The scenario checks the geometry and the mask; the pixels need an eye.
 - **#400 (macOS 27 only):** a white page with DevTools docked right and set to dark, toolbar shown,
   Edge to edge on and off: no white shows at any corner of the page or DevTools. This Mac runs
   macOS 26, where the test stands in for 27 with AppKit's own window radius; ask the reporter to confirm.
@@ -177,6 +180,12 @@ built release app with a test profile. Note anything that fails in the release's
   holds: Console logs `Cra: mouse swipe back:`. In Split View the pane under the pointer goes back,
   not the focused one, and a tab a link opened closes back to its opener. A test can't make a swipe
   event, so only this check proves the swipe monitor.
+- **#714:** ⌥← / ⌥→ typed on the keyboard reach the page: on a YouTube video with chapters they skip to the
+  previous and next chapter, and the tab stays (Console: `Cra: mouse key back: left for the page, typed on the
+  keyboard`). Then the #233 check above with Logi Options+'s ⌥← / ⌥→ keystrokes: they must still go back and
+  forward, which proves Options+ posts them from its own process (an event from the keyboard has source process 0).
+  If Options+ types them as a keyboard does, they reach the page instead and #233's keystroke assignment needs
+  another tell.
 - **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
   ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
   the Library and back out. A short drag that settles back is silent; a sideways wheel never

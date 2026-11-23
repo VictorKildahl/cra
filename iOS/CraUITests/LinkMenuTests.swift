@@ -40,6 +40,34 @@ final class LinkMenuTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
     }
 
+    // promise: #713
+    /// Save to Photos in a long-pressed image's menu (WebKit's own) asks for the photo library instead of ending
+    /// the app: iOS ends an app that reaches the library without NSPhotoLibraryAddUsageDescription.
+    func testSaveToPhotosFromAnImageKeepsTheAppRunning() {
+        // A 300 px picture from the local fixture server (WebKit offers no image menu for a 1 px one blown up).
+        let base = ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765"
+        let page = base + "/picture"
+        launch(["-CraOpenURL", page, "-CraSearch", "NO"])
+        waitForPage("Picture")
+        let image = app.webViews.images["Square"]
+        XCTAssertTrue(image.waitForExistence(timeout: 10))
+        // The photo library's question comes from SpringBoard; allowing it lets the save finish.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        image.press(forDuration: 1.5)
+        let save = app.buttons["Save to Photos"]
+        let offered = save.waitForExistence(timeout: 5)
+        keep("image-menu")
+        XCTAssertTrue(offered, "the image menu offers Save to Photos: \(app.buttons.allElementsBoundByIndex.map(\.label))")
+        save.tap()
+        for title in ["Allow Access to All Photos", "Allow", "OK"] {
+            let allow = springboard.buttons[title]
+            if allow.waitForExistence(timeout: 3) { allow.tap(); break }
+        }
+        sleep(2)
+        XCTAssertEqual(app.state, .runningForeground, "Save to Photos must not end the app")
+        XCTAssertTrue(app.webViews.staticTexts["Picture"].exists, "the page is still on screen")
+    }
+
     /// The search sheet's eyes on, then a private page typed in with a link to `title`.
     private func openPrivatePage(linkingTo title: String) {
         app.buttons["bar-search"].tap()

@@ -1,0 +1,13 @@
+# promise: #694
+# The toolbar's buttons and address show their hover on the bar they're on: black 6 % on a light
+# bar (a white one, or a light page's), where Cra's white hover didn't show, and white on a dark
+# page's bar as before (10 % under the buttons, 8 % under the address).
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://open?url=${ORIGIN}/toolbar-colour.html
+wait 4
+cra://debug?toolbarHover=light
+expect-log toolbar hover light: bar=F6F8FA hover=black 6% url=black 6%$
+cra://open?url=${ORIGIN}/toolbar-dark.html
+wait 4
+cra://debug?toolbarHover=dark
+expect-log toolbar hover dark: bar=0D1117 hover=white 10% url=white 8%$

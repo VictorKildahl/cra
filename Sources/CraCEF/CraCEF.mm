@@ -3738,6 +3738,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 }
 + (void)setPageHostBrowserViewsHidden:(BOOL)hidden {
 }
++ (void)reuseRendererInsideExitNotice {
+}
 + (NSString*)pageWindowsReadout {
     return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_pageWindowsShown, (long)g_pageWindowsShownAway,
                                       (long)g_pageWindowsShownAnimated];

@@ -1,0 +1,21 @@
+# promise: crash-extensions-renderer-reused-on-exit
+# A renderer host that starts its next process inside the notice that its last one ended, before Chrome's
+# extensions system has heard of the end. That system kept the old process's entry when the new process was
+# created (and sent it nothing), dropped the entry when its turn in the notice came, and found the new process
+# untracked once it launched: CHECK in extensions::RendererStartupHelper::OnRenderProcessLaunched (0.1.52 and
+# 0.1.54 crash reports). Chromium handled it on Android and ChromeOS only; renderer-startup-reused-process.patch
+# gives that process the extensions' state on the Mac too. The hook (cra://debug?rendererReuse=1) ends a fresh
+# renderer twice, the second time starting the next one from inside the notice, ahead of the extensions system.
+budget rss=900 stalls50=30
+extension ${FIXTURES}/Extension
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=before
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?rendererReuse=1
+expect-log renderer reuse: starts the next process inside the exit notice
+expect-log extensions: a renderer launched untracked; initializing it
+expect-log renderer reuse: the process started in the exit notice is running
+cra://open?url=${PAGE}?n=after
+expect-log GET /page\.html\?n=after
+reject-log fault:

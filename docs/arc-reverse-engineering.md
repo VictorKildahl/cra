@@ -943,6 +943,22 @@ to Chromium's `RenderWidgetHostViewCocoa` (the view AppKit gives real key presse
 once activation is reported. (Until 26 Oct test videos had to be VP9/Opus WebM: Spotify's CEF build
 has no H.264/AAC. Cra now ships its own CEF build with them; see docs/release.md.)
 
+Document Picture in Picture let go past the edge (Arc 1.173, live, 23 Nov 2026, GitHub #702). Victor's Arc,
+a file:// page that calls `documentPictureInPicture.requestWindow({width: 400, height: 240})` on a key
+press (posted to Arc's pid), dragged with real HID events by the window's top bar, frames read from
+CGWindowList (top-left coordinates, 1728 × 1117 display, menu bar 33 pt). Arc opened the page in Little Arc.
+- [O] The window has Arc's own top bar (Back to Tab, the address, a chat glyph, Close), layer 3.
+- [O] Let go half past the left edge at y = 186: 1.75 s later at x = 10, y = 186. Half below the bottom:
+  its bottom at 1107 (10 pt up), x kept. Half past the right edge: x = 1318 (its right edge at 1718), y
+  kept. So it slides back the shortest way, 10 pt in from the edge it crossed, at its own size; unlike
+  a video's PiP it doesn't go into a corner.
+- [O] Reopened, it came back where it was last left (10, 186): `LastDocumentPIPPosition`. Not built.
+- [O] Victor's Rectangle snaps Cra's Document PiP to half the screen when the pointer reaches the
+  screen's edge in a drag; it left Arc's alone in the same drag. Not looked into.
+- Cra: `DocumentPictureInPictureDrag` (CraCore) decides; `DocumentPictureInPictureSpring` watches the window
+  move with the button held and, once it's up, slides it on the video PiP's spring. Real drags on
+  Cra land on the same numbers (10 / 1107 / 1318).
+
 ### Hover, toolbar colour, library glyph (24 Oct, late evening)
 
 - Row hover (pointer moved onto "Google Search Console", screen capture, same backdrop):
@@ -2341,6 +2357,15 @@ Arc's popup this time, so geometry is not measured.
   208×33 rows on a 43 pt pitch (32 pt circle #F0F1FE when on, #6A6A6F when off; title 14 pt semibold #DBDBDB,
   subtitle 13 pt #979798): Developer Mode On/Off, Block Ads & Trackers On/Off, Automatic Picture-In-Picture Allowed;
   a divider; footer: "Secure" pill 82×32 (#363536) and a 32 pt "More" circle (#403F40). Background #272728 (dark theme).
+- [O] ⌘E is "Open pinned extensions picker." (`openExtensionsPicker`; Arc 1.172, 23 Nov 2026, held ⌘ with HID taps
+  recorded): ⌘E opens the Site Control Center with the first extension tile ringed; each E after it, ⌘ still held,
+  rings the next tile in grid order (pinned, then the rest: the 3rd tap ringed an unpinned one); letting go of ⌘
+  closes the popover and opens the ringed extension's popup (one press and let go: the first pinned extension's).
+  Ring: 2 pt in the accent colour (#FAEEC2 in a cream theme, the pin badge's), centred on the tile's edge; the tile's
+  fill is unchanged. Past the last tile: no ring was visible, and a later tap opened an extension popup while ⌘ was
+  still held; not pinned down (Cra goes round to the first). Release notes: 2022 "Hold CMD and tap E to cycle through
+  your extensions", 2023 "Hold CMD and hit E to toggle through and open pinned extensions". Cra: `ExtensionPicker`
+  (CraCore), GitHub #709.
 - [O] Pinning: each tile carries a 14 pt `pin.fill` badge at (+37, +21) from its top-left. Pinned tiles always show
   it (#F0F1FE, AX "Unpin"); an unpinned tile shows it on hover only (#7F7E85, AX "Pin"). The badge glyph is the
   popover's background colour.
@@ -3105,6 +3130,15 @@ CEF still draws the first page of a new renderer transparent (chromiumembedded/c
 canvas, an unstyled page (no background, no color-scheme) showed black text on black until its load ended
 (4 s with a slow image). The page now reports its background on every frame while it is parsed
 (kLoadingBackgroundProbe; frames wait for render-blocking stylesheets), so it turns white with its first paint.
+
+On Chrome's engine (23 Nov 2026, X report on the Arc-vs-Cra video: a Peek of GitHub flashed white for ~150 ms)
+the page's own view covers that fill: until its renderer's first frame, Chromium's compositor draws the view's
+colour, white by default (BrowserCompositorMac), and Chrome's ContentsWebView set its theme's #3C3C3C only on the
+page active in Cra's never-shown Chrome window. The bridge now gives every page's main-frame view the canvas
+(`applyPageCanvasTo:`, at each new view and on View ▸ Appearance), and cra-hosted-pages.patch keeps
+ContentsWebView off Cra's pages. Sampled on screen at 60 fps (`cra://debug?pageColours=`, scenario
+page-pre-frame-canvas, dark-late-paint.html): a Peek went 000000 → 4D4D4D for the 1.5 s hold → page; now
+000000 → page, as in Arc. An unstyled page still paints white once it draws.
 
 ### The toolbar on a tab switch (Arc 1.171, 2 Nov 2026, issue #84, app-only recordings at 100 fps)
 

@@ -71,6 +71,38 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
 
     /// How one extension's toolbar button draws: its own icon, monochrome, a symbol or an
     /// image file (GitHub #9). Also the pinned button's context menu.
+    /// A pinned extension's right-click menu in the toolbar: Arc's rows (CraCore ExtensionActionMenu,
+    /// #695), Cra's icon choices under Icon. `profile`: the Chromium profile folder the bar lists its pins
+    /// for; `open` opens a page in a new tab of the window.
+    static func actionMenu(for e: ExtensionStore.Entry, profile: String, open: @escaping (String) -> Void) -> NSMenu {
+        let id = e.extensionID
+        let menu = NSMenu(title: e.name)
+        let rows = ExtensionActionMenu.rows(name: e.name, hasOptions: e.optionsPath != nil, fromWebStore: e.managedByChrome)
+        for row in rows {
+            switch row {
+            case .separator: menu.addItem(.separator())
+            case .name(_, let opensWebStore):
+                let item = BlockMenuItem(title: row.title) { open(ExtensionActionMenu.webStorePage(id: id)) }
+                item.image = menuIcon(e.icon)
+                if !opensWebStore { item.action = nil }
+                menu.addItem(item)
+            case .options:
+                if let path = e.optionsPath { menu.addItem(BlockMenuItem(title: row.title) { open(ExtensionActionMenu.optionsPage(id: id, path: path)) }) }
+            case .unpin:
+                menu.addItem(BlockMenuItem(title: row.title) { ExtensionStore.shared.setPinned(id, false, inProfile: profile) })
+            case .manage:
+                menu.addItem(BlockMenuItem(title: row.title) { open(ExtensionActionMenu.managePage(id: id)) })
+            case .webPermissions:
+                menu.addItem(BlockMenuItem(title: row.title) { open(ExtensionActionMenu.webPermissionsPage(id: id)) })
+            case .icon:
+                let item = NSMenuItem(title: row.title, action: nil, keyEquivalent: "")
+                item.submenu = iconMenu(for: e)
+                menu.addItem(item)
+            }
+        }
+        return menu
+    }
+
     static func iconMenu(for e: ExtensionStore.Entry) -> NSMenu {
         let store = ExtensionStore.shared
         let id = e.extensionID

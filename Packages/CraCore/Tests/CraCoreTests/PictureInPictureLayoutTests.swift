@@ -170,6 +170,27 @@ struct PictureInPictureLayoutTests {
         #expect(landing(0, 0) == nil)
     }
 
+    /// The reporter's Arc clip (#702): a PiP dragged half past the left edge comes back into view in that
+    /// side's corner, and one dragged half below the bottom into a bottom corner, 10 pt in, at its own size;
+    /// one let go wholly on screen stays. The frames are a real pointer drag of a 782 × 440 PiP on the
+    /// built-in display (23 Nov 2026), as the overlay hands them to `rest` on mouse-up.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/702"))
+    func draggedPastTheLeftOrBottomEdgeComesBackIntoView() {
+        let size = CGSize(width: 782, height: 440)
+        func rest(_ x: CGFloat, _ y: CGFloat) -> PictureInPictureLayout.Rest? {
+            PictureInPictureLayout.rest(afterDropping: CGRect(origin: CGPoint(x: x, y: y), size: size), from: builtIn, displays: [builtIn])
+        }
+        // Half past the left edge, high on the screen: the top left corner, below the menu bar.
+        #expect(rest(-391, 634) == .init(frame: CGRect(x: 10, y: 1084 - 10 - 440, width: 782, height: 440), corner: .topLeft))
+        // Half past the left edge, low on the screen: the bottom left corner.
+        #expect(rest(-391, 100) == .init(frame: CGRect(x: 10, y: 10, width: 782, height: 440), corner: .bottomLeft))
+        // Below the bottom edge, on the right half: the bottom right corner.
+        #expect(rest(936, -266) == .init(frame: CGRect(x: 1728 - 10 - 782, y: 10, width: 782, height: 440), corner: .bottomRight))
+        // Wholly on screen it stays where it was let go.
+        #expect(rest(300, 300) == nil)
+        #expect(rest(936, 644) == nil)
+    }
+
     /// Across two displays side by side it is on screen, so no corner takes it (since 12 Nov it
     /// slides onto one display instead: `droppedAcrossDisplaysSlidesOntoOne`). Past the far edge of
     /// the second, it goes to that display's corner, not the first one's.

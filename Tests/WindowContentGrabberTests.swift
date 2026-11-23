@@ -20,6 +20,7 @@ enum WindowContentGrabberTests {
         checkCursorChange()
         checkActivatingPress()
         checkEligibility()
+        checkEdgeToEdgeDoubleClick()
         checkResizeEdges()
         checkRoundedResizeCorners()
         checkRightInset()
@@ -211,6 +212,47 @@ enum WindowContentGrabberTests {
         NSApp.sendEvent(f.mouse(.leftMouseDragged, dx: 15))
         NSApp.sendEvent(f.mouse(.leftMouseUp, dx: 15))
         expect(f.owner.drags.isEmpty, "disabling grabbing also cancels a pending press")
+    }
+
+    // promise: #685
+    /// Edge to edge with no bar (#685), a double click in the page's top 10 pt zooms the window as a title bar's does:
+    /// its second press and release stay away from the page. Deeper, with the margin or under a bar, the page keeps it.
+    @MainActor
+    private static func checkEdgeToEdgeDoubleClick() {
+        let f = Fixture()
+        defer { f.close() }
+        NSCursor.arrow.set()
+        var zooms = 0
+        f.grabber.titleDoubleClick = { zooms += 1 }
+        func doubleClick(depth: Double) {
+            f.source.delivered.removeAll()
+            NSApp.sendEvent(f.mouse(.leftMouseDown, depth: depth))
+            NSApp.sendEvent(f.mouse(.leftMouseUp, depth: depth))
+            NSApp.sendEvent(f.mouse(.leftMouseDown, depth: depth, clickCount: 2))
+            NSApp.sendEvent(f.mouse(.leftMouseUp, depth: depth, clickCount: 2))
+        }
+        doubleClick(depth: 5)
+        expect(zooms == 0 && f.source.delivered.count == 4, "with the margin the page keeps a double click at its top")
+        f.grabber.fillsWindow = { true }
+        doubleClick(depth: 5)
+        expect(zooms == 1, "edge to edge a double click 5 pt into the page zooms the window")
+        expect(f.source.delivered.count == 2 && f.source.delivered.allSatisfy { $0.clickCount == 1 },
+               "the page gets the first click, not the second press and its release")
+        doubleClick(depth: 12)
+        expect(zooms == 1 && f.source.delivered.count == 4, "12 pt in, the double click is the page's (a site's buttons show the arrow too)")
+        f.grabber.barHeight = { 32 }
+        doubleClick(depth: 5)
+        expect(zooms == 1 && f.source.delivered.count == 4, "under a toolbar the page keeps it; the toolbar takes its own")
+        f.grabber.barHeight = { 0 }
+        NSCursor.iBeam.set()
+        doubleClick(depth: 5)
+        expect(zooms == 1 && f.source.delivered.count == 4, "over text the double click selects a word, as always")
+        NSCursor.arrow.set()
+        doubleClick(depth: 5)
+        NSApp.sendEvent(f.mouse(.leftMouseDown, depth: 5))
+        NSApp.sendEvent(f.mouse(.leftMouseUp, depth: 5))
+        expect(zooms == 2 && f.source.delivered.suffix(2).map(\.type) == [.leftMouseDown, .leftMouseUp],
+               "the next click after a zoom goes to the page")
     }
 
     @MainActor
