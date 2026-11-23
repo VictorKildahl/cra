@@ -1628,6 +1628,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Library's rail or gone, the button down or up; a second later cra.log says, under that label,
             // which frame its icon rests on and in how many it got there since it was picked, and the tile's
             // colours and wash.
+            // libraryBack=1: the Library rail's back arrow, as its click sends it (#726).
+            if dict["libraryBack"] != nil {
+                let pressed = (main.shell.sidebarHost as? SidebarView)?.debugLibraryBack() == true
+                CraLog.note("library back arrow: \(pressed ? "pressed" : "no library")")
+                return
+            }
             if let name = dict["libraryRail"] {
                 guard let page = LibraryPage(rawValue: name), let sidebar = main.shell.sidebarHost as? SidebarView else {
                     CraLog.note("library rail: none"); return

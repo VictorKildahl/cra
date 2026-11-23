@@ -84,6 +84,45 @@ public enum LibrarySwipe {
         max(inset, sidebarWidth(reveal: r, base: 0, library: library))
     }
 
+    // MARK: The Library button
+    //
+    // Arc slides the Library in when its button (or ⇧⌘L) opens it and out when the button or the Library's back
+    // arrow leaves it, on the swipe's motion, from a hidden sidebar too: in from the window's edge under the
+    // floating sidebar, and out to the hidden sidebar with no tab list on the way (#726, the reporter's recording of
+    // Arc: one eased-out motion of about 320 ms either way).
+
+    /// Where the sidebar is when the button is pressed.
+    public enum ButtonSidebar: Equatable, Sendable {
+        /// Docked beside the page, the Library's own or the tab list's.
+        case docked
+        /// Hidden, its floating panel out over the page or not.
+        case hidden
+        /// None to slide beside: a page full screen for its own (a video's).
+        case none
+    }
+
+    /// How the button moves the Library.
+    public enum ButtonMotion: Equatable, Sendable {
+        /// The swipe's spring to reveal 0 or 1 in the docked sidebar, from where it shows.
+        case slide(to: CGFloat)
+        /// In from the window's edge under the floating sidebar, landing docked.
+        case slideFromHidden
+        /// At once.
+        case show
+        case close
+    }
+
+    /// The Library button, ⇧⌘L and the Library's back arrow. A swipe in progress keeps the fingers in charge: the
+    /// button lands it at once.
+    public static func buttonMotion(opening: Bool, sidebar: ButtonSidebar, swiping: Bool) -> ButtonMotion {
+        guard !swiping else { return opening ? .show : .close }
+        switch sidebar {
+        case .docked: return .slide(to: opening ? 1 : 0)
+        case .hidden: return opening ? .slideFromHidden : .close
+        case .none: return opening ? .show : .close
+        }
+    }
+
     /// Where a released swipe settles: a flick goes its way, else past halfway opens.
     /// `velocity` is in reveals per second, + toward the Library.
     public static func target(reveal r: CGFloat, velocity: CGFloat) -> CGFloat {

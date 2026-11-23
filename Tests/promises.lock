@@ -1642,6 +1642,9 @@
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::anythingOfAFinderIconCounts  fe4242760f79
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theAppNeverPutsAnIconOnItself  2b74fc6f15fa
 #724   Tests/Scenarios/app-icon-signature.scenario  aafcd593a237
+#726   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theButtonSlidesTheLibraryFromAHiddenSidebarAndBack  1521c105318e
+#726   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theButtonsSlideEasesOutInAboutAThirdOfASecond  39fad79abe89
+#726   Tests/Scenarios/library-button-slides.scenario  ddcde828c462
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
