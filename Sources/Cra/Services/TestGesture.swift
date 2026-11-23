@@ -96,6 +96,16 @@ enum TestGesture {
         NSApp.postEvent(e, atStart: false)
     }
 
+    /// A modifier key let go or pressed: the flagsChanged event the window server sends then, through the app's
+    /// event queue (its local monitors see it), with `flags` the modifiers still down.
+    static func flagsChanged(_ flags: CGEventFlags) {
+        guard let cg = CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: flags.contains(.maskCommand)) else { return }
+        cg.type = .flagsChanged
+        cg.flags = flags
+        guard let e = NSEvent(cgEvent: cg) else { return }
+        NSApp.postEvent(e, atStart: false)
+    }
+
     static func key(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow) {
         for type in [NSEvent.EventType.keyDown, .keyUp] {
             guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,

@@ -1596,6 +1596,11 @@
 #706   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
 #707   Packages/CraCore/Tests/CraCoreTests/WheelSpaceSwitchTests.swift::theMenuKeysReachTheLibraryLikeASwipe  f8e7fa428732
 #707   Tests/Scenarios/space-keys-library.scenario  0f26f2767a46
+#709   Packages/CraCore/Tests/CraCoreTests/ExtensionPickerTests.swift::eachPressRingsTheNextExtension  c7fdbc1929dd
+#709   Packages/CraCore/Tests/CraCoreTests/ExtensionPickerTests.swift::noExtensionsRingsNothing  186a2aae9eba
+#709   Packages/CraCore/Tests/CraCoreTests/ExtensionPickerTests.swift::pastTheLastItStartsAgain  f3821c94cd6d
+#709   Packages/CraCore/Tests/CraCoreTests/ExtensionPickerTests.swift::whatAPressDoes  8311eb472131
+#709   Tests/Scenarios/extension-picker.scenario  82cd3453d5eb
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

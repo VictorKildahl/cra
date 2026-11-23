@@ -4624,6 +4624,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Site Control Center as if its sliders button was clicked, wherever the request came from
     /// (the protected media toast's Why?): under the toolbar's button, else under the sidebar's URL
     /// field at its right end, where that button sits. The arrow shows where to find it next time.
+    /// The Open Extensions shortcut (⌘E). Held ⌘, it is Arc's extension picker (ExtensionPicker, #709): the Site
+    /// Control Center with its first extension ringed, the next one on each press, and the ringed one's popup when
+    /// ⌘ is let go. From the command bar (no ⌘ held) it opens or closes the Site Control Center as its button does.
+    func openExtensions(commandHeld: Bool, isPickerKey: @escaping (NSEvent) -> Bool) {
+        switch ExtensionPicker.press(commandHeld: commandHeld, picking: siteControlCenter.isPicking) {
+        case .step: siteControlCenter.step()
+        case .toggle: showSiteControlsFromTheirButton()
+        case .openPicking:
+            if !siteControlCenter.isShown { showSiteControlsFromTheirButton() }
+            siteControlCenter.startPicking(isPickerKey: isPickerKey)
+        }
+    }
+
     func showSiteControlsFromTheirButton() {
         if let button = (shell.focusedCard?.toolbarHost as? PaneToolbarView)?.siteControlsButtonFrameOnScreen() {
             return showToolbarExtensionsMenu(from: button, inToolbar: true)
@@ -4753,7 +4766,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         CraLog.note("floating sidebar \(step): \(floatingSidebar?.isShown == true ? "out" : "in")")
     }
 
-    func debugSiteControlsRead() { siteControlCenter.debugRead() }
+    func debugSiteControlsRead(label: String = "1") { siteControlCenter.debugRead(label: label) }
     func debugSiteControlsPress(_ label: String, accessory: Bool) { siteControlCenter.debugPress(label, accessory: accessory) }
 
     /// Cra's privacy page, where the command bar's search-suggestions banner says "Learn more".

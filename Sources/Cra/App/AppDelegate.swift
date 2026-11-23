@@ -1408,6 +1408,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // flags=<modifier bits>: the modifier keys as they are now, as letting go of ⌘ after ⌘E posts it (#709).
+            if let raw = dict["flags"].flatMap(UInt64.init) { TestGesture.flagsChanged(CGEventFlags(rawValue: raw)); return }
             // activate=1: Cra to the front with its window key, for a screen scenario that types (#424).
             if dict["activate"] == "1" { main.showWindow(nil); NSApp.activate(ignoringOtherApps: true); main.window?.makeKey(); return }
             // deactivate=1: Cra goes behind as when the user picks another app (Finder), its windows still on
@@ -2838,7 +2840,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["siteControls"] != nil { main.debugSiteControls(); return }
             // siteControlsRead=1, siteControlsPress=<label>[&accessory=1]: the open Site Control
             // Center's action buttons and Boost rows, read or pressed (#478).
-            if dict["siteControlsRead"] != nil { main.debugSiteControlsRead(); return }
+            if let label = dict["siteControlsRead"] { main.debugSiteControlsRead(label: label); return }
             if let label = dict["siteControlsPress"] { main.debugSiteControlsPress(label, accessory: dict["accessory"] == "1"); return }
             // The sidebar's URL field (toolbar hidden): hovered, and a press on one of its buttons (#226).
             if let v = dict["urlFieldHover"] { main.debugURLFieldHover(v == "1"); return }
@@ -3812,7 +3814,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "resetSpaceTabs": main.resetAllPinnedTabs()
         case "collapseAllFolders": store.setAllFoldersExpanded(false, inSpace: main.focusedSpaceID)
         case "expandAllFolders": store.setAllFoldersExpanded(true, inSpace: main.focusedSpaceID)
-        case "openExtensions": main.showSiteControlsFromTheirButton()
+        case "openExtensions":
+            // From the keyboard with ⌘ held: Arc's picker (#709). The command bar's Return and a click carry no ⌘.
+            let held = NSApp.currentEvent.map { $0.type == .keyDown && $0.modifierFlags.contains(.command) } ?? false
+            main.openExtensions(commandHeld: held) { [bindings] e in bindings.action(for: e)?.id == "openExtensions" }
         case "manageExtensions": main.openExtensionsPage()
         case "cast": if main.currentBrowser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { main.showToast("Nothing to Cast") }
         case "taskManager": if main.currentBrowser?.runChromeCommand("IDC_TASK_MANAGER") != true { main.showToast("Open a Page First") }

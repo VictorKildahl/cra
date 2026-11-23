@@ -2341,6 +2341,15 @@ Arc's popup this time, so geometry is not measured.
   208×33 rows on a 43 pt pitch (32 pt circle #F0F1FE when on, #6A6A6F when off; title 14 pt semibold #DBDBDB,
   subtitle 13 pt #979798): Developer Mode On/Off, Block Ads & Trackers On/Off, Automatic Picture-In-Picture Allowed;
   a divider; footer: "Secure" pill 82×32 (#363536) and a 32 pt "More" circle (#403F40). Background #272728 (dark theme).
+- [O] ⌘E is "Open pinned extensions picker." (`openExtensionsPicker`; Arc 1.172, 23 Nov 2026, held ⌘ with HID taps
+  recorded): ⌘E opens the Site Control Center with the first extension tile ringed; each E after it, ⌘ still held,
+  rings the next tile in grid order (pinned, then the rest: the 3rd tap ringed an unpinned one); letting go of ⌘
+  closes the popover and opens the ringed extension's popup (one press and let go: the first pinned extension's).
+  Ring: 2 pt in the accent colour (#FAEEC2 in a cream theme, the pin badge's), centred on the tile's edge; the tile's
+  fill is unchanged. Past the last tile: no ring was visible, and a later tap opened an extension popup while ⌘ was
+  still held; not pinned down (Cra goes round to the first). Release notes: 2022 "Hold CMD and tap E to cycle through
+  your extensions", 2023 "Hold CMD and hit E to toggle through and open pinned extensions". Cra: `ExtensionPicker`
+  (CraCore), GitHub #709.
 - [O] Pinning: each tile carries a 14 pt `pin.fill` badge at (+37, +21) from its top-left. Pinned tiles always show
   it (#F0F1FE, AX "Unpin"); an unpinned tile shows it on hover only (#7F7E85, AX "Pin"). The badge glyph is the
   popover's background colour.
