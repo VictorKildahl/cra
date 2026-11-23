@@ -1795,6 +1795,28 @@ final class AppIconDockTests: BrowserTestCase {
         sleep(1)
         keep("icon-dock")
     }
+
+    /// On iPad the dock's row of icons sits in the middle of the sheet, under its title, instead
+    /// of against the left edge with empty shelf to the right.
+    func testIconDockCentresItsRowOnIPad() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "on iPhone the row is wider than the sheet and scrolls")
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
+        app.buttons["bar-settings"].tap()
+        let row = app.buttons["setting-app-icon"]
+        XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
+        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        let title = app.staticTexts["App Icon"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        sleep(1)
+        let first = app.buttons["icon-segments"].frame, last = app.buttons["icon-violet"].frame
+        XCTAssertEqual((first.minX + last.maxX) / 2, title.frame.midX, accuracy: 6,
+                       "the icons run from \(first.minX) to \(last.maxX), not centred under the title at \(title.frame.midX)")
+        keep("icon-dock-ipad")
+    }
 }
 
 final class LanguagesTests: BrowserTestCase {

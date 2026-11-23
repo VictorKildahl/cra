@@ -9,12 +9,20 @@ import SwiftUI
 struct AppIconDock: View {
     var done: () -> Void = {}
     @State private var selected = MobileAppIcon(alternateName: UIApplication.shared.alternateIconName)
+    /// The sheet's width. An iPad's is wider than the row, which then sits in the middle, still;
+    /// an iPhone's is narrower, and the row scrolls from the left edge as in Arc Search.
+    @State private var width: CGFloat = 0
 
     private static let icon: CGFloat = 78
     private static let gap: CGFloat = 32
     private static let shelfTop: CGFloat = 41
     private static let shelfFront: CGFloat = 17
     private static let dot = Color(red: 0x2b / 255, green: 0x3a / 255, blue: 0xf0 / 255)
+    /// The icons and their 24 pt margins, without the shelf that runs past both ends.
+    private static var rowWidth: CGFloat {
+        let count = CGFloat(MobileAppIcon.allCases.count)
+        return count * icon + (count - 1) * gap + 48
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,13 +48,19 @@ struct AppIconDock: View {
                     .padding(.horizontal, 24)
                     .padding(.bottom, Self.shelfFront + Self.shelfTop * 0.45)
                 }
+                .frame(width: fits ? Self.rowWidth : nil, alignment: .leading)
+                .frame(width: fits ? width : nil)
             }
             .scrollClipDisabled()
+            .scrollDisabled(fits)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             Spacer(minLength: 30)
         }
         .background(LinearGradient(colors: [Color(white: 0.965), Color(red: 0.95, green: 0.94, blue: 0.99)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
         .environment(\.colorScheme, .light)
     }
+
+    private var fits: Bool { width >= Self.rowWidth }
 
     /// The glass shelf the icons stand on: a pale top face with their reflections, a white front edge.
     private var shelf: some View {
