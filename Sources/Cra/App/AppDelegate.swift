@@ -1078,6 +1078,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if inMenuBar { DispatchQueue.main.async { [weak self] in self?.settleDockIcon() } }
         if let parent = w.peekParent, let tab = w.peekSourceTab,
            !littleWindows.contains(where: { $0.peekParent === parent && $0.peekSourceTab == tab }) { parent.sidebarUI.peekBadges[tab] = nil }
+        // A Peek gone from the list never stands for the sidebar's address field (#706).
+        w.peekParent?.syncPeekAddress()
     }
 
     private func archiveIdleLittleWindows() {
