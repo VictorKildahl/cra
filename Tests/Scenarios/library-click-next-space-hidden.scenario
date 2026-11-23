@@ -1,0 +1,21 @@
+# promise: #717
+# With the sidebar shown and a space to the right of the current one, opening the Library and closing it
+# again (its button, ⇧⌘L) never shows the next space's tabs past the sidebar's edge: the column narrows from
+# the Library's width to the tab list's, and the space pages' mask follows it at once (PagerMask, #679),
+# where it used to ease after it and let the next space's column through for its 0.13 s.
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=first-space
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/newSpace
+wait 1
+cra://open?url=${PAGE}?n=second-space-a
+cra://open?url=${PAGE}?n=second-space-b
+wait 1
+cra://action/space1
+wait 1
+cra://action/openLibrary
+wait 1.5
+cra://action/openLibrary
+expect-log library left in place: the space pages' mask follows the column$
+reject-log the space pages' mask trails the column

@@ -1620,6 +1620,7 @@
 #715   Packages/CraCore/Tests/CraCoreTests/SpellCheckTests.swift::onUnlessTheProfileTurnedItOff  08700842f871
 #715   Tests/Scenarios/spellcheck-toggle.scenario  26c8ad5f6d2a
 #716   Tests/Scenarios/command-bar-space-scope-pinned.scenario  5898d27719ad
+#717   Tests/Scenarios/library-click-next-space-hidden.scenario  a9075cb356d2
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

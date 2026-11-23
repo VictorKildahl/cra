@@ -49,6 +49,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var librarySwipeToward: CGFloat?
     private var librarySettleSpring: (clock: SettleClock, from: CGFloat, velocity: CGFloat, target: CGFloat)?
     private var librarySettleLink: CADisplayLink?
+    /// Frames of the Library's slide on which the space pages' mask was still easing after the column (#717).
+    private var libraryMaskTrailFrames = 0
     /// Shows the lists' overlay knob again once a swipe's scroller flash has faded.
     private var swipeKnobReveal: DispatchWorkItem?
     /// Whether a touch over the sidebar hides the lists' knob (#77), or leaves it showing (#544).
@@ -3920,6 +3922,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     private func settleLibrary(from r: CGFloat, velocity: CGFloat, to target: CGFloat) {
+        libraryMaskTrailFrames = 0
         librarySettleSpring = (clock: SettleClock(started: CACurrentMediaTime()), from: r, velocity: velocity, target: target)
         if librarySettleLink == nil {
             let link = shell.displayLink(target: self, selector: #selector(stepLibrarySettle))
@@ -3937,6 +3940,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             stopLibrarySettle()
             finishLibrarySwipe(at: s.target)
         } else {
+            // The last frame's narrowing: the space pages' mask must already be the column's, or the next space's
+            // column shows past its edge (#679, #717).
+            if (shell.sidebarHost as? SidebarView)?.pagesMaskTrails == true { libraryMaskTrailFrames += 1 }
             setLibraryReveal(LibrarySwipe.settle(from: s.from, velocity: s.velocity, to: s.target, at: t))
         }
     }
@@ -3996,6 +4002,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // The column has just narrowed from the Library's width; the next space's column lies past its edge (#679).
             let trails = (shell.sidebarHost as? SidebarView)?.pagesMaskTrails == true
             CraLog.note("library left by a swipe: the sidebar hides again, the space pages' mask \(trails ? "trails" : "follows") the column")
+        } else if target < 1 {
+            // Left in place (its button, ⇧⌘L, a swipe): the column narrows to the tab list's width with the next
+            // space's column right past its edge, over the page (#717).
+            shell.layoutSubtreeIfNeeded()
+            let trails = (shell.sidebarHost as? SidebarView)?.pagesMaskTrails == true || libraryMaskTrailFrames > 0
+            CraLog.note("library left in place: the space pages' mask \(trails ? "trails" : "follows") the column"
+                        + (libraryMaskTrailFrames > 0 ? " on \(libraryMaskTrailFrames) frames" : ""))
         }
         shell.thawPages()
     }
