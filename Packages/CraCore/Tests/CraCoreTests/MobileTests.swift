@@ -364,6 +364,39 @@ struct MobileTabsTests {
         #expect(loaded.tabs.first?.displayTitle == "a.example")
         #expect(loaded.selected == nil)
     }
+
+    /// The tab row opens focused on the card behind the page, to its left; the first or only
+    /// card focuses itself, and with no page the newest card does.
+    @Test func theRowFocusesTheCardBehindThePage() {
+        var document = MobileTabsDocument()
+        let tabs = ["a", "b", "c"].map { Self.tab($0, hoursAgo: 1) }
+        tabs.forEach { document.open($0) }
+        document.select(tabs[1].id, now: Self.start)
+        #expect(document.switcherFocus?.id == tabs[0].id)
+        document.select(tabs[0].id, now: Self.start)
+        #expect(document.switcherFocus?.id == tabs[0].id, "the first card focuses itself")
+        document.select(tabs[2].id, now: Self.start)
+        #expect(document.switcherFocus?.id == tabs[1].id)
+        document.selected = nil
+        #expect(document.switcherFocus?.id == tabs[2].id, "no page: the newest card")
+        document.tabs = [tabs[0]]
+        document.selected = tabs[0].id
+        #expect(document.switcherFocus?.id == tabs[0].id, "one tab focuses itself")
+    }
+
+    /// The tab button previews the two tabs behind the page, never the page itself: the previous
+    /// tab on top and the tab behind it underneath.
+    @Test func theButtonPreviewsTheTwoTabsBehindThePage() {
+        let tabs = (1...4).map { Self.tab("\($0)", hoursAgo: Double($0)) }
+        let document = MobileTabsDocument(tabs: tabs, selected: tabs[1].id)
+        #expect(document.tabsBehindCurrent.map(\.title) == ["1", "3", "4"])
+        #expect(document.previousTab?.title == "1")
+        #expect(!document.tabsBehindCurrent.contains { $0.id == tabs[1].id }, "the page itself is left out")
+        let tied = ["a", "b", "c"].map { Self.tab($0, hoursAgo: 1) }
+        let even = MobileTabsDocument(tabs: tied, selected: tied[0].id)
+        #expect(even.tabsBehindCurrent.map(\.title) == ["c", "b"], "ties go to the newer tab in the row")
+        #expect(even.previousTab?.title == "c")
+    }
 }
 
 struct MobileSettingsTests {
@@ -495,21 +528,25 @@ struct MobileTabCarouselTests {
 
 struct MobilePageMenuTests {
     /// Victor's recording of Arc Search 1.49 on an iPhone 16 Pro Max (440 × 956 pt): the closed
-    /// menu's sheet starts at 508 pt, the address capsule at 524.7 pt; Display Options opens to
-    /// four more rows.
-    @Test func heightMatchesArcSearch() {
-        #expect(abs(MobilePageMenu.height(safeBottom: 34) - (956 - 508.3)) < 1)
-        #expect(MobilePageMenu.height(displayOptionsOpen: true, safeBottom: 34) - MobilePageMenu.height(safeBottom: 34) == CGFloat(192))
+    /// menu's sheet starts at 508 pt with the recording's 85.6 × 88.7 tiles. Square tiles with
+    /// slightly less horizontal padding (Victor's call) put it at 508.0 pt. The address capsule
+    /// is at 524.7 pt; Display Options opens to four more rows.
+    @Test func heightMatchesTheSquareTiles() {
+        #expect(abs(MobilePageMenu.height(width: 440, safeBottom: 34) - (956 - 508.0)) < 1)
+        #expect(abs(MobilePageMenu.height(displayOptionsOpen: true, width: 440, safeBottom: 34)
+            - MobilePageMenu.height(width: 440, safeBottom: 34) - 192) < 0.001)
     }
 
-    /// The tiles there: 85.7 pt wide from 18.3 pt in, 20 pt apart, their tops 81 pt down the sheet.
+    /// The tiles: 88.1 pt square from 16.3 pt in, 18.3 pt apart, their tops 81 pt down the sheet.
     @Test func fourTilesFillTheWidthAndThreeStayCentred() {
         let four = MobilePageMenu.tileFrames(count: 4, width: 440)
-        // 55, 373, 691 and 1008 px in the recording.
-        let measured: [CGFloat] = [55, 373, 691, 1008].map { $0 / 3 }
-        #expect(zip(four, measured).allSatisfy { abs($0.minX - $1) < 0.4 })
-        #expect(abs(four[0].width - 85.6) < 0.1 && four[0].height == 88.7)
+        #expect(abs(four[0].minX - 16.33) < 0.01)
+        #expect(abs(four[3].maxX - (440 - 16.33)) < 0.01)
+        #expect(abs(four[1].minX - four[0].maxX - 18.33) < 0.01)
+        #expect(abs(four[0].width - 88.0875) < 0.01 && four[0].height == four[0].width)
         #expect(abs(four[0].minY - 80.9) < 0.01)
+        let wide = MobilePageMenu.tileFrames(count: 4, width: 540)
+        #expect(wide.allSatisfy { $0.width == $0.height }, "every sheet width keeps the buttons square")
         let three = MobilePageMenu.tileFrames(count: 3, width: 440)
         #expect(abs(three[1].midX - 220) < 0.01)
         #expect(MobilePageMenu.tiles(canSummarize: false) == [.findOnPage, .pin, .share])
@@ -689,7 +726,7 @@ struct MobileSwipeTests {
         #expect(!MobileSwipe.switchesToPreviousTab(dragUp: 10, velocityUp: 2000))
         #expect(!MobileSwipe.switchesToPreviousTab(dragUp: 120, velocityUp: -800), "pulled back down before letting go")
         #expect(MobileSwipe.previousTabProgress(dragUp: 0) == 0)
-        #expect(MobileSwipe.previousTabProgress(dragUp: 250) == 0.5)
+        #expect(MobileSwipe.previousTabProgress(dragUp: 200) == 0.5)
         #expect(MobileSwipe.previousTabProgress(dragUp: 900) == 1)
         #expect(MobileSwipe.previousTabProgress(dragUp: -40) == 0)
     }
@@ -1134,6 +1171,70 @@ struct MobileMotionTests {
         #expect(MobileMotion.opensSwitcher(dragUp: 40, velocityUp: 800))
         #expect(!MobileMotion.opensSwitcher(dragUp: 40, velocityUp: 100))
     }
+
+    /// The page card on a flick up shrinks straight with the hand, all the way to the top of the
+    /// screen, rounded at the device's corners from its first frame.
+    @Test func theFlickedPageShrinksStraightWithTheHand() {
+        let startY: CGFloat = 800
+        #expect(MobileMotion.flickCardProgress(dragUp: 0, startY: startY) == 0)
+        #expect(abs(MobileMotion.flickCardProgress(dragUp: 400, startY: startY) - 0.5) < 0.001, "straight, no easing")
+        #expect(MobileMotion.flickCardProgress(dragUp: 800, startY: startY) == 1)
+        #expect(MobileMotion.flickCardProgress(dragUp: 900, startY: startY) == 1)
+        let steps = (1...8).map { MobileMotion.flickCardProgress(dragUp: CGFloat($0) * 100, startY: startY) }
+        #expect(zip(steps, steps.dropFirst()).allSatisfy { $0 < $1 }, "never goes back up")
+
+        #expect(MobileMotion.flickCornerRadius == 44, "the device's own corners, from the first frame")
+    }
+
+    /// The page shrinks into the bottom-left with the screen's own shape, so the tab's top colour
+    /// and what lies under the bar are in it: 60 % of the screen's width, 10 pt above the bar.
+    @Test func theFlickedPageBecomesACardInTheBottomLeft() {
+        let screen = CGRect(x: 0, y: 0, width: 393, height: 852)
+        let card = MobileMotion.flickCardFrame(in: screen, aboveBar: 776, safeTop: 59)
+        #expect(abs(card.height - (776 - 59) * 0.5) < 0.001, "half the tab area's height")
+        #expect(abs(card.width - card.height * screen.width / screen.height) < 0.001, "the screen's own shape")
+        #expect(card.minX == screen.minX + 16)
+        #expect(abs(card.maxY - 752) < 0.001, "16 pt from the left, 24 pt above the bar")
+        #expect(card.minY > screen.minY, "anchored above the bar, growing up")
+        let start = MobileMotion.flickStartFrame(in: screen, aboveBar: 776)
+        #expect(start.minX == screen.minX + 20 && start.maxX == screen.maxX - 20, "20 pt at the sides")
+        #expect(start.minY == 20, "20 pt from the top of the screen")
+        #expect(abs(start.maxY - 756) < 0.001, "20 pt above the tab bar")
+    }
+
+    /// The tab being dragged up can grow only as far as its bottom reaching the screen's edge.
+    @Test func theDraggedTabNeverPassesTheScreensBottom() {
+        #expect(abs(MobileMotion.flickCardLimit(fingerY: 600, screenHeight: 852) - 252 / 0.55) < 0.001)
+        let height = MobileMotion.flickCardLimit(fingerY: 600, screenHeight: 852)
+        #expect(abs(600 + 0.55 * height - 852) < 0.001)
+        #expect(MobileMotion.flickCardLimit(fingerY: 900, screenHeight: 852) == 0)
+    }
+
+    /// The card hangs from the finger: a still hand leaves it straight, and a sideways pull sets
+    /// it rocking and settling straight again.
+    @Test func theFlickedCardSwingsFromTheFingerAndSettlesStraight() {
+        #expect(MobileMotion.flickSwingTarget(velocityX: 0) == 0)
+        #expect(MobileMotion.flickSwingTarget(velocityX: 6000) == MobileMotion.flickSwingTarget(velocityX: 60_000))
+        #expect(MobileMotion.flickSwingTarget(velocityX: -6000) == -MobileMotion.flickSwingTarget(velocityX: 6000))
+        var angle: CGFloat = 0, speed: CGFloat = 0
+        for _ in 0..<120 {
+            (angle, speed) = MobileMotion.flickSwingStep(angle: angle, speed: speed, target: 0, dt: 1.0 / 60)
+        }
+        #expect(angle == 0 && speed == 0, "a still hand never tips it")
+        var peak: CGFloat = 0, sides = 0
+        var last: CGFloat = 0
+        for frame in 0..<36 {
+            let target = MobileMotion.flickSwingTarget(velocityX: frame < 6 ? 900 : 0)
+            (angle, speed) = MobileMotion.flickSwingStep(angle: angle, speed: speed, target: target, dt: 1.0 / 60)
+            peak = max(peak, abs(angle))
+            if angle * last < 0 { sides += 1 }
+            last = angle
+        }
+        #expect(peak > 0.005 && peak < 0.1, "a sideways pull tips it, five degrees at most")
+        #expect(abs(MobileMotion.flickSwingTarget(velocityX: 60_000) - 5 * .pi / 180) < 0.0001)
+        #expect(sides >= 2, "it rocks back and forth, elastic rather than damped flat")
+        #expect(abs(angle) < 0.01, "and hangs straight again within half a second")
+    }
 }
 
 struct MobileOnboardingTests {
@@ -1242,6 +1343,21 @@ struct MobilePageBehindSearchTests {
         #expect(abs(top - 59) < 1e-9)
         // White under the dim comes out #cccccc, the screenshot's colour.
         #expect(Int(((1 - MobilePageBehindSearch.dim) * 255).rounded()) == 0xcc)
+    }
+
+    /// The page follows the search drawer: closed it is the page itself, open the card, and
+    /// halfway its top is halfway to the status bar.
+    @Test func thePageFollowsTheDrawerAsItOpens() {
+        let size = CGSize(width: 393, height: 852)
+        let closed = MobilePageBehindSearch.transform(in: size, safeTop: 59, progress: 0)
+        #expect(closed.scale == 1 && closed.shiftDown == 0)
+        let half = MobilePageBehindSearch.transform(in: size, safeTop: 59, progress: 0.5)
+        let top = size.height * (1 - half.scale) / 2 + half.shiftDown
+        #expect(abs(top - 29.5) < 1e-9, "the page's top follows the drawer halfway")
+        let open = MobilePageBehindSearch.transform(in: size, safeTop: 59, progress: 1)
+        let card = MobilePageBehindSearch.transform(in: size, safeTop: 59)
+        #expect(abs(open.scale - card.scale) < 1e-9 && abs(open.shiftDown - card.shiftDown) < 1e-9)
+        #expect(MobilePageBehindSearch.transform(in: size, safeTop: 59, progress: 2).scale == card.scale)
     }
 }
 
@@ -1746,20 +1862,79 @@ struct MobileRecentTabsTests {
     }
 }
 
-/// The bottom bar's buttons tick under the finger as Arc Search's do (#675).
+/// The bottom bar's buttons and the page menu's controls tick under the finger (#675).
 struct MobilePressHapticsTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
-    func aButtonTicksAsTheFingerComesDownAndAgainAsItLetsGo() {
-        #expect(MobilePressHaptics.tick(from: false, to: true) == .press)
-        #expect(MobilePressHaptics.tick(from: true, to: false) == .release)
-        // A finger moving on the button sets the highlight again: no tick for that.
-        #expect(MobilePressHaptics.tick(from: true, to: true) == nil)
-        #expect(MobilePressHaptics.tick(from: false, to: false) == nil)
+    func theBarsButtonsTickOnlyAsTheFingerComesDown() {
+        #expect(MobilePressHaptics.barButtons == ["bar-tabs", "bar-search", "bar-menu", "bar-spaces", "bar-settings"])
+        for id in MobilePressHaptics.barButtons {
+            #expect(MobilePressHaptics.tick(for: id, edge: .down) == .selection)
+            #expect(MobilePressHaptics.tick(for: id, edge: .up) == nil)
+        }
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
-    func everyBarButtonTicksTheNewTabPillToo() {
-        #expect(MobilePressHaptics.barButtons == ["bar-tabs", "bar-search", "bar-menu", "bar-spaces", "bar-settings"])
-        #expect(MobilePressHaptics.barButtons.contains("bar-search"))
+    func theMenusTilesAndRowsTickOnPress() {
+        // Find on Page and Share tick once; Pin and Summarize again as the finger lets go.
+        for id in ["menu-tile-findOnPage", "menu-tile-share"] {
+            #expect(MobilePressHaptics.tick(for: id, edge: .down) == .press)
+            #expect(MobilePressHaptics.tick(for: id, edge: .up) == nil)
+        }
+        for id in ["menu-tile-pin", "menu-tile-summarize"] {
+            #expect(MobilePressHaptics.tick(for: id, edge: .down) == .press)
+            #expect(MobilePressHaptics.tick(for: id, edge: .up) == .release)
+        }
+        for id in [
+            "menu-row-displayOptions", "menu-row-translate", "menu-row-readerMode",
+            "menu-row-requestDesktopSite", "menu-row-siteSettings",
+            "menu-zoom-in", "menu-zoom-out", "menu-zoom-value",
+            "menu-reload-without-blockers",
+        ] {
+            #expect(MobilePressHaptics.tick(for: id, edge: .down) == .press)
+            #expect(MobilePressHaptics.tick(for: id, edge: .up) == nil)
+        }
+        // The address gives one very subtle selection tick instead of an impact.
+        #expect(MobilePressHaptics.tick(for: "menu-host", edge: .down) == .selection)
+        #expect(MobilePressHaptics.tick(for: "menu-host", edge: .up) == nil)
+        // The zoom row itself has no action: only its stepper ticks.
+        #expect(MobilePressHaptics.tick(for: "menu-row-pageZoom", edge: .down) == nil)
+        #expect(MobilePressHaptics.policy(for: "nothing") == nil)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/675"))
+    func theCapsulesButtonsTickOnlyAsTheFingerLetsGo() {
+        for id in ["menu-back", "menu-forward", "menu-reload", "menu-copy-link"] {
+            #expect(MobilePressHaptics.tick(for: id, edge: .down) == nil)
+            #expect(MobilePressHaptics.tick(for: id, edge: .up) == .release)
+        }
+    }
+}
+
+struct MobileSnapshotTests {
+    /// A capture that came back black is not kept as the tab's picture, and is not shown on a
+    /// flick's card, while a dark page still is: the black flash after a quick flick.
+    @Test func aBlackCaptureIsBlankButADarkPageIsNot() {
+        #expect(MobileSnapshot.looksBlank(red: 0, green: 0, blue: 0))
+        #expect(MobileSnapshot.looksBlank(red: 0.01, green: 0.01, blue: 0.02))
+        // iOS's dark background, #1c1c1e, with nothing on it.
+        #expect(!MobileSnapshot.looksBlank(red: 0.11, green: 0.11, blue: 0.118))
+        #expect(!MobileSnapshot.looksBlank(red: 1, green: 1, blue: 1))
+    }
+}
+
+struct MobileFlickThrowTests {
+    /// The arriving tab keeps the way the hand threw it, scaled by its gain and always a little
+    /// upwards; a still hand sends it straight up.
+    @Test func theThrowCarriesTheHandsSpeedAndAlwaysRises() {
+        let gain = CGVector(dx: 1, dy: 1)
+        let up = MobileMotion.flickThrow(velocity: CGPoint(x: 400, y: -1000), distance: 200, gain: gain)
+        #expect(abs(up.dx - 2) < 0.001 && abs(up.dy - 5) < 0.001)
+        let down = MobileMotion.flickThrow(velocity: CGPoint(x: 0, y: 900), distance: 200, gain: gain)
+        #expect(down.dy == 1, "thrown down, it still rises a little")
+        let still = MobileMotion.flickThrow(velocity: .zero, distance: 300, gain: gain)
+        #expect(still.dx == 0 && abs(still.dy - 4) < 0.001, "a still hand throws it up")
+        let picture = MobileMotion.flickThrow(velocity: CGPoint(x: 400, y: -1000), distance: 200,
+                                              gain: MobileMotion.flickPictureThrowGain)
+        #expect(abs(picture.dx - 0.8) < 0.001 && abs(picture.dy - 3) < 0.001)
     }
 }

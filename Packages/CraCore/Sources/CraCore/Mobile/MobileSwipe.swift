@@ -101,8 +101,8 @@ public enum MobileSwipe {
     /// A drag up that starts on the tab button brings the previous tab (`MobileTabsDocument.previousTab`)
     /// out of the button under the finger (#537). Its card is the whole page at this share of
     /// the way: a 500 pt drag would get there, so mid-screen it is about half grown, as in Arc Search.
-    public static func previousTabProgress(dragUp distance: CGFloat) -> CGFloat {
-        min(1, max(0, distance / 500))
+    public static func previousTabProgress(dragUp distance: CGFloat, to startY: CGFloat = 400) -> CGFloat {
+        min(1, max(0, distance / max(startY, 1)))
     }
 
     /// Whether letting go of that drag switches: far enough or flicked upwards, and not being

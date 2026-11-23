@@ -475,9 +475,11 @@ built release app with a test profile. Note anything that fails in the release's
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
   lists Cra too. Needs a real iPhone and Apple's signing: the policy test only sees the file.
 
-- **#675:** on a TestFlight build on a real iPhone with System Haptics on, press and hold the New Tab pill, the
-  tab stack and the up arrow: a light tick as the finger comes down, a softer one as it lets go, and nothing with
-  System Haptics off. The simulator plays no haptics; `BarHapticsTests` only counts them.
+- **#675:** on a TestFlight build on a real iPhone with System Haptics on, press the New Tab pill, the
+  tab stack and the up arrow: one very subtle tick as the finger comes down and nothing as it lets go. In
+  the page menu, tapping the address gives the same subtle tick; the tiles and rows a light one, Pin and
+  Summarize also on release, and the capsule only on release. Nothing with System Haptics off. The
+  simulator plays no haptics; `BarHapticsTests` and `MenuHapticsTests` only count them.
 
 - **#536:** on a TestFlight build, sign in to a site with a passkey saved in iCloud Keychain and
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in
@@ -505,6 +507,13 @@ built release app with a test profile. Note anything that fails in the release's
   and rests about 0.28 s after letting go, with no sink towards the bar and no overshoot. The
   simulator records at a variable rate, so only a phone settles the timing; CraCore's
   `aLetGoSheetWaitsForTheKeyboardWhereItWasLeft` pins the hold.
+
+- **#572, the address turning editable:** on a real iPhone, tap the address in the page menu: the
+  menu does not visibly close first. The editable field takes the capsule's place in the same
+  panel and the keyboard lifts it from there, and the page behind does not zoom out or move: only
+  the + button's search pushes it back, and dragging this panel down leaves the page still. The
+  simulator records animations at a variable rate, so
+  only a phone settles the handoff; `testTheMenusAddressIsEditedInThisTab` pins the end state.
 
 ## Not pinned yet
 

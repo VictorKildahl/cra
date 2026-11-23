@@ -17,14 +17,28 @@ public struct PageHistory: Codable, Equatable, Sendable {
     public var state: Data
     /// Chromium: the current entry's place in `state`'s list. WebKit's state holds its own.
     public var index: Int
+    /// How far down the page was scrolled, in points, when this was saved. nil in a file from
+    /// before the scroll was kept.
+    public var scrollY: Double?
     public var savedAt: Date
 
-    public init(engine: PageEngine, url: String, state: Data, index: Int = 0, savedAt: Date) {
+    /// A saved scroll shallower than this opens at the top: a small nudge is not worth putting
+    /// the page back part of the way down.
+    public static let restoreAtTopBelow: Double = 100
+
+    public init(engine: PageEngine, url: String, state: Data, index: Int = 0, scrollY: Double? = nil, savedAt: Date) {
         self.engine = engine
         self.url = url
         self.state = state
         self.index = index
+        self.scrollY = scrollY
         self.savedAt = savedAt
+    }
+
+    /// Whether the saved page should open at the top rather than at `scrollY`.
+    public var restoresAtTop: Bool {
+        guard let scrollY else { return false }
+        return scrollY < Self.restoreAtTopBelow
     }
 
     /// Whether a new page for a tab now at `tabURL`, made in `engine`, opens with this history.

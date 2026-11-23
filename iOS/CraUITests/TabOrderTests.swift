@@ -25,6 +25,31 @@ final class TabOrderTests: BrowserTestCase {
         sleep(1)
     }
 
+    private func flickUpFromTheTabButton() {
+        let start = app.buttons["bar-tabs"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)),
+                    withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+    }
+
+    /// A flick begun while the one before it is still settling must not leave that one's page
+    /// card frozen over the screen: the bar stays reachable and the page answers.
+    func testAFlickStartedWhileAnotherSettlesLeavesNoCardOverThePage() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        waitForPage("Second")
+        let start = app.buttons["bar-tabs"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55))
+        for _ in 0..<2 {
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+        }
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5),
+                      "a page card left over the screen would swallow the tap")
+    }
+
     // promise: #647
     /// A tab picked from the row moves to its newest end, the right.
     func testAPickedTabMovesToTheEndOfTheRow() {
@@ -42,6 +67,24 @@ final class TabOrderTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         XCTAssertEqual(rowTitles(), ["First", "Third", "Second"])
         keep("picked tab at the end")
+    }
+
+    // promise: #647
+    /// A flick up on the tab button picks the tab looked at last; it moves to the row's newest
+    /// end like a card picked in the row.
+    func testAFlickUpOnTheTabButtonMovesItsTabToTheEndOfTheRow() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        openTab("Third")
+        swipeAlongTheBarToTheOlderTab()
+        waitForPage("Second")
+        flickUpFromTheTabButton()
+        waitForPage("Third")
+        flickUpFromTheTabButton()
+        waitForPage("Second")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertEqual(rowTitles(), ["First", "Third", "Second"])
     }
 
     // promise: #647

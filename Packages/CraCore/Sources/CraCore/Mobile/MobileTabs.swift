@@ -212,10 +212,28 @@ extension MobileTabsDocument {
     /// before the one on screen, so a second flick comes back. Arc Search 1.0 toggled between
     /// the current and the previous page this way. Ties go to the newer tab in the row.
     public var previousTab: MobileTab? {
-        rowTabs.filter { $0.id != selected }.reduce(nil) { best, tab in
-            guard let best, best.lastActive > tab.lastActive else { return tab }
-            return best
-        }
+        rowTabs.last { $0.id != selected && $0.lastActive == newestBehind }
+    }
+
+    /// The row's tabs behind the one on screen, most recently looked at first, ties to the newer
+    /// tab in the row. The tab button's preview shows the first two, never the page itself.
+    public var tabsBehindCurrent: [MobileTab] {
+        rowTabs.enumerated()
+            .filter { $0.element.id != selected }
+            .sorted { ($0.element.lastActive, $0.offset) > ($1.element.lastActive, $1.offset) }
+            .map(\.element)
+    }
+
+    private var newestBehind: Date? {
+        rowTabs.lazy.filter { $0.id != selected }.map(\.lastActive).max()
+    }
+
+    /// The card the tab row opens focused on: the one behind the page, to its left in the row.
+    /// The first card focuses itself, and with no page on screen the newest card does.
+    public var switcherFocus: MobileTab? {
+        let cards = switcherTabs
+        guard let selected, let index = cards.firstIndex(where: { $0.id == selected }) else { return cards.last }
+        return cards[max(0, index - 1)]
     }
 
     /// Export Data: the open tabs as text, a title and an address each. Incognito tabs stay out.

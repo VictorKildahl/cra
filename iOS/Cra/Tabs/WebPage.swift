@@ -39,6 +39,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     static var certificateExceptions = MobileCertificateExceptions()
     /// Browse for Me is making this tab's page.
     var isBrowsing = false
+    /// The page's saved history is being restored and the saved scroll is small: put it at the
+    /// top when the scroll view reports the restored position.
+    var restoresAtTop = false
     private(set) var isLoading = false
     private(set) var progress: Double = 0
     /// "Request Desktop Site": applied to every navigation of this tab while it is on.
@@ -83,7 +86,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         // black text sat on the app's black background in dark mode.
         webView.isOpaque = true
         webView.backgroundColor = .systemBackground
-        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        // The app sets the page's scroll insets itself (the bar and the safe areas), so the
+        // viewport does not change when the page is transformed behind the search sheet.
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         super.init()
         if let opener {
             siteOptions = opener.siteOptions
@@ -178,6 +183,13 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     /// The page as a picture, for the tab stack and the tab cards.
     func takeSnapshot(_ done: @escaping (UIImage?) -> Void) {
+        // A web view that is hidden, or under a hidden page, snapshots black. That black picture
+        // would then be the tab's preview until the next capture, so keep the last good one.
+        var view: UIView? = webView
+        while let current = view {
+            if current.isHidden || current.alpha < 0.01 { return done(nil) }
+            view = current.superview
+        }
         guard webView.window != nil, webView.bounds.width > 0 else { return done(nil) }
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: Double(webView.bounds.width))
@@ -309,6 +321,14 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+        if restoresAtTop {
+            restoresAtTop = false
+            if offset > 0.5, offset < CGFloat(PageHistory.restoreAtTopBelow) {
+                scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
+                                            animated: false)
+            }
+            return
+        }
         if scrollView.isTracking, offset < 0 {
             // The reload arrow turns as the page is pulled and is whole once letting go reloads.
             let progress = min(1, -offset / MobileSwipe.pullToRefreshDistance)

@@ -163,7 +163,7 @@ final class BarButton: UIControl {
 
     override var isHighlighted: Bool {
         didSet {
-            PressHaptics.play(for: self, from: oldValue, to: isHighlighted)
+            PressHaptics.highlightChanged(for: self, from: oldValue, to: isHighlighted)
             UIView.animate(withDuration: isHighlighted ? 0.08 : 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
                 self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.94, y: 0.94) : .identity
             }
@@ -185,6 +185,11 @@ final class BarButton: UIControl {
 final class TabStackButton: UIControl {
     private let back = UIImageView()
     private let front = UIImageView()
+    private var frontImage: UIImage?
+    private var showsFront = true
+    /// A page card that flew into the button, standing in for the front card until a snapshot
+    /// takes its place.
+    private var keptFront: UIView?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -211,16 +216,50 @@ final class TabStackButton: UIControl {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    /// The tab on screen in front, the one looked at before it behind.
+    /// The tabs the button previews: the previous tab in front, the one behind it under.
     func setSnapshots(front: UIImage?, back: UIImage?) {
-        self.front.image = front
+        frontImage = front
         self.back.image = back
+        // A picture of its own takes the slot back from a card that landed there.
+        if front != nil {
+            keptFront?.removeFromSuperview()
+            keptFront = nil
+            self.front.isHidden = false
+        }
+        self.front.image = showsFront ? frontImage : nil
     }
 
-    /// The card behind, unturned and in `view`'s coordinates: where the previous tab grows from
-    /// on a flick up.
-    func backCard(in view: UIView) -> CGRect {
-        guard let holder = back.superview else { return convert(bounds, to: view) }
+    /// Keeps the page card that flew into the button as the front picture, until a snapshot
+    /// takes its place. The card is already the size and shape of the slot.
+    func keepFrontCard(_ card: UIView) {
+        guard let holder = front.superview else { return }
+        keptFront?.removeFromSuperview()
+        card.transform = .identity
+        card.frame = holder.bounds
+        card.layer.cornerRadius = 5
+        holder.addSubview(card)
+        keptFront = card
+        front.isHidden = true
+    }
+
+    /// While a flick up has the front card's tab in hand, its frame is hidden too: the tab is
+    /// out of the button. It comes back when that tab returns to it.
+    func setFrontEmpty(_ empty: Bool) {
+        showsFront = !empty
+        if empty {
+            keptFront?.removeFromSuperview()
+            keptFront = nil
+            front.image = nil
+        } else {
+            front.image = frontImage
+        }
+        front.isHidden = empty
+    }
+
+    /// The card in front, unturned and in `view`'s coordinates: the previous tab, where a flick
+    /// up starts and where the page left behind lands.
+    func frontCard(in view: UIView) -> CGRect {
+        guard let holder = front.superview else { return convert(bounds, to: view) }
         let center = convert(holder.center, to: view)
         return CGRect(x: center.x - holder.bounds.width / 2, y: center.y - holder.bounds.height / 2,
                       width: holder.bounds.width, height: holder.bounds.height)
@@ -231,50 +270,25 @@ final class TabStackButton: UIControl {
         // Arc Search's stack, relative to the button's centre: a 26 pt card leaning left behind,
         // a 26.5 × 30 pt card leaning right in front, up and to the right of it.
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        for (card, size, offset, degrees) in [(back, CGSize(width: 26, height: 26), CGPoint(x: 1, y: 5.5), CGFloat(-14)),
-                                              (front, CGSize(width: 26.5, height: 30), CGPoint(x: 15.5, y: -4.5), 8)] {
+        for (card, size, offset, angle) in [(back, CGSize(width: 26, height: 26), CGPoint(x: 1, y: 5.5), -14 * CGFloat.pi / 180),
+                                            (front, CGSize(width: 26.5, height: 30), CGPoint(x: 15.5, y: -4.5), MobileMotion.frontCardTilt)] {
             guard let holder = card.superview else { continue }
             holder.transform = .identity
             holder.bounds = CGRect(origin: .zero, size: size)
             holder.center = CGPoint(x: center.x + offset.x, y: center.y + offset.y)
             card.frame = holder.bounds
-            holder.transform = CGAffineTransform(rotationAngle: degrees * .pi / 180)
+            holder.transform = CGAffineTransform(rotationAngle: angle)
         }
     }
 
     override var isHighlighted: Bool {
         didSet {
-            PressHaptics.play(for: self, from: oldValue, to: isHighlighted)
+            PressHaptics.highlightChanged(for: self, from: oldValue, to: isHighlighted)
             alpha = isHighlighted ? 0.6 : 1
         }
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         bounds.insetBy(dx: -6, dy: -6).contains(point)
-    }
-}
-
-/// Arc Search's ticks under a finger on the bar's buttons (MobilePressHaptics, #675): a light one as the finger comes
-/// down, a soft one as it lets go. iOS leaves them out when System Haptics is off. With `-CraCountHaptics YES` a
-/// button also counts the ticks it played in its accessibility value ("ticks 2"), for a UI test: the simulator plays none.
-@MainActor
-enum PressHaptics {
-    private static let counts = LaunchOptions.value("CraCountHaptics") == "YES"
-    private static let press = UIImpactFeedbackGenerator(style: .light)
-    private static let release = UIImpactFeedbackGenerator(style: .soft)
-
-    static func play(for control: UIControl, from was: Bool, to now: Bool) {
-        guard let id = control.accessibilityIdentifier, MobilePressHaptics.barButtons.contains(id),
-              let tick = MobilePressHaptics.tick(from: was, to: now) else { return }
-        switch tick {
-        case .press:
-            press.impactOccurred()
-            release.prepare()
-        case .release:
-            release.impactOccurred()
-        }
-        guard counts else { return }
-        let played = control.accessibilityValue.flatMap { Int($0.split(separator: " ").last ?? "") } ?? 0
-        control.accessibilityValue = "ticks \(played + 1)"
     }
 }

@@ -120,7 +120,8 @@ final class TabSwitcherTests: BrowserTestCase {
         waitForPage("Second")
     }
 
-    /// The tab stack opens the row of cards, newest in focus; a tap on the older card opens it.
+    /// The tab stack opens the row of cards focused on the older card to the page's left; a tap
+    /// on either card opens it.
     func testTheRowShowsEveryTabAndATapOpensOne() {
         openTwoTabs()
         app.buttons["bar-tabs"].tap()
@@ -152,27 +153,28 @@ final class TabSwitcherTests: BrowserTestCase {
     }
 }
 
-/// The bottom bar's buttons tick under the finger as Arc Search's do (#675). The simulator plays no haptics, so with
-/// `-CraCountHaptics YES` each button counts the ticks it played.
+/// The bottom bar's buttons tick once under the finger and nothing as it lets go (#675,
+/// Victor's call). The simulator plays no haptics, so with `-CraCountHaptics YES` each button
+/// counts the ticks it played.
 final class BarHapticsTests: BrowserTestCase {
     // promise: #675
-    func testBarButtonsTickOnPressAndOnRelease() {
+    func testBarButtonsTickOnceOnPress() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraCountHaptics", "YES"])
         waitForPage("First")
-        // The New Tab pill, which gave nothing before: one tick down, one up (read once the sheet has gone and
-        // the pill is back on screen).
+        // The New Tab pill: one tick down, none up (read once the sheet has gone and the pill
+        // is back on screen).
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
         XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
         waitForBarOnScreen()
-        XCTAssertEqual(app.buttons["bar-search"].value as? String, "ticks 2")
+        XCTAssertEqual(app.buttons["bar-search"].value as? String, "ticks 1")
         // The menu button.
         app.buttons["bar-menu"].tap()
         XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["bar-menu"].value as? String, "ticks 2")
+        XCTAssertEqual(app.buttons["bar-menu"].value as? String, "ticks 1")
         // The tab stack, then Settings in the tab switcher.
         app.buttons["bar-tabs"].tap()
         let settings = app.buttons["bar-settings"]
@@ -181,11 +183,93 @@ final class BarHapticsTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
-        XCTAssertEqual(settings.value as? String, "ticks 2")
+        XCTAssertEqual(settings.value as? String, "ticks 1")
         // Back on the page by its card, where the tab stack shows again.
         app.buttons["tab-card-0"].tap()
         XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["bar-tabs"].value as? String, "ticks 2")
+        XCTAssertEqual(app.buttons["bar-tabs"].value as? String, "ticks 1")
+    }
+}
+
+/// The page menu's controls tick as the drawer's design says: its tiles and rows as the finger
+/// comes down, Pin and Summarize again as it lets go, and the capsule's Back, Forward, Reload
+/// and Copy Link only as it lets go. `-CraCountHaptics YES` keeps a running total in the hidden
+/// `haptic-count` element, which outlives a tap that puts the menu away.
+final class MenuHapticsTests: BrowserTestCase {
+    // promise: #675
+    func testTheMenusControlsTickOnPressAndRelease() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO",
+                "-CraCountHaptics", "YES", "-CraFakeModel", "YES"])
+        waitForPage("First")
+        let counter = app.descendants(matching: .any)["haptic-count"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 5))
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-pin"].waitForExistence(timeout: 5))
+
+        // Pin ticks down and up.
+        assertTicks(2, counter) { app.buttons["menu-tile-pin"].tap() }
+        XCTAssertEqual(app.buttons["menu-tile-pin"].label, "Pinned")
+
+        // Display Options and the zoom stepper tick on press only.
+        assertTicks(1, counter) { app.buttons["menu-row-displayOptions"].tap() }
+        XCTAssertTrue(app.buttons["menu-zoom-in"].waitForExistence(timeout: 3))
+        assertTicks(1, counter) { app.buttons["menu-zoom-in"].tap() }
+        XCTAssertEqual(app.buttons["menu-zoom-value"].label, "110%")
+        assertTicks(1, counter) { app.buttons["menu-zoom-value"].tap() }
+
+        // The address ticks on press and opens the sheet to edit it; a second page gives Back
+        // and Forward their release-only ticks without putting the menu away.
+        assertTicks(1, counter) { app.staticTexts["menu-host"].tap() }
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(Self.page("Second") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-back"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-back"].tap() }
+        assertTicks(1, counter) { app.buttons["menu-forward"].tap() }
+
+        // Reload and Copy Link tick as the finger lets go, and put the menu away.
+        assertTicks(1, counter) { app.buttons["menu-reload"].tap() }
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-copy-link"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-copy-link"].tap() }
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+
+        // Share ticks on press only.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-tile-share"].tap() }
+        closeShareSheet(openedFrom: app.buttons["bar-menu"])
+
+        // Summarize ticks down and up.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-summarize"].waitForExistence(timeout: 5))
+        assertTicks(2, counter) { app.buttons["menu-tile-summarize"].tap() }
+        XCTAssertTrue(app.staticTexts["summary-overview"].waitForExistence(timeout: 10))
+        app.buttons["summary-close"].tap()
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
+
+        // The footer ticks on press only and puts the menu away.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-reload-without-blockers"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-reload-without-blockers"].tap() }
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+
+        // Find on Page ticks on press only.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-findOnPage"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-tile-findOnPage"].tap() }
+    }
+
+    private func assertTicks(_ expected: Int, _ counter: XCUIElement,
+                             file: StaticString = #filePath, line: UInt = #line,
+                             _ action: () -> Void) {
+        let before = Int(counter.value as? String ?? "") ?? -1
+        action()
+        let after = Int(counter.value as? String ?? "") ?? -1
+        XCTAssertEqual(after - before, expected, "ticks on one press", file: file, line: line)
     }
 }
 
@@ -644,22 +728,6 @@ final class GestureTests: BrowserTestCase {
         sleep(1)
     }
 
-    /// The title of the tab on screen: opens the tab row, reads the focused card (the selected
-    /// tab) and goes back into it.
-    private func shownTabTitle() -> String {
-        app.buttons["bar-tabs"].tap()
-        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
-        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
-        sleep(1)
-        // The focused card is the one whose left edge is 83 pt in.
-        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
-        let title = focused?.label ?? ""
-        focused?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
-        sleep(1)
-        return title
-    }
-
     /// A swipe along the bottom bar goes to the neighbouring tab: right for the older one, left
     /// for the newer.
     func testSwipingTheBarMovesBetweenTabs() {
@@ -692,7 +760,7 @@ final class GestureTests: BrowserTestCase {
         sleep(1)
         drag(fromX: 0.8, toX: 0.1, y: 0.5)
         sleep(1)
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
     }
 
     /// A drag up from the bottom bar opens the tab row, as the tab stack button does.
@@ -703,6 +771,25 @@ final class GestureTests: BrowserTestCase {
         start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.55)), withVelocity: .default, thenHoldForDuration: 0)
         XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["bar-spaces"].exists)
+    }
+
+    /// The tabs button opens on the card behind the page, the one to its left, and a tap on the
+    /// row's background goes back to the page that was on screen rather than that card.
+    func testTheTabRowOpensOnTheLeftCardAndOutsideGoesBackToThePage() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        app.buttons["bar-tabs"].tap()
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
+        sleep(1)
+        // The focused card is the one whose left edge is 83 pt in: First, the tab to the left.
+        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
+        XCTAssertEqual(focused?.label, "First")
+        // The empty background returns to Second, the page that was open.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        waitForPage("Second")
+        XCTAssertFalse(app.buttons["tab-card-0"].exists)
     }
 
     // promise: #537
@@ -717,12 +804,12 @@ final class GestureTests: BrowserTestCase {
         // was on screen last.
         drag(fromX: 0.3, toX: 0.9, y: 0.95)
         sleep(1)
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
         flickUpFromTheTabButton()
         XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
-        XCTAssertEqual(shownTabTitle(), "Third")
+        waitForPage("Third")
         flickUpFromTheTabButton()
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
         keep("flicked back")
     }
 
@@ -740,8 +827,29 @@ final class GestureTests: BrowserTestCase {
                     withVelocity: .fast, thenHoldForDuration: 0)
         sleep(1)
         XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
-        XCTAssertEqual(shownTabTitle(), "First")
+        waitForPage("First")
         keep("flicked from beside the button")
+    }
+
+    // promise: #537
+    /// The flick works from the bar's top edge too, above the button's own height: the pan
+    /// begins a few points up the way, and that used to be read as a start above the bar, so
+    /// the row opened instead.
+    func testFlickingUpFromTheBarsTopEdgeStillSwitches() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        let button = app.buttons["bar-tabs"]
+        // Just inside the bar's top edge: the button's expanded 47 pt frame starts 6 pt above
+        // the visual circle, and the bar's own top is 8 pt above that.
+        let start = button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: -(button.frame.height / 2 + 4)))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)),
+                    withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+        XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
+        waitForPage("First")
+        keep("flicked from the bar's top edge")
     }
 
     // promise: #509
