@@ -3951,7 +3951,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Two fingers move no pointer: one resting in the edge strip brought the sidebar straight
             // back out over the page (#635).
             floatingSidebar?.waitForPointerToMove()
-            CraLog.note("library left by a swipe: the sidebar hides again")
+            // The column has just narrowed from the Library's width; the next space's column lies past its edge (#679).
+            let trails = (shell.sidebarHost as? SidebarView)?.pagesMaskTrails == true
+            CraLog.note("library left by a swipe: the sidebar hides again, the space pages' mask \(trails ? "trails" : "follows") the column")
         }
         shell.thawPages()
     }

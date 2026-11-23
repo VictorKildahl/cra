@@ -38,6 +38,9 @@ final class SidebarView: NSView {
     private let trayHost: DownloadsTrayView
     private let player: NowPlayingTrayView
     private let trayMask = CAGradientLayer()
+    /// Whether the space pages' mask is still catching up with the column's size, which shows the next space's
+    /// column past the column's edge (PagerMask, #679), for cra.log.
+    var pagesMaskTrails: Bool { PagerMask.trails(trayMask) }
     private let bannerHost = UpdateBannerView()
     private let dock: SpaceDockView
     /// Arc's "+" past the last space, over the column (NewSpaceSwipe).
@@ -291,14 +294,11 @@ final class SidebarView: NSView {
         let clearTop = max(0, h - DownloadsTrayMetrics.listHeight(rows: rows) - 1)
         let fadeTop = max(0, clearTop - DownloadsTrayMetrics.fade)
         let over = MusicNotes.overhang
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(open ? 0.18 : 0.13)
-        if !open { CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut)) }
-        trayMask.frame = NSRect(x: 0, y: -over, width: pager.bounds.width, height: pager.bounds.height + over)
-        trayMask.locations = [0, NSNumber(value: Double((fadeTop + over) / (h + over))), NSNumber(value: Double((clearTop + over) / (h + over))), 1]
         let opaque = NSColor.black.cgColor, clear = NSColor.clear.cgColor
-        trayMask.colors = open ? [opaque, opaque, clear, clear] : [opaque, opaque, opaque, opaque]
-        CATransaction.commit()
+        // Its size follows the column at once; only the fade eases (PagerMask, #679).
+        PagerMask.place(trayMask, frame: NSRect(x: 0, y: -over, width: pager.bounds.width, height: pager.bounds.height + over),
+                        locations: [0, NSNumber(value: Double((fadeTop + over) / (h + over))), NSNumber(value: Double((clearTop + over) / (h + over))), 1],
+                        colors: open ? [opaque, opaque, clear, clear] : [opaque, opaque, opaque, opaque], opening: open)
         if pager.layer?.mask !== trayMask { pager.layer?.mask = trayMask }
         trayHost.isHidden = rows == 0
     }
