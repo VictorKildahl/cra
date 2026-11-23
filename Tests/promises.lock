@@ -1584,6 +1584,8 @@
 #698   Packages/CraCore/Tests/CraCoreTests/MissionControlCoverageTests.swift::missionControlIsUp  f989393bf830
 #698   Tests/Scenarios/pip-mission-control.scenario  8c788e3f0b89
 #699   Tests/Scenarios/extension-action-popup-context.scenario  2cafda46cca1
+#702   Packages/CraCore/Tests/CraCoreTests/PictureInPictureLayoutTests.swift::draggedPastTheLeftOrBottomEdgeComesBackIntoView  d0049d8bc87a
+#702   Tests/Scenarios/pip-drop-corner.scenario  e5b8bd44d942
 #703   Packages/CraCore/Tests/CraCoreTests/AutoPictureInPictureMomentTests.swift::aTabSwitchOpensItAndASpaceSwitchDoesNot  7e042eea0fad
 #703   Tests/Scenarios/pip-space-switch.scenario  5f312b1e5a8e
 #704   Packages/CraCore/Tests/CraCoreTests/SharedBoostTests.swift::theCSSTheSiteShowsLeavesTheTintToTheEngine  0cd8f7e4da8a
