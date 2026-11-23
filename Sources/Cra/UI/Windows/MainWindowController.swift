@@ -66,6 +66,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var shownTheme: SpaceTheme?
     /// Settings ▸ Tabs ▸ "Translucent sidebar" as the window last drew it (#366).
     private var shownGlass: Bool?
+    private var shownLightMaterial: Bool?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     /// The sidebar address the open bar hangs from (#663), nil while it is the centred bar.
@@ -658,9 +659,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // view rebuilds its whole SwiftUI tree, and a new window appearance or background redraws
         // every view, so all of these follow the theme only when it changes. What the root
         // views show beyond the palette they observe themselves.
-        if shownTheme != space.theme.shown || shownGlass != palette.glass {
+        // The material too: View ▸ Appearance picks it for every space without changing the theme (#700).
+        if shownTheme != space.theme.shown || shownGlass != palette.glass || shownLightMaterial != palette.lightMaterial {
             shownTheme = space.theme.shown
             shownGlass = palette.glass
+            shownLightMaterial = palette.lightMaterial
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
             shell.isDarkTheme = palette.isDark

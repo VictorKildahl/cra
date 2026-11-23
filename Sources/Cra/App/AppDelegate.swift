@@ -278,9 +278,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         littleWindowArchiveCheck = composition.clock.every(60) { [weak self] in self?.archiveIdleLittleWindows() }
         // View ▸ Appearance: pages, and the browser itself as in Arc (its windows, menus, command bar
         // and Auto space themes follow NSApp's appearance), before the first window is made (#362).
-        observeChanges(of: { [store] in store.settings.websiteAppearance }) { appearance in
+        observeChanges(of: { [store] in store.settings.websiteAppearance }) { [weak self] appearance in
             CraCEFRuntime.setWebsiteAppearance(appearance.chromiumMode)
             NSApp.appearance = appearance.forcesDark.flatMap { NSAppearance(named: $0 ? .darkAqua : .aqua) }
+            // And every space's sidebar, its own Light or Dark included, as Arc's one setting does (#700).
+            SystemAppearance.shared.setForced(appearance.forcesDark)
+            self?.mainWindows.forEach { $0.refresh() }
         }
         // Chromium's Mode in chrome://settings/appearance is the same setting, saved as Cra's so the
         // next launch keeps it (#630).

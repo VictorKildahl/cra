@@ -139,11 +139,17 @@ public struct SpaceTheme: Codable, Equatable {
     /// follows its own appearance (View ▸ Appearance, which the theme editor's sun and moon set) and
     /// never changes the colour for it (offline Arc 1.172, 17 Nov 2026); a Cra space's Light or Dark
     /// stands in for that appearance, and Auto follows macOS, as Arc on Automatic does (#455).
-    public func usesLightMaterial(systemDark: Bool) -> Bool { Self.isLight(appearance, systemDark: systemDark) }
+    /// `forcedDark`: View ▸ Appearance set to Dark (true) or Light (false), nil on Automatic.
+    public func usesLightMaterial(systemDark: Bool, forcedDark: Bool? = nil) -> Bool {
+        Self.isLight(appearance, systemDark: systemDark, forcedDark: forcedDark)
+    }
 
     /// Light or Dark as they are, Auto as macOS shows: Arc's appearance setting, which picks the
     /// one-colour material and the theme editor's card (light card, black controls) alike (#455).
-    public static func isLight(_ appearance: String, systemDark: Bool) -> Bool {
+    /// View ▸ Appearance set to Light or Dark (`forcedDark`) is that setting for every space, as in Arc,
+    /// where it is one for the whole browser (#700).
+    public static func isLight(_ appearance: String, systemDark: Bool, forcedDark: Bool? = nil) -> Bool {
+        if let forcedDark { return !forcedDark }
         switch appearance {
         case "light": return true
         case "dark": return false

@@ -225,7 +225,8 @@ final class PaneCardView: NSView {
         // With no tab Arc's card follows its appearance (the space's Light or Dark, macOS on Auto), not how dark the
         // theme reads: white on Light, faint on Dark, a light theme too (#669).
         let veil = CGFloat(noTab
-            ? CardVeil.noTabCard(light: SpaceTheme.isLight(ground.appearance, systemDark: SystemAppearance.shared.isDark),
+            ? CardVeil.noTabCard(light: SpaceTheme.isLight(ground.appearance, systemDark: SystemAppearance.shared.isDark,
+                                                                     forcedDark: SystemAppearance.shared.forcedDark),
                                  groundLightness: ground.lightness)
             : CardVeil.white(noTab: false, dark: isDark))
         layer?.backgroundColor = hasPage ? NSColor.clear.cgColor : NSColor(white: 1, alpha: veil).cgColor
