@@ -1,0 +1,28 @@
+# Arc's icon set, redrawn around Cra's C by Provok (mat-up/cra-icons): each of the nine is in the Icon tab's
+# list and its picture ships in the app. Picking one puts it on Cra.app ("put on the app" needs the bundled
+# PNG; an id the list doesn't know is ignored and logs nothing). appIcon= picks without remembering, so the
+# run never writes the defaults the installed Cra reads, and it ends on Segments: the build is left as it was.
+home
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?appIcon=original
+expect-log app icon: original put on the app
+cra://debug?appIcon=candy
+expect-log app icon: candy put on the app
+cra://debug?appIcon=hologram
+expect-log app icon: hologram put on the app
+cra://debug?appIcon=neon
+expect-log app icon: neon put on the app
+cra://debug?appIcon=fluted-glass
+expect-log app icon: fluted-glass put on the app
+cra://debug?appIcon=schoolbook
+expect-log app icon: schoolbook put on the app
+cra://debug?appIcon=colorful
+expect-log app icon: colorful put on the app
+cra://debug?appIcon=canary
+expect-log app icon: canary put on the app
+cra://debug?appIcon=early-birds
+expect-log app icon: early-birds put on the app
+cra://debug?appIcon=segments
+expect-log app icon: segments taken off the app
+cra://debug?bundleIcon=end
+expect-log bundle icon end: custom=0 file=0

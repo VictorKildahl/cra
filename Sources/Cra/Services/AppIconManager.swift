@@ -20,8 +20,20 @@ final class AppIconManager {
 
     static let defaultID = "segments"
     static let customID = "custom"
+    /// Segments, then Arc's own icon set in Arc's order (its AppIcon cases: original, candy, hologram, neon,
+    /// flutedGlass, schoolbook, colorful, and the canary and Early Birds channel icons), redrawn around Cra's C
+    /// by Provok (github.com/mat-up/cra-icons, MIT; sources in brand/arc-icons), then Cra's earlier alternates.
     static let presets = [
         Option(id: defaultID, name: "Segments"),
+        Option(id: "original", name: "Original"),
+        Option(id: "candy", name: "Candy"),
+        Option(id: "hologram", name: "Hologram"),
+        Option(id: "neon", name: "Neon"),
+        Option(id: "fluted-glass", name: "Fluted Glass"),
+        Option(id: "schoolbook", name: "Schoolbook"),
+        Option(id: "colorful", name: "Colorful"),
+        Option(id: "canary", name: "Canary"),
+        Option(id: "early-birds", name: "Early Birds"),
         Option(id: "midnight", name: "Midnight"),
         Option(id: "mono", name: "Mono"),
         Option(id: "violet", name: "Violet"),
