@@ -365,6 +365,8 @@ built release app with a test profile. Note anything that fails in the release's
   Full-page capture shows "Capture in Progress" first. Share keeps the control center open. On
   an https page with a certificate error the lock reads "Not Secure" and opens the certificate
   sheet.
+- **#723:** open the Site Control Center in dark and in light appearance. Its arrow has the panel's
+  colour, with no seam where they meet, and the popover's rounded corners show no square fill behind them.
 
 ### Extensions and developer mode
 

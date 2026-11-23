@@ -1638,6 +1638,7 @@
 #716   Tests/Scenarios/command-bar-space-scope-pinned.scenario  5898d27719ad
 #717   Tests/Scenarios/library-click-next-space-hidden.scenario  a9075cb356d2
 #721   Tests/Scenarios/command-bar-follows-space.scenario  2356431abd10
+#723   Tests/Scenarios/site-controls-arrow.scenario  2934085acb19
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::anIconAnEarlierCraPutOnTheAppComesOff  6f7da080e196
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::anythingOfAFinderIconCounts  fe4242760f79
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theAppNeverPutsAnIconOnItself  2b74fc6f15fa

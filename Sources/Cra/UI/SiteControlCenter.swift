@@ -99,6 +99,23 @@ final class SiteControlCenterView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// The popover's frame draws its arrow in the popover's own material, a lighter grey than this view's
+    /// fill, so the arrow read as a separate shape with a seam (GitHub #723). The same fill behind the frame,
+    /// which keeps the popover's shape, makes arrow and body one, as Arc's are.
+    private(set) var arrowFill: NSView?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let frame = window?.contentView?.superview, arrowFill?.superview !== frame else { return }
+        arrowFill?.removeFromSuperview()
+        let fill = NSView(frame: frame.bounds)
+        fill.wantsLayer = true
+        fill.layer?.backgroundColor = colors.background.cgColor
+        fill.autoresizingMask = [.width, .height]
+        frame.addSubview(fill, positioned: .below, relativeTo: nil)
+        arrowFill = fill
+    }
+
     var onResize: (NSSize) -> Void = { _ in }
 
     /// The extension ringed by ⌘E's picker (ExtensionPicker, #709), by its place in the grid; nil: none.
@@ -1025,6 +1042,15 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         }
         rowsOf(root)
         CraLog.note("site controls settings: \(settings.joined(separator: "|"))")
+        // The arrow's fill (#723): the colour behind the popover's frame, which draws the arrow, against the body's.
+        let view = root as? SiteControlCenterView
+        let hex = { (c: CGColor?) in c.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }.map {
+            String(format: "#%02X%02X%02X", Int(round($0.redComponent * 255)), Int(round($0.greenComponent * 255)), Int(round($0.blueComponent * 255)))
+        } ?? "none" }
+        let frame = view?.arrowFill?.superview
+        CraLog.note("site controls arrow \(label): fill=\(hex(view?.arrowFill?.layer?.backgroundColor)) body=\(hex(root.layer?.backgroundColor))"
+                    + " behindFrame=\(frame != nil && frame === root.window?.contentView?.superview && frame?.subviews.first === view?.arrowFill ? 1 : 0)"
+                    + " window=\(root.window?.windowNumber ?? 0)")
     }
 
     /// cra://debug?siteControlsPress=<label>[&accessory=1] (#478): the button or row with that
