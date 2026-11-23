@@ -8,7 +8,7 @@ delegate	AddNewContents	scenarios page-windows-open-on-cra,blocked-popups,page-p
 delegate	ActivateContents	scenarios extension-window-focus,page-popup-closes	window.focus() and a notification click bringing a page forward
 delegate	IsContentsActive	n/a: only Chrome's own tab strip asks	whether a page is its window's active tab
 delegate	LoadingStateChanged	scenarios background-tab-shows,page-console	a page starting and finishing a load
-delegate	CloseContents	scenarios page-popup-closes	window.close() from a page
+delegate	CloseContents	scenarios page-popup-closes,site-saves-on-close	window.close() from a page, and a closed tab once its unload ran
 delegate	SetContentsBounds	scenarios page-resize-window	window.resizeTo, moveTo, resizeBy, moveBy
 delegate	UpdateTargetURL	scenarios devtools-link-hover	the link under the pointer, in Cra's status line
 delegate	ContentsMouseEvent	n/a: Chrome's status bubble only	the pointer moving over a page
@@ -17,7 +17,7 @@ delegate	CanOverscrollContent	n/a: Aura only; a Mac's swipe is swipe-back's	over
 delegate	ShouldSuppressDialogs	scenarios page-dialogs	whether a page may show alert, confirm and prompt
 delegate	ShouldPreserveAbortedURLs	n/a: Chrome's address bar only	a stopped load's address
 delegate	DidAddMessageToConsole	scenarios page-console	a page's console messages
-delegate	BeforeUnloadFired	scenarios page-dialog-leave-site	"Leave site?" and "Reload site?" (beforeunload)
+delegate	BeforeUnloadFired	scenarios page-dialog-leave-site,site-saves-on-close	"Leave site?" and "Reload site?" (beforeunload); a closed tab's beforeunload and unload run, never asking (#705)
 delegate	ShouldFocusLocationBarByDefault	n/a: Cra's command bar decides focus	focus after a new tab
 delegate	SetFocusToLocationBar	n/a: Cra's command bar decides focus	focus to the address bar
 delegate	ShouldFocusPageAfterCrash	n/a: Chrome's sad tab only	focus after a page crash

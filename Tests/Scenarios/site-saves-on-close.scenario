@@ -1,0 +1,58 @@
+# promise: #705
+# A site that writes its sign-in back as its page goes is still signed in after its tab closes. Discord takes its
+# token out of localStorage while it thinks DevTools are open (window.outerWidth - innerWidth > 160, which Cra's
+# sidebar is) and puts it back on beforeunload, so a close that skipped beforeunload signed it out (0.1.54). Closing a
+# tab with ⌘W runs the page's beforeunload and pagehide, as Chrome's does, and still never asks "Leave site?", as
+# Arc's never does: in the Default space, in a space on its own profile, and for a tab brought back with ⇧⌘T.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+
+# Discord's way: the token is out of storage while the page is open, and back in it as the page goes.
+cra://open?url=${PAGE}?n=discord
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"localStorage.removeItem('token'); localStorage.removeItem('hid'); addEventListener('beforeunload', e => { if (e.isTrusted) localStorage.setItem('token', 'back') }); addEventListener('pagehide', e => { if (e.isTrusted) localStorage.setItem('hid', 'back') }); 'hidden token=' + localStorage.getItem('token')","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"hidden token=null"
+wait 1
+cra://action/closeTab
+wait 2
+cra://debug?pageDialogs=closed
+expect-log page dialogs closed: n=0
+cra://open?url=${PAGE}?n=again
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'again token=' + localStorage.getItem('token') + ' hid=' + localStorage.getItem('hid')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"again token=back hid=back"
+
+# A page that also asks "Leave site?" (something in its cart, after a click in it): the tab closes without asking,
+# and what the page wrote as it went is kept.
+cra://open?url=${PAGE}?n=cart
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"localStorage.removeItem('cart'); addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; if (e.isTrusted) localStorage.setItem('cart', 'kept') }); 'cart=' + localStorage.getItem('cart')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"cart=null"
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":300,"y":400,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":300,"y":400,"button":"left","clickCount":1}
+wait 1
+cra://action/closeTab
+wait 2
+cra://debug?pageDialogs=cart-closed
+expect-log page dialogs cart-closed: n=0
+cra://open?url=${PAGE}?n=cart-again
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'cart again=' + localStorage.getItem('cart')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"cart again=kept"
+
+# The same in Random, a space on its own profile (Hobbies), then closed again and brought back with ⇧⌘T.
+cra://open?url=${PAGE}?n=discord2&space=A0000000-0000-0000-0000-000000000002
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"localStorage.removeItem('token'); addEventListener('beforeunload', e => { if (e.isTrusted) localStorage.setItem('token', 'back2') }); 'hidden2 token=' + localStorage.getItem('token')","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"hidden2 token=null"
+wait 1
+cra://action/closeTab
+wait 2
+cra://action/reopenClosedTab
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'reopened token=' + localStorage.getItem('token')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"reopened token=back2"
+reject-log fault:

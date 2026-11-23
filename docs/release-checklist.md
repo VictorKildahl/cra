@@ -410,6 +410,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#5:** with Cra running, `ps -axo args | grep 'Cra Helper'`: the renderer, GPU, network,
   storage and audio helpers carry `--seatbelt-client`; only video capture runs without it.
 - **#66:** signed in, a Disney+ title and a Prime Video title both play, in Safari's engine.
+- **#705:** signed in to discord.com and web.whatsapp.com in sidebar tabs, close each with ⌘W, open it again
+  (and once with ⇧⌘T): still signed in. Discord takes its token out of storage while it thinks DevTools are open,
+  which Cra's sidebar makes it think, and puts it back as the tab closes (`site-saves-on-close` pins the mechanism).
 - **#167:** on a Mac whose first language is Simplified Chinese, cra.log says `chromium locale:
   zh-CN` and chrome://version shows `--lang=zh-CN`.
 - **#133:** pick Google in Settings ▸ Privacy ▸ Secure DNS. Without a relaunch, cra.log says

@@ -318,6 +318,15 @@ std::string BoostTint(content::WebContents* contents) {
   return page ? [page boostTintForPrefs] : std::string();
 }
 
+// A page Cra is closing (-[CraBrowser close]): its "Leave site?" is answered Leave without showing (#705).
+const char kClosingWithoutAsking = 0;
+bool ClosingWithoutAsking(content::WebContents* contents) {
+  return contents && contents->GetUserData(&kClosingWithoutAsking);
+}
+// How long a closing page's handlers may keep it before it is deleted outright. Chrome ends a hung beforeunload
+// or unload sooner (its hang timeouts); this is for a close Chrome never finishes.
+constexpr base::TimeDelta kCloseGiveUp = base::Seconds(5);
+
 void Later(base::OnceClosure task) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE, std::move(task));
 }
@@ -1991,6 +2000,7 @@ void RunReadyBlocks() {
   g_external_protocol = &ExternalProtocol;
   g_navigation_throttles = &AddNavigationThrottles;
   g_download_intercept = &DownloadIntercept;
+  g_closing_without_asking = &ClosingWithoutAsking;
   // Cra's app holds a request from a tab behind until its tab shows (BrowserManager, PermissionAsk), as on CEF.
   permissions::cra::g_asks_from_any_tab = [](content::WebContents* contents) { return BrowserFor(contents) != nil; };
   MediaCaptureDevicesDispatcher::GetInstance()->GetMediaStreamCaptureIndicator()->AddObserver(&Captures());
@@ -2958,11 +2968,17 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
     [self didClose];
     return;
   }
-  // A forced close, as CEF's CloseBrowser(true): no "Leave site?" (beforeunload), which would keep a closed tab's
-  // page alive. Deleting the page closes its DevTools too. It is deleted on the next turn, as CEF's close
-  // was: close can come from inside the page's own callbacks (a hidden page that answers from its
-  // navigation, and its owner closes it), and Chrome stops when a page is deleted while it tells its
-  // observers something (~WebContentsImpl, 0.1.44 crash reports).
+  // Closed as Chrome's ⌘W closes a tab (TabStripModel::CloseWebContentsAt): the page's beforeunload, pagehide and
+  // unload run first, then Chrome deletes it. Discord writes its sign-in back to localStorage on beforeunload
+  // (it takes it out while it thinks DevTools are open, which Cra's sidebar makes it think), and the forced close
+  // this replaced (no handlers, as CEF's CloseBrowser(true)) signed it out on every close (#705). It never asks
+  // "Leave site?", as Arc's tabs never do: the page is marked, and patches/cra-close-without-asking.patch answers
+  // Leave for it. Chrome's own timeouts end a page that hangs in its handlers; one still there after
+  // kCloseGiveUp is deleted outright. Deleting the page closes its DevTools too. It starts on the next turn, as
+  // CEF's close did: close can come from inside the page's own callbacks (a hidden page that answers from its
+  // navigation, and its owner closes it), and Chrome stops when a page is deleted while it tells its observers
+  // something (~WebContentsImpl, 0.1.44 crash reports).
+  _contents->SetUserData(&kClosingWithoutAsking, std::make_unique<base::SupportsUserData::Data>());
   Later(base::BindOnce(
       [](base::WeakPtr<content::WebContents> contents) {
         if (!contents) {
@@ -2972,9 +2988,28 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
           TabStripModel* tabs = host->browser()->GetTabStripModel();
           const int index = tabs->GetIndexOfWebContents(contents.get());
           if (index != TabStripModel::kNoTab) {
-            tabs->DetachAndDeleteWebContentsAt(index);
+            tabs->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE);
           }
         }
+        if (!contents) {
+          return;
+        }
+        base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](base::WeakPtr<content::WebContents> contents) {
+                  PageHost* host = contents ? HostOf(contents.get()) : nullptr;
+                  if (!host) {
+                    return;
+                  }
+                  TabStripModel* tabs = host->browser()->GetTabStripModel();
+                  const int index = tabs->GetIndexOfWebContents(contents.get());
+                  if (index != TabStripModel::kNoTab) {
+                    tabs->DetachAndDeleteWebContentsAt(index);
+                  }
+                },
+                contents),
+            kCloseGiveUp);
       },
       _contents->GetWeakPtr()));
 }

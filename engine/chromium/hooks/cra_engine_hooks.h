@@ -174,6 +174,11 @@ inline NavigationThrottlesHook g_navigation_throttles = nullptr;
 using DownloadInterceptHook = bool (*)(content::WebContents* contents, const GURL& url);
 inline DownloadInterceptHook g_download_intercept = nullptr;
 
+// Whether Cra is closing this page of its own. Its beforeunload runs, as in Chrome, but it never asks "Leave site?":
+// a tab closed in Cra goes, as in Arc (patches/cra-close-without-asking.patch, GitHub #705).
+using ClosingWithoutAskingHook = bool (*)(content::WebContents* contents);
+inline ClosingWithoutAskingHook g_closing_without_asking = nullptr;
+
 }  // namespace cra
 
 #endif  // CHROME_BROWSER_CRA_ENGINE_HOOKS_H_

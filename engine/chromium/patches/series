@@ -78,3 +78,4 @@ extension-store-copies-install-type.patch
 cra-boost-tint.patch
 cra-cast-dialog.patch
 renderer-startup-reused-process.patch
+cra-close-without-asking.patch

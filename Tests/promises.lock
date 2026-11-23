@@ -1615,6 +1615,7 @@
 #703   Packages/CraCore/Tests/CraCoreTests/AutoPictureInPictureMomentTests.swift::aTabSwitchOpensItAndASpaceSwitchDoesNot  7e042eea0fad
 #703   Tests/Scenarios/pip-space-switch.scenario  5f312b1e5a8e
 #704   Packages/CraCore/Tests/CraCoreTests/SharedBoostTests.swift::theCSSTheSiteShowsLeavesTheTintToTheEngine  0cd8f7e4da8a
+#705   Tests/Scenarios/site-saves-on-close.scenario  585a47e8abeb
 #705   Tests/Scenarios/site-storage-after-close.scenario  66e22ff47082
 #706   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
 #707   Packages/CraCore/Tests/CraCoreTests/WheelSpaceSwitchTests.swift::theMenuKeysReachTheLibraryLikeASwipe  f8e7fa428732
