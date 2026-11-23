@@ -6,10 +6,21 @@ HTTPS with that certificate, which the simulator can't verify (CertificateTests)
 requests."""
 import argparse
 import html
+import struct
+import zlib
 import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
+
+
+def square_png(size=300, rgb=(255, 99, 71)):
+    """A solid size × size PNG, made here so the fixtures need no files (LinkMenuTests' Save to Photos, #713)."""
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    row = b'\x00' + bytes(rgb) * size
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(row * size)) + chunk(b'IEND', b''))
 
 
 class PopupHandler(BaseHTTPRequestHandler):
@@ -84,6 +95,17 @@ function createPasskey() {
           error => { answered = true; answer.textContent = 'Passkey refused: ' + error.name; });
 }
 </script>''')
+        elif url.path == '/picture':
+            # A picture to long-press for WebKit's image menu (LinkMenuTests, Save to Photos, #713).
+            self.page('<title>Picture</title><h1>Picture</h1>'
+                      '<img alt="Square" src="/picture.png" style="width:240px;height:240px">')
+        elif url.path == '/picture.png':
+            data = square_png()
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         elif url.path == '/plain':
             # A plain-http page (PlainHTTPTests), opened by a domain name: iOS's App Transport
             # Security lets IP addresses and plain `localhost` through, but not `cra.localhost`.

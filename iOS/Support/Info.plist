@@ -57,8 +57,12 @@
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Cra opens the camera when a page asks you to take a photo or video, such as for an upload.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cra listens when you search by voice.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Cra saves the pictures you choose to save from a page to your photos.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cra turns what you say into a search, on this device.</string>
 	<key>UIApplicationSceneManifest</key>
