@@ -104,7 +104,7 @@ final class FidgetLogoView: UIImageView {
 }
 
 /// A view that takes no touches itself, only its subviews do: the page container, so that the
-/// logo under it can be flicked while no page is open.
+/// logo (and with Rippling Dots the dots) under it can be played with while no page is open.
 final class PassthroughView: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)

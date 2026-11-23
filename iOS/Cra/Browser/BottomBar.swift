@@ -16,6 +16,10 @@ final class BottomBar: UIView {
 
     enum Mode { case page, tabs }
     var mode: Mode = .page { didSet { applyMode() } }
+    /// Over the empty home screen's dots: no slab, the buttons float as they do over the tab row.
+    var overBackdrop = false {
+        didSet { if overBackdrop != oldValue { applyMode() } }
+    }
     private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
     private let hairline = UIView()
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
@@ -66,9 +70,12 @@ final class BottomBar: UIView {
         spacesButton.alpha = tabs ? visible : 0
         settingsButton.alpha = tabs ? visible : 0
         // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
-        // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd).
-        blur.alpha = tabs ? 0 : visible
-        pill.backgroundColor = tabs ? Palette.switcherPillFill : Palette.barControlFill
+        // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd). The
+        // empty home screen's bar floats the same way.
+        let floats = tabs || overBackdrop
+        blur.alpha = floats ? 0 : visible
+        pill.backgroundColor = tabs ? Palette.switcherPillFill : overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
+        menuButton.backgroundColor = overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         pill.setSymbol("plus", pointSize: tabs ? 20.5 : 16, weight: .semibold)
         pill.glyphTint = tabs ? Palette.switcherGlyph : Palette.glyph
         spacesButton.glyphTint = Palette.switcherGlyph
