@@ -1,7 +1,7 @@
 # promise: #600
 # A tab's right-click menu is Arc 1.173.1's, read live 19 Nov 2026 (Victor: menus 1:1 with Arc): Copy Link,
 # Share ▸ | Change Icon…, Rename…, Mute (dimmed while silent), Customize Page… on the open tab, Edit Pinned
-# Page ▸ on a pinned one | Add Split View on the open tab, Open in Split View on another, Duplicate, Move to ▸
+# Page ▸ on a pinned one (Cra lists it flat after Rename…: #76, pinned-url-rows) | Add Split View on the open tab, Open in Split View on another, Duplicate, Move to ▸
 # (spaces, ✓ on its own, New Space…) | Remove Pin on a pinned tab; on Today Archive Tab with Archive Other Tabs
 # under ⌥, and Archive Tabs Below with Archive Tabs Above under ⌥, dimmed when there is nothing to archive.
 # One row Arc doesn't have: Cast… after Mute on a web page (Victor, 22 Nov 2026; tab-menu-cast).
@@ -18,8 +18,7 @@ wait 1
 
 # Listed: the pinned tab, then Today's c (open), b, a.
 cra://debug?tabMenu=1&label=pinned
-expect-log tab menu pinned: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Mute \(off\)\|Cast…\|Edit Pinned Page ▸\|──\|Open in Split View\|Duplicate\|Move to ▸\|──\|Remove Pin$
-expect-log tab menu pinned Edit Pinned Page: Replace Pinned URL with Current \(off\)\|Edit…$
+expect-log tab menu pinned: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute \(off\)\|Cast…\|──\|Open in Split View\|Duplicate\|Move to ▸\|──\|Remove Pin$
 expect-log tab menu pinned Move to: .*Personal\|──\|New Space…$
 cra://debug?tabMenu=2&label=open
 expect-log tab menu open: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Mute \(off\)\|Cast…\|Customize Page…\|──\|Add Split View\|Duplicate\|Move to ▸\|──\|Archive Tab\|Archive Other Tabs ⌥\|Archive Tabs Below\|Archive Tabs Above \(off\) ⌥$

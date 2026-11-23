@@ -1805,7 +1805,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         // Arc 1.173.1's favorite menu, read live 19 Nov 2026 (#600): Copy Link, Share ▸ | Change Icon…,
         // Rename…, Mute, Customize Page… (open), Edit Pinned Page ▸ | Add/Open in Split View, Duplicate,
         // Move to ▸ | Close Tab (open), Remove Favorite. Cra keeps Use Site Icon and Tile Color ▸, which
-        // have no other way in, by Change Icon….
+        // have no other way in, by Change Icon…, and lists Edit Pinned Page ▸ flat after Rename… (#76).
         guard let t = item.tab else { return m }
         let open = store.isSelected(id, window: ui.windowID)
         MenuItems.add(m, action: "copyURL", title: "Copy Link") {
@@ -1839,11 +1839,12 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             store.setTileColor(tileColor, for: grid.spaceFavoriteIDs())
         }
         MenuItems.add(m, action: "renameTab", title: "Rename…") { ui.renamingID = id }
-        SidebarMenus.muteItem(m, id, t, ui: ui, store: store, actions: actions)
-        if open, web?.host != nil { MenuItems.add(m, "Customize Page…") { actions.performAction("newBoost") } }
+        // Edit Pinned URL… and Replace Pinned URL with Current beside Rename…, flat (#76).
         if t.liveItemURL == nil {
             SidebarMenus.pinnedURLItems(m, id, navigatedAway: t.url != t.savedURL, store: store, actions: actions)
         }
+        SidebarMenus.muteItem(m, id, t, ui: ui, store: store, actions: actions)
+        if open, web?.host != nil { MenuItems.add(m, "Customize Page…") { actions.performAction("newBoost") } }
         m.addItem(.separator())
         if open {
             MenuItems.add(m, action: "addSplitView", title: "Add Split View") { actions.performAction("addSplitView") }

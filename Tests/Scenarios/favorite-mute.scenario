@@ -1,6 +1,7 @@
 # promise: #387
 # A favorite's right-click menu has Mute after Rename… (Arc 1.173.1's favorite menu: Copy Link, Share ▸ |
-# Change Icon…, Rename…, Mute, Edit Pinned Page ▸ | …). Mute silences the page without opening it, and on a
+# Change Icon…, Rename…, Mute, Edit Pinned Page ▸ | …; Cra lists Edit Pinned Page's rows flat between
+# Rename… and Mute, #76). Mute silences the page without opening it, and on a
 # muted favorite the row says Unmute and brings the sound back (GitHub #387). As in Arc, Mute is dimmed
 # while the page makes no sound (#600, Victor 19 Nov 2026: menus 1:1 with Arc), so the page plays a
 # quiet tone first (the music-notes recipe).
@@ -15,17 +16,17 @@ wait 1
 # Silent, Mute is dimmed; then the favorite plays a tone, and another tab comes in front, so the
 # favorite is muted from its tile without being the open page.
 cra://debug?favoriteMenu=1&label=silent
-expect-log favorite menu silent: .*\|Rename…\|Mute \(off\)\|
+expect-log favorite menu silent: .*\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute \(off\)\|
 cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"(async()=>{const n=16000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n,true);for(let i=0;i<8000;i++)v.setInt16(44+2*i,Math.round(33*Math.sin(2*Math.PI*440*i/8000)),true);const a=document.createElement('audio');a.loop=true;a.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.append(a);await a.play();return 'fav:'+(a.paused?'paused':'playing')})()"}
 expect-log "value":"fav:playing"
 wait 2
 cra://open?url=${PAGE}?n=other
 wait 1
 cra://debug?favoriteMenu=1&label=before
-expect-log favorite menu before: Copy Link\|Share ▸\|──\|Change Icon…\|Tile Color ▸\|Rename…\|Mute\|Edit Pinned Page ▸\|
+expect-log favorite menu before: Copy Link\|Share ▸\|──\|Change Icon…\|Tile Color ▸\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute\|
 cra://debug?favoriteMenu=1&label=mute&run=Mute
 expect-log favorite menu mute ran Mute: saved=muted page=muted$
 cra://debug?favoriteMenu=1&label=muted
-expect-log favorite menu muted: .*\|Rename…\|Unmute\|
+expect-log favorite menu muted: .*\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Unmute\|
 cra://debug?favoriteMenu=1&label=unmute&run=Unmute
 expect-log favorite menu unmute ran Unmute: saved=unmuted page=unmuted$

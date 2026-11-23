@@ -91,7 +91,7 @@ gains "New Profile".
 | Where | Arc items Cra lacks |
 |---|---|
 | Today tab | all done, in Arc 1.173.1's order (GitHub #600): Customize Page… opens the site's Boost editor; Archive Other Tabs and Archive Tabs Above are the ⌥ rows. Cra keeps Use Page Title and Use Site Icon (no other way in) |
-| Pinned tab | all done, in Arc 1.173.1's order (GitHub #600): Edit Pinned Page ▸ is Arc's submenu again (it was flat from PR #55), Remove Pin archives the tab as Arc's does |
+| Pinned tab | all done, in Arc 1.173.1's order (GitHub #600): except Edit Pinned Page ▸: Cra lists its Edit Pinned URL… and Replace Pinned URL with Current flat, right after Rename… (#76, asked again on #600). Remove Pin archives the tab as Arc's does |
 | Favorite | all done, in Arc 1.173.1's order (GitHub #600) except Share ▸ (http pages only) and Move to ▸ Profile (shared favorites only). Remove Favorite archives a space's own favorite (Arc deletes it; Library brings Cra's back). Cra keeps Tile Color ▸ and Use Site Icon |
 | Split | all done, in Arc 1.173.1's order (GitHub #600): Share Split View… (Arc's warning sheet, a crabrowser.app link like Share Folder…), Change Icon… (Arc's Emoji / Icon picker; the row then shows the icon and "N Tabs"), the pane submenus' Share ▸, and Archive Other Tabs / Archive Tabs Below / Above in Today. Archive Tabs Above and Other Tabs are the ⌥ rows. The toast after Share Split View… is Share Folder's ("Copied Folder URL"); Arc's couldn't be seen offline |
 | Space header / empty sidebar | Share Space… (*skip*), New Folder, Manage Spaces…, Delete Space (check order) |

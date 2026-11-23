@@ -18,7 +18,7 @@ cra://action/favoriteTab
 wait 1
 
 cra://debug?favoriteMenu=1&label=tab
-expect-log favorite menu tab: Copy Link\|Share ▸\|──\|Change Icon…\|Tile Color ▸\|Rename…\|Mute \(off\)\|Edit Pinned Page ▸\|──\|Open in Split View\|Duplicate\|──\|(Close Tab\|)?Remove Favorite$
+expect-log favorite menu tab: Copy Link\|Share ▸\|──\|Change Icon…\|Tile Color ▸\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute \(off\)\|──\|Open in Split View\|Duplicate\|──\|(Close Tab\|)?Remove Favorite$
 cra://debug?favoriteMenu=1&label=tab-copy&run=Duplicate
 expect-log favorite menu tab-copy favorites: n=fav n=left\+n=right today: n=fav open: n=right$
 wait 1

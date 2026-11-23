@@ -81,6 +81,7 @@ enum SidebarMenus {
     /// Copy Link, Share ▸ | Change Icon…, Rename…, Mute, Customize Page… (the open tab), Edit Pinned
     /// Page ▸ (pinned) | Add/Open in Split View, Duplicate, Move to ▸ | Archive Tab (⌥ Archive Other
     /// Tabs), Archive Tabs Below (⌥ Archive Tabs Above) on Today, Remove Pin on a pinned tab.
+    /// Cra lists Arc's Edit Pinned Page ▸ flat, right after Rename… (#76, pinnedURLItems).
     /// Cra keeps Use Site Icon and Use Page Title, which have no other way in, beside their rows, and
     /// adds Cast… after Mute on a web page (tab-menu-cast).
     static func tab(_ m: TabRowModel, list: SpaceListView) -> NSMenu {
@@ -97,11 +98,11 @@ enum SidebarMenus {
         changeIconItems(menu, id, custom: tab.customIconKey, list: list)
         add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }
         if item.title != nil { add(menu, "Use Page Title") { store.rename(id, to: nil) } }
+        if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
         muteItem(menu, id, tab, ui: ui, store: store, actions: actions)
         // Not in Arc's tab menu (View ▸ Cast there): Cra's, on Victor's call after an X DM (22 Nov 2026).
         if web != nil { add(menu, action: "cast", "Cast…") { actions.performAction("castTab:\(id.uuidString)") } }
         if open, web?.host != nil { add(menu, "Customize Page…") { actions.performAction("newBoost") } }
-        if m.pinned, tab.liveItemURL == nil { pinnedURLItems(menu, id, navigatedAway: m.navigatedAway, store: store, actions: actions) }
         menu.addItem(.separator())
         // Arc: "Add Split View" on the open tab, "Open in Split View" on any other.
         if open {
@@ -256,12 +257,14 @@ enum SidebarMenus {
         return menu
     }
 
-    /// Arc's Edit Pinned Page ▸ on pinned tabs and favorites: Replace Pinned URL with Current (dim
-    /// while the tab is on its pinned page) and Edit… (#54; flat rows from PR #55 until #600).
+    /// The pinned URL's rows on pinned tabs and favorites (#54), right after Rename… since they edit
+    /// the same item. Arc has them in an Edit Pinned Page ▸ submenu; Cra lists them flat to save a
+    /// click, as Anoninz asked on PR #55 (#76, and again on #600 after the Arc row-for-row menus put
+    /// the submenu back; Victor's call, 22 Nov 2026). Replace is dimmed while the tab is on its
+    /// pinned page, as in Arc. Locked by the pinned-url-rows scenario.
     static func pinnedURLItems(_ menu: NSMenu, _ id: UUID, navigatedAway: Bool, store: SidebarStore, actions: SidebarActions) {
-        let sub = submenu(menu, "Edit Pinned Page")
-        add(sub, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
-        add(sub, "Edit…") { actions.editPinnedURL(id) }
+        add(menu, "Edit Pinned URL…") { actions.editPinnedURL(id) }
+        add(menu, "Replace Pinned URL with Current", enabled: navigatedAway) { store.setPinnedHomeToCurrent(id) }
     }
 
     // MARK: Folders

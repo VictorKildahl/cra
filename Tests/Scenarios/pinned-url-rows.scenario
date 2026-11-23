@@ -1,0 +1,40 @@
+# promise: #76 #600
+# A pinned tab's and a favorite's right-click menu list Edit Pinned URL… and Replace Pinned URL with Current
+# at the top level, right after Rename…, not in Arc's Edit Pinned Page ▸ submenu. Anoninz asked for them
+# beside Rename… on PR #55 to save a click (#76, 1 Nov 2026). The Arc row-for-row menus for #600 put the
+# submenu back, and Anoninz asked on #600 (22 Nov) for the flat rows again: Victor's call, Cra keeps them flat.
+# Replace is dimmed while the tab is on its pinned page and works from the top level.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+# A pinned tab, moved off its pinned page.
+cra://open?url=${PAGE}?n=pin
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/pinTab
+wait 1
+cra://debug?tabMenu=1&label=pin-home
+expect-log tab menu pin-home: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute \(off\)\|
+cra://navigate?url=${PAGE}?n=moved
+wait 1
+cra://debug?tabMenu=1&label=pin-away
+expect-log tab menu pin-away: Copy Link\|Share ▸\|──\|Change Icon…\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current\|Mute \(off\)\|Cast…\|Customize Page…\|──\|Add Split View\|Duplicate\|Move to ▸\|──\|Remove Pin$
+cra://debug?tabMenu=1&label=pin-replace&run=Replace Pinned URL with Current
+expect-log tab menu pin-replace ran Replace Pinned URL with Current: pinned: n=moved
+cra://debug?tabMenu=1&label=pin-replaced
+expect-log tab menu pin-replaced: .*\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute
+
+# A favorite, moved off its pinned page.
+cra://open?url=${PAGE}?n=fav
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://navigate?url=${PAGE}?n=favmoved
+wait 1
+cra://debug?favoriteMenu=1&label=fav-away
+expect-log favorite menu fav-away: Copy Link\|Share ▸\|──\|Change Icon…\|Tile Color ▸\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current\|Mute \(off\)\|Customize Page…\|──\|
+cra://debug?favoriteMenu=1&label=fav-replace&run=Replace Pinned URL with Current
+cra://debug?favoriteMenu=1&label=fav-replaced
+expect-log favorite menu fav-replaced: .*\|Rename…\|Edit Pinned URL…\|Replace Pinned URL with Current \(off\)\|Mute
+
+# Never the submenu, on either menu.
+reject-log (tab|favorite) menu (pin|fav)-.*Edit Pinned Page

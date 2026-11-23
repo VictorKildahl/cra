@@ -55,6 +55,7 @@
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::handoffRules  6eea8116562b
 #66    Packages/CraCore/Tests/CraCoreTests/ProtectedMediaTests.swift::servicesOpenInWebKit  1f4f8537772e
 #66    Tests/Scenarios/webkit-drm-tabs.scenario  ecd18e480d10
+#76    Tests/Scenarios/pinned-url-rows.scenario  524d0811137c
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::differentTopRatesAreMixed  e6736f0fff82
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::fixedRateDisplayShowsOneRate  7c3babaccb16
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::intervalsBecomeWholeHertz  7fba8a629c39
@@ -740,7 +741,7 @@
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::shortcutsPressTheirButtons  b2c01bed9702
 #385   Packages/CraCore/Tests/CraCoreTests/PeekControlLookTests.swift::springsAreArcsInCoreAnimationTerms  5be9f378ea04
 #386   Tests/Scenarios/picked-tabs-split.scenario  cd33102969a4
-#387   Tests/Scenarios/favorite-mute.scenario  db8d9c42c4be
+#387   Tests/Scenarios/favorite-mute.scenario  b96211f0fbc1
 #387   Tests/Scenarios/muted-tab-restores.scenario  84b90b5d2da8
 #391   Tests/DockedWindowAccessibilityTests.swift::attachingNoWindowIsHarmless  a7281f64456f
 #391   Tests/DockedWindowAccessibilityTests.swift::movesFindsTheBrowserWindow  b7cbb5a23a9d
@@ -1301,9 +1302,10 @@
 #599   Packages/CraCore/Tests/CraCoreTests/LittleWindowLinksTests.swift::newTabLinkLoadsInTheWindow  80fbb6cec90e
 #599   Tests/Scenarios/little-window-stays.scenario  f152fd5a1638
 #600   Packages/CraCore/Tests/CraCoreTests/SidebarModelTests.swift::splitIcon  05a9196e97d2
-#600   Tests/Scenarios/favorite-duplicate.scenario  93d14728a17b
+#600   Tests/Scenarios/favorite-duplicate.scenario  b7b91f9c7643
+#600   Tests/Scenarios/pinned-url-rows.scenario  524d0811137c
 #600   Tests/Scenarios/split-menu-arc.scenario  10935539dd24
-#600   Tests/Scenarios/tab-menu-arc.scenario  29b9ea8a9aed
+#600   Tests/Scenarios/tab-menu-arc.scenario  6d3b9c89fca7
 #600   Tests/StoreTests.swift::archiveTabsAboveAndOthers  ba0f7add3191
 #600   Tests/StoreTests.swift::duplicateFavoritesAndSplits  63a22561dc03
 #600   Tests/StoreTests.swift::splitIconAndReset  e6b28707383e
