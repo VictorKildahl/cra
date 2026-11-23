@@ -2,10 +2,11 @@ import AppKit
 
 // Yab (folder "Fast" before Oct 2026) lists its spaces in <support>/spaces.json and keeps each
 // space's tabs in a file of its own: session.json for the first space, session-<space id>.json for
-// the others, and session-…0A11.json for the pinned tiles every space shares when "pins in every
-// space" is on. Each entry is one tab, in sidebar order: a tile (`pin`, Arc's favorite), then kept
-// tabs (`kept`, Arc's pinned), then today's. A kept tab names its folder (`folder`, `folderName`)
-// and the folders that one is in (`folderPath`, from the top down).
+// the others, and session-…0A11.json for the shared tiles, which a space without tiles of its own
+// shows unless "pins in every space" is off. Each entry is one tab, in sidebar order: a tile
+// (`pin`, Arc's favorite), then kept tabs (`kept`, Arc's pinned), then today's. A kept tab names
+// its folder (`folder`, `folderName`) and the folders that one is in (`folderPath`, from the top
+// down).
 //
 // Its Chromium profiles are <support>/Chromium/space-<id>: the shared one for spaces that use the
 // first space's sign-ins, and one per space with sign-ins of its own, found through the receipts
@@ -32,8 +33,8 @@ enum YabImporter {
 
     static func plan() throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Yab") }
-        // Yab's Settings › Tabs "Pins in every space"; without it, a space with no tiles of its own
-        // shows the shared ones.
+        // Yab's Settings › Tabs "Pins in every space": on or unset, a space with no tiles of its own
+        // shows the shared ones; off, no space does.
         let everySpace = UserDefaults(suiteName: "dev.serafim.fast")?.object(forKey: "pins.everySpace") as? Bool
         var plan = try plan(supportDir: supportDir, pinsInEverySpace: everySpace)
         ImportFavicons.attach(to: &plan.spaces, folder: "cra-yab-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
@@ -54,7 +55,7 @@ enum YabImporter {
             let file = id.uppercased() == firstID ? "session.json" : "session-\(id.uppercased()).json"
             var rows = entries(dir.appendingPathComponent(file))
             let ownTiles = rows.contains { isTile($0) }
-            if pinsInEverySpace == true || (pinsInEverySpace == nil && !ownTiles) {
+            if pinsInEverySpace != false && !ownTiles {
                 rows = shared.filter(isTile) + rows.filter { !isTile($0) }
             }
 
