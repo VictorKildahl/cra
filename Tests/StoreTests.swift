@@ -35,6 +35,7 @@ enum StoreTests {
         zenFaviconSize()
         autoArchive()
         longAutoArchive()
+        profileAutoArchive()
         tabSleepCadence()
         tabRestTimes()
         integrity()
@@ -584,6 +585,40 @@ enum StoreTests {
         expect(archived(idle.id), "the next pass after 180 days archives it")
         expect(!archived(shown.id), "the selected tab is never archived")
         expect(!archived(pinned.id), "pinned tabs are never auto-archived")
+    }
+
+    // promise: #693
+    /// Each profile's own "Archive tabs after", as in Arc: a space on a Work profile set to 7 days keeps
+    /// its tabs while the Default space's go after 12 hours, and a profile set to Never keeps them all.
+    @MainActor
+    private static func profileAutoArchive() {
+        let clock = ManualScheduler()
+        let composition = AppComposition(clock: clock)
+        let store = composition.store
+        let work = store.createProfile(name: "Work")
+        let school = store.createProfile(name: "School")
+        let profiles = store.profiles.map(\.id)
+        store.settings.setAutoArchive(.after(.twelveHours), profileID: nil, otherProfiles: profiles)
+        store.settings.setAutoArchive(.after(.sevenDays), profileID: work.id, otherProfiles: profiles)
+        store.settings.setAutoArchive(.never, profileID: school.id, otherProfiles: profiles)
+        let home = store.focusedSpaceID
+        var workSpace = store.createSpace(title: "Work", emoji: "", focus: false)
+        workSpace.profileID = work.id
+        store.updateSpace(workSpace)
+        var schoolSpace = store.createSpace(title: "School", emoji: "", focus: false)
+        schoolSpace.profileID = school.id
+        store.updateSpace(schoolSpace)
+        let personal = store.createTab(url: "https://example.com/personal", in: home, select: false)
+        let job = store.createTab(url: "https://example.com/job", in: workSpace.id, select: false)
+        let homework = store.createTab(url: "https://example.com/homework", in: schoolSpace.id, select: false)
+        composition.startPeriodicWork {}
+        func archived(_ id: UUID) -> Bool { store.item(id) == nil }
+        clock.advance(by: 12 * 3600 + AppComposition.autoArchiveInterval + 1)
+        expect(archived(personal.id), "the Default space's tab goes after Default's 12 hours")
+        expect(!archived(job.id), "the Work space's tab stays: Work archives after 7 days")
+        clock.advance(by: 7 * 86400)
+        expect(archived(job.id), "after 7 days the Work tab goes too")
+        expect(!archived(homework.id), "School's Never keeps its tab")
     }
 
     // promise: #136

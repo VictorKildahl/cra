@@ -99,20 +99,15 @@ struct ProfilesPane: View {
 
     // MARK: Detail
 
-    private enum Archive: Hashable { case after(AutoArchiveThreshold), never }
     private enum DownloadChoice: Hashable { case folder, ask, other }
 
     @ViewBuilder private func detail(for profileID: UUID?) -> some View {
         @Bindable var store = store
         let path = store.profilePath(profile: profileID)
-        let archive = Binding<Archive>(
-            get: { store.settings.autoArchiveEnabled ? .after(store.settings.autoArchive) : .never },
-            set: {
-                switch $0 {
-                case .never: store.settings.autoArchiveEnabled = false
-                case .after(let t): store.settings.autoArchiveEnabled = true; store.settings.autoArchive = t
-                }
-            })
+        // This profile's own timer, as in Arc (#693).
+        let archive = Binding<AutoArchiveChoice>(
+            get: { store.settings.autoArchive(profileID: profileID) },
+            set: { store.settings.setAutoArchive($0, profileID: profileID, otherProfiles: store.profiles.map(\.id)) })
         VStack(alignment: .leading, spacing: 0) {
             SettingsCard {
                 SettingsCardRow { Text("Search engine").font(.system(size: 13)) } trailing: { SearchEnginePicker(store: store) }
@@ -129,9 +124,9 @@ struct ProfilesPane: View {
             SettingsCard {
                 SettingsCardRow { Text("Archive tabs after").font(.system(size: 13)) } trailing: {
                     Picker("Archive tabs after", selection: archive) {
-                        ForEach(AutoArchiveThreshold.allCases) { Text($0.label).tag(Archive.after($0)) }
+                        ForEach(AutoArchiveThreshold.allCases) { Text($0.label).tag(AutoArchiveChoice.after($0)) }
                         Divider()
-                        Text("Never").tag(Archive.never)
+                        Text("Never").tag(AutoArchiveChoice.never)
                     }
                     .labelsHidden().fixedSize()
                 }

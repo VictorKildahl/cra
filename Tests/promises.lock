@@ -1563,6 +1563,11 @@
 #691   Tests/Scenarios/sidebar-address-panel-click-away.scenario  7305967ee2f9
 #692   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::aClickElsewhereInTheSidebarsWindowEndsTheEdit  1f7c0d1c2e9a
 #692   Tests/Scenarios/sidebar-address-edit-click-away.scenario  348c15d2a2e1
+#693   Packages/CraCore/Tests/CraCoreTests/ProfileAutoArchiveTests.swift::aProfileNeverSetArchivesAsBeforeAndDefaultsChangeLeavesIt  7fc10c60baf0
+#693   Packages/CraCore/Tests/CraCoreTests/ProfileAutoArchiveTests.swift::dueTabsFollowTheirSpacesTimer  6c456fc170d1
+#693   Packages/CraCore/Tests/CraCoreTests/ProfileAutoArchiveTests.swift::eachProfileKeepsItsOwnTimer  739585095060
+#693   Packages/CraCore/Tests/CraCoreTests/ProfileAutoArchiveTests.swift::theTimersSurviveTheFileAndAnUnknownOneArchivesLater  69c7bf730123
+#693   Tests/StoreTests.swift::profileAutoArchive  3915a5e88140
 #697   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::aTabOnAPullRequestsOwnPagesStillShowsIt  f913bea636c6
 #697   Tests/Scenarios/live-folder-closed-request-pages.scenario  bbecb6b6f7ef
 #697   Tests/StoreTests.swift::closedPullRequestsLeaveFromTheirOwnPages  7471cc27d91a
