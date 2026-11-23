@@ -1403,12 +1403,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     let roots: [NSView] = dict["devtools"] == "1"
                         ? [EmbeddedDevTools.holder(of: devTools).flatMap { $0.superview != nil ? $0 : nil } ?? devTools?.contentView].compactMap { $0 }
                         : [page.hostWindow?.contentView, page.containerView].compactMap { $0 }
-                    TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags, in: roots, window: w)
+                    TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags, in: roots, window: w, fromKeyboard: dict["source"] == "keyboard")
                 } else {
                     // The ⌘T bar, while it is open, has the keyboard; target=find sends it to the find bar's panel.
                     let target = dict["target"] == "find" ? main.debugFindPanel
                         : dict["target"] == "littleFind" ? littleWindows.last?.finder.debugPanel : main.openCommandPanel
-                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: target ?? w)
+                    // source=keyboard: typed on the keyboard (source process 0), not posted by an app as a mouse driver does (#714).
+                    TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: target ?? w, fromKeyboard: dict["source"] == "keyboard")
                 }
                 return
             }
@@ -3460,9 +3461,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let which = offset < 0 ? "back" : "forward"
             let editing = self.textFieldHasKey(event)
             let overSidebar = self.mainWindows.contains { $0.pointerOverSidebar() }
-            guard let action = MouseButtonSpaceSwitch.action(offset: offset, pointerOverSidebar: overSidebar,
-                                                              editingText: editing, isRepeat: event.isARepeat) else {
-                if !event.isARepeat { CraLog.note("mouse key \(which): left for text") }
+            // Typed on the keyboard it is the page's (YouTube's chapters, #714); only a mouse driver's posted one acts.
+            let keyboard = MouseButtonSpaceSwitch.typedOnKeyboard(sourcePID: event.cgEvent?.getIntegerValueField(.eventSourceUnixProcessID) ?? 0)
+            guard let action = MouseButtonSpaceSwitch.action(offset: offset, pointerOverSidebar: overSidebar, editingText: editing,
+                                                              isRepeat: event.isARepeat, typedOnKeyboard: keyboard) else {
+                if !event.isARepeat { CraLog.note("mouse key \(which): left for \(editing ? "text" : "the page, typed on the keyboard")") }
                 return event
             }
             switch action {
@@ -3474,7 +3477,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 CraLog.note("mouse key \(which): switched space")
             case .history(let step):
-                guard let browser = self.keyLittleWindow?.browser ?? self.keyMainWindow()?.currentBrowser else { return event }
+                guard let browser = self.keyLittleWindow?.browser ?? self.keyMainWindow()?.currentBrowser else {
+                    CraLog.note("mouse key \(which): history, no window in front")
+                    return event
+                }
                 if step < 0 { browser.goBack() } else { browser.goForward() }
                 CraLog.note("mouse key \(which): history")
             }

@@ -1,0 +1,28 @@
+# promise: #714
+# ⌥← / ⌥→ typed on the keyboard are the page's, as in Arc, Chrome and Safari: YouTube's previous and next chapter,
+# a word in a text field. Since #233 Cra took them over a page for Back and Forward, so a YouTube video left its
+# page. The keys a mouse driver posts for a side button (Logi Options+ types ⌥← / ⌥→) still go back and forward.
+# The keys go through the app's event queue, where Cra's key monitor decides; the decision is
+# OptionArrowsOnThePageTests (and MouseButtonSpaceSwitchTests for #233).
+budget rss=800 stalls50=20
+pace 0.5
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://navigate?url=${PAGE}?n=two
+expect-log GET /page.html\?n=two
+wait 1.5
+cra://debug?back=start
+expect-log back start: selected=\S+n=two back=1
+
+# ⌥← typed on the keyboard: left for the page; the tab stays where it is.
+cra://debug?key=,123,524288&source=keyboard
+expect-log mouse key back: left for the page, typed on the keyboard
+wait 1.5
+cra://debug?back=kept
+expect-log back kept: selected=\S+n=two back=1
+
+# ⌥← posted by another app (a mouse's side button through its driver): back, as #233 has it. A background test copy
+# has no key window, so it says so instead of going back.
+cra://debug?key=,123,524288
+expect-log mouse key back: history

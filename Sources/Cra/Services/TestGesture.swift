@@ -106,12 +106,20 @@ enum TestGesture {
         NSApp.postEvent(e, atStart: false)
     }
 
-    static func key(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow) {
+    /// `fromKeyboard`: the event says the keyboard typed it (source process 0, as the window server's are), not that
+    /// an app posted it, as a mouse driver does (#714). Otherwise it carries Cra's own process.
+    static func asTyped(_ e: NSEvent, fromKeyboard: Bool) -> NSEvent {
+        guard fromKeyboard, let c = e.cgEvent?.copy() else { return e }
+        c.setIntegerValueField(.eventSourceUnixProcessID, value: 0)
+        return NSEvent(cgEvent: c) ?? e
+    }
+
+    static func key(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow, fromKeyboard: Bool = false) {
         for type in [NSEvent.EventType.keyDown, .keyUp] {
             guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: window.windowNumber, context: nil, characters: characters,
                                            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
-            NSApp.postEvent(e, atStart: false)
+            NSApp.postEvent(asTyped(e, fromKeyboard: fromKeyboard), atStart: false)
         }
     }
 
@@ -120,7 +128,8 @@ enum TestGesture {
     /// page's own handlers and OnKeyEvent see it as they see a typed one (who gets a shortcut, #374).
     /// The page's view is found under `roots` (Chromium's own window when Chrome hosts the page), else
     /// it is `window`'s first responder (an embedded page that has the keyboard).
-    static func pageKey(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in roots: [NSView], window: NSWindow?) {
+    static func pageKey(_ characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in roots: [NSView], window: NSWindow?,
+                        fromKeyboard: Bool = false) {
         func isPage(_ v: NSView) -> Bool { NSStringFromClass(type(of: v)) == "RenderWidgetHostViewCocoa" }
         func pageView(_ v: NSView) -> NSView? { isPage(v) ? v : v.subviews.lazy.compactMap(pageView).first }
         let focused = (window?.firstResponder as? NSView).flatMap { isPage($0) ? $0 : nil }
@@ -133,7 +142,7 @@ enum TestGesture {
             guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: target.windowNumber, context: nil, characters: characters,
                                            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
-            target.sendEvent(e)
+            target.sendEvent(asTyped(e, fromKeyboard: fromKeyboard))
         }
     }
 

@@ -180,6 +180,12 @@ built release app with a test profile. Note anything that fails in the release's
   holds: Console logs `Cra: mouse swipe back:`. In Split View the pane under the pointer goes back,
   not the focused one, and a tab a link opened closes back to its opener. A test can't make a swipe
   event, so only this check proves the swipe monitor.
+- **#714:** ⌥← / ⌥→ typed on the keyboard reach the page: on a YouTube video with chapters they skip to the
+  previous and next chapter, and the tab stays (Console: `Cra: mouse key back: left for the page, typed on the
+  keyboard`). Then the #233 check above with Logi Options+'s ⌥← / ⌥→ keystrokes: they must still go back and
+  forward, which proves Options+ posts them from its own process (an event from the keyboard has source process 0).
+  If Options+ types them as a keyboard does, they reach the page instead and #233's keystroke assignment needs
+  another tell.
 - **#260:** on a built-in trackpad, every space change by a two-finger swipe over the sidebar
   ticks once: a short flick, a slow drag past half (the tick comes at half), and a swipe into
   the Library and back out. A short drag that settles back is silent; a sideways wheel never

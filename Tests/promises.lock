@@ -1612,6 +1612,10 @@
 #709   Tests/Scenarios/extension-picker.scenario  82cd3453d5eb
 #713   Packages/CraCore/Tests/CraCoreTests/MobileUsageDescriptionsTests.swift::theInfoPlistDescribesEverythingAPageCanAskFor  3acf68d2461b
 #713   iOS/CraUITests/LinkMenuTests.swift::testSaveToPhotosFromAnImageKeepsTheAppRunning  03ab00e6aa43
+#714   Packages/CraCore/Tests/CraCoreTests/OptionArrowsOnThePageTests.swift::aMouseDriversOptionArrowsStillGoBack  29735838cedf
+#714   Packages/CraCore/Tests/CraCoreTests/OptionArrowsOnThePageTests.swift::theKeyboardIsSourceProcessZero  fb28dee51672
+#714   Packages/CraCore/Tests/CraCoreTests/OptionArrowsOnThePageTests.swift::theKeyboardsOptionArrowsGoToThePage  8bbaac73758d
+#714   Tests/Scenarios/option-arrows-to-the-page.scenario  b4af291a96e9
 #716   Tests/Scenarios/command-bar-space-scope-pinned.scenario  5898d27719ad
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
