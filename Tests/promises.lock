@@ -1577,6 +1577,8 @@
 #698   Packages/CraCore/Tests/CraCoreTests/MissionControlCoverageTests.swift::missionControlComingUpLateStillHoldsTheVideo  4331e58b0c8a
 #698   Packages/CraCore/Tests/CraCoreTests/MissionControlCoverageTests.swift::missionControlIsUp  f989393bf830
 #698   Tests/Scenarios/pip-mission-control.scenario  8c788e3f0b89
+#703   Packages/CraCore/Tests/CraCoreTests/AutoPictureInPictureMomentTests.swift::aTabSwitchOpensItAndASpaceSwitchDoesNot  7e042eea0fad
+#703   Tests/Scenarios/pip-space-switch.scenario  5f312b1e5a8e
 #704   Packages/CraCore/Tests/CraCoreTests/SharedBoostTests.swift::theCSSTheSiteShowsLeavesTheTintToTheEngine  0cd8f7e4da8a
 #705   Tests/Scenarios/site-storage-after-close.scenario  66e22ff47082
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae

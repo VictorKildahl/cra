@@ -727,8 +727,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         if live != browsers.visibleTabIDs || liveFocus != browsers.visibleTabID
             || live.contains(where: { browsers.runtime(for: $0) == nil && store.item($0)?.isEmptyTab == false })
             || live.contains(where: browsers.waitsForItsPane) {
-            browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen)
+            // Arc: a tab switch puts a playing video in Picture in Picture, a space switch doesn't (#703).
+            let autoPiP = AutoPictureInPictureMoment.opensOnLeaving(from: pagesShownForSpace, to: focusedSpaceID)
+            browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen, autoPictureInPicture: autoPiP)
         }
+        pagesShownForSpace = focusedSpaceID
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
         shell.layoutContentChildren()
         // After browsers.show: the bar finds on the page now in front (showFindBar does). Typing stays with the page.
@@ -1667,6 +1670,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     private var findTabID: UUID?
     /// The find bar went away because that tab was switched away from, and comes back with it.
     private var findParked = false
+    /// The space whose pages the last refresh put on screen: a refresh for another space is a space switch (#703).
+    private var pagesShownForSpace: UUID?
     /// The focused page's screen rect the find panel was last placed on.
     private var lastFindPage: NSRect?
     /// Arc Max's Ask on Page: with the setting on, the find bar's panel shows this card instead (#393).
