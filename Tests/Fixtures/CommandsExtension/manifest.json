@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Commands Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: a keyboard shortcut (commands) that opens its toolbar popup, as an extension's 'Activate the extension' shortcut in chrome://extensions/shortcuts does (GitHub #701). Its popup loads a fixture page to say it opened.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1zeZiVQW/7m/wBd9UaRLre7CN4ktHMlc3e1fsrekFKlBbULARV/X+WK7tdlt2ARvtzz7xLNTWHvRswoSrdE8HijjWwinAxJ9fChRagAmhGUCxOq0C07Vqz+owxNGmRgBmuPBQuqIVWVDOKLAwInvh/gYieiEq+RQ/7P045IXJc4ID2IDhPBNstgiIsBDl7qafbnCqPY3TfTSQjsB7XQMk/CcpTE+Yki6t/PdUZdtgbYl5d0WHyKV4QbCAJGuSrdM2/aP9qCPv2+Yh/YA5xIeWi6kEr/KTE6X/Vh4qlgckjY8dTNLknwS2l9oHJKJYzO5wjQXvEiAW7+Sx0yoT1fM2wIDAQAB",
+  "permissions": ["storage"],
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["origin.js"] }],
+  "action": { "default_popup": "popup.html", "default_title": "Cra Commands Fixture" },
+  "commands": {
+    "_execute_action": { "suggested_key": { "default": "Alt+Shift+Y" }, "description": "Open the popup" }
+  }
+}

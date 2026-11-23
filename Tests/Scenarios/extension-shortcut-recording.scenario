@@ -1,0 +1,13 @@
+# promise: #701
+# On chrome://extensions/shortcuts a shortcut is recorded by pressing it, so Cra holds extensions'
+# shortcuts back there, as Chrome does: ⌥⇧Y doesn't open the fixture's popup while that page is in front.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/CommandsExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=chrome://extensions/shortcuts
+wait 3
+cra://debug?key=Y,16,655360
+wait 2
+reject-log extension command [a-p]{8}: opens its popup

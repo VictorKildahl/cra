@@ -1,0 +1,17 @@
+# promise: #701
+# An extension's shortcut outside Global scope (chrome://extensions/shortcuts, the manifest's commands) that
+# opens its popup works in Cra's windows, as in Chrome: the fixture's ⌥⇧Y opens its toolbar popup. Chrome
+# catches these on its own browser window, which Cra never shows, so until 0.1.54 only Global ones worked.
+# The key goes through the app's event queue, as a typed one does; the popup says it opened.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/CommandsExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=shortcut
+wait 3
+cra://debug?chromePref=extensions.commands
+expect-log chrome pref extensions\.commands: .*"mac:Alt\+Shift\+Y":\{"command_name":"_execute_action","extension":"${COMMANDS_EXTENSION_ID}"
+cra://debug?key=Y,16,655360
+expect-log extension command [a-p]{8}: opens its popup
+expect-log "GET /page\.html\?n=commands-popup-opened HTTP

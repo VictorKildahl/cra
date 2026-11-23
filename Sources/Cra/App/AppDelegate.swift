@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindows.first { $0.windowID == store.activeWindowID } ?? mainWindows.first
     }
     private var bootstrapped = false
+    private var extensionCommandMonitor: Any?
     private var pendingURLs: [String] = []
     private var settingsWindow: NSWindow?
     private var settingsController: SettingsWindowController?
@@ -297,6 +298,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeChanges(of: { [store] in store.settings.soundEffects }) { CaptureSound.enabled = $0 }
         observeLinkMenu()
         logSecureDNS()
+        // Extensions' shortcuts outside Global scope: Chrome catches them on its own window, which Cra never
+        // shows, so Cra catches them first, pages included, as Chrome does (#701).
+        extensionCommandMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            MainActor.assumeIsolated { self?.runExtensionCommand(event) == true ? nil : event }
+        }
     }
 
     /// A sidebar whose links disagree (SidebarIntegrity) says so in the log, one fault a problem.
@@ -3578,6 +3584,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// A key before the page sees it: Cra takes native window commands, the shortcuts that prefer
     /// Cra, and Use Both's second press of a shortcut the page kept (Settings ▸ Shortcuts, #374).
     /// The rest go to the page and come back through handleUnhandledKey if it leaves them alone.
+    /// An extension's shortcut (chrome://extensions/shortcuts) pressed in a browser window: the ones that
+    /// open its popup run as a click on its button does (#701). Its own commands (chrome.commands.onCommand)
+    /// still need the engine, and pass on. Global ones are the system's hot keys and never get here.
+    private func runExtensionCommand(_ event: NSEvent) -> Bool {
+        let held = event.modifierFlags.intersection([.command, .option, .control])
+        guard !held.isEmpty, !event.isARepeat, let main, event.window === main.window || event.window?.parent === main.window else { return false }
+        // chrome://extensions/shortcuts records a key by its press: Chrome holds its shortcuts back there.
+        if main.selectedTab?.tab?.url.hasPrefix("chrome://extensions") == true { return false }
+        let path = store.profilePath(profile: main.focusedSpace.profileID)
+        guard let json = CraCEFRuntime.preference("extensions.commands", forProfile: path) else { return false }
+        let bindings = ExtensionCommands.bindings(prefJSON: json)
+        guard !bindings.isEmpty,
+              let binding = ExtensionCommands.binding(in: bindings, characters: event.charactersIgnoringModifiers ?? "",
+                                                      keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) else { return false }
+        guard ExtensionCommands.opensPopup(binding.command) else {
+            CraLog.note("extension command \(binding.extensionID.prefix(8)) \(binding.command): needs the engine")
+            return false
+        }
+        CraLog.note("extension command \(binding.extensionID.prefix(8)): opens its popup")
+        main.runExtensionAction(binding.extensionID)
+        return true
+    }
+
     func handleReservedKey(_ event: NSEvent) -> Bool {
         if performNativePageShortcut(event) { return true }
         guard let action = bindings.action(for: event) else { return false }
