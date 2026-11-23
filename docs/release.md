@@ -76,13 +76,16 @@ clip hook checks the website push, not the tag (see "Clips in the release notes"
 
 ### Notarization
 
-Each CPU is notarized once: `release.sh` packages the signed app into its DMG and
-`scripts/notarize.sh` submits the DMG, whose ticket covers the app inside, then staples the DMG
-and the app and zips the stapled app. Apple usually answers in minutes; on 17 Nov 2026 it took
-52, so the wait is 2 hours.
+Each CPU is notarized twice (`scripts/notarize-dist.sh`): `release.sh` packages the signed app into its DMG,
+`scripts/notarize.sh` submits that DMG, whose ticket covers the app inside, and staples the app; then `package.sh`
+packs the DMG again with the stapled app, and that DMG is submitted and stapled in turn. So the app inside the
+DMG carries its own ticket and opens offline on its first launch (GitHub #720: until 0.1.54 only the DMG and the
+update zip had one). `release.sh` stops unless the DMG and the app in it are both stapled, then zips the stapled
+app. Apple usually answers in minutes; on 17 Nov 2026 it took 52, so each wait is up to 2 hours.
 
 A run that stops while Apple is still checking keeps its work. `notarize.sh` writes the
-submission id next to the DMG (`Cra.dmg.submission`) as soon as Apple has it; when a build job
+submission id next to the DMG (`Cra.dmg.submission`) as soon as Apple has it (a stapled app in the kept files means
+it is the second DMG's); when a build job
 fails or is cancelled, the workflow uploads the signed app, the DMG and the id
 (`scripts/keep-pending.sh`, artifact `pending-<version>-<arch>`). Rerun the failed job
 (`gh run rerun <id> --failed`): it downloads them and only waits for that submission, then
@@ -168,9 +171,10 @@ scripts/release.sh
 ```
 
 `scripts/release.sh` does this once per CPU (`CRA_ARCHS`, default `arm64 x86_64`): it runs
-`build.sh` (sign, innermost first, with the helper entitlements), notarizes and staples the
-app, runs `package.sh` (zip, DMG with an Applications link, checksums), then notarizes and
-staples the DMG, checks it with `spctl` and writes that CPU's appcast. Both CPUs share one
+`build.sh` (sign, innermost first, with the helper entitlements), runs `package.sh` (zip, DMG with an
+Applications link, checksums), notarizes the DMG and staples the app, packs the DMG again with the stapled
+app and notarizes and staples that (`notarize-dist.sh`), checks both tickets and `spctl` and writes that CPU's
+appcast. Both CPUs share one
 build number. Without `CRA_SIGN_IDENTITY` it produces an ad-hoc build and skips notarization.
 
 `CRA_ARCH=x86_64 scripts/build.sh` builds the other CPU on its own: the host CPU keeps

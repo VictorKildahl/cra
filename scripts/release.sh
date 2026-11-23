@@ -57,7 +57,7 @@ for ARCH in $ARCHS; do
     CRA_ARCH="$ARCH" scripts/build.sh release
     SUFFIX="$(scripts/asset-suffix.sh "$APP")"
     rm -f "build/dist/Cra$SUFFIX.dmg.submission"
-    # The DMG holds the app as signed; one notarization of the DMG covers both.
+    # The DMG holds the app as signed; its notarization covers both, and notarize-dist.sh packs it again stapled.
     scripts/package.sh "$APP"
   fi
 
@@ -89,10 +89,17 @@ for ARCH in $ARCHS; do
   [ -z "${CRA_SKIP_SNAPSHOTS:-}" ] || echo "snapshots skipped: $CRA_SKIP_SNAPSHOTS" | tee "build/dist/snapshots-$ARCH.txt"
 
   if [ "$IDENTITY" != "-" ]; then
-    # One submission per CPU: the DMG, whose ticket covers the app inside it. Stapled to the DMG
-    # and to the app (macOS checks the app inside the DMG online, as for most apps).
-    scripts/notarize.sh "build/dist/Cra$SUFFIX.dmg" "$APP"
-    rm -f "build/dist/Cra$SUFFIX.dmg.submission"
+    # Two submissions per CPU (notarize-dist.sh): the DMG as packaged, whose ticket goes on the app, then the DMG
+    # packed again with that stapled app. An install from the DMG then carries its ticket offline (GitHub #720).
+    scripts/notarize-dist.sh "$APP" "build/dist/Cra$SUFFIX.dmg"
+    # The DMG and the app inside it both carry their tickets, or the release stops.
+    MNT="$(mktemp -d)"
+    hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "build/dist/Cra$SUFFIX.dmg" > /dev/null
+    if xcrun stapler validate -q "$MNT/Cra.app"; then IN_DMG=stapled; else IN_DMG=missing; fi
+    hdiutil detach -quiet "$MNT" || true
+    [ "$IN_DMG" = stapled ] || { echo "Release stopped: Cra.app in Cra$SUFFIX.dmg has no notarization ticket" >&2; exit 1; }
+    xcrun stapler validate -q "build/dist/Cra$SUFFIX.dmg" ||
+      { echo "Release stopped: Cra$SUFFIX.dmg has no notarization ticket" >&2; exit 1; }
     # Zip the stapled app: Sparkle updates and scripts/install.sh carry the ticket offline.
     ditto -c -k --keepParent "$APP" "build/dist/Cra$SUFFIX.zip"
     # On its own line so set -e fails the release when Gatekeeper rejects the app.
