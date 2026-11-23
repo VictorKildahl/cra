@@ -944,7 +944,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         }?.faviconKey
         if let i = favicons.image(forKey: key) { return i }
         // Never shown in a tab here: fetch the site's own icon, then draw the row again.
-        SiteIconLoader.shared.load(host: b.host, into: favicons) { [weak self] in self?.table.reloadData() }
+        SiteIconLoader.shared.want(.init(url: "https://\(b.host)/", iconKey: b.host, source: .saved, incognito: false), into: favicons) { [weak self] in self?.table.reloadData() }
         return nil
     }
 }

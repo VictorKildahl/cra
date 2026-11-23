@@ -1,8 +1,8 @@
 import Foundation
 
 /// A site's icon for places that show a site Cra may never have opened (a boost on Library ▸
-/// Boosts): read from its home page's `<link rel=icon>` tags as a page's icon is (the largest it
-/// declares, bitmaps before SVG), then /favicon.ico.
+/// Boosts, a tab that never loaded, SiteIconQueue): read from its home page's `<link rel=icon>`
+/// tags as a page's icon is (the largest it declares, bitmaps before SVG), then /favicon.ico.
 public enum SiteIcon {
     /// Where to look, best first, from the page at `base`.
     public static func candidates(html: String, base: URL) -> [URL] {

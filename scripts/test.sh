@@ -50,6 +50,7 @@ if [ "${1:-}" != core ]; then
   suite "Extension state" scripts/test-extension-state.sh
   suite "Extension store migration" scripts/test-extension-store-migration.sh
   suite "Store and importers" scripts/test-store.sh
+  suite "Site icons" scripts/test-site-icons.sh
   suite "Tidy Downloads lifecycle" scripts/test-tidy-downloads.sh
   suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
