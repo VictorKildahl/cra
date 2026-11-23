@@ -538,7 +538,7 @@
 #306   Packages/CraCore/Tests/CraCoreTests/SpaceSearchEngineTests.swift::withoutOneTheSpaceInheritsTheDefault  862d2c21caef
 #306   Tests/Scenarios/space-search-engine.scenario  305a5e5abcd0
 #307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::commandBarTabsFollowTheSetting  316e28600e93
-#307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::currentSpaceOnlySettingDefaultsOffAndRoundTrips  8465a635dabd
+#307   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::currentSpaceOnlySettingDefaultsOffAndRoundTrips  069565c8983d
 #307   Tests/Scenarios/command-bar-space-scope.scenario  0b4de914ffa4
 #308   Tests/Scenarios/fullscreen-window-chrome.scenario  387fa799cbb9
 #310   Packages/CraCore/Tests/CraCoreTests/PageTranslationTests.swift::buttonOutlivesTheAutomaticOffer  8b6c61024b81
@@ -1630,6 +1630,7 @@
 #715   Packages/CraCore/Tests/CraCoreTests/SpellCheckTests.swift::aProfileNotLoadedIsReadFromItsPreferencesFile  720ab9091f3f
 #715   Packages/CraCore/Tests/CraCoreTests/SpellCheckTests.swift::onUnlessTheProfileTurnedItOff  08700842f871
 #715   Tests/Scenarios/spellcheck-toggle.scenario  26c8ad5f6d2a
+#716   Packages/CraCore/Tests/CraCoreTests/TabSearchScopeTests.swift::theScopeMovesToArcsOnceAndThenKeepsTheUsersChoice  9aa2c4d9c73b
 #716   Tests/Scenarios/command-bar-space-scope-pinned.scenario  5898d27719ad
 #717   Tests/Scenarios/library-click-next-space-hidden.scenario  a9075cb356d2
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae

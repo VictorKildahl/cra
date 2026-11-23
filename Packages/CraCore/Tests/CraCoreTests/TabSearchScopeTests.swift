@@ -44,8 +44,8 @@ struct TabSearchScopeTests {
         #expect(TabSearchScope.rank([C(id: "a", score: 10, lastActive: now)], typed: true).isEmpty)
     }
 
-    /// ⌘T's scope (#307): off, Arc's bar finds a tab in any space; on, only the window's space's
-    /// tabs are searched and listed, in the order given.
+    /// ⌘T's scope (#307, #716): on, Arc's bar, only the window's space's tabs are searched and listed,
+    /// in the order given; off, a tab in any space.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/307"))
     func commandBarTabsFollowTheSetting() {
         let home = UUID(), work = UUID()
@@ -58,14 +58,27 @@ struct TabSearchScopeTests {
         #expect(listed(currentSpaceOnly: true, window: work) == ["work-a"])
     }
 
-    /// The setting is off in a settings.json written before #307 and survives a save.
+    /// The setting survives a save both ways (#307); its default is Arc's, this space only (#716).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/307"))
     func currentSpaceOnlySettingDefaultsOffAndRoundTrips() throws {
         let decoder = JSONDecoder()
         let older = try decoder.decode(AppSettings.self, from: Data("{}".utf8))
-        #expect(!older.commandBarCurrentSpaceOnly)
-        var on = older
-        on.commandBarCurrentSpaceOnly = true
-        #expect(try decoder.decode(AppSettings.self, from: JSONEncoder().encode(on)).commandBarCurrentSpaceOnly)
+        #expect(older.commandBarCurrentSpaceOnly)
+        var off = older
+        off.commandBarCurrentSpaceOnly = false
+        #expect(try !decoder.decode(AppSettings.self, from: JSONEncoder().encode(off)).commandBarCurrentSpaceOnly)
+        #expect(try decoder.decode(AppSettings.self, from: JSONEncoder().encode(older)).commandBarCurrentSpaceOnly)
+    }
+
+    /// Arc's ⌘T keeps to the window's space (live in Arc 1.174, #716). 0.1.38–0.1.54 saved the switch off
+    /// for everyone by default: such a file turns it on once; one saved after that keeps what it says.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/716"))
+    func theScopeMovesToArcsOnceAndThenKeepsTheUsersChoice() throws {
+        let decoder = JSONDecoder()
+        let before716 = try decoder.decode(AppSettings.self, from: Data(#"{"commandBarCurrentSpaceOnly": false}"#.utf8))
+        #expect(before716.commandBarCurrentSpaceOnly && before716.commandBarScopeMigrated)
+        let chosenOff = try decoder.decode(AppSettings.self, from: Data(#"{"commandBarCurrentSpaceOnly": false, "commandBarScopeMigrated": true}"#.utf8))
+        #expect(!chosenOff.commandBarCurrentSpaceOnly)
+        #expect(AppSettings().commandBarCurrentSpaceOnly)
     }
 }

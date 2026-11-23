@@ -264,6 +264,7 @@ public extension AppSettings {
         s.perfHidesSiteNames = false
         s.toolbarDefaultMigrated = true
         s.newTabButtonDefaultMigrated = true
+        s.commandBarScopeMigrated = true
         return s
     }
 
@@ -280,6 +281,7 @@ public extension AppSettings {
         s.perfHidesSiteNames = perfHidesSiteNames
         s.toolbarDefaultMigrated = true
         s.newTabButtonDefaultMigrated = true
+        s.commandBarScopeMigrated = true
         return s
     }
 }

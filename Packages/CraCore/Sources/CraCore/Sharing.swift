@@ -185,7 +185,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     /// `commandBarSiteColor`, `sidebarSide`, `edgeToEdgeRoundedCorners`, `pageMargin` and `translucentSidebar` are here because a feature Arc never had adds nothing to what a report says (CONTRIBUTING.md).
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "keepActiveSites", "linkRoutes", "mediaFolders", "mediaHidden",
-        "downloadLocations", "newDocumentApps", "profileAutoArchive", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated",
+        "downloadLocations", "newDocumentApps", "profileAutoArchive", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated", "commandBarScopeMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar", "autoHideLittleWindowToolbar", "autoHidePeekToolbar",
         "commandBarSiteColor", "sidebarSide", "customBlocklists", "edgeToEdgeRoundedCorners", "pageMargin", "translucentSidebar",
     ]

@@ -12,9 +12,9 @@ public enum TabSearchScope {
     /// confuse a list this short more than they help.
     public static let minimumScore = 50.0
 
-    /// Which open tabs ⌘T searches and lists (#307, not in Arc): Arc's bar finds a tab in any space,
-    /// and Settings ▸ Advanced "Search only the current space’s tabs" narrows it to
-    /// the window's space, as "%" Tab does for one search. `space` gives a tab's space (nil for
+    /// Which open tabs ⌘T searches and lists: the window's space's, as Arc's bar does (#716), with
+    /// Settings ▸ Advanced "Only this space’s tabs" on (the default); off (#307), any space's. "%" Tab
+    /// narrows one search to the space either way. `space` gives a tab's space (nil for
     /// one no space holds, which only the whole-profile search keeps).
     public static func commandBarTabs<Tab>(_ tabs: [Tab], space: (Tab) -> UUID?, windowSpace: UUID,
                                            currentSpaceOnly: Bool) -> [Tab] {
