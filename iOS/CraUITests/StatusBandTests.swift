@@ -2,6 +2,14 @@ import XCTest
 
 /// The band behind the status bar over a page (#657).
 final class StatusBandTests: BrowserTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        // shortcut: only the iPhone Duo simulator is known here; revisit for other non-top status bars.
+        if ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] == "iPhone19,4" {
+            throw XCTSkip("The status bar is a right-hand column or a top-right cluster, the top safe area is 0, and whether the band belongs there is an open product question (duo research, finding 8)")
+        }
+    }
+
     /// The screen's colour a few points from the top, left of the clock: the band, not the page.
     private func topColour() -> (r: Int, g: Int, b: Int) {
         let shot = XCUIScreen.main.screenshot().image
