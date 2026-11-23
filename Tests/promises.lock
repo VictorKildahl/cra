@@ -1612,6 +1612,7 @@
 #709   Packages/CraCore/Tests/CraCoreTests/ExtensionPickerTests.swift::pastTheLastItStartsAgain  f3821c94cd6d
 #709   Packages/CraCore/Tests/CraCoreTests/ExtensionPickerTests.swift::whatAPressDoes  8311eb472131
 #709   Tests/Scenarios/extension-picker.scenario  82cd3453d5eb
+#712   Tests/Scenarios/tab-switch-dark-canvas.scenario  ac7796defbfe
 #713   Packages/CraCore/Tests/CraCoreTests/MobileUsageDescriptionsTests.swift::theInfoPlistDescribesEverythingAPageCanAskFor  3acf68d2461b
 #713   iOS/CraUITests/LinkMenuTests.swift::testSaveToPhotosFromAnImageKeepsTheAppRunning  03ab00e6aa43
 #714   Packages/CraCore/Tests/CraCoreTests/OptionArrowsOnThePageTests.swift::aMouseDriversOptionArrowsStillGoBack  29735838cedf

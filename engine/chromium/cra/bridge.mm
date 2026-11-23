@@ -178,6 +178,10 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)pageDestroyed;
 - (void)pageBackgroundColor;
 - (void)applyPageCanvasTo:(content::RenderWidgetHostView*)view;
+- (void)applyCanvasBaseTo:(content::WebContents*)contents;
+- (void)applySpareCanvas;
+- (void)refreshCanvasBase:(content::WebContents*)contents;
+- (void)pageFirstPaint;
 - (void)pageFavicon:(NSImage*)image url:(NSString*)url;
 - (void)pageFindResult;
 - (void)pagePictureInPicture:(BOOL)active;
@@ -432,6 +436,8 @@ class PageObserver : public content::WebContentsObserver,
 
   // "Aw, Snap!" and "Page Unresponsive", for Cra's performance recorder (GitHub #91).
   void PrimaryMainFrameRenderProcessGone(base::TerminationStatus status) override {
+    // The page's next renderer (a tab slept by discarding, then shown again) starts on Arc's canvas too (#712).
+    [owner_ applyCanvasBaseTo:web_contents()];
     const char* what = "unknown";
     switch (status) {
       case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
@@ -502,6 +508,7 @@ class PageObserver : public content::WebContentsObserver,
     }
   }
   void DidStartLoading() override { [owner_ pageLoadingChanged]; }
+  void DidFirstVisuallyNonEmptyPaint() override { [owner_ pageFirstPaint]; }
   void DidStopLoading() override { [owner_ pageLoadingChanged]; }
   void LoadProgressChanged(double progress) override { [owner_ pageProgress:progress]; }
   void DidFinishLoad(content::RenderFrameHost* frame, const GURL& url) override {
@@ -2105,6 +2112,8 @@ bool HandleDebugMethod(content::WebContents* contents,
 
 @implementation CraBrowser {
   NSView* _container;
+  // The page's empty document draws in Arc's canvas colour until it first draws something of its own (#712).
+  BOOL _canvasBase;
   raw_ptr<content::WebContents> _contents;
   std::unique_ptr<PageObserver> _observer;
   std::unique_ptr<DevToolsFrontendObserver> _devToolsFrontend;
@@ -2264,12 +2273,14 @@ bool HandleDebugMethod(content::WebContents* contents,
     // Made now, while nothing waits on it; it goes in a tab strip when a tab takes it (takeSpareWithURL:).
     _spareProfile = profile;
     _spareContents = content::WebContents::Create(params);
+    [self applySpareCanvas];
     [SparePages() addObject:self];
     // Made: a tab can take it (SparePages.take), as the CEF bridge reports a spare once its browser exists.
     _isCreated = YES;
     return;
   }
   std::unique_ptr<content::WebContents> made = content::WebContents::Create(params);
+  [self applyCanvasBaseTo:made.get()];
   if (_sidePanel) {
     extensions::SetViewType(made.get(), extensions::mojom::ViewType::kExtensionSidePanel);
   }
@@ -3361,6 +3372,39 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
     view->SetBackgroundColor(PagesAreDark() ? SK_ColorBLACK : SK_ColorWHITE);
   }
 }
+// A new page draws its empty document before its first page commits, and that frame stays on screen until the page
+// paints: white for a second and more on a dark site that draws late (#712), for a tab woken from sleep whether it
+// takes a spare page (drawn before any tab took it), makes a page and restores its history, or reloads in place
+// after a discard (its renderer gone: PrimaryMainFrameRenderProcessGone). The empty document
+// draws in Arc's canvas instead; the page goes back to Chromium's white base once it draws
+// (pageFirstPaint), so a page with no background of its own still paints white, as in Arc.
+- (void)applyCanvasBaseTo:(content::WebContents*)contents {
+  if (!contents) {
+    return;
+  }
+  contents->SetPageBaseBackgroundColor(PagesAreDark() ? SK_ColorBLACK : SK_ColorWHITE);
+  [self applyPageCanvasTo:contents->GetRenderWidgetHostView()];
+  _canvasBase = YES;
+}
+- (void)applySpareCanvas {
+  [self applyCanvasBaseTo:_spareContents.get()];
+}
+// The page drew something of its own: Chromium's base again, so a page with no background of its own paints white,
+// as in Arc. Not at commit: a page restored from its history (a tab woken without a spare) drew its first frame on
+// the cleared base, white, before its own colours came (#712).
+- (void)pageFirstPaint {
+  if (_canvasBase && _contents && !_contents->IsBeingDestroyed()) {
+    _canvasBase = NO;
+    _contents->SetPageBaseBackgroundColor(std::nullopt);
+    [self applyPageCanvasTo:_contents->GetRenderWidgetHostView()];
+  }
+}
+// View ▸ Appearance while a page still waits for its first paint.
+- (void)refreshCanvasBase:(content::WebContents*)contents {
+  if (_canvasBase) {
+    [self applyCanvasBaseTo:contents];
+  }
+}
 - (void)executeJavaScript:(NSString*)script inDevTools:(BOOL)inDevTools {
   if (!inDevTools) {
     [self executeJavaScript:script];
@@ -4112,6 +4156,10 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
   cra::SetWebsiteAppearance(mode);
   for (const auto& [contents, page] : PagesByContents()) {
     [page applyPageCanvasTo:contents->GetRenderWidgetHostView()];
+    [page refreshCanvasBase:contents];
+  }
+  for (CraBrowser* spare in SparePages().allObjects) {
+    [spare applySpareCanvas];
   }
 }
 + (NSInteger)websiteAppearance {

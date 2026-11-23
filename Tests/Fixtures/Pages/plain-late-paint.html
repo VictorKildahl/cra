@@ -1,0 +1,5 @@
+<!doctype html>
+<title>Plain late paint</title>
+<!-- Holds its first frame 1.5 s like dark-late-paint.html, then draws with no background of its own: white (#712). -->
+<script>for (const end = Date.now() + 1500; Date.now() < end;) {}</script>
+<p style="font:16px sans-serif">A plain page that draws late.</p>

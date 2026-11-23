@@ -1,0 +1,68 @@
+# promise: #712
+# The same dark site open in two spaces (the report: "I opened the same workspace in a different space"), then
+# switching between them and between tabs: no white or grey may show over the page before it is on screen
+# again, only Arc's canvas (black while websites are dark) and the page's own colour. Engine -16 gave every page
+# that canvas before its first frame; this switches to pages that drew before and were hidden. Colours are sampled
+# at the page's centre every frame from just before each switch (cra://debug?pageColours=).
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "websiteAppearance": "dark"}
+seed sidebar.json {"version": 1, "spaceOrder": ["A0000000-0000-0000-0000-000000000001", "A0000000-0000-0000-0000-000000000002"], "spaces": [{"id": "A0000000-0000-0000-0000-000000000001", "title": "Home", "emoji": "\ud83c\udfe0", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C0000000-0000-0000-0000-000000000011", "pinnedContainerID": "C0000000-0000-0000-0000-000000000012", "todayContainerID": "C0000000-0000-0000-0000-000000000013", "createdAt": "2026-11-06T08:00:00Z"}, {"id": "A0000000-0000-0000-0000-000000000002", "title": "Work", "emoji": "\ud83d\udcbc", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C0000000-0000-0000-0000-000000000021", "pinnedContainerID": "C0000000-0000-0000-0000-000000000022", "todayContainerID": "C0000000-0000-0000-0000-000000000023", "createdAt": "2026-11-06T08:00:00Z"}], "items": [{"id": "C0000000-0000-0000-0000-000000000011", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000012", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000013", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000021", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000002"}}}}}, {"id": "C0000000-0000-0000-0000-000000000022", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000002"}}}}}, {"id": "C0000000-0000-0000-0000-000000000023", "children": [], "isUnread": false, "createdAt": "2026-11-06T08:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000002"}}}}}]}
+
+cra://open?url=${ORIGIN}/dark-late-paint.html?n=home&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://open?url=${ORIGIN}/dark-late-paint.html?n=first&space=A0000000-0000-0000-0000-000000000002
+wait 3
+
+# Back to the first space: its page drew before and was hidden.
+cra://debug?pageColours=space-back&seconds=3
+cra://action/previousSpace
+wait 4
+expect-log Cra page colours space-back: (000000x[0-9]+ )?(.* )?(0[0-9A-F]|1[0-9A-F]){3}x[0-9]+$
+reject-log Cra page colours space-back: (.* )?([2-9A-F][0-9A-F]){3}x
+
+# And to the second space again.
+cra://debug?pageColours=space-again&seconds=3
+cra://action/nextSpace
+wait 4
+expect-log Cra page colours space-again: (000000x[0-9]+ )?(.* )?(0[0-9A-F]|1[0-9A-F]){3}x[0-9]+$
+reject-log Cra page colours space-again: (.* )?([2-9A-F][0-9A-F]){3}x
+
+# A second tab of the site in this space, then back to the first one.
+cra://open?url=${ORIGIN}/dark-late-paint.html?n=second&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?pageColours=tab-back&seconds=3
+cra://debug?selectTab=n=first
+wait 4
+expect-log Cra page colours tab-back: (000000x[0-9]+ )?(.* )?(0[0-9A-F]|1[0-9A-F]){3}x[0-9]+$
+reject-log Cra page colours tab-back: (.* )?([2-9A-F][0-9A-F]){3}x
+
+# The first tab put to sleep (a one-second threshold), then back to it: its page is made again, on a spare page
+# (BrowserManager's SparePages), and draws late. The spare had drawn its empty document white, and that frame stayed
+# on screen until the site drew (#712: FFFFFFx90 on engine -17).
+cra://debug?selectTab=n=second
+wait 3
+cra://debug?sleepTabs=1
+wait 2
+cra://debug?closeSleptPages=1
+wait 1
+cra://debug?pageColours=slept&seconds=4
+cra://debug?selectTab=n=first
+wait 5
+expect-log Cra page colours slept: (000000x[0-9]+ )?(.* )?(0[0-9A-F]|1[0-9A-F]){3}x[0-9]+$
+reject-log Cra page colours slept: (.* )?([2-9A-F][0-9A-F]){3}x
+
+# A page with no background of its own shows Arc's black until it draws, then white, as in Arc: the spare's colour
+# is only its own.
+cra://open?url=${ORIGIN}/plain-late-paint.html?n=plain&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?selectTab=n=second
+wait 3
+cra://debug?sleepTabs=1
+wait 2
+cra://debug?closeSleptPages=1
+wait 1
+cra://debug?pageColours=plain&seconds=4
+cra://debug?selectTab=n=plain
+wait 5
+expect-log Cra page colours plain: (.* )?000000x[0-9]+ FFFFFFx[0-9]+$
