@@ -274,6 +274,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeChanges(of: { [store] in store.settings.customBlocklists }) { [composition] in
             BlockLists.shared.set(addresses: $0, clock: composition.clock)
         }
+        BlockLists.shared.hidingChanged = { [weak self] in
+            for window in self?.mainWindows ?? [] { window.browsers.refreshElementHiding() }
+        }
+        observeChanges(of: { [store] in store.settings.personalBlockFilters }) {
+            BlockLists.shared.setPersonal($0)
+        }
         observeContentBlocking()
         observeHttpsOnly()
         // Arc's "Archive Little Arcs after:": a Little Window left alone that long closes, its page archived.
@@ -455,7 +461,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var globalHotkey: GlobalHotkey?
 
     private func observeContentBlocking() {
-        observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }, apply: CraCEFRuntime.setContentBlockingEnabled)
+        observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }) { [weak self] enabled in
+            CraCEFRuntime.setContentBlockingEnabled(enabled)
+            for window in self?.mainWindows ?? [] { window.browsers.refreshElementHiding() }
+        }
     }
 
     /// The last update notice toasted this launch (UpdateNotice.toast), and how many were.

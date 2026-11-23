@@ -30,7 +30,32 @@ final class BlockLists {
     /// A list bigger than this isn't a block list.
     private static let maxBytes = 64 << 20
 
-    private init() {}
+    @ObservationIgnored var hidingChanged: (() -> Void)?
+    @ObservationIgnored private var hiding = DesktopHidingRules(lines: [])
+    @ObservationIgnored private let styles = NSCache<NSString, NSString>()
+    @ObservationIgnored private var personal = ""
+    private(set) var personalSummary: String?
+
+    nonisolated(unsafe) private static var lastDomains: [String]? // only accessed on queue
+
+    private init() {
+        styles.totalCostLimit = 4 << 20
+        styles.countLimit = 32
+    }
+
+    func setPersonal(_ text: String?) {
+        let next = text ?? ""
+        guard next != personal else { return }
+        personal = next
+        publish()
+    }
+
+    func style(for host: String) -> String {
+        if let value = styles.object(forKey: host as NSString) { return value as String }
+        let value = hiding.css(host: host)
+        styles.setObject(value as NSString, forKey: host as NSString, cost: value.utf8.count)
+        return value
+    }
 
     static var folder: URL {
         let url = AppPaths.supportDir.appendingPathComponent("Blocklists", isDirectory: true)
@@ -91,8 +116,8 @@ final class BlockLists {
             let outcome = await Self.load(url)
             let result: Result<CachedBlocklist, BlockListError> = await Task.detached(priority: .utility) {
                 outcome.flatMap { text in
-                    let list = CachedBlocklist(url: address, list: ParsedBlocklist(text: text), fetched: fetchedAt)
-                    guard !list.domains.isEmpty else { return .failure(.noDomains) }
+                    let list = DesktopHidingRules.read(text, address: address, fetched: fetchedAt)
+                    guard !list.domains.isEmpty || !list.hidingRules.isEmpty else { return .failure(.noDomains) }
                     return .success(list)
                 }
             }.value
@@ -118,17 +143,30 @@ final class BlockLists {
 
     /// Gives the engine Cra's list with every added one, when that changed.
     private func publish() {
-        let key = CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
+        let key = [personal] + CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
         guard key != publishedKey else { return }
         publishedKey = key
-        let lists = addresses.compactMap { cached[$0]?.domains }
+        let lists = addresses.compactMap { cached[$0] }
+        let personalText = personal
         queue.async {
             if Self.bundled == nil {
                 let path = Bundle.main.path(forResource: "domains", ofType: "txt", inDirectory: "blocklist")
                 Self.bundled = path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }.map { ParsedBlocklist(text: $0).domains } ?? []
             }
-            let domains = CustomBlocklist.merged([Self.bundled ?? []] + lists)
-            CraCEFRuntime.setBlockedDomains(domains)
+            let user = DesktopHidingRules.read(personalText, address: "", fetched: .distantPast)
+            let domains = CustomBlocklist.merged([Self.bundled ?? [], user.domains] + lists.map(\.domains))
+            let hiding = DesktopHidingRules(lines: lists.flatMap(\.hidingRules) + user.hidingRules)
+            DispatchQueue.main.async { [self] in
+                guard publishedKey == key else { return }
+                self.hiding = hiding
+                styles.removeAllObjects()
+                personalSummary = personalText.isEmpty ? nil : user.desktopSummary
+                hidingChanged?()
+            }
+            if domains != Self.lastDomains {
+                CraCEFRuntime.setBlockedDomains(domains)
+                Self.lastDomains = domains
+            }
             CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")")
         }
     }
@@ -172,7 +210,7 @@ enum BlockListError: Error {
         case .status(let code): return "The server answered \(code). Cra tries again later."
         case .unreadable: return "Cra couldn’t read the file."
         case .tooBig: return "The list is bigger than 64 MB."
-        case .noDomains: return "Cra found no domain rules it can use in this list."
+        case .noDomains: return "Cra found no supported domain or element-hiding rules in this list."
         }
     }
 }

@@ -23,7 +23,7 @@ struct PrivacyPane: View {
                                   detail: "Requests to known ad and tracker domains are cancelled, unless the domain belongs to the site you’re on.",
                                   isOn: $store.settings.blockAdsAndTrackers)
                 SettingsCardDivider()
-                BlockListRows(addresses: $store.settings.customBlocklists, enabled: store.settings.blockAdsAndTrackers)
+                BlockListRows(addresses: $store.settings.customBlocklists, personal: $store.settings.personalBlockFilters, enabled: store.settings.blockAdsAndTrackers)
                 SettingsCardDivider()
                 // Arc: Settings ▸ General "Block Cookie Banners", off by default.
                 SettingsToggleRow("Block cookie banners",
@@ -90,25 +90,65 @@ struct PrivacyPane: View {
 /// Each added list is a line with its name, what it blocks and a remove button.
 private struct BlockListRows: View {
     @Binding var addresses: [String]
+    @Binding var personal: String?
     let enabled: Bool
     private let lists = BlockLists.shared
     @State private var adding = false
+    @State private var browsing = false
+    @State private var regional = false
+    @State private var editingRules = false
+    @State private var draft = ""
     @State private var text = ""
     @State private var error: String?
 
     var body: some View {
         SettingsPlainRow("Block lists",
-                         detail: "Add a list to block more, like ads in your country. Cra uses its domain rules (hosts files, domain lists and Adblock Plus “||domain^” rules) and fetches it again when Cra opens, once a day at most.",
+                         detail: "Cra blocks third-party domains and hides matching elements on pages. Each list shows how many rules Cra can use.",
                          trailing: {
+                             Button("Update Lists") { addresses.forEach { lists.fetch($0) } }
+                                 .disabled(!enabled || addresses.isEmpty || !lists.fetching.isEmpty)
                              Button("Add List…") { error = nil; text = ""; adding = true }
                                  .disabled(!enabled || adding)
                          }) {
+            DisclosureGroup("Available filter lists", isExpanded: $browsing) {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(DesktopFilterList.catalog.filter { !$0.regional }) { presetToggle($0) }
+                    DisclosureGroup("Regional lists", isExpanded: $regional) {
+                        VStack(alignment: .leading) {
+                            ForEach(DesktopFilterList.catalog.filter(\.regional)) { presetToggle($0) }
+                        }
+                    }
+                }
+            }
+            .disabled(!enabled)
             if !addresses.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(addresses, id: \.self) { BlockListLine(address: $0, lists: lists, remove: remove) }
                 }
                 .padding(.top, 4)
                 .opacity(enabled ? 1 : 0.5)
+            }
+        }
+        SettingsCardDivider()
+        SettingsPlainRow("Custom filters", detail: "Enter domains or simple element filters, one per line.",
+                         trailing: {
+                             Button("Edit…") { draft = personal ?? ""; editingRules = true }
+                                 .disabled(!enabled || editingRules)
+                         }) {
+            if let summary = lists.personalSummary { Text(summary).font(.caption).foregroundStyle(.secondary) }
+            if editingRules {
+                TextEditor(text: $draft)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 84)
+                    .accessibilityLabel("Custom filters")
+                HStack {
+                    Button("Cancel") { editingRules = false }
+                    Button("Save Changes") {
+                        personal = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draft
+                        editingRules = false
+                    }
+                    .disabled(!enabled || draft == (personal ?? ""))
+                }
             }
         }
         if adding {
@@ -129,6 +169,22 @@ private struct BlockListRows: View {
         if let error {
             SettingsFootnote(error).foregroundStyle(.red).padding(.bottom, 8)
         }
+    }
+
+    private func presetToggle(_ list: DesktopFilterList) -> some View {
+        Toggle(isOn: Binding(
+            get: { addresses.contains(list.address) },
+            set: { selected in
+                if selected { apply(CustomBlocklist.adding(list.address, to: addresses, httpsOnly: true)) }
+                else { remove(list.address) }
+            })) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(list.name)
+                Text(list.detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+            .toggleStyle(.checkbox)
+            .help(list.address)
     }
 
     private func addTyped() {
@@ -179,7 +235,7 @@ private struct BlockListLine: View {
                 if let failure = lists.failures[address] {
                     Text(failure).foregroundStyle(.red)
                 } else if let list {
-                    Text(CustomBlocklist.summary(domains: list.domains.count, skippedRules: list.skippedRules)
+                    Text(list.desktopSummary
                          + " · Updated " + list.fetched.formatted(.relative(presentation: .named)))
                         .foregroundStyle(.secondary)
                 } else {
