@@ -1,11 +1,15 @@
+import CraCore
 import UIKit
 
-/// What shows when no page is open, under the dots (`DotFieldView`) and behind the search sheet:
-/// near-black with soft warm patches, as in the reference recording of 23 November 2026, where
-/// the screen runs from #101010 to #272727 at the patches. Light mirrors it.
+/// What shows when no page is open, behind the search sheet. Arc Search's soft gradient by default, lavender from the
+/// top left with a pink bloom on the right. With Rippling Dots on (`MobileEmptyHome`, PR #708) it lies under the dots
+/// (`DotFieldView`): near-black with soft warm patches, as in the reference recording of 23 November 2026, where the
+/// screen runs from #101010 to #272727 at the patches; light mode mirrors it.
 final class BackdropView: UIView {
     private let base = CAGradientLayer()
-    /// The patches: a tall one high on the right, one low on the left, one along the bottom.
+    /// Arc Search's bloom.
+    private let bloom = CAGradientLayer()
+    /// The dots' patches: a tall one high on the right, one low on the left, one along the bottom.
     private let patches = [CAGradientLayer(), CAGradientLayer(), CAGradientLayer()]
     /// Where each patch is centred and how far it reaches, as fractions of the screen.
     private let placements: [(center: CGPoint, reach: CGSize)] = [
@@ -14,14 +18,20 @@ final class BackdropView: UIView {
         (CGPoint(x: 0.48, y: 0.93), CGSize(width: 0.5, height: 0.12)),
     ]
     /// Incognito drains the colour: Arc Search's backdrop turns a flat grey-lavender.
-    var isIncognito = false { didSet { applyColors() } }
+    var isIncognito = false { didSet { if isIncognito != oldValue { applyColors() } } }
+    /// Which backdrop: Arc Search's, or the dots' (App Settings ▸ Rippling Dots).
+    var style: MobileEmptyHome.Backdrop = .arcSearch { didSet { if style != oldValue { applyColors() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
         base.startPoint = CGPoint(x: 0, y: 0)
         base.endPoint = CGPoint(x: 1, y: 1)
+        bloom.type = .radial
+        bloom.startPoint = CGPoint(x: 1.05, y: 0.52)
+        bloom.endPoint = CGPoint(x: 0.25, y: 1.0)
         layer.addSublayer(base)
+        layer.addSublayer(bloom)
         for (patch, placement) in zip(patches, placements) {
             patch.type = .radial
             patch.startPoint = placement.center
@@ -39,6 +49,7 @@ final class BackdropView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         base.frame = bounds
+        bloom.frame = bounds
         patches.forEach { $0.frame = bounds }
         CATransaction.commit()
     }
@@ -47,29 +58,24 @@ final class BackdropView: UIView {
         let dark = traitCollection.userInterfaceStyle == .dark
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let patch: UIColor
+        var bloomColor: UIColor = .clear, patch: UIColor = .clear
         if isIncognito {
             base.colors = [Palette.rgb(0xb0aec5).cgColor, Palette.rgb(0xaaa8bd).cgColor]
-            patch = .clear
+        } else if style == .dots {
+            base.colors = dark ? [Palette.rgb(0x101010).cgColor, Palette.rgb(0x141313).cgColor]
+                : [Palette.rgb(0xf5f4f2).cgColor, Palette.rgb(0xf0eeeb).cgColor]
+            patch = dark ? Palette.rgb(0x2a2624) : Palette.rgb(0xebe7e3)
         } else if dark {
-            base.colors = [Palette.rgb(0x101010).cgColor, Palette.rgb(0x141313).cgColor]
-            patch = Palette.rgb(0x2a2624)
+            base.colors = [Palette.rgb(0x25233a).cgColor, Palette.rgb(0x1d1b2b).cgColor]
+            bloomColor = Palette.rgb(0x4a2f44, alpha: 0.9)
         } else {
-            base.colors = [Palette.rgb(0xf5f4f2).cgColor, Palette.rgb(0xf0eeeb).cgColor]
-            patch = Palette.rgb(0xebe7e3)
+            base.colors = [Palette.rgb(0xbdb9d3).cgColor, Palette.rgb(0xb9b3c7).cgColor]
+            bloomColor = Palette.rgb(0xdcc8d0)
         }
+        bloom.colors = [bloomColor.cgColor, bloomColor.withAlphaComponent(0).cgColor]
         for layer in patches {
             layer.colors = [patch.cgColor, patch.withAlphaComponent(0).cgColor]
         }
         CATransaction.commit()
-    }
-}
-
-/// A view that takes no touches itself, only its subviews do: the page container, so that the
-/// dots under it can be played with while no page is open.
-final class PassthroughView: UIView {
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
-        return hit === self ? nil : hit
     }
 }

@@ -13,7 +13,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     lazy var favorites = FavoritesStore(directory: LaunchOptions.dataDirectory)
 
     let backdrop = BackdropView()
-    /// The empty home screen: dots a finger stirs, and "Tap to search" over the pill.
+    /// The empty home screen: Cra's logo, which spins when flicked, and with Rippling Dots on (`MobileEmptyHome`)
+    /// dots a finger stirs under it and "Tap to search" over the pill.
+    let logo = FidgetLogoView(image: UIImage(named: "LaunchMark"))
     let dotField = DotFieldView()
     let searchHint = SearchHintView()
     let pageContainer = PassthroughView()
@@ -99,6 +101,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         view.backgroundColor = .systemBackground
         view.addSubview(backdrop)
         view.addSubview(dotField)
+        view.addSubview(logo)
         view.addSubview(searchHint)
         view.addSubview(pageContainer)
         pageDim.backgroundColor = .black
@@ -263,6 +266,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         pageDim.frame = pageContainer.bounds
         dotField.frame = bounds
         updateStatusBand()
+        let logoSide: CGFloat = 132
+        logo.bounds = CGRect(x: 0, y: 0, width: logoSide, height: logoSide)
+        logo.center = CGPoint(x: bounds.midX, y: bounds.height * 0.505)
 
         // While the search sheet is up over a page, the page sits back as a dimmed card under
         // the status bar (Arc Search's look; `MobilePageBehindSearch`).
@@ -286,13 +292,16 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let keyboardUpForPage = keyboardHeight > safeBottom && !isSearching
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
-        // On the empty home screen the bar has no slab: its buttons float on the dots.
         let home = store.selected == nil && switcher == nil
-        bar.overBackdrop = home
+        let pull = isSearching ? nil : searchPull
+        let emptyHome = MobileEmptyHome(dots: settings.value.homeDots, home: home, searching: isSearching,
+                                        incognitoSearch: incognitoSearch, pulling: pull != nil)
+        backdrop.style = emptyHome.backdrop
+        // With the dots the bar has no slab: its buttons float on them.
+        bar.overBackdrop = emptyHome.barFloats
         searchHint.place(centerX: bounds.midX, pillTop: frames.pill.minY + barFrame.minY - frames.bar.minY)
         // Pulled out of the pill (#623), the sheet's top follows the finger and its field grows
         // from the pill on the way up.
-        let pull = isSearching ? nil : searchPull
         let pulled = pull.map { MobileSwipe.searchPullProgress(dragUp: $0) }
         bar.controlsVisibility = isSearching ? 0 : 1 - (pulled ?? 0)
         barReveal.frame = MobileBottomBar.revealStrip(in: bounds.size, safeBottom: safeBottom)
@@ -310,9 +319,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.collapsedFieldFrame = bar.pillFrame
         sheet.openness = isSearching ? pulledSheetHold?.openness ?? 1 : pulled ?? 0
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))
-        // The dots stay behind the sheet, as the backdrop does, but not behind incognito's grey.
-        dotField.alpha = home && !(isSearching && incognitoSearch) ? 1 : 0
-        searchHint.alpha = home && !isSearching && pull == nil ? 1 : 0
+        logo.alpha = emptyHome.showsLogo ? 1 : 0
+        dotField.alpha = emptyHome.showsDots ? 1 : 0
+        searchHint.alpha = emptyHome.showsSearchHint ? 1 : 0
         layoutBrowseToggle(barTop: barFrame.minY)
         updatePageInsets()
     }
@@ -386,7 +395,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// Puts the sheet away. With no page behind it that leaves the empty home screen: the
-    /// backdrop and its dots, "Tap to search" and the bar.
+    /// backdrop, the logo (over the dots and "Tap to search" with Rippling Dots on) and the bar.
     @objc func dismissSearch() {
         setSearching(false)
     }
@@ -904,6 +913,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func presentSettings(site host: String?, startingAtSite: Bool) {
         let model = SettingsModel(store: settings, host: host, canSummarize: BrowseForMe.isOffered)
         model.done = { [weak self] in self?.dismiss(animated: true) }
+        model.changed = { [weak self] in self?.view.setNeedsLayout() }
         model.showArchive = { [weak self] in self?.showArchive() }
         model.showOnboarding = { [weak self] in self?.showOnboarding() }
         model.showIconDock = { [weak self] in
