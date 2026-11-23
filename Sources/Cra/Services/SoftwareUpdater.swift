@@ -59,12 +59,15 @@ final class SoftwareUpdater: NSObject {
     var bannerDismissed = false
     /// What the "ready" banner says, and the toast says for a window whose sidebar is hidden.
     var notice: UpdateNotice? {
-        UpdateNotice.current(ready: readyRelease?.version, found: foundRelease?.version, dismissed: bannerDismissed)
+        UpdateNotice.current(ready: readyRelease?.version ?? replacedBy, found: foundRelease?.version, dismissed: bannerDismissed)
     }
 
     /// Clicking the banner, or the toast's button: restart into it, or show the found update.
     func act(on notice: UpdateNotice) {
         switch notice {
+        case .ready where readyRelease == nil && replacedBy != nil:
+            // Cra.app on disk is already the new one: starting it again is the whole update.
+            app?.relaunch()
         case .ready: installAndRelaunch()
         case .available: showFoundUpdate()
         }
@@ -150,6 +153,7 @@ final class SoftwareUpdater: NSObject {
 
     func start(app: AppDelegate) {
         self.app = app
+        watchInstalledBundle(clock: app.composition.clock)
         let d = UserDefaults.standard
         launchedByAutoUpdate = d.bool(forKey: Keys.autoRelaunch)
         d.removeObject(forKey: Keys.autoRelaunch)
@@ -181,6 +185,41 @@ final class SoftwareUpdater: NSObject {
             MainActor.assumeIsolated { self?.inactiveSince = nil }
         }
         if !NSApp.isActive { inactiveSince = Date() }
+    }
+
+    // MARK: Cra.app replaced while it runs
+
+    /// The version of the Cra.app on disk once it is another build than this running copy (InstalledBundle):
+    /// `brew upgrade --greedy` or a copy put over it. Its banner says "An update is ready!", as for Sparkle's.
+    private(set) var replacedBy: String?
+    /// This copy's version, read before anything could replace the bundle.
+    @ObservationIgnored private var runningBundle: InstalledBundle.Version?
+    @ObservationIgnored private var bundleCheck: ScheduledWork?
+
+    /// Development builds too: scripts/build.sh replaces build/Cra.app under a running copy the same way.
+    private func watchInstalledBundle(clock: Scheduler) {
+        let info = Bundle.main.infoDictionary
+        runningBundle = (info?["CFBundleShortVersionString"] as? String).flatMap { short in
+            (info?["CFBundleVersion"] as? String).map { InstalledBundle.Version(short: short, build: $0) }
+        }
+        bundleCheck = clock.every(30) { [weak self] in self?.checkInstalledBundle() }
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkInstalledBundle() }
+        }
+    }
+
+    /// Reads Cra.app's Info.plist on disk: every 30 s, when Cra comes forward, and at once when a page's
+    /// process ended (PerfCEF): one that can't start is how a replaced bundle shows itself first.
+    func checkInstalledBundle() {
+        guard let runningBundle else { return }
+        let plist = Bundle.main.bundleURL.appendingPathComponent("Contents/Info.plist")
+        let onDisk = (try? Data(contentsOf: plist)).flatMap(InstalledBundle.Version.init(infoPlist:))
+        let version = InstalledBundle.replacement(running: runningBundle, onDisk: onDisk)
+        guard version != replacedBy else { return }
+        replacedBy = version
+        if let version {
+            CraLog.note("updater: Cra.app on disk is \(version) (\(onDisk?.build ?? "")), not this copy; restart offered")
+        }
     }
 
     // MARK: Actions

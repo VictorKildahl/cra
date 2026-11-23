@@ -1,0 +1,14 @@
+# Cra.app replaced while Cra runs by a release on another Chrome (158 → 159 was 0.1.52). Chrome starts each new
+# page's process from the bundle on disk and Cra keeps Chrome's code sign clone off (code-sign-clone-off), so this
+# copy's helpers are gone: a new page can't start ("Aw, Snap!", launch failed, measured 23 Nov 2026). Cra offers the
+# restart into the new copy as soon as a page fails that way, with Arc's update banner, and keeps running.
+budget rss=900
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=before
+expect-log GET /page\.html\?n=before
+replace-app chrome
+cra://open?url=chrome://version
+expect-log updater: Cra\.app on disk is .*\.1 \(999999999999\), not this copy; restart offered
+cra://debug?updateNotice=after
+expect-log update notice after: An update is ready! Click to restart \(.*\.1\)
+reject-log fault:

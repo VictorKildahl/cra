@@ -2751,6 +2751,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
+            // updateNotice=<label>: what the update banner says ("update notice <label>: …"); =click clicks it, as
+            // for a Cra.app replaced while it runs (app-replaced-while-running).
+            if let v = dict["updateNotice"] {
+                let u = SoftwareUpdater.shared
+                if v == "click" { if let n = u.notice { u.act(on: n) } else { CraLog.note("update notice click: none") }; return }
+                CraLog.note("update notice \(v): \(u.notice.map { "\($0.title) \($0.subtitle) (\($0.version))" } ?? "none")")
+                return
+            }
             // switcher=held: open as from ⌃Tab with ⌃ held, so keys go to it and letting go switches (#696);
             // switcher=state logs the selected card.
             if dict["switcher"] == "state" { main.debugTabSwitcherState(); return }

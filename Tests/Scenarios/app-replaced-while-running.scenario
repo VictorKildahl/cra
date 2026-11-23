@@ -1,0 +1,22 @@
+# Cra.app replaced while Cra runs, as `brew upgrade --greedy` and `brew reinstall` do (Sparkle installs only once Cra
+# has quit). Pages keep opening on the same Chrome, and Cra offers the restart into the new copy with Arc's update
+# banner ("An update is ready! Click to restart", InstalledBundle); its click starts the new copy.
+budget rss=900
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=before
+expect-log GET /page\.html\?n=before
+cra://debug?updateNotice=before
+expect-log update notice before: none
+replace-app
+wait 5
+expect-log updater: Cra\.app on disk is .*\.1 \(999999999999\), not this copy; restart offered
+cra://debug?updateNotice=after
+expect-log update notice after: An update is ready! Click to restart \(.*\.1\)
+# New pages start from the new copy's engine.
+cra://open?url=chrome://version
+wait 3
+cra://open?url=${PAGE}?n=after
+expect-log GET /page\.html\?n=after
+relaunch cra://debug?updateNotice=click
+expect-log Cra .*\.1 \(999999999999\) starts, pid
+reject-log fault:
