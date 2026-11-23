@@ -1590,7 +1590,9 @@
 #700   Packages/CraCore/Tests/CraCoreTests/ForcedAppearanceTests.swift::aForcedAppearancePicksEverySpacesMaterial  a930e3f71ff5
 #700   Packages/CraCore/Tests/CraCoreTests/ForcedAppearanceTests.swift::automaticLeavesEachSpacesOwn  3f20917d57eb
 #700   Tests/Scenarios/appearance-every-space.scenario  37de53b90485
+#701   Packages/CraCore/Tests/CraCoreTests/ExtensionPopupFocusTests.swift::chromiumsDevToolsWindowKeepsThePopup  315c91b6aeb0
 #701   Packages/CraCore/Tests/CraCoreTests/ExtensionPopupFrameTests.swift::thePageSitsInsideTheWindowsBorderAndCorners  97ff0f05b53e
+#701   Tests/ExtensionPopupWindowTests.swift::staysOpenForItsDevTools  e596132901f4
 #701   Tests/Scenarios/extension-popup-frame.scenario  1b63160f0d78
 #702   Packages/CraCore/Tests/CraCoreTests/DocumentPictureInPictureDragTests.swift::draggedPastTheEdgeSlidesBackOnScreen  d16753091b23
 #702   Packages/CraCore/Tests/CraCoreTests/DocumentPictureInPictureDragTests.swift::onlyAMouseDragSlidesIt  396d03e1af14

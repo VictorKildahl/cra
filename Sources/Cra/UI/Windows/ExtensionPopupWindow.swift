@@ -117,7 +117,9 @@ final class ExtensionPopupWindow: NSWindow {
         w.observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak w] note in
             MainActor.assumeIsolated {
                 // The click that opened the popup can still be making its window key.
+                // The popup's own DevTools (Inspect in its menu) leave it open, as in Chrome (#701).
                 guard let w, let bubble = w.bubble, let key = note.object as? NSWindow, key !== bubble, key.parent !== bubble,
+                      !ExtensionPopupFocus.isDevTools(title: key.title),
                       Date().timeIntervalSince(shownAt) > 0.3 else { return }
                 w.dismiss(closingBubble: true)
             }
@@ -302,7 +304,8 @@ final class ExtensionPopupWindow: NSWindow {
     /// A press in one of Cra's windows other than this popup (its frame, Chrome's bubble or a window the
     /// bubble opened): it closes the popup, as a click that takes the popup's focus does.
     private func mouseDown(elsewhere event: NSEvent) {
-        guard let bubble, let target = event.window, target !== self, target !== bubble, target.parent !== bubble else { return }
+        guard let bubble, let target = event.window, target !== self, target !== bubble, target.parent !== bubble,
+              !ExtensionPopupFocus.isDevTools(title: target.title) else { return }
         if event.type == .leftMouseDown { Self.closingClick = event.timestamp }
         dismiss(closingBubble: true)
     }

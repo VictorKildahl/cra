@@ -66,6 +66,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#701:** open an extension's popup from the toolbar (Element Remover or 1Password) on macOS 26 and 27: the page
   sits inside the window's thin border on both sides and the bottom, and its bottom corners follow the window's
   rounded ones (no square corner past the border). The scenario checks the geometry and the mask; the pixels need an eye.
+- **#701, Inspect:** right-click inside an extension's popup (Bitwarden, 1Password) and choose Inspect: Chromium's
+  DevTools window opens on the popup and the popup stays open while you click around DevTools; a click in a Cra
+  window then closes it. The harness covers the focus rule with a stand-in window; the real Inspect needs a hand.
 - **#400 (macOS 27 only):** a white page with DevTools docked right and set to dark, toolbar shown,
   Edge to edge on and off: no white shows at any corner of the page or DevTools. This Mac runs
   macOS 26, where the test stands in for 27 with AppKit's own window radius; ask the reporter to confirm.

@@ -60,6 +60,7 @@ enum ExtensionPopupWindowTests {
         expect(!bubble.isVisible, "dismissal closes the visible Chrome bubble asynchronously")
 
         closesOnAClickElsewhere()
+        await staysOpenForItsDevTools()
         hangsUnderItsButtonUntilDragged()
         keepsADragWithARealMouse()
         print("Extension popup window: \(checks) checks passed")
@@ -122,6 +123,32 @@ enum ExtensionPopupWindowTests {
         expect(thirdFrame.isVisible && third.parent === thirdFrame, "an earlier popup's watch doesn't close a later one")
         thirdFrame.performClose(nil)
         expect(ExtensionPopupWindow.shownAnchor == nil, "the close button ends it too")
+    }
+
+    // promise: #701
+    /// Inspect in a popup's menu opens Chromium's own DevTools window ("DevTools - chrome-extension://…"), which
+    /// takes focus: the popup stays open while it's inspected, as in Chrome, and clicks in DevTools keep it. Cra
+    /// closed it as for any other window, so Inspect did nothing. Another window taking focus still closes it.
+    @MainActor
+    private static func staysOpenForItsDevTools() async {
+        let anchor = NSPoint(x: -9800, y: -9700)
+        let (page, frame) = presentPopup(anchor: anchor)
+        // The observer leaves the first moments alone (the click that opened the popup can still be making its window key).
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let devtools = NSWindow(contentRect: NSRect(x: -11000, y: -10000, width: 600, height: 400),
+                                styleMask: [.titled], backing: .buffered, defer: false)
+        devtools.title = "DevTools - chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/popup.html"
+        devtools.isReleasedWhenClosed = false
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: devtools)
+        expect(frame.isVisible && page.parent === frame, "the popup's DevTools taking focus keep it open")
+        NSApp.sendEvent(click(at: NSPoint(x: 100, y: 100), in: devtools))
+        expect(frame.isVisible && page.parent === frame, "a click in its DevTools keeps it open")
+        let other = NSWindow(contentRect: NSRect(x: -12000, y: -10000, width: 300, height: 200),
+                             styleMask: [.titled], backing: .buffered, defer: false)
+        other.title = "Cra"
+        other.isReleasedWhenClosed = false
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: other)
+        expect(!frame.isVisible && page.parent == nil, "another of Cra's windows taking focus closes it")
     }
 
     // promise: #634
