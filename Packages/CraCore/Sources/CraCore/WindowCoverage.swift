@@ -123,6 +123,56 @@ public enum WindowCoverage {
     /// The Dock's process, as `kCGWindowOwnerName` names it (not localized).
     static let dockOwner = "Dock"
 
+    /// Mission Control or App Exposé is up: the Dock lays its own windows over every display, one at layer 18
+    /// spanning the display (measured on macOS 27, 23 Nov 2026; at other times the Dock has only its wallpaper
+    /// and, unless it hides, its layer-20 window). A full-screen window is then "not visible" and not on screen,
+    /// although it is right there in the Mission Control grid: it isn't out of sight yet, and automatic Picture
+    /// in Picture waits until Mission Control closes (#698). `onScreen`: `CGWindowListCopyWindowInfo` of every
+    /// on-screen window.
+    public static func missionControlShowing(_ onScreen: [[String: Any]]) -> Bool {
+        onScreen.lazy.compactMap(Listed.init).contains {
+            $0.owner == dockOwner && $0.layer == missionControlLayer && $0.frame.width >= 400 && $0.frame.height >= 300
+        }
+    }
+
+    /// The layer of the Dock's window that spans a display while Mission Control or App Exposé is up.
+    static let missionControlLayer = 18
+
+    /// A window that went off screen while not key waits before its video goes to Picture in Picture (#698):
+    /// macOS calls a window not visible as Mission Control starts to open, about 0.7 s before the Dock's windows
+    /// are listed (macOS 26, 23 Nov 2026). Asked every `interval`: the window is out of sight once it has stayed
+    /// off screen for `settleTicks` asks with no Mission Control, which also covers Mission Control closing on
+    /// another desktop or window. Back on screen or key, the wait just ends (the app stops asking).
+    public struct OffScreenWait: Sendable, Equatable {
+        public static let interval: TimeInterval = 0.25
+        public static let settleTicks = 2
+
+        public enum Step: Sendable, Equatable {
+            /// Keep asking.
+            case wait
+            /// Mission Control or App Exposé came up: keep asking until it closes (said once, for the log).
+            case missionControl
+            /// Off screen and no Mission Control for long enough: the window is out of sight.
+            case outOfSight
+        }
+
+        public private(set) var sawMissionControl = false
+        private var quiet = 0
+
+        public init() {}
+
+        public mutating func tick(missionControl: Bool) -> Step {
+            if missionControl {
+                quiet = 0
+                if sawMissionControl { return .wait }
+                sawMissionControl = true
+                return .missionControl
+            }
+            quiet += 1
+            return quiet >= Self.settleTicks ? .outOfSight : .wait
+        }
+    }
+
     /// `window`: the window's own entry, nil when the window server has none (then it counts as out of
     /// sight, as macOS said). `inFront`: the on-screen windows above it. `isOwnPart` is asked only for
     /// this process's windows, by window number.

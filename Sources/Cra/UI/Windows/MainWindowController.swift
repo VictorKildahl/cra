@@ -5992,7 +5992,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// A locked screen covers every window and leaves nothing. macOS 27.2.1 called a window on a second
     /// display not visible when another app became active on the first, with nothing in front of it
     /// (#533): the windows in front decide (WindowCoverage).
-    private func leaveIfCovered() {
+    private func leaveIfCovered(settled: Bool = false) {
         guard let window, !window.isKeyWindow, !window.occlusionState.contains(.visible), !Self.screenIsLocked else { return }
         let coverage = Self.coverage(of: window)
         guard coverage.covered else {
@@ -6000,9 +6000,83 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             CraLog.note("window not visible to macOS, nothing in front covers it: \(coverage.summary)")
             return
         }
+        // Off screen: another desktop, the Dock, or the Mission Control or App Exposé grid, where the window is
+        // still in sight (#698: a full-screen video went to Picture in Picture and came back to full screen each
+        // time Mission Control opened). Decided after a moment, and once Mission Control has closed.
+        if !coverage.onScreen, !settled {
+            waitOffScreen()
+            return
+        }
         // What covered it, so a Picture in Picture nobody expected can be told apart (a test runner's window over Cra).
         CraLog.note("window out of sight: \(coverage.summary)")
         browsers.windowVisibilityChanged(covered: true)
+    }
+
+    /// Mission Control or App Exposé is up, by the Dock's windows over the displays (WindowCoverage).
+    private static func missionControlShowing() -> Bool {
+        WindowCoverage.missionControlShowing(CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? [])
+    }
+
+    /// Asks the window server a few times a second while this window is off screen and not key
+    /// (WindowCoverage.OffScreenWait), then decides as for any other change (leaveIfCovered). Back on screen
+    /// or key, the wait ends: windowDidBecomeKey brings a video home as before.
+    private func waitOffScreen() {
+        guard offScreenTimer == nil else { return }
+        offScreenWait = WindowCoverage.OffScreenWait()
+        offScreenTimer = Timer.scheduledTimer(withTimeInterval: WindowCoverage.OffScreenWait.interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.offScreenTick() }
+        }
+    }
+
+    private func offScreenTick() {
+        guard !isTornDown, let window, !window.isKeyWindow, !window.occlusionState.contains(.visible) else {
+            if offScreenWait.sawMissionControl, let window { CraLog.note("Mission Control closed: window \(window.isKeyWindow ? "key" : "visible")") }
+            return endOffScreenWait()
+        }
+        switch offScreenWait.tick(missionControl: Self.missionControlShowing()) {
+        case .wait: break
+        case .missionControl: CraLog.note("window in Mission Control: \(Self.coverage(of: window).summary), waits until it closes")
+        case .outOfSight:
+            let sawMissionControl = offScreenWait.sawMissionControl
+            endOffScreenWait()
+            if sawMissionControl { CraLog.note("Mission Control closed: window not visible") }
+            leaveIfCovered(settled: true)
+        }
+    }
+
+    private func endOffScreenWait() {
+        offScreenTimer?.invalidate()
+        offScreenTimer = nil
+    }
+
+    private var offScreenTimer: Timer?
+    private var offScreenWait = WindowCoverage.OffScreenWait()
+
+    /// `cra://debug?missionControl=open|close|state`: opens or closes Mission Control (Mission Control.app
+    /// toggles it), and says once the Dock's windows show it or are gone, for the #698 scenario.
+    func debugMissionControl(_ mode: String) {
+        let want: Bool
+        switch mode {
+        case "open": want = true
+        case "close": want = false
+        default:
+            CraLog.note("mission control: \(Self.missionControlShowing() ? "showing" : "not showing")")
+            return
+        }
+        if Self.missionControlShowing() != want {
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Mission Control.app"),
+                                               configuration: NSWorkspace.OpenConfiguration())
+        }
+        Self.sayMissionControl(when: want, after: mode, triesLeft: 50)
+    }
+
+    private static func sayMissionControl(when want: Bool, after mode: String, triesLeft: Int) {
+        let showing = missionControlShowing()
+        guard showing == want || triesLeft <= 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { sayMissionControl(when: want, after: mode, triesLeft: triesLeft - 1) }
+            return
+        }
+        CraLog.note("mission control: \(showing ? "showing" : "not showing") after \(mode)")
     }
 
     /// What the window server has in front of `window`, its own parts (its child windows, Chrome's page
@@ -6205,6 +6279,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// the sidebar) and it lets go of everything that would keep it alive.
     func tearDown() {
         isTornDown = true
+        endOffScreenWait()
         dismissTransientUI()
         sidePanel.hide()
         for p in peeks { p.closeWindow() }

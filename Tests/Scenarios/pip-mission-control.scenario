@@ -1,0 +1,58 @@
+# A video in full screen stays full screen while Mission Control is up, and stays when it closes (#698).
+# macOS calls a full-screen window not visible and not on screen while it sits in the Mission Control grid, so
+# automatic Picture in Picture took the video out of full screen each time Mission Control opened, and put it
+# back when it closed. The Dock's windows over the display tell Mission Control apart (WindowCoverage); the
+# decision waits a moment (macOS calls the window not visible before those windows are listed) and while Mission
+# Control is up. The CraCore half is MissionControlCoverageTests.
+# Opens the real Mission Control, so it needs the screen.
+# promise: #698
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${ORIGIN}/sound-video.html
+expect-log loaded 127\.0\.0\.1
+wait 1
+cra://debug?activate=1
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"unmute()","userGesture":true,"awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"unmuted"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.documentElement.requestFullscreen().then(()=>'entered')","awaitPromise":true,"userGesture":true}
+expect-log "value":"entered"
+wait 3
+cra://debug?windowState=video
+expect-log window state video: main0 fullscreen=1
+
+# Another window of Cra's takes key, as Mission Control takes it on macOS 27.3: the full-screen window is then
+# not key, and macOS calls it not visible as Mission Control opens, before the Dock's windows are listed.
+cra://debug?coverWindow=aside
+expect-log cover window: aside, this window not key
+wait 2
+reject-log enters Picture in Picture
+
+# Mission Control over it: the window is out of the way in the grid, not out of sight.
+cra://debug?missionControl=open
+expect-log mission control: showing after open
+wait 3
+reject-log enters Picture in Picture
+
+# Closed again over the same desktop: the video is where it was, full screen.
+cra://debug?missionControl=close
+expect-log mission control: not showing after close
+wait 2
+reject-log enters Picture in Picture
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!document.fullscreenElement)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"true"
+cra://debug?windowState=after
+expect-log window state after: main0 fullscreen=1
+cra://debug?coverWindow=off
+wait 1
+
+# Picture in Picture still opens for a window really out of sight (#117).
+cra://debug?coverWindow=other
+expect-log enters Picture in Picture
+cra://debug?coverWindow=off
+cra://debug?activate=1
+expect-log leaves Picture in Picture
