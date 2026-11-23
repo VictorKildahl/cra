@@ -5456,5 +5456,7 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   day, so Arc puts it back after updates replace the bundle. The main binary has
   `ARCClients/Sources/AppIconClient/UI_macOS/AppIconApplier.swift` and calls `setIcon:forFile:`, with
   `AppIconDockTile` for the Dock after Arc quits.
-- Cra: AppIconManager puts the picked icon on the bundle with NSWorkspace.setIcon at the pick and at launch, and
-  takes it off for Segments (AppIconBundle). Scenario app-icon-finder.
+- Cra: deliberately not. 0.1.54 and 0.1.55 did the same as Arc, but the attribute breaks the app's signature
+  (`codesign --strict` refuses com.apple.FinderInfo on the bundle; lsd kept registering it launch-disabled, GitHub
+  #724). AppIconManager never puts the icon on Cra.app and takes off one an earlier Cra left (AppIconBundle);
+  the Dock tile shows the pick. Scenario app-icon-signature.

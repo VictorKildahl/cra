@@ -2697,6 +2697,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // appIcon=<id>: picks an icon without remembering it; bundleIcon=<label>: Finder's icon on the app.
             if let id = dict["appIcon"] { AppIconManager.shared.select(id, remember: false); return }
             if let label = dict["bundleIcon"] { AppIconManager.shared.logBundleIcon(label); return }
+            // bundleIconPut=<id>: that icon on Cra.app as 0.1.54 put it, for a launch to take off (#724).
+            if let id = dict["bundleIconPut"] { AppIconManager.shared.putBundleIconForTest(id); return }
             // How far the open downloads list's hover reaches below its rows, and what a press there hits (#575).
             if let label = dict["downloadsTray"] {
                 let tray = (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.hoverReadout ?? "none"

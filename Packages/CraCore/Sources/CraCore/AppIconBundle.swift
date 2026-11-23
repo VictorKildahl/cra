@@ -1,26 +1,29 @@
 import Foundation
 
-/// The picked app icon on Cra.app itself, for Finder, /Applications, Launchpad and Spotlight, which draw the
-/// bundle's icon and never the Dock tile's (X, 20 Nov 2026: "it changes in the Dock but not elsewhere"). Arc
-/// does the same: its AppIconApplier puts the picked icon on Arc.app (Finder's custom icon: an `Icon\r` file
-/// and a flag in com.apple.FinderInfo) and puts it back at launch, since an update replaces the bundle.
+/// Cra.app itself never carries the picked app icon (GitHub #724). 0.1.54 and 0.1.55 put it there as Finder's
+/// custom icon (an `Icon\r` file and a flag in com.apple.FinderInfo), as Arc's AppIconApplier does, so Finder and
+/// /Applications showed it. That attribute on the bundle breaks the app's signature: `codesign --strict` refuses
+/// it, and lsd kept registering the app launch-disabled while trustd checked it over and over. The pick shows in
+/// the Dock (applicationIconImage, and the CraDockTile plug-in after Cra quits), which needs no change to the app.
 public enum AppIconBundle {
     public enum Change: Equatable, Sendable {
-        /// Put the picked icon on the app.
-        case put
-        /// Take a custom icon off: the app shows its own again.
+        /// Take Finder's custom icon off: the app's signature holds again.
         case takeOff
         /// Leave the bundle alone.
         case none
     }
 
-    /// What the app does to its bundle when `picked` is the icon, at the pick or at launch. A pick puts the
-    /// icon on even when one is there (it may be another). At launch it goes on only when the bundle has none,
-    /// as after an update, which brings a bundle with only its own icon; else every launch would rewrite it.
-    /// With the bundle's own icon picked the app writes to its bundle only to take a custom one off.
-    public static func change(picked: String, defaultID: String, bundleHasCustomIcon: Bool, atLaunch: Bool = false) -> Change {
-        if picked != defaultID { return atLaunch && bundleHasCustomIcon ? .none : .put }
-        return bundleHasCustomIcon ? .takeOff : .none
+    /// What the app does to its bundle, at launch or at a pick: it writes to it only to take off a Finder icon an
+    /// earlier Cra put there (an `Icon\r` file, or a com.apple.FinderInfo attribute, which `codesign --strict`
+    /// refuses whatever it holds), whatever icon is picked.
+    public static func change(bundleHasFinderIcon: Bool) -> Change {
+        bundleHasFinderIcon ? .takeOff : .none
+    }
+
+    /// Whether the bundle has anything of a Finder custom icon on it: the com.apple.FinderInfo attribute (nil when
+    /// it's absent) or the `Icon\r` file.
+    public static func hasFinderIcon(finderInfo: [UInt8]?, iconFile: Bool) -> Bool {
+        finderInfo != nil || iconFile
     }
 
     /// Finder's custom icon flag (kHasCustomIcon, 0x0400) in a com.apple.FinderInfo value: the finder
@@ -31,10 +34,9 @@ public enum AppIconBundle {
 
     /// The picture the Dock tile is given for `picked` (the running app's applicationIconImage and the Dock tile
     /// plug-in's view): always the picked one, Segments too (app-icons/segments.png, the bundle's icon on Apple's
-    /// grid). Left to the Dock, the bundle's own icon came from the Dock's cache, which since a pick goes on Cra.app
-    /// can be the icon picked before: Segments picked after Original kept Original (Victor, 23 Nov 2026).
+    /// grid). Left to the Dock, the bundle's own icon came from the Dock's cache, which after 0.1.54 put a pick on
+    /// Cra.app can be the icon picked before: Segments picked after Original kept Original (Victor, 23 Nov 2026).
     public static func dockImage(picked: String, defaultID: String) -> String? {
         picked
     }
 }
-
