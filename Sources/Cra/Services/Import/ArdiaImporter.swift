@@ -143,10 +143,11 @@ enum ArdiaImporter {
         return out
     }
 
-    /// A pinned tab or Top App keeps the page it was pinned with, not where it navigated.
+    /// A pinned tab or Top App keeps the page it was pinned with, not where it navigated, unless that
+    /// page can't be imported: then it comes at the page it shows.
     private static func item(_ t: [String: Any], pinned: Bool) -> ImportedItem? {
-        let home = pinned ? (t["pinnedUrl"] as? String).flatMap { $0.isEmpty ? nil : $0 } : nil
-        guard let url = home ?? t["url"] as? String, url.hasPrefix("http://") || url.hasPrefix("https://") else { return nil }
+        let home = pinned ? t["pinnedUrl"] as? String : nil
+        guard let url = [home, t["url"] as? String].compactMap({ $0 }).first(where: ImportedAddress.keeps) else { return nil }
         let custom = (t["customTitle"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let created = (t["createdAt"] as? Double).flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0 / 1000) : nil } ?? Date()
         return ImportedItem(customTitle: custom, pageTitle: t["title"] as? String ?? "", url: url, createdAt: created)
