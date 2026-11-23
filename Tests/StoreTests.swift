@@ -410,12 +410,16 @@ enum StoreTests {
         let personal = plan.spaces[0], work = plan.spaces[1]
         expect(personal.favorites.compactMap(\.url) == ["https://mail.example.com/"] && personal.favorites[0].pageTitle == "Inbox",
                "a tile is a favorite, at the page it was pinned with")
-        expect(personal.pinned.map(\.pageTitle) == ["Clients", "Code"] && personal.pinned[0].isFolder,
+        expect(personal.pinned.map(\.pageTitle) == ["Clients", "Code", "Notes", "Status now"] && personal.pinned[0].isFolder,
                "kept tabs are pinned, a folder where its first tab is")
+        expect(personal.pinned.compactMap(\.url).contains("file:///Users/me/notes.html"), "a kept tab on a file on disk comes over")
+        expect(personal.pinned.last?.url == "https://status.example.com/now" && personal.pinned.last?.pageTitle == "Status now",
+               "a kept tab pinned with a new tab page comes over pinned, at the page it shows and that page's title")
         let clients = personal.pinned[0].children
         expect(clients.count == 1 && clients[0].pageTitle == "Work" && clients[0].children.first?.url == "https://tasks.example.com/"
                && clients[0].children.first?.customTitle == "Tasks", "folders nest through folderPath, renamed tabs keep their name")
-        expect(personal.today.compactMap(\.url) == ["https://news.example.com/"], "today's tabs come over, about:blank left out")
+        expect(personal.today.compactMap(\.url) == ["https://news.example.com/", "javascript:void(document.title)", "chrome://settings/"],
+               "today's tabs come over whatever their address; about:blank, a new tab page and blob: left out")
         expect(personal.emoji == "🏠" && personal.profile == nil && personal.theme?.accent == "#8DB6E6",
                "an emoji icon, the shared sign-ins on Default, a swatch as the theme")
         expect(work.favorites.compactMap(\.url) == ["https://docs.example.com/"],
