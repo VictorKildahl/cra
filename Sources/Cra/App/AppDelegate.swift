@@ -2733,7 +2733,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
-            if let mode = dict["switcher"] { main.debugTabSwitcher(allSpaces: mode == "all"); return }
+            // switcher=held: open as from ⌃Tab with ⌃ held, so keys go to it and letting go switches (#696);
+            // switcher=state logs the selected card.
+            if dict["switcher"] == "state" { main.debugTabSwitcherState(); return }
+            if let mode = dict["switcher"] { main.debugTabSwitcher(allSpaces: mode == "all", held: mode == "held" ? .control : []); return }
+            // modifierFlags=<bits>: keys held or let go, a flagsChanged event through the app's queue.
+            if let bits = dict["modifierFlags"].flatMap(UInt.init), let w = main.window {
+                TestGesture.flags(NSEvent.ModifierFlags(rawValue: bits), in: w)
+                return
+            }
             // The Site Control Center's Safari's Engine switch for the focused page, without the pointer.
             if let v = dict["safariEngine"] { main.debugChooseSafariEngine(v == "on"); return }
             // The protected video prompt of a mixed site's page: state, Once, Always, close, row.

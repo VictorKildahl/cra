@@ -1574,6 +1574,9 @@
 #695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::arcsRowsInArcsOrder  16bbcbdab5c5
 #695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::eachRowOpensChromesPage  5c91641395f2
 #695   Tests/Scenarios/toolbar-extension-menu.scenario  90640d771fa9
+#696   Packages/CraCore/Tests/CraCoreTests/TabSwitcherKeysTests.swift::graveGoesBackLikeTheAppSwitcher  dd39f3565da5
+#696   Packages/CraCore/Tests/CraCoreTests/TabSwitcherKeysTests.swift::theOtherKeysStayAsTheyWere  36027ecb06a5
+#696   Tests/Scenarios/tab-switcher-grave-back.scenario  8e15a1e6acab
 #697   Packages/CraCore/Tests/CraCoreTests/LiveFolderModelTests.swift::aTabOnAPullRequestsOwnPagesStillShowsIt  f913bea636c6
 #697   Tests/Scenarios/live-folder-closed-request-pages.scenario  bbecb6b6f7ef
 #697   Tests/StoreTests.swift::closedPullRequestsLeaveFromTheirOwnPages  7471cc27d91a

@@ -4590,7 +4590,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func debugSiteControls() { showToolbarExtensionsMenu() }
 
     /// `cra://debug?switcher` (`=all`: ⌃⌥Tab's, #467).
-    func debugTabSwitcher(allSpaces: Bool = false) {
+    func debugTabSwitcher(allSpaces: Bool = false, held: NSEvent.ModifierFlags = []) {
         let theme = focusedSpace.theme
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         tabSwitcher.isDark = dark
@@ -4600,8 +4600,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // The cards, for a scenario: a tab by its title, a split as its panes' titles (#554).
         let cards = items.map { $0.panes.isEmpty ? $0.title : "split(" + $0.panes.map(\.title).joined(separator: " | ") + ")" }
         CraLog.note("tab switcher: \(items.count) cards: \(cards.joined(separator: ", "))")
-        tabSwitcher.debugOpen(items)
+        tabSwitcher.debugOpen(items, held: held)
     }
+
+    /// `cra://debug?switcher=state`: the open switcher's selected card (#696).
+    func debugTabSwitcherState() { CraLog.note("tab switcher state: " + tabSwitcher.debugState) }
 
     /// Selects a split pane and brings the shell along at once (refresh otherwise runs on the next
     /// turn), so the focused card, the visible page and the profile are that pane's when the

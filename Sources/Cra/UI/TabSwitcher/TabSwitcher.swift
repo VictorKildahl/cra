@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 
 /// Arc's tab switcher (ModalItemSwitcher): ⌃Tab shows the space's five most recent tabs
-/// the way ⌘Tab shows apps. While ⌃ is held, Tab / ⇧Tab and ← / → move the selection
+/// the way ⌘Tab shows apps. While ⌃ is held, Tab / ⇧Tab, ` (back) and ← / → move the selection
 /// (wrapping) and the pointer picks the card it moves over; releasing ⌃, Return or a click
 /// switches, Esc cancels. A quick tap switches to the previous tab without showing the
 /// panel. Arc 1.170 measured 27 Oct 2026: no animation on open, move or close.
@@ -89,13 +89,27 @@ final class TabSwitcher {
         DispatchQueue.main.asyncAfter(deadline: .now() + TabSwitcherMetrics.showDelay, execute: work)
     }
 
-    /// Testing: open on the second card without a held key.
-    func debugOpen(_ list: [Item]) {
+    /// Testing: open on the second card without a held key. `held`: as if those keys were held, so
+    /// the keys go to the switcher as they do from ⌃Tab and letting go of them switches (#696).
+    func debugOpen(_ list: [Item], held: NSEvent.ModifierFlags = []) {
         guard !list.isEmpty else { return }
         items = list
         selectedIndex = min(1, list.count - 1)
         isOpen = true
+        if !held.isEmpty, monitor == nil {
+            hold = held
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown]) { [weak self] event in
+                guard let self else { return event }
+                return self.handle(event)
+            }
+        }
         onShow()
+    }
+
+    /// Scenarios (#696): "open=1 card=2/5 Title" or "open=0".
+    var debugState: String {
+        guard isOpen, items.indices.contains(selectedIndex) else { return "open=0" }
+        return "open=1 card=\(selectedIndex)/\(items.count) \(items[selectedIndex].title)"
     }
 
     func move(_ delta: Int) {
@@ -159,13 +173,12 @@ final class TabSwitcher {
             return event
         }
         if let d = direction(event) { move(d); return nil }
-        switch event.keyCode {
-        case 48: move(event.modifierFlags.contains(.shift) ? -1 : 1)  // Tab
-        case 124: move(1)  // →
-        case 123: move(-1)  // ←
-        case 53: cancel()  // Esc
-        case 36, 76: commit()  // Return, Enter
-        default: break
+        // Tab, ` (back, #696), the arrows, Return and Esc: TabSwitcherKeys.
+        switch TabSwitcherKeys.action(keyCode: event.keyCode, shift: event.modifierFlags.contains(.shift)) {
+        case .move(let d): move(d)
+        case .cancel: cancel()
+        case .commit: commit()
+        case nil: break
         }
         return nil
     }
