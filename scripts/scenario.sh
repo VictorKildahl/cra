@@ -52,7 +52,11 @@
 #                               before launch, as macOS leaves one (needs home)
 #   cover                       another app's window over the browser window, right above it in the window order
 #                               (scripts/cover-window/cover.m); ${COVER} is its pid, for cra://debug?yieldTo=${COVER}
+#   cover at <x,y,w,h>          the same app, its window at that frame (as cra://debug?littleFrame=) instead, clear of
+#                               the browser window: Slack beside it, the app the user was in over it (bystander) (#659)
 #   cover link                  that app, once in front, brings Cra forward, as for a link clicked in it (#607)
+#   bystander                   a second app's window over the browser window, as `cover`, that nothing brings forward:
+#                               the app in use on the browser window's display while a link comes from Slack (#659)
 #   click little-close          a real click (through the window server, scripts/hid-click/click.m) on the newest
 #                               Little Window's close button, only if that window is in front there; needs a screen
 #                               (requires screen), as Cra comes forward for it as for a mouse (#659)
@@ -431,6 +435,7 @@ PIDS+=("$PID")
 cleanup() {
   for p in "${PIDS[@]}"; do kill -KILL "$p" 2>/dev/null; done
   [ -n "${COVER:-}" ] && kill "$COVER" 2>/dev/null
+  [ -n "${BYSTANDER:-}" ] && kill "$BYSTANDER" 2>/dev/null
   kill "$SERVER" "$STALLER" "$TRICKLER" "$WS_SERVER" 2>/dev/null
   cp "$DATA"/cra*.log "$OUT/" 2>/dev/null
   [ -n "${CRA_SCENARIO_DATA:-}" ] || rm -rf "$DATA"
@@ -548,12 +553,22 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         if [ -n "${COVER:-}" ] && kill -USR1 "$COVER" 2>/dev/null; then sleep 0.3; else problem "cover link: no cover window"; fi
         continue
       fi
+      [ "${2:-}" = "at" ] && [ -z "${3:-}" ] && { problem "cover at: no frame"; continue; }
       [ -x "$OUT/cover" ] || clang -fobjc-arc -framework AppKit "$ROOT/scripts/cover-window/cover.m" -o "$OUT/cover" 2>"$OUT/cover-build.log"
       if [ ! -x "$OUT/cover" ]; then problem "the cover window did not build (cover-build.log)"
       else
-        "$OUT/cover" "$PID" >"$OUT/cover.log" 2>&1 & COVER=$!
+        if [ "${2:-}" = "at" ]; then "$OUT/cover" "$PID" "$3" >"$OUT/cover.log" 2>&1 & COVER=$!
+        else "$OUT/cover" "$PID" >"$OUT/cover.log" 2>&1 & COVER=$!; fi
         for _ in $(seq 1 50); do grep -q '^covering' "$OUT/cover.log" && break; sleep 0.2; done
         grep -q '^covering' "$OUT/cover.log" && echo "  $(head -1 "$OUT/cover.log")" || problem "no cover window: $(cat "$OUT/cover.log")"
+      fi ;;
+    bystander)
+      [ -x "$OUT/cover" ] || clang -fobjc-arc -framework AppKit "$ROOT/scripts/cover-window/cover.m" -o "$OUT/cover" 2>"$OUT/cover-build.log"
+      if [ ! -x "$OUT/cover" ]; then problem "the cover window did not build (cover-build.log)"
+      else
+        "$OUT/cover" "$PID" >"$OUT/bystander.log" 2>&1 & BYSTANDER=$!
+        for _ in $(seq 1 50); do grep -q '^covering' "$OUT/bystander.log" && break; sleep 0.2; done
+        grep -q '^covering' "$OUT/bystander.log" && echo "  bystander $(head -1 "$OUT/bystander.log")" || problem "no bystander window: $(cat "$OUT/bystander.log")"
       fi ;;
     click)
       case "${2:-}" in

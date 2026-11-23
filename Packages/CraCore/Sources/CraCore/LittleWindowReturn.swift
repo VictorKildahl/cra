@@ -105,3 +105,24 @@ public struct LittleWindowClose: Equatable, Sendable {
         self.craActive = craActive || clickBringsCraForward
     }
 }
+
+/// Where Cra's keyboard stays while a closing Little Window hands the front back to the app it was opened over
+/// (#659). Cra is still the active app for a moment after asking that app forward (70 ms in the report), or about
+/// to become it (a click on the close button while that app was in front). With the Little Window gone, AppKit gave
+/// the keyboard (and main) to the browser window then, and activation raised it: on its own display, over the app
+/// in use there, where it stayed, since the app coming back raises only its own windows. A window that shows nothing
+/// is Cra's key and main window instead, and goes once Cra has let go of the front.
+public struct KeyboardHold: Equatable, Sendable {
+    /// The app that was asked forward may never take the front (it quit, or the user clicked Cra again): the hold
+    /// goes then too, and Cra's next window takes the keyboard as AppKit gives it.
+    public static let limit: TimeInterval = 2
+
+    public let since: Date
+
+    public init(at now: Date) { since = now }
+
+    /// Whether the hold goes: Cra has let go of the front (applicationDidResignActive), or `limit` has passed.
+    public func releases(craResigned: Bool, at now: Date) -> Bool {
+        craResigned || now.timeIntervalSince(since) >= Self.limit
+    }
+}

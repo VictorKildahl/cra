@@ -1479,7 +1479,9 @@
 #658   Tests/Scenarios/easel-text-colour.scenario  5e2fb83621eb
 #659   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::closeButtonClickedFromAnotherAppGoesBackToIt  48a704d35f51
 #659   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::theBrowserWindowKeyWhileCraComesForwardIsNotUse  fc4f8362c77c
+#659   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::theKeyboardStaysHeldUntilCraLetsGoOfTheFront  b2954b9cfe7a
 #659   Tests/Scenarios/little-window-close-button-behind.scenario  1ab5bfcce8bf
+#659   Tests/Scenarios/little-window-close-button-bystander.scenario  7bffb141a08c
 #659   Tests/Scenarios/little-window-close-other-display.scenario  d16a48d78e1d
 #660   Tests/Scenarios/extension-store-copy-install-type.scenario  4b8996fb57e7
 #662   Tests/Scenarios/folder-menu-move-to.scenario  3a945485c54c

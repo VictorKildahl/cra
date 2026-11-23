@@ -1,0 +1,54 @@
+# promise: #659
+# The reporter's case after 0.1.54: the browser window under the app in use on its display (`bystander`), the Little
+# Window opened by a link from Slack (`cover at`, the window beside it, clear of the browser window), and a real
+# click on the Little Window's close button. The keyboard went back to Slack, but Cra was still the active app as
+# the window closed, so AppKit gave the keyboard to the browser window first, and it came forward over the bystander
+# app, where it stayed: Slack coming forward raises only Slack's windows. mainOver counts the bystander's window
+# still over the browser window. little-window-close-button-behind had Slack's own window over it, which Slack
+# coming back put over it again, so it passed either way.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?mainFrame=0,0,800,700
+wait 1
+cra://debug?activate=1
+wait 1
+bystander
+cover at 880,660,700,300
+cra://debug?yieldTo=${COVER}
+wait 1
+cra://debug?littleFocus=start
+expect-log little focus start: active=0 key=none over=- windows=0 mainOver=[1-9]
+cover link
+cra://debug?externalURL=${PAGE}?n=little
+wait 2
+cra://debug?littleFrame=880,80,700,560
+wait 1
+cra://debug?littleFocus=open
+expect-log little focus open: active=1 key=little0 over=0 windows=1 mainOver=[1-9]
+cra://debug?yieldTo=${COVER}
+wait 1
+cra://debug?littleFocus=behind
+expect-log little focus behind: active=0 key=none over=0 windows=1 mainOver=[1-9]
+click little-close
+wait 2
+cra://debug?littleFocus=clicked
+expect-log little focus clicked: active=0 key=none over=- windows=0 mainOver=[1-9]
+
+# The same with Cra in front: Slack hands Cra the front for a second link, and ⌘W closes the Little Window.
+cover link
+cra://debug?externalURL=${PAGE}?n=little-two
+wait 2
+cra://debug?littleFrame=880,80,700,560
+wait 1
+cra://debug?littleFocus=openTwo
+expect-log little focus openTwo: active=1 key=little0 over=0 windows=1 mainOver=[1-9]
+cra://action/closeTab
+wait 2
+cra://debug?littleFocus=closedTwo
+expect-log little focus closedTwo: active=0 key=none over=- windows=0 mainOver=[1-9]

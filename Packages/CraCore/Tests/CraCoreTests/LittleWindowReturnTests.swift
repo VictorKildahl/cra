@@ -140,4 +140,16 @@ struct LittleWindowCloseNextTests {
         // Moved into a tab: the browser window is in use.
         #expect(!LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: true, craActive: true, movedToTab: true, littleWindowsLeft: true))
     }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/659"))
+    func theKeyboardStaysHeldUntilCraLetsGoOfTheFront() {
+        // The close button clicked with the browser window on another display, under the app in use there: Cra
+        // becomes active only after the window closed, and the hold keeps the keyboard from the browser window.
+        let hold = KeyboardHold(at: LittleWindowReturnTests.t0)
+        #expect(!hold.releases(craResigned: false, at: LittleWindowReturnTests.t0))
+        #expect(!hold.releases(craResigned: false, at: LittleWindowReturnTests.t0 + 0.07))
+        #expect(hold.releases(craResigned: true, at: LittleWindowReturnTests.t0 + 0.07))
+        // Slack never took the front: the hold still goes, and AppKit picks Cra's window as before.
+        #expect(hold.releases(craResigned: false, at: LittleWindowReturnTests.t0 + KeyboardHold.limit))
+    }
 }

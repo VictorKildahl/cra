@@ -1984,6 +1984,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                                            littleWindowsLeft: next != nil),
               let other = NSRunningApplication(processIdentifier: pid), !other.isTerminated else { return }
         CraLog.note("Little Window closed: the app it was opened over comes forward (#430)")
+        // Cra is still the active app for a moment, or about to become it (the close button clicked while that app
+        // was in front): with this window gone, AppKit gave the keyboard to the browser window then, which came
+        // forward on its display over the app in use there (#659). The hold has it until Cra lets go of the front.
+        KeyboardHoldPanel.take(at: window.frame)
+        NSApp.yieldActivation(to: other)
         other.activate(from: .current, options: [])
     }
 

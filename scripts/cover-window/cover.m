@@ -2,6 +2,9 @@
 //   cover <pid>     waits for that process's largest normal window, puts one of its own over it (same frame) and
 //                   right above it in the window order, so it stays behind every window that was over Cra's;
 //                   prints "covering <window number>", then waits until killed
+//   cover <pid> <x,y,w,h>
+//                   its window at that frame instead (points from the top left of the visible frame of that
+//                   window's display, as cra://debug?littleFrame=), clear of Cra's window: Slack beside it (#659)
 // It is the app a link is clicked in (Slack): once Cra hands it the front (cra://debug?yieldTo=<its pid>), SIGUSR1
 // hands the front back to Cra, as LaunchServices brings Cra forward for a link clicked in Slack, before the link
 // arrives. macOS lets only the app in front do that. Built by scripts/scenario.sh's `cover` lines.
@@ -22,7 +25,7 @@ static NSDictionary* LargestWindow(pid_t pid) {
 
 int main(int argc, const char* argv[]) {
   @autoreleasepool {
-    if (argc < 2) { fprintf(stderr, "usage: cover <pid>\n"); return 2; }
+    if (argc < 2) { fprintf(stderr, "usage: cover <pid> [x,y,w,h]\n"); return 2; }
     pid_t pid = atoi(argv[1]);
     NSApplication* app = [NSApplication sharedApplication];
     [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
@@ -34,6 +37,17 @@ int main(int argc, const char* argv[]) {
     // Window-server bounds are from the top left of the main display; AppKit's from its bottom left.
     CGFloat mainHeight = NSScreen.screens.firstObject.frame.size.height;
     NSRect frame = NSMakeRect(r.origin.x, mainHeight - r.origin.y - r.size.height, r.size.width, r.size.height);
+    BOOL placed = NO;
+    if (argc > 2) {
+      NSArray<NSString*>* n = [@(argv[2]) componentsSeparatedByString:@","];
+      if (n.count != 4) { fprintf(stderr, "cover: frame is x,y,w,h\n"); return 2; }
+      NSScreen* screen = NSScreen.screens.firstObject;
+      for (NSScreen* s in NSScreen.screens) if (NSIntersectsRect(s.frame, frame)) { screen = s; break; }
+      NSRect v = screen.visibleFrame;
+      frame = NSMakeRect(v.origin.x + n[0].doubleValue, NSMaxY(v) - n[1].doubleValue - n[3].doubleValue,
+                         n[2].doubleValue, n[3].doubleValue);
+      placed = YES;
+    }
     NSWindow* w = [[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskTitled
                                                 backing:NSBackingStoreBuffered defer:NO];
     w.title = @"Cra Test Cover";
@@ -41,7 +55,8 @@ int main(int argc, const char* argv[]) {
     w.backgroundColor = NSColor.windowBackgroundColor;
     [w setFrame:frame display:YES];
     NSInteger number = [target[(id)kCGWindowNumber] integerValue];
-    [w orderWindow:NSWindowAbove relativeTo:number];
+    if (placed) [w orderFront:nil];
+    else [w orderWindow:NSWindowAbove relativeTo:number];
     signal(SIGUSR1, SIG_IGN);
     dispatch_source_t link = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGUSR1, 0, dispatch_get_main_queue());
     dispatch_source_set_event_handler(link, ^{
