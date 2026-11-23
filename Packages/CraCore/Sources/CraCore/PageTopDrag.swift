@@ -24,6 +24,23 @@ public enum PageTopDrag {
             && depthIntoPage >= 0 && depthIntoPage < band(barHeight: barHeight) && distanceFromRight > trailingInset
     }
 
+    /// How far into the page a double click zooms the window edge to edge (#685): the margin edge to edge takes away
+    /// (CraMetrics.contentInset), where the strip above the card takes it otherwise. Not the drag's whole band: a site's
+    /// buttons show the arrow too, and a quick second click on one must stay a click.
+    public static let zoomReach: Double = 10
+
+    /// Whether a press zooms the window as a title bar's double click does (#685): a plain double click in the page's top
+    /// 10 pt, edge to edge (`fillsWindow`) with no bar above the page. Nothing else stands in for the title bar there:
+    /// with the margin the strip above the card takes the double click, and a toolbar takes its own. Like a drag, only
+    /// where the page shows the ordinary arrow (WindowContentGrabber checks the cursor). Not in Arc, which always keeps
+    /// the margin.
+    public static func zooms(enabled: Bool, fillsWindow: Bool, barHeight: Double, depthIntoPage: Double, clickCount: Int,
+                             modifiers: Bool, distanceFromRight: Double = .infinity) -> Bool {
+        fillsWindow && barHeight <= 0 && clickCount == 2 && depthIntoPage < zoomReach
+            && holds(enabled: enabled, barHeight: barHeight, depthIntoPage: depthIntoPage, clickCount: 1, modifiers: modifiers,
+                     distanceFromRight: distanceFromRight)
+    }
+
     /// How long before a press Cra must have been active for the cursor to count.
     public static let activationSlack: Double = 0.1
 

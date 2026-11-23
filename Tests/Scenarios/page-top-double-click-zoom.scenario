@@ -1,0 +1,21 @@
+# promise: #685
+# Edge to edge with the toolbar hidden (the default), the page's top is all that stands in for the title bar: a drag
+# there moved the window, but a double click did nothing (GitHub #685, neolytic, 0.1.54), where the strip above the
+# card zooms it with the margin. Now a double click in the page's top 10 pt (the margin edge to edge takes away)
+# zooms it as macOS is set to. The double click is a real one, through the window server (scripts/hid-click/click.m),
+# 5 pt into the page's empty top.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "edgeToEdgeContent": true}
+pace 0.5
+cra://open?url=${PAGE}?n=zoom
+wait 2
+cra://debug?mainFrame=100,100,1000,700
+wait 1
+cra://debug?activate=1
+wait 1
+click page-top double
+wait 2
+cra://debug?toolbarZoom=page
+expect-log toolbar zoom page: zoomed=1 grew=1

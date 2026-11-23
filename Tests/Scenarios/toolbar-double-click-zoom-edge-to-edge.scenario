@@ -1,0 +1,20 @@
+# promise: #685
+# Edge to edge, a double click on the toolbar's empty part zooms the window as with the margin around the page (the
+# toolbar-double-click-zoom scenario). It did nothing there (GitHub #685, neolytic, 0.1.54). The double click is a
+# real one, through the window server as a mouse sends it (scripts/hid-click/click.m): edge to edge the toolbar sits
+# in the hidden title bar's band at the window's top.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "edgeToEdgeContent": true}
+pace 0.5
+cra://open?url=${PAGE}?n=zoom
+wait 2
+cra://debug?mainFrame=100,100,1000,700
+wait 1
+cra://debug?activate=1
+wait 1
+click toolbar-empty double
+wait 2
+cra://debug?toolbarZoom=real
+expect-log toolbar zoom real: zoomed=1 grew=1

@@ -1928,6 +1928,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // A floating bar takes nothing from the page, so the band starts at the card's top.
             card?.barInset ?? 0
         }
+        grabber.fillsWindow = { [weak self] in self?.shell.fillsWindow ?? false }
+        grabber.titleDoubleClick = { [weak window] in (window as? CraWindow)?.performTitleDoubleClickAction() }
         grabber.attach(to: page, owner: window)
     }
 

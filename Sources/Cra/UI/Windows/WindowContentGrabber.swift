@@ -53,6 +53,12 @@ final class WindowContentGrabber: NSView {
     var isEnabled: () -> Bool = { false }
     /// The height of the bar above the page in its card (0 with none): the band is what is left of 60 pt.
     var barHeight: () -> CGFloat = { 0 }
+    /// Whether the card fills the window (edge to edge): then a double click in the page's top 10 pt zooms the window (#685).
+    var fillsWindow: () -> Bool = { false }
+    /// What a title bar's double click does (CraWindow.performTitleDoubleClickAction).
+    var titleDoubleClick: () -> Void = {}
+    /// The release of a double click that zoomed the window: it stays away from the page, as its press did.
+    private var swallowsRelease = false
     private var monitor: Any?
     private var press: NSEvent?
     private var dragging = false
@@ -98,6 +104,7 @@ final class WindowContentGrabber: NSView {
         if event.type == .leftMouseDown {
             press = nil
             dragging = false
+            swallowsRelease = false
             pressCursorIsCurrent = WindowDragRegion.cursorIsCurrent(at: event)
             guard let owner, let page = pageView, event.window === page.window, isEnabled(),
                   WindowDragRegion.allows(event, in: owner, cursorIsCurrent: pressCursorIsCurrent), let content = window?.contentView,
@@ -106,12 +113,24 @@ final class WindowContentGrabber: NSView {
             let depth = page.convert(page.bounds, to: nil).maxY - event.locationInWindow.y
             let distanceFromRight = page.bounds.maxX - page.convert(event.locationInWindow, from: nil).x
             let modifiers = !event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
+            if PageTopDrag.zooms(enabled: true, fillsWindow: fillsWindow(), barHeight: Double(barHeight()), depthIntoPage: depth,
+                                 clickCount: event.clickCount, modifiers: modifiers, distanceFromRight: distanceFromRight) {
+                // Edge to edge with no bar, the page's top is all that stands in for the title bar: a double click in its
+                // top 10 pt zooms the window as macOS is set to, as the strip above the card does with the margin (#685).
+                swallowsRelease = true
+                titleDoubleClick()
+                return nil
+            }
             if PageTopDrag.holds(enabled: true, barHeight: Double(barHeight()), depthIntoPage: depth,
                                  clickCount: event.clickCount, modifiers: modifiers,
                                  distanceFromRight: distanceFromRight) { press = event }
             return event
         }
         guard event.window === window else { return event }
+        if event.type == .leftMouseUp, swallowsRelease {
+            swallowsRelease = false
+            return nil
+        }
         if event.type == .leftMouseUp {
             // The page gets the release of a window drag, as Arc's does. Not one that brought Cra forward:
             // it ends with two releases 3 ms apart, and `dragging` lasts until the next press so both stay away.

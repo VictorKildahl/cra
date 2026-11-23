@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var spacesMenu = SpacesMenu(app: self)
     /// Arc's Little Arc windows: small, sidebar-less, disposable (see LittleWindowController).
     private(set) var littleWindows: [LittleWindowController] = []
+    /// The browser window's frame when `cra://debug?toolbarDoubleClick` last looked for the toolbar's empty part (#685).
+    private var toolbarDoubleClickFrame: NSRect?
     /// When each Little Window was last the key window, for Arc's "Archive Little Arcs after:".
     private var littleWindowLastUsed: [ObjectIdentifier: Date] = [:]
     private var littleWindowArchiveCheck: ScheduledWork?
@@ -1875,18 +1877,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // the keys, and how many other apps' windows are over the newest one
             // and (mainOver, #659) the browser window.
             // toolbarDoubleClick=<label> (#685): a double click on the focused page's toolbar where no button is, through the
-            // app's event queue as a mouse sends it; cra.log says whether the window zoomed.
+            // app's event queue as a mouse sends it; cra.log says whether the window zoomed. toolbarDoubleClick=point
+            // instead notes where that spot is on screen, top-left points, for scenario.sh's `click toolbar-empty`
+            // ("toolbar empty point: <x> <y>"), and toolbarZoom=<label> whether the window has zoomed since.
+            // pageTop=point (#685): where scenario.sh's `click page-top` presses, 5 pt into the focused page's top, a third
+            // of the way across: "page top point: <x> <y>", top-left screen points. toolbarZoom then says whether it zoomed.
+            if dict["pageTop"] == "point" {
+                guard let card = main.shell.focusedCard, let w = main.window, let top = NSScreen.screens.first?.frame.maxY else {
+                    CraLog.note("page top point: none"); return
+                }
+                toolbarDoubleClickFrame = w.frame
+                let area = card.webArea.convert(card.webArea.bounds, to: nil)
+                let onScreen = w.convertPoint(toScreen: NSPoint(x: area.minX + area.width / 3, y: area.maxY - 5))
+                CraLog.note("page top point: \(Int(onScreen.x)) \(Int(top - onScreen.y))")
+                return
+            }
+            if let label = dict["toolbarZoom"], let w = main.window {
+                let before = toolbarDoubleClickFrame ?? w.frame
+                CraLog.note("toolbar zoom \(label): zoomed=\(w.isZoomed ? 1 : 0) grew=\(w.frame.width > before.width + 1 || w.frame.height > before.height + 1 ? 1 : 0)")
+                return
+            }
             if let label = dict["toolbarDoubleClick"] {
-                guard let bar = main.shell.focusedCard?.toolbarHost as? PaneToolbarView, let w = main.window else {
+                guard let bar = main.shell.focusedCard?.toolbarHost as? PaneToolbarView, let w = main.window,
+                      let frameView = w.contentView?.superview else {
                     CraLog.note("toolbar double click \(label): no toolbar"); return
                 }
                 let y = bar.bounds.midY
+                // The window's own hit test, not only the bar's: edge to edge the bar reaches the window's edge, where
+                // AppKit's resize edge takes a double click (it grows the window to the screen's edge).
                 let empty = stride(from: bar.bounds.maxX - 1, to: bar.bounds.minX, by: -4).first { x in
-                    bar.hitTest(bar.convert(NSPoint(x: x, y: y), to: bar.superview)) === bar
+                    let p = bar.convert(NSPoint(x: x, y: y), to: nil)
+                    return frameView.hitTest(frameView.convert(p, from: nil)) === bar
                 }
                 guard let x = empty else { CraLog.note("toolbar double click \(label): no empty spot"); return }
                 let at = bar.convert(NSPoint(x: x, y: y), to: nil)
                 let before = w.frame
+                toolbarDoubleClickFrame = before
+                if label == "point" {
+                    let onScreen = w.convertPoint(toScreen: at)
+                    guard let top = NSScreen.screens.first?.frame.maxY else { CraLog.note("toolbar empty point: none"); return }
+                    CraLog.note("toolbar empty point: \(Int(onScreen.x)) \(Int(top - onScreen.y))")
+                    return
+                }
                 for clicks in [1, 2] {
                     for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
                         if let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,

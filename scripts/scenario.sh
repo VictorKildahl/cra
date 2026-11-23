@@ -55,6 +55,8 @@
 #   click little-close          a real click (through the window server, scripts/hid-click/click.m) on the newest
 #                               Little Window's close button, only if that window is in front there; needs a screen
 #                               (requires screen), as Cra comes forward for it as for a mouse (#659)
+#   click toolbar-empty double  a real double click the same way on the focused page's toolbar where no button is (#685)
+#   click page-top double       the same 5 pt into the focused page's top (#685)
 #   bare-helper <suffix>        runs the engine's "Cra Helper (<suffix>)" with no arguments, as macOS launches the
 #                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   requires screen
@@ -538,20 +540,26 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         grep -q '^covering' "$OUT/cover.log" && echo "  $(head -1 "$OUT/cover.log")" || problem "no cover window: $(cat "$OUT/cover.log")"
       fi ;;
     click)
-      [ "${2:-}" = "little-close" ] || { problem "click: unknown target ${2:-}"; continue; }
+      case "${2:-}" in
+        little-close) ask="littleClose=point"; mark="little close point:" ;;
+        toolbar-empty) ask="toolbarDoubleClick=point"; mark="toolbar empty point:" ;;
+        page-top) ask="pageTop=point"; mark="page top point:" ;;
+        *) problem "click: unknown target ${2:-}"; continue ;;
+      esac
+      count=1; [ "${3:-}" = "double" ] && count=2
       [ -x "$OUT/click" ] || clang -fobjc-arc -framework AppKit "$ROOT/scripts/hid-click/click.m" -o "$OUT/click" 2>"$OUT/click-build.log"
       [ -x "$OUT/click" ] || { problem "the click helper did not build (click-build.log)"; continue; }
-      seen=$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "little close point:")
-      send "cra://debug?littleClose=point"
+      seen=$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "$mark")
+      send "cra://debug?$ask"
       xy=""
       for _ in $(seq 1 50); do
-        [ "$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "little close point:")" -gt "$seen" ] && \
-          { xy=$(cat "$DATA"/cra*.log | grep "little close point:" | tail -1 | sed 's/.*little close point: //'); break; }
+        [ "$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "$mark")" -gt "$seen" ] && \
+          { xy=$(cat "$DATA"/cra*.log | grep "$mark" | tail -1 | sed "s/.*$mark //"); break; }
         sleep 0.2
       done
       case "$xy" in
-        [0-9]*" "[0-9]*) out=$("$OUT/click" "$PID" $xy) || problem "click little-close: $out"; echo "  $out" ;;
-        *) problem "click little-close: no close button (${xy:-no answer})" ;;
+        [0-9]*" "[0-9]*) out=$("$OUT/click" "$PID" $xy $count) || problem "click $2: $out"; echo "  $out" ;;
+        *) problem "click $2: nowhere to click (${xy:-no answer})" ;;
       esac ;;
     bare-helper)
       helper="Cra Helper (${line#bare-helper })"
