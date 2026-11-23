@@ -33,3 +33,23 @@ public extension HistoryEntry {
         profiles = known
     }
 }
+
+public extension CommandBarProfileScope {
+    /// History saved before #609 has no profiles, so every profile's bar suggested it (#729). The
+    /// profiles' own Chromium histories know whose each page was: `chromiumURLs` holds, per profile
+    /// (`key`), the addresses its `History` has. An entry with no profiles gets those that have its
+    /// page; one that none has (older than Chromium's 90 days) gets every profile there is, which is
+    /// what it was suggested on before. Entries that have profiles are left as they are. Returns the
+    /// entries that changed.
+    static func attributing(_ entries: [HistoryEntry], chromiumURLs: [String: Set<String>]) -> [HistoryEntry] {
+        let everyone = chromiumURLs.keys.sorted { ($0 == key(nil) ? 0 : 1, $0) < ($1 == key(nil) ? 0 : 1, $1) }
+        guard !everyone.isEmpty else { return [] }
+        return entries.compactMap { e in
+            guard e.profiles == nil else { return nil }
+            var out = e
+            let found = everyone.filter { chromiumURLs[$0]?.contains(e.url) == true }
+            out.profiles = found.isEmpty ? everyone : found
+            return out
+        }
+    }
+}
