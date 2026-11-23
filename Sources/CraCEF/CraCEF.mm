@@ -3326,6 +3326,8 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
     }
 }
 - (void)print { if (_browser) _browser->GetHost()->Print(); }
+// Extension shortcuts' own commands are the engine's (#701); CEF builds don't deliver them.
+- (BOOL)runExtensionCommand:(NSString*)command extension:(NSString*)extensionID { return NO; }
 - (BOOL)runChromeCommand:(NSString*)name {
     if (!_browser) return NO;
     int command = cef_id_for_command_id_name(name.UTF8String);

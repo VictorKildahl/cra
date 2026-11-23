@@ -424,6 +424,11 @@ CRA_EXPORT @interface CraBrowser : NSObject
 /// One of Chrome's own commands by its IDC name ("IDC_ROUTE_MEDIA" for Cast…, "IDC_TASK_MANAGER"),
 /// where Chromium can run it for this page. NO when it can't.
 - (BOOL)runChromeCommand:(NSString *)name NS_SWIFT_NAME(runChromeCommand(_:));
+/// An extension's own command from its keyboard shortcut (chrome://extensions/shortcuts) outside Global scope:
+/// commands.onCommand with this page as the active tab, after granting activeTab if the extension asks for it, as
+/// Chrome's ExtensionKeybindingRegistry delivers it (#701). Chrome catches the key on its own browser window, which
+/// Cra never shows. NO when the extension isn't enabled in this page's profile.
+- (BOOL)runExtensionCommand:(NSString *)command extension:(NSString *)extensionID NS_SWIFT_NAME(runExtensionCommand(_:extension:));
 - (void)executeJavaScript:(NSString *)script;
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.

@@ -1,0 +1,18 @@
+# promise: #701
+# An extension's own command from its shortcut outside Global scope reaches it, as in Chrome: the fixture's ⌥⇧U
+# fires chrome.commands.onCommand in its service worker with the page it was pressed over as the tab. Chrome
+# catches these on its own browser window, which Cra never shows; Cra catches the key and the engine delivers the
+# command (CraBrowser.runExtensionCommand, engine -19), granting activeTab first as Chrome does, so the worker
+# sees the page's address. The worker loads a fixture page naming what it got.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/CommandsExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=command-page
+wait 3
+cra://debug?chromePref=extensions.commands
+expect-log chrome pref extensions\.commands: .*"mac:Alt\+Shift\+U":\{"command_name":"say-hello"
+cra://debug?key=U,32,655360
+expect-log extension command [a-p]{8} say-hello: sent
+expect-log "GET /page\.html\?n=commands-say-hello-command-page HTTP

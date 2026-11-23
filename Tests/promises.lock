@@ -1602,6 +1602,7 @@
 #701   Packages/CraCore/Tests/CraCoreTests/ExtensionPopupFrameTests.swift::thePageSitsInsideTheWindowsBorderAndCorners  97ff0f05b53e
 #701   Tests/ExtensionPopupWindowTests.swift::staysOpenForItsDevTools  e596132901f4
 #701   Tests/Scenarios/extension-popup-frame.scenario  1b63160f0d78
+#701   Tests/Scenarios/extension-shortcut-command.scenario  5e4c41cb2950
 #701   Tests/Scenarios/extension-shortcut-popup.scenario  1625a30cd94b
 #701   Tests/Scenarios/extension-shortcut-recording.scenario  17e40697c1c0
 #702   Packages/CraCore/Tests/CraCoreTests/DocumentPictureInPictureDragTests.swift::draggedPastTheEdgeSlidesBackOnScreen  d16753091b23

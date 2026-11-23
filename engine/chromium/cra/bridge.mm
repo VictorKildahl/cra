@@ -146,6 +146,11 @@
 #include "net/base/net_errors.h"
 #include "ui/base/base_window.h"
 #include "extensions/browser/view_type_utils.h"
+#include "extensions/common/mojom/context_type.mojom.h"
+#include "extensions/browser/permissions/active_tab_permission_granter.h"
+#include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_registry.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/views/controls/webview/cra_hosted_page.h"
 #include "ui/compositor/compositor.h"
@@ -3354,6 +3359,46 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   }
   [self makeChromeActiveTab];
   return chrome::ExecuteCommand(host->browser(), command.intValue);
+}
+// An extension's command from its shortcut (#701): what Chrome's ExtensionKeybindingRegistry::CommandExecuted does
+// for a named command (DispatchCommandEvent there), with this page as the active tab.
+- (BOOL)runExtensionCommand:(NSString*)command extension:(NSString*)extensionID {
+  if (!_contents) {
+    return NO;
+  }
+  content::BrowserContext* context = _contents->GetBrowserContext();
+  std::string extension_id = base::SysNSStringToUTF8(extensionID), name = base::SysNSStringToUTF8(command);
+  const extensions::Extension* extension =
+      extensions::ExtensionRegistry::Get(context)->enabled_extensions().GetByID(extension_id);
+  if (!extension) {
+    return NO;
+  }
+  auto dispatch = [](base::WeakPtr<content::WebContents> contents, std::string extension_id, std::string name) {
+    if (!contents) {
+      return;
+    }
+    content::BrowserContext* context = contents->GetBrowserContext();
+    const extensions::Extension* extension =
+        extensions::ExtensionRegistry::Get(context)->enabled_extensions().GetByID(extension_id);
+    if (!extension) {
+      return;
+    }
+    auto args = base::MakeRefCounted<extensions::EventArgs>();
+    args->data.Append(name);
+    extensions::ExtensionTabUtil::ScrubTabBehavior scrub = extensions::ExtensionTabUtil::GetScrubTabBehavior(
+        extension, extensions::mojom::ContextType::kPrivilegedExtension, contents.get());
+    args->data.Append(base::Value(extensions::ExtensionTabUtil::CreateTabObject(contents.get(), scrub, extension).ToValue()));
+    auto event = std::make_unique<extensions::Event>(extensions::events::COMMANDS_ON_COMMAND, "commands.onCommand",
+                                                     std::move(args), context);
+    event->user_gesture = extensions::EventRouter::UserGestureState::kEnabled;
+    extensions::EventRouter::Get(context)->DispatchEventToExtension(extension_id, std::move(event));
+  };
+  if (auto* granter = extensions::ActiveTabPermissionGranter::FromWebContents(_contents)) {
+    granter->GrantIfRequested(extension, base::BindOnce(dispatch, _contents->GetWeakPtr(), extension_id, name));
+  } else {
+    dispatch(_contents->GetWeakPtr(), extension_id, name);
+  }
+  return YES;
 }
 - (void)probeBackgroundColor {
   if (_contents) {

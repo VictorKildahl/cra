@@ -3588,8 +3588,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Cra, and Use Both's second press of a shortcut the page kept (Settings ▸ Shortcuts, #374).
     /// The rest go to the page and come back through handleUnhandledKey if it leaves them alone.
     /// An extension's shortcut (chrome://extensions/shortcuts) pressed in a browser window: the ones that
-    /// open its popup run as a click on its button does (#701). Its own commands (chrome.commands.onCommand)
-    /// still need the engine, and pass on. Global ones are the system's hot keys and never get here.
+    /// open its popup run as a click on its button does (#701); its own commands (chrome.commands.onCommand) go to
+    /// the extension through the engine, with the page as the active tab. Global ones are the system's hot keys.
     private func runExtensionCommand(_ event: NSEvent) -> Bool {
         let held = event.modifierFlags.intersection([.command, .option, .control])
         guard !held.isEmpty, !event.isARepeat, let main, event.window === main.window || event.window?.parent === main.window else { return false }
@@ -3602,8 +3602,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
               let binding = ExtensionCommands.binding(in: bindings, characters: event.charactersIgnoringModifiers ?? "",
                                                       keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) else { return false }
         guard ExtensionCommands.opensPopup(binding.command) else {
-            CraLog.note("extension command \(binding.extensionID.prefix(8)) \(binding.command): needs the engine")
-            return false
+            // Its own command: the engine delivers it to the extension with this page as the active tab (engine -19).
+            let page = main.currentBrowser
+            let sent = page?.responds(to: #selector(CraBrowser.runExtensionCommand(_:extension:))) == true
+                && page?.runExtensionCommand(binding.command, extension: binding.extensionID) == true
+            CraLog.note("extension command \(binding.extensionID.prefix(8)) \(binding.command): \(sent ? "sent" : "not sent")")
+            return sent
         }
         CraLog.note("extension command \(binding.extensionID.prefix(8)): opens its popup")
         main.runExtensionAction(binding.extensionID)

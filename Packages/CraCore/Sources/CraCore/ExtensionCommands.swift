@@ -4,8 +4,8 @@ import Foundation
 /// Global scope (GitHub #701). Chrome catches them on its own browser window, which Cra never shows,
 /// so they never fired; Global ones are system hot keys and did. Chromium keeps a profile's in its
 /// extensions.commands pref, keyed "mac:<accelerator>". Cra catches the key itself and runs the ones
-/// that open the extension's popup (_execute_action), as a click on its toolbar button does. An
-/// extension's own commands (chrome.commands.onCommand) need the engine to deliver them.
+/// that open the extension's popup (_execute_action), as a click on its toolbar button does; an
+/// extension's own commands go to it through the engine (chrome.commands.onCommand, engine -19).
 public enum ExtensionCommands {
     public struct Binding: Equatable, Sendable {
         public let extensionID: String
