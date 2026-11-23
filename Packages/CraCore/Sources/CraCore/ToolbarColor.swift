@@ -29,10 +29,10 @@ public enum ToolbarColor {
     }
 
     /// The fill under the button the pointer is over (GitHub #694): white 10 % on a dark bar; on a
-    /// light one, where white didn't show, black 6 %, Arc's hover on light surfaces
-    /// (NewTabPageButtonHoveredBackground).
+    /// light one, where white didn't show, black 5 %: Arc's toolbar ↻ hover on a white bar measured 242/255
+    /// (live Arc 1.174, 23 Nov 2026).
     public static func hover(light: Bool) -> Fill {
-        light ? Fill(white: 0, alpha: 0.06) : Fill(white: 1, alpha: 0.1)
+        light ? Fill(white: 0, alpha: 0.05) : Fill(white: 1, alpha: 0.1)
     }
 }
 

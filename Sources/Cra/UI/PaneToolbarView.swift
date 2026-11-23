@@ -48,10 +48,10 @@ final class PaneToolbarView: NSView {
         var closeTint = NSColor.secondaryLabelColor
         var hairline: NSColor?
         var dividerColor = NSColor.clear
-        /// Icon hover fill: white 10 % on a dark bar, black 6 % on a light one (ToolbarColor.hover, #694);
+        /// Icon hover fill: white 10 % on a dark bar, black 5 % on a light one, Arc's 242 on white (ToolbarColor.hover, #694);
         /// the developer bar's own white 8 % (GitHub #42).
         var hover = NSColor.white.withAlphaComponent(0.1)
-        /// The address's hover: white 8 % on a dark bar, the icons' black 6 % on a light one (#694).
+        /// The address's hover: white 8 % on a dark bar, the icons' black 5 % on a light one (#694).
         var urlHover = NSColor.white.withAlphaComponent(0.08)
         /// Arc's diagonal stripes behind the developer bar.
         var stripes = false
@@ -254,7 +254,7 @@ final class PaneToolbarView: NSView {
         return m
     }
 
-    /// Scenarios (#694): "hover=black 6% url=black 6%", the fills under the pointer on this bar.
+    /// Scenarios (#694): "hover=black 5% url=black 5%", the fills under the pointer on this bar.
     var debugHover: String {
         func name(_ c: NSColor) -> String {
             guard let g = c.usingColorSpace(.genericGray) else { return "?" }
