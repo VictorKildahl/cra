@@ -32,6 +32,9 @@ struct FlickState {
     /// The display link that drives the clocks above, and the frame update it calls.
     var link: CADisplayLink?
     var frameUpdate: (() -> Void)?
+    /// The view playing the arriving tab's way into the page (`UIView.playLanding`), while it
+    /// plays.
+    var landing: UIView?
 
     // Across flicks.
     /// Which flick is on screen, so a settle that was interrupted leaves the next one alone, and
@@ -51,6 +54,8 @@ struct FlickState {
     mutating func startGesture() {
         oldCard?.removeFromSuperview()
         link?.invalidate()
+        landing?.layer.removeAnimation(forKey: UIView.flickLandingKey)
+        landing = nil
         let carried = (generation &+ 1, end, handoff, statusFill, statusPage, incoming)
         self = FlickState()
         (generation, end, handoff, statusFill, statusPage, incoming) = carried

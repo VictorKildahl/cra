@@ -824,11 +824,17 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// `captureSnapshot` is a `WKWebView` capture, which comes out black once the page is hidden;
     /// this one is made before the flick covers it, so a tab scrolled since its last capture keeps
     /// up to date, and the flick's card shows the same picture.
+    @discardableResult
     func capturePageSnapshot() -> UIImage? {
         guard let page = shownPage, pageContainer.bounds.width > 1, !pageContainer.isHidden else { return nil }
         let bounds = pageContainer.bounds
-        let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
-            pageContainer.drawHierarchy(in: bounds, afterScreenUpdates: true)
+        // What is on screen already, without making the app draw again first, and at 2× at most:
+        // it is taken as a drag starts, and the preview is small, so it must cost next to nothing.
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = min(format.scale, 2)
+        format.opaque = true
+        let image = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
+            pageContainer.drawHierarchy(in: bounds, afterScreenUpdates: false)
         }
         return keepSnapshot(image, for: page.tabID) ? image : nil
     }

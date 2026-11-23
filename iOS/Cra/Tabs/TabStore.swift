@@ -210,7 +210,9 @@ final class TabStore {
 
     func snapshot(_ id: UUID) -> UIImage? {
         if let image = snapshots[id] { return image }
-        guard let image = UIImage(contentsOfFile: snapshotFile(id).path) else { return nil }
+        // A picture saved before captures were checked may be a black one: it is looked at once,
+        // here, and dropped rather than shown.
+        guard let image = UIImage(contentsOfFile: snapshotFile(id).path), !image.looksBlank else { return nil }
         snapshots[id] = image
         return image
     }

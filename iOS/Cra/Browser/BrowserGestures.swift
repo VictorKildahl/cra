@@ -255,7 +255,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // the card shows that same picture. Right after a switch the page has not drawn: its
             // picture would be black, so the tab's stored one stands in.
             let drawn = CACurrentMediaTime() - pageShownAt > MobileMotion.pageDrawDelay
-            let current = drawn ? capturePageSnapshot() : nil
+            if drawn { capturePageSnapshot() }
             // The front card hands its tab to the flick: the slot is left empty underneath it.
             bar.tabsButton.setFrontEmpty(true)
             let card = UIView()
@@ -267,13 +267,16 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             card.layer.cornerCurve = .continuous
             card.layer.borderWidth = 1 / max(1, view.traitCollection.displayScale)
             card.layer.borderColor = UIColor(white: 0, alpha: 0.12).cgColor
-            if let image = current ?? shownPage.flatMap({ store.snapshot($0.tabID) }) {
+            // The card shows the page as it is on screen: a snapshot view is a copy the render
+            // server already has, sharp and free. Only a page swapped in a moment ago, not drawn
+            // yet, shows its stored picture instead.
+            if drawn, let shot = pageContainer.snapshotView(afterScreenUpdates: false) {
+                flick.oldShot = shot
+            } else if let image = shownPage.flatMap({ store.snapshot($0.tabID) }) {
                 let imageView = UIImageView(image: image)
                 imageView.contentMode = .scaleAspectFill
                 imageView.clipsToBounds = true
                 flick.oldShot = imageView
-            } else {
-                flick.oldShot = pageContainer.snapshotView(afterScreenUpdates: false)
             }
             if let oldShot = flick.oldShot { card.addSubview(oldShot) }
             flick.oldCard = card
@@ -282,9 +285,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             view.insertSubview(card, aboveSubview: pageContainer)
             pageContainer.isHidden = true
 
-            // A picture that came out black is a failed capture, not a dark page: show the
-            // card's own background instead of a black screen.
-            let arrivingImage = store.snapshot(target.id).flatMap { $0.looksBlank ? nil : $0 }
+            // The tab's stored picture: never a black one (`TabStore.snapshot`).
+            let arrivingImage = store.snapshot(target.id)
             let picture = UIImageView(image: arrivingImage)
             picture.backgroundColor = .systemBackground
             picture.contentMode = .scaleAspectFill
@@ -350,6 +352,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             let generation = flick.generation
             let picture = swipeNeighbour
             let switches = pan.state == .ended && MobileSwipe.switchesToPreviousTab(dragUp: up, velocityUp: -pan.velocity(in: view).y)
+            // Its lean's speed carries into the landing: read before the hand's clock stops.
+            let spin = flick.swingRate
             stopFlickTilt()
             if switches {
                 // The bar over the arriving tab changes as it comes in, not once it has landed.
@@ -378,12 +382,17 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             }
             func settle() {
                 // The page's shape is layout's again, whether it flew in or not.
+                // Taken off first, so its own end does not settle a second time.
+                let landing = self.flick.landing
+                self.flick.landing = nil
+                landing?.layer.removeAnimation(forKey: UIView.flickLandingKey)
                 self.flick.incoming = false
                 self.pageContainer.clipsToBounds = false
                 if switches, self.store.tabs.contains(where: { $0.id == target.id }) {
-                    // The incoming card's last frame is the whole screen, edge to edge.
-                    picture?.frame = full
+                    // The incoming card's last frame is the whole screen, edge to edge (its transform
+                    // first: a frame set through a transform is not the frame it gets).
                     picture?.transform = .identity
+                    picture?.frame = full
                     picture?.layer.cornerRadius = 0
                     self.store.bringToFront(target.id)
                     self.show(target)
@@ -430,76 +439,44 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                         self.view.insertSubview(picture, aboveSubview: self.pageContainer)
                     }
                 }
-                if let picture, liveIncoming {
-                    // The tab already has a page, so the page itself is the card: it takes the
-                    // card's place, size and lean, then flies in. It can load and answer touches
-                    // the whole way, and only its transform changes, so its viewport never does.
-                    let centre = picture.center
-                    let turn = atan2(picture.transform.b, picture.transform.a)
+                if let picture {
+                    // The arriving tab: the live page itself when the tab has one, taking the
+                    // card's place, size, lean and corners so it can load and take touches the
+                    // whole way, or else the card. Either is laid out at the page's size and
+                    // drawn smaller, so only its transform changes and a page's viewport never
+                    // does.
+                    let center = picture.center
+                    let angle = atan2(picture.transform.b, picture.transform.a)
                     let scale = max(0.02, min(1, picture.bounds.width / full.width))
-                    store.bringToFront(target.id)
-                    show(target)
-                    pageContainer.isHidden = false
-                    flick.incoming = true
-                    pageContainer.bounds = CGRect(origin: .zero, size: full.size)
-                    pageContainer.center = centre
-                    pageContainer.transform = CGAffineTransform(rotationAngle: turn).scaledBy(x: scale, y: scale)
-                    pageContainer.layer.cornerRadius = MobileMotion.flickCornerRadius / scale
-                    pageContainer.clipsToBounds = true
-                    picture.removeFromSuperview()
-                    let initial = MobileMotion.flickThrow(velocity: pan.velocity(in: view),
-                                                          distance: hypot(full.midX - centre.x, full.midY - centre.y),
-                                                          gain: MobileMotion.flickThrowGain)
-                    // It travels on the hand's throw, and grows at its own, slower pace.
-                    UIView.animate(spring: MobileMotion.flickTabOpen, initialVelocity: initial) {
-                        self.pageContainer.center = CGPoint(x: full.midX, y: full.midY)
+                    let corner = picture.layer.cornerRadius
+                    let card: UIView
+                    if liveIncoming {
+                        store.bringToFront(target.id)
+                        show(target)
+                        pageContainer.isHidden = false
+                        flick.incoming = true
+                        pageContainer.clipsToBounds = true
+                        picture.removeFromSuperview()
+                        card = pageContainer
+                    } else {
+                        picture.layer.borderWidth = 0
+                        card = picture
+                        flick.band?.frame = CGRect(x: 0, y: 0, width: full.width, height: statusBar)
                     }
-                    UIView.animate(spring: MobileMotion.flickTabLiveScale) {
-                        self.pageContainer.transform = .identity
-                        self.pageContainer.layer.cornerRadius = 0
-                    } completion: {
+                    let landing = MobileMotion.FlickLanding(
+                        from: center, to: CGPoint(x: full.midX, y: full.midY),
+                        velocity: MobileMotion.flickLaunch(velocity: pan.velocity(in: view)),
+                        angle: angle, spin: spin, scale: scale)
+                    card.bounds = CGRect(origin: .zero, size: full.size)
+                    // One smooth arc on the hand's own throw, its lean letting go and a small
+                    // overshoot in size, worked out ahead and played by the render server: the
+                    // page arriving meanwhile cannot make it stutter.
+                    let step = 1.0 / 120
+                    flick.landing = card
+                    card.playLanding(landing.frames(every: step), every: step, corner: corner) { [weak self, weak card] in
+                        guard let self, let card, self.flick.landing === card else { return }
                         self.view.setNeedsLayout()
                         finish()
-                    }
-                } else if let picture {
-                    // A tab with no page yet comes in as its picture. The hand's throw is the
-                    // position's first velocity, and the size has a timeline of its own so its
-                    // overshoot stops at 101 % of the page.
-                    let initial = MobileMotion.flickThrow(velocity: pan.velocity(in: view),
-                                                          distance: hypot(full.midX - picture.center.x,
-                                                                          full.midY - picture.center.y),
-                                                          gain: MobileMotion.flickPictureThrowGain)
-                    func band(_ share: CGFloat) {
-                        self.flick.band?.frame = CGRect(x: 0, y: 0, width: full.width * share,
-                                                       height: statusBar * share)
-                    }
-                    // The size waits a moment, so the hand's throw is seen before the page
-                    // fills the screen.
-                    UIView.animateKeyframes(withDuration: MobileMotion.flickTabScale, delay: 0,
-                                            options: [.calculationModeCubicPaced, .beginFromCurrentState, .allowUserInteraction]) {
-                        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.12) {
-                            picture.bounds = CGRect(origin: .zero, size: picture.bounds.size)
-                        }
-                        UIView.addKeyframe(withRelativeStartTime: 0.12, relativeDuration: 0.48) {
-                            picture.bounds = CGRect(origin: .zero,
-                                                    size: CGSize(width: full.width * 1.01, height: full.height * 1.01))
-                            band(1.01)
-                        }
-                        UIView.addKeyframe(withRelativeStartTime: 0.6, relativeDuration: 0.4) {
-                            picture.bounds = CGRect(origin: .zero, size: full.size)
-                            band(1)
-                        }
-                    }
-                    UIView.animate(spring: MobileMotion.flickTabOpen, initialVelocity: initial) {
-                        picture.center = CGPoint(x: full.midX, y: full.midY)
-                        // Its corners stay rounded all the way in; the page takes over at the end.
-                        picture.layer.borderWidth = 0
-                    } completion: { finish() }
-                    // The lean takes longer to let go than the place it goes to. This one has no
-                    // completion: with the card already straight there is nothing to animate, and
-                    // its completion would never come.
-                    UIView.animate(spring: MobileMotion.flickTabStraighten) {
-                        picture.transform = .identity
                     }
                 } else {
                     finish()

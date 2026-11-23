@@ -1922,19 +1922,71 @@ struct MobileSnapshotTests {
     }
 }
 
-struct MobileFlickThrowTests {
-    /// The arriving tab keeps the way the hand threw it, scaled by its gain and always a little
-    /// upwards; a still hand sends it straight up.
-    @Test func theThrowCarriesTheHandsSpeedAndAlwaysRises() {
-        let gain = CGVector(dx: 1, dy: 1)
-        let up = MobileMotion.flickThrow(velocity: CGPoint(x: 400, y: -1000), distance: 200, gain: gain)
-        #expect(abs(up.dx - 2) < 0.001 && abs(up.dy - 5) < 0.001)
-        let down = MobileMotion.flickThrow(velocity: CGPoint(x: 0, y: 900), distance: 200, gain: gain)
-        #expect(down.dy == 1, "thrown down, it still rises a little")
-        let still = MobileMotion.flickThrow(velocity: .zero, distance: 300, gain: gain)
-        #expect(still.dx == 0 && abs(still.dy - 4) < 0.001, "a still hand throws it up")
-        let picture = MobileMotion.flickThrow(velocity: CGPoint(x: 400, y: -1000), distance: 200,
-                                              gain: MobileMotion.flickPictureThrowGain)
-        #expect(abs(picture.dx - 0.8) < 0.001 && abs(picture.dy - 3) < 0.001)
+struct MobileFlickLandingTests {
+    static let landing = MobileMotion.FlickLanding(from: CGPoint(x: 120, y: 300), to: CGPoint(x: 196, y: 426),
+                                                   velocity: CGPoint(x: -1500, y: -800), angle: 0.08, spin: 0.4,
+                                                   scale: 0.6)
+    static let frames = stride(from: 0.0, through: 2.0, by: 1.0 / 120).map { landing.frame(after: $0) }
+
+    /// Let go thrown left, the tab carries on left before it comes in: an arc, not a straight
+    /// line to its place.
+    @Test func aTabThrownSidewaysCarriesOnSidewaysFirst() {
+        let leftmost = Self.frames.map(\.center.x).min() ?? 0
+        #expect(leftmost < 120 - 20, "it keeps going the way it was thrown")
+        #expect(Self.frames.last?.center == CGPoint(x: 196, y: 426))
+        let offLine = Self.frames.map { frame -> CGFloat in
+            let dx: CGFloat = 76, dy: CGFloat = 126
+            return abs((frame.center.x - 120) * dy - (frame.center.y - 300) * dx) / hypot(dx, dy)
+        }.max() ?? 0
+        #expect(offLine > 20, "off the straight line from where it was let go to its place")
+    }
+
+    /// One smooth arc: each axis turns home at most once, never rocking back and forth.
+    @Test func theLandingNeverRocksBackAndForth() {
+        func crossings(_ values: [CGFloat]) -> Int { zip(values, values.dropFirst()).filter { $0 * $1 < 0 }.count }
+        #expect(crossings(Self.frames.map { $0.center.x - 196 }) <= 1)
+        #expect(crossings(Self.frames.map { $0.center.y - 426 }) <= 1)
+        #expect(crossings(Self.frames.map(\.angle)) <= 1)
+    }
+
+    /// Worked out ahead, the landing is the same frames, ending on the one where it lands.
+    @Test func theLandingWorkedOutAheadIsTheSameFrames() {
+        let frames = Self.landing.frames(every: 1.0 / 120)
+        #expect(frames.last?.done == true)
+        #expect(frames.dropLast().allSatisfy { !$0.done })
+        #expect(frames[10] == Self.landing.frame(after: 10.0 / 120))
+        #expect(frames.count <= 2 * 120 + 1, "never longer than its two-second cap")
+    }
+
+    /// It lands straight, at the page's size, in its place.
+    @Test func itLandsStraightAtThePagesSizeInItsPlace() {
+        let landed = Self.frames.first { $0.done }
+        #expect(landed?.angle == 0 && landed?.scale == 1 && landed?.center == CGPoint(x: 196, y: 426))
+    }
+
+    /// It grows to 101 % of the page and settles back on it, once.
+    @Test func itGrowsJustPastThePageAndSettles() {
+        let sizes = stride(from: 0.0, through: MobileMotion.flickGrow, by: 0.005)
+            .map { MobileMotion.flickGrowth(from: 0.6, after: $0) }
+        let peak = sizes.max() ?? 0
+        #expect(peak > 1.005 && peak <= 1.0101)
+        let top = sizes.firstIndex(of: peak) ?? 0
+        #expect(zip(sizes[..<top], sizes[1...top]).allSatisfy { $0 <= $1 }, "it only rises to the top")
+        #expect(zip(sizes[top...], sizes[(top + 1)...]).allSatisfy { $0 >= $1 }, "then only falls")
+        #expect(abs((sizes.last ?? 0) - 1) < 0.0001)
+        // Not all at once: a fifth of the way in it has done well under half its growth.
+        let early = MobileMotion.flickGrowth(from: 0.6, after: MobileMotion.flickGrow * 0.2)
+        #expect(early > 0.6 && (early - 0.6) / 0.41 < 0.45)
+    }
+
+    /// It leaves the hand at the hand's own speed, the sideways part counting more, always rising
+    /// a little, straight up when the hand was still, and no faster than a hard flick.
+    @Test func itLeavesTheHandAtTheHandsSpeed() {
+        let gain = MobileMotion.flickSidewaysGain
+        #expect(gain > 1, "a sideways throw shows more than an upward one")
+        #expect(MobileMotion.flickLaunch(velocity: CGPoint(x: 700, y: -900)) == CGPoint(x: 700 * gain, y: -900))
+        #expect(MobileMotion.flickLaunch(velocity: CGPoint(x: 0, y: 500)).y == -100)
+        #expect(MobileMotion.flickLaunch(velocity: .zero) == CGPoint(x: 0, y: -600))
+        #expect(MobileMotion.flickLaunch(velocity: CGPoint(x: 9000, y: -9000)) == CGPoint(x: 4000 * gain, y: -4000))
     }
 }
