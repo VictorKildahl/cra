@@ -1,6 +1,6 @@
 # Arc Search parity (iPhone app)
 
-Arc Search 1.49.0 feature by feature, against Cra for iPhone on the `ios-app` branch. The
+Arc Search 1.49.0 feature by feature, against Cra for iPhone (`iOS/`, on main). The
 feature list comes from [arc-search-reference.md](arc-search-reference.md) (sections B and C);
 [ios.md](ios.md) says how a screen is measured and compared.
 
@@ -8,10 +8,12 @@ Status: **done** = built and compared with the reference; **partial** = some of 
 **missing** = nothing yet; *skip* = left out on purpose (account, cloud AI, a service that
 ended). "Measured" means the numbers come from Arc Search footage, not from a description.
 
+**Released.** Cra for iPhone is on the App Store since 23 November 2026 (0.1.0); the public
+TestFlight beta gets each build first. See [ios.md](ios.md#app-store).
+
 ## Where this stopped (12 November 2026)
 
-Work was paused mid-way. The branch is `ios-app`, in the worktree `../cra-ios`; nothing is
-pushed. Pick up here.
+Kept as the history of the build-up; the `ios-app` branch was merged into main on 13 November.
 
 **State of the tests.** 13 November, morning: every UI test passed (41, run in two halves);
 under the Mac's load at the time (security agents at a load average of several hundred) some were

@@ -31,7 +31,7 @@ body:
     id: version
     attributes:
       label: Cra version
-      description: "Mac: click the version in Settings ▸ Advanced to copy it, or Help ▸ Troubleshooting ▸ Copy Cra Info. iPhone: the bottom of App Settings, or the build in TestFlight."
+      description: "Mac: click the version in Settings ▸ Advanced to copy it, or Help ▸ Troubleshooting ▸ Copy Cra Info. iPhone: the bottom of App Settings (on a TestFlight build, TestFlight shows the build too)."
       placeholder: 0.1.14 (Chromium 156.0.8078.48)
     validations:
       required: true
