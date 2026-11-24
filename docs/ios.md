@@ -107,6 +107,8 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 ### On the iPhone Duo
 
+On the closed screen, the search field and the tab switcher’s cards stay left of the status column; the rule applies only to a portrait-shaped window with a side inset, so iPhones keep their layout.
+
 The closed-screen harness repro is these two tests, run together on the existing Duo:
 
 ```sh
@@ -142,13 +144,7 @@ remain enabled):
 
 | Test | Cause |
 | --- | --- |
-| `IncognitoTests/testAnIncognitoTabStaysOutOfTheRowAndTheArchive` | Accessories under status column (duo job 2) |
-| `SearchFieldTests/testTheIncognitoGlyphStaysPutWhenSwitchedOn` | Accessories under status column |
-| `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Accessories under status column |
-| `LinkMenuTests/testAPrivateTabsLinksStayPrivate` | Accessories under status column |
 | `LinkMenuTests/testSaveToPhotosFromAnImageKeepsTheAppRunning` | Image long-press menu does not open (unresolved) |
-| `PopupTests/testPrivatePopupSharesOnlyItsPrivateSourceAndClosesBackToIt` | Accessories under status column |
-| `SiteMatchTests/testSyncedSpaceSitesShowTheirPlaceAndOpen` | Accessories under status column |
 | `AppLinkTests/testALinkNoAppClaimsLoadsHere` | iOS 27/unresolved app-link handoff |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Custom engine not saved after the alert's Save (unresolved) |
 | `ExternalLinkTests/testATappedMessageLinkOpensMessages` | iOS 27 Messages handoff |
