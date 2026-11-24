@@ -11,9 +11,11 @@ public enum MobileStatusBand {
     }
 
     /// Whether the band is there: over a page shown full size, not while the search sheet or the tab
-    /// row has pushed it back.
-    public static func shown(hasPage: Bool, searching: Bool, switching: Bool) -> Bool {
-        hasPage && !searching && !switching
+    /// row has pushed it back, nor over a new page still drawing under the canvas colour after a choice in
+    /// the sheet (`MobileSheetLeave.liftsCover`). That page has no colour of its own yet: the band took
+    /// WebKit's white, which showed under the Dynamic Island as the screen went black.
+    public static func shown(hasPage: Bool, searching: Bool, switching: Bool, covered: Bool = false) -> Bool {
+        hasPage && !searching && !switching && !covered
     }
 
     /// White time and battery over a dark band, black over a light one.

@@ -520,6 +520,12 @@ built release app with a test profile. Note anything that fails in the release's
   simulator records animations at a variable rate, so
   only a phone settles the handoff; `testTheMenusAddressIsEditedInThisTab` pins the end state.
 
+- **A choice in the search sheet (`MobileSheetLeave`):** on a real iPhone in dark mode beside Arc Search, with
+  google.com's dark theme on, search for google.com from a page and from the empty home screen. The sheet rises and
+  fades, the screen goes black without lightening on the way (the band under the Dynamic Island included), and the
+  page appears without a white frame. `testAPageOpenedFromTheSheetIsCoveredUntilItHasDrawn` checks the page and the
+  band are out of sight under the cover; the timing needs a human eye.
+
 ## Not pinned yet
 
 Each of these needs a change to production code before a test can pin it: a move into

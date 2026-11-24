@@ -1387,6 +1387,27 @@ struct MobilePageBehindSearchTests {
     }
 }
 
+/// What the screen does once something is chosen in the search sheet.
+struct MobileSheetLeaveTests {
+    /// The sheet rises and fades out over a quarter of a second, as Arc Search's, instead of sinking into the pill.
+    @Test func theSheetRisesAndFadesForAChoice() {
+        #expect(MobileSheetLeave.leaveRise == 160)
+        #expect(MobileSheetLeave.leaveDuration == 0.25)
+    }
+
+    /// A new tab from the sheet stays under the canvas colour until it has drawn, and not past the longest hold.
+    @Test func aNewPageIsCoveredUntilItHasDrawn() {
+        #expect(!MobileSheetLeave.liftsCover(elapsed: 0.1, sinceDrawn: 0.1))
+        #expect(MobileSheetLeave.liftsCover(elapsed: 0.25, sinceDrawn: 0.1))
+        #expect(!MobileSheetLeave.liftsCover(elapsed: 1.0, sinceDrawn: nil))
+        #expect(MobileSheetLeave.liftsCover(elapsed: 1.5, sinceDrawn: nil))
+        // Drawn, it waits for that paint to reach the screen: lifted at once, two white frames showed first.
+        #expect(!MobileSheetLeave.liftsCover(elapsed: 0.6, sinceDrawn: 0))
+        #expect(!MobileSheetLeave.liftsCover(elapsed: 0.6, sinceDrawn: 0.05))
+        #expect(MobileSheetLeave.liftsCover(elapsed: 0.6, sinceDrawn: 0.1))
+    }
+}
+
 /// The switch between Browse for Me and the search engine on their pages.
 struct MobileBrowseToggleTests {
     /// TapSmart's screenshot of Arc Search (402 × 874 pt, bar top at 798.3 pt): the capsule spans
