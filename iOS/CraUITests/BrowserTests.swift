@@ -1439,7 +1439,7 @@ final class OnboardingTests: BrowserTestCase {
             XCTAssertEqual(mock.value as? String, shape, "\(step): mock matches the screen shape")
             let aspect = isPhone ? 330.0 / 640 : window.width / window.height
             XCTAssertEqual(mock.frame.width / mock.frame.height / aspect, 1, accuracy: isPhone ? 0.01 : 0.02,
-                           "\(step): mock aspect matches the screen")
+                           "\(step): mock \(mock.frame) aspect matches window \(window)")
         }
 
         XCTAssertTrue(next.waitForExistence(timeout: 10), "welcome: Next appears")
