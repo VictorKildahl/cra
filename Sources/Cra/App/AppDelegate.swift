@@ -272,6 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// checkbox). The bundled list (resources/blocklist) and the lists added in Settings (#507)
     /// are read off the main thread; the switch and the lists follow the settings live, no restart.
     private func startContentBlocking() {
+        observeContentBlocking()
         observeChanges(of: { [store] in store.settings.customBlocklists }) { [composition] in
             BlockLists.shared.set(addresses: $0, clock: composition.clock)
         }
@@ -281,7 +282,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeChanges(of: { [store] in store.settings.personalBlockFilters }) {
             BlockLists.shared.setPersonal($0)
         }
-        observeContentBlocking()
         observeHttpsOnly()
         // Arc's "Archive Little Arcs after:": a Little Window left alone that long closes, its page archived.
         littleWindowArchiveCheck = composition.clock.every(60) { [weak self] in self?.archiveIdleLittleWindows() }
@@ -467,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func observeContentBlocking() {
         observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }) { [weak self] enabled in
             CraCEFRuntime.setContentBlockingEnabled(enabled)
+            BlockLists.shared.setDownloadsEnabled(enabled)
             for window in self?.mainWindows ?? [] { window.browsers.refreshElementHiding() }
         }
     }

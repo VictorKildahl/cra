@@ -9,6 +9,26 @@ struct DesktopFilterListsTests {
         #expect(addresses.allSatisfy { CustomBlocklist.listURL(from: $0)?.scheme == "https" })
     }
 
+    @Test func togglesRememberCustomURLsAndNeverRemovePresets() throws {
+        let preset = try #require(DesktopFilterList.catalog.first?.address)
+        let custom = "https://lists.example/rules.txt"
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        for address in [preset, custom] {
+            settings.setFilterList(address, enabled: true)
+            settings.setFilterList(address, enabled: false)
+        }
+        settings = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(settings.customBlocklists.isEmpty)
+        #expect(settings.customFilterAddresses == [custom])
+        for address in [preset, custom, custom] { settings.setFilterList(address, enabled: true) }
+        #expect(settings.customBlocklists == [preset, custom])
+        #expect(settings.disabledCustomBlocklists.isEmpty)
+        settings.forgetFilterList(custom)
+        #expect(settings.customFilterAddresses.isEmpty)
+        settings.setFilterList(custom, enabled: true)
+        #expect(settings.customFilterAddresses == [custom])
+    }
+
     @Test func hostProjectionDoesNotWidenScopedFilters() {
         let list = DesktopHidingRules.read("""
         ||tracker.example^$third-party

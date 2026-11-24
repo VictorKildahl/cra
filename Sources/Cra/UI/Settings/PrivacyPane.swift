@@ -23,8 +23,6 @@ struct PrivacyPane: View {
                                   detail: "Requests to known ad and tracker domains are cancelled, unless the domain belongs to the site you’re on.",
                                   isOn: $store.settings.blockAdsAndTrackers)
                 SettingsCardDivider()
-                BlockListRows(addresses: $store.settings.customBlocklists, personal: $store.settings.personalBlockFilters, enabled: store.settings.blockAdsAndTrackers)
-                SettingsCardDivider()
                 // Arc: Settings ▸ General "Block Cookie Banners", off by default.
                 SettingsToggleRow("Block cookie banners",
                                   detail: "Cookie banners from the common consent tools are hidden. Pages load again with the change.",
@@ -35,6 +33,8 @@ struct PrivacyPane: View {
                                   detail: "Sites that tell browsers apart by reading back drawings, 3D graphics or sound get faint noise in what they read, different for each site and each time Cra opens. Sites also see 8 processor cores.",
                                   isOn: $store.settings.fingerprintingProtection)
             }
+
+            BlockListRows().padding(.top, 20)
 
             SettingsHeader("Connections").padding(.top, 20)
             SettingsFeatureCard {
@@ -85,110 +85,112 @@ struct PrivacyPane: View {
     }
 }
 
-/// Block lists added on top of Cra's own (#507, in neither Arc nor Dia): a regional list or a
-/// bigger one, by address or from a file, blocked under "Block ads and trackers" (BlockLists).
-/// Each added list is a line with its name, what it blocks and a remove button.
+/// Catalog entries stay visible when switched off. A custom subscription stays until removed.
 private struct BlockListRows: View {
-    @Binding var addresses: [String]
-    @Binding var personal: String?
-    let enabled: Bool
+    @Environment(SidebarStore.self) private var store
     private let lists = BlockLists.shared
     @State private var adding = false
-    @State private var browsing = false
-    @State private var regional = false
     @State private var editingRules = false
     @State private var draft = ""
     @State private var text = ""
     @State private var error: String?
 
+    private var enabled: Bool { store.settings.blockAdsAndTrackers }
+
     var body: some View {
-        SettingsPlainRow("Block lists",
-                         detail: "Cra blocks third-party domains and hides matching elements on pages. Each list shows how many rules Cra can use.",
-                         trailing: {
-                             Button("Update Lists") { addresses.forEach { lists.fetch($0) } }
-                                 .disabled(!enabled || addresses.isEmpty || !lists.fetching.isEmpty)
-                             Button("Add List…") { error = nil; text = ""; adding = true }
-                                 .disabled(!enabled || adding)
-                         }) {
-            DisclosureGroup("Available filter lists", isExpanded: $browsing) {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(DesktopFilterList.catalog.filter { !$0.regional }) { presetToggle($0) }
-                    DisclosureGroup("Regional lists", isExpanded: $regional) {
-                        VStack(alignment: .leading) {
-                            ForEach(DesktopFilterList.catalog.filter(\.regional)) { presetToggle($0) }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                SettingsHeader("Filter lists")
+                Spacer()
+                Button("Update Enabled Lists") { store.settings.customBlocklists.forEach { lists.fetch($0) } }
+                    .disabled(!enabled || store.settings.customBlocklists.isEmpty || !lists.fetching.isEmpty)
+                Button("Add List…") { error = nil; text = ""; adding = true }
+                    .disabled(!enabled || adding)
+            }
+            .padding(.bottom, 6)
+            SettingsFeatureCard {
+                ForEach(DesktopFilterList.catalog.filter { !$0.regional }) { list in
+                    if list.id != DesktopFilterList.catalog.first?.id { SettingsCardDivider() }
+                    listRow(list.address, name: list.name, detail: list.detail)
+                }
+            }
+            SettingsHeader("Regional lists").padding(.top, 14)
+            SettingsFeatureCard {
+                let regional = DesktopFilterList.catalog.filter(\.regional)
+                ForEach(regional) { list in
+                    if list.id != regional.first?.id { SettingsCardDivider() }
+                    listRow(list.address, name: list.name, detail: list.detail)
+                }
+            }
+            if !store.settings.customFilterAddresses.isEmpty || adding {
+                SettingsHeader("Your lists").padding(.top, 14)
+                SettingsFeatureCard {
+                    ForEach(store.settings.customFilterAddresses, id: \.self) { address in
+                        listRow(address, name: lists.cached[address]?.name ?? address, detail: address, removable: true)
+                        if address != store.settings.customFilterAddresses.last || adding { SettingsCardDivider() }
+                    }
+                    if adding { addListRow }
+                }
+            }
+            if let error { SettingsFootnote(error).foregroundStyle(.red) }
+            SettingsFootnote("Enabled lists update automatically. Downloads contact each list’s host, which can see your IP address. Filtering happens on this Mac.")
+            SettingsHeader("Custom filters").padding(.top, 14)
+            SettingsFeatureCard {
+                SettingsPlainRow("My filters", detail: "One domain or element filter per line.", trailing: {
+                    Button("Edit…") { draft = store.settings.personalBlockFilters ?? ""; editingRules = true }
+                        .disabled(!enabled || editingRules)
+                }) {
+                    if editingRules {
+                        TextEditor(text: $draft)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 84)
+                            .accessibilityLabel("Custom filters")
+                        HStack {
+                            Button("Cancel") { editingRules = false }
+                            Button("Save Changes") {
+                                store.settings.personalBlockFilters = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draft
+                                editingRules = false
+                            }
+                            .disabled(!enabled || draft == (store.settings.personalBlockFilters ?? ""))
                         }
                     }
                 }
             }
-            .disabled(!enabled)
-            if !addresses.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(addresses, id: \.self) { BlockListLine(address: $0, lists: lists, remove: remove) }
-                }
-                .padding(.top, 4)
-                .opacity(enabled ? 1 : 0.5)
-            }
-        }
-        SettingsCardDivider()
-        SettingsPlainRow("Custom filters", detail: "Enter domains or simple element filters, one per line.",
-                         trailing: {
-                             Button("Edit…") { draft = personal ?? ""; editingRules = true }
-                                 .disabled(!enabled || editingRules)
-                         }) {
-            if let summary = lists.personalSummary { Text(summary).font(.caption).foregroundStyle(.secondary) }
-            if editingRules {
-                TextEditor(text: $draft)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 84)
-                    .accessibilityLabel("Custom filters")
-                HStack {
-                    Button("Cancel") { editingRules = false }
-                    Button("Save Changes") {
-                        personal = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draft
-                        editingRules = false
-                    }
-                    .disabled(!enabled || draft == (personal ?? ""))
-                }
-            }
-        }
-        if adding {
-            SettingsCardDivider()
-            SettingsCardRow {
-                TextField("List address", text: $text, prompt: Text("https://example.com/list.txt"))
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-                    .onSubmit(addTyped)
-            } trailing: {
-                Button("Choose File…", action: chooseFile)
-                Button("Cancel") { adding = false; error = nil }
-                Button("Add", action: addTyped)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        if let error {
-            SettingsFootnote(error).foregroundStyle(.red).padding(.bottom, 8)
         }
     }
 
-    private func presetToggle(_ list: DesktopFilterList) -> some View {
-        Toggle(isOn: Binding(
-            get: { addresses.contains(list.address) },
-            set: { selected in
-                if selected { apply(CustomBlocklist.adding(list.address, to: addresses, httpsOnly: true)) }
-                else { remove(list.address) }
-            })) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(list.name)
-                Text(list.detail).font(.caption).foregroundStyle(.secondary)
+    private func listRow(_ address: String, name: String, detail: String, removable: Bool = false) -> some View {
+        SettingsPlainRow(name, detail: name == detail ? "" : detail, trailing: {
+            if lists.fetching.contains(address) { ProgressView().controlSize(.mini) }
+            if removable {
+                Button { store.settings.forgetFilterList(address) } label: { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless).help("Remove this list").accessibilityLabel("Remove " + name)
             }
+            Toggle(name, isOn: Binding(
+                get: { store.settings.customBlocklists.contains(address) },
+                set: { store.settings.setFilterList(address, enabled: $0) }
+            ))
+            .toggleStyle(.arcSwitch).labelsHidden().disabled(!enabled)
+            .help(address)
+        }) {
+            if let failure = lists.failures[address] { Text(failure).font(.caption).foregroundStyle(.red) }
         }
-            .toggleStyle(.checkbox)
-            .help(list.address)
+    }
+
+    private var addListRow: some View {
+        SettingsCardRow {
+            TextField("List address", text: $text, prompt: Text("https://example.com/list.txt"))
+                .textFieldStyle(.roundedBorder).onSubmit(addTyped)
+        } trailing: {
+            Button("Choose File…", action: chooseFile)
+            Button("Cancel") { adding = false; error = nil }
+            Button("Add", action: addTyped).keyboardShortcut(.defaultAction)
+                .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
     }
 
     private func addTyped() {
-        apply(CustomBlocklist.adding(text, to: addresses, httpsOnly: false))
+        apply(CustomBlocklist.adding(text, to: store.settings.customBlocklists, httpsOnly: false))
     }
 
     private func chooseFile() {
@@ -197,7 +199,7 @@ private struct BlockListRows: View {
         panel.allowsMultipleSelection = false
         panel.message = "Choose a block list: a hosts file, a list of domains or an Adblock Plus list."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        apply(CustomBlocklist.adding(url, to: addresses))
+        apply(CustomBlocklist.adding(url, to: store.settings.customBlocklists))
     }
 
     private func apply(_ addition: CustomBlocklist.Addition) {
@@ -206,7 +208,7 @@ private struct BlockListRows: View {
             error = "Enter the list’s web address, like https://example.com/list.txt."
             return
         case .added(let next):
-            addresses = next
+            if let address = next.last { store.settings.setFilterList(address, enabled: true) }
         case .alreadyAdded:
             break
         }
@@ -214,51 +216,6 @@ private struct BlockListRows: View {
         adding = false
     }
 
-    private func remove(_ address: String) {
-        addresses.removeAll { $0 == address }
-    }
-}
-
-/// One added list: its name, then what it blocks and when it was fetched, or why it couldn't be.
-private struct BlockListLine: View {
-    let address: String
-    let lists: BlockLists
-    let remove: (String) -> Void
-
-    var body: some View {
-        let list = lists.cached[address]
-        HStack(alignment: .center, spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(list?.name ?? fallbackName).font(.system(size: 12, weight: .medium)).foregroundStyle(.primary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .help(address)
-                if let failure = lists.failures[address] {
-                    Text(failure).foregroundStyle(.red)
-                } else if let list {
-                    Text(list.desktopSummary
-                         + " · Updated " + list.fetched.formatted(.relative(presentation: .named)))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Fetching…").foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 8)
-            if lists.fetching.contains(address) {
-                ProgressView().controlSize(.mini)
-            } else if lists.failures[address] != nil {
-                Button("Try Again") { lists.fetch(address) }.buttonStyle(.link)
-            }
-            Button { remove(address) } label: { Image(systemName: "minus.circle") }
-                .buttonStyle(.borderless)
-                .help("Remove this list")
-                .accessibilityLabel("Remove \(list?.name ?? fallbackName)")
-        }
-    }
-
-    private var fallbackName: String {
-        guard let url = URL(string: address) else { return address }
-        return url.isFileURL ? url.lastPathComponent : (url.host ?? address)
-    }
 }
 
 /// Chromium's secure DNS setting (chrome://settings/security) as a menu, under "Always use

@@ -651,6 +651,7 @@ public struct AppSettings: Codable, Equatable {
     /// of Cra's own, blocked under `blockAdsAndTrackers` (CustomBlocklist). Fetched copies live in
     /// the data folder's Blocklists folder.
     public var customBlocklists: [String] = []
+    public var disabledCustomBlocklists: [String] = []
     public var personalBlockFilters: String?
     /// Dia's Tabs ▸ "Haptic feedback when reordering tabs" (tabReorderingHapticsEnabled).
     public var hapticFeedbackOnReorder: Bool = true
@@ -1026,6 +1027,7 @@ extension AppSettings {
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
         autoPictureInPictureSites = (try? c.decodeIfPresent([String: Bool].self, forKey: .autoPictureInPictureSites)) ?? [:]
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
+        disabledCustomBlocklists = (try? c.decodeIfPresent([String].self, forKey: .disabledCustomBlocklists)) ?? []
         personalBlockFilters = try c.decodeIfPresent(String.self, forKey: .personalBlockFilters)
         customBlocklists = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
         if let d = try? c.decodeIfPresent(LinkDestination.self, forKey: .defaultLinkDestination) {

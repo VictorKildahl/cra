@@ -24,10 +24,35 @@ public struct DesktopFilterList: Identifiable {
         Self("Adblock Warning Removal List", "Anti-adblock notices", "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt"),
         Self("StevenBlack Unified Hosts", "Advertising and tracking domains, also offered by Pi-hole", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"),
         Self("HaGeZi Multi NORMAL", "A broader general-purpose domain list", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"),
+        Self("HaGeZi Multi PRO", "Stronger alternative to NORMAL. May affect more sites.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"),
         Self("EasyList Germany", "German-language sites", "https://easylist.to/easylistgermany/easylistgermany.txt", regional: true),
         Self("Liste FR", "French-language sites", "https://easylist-downloads.adblockplus.org/liste_fr.txt", regional: true),
         Self("EasyList Italy", "Italian-language sites", "https://easylist-downloads.adblockplus.org/easylistitaly.txt", regional: true),
     ]
+}
+
+public extension AppSettings {
+    var customFilterAddresses: [String] {
+        let presets = Set(DesktopFilterList.catalog.map(\.address))
+        return Set(customBlocklists + disabledCustomBlocklists).subtracting(presets).sorted()
+    }
+
+    mutating func setFilterList(_ address: String, enabled: Bool) {
+        disabledCustomBlocklists.removeAll { $0 == address }
+        if enabled {
+            if !customBlocklists.contains(address) { customBlocklists.append(address) }
+        } else {
+            customBlocklists.removeAll { $0 == address }
+            if !DesktopFilterList.catalog.contains(where: { $0.address == address }) {
+                disabledCustomBlocklists.append(address)
+            }
+        }
+    }
+
+    mutating func forgetFilterList(_ address: String) {
+        customBlocklists.removeAll { $0 == address }
+        disabledCustomBlocklists.removeAll { $0 == address }
+    }
 }
 
 /// The Mac can apply declarative element hiding to the top document alongside its domain blocker.
@@ -137,13 +162,5 @@ public struct DesktopHidingRules {
         var cache = CachedBlocklist(url: address, list: parsed, fetched: fetched)
         cache.hidingRules = lines
         return cache
-    }
-}
-
-public extension CachedBlocklist {
-    var desktopSummary: String {
-        let network = CustomBlocklist.summary(domains: domains.count, skippedRules: skippedRules)
-        guard !hidingRules.isEmpty else { return network }
-        return network + " · " + hidingRules.count.formatted() + " element filters"
     }
 }

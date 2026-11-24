@@ -34,7 +34,7 @@ final class BlockLists {
     @ObservationIgnored private var hiding = DesktopHidingRules(lines: [])
     @ObservationIgnored private let styles = NSCache<NSString, NSString>()
     @ObservationIgnored private var personal = ""
-    private(set) var personalSummary: String?
+    @ObservationIgnored private var downloadsEnabled = false
 
     nonisolated(unsafe) private static var lastDomains: [String]? // only accessed on queue
 
@@ -102,6 +102,12 @@ final class BlockLists {
         added.forEach { fetch($0) }
     }
 
+    func setDownloadsEnabled(_ enabled: Bool) {
+        guard downloadsEnabled != enabled else { return }
+        downloadsEnabled = enabled
+        if enabled && started { refreshDue(atLaunch: true) }
+    }
+
     /// Fetches the lists that are old, or that have no copy yet.
     private func refreshDue(atLaunch: Bool) {
         CustomBlocklist.due(addresses, fetched: cached.mapValues(\.fetched), now: clock.now, atLaunch: atLaunch).forEach { fetch($0) }
@@ -109,7 +115,7 @@ final class BlockLists {
 
     /// Fetches (or reads) one list now. A failure keeps the copy it had.
     func fetch(_ address: String) {
-        guard !fetching.contains(address), let url = URL(string: address) else { return }
+        guard downloadsEnabled, addresses.contains(address), !fetching.contains(address), let url = URL(string: address) else { return }
         fetching.insert(address)
         let fetchedAt = clock.now
         Task { [weak self] in
@@ -160,7 +166,6 @@ final class BlockLists {
                 guard publishedKey == key else { return }
                 self.hiding = hiding
                 styles.removeAllObjects()
-                personalSummary = personalText.isEmpty ? nil : user.desktopSummary
                 hidingChanged?()
             }
             if domains != Self.lastDomains {
@@ -182,6 +187,7 @@ final class BlockLists {
             return text(data)
         }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        request.httpShouldHandleCookies = false
         request.setValue("text/plain, */*", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
