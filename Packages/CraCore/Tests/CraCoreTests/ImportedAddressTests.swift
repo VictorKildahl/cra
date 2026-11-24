@@ -3,7 +3,7 @@ import Testing
 
 struct ImportedAddressTests {
     /// What Arc import always kept, now every browser's: files, bookmarklets, other browsers' own pages.
-    @Test(arguments: [
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/742"), arguments: [
         "https://example.com/",
         "http://localhost:3000",
         "file:///Users/me/notes.html",
@@ -23,8 +23,9 @@ struct ImportedAddressTests {
         #expect(ImportedAddress.keeps(url))
     }
 
-    /// What can't work once imported: nothing, a blank or new tab page, a dead blob:, a Firefox history query.
-    @Test(arguments: [
+    /// What can't work once imported: nothing, a blank or new tab page, a dead blob:, a Firefox history
+    /// query, and Cra's own cra: commands (another app's data never reaches them).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/742"), arguments: [
         "",
         "  \n",
         "about:blank",
@@ -47,6 +48,9 @@ struct ImportedAddressTests {
         "BLOB:https://example.com/5f1c",
         "place:sort=8&maxResults=10",
         "PLACE:type=6",
+        "cra://open?url=file:///etc/hosts",
+        "CRA://debug?activate=1",
+        "cra:action/newTab",
     ])
     func leavesOut(url: String) {
         #expect(!ImportedAddress.keeps(url))

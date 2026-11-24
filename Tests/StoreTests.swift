@@ -156,6 +156,7 @@ enum StoreTests {
         arcProfiles(plan: plan, store: composition.store)
     }
 
+    // promise: #742
     /// Arc import keeps a tab whatever its address, as it always has, and leaves out what every
     /// importer leaves out: a blank or new tab page and a blob:.
     private static func arcKeepsAnyAddress() throws {
@@ -504,6 +505,7 @@ enum StoreTests {
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
     }
 
+    // promise: #742
     /// Yab import keeps a tab whatever its address, and a kept tab pinned with a page that can't be
     /// imported comes over pinned, at the page it shows. A copy of Tests/Fixtures/Yab with such tabs.
     private static func yabKeepsAnyAddress() throws {
@@ -554,6 +556,7 @@ enum StoreTests {
                "an extension with disable_reasons is off, one in state 1 is on")
     }
 
+    // promise: #742
     /// Firefox (a profile made here, as Firefox writes it): bookmarks from places.sqlite and open
     /// tabs from the session store come over whatever their address. Left out: a blank or new tab
     /// page, a blob: and the place: queries Firefox keeps as smart bookmarks.
@@ -572,6 +575,7 @@ enum StoreTests {
                "open tabs come over whatever their address; about:blank, about:newtab, about:home and blob: left out")
     }
 
+    // promise: #742
     /// Zen (a profile made here): tabs come over whatever their address, and a pinned tab whose
     /// pinned page is a new tab page comes over pinned, at the page it shows.
     private static func zenImport() throws {
@@ -585,6 +589,7 @@ enum StoreTests {
                "a tab pinned with a new tab page comes over pinned, at the page it shows and that page's title")
     }
 
+    // promise: #742
     /// Safari's exported Bookmarks.html (Tests/Fixtures/Safari): bookmarks come over whatever
     /// their address, and a folder of only blank ones is left out.
     private static func safariImport() throws {
