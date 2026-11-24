@@ -6007,7 +6007,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         guard (notification.object as? NSWindow) === window else { return }
         if let host = browsers.visibleRuntime?.hostWindow { ChromiumPageFocus.focus(host) }
         refreshMaterialActive()
-        browsers.windowVisibilityChanged(covered: false)
+        // Cra came forward for a press on Picture in Picture's window only (#741): this window is still behind the app in
+        // use, and an automatic Picture in Picture's video stays out.
+        if !PictureInPictureChrome.shared.isInFrontForWindow { browsers.windowVisibilityChanged(covered: false) }
         reclaimPages()
     }
 
@@ -6411,6 +6413,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 /// Window with Arc's taller title row: the traffic lights sit 24pt from the top.
 /// They always show in colour, like Dia (Arc mutes them to grey discs until hovered).
 final class CraWindow: NSWindow {
+    /// While Cra comes forward for a press on Picture in Picture's window (#741), a browser window takes neither the
+    /// keyboard nor main: the window's overlay has the keyboard, and the browser windows stay behind the app in use
+    /// (PictureInPictureChrome.pressed).
+    static var stayBehindWhileComingForward = false
+    override var canBecomeKey: Bool { !Self.stayBehindWhileComingForward && super.canBecomeKey }
+    override var canBecomeMain: Bool { !Self.stayBehindWhileComingForward && super.canBecomeMain }
+
     /// AppKit's private per-button hook: the window buttons keep their colours
     /// while the window or the app is inactive. Nothing else about the window's
     /// inactive look changes.

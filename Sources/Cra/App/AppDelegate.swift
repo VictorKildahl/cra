@@ -51,6 +51,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DockedWindowAccessibility.install()
         SystemAppearance.shared.start()
         DocumentPictureInPictureSpring.shared.start()
+        // Coming forward for a press on Picture in Picture's window (#741), AppKit raised a browser window over the app
+        // the user was in for a moment, even one that couldn't take the keyboard (Victor, 24 Nov 2026): those behind
+        // another window are out of sight while the activation lands and come back where they were, and meanwhile no
+        // browser window takes the keyboard or main.
+        PictureInPictureChrome.shared.browserWindowsComingForward = { [unowned self] in
+            let behind = BrowserWindowsBehind(mainWindows.compactMap(\.window), stack: StackedWindow.onScreen())
+            CraWindow.stayBehindWhileComingForward = true
+            behind.takeOut()
+            return { last in
+                behind.bringBackIn()
+                if last { CraWindow.stayBehindWhileComingForward = false }
+            }
+        }
         installURLEventHandler()
         observeFrontmostApp()
         PerfCEF.install(app: self)

@@ -52,6 +52,65 @@ final class PictureInPictureChrome {
     private static let displayFrameKey = "CraPictureInPictureDisplayFrame"
 
     private var overlays: [ObjectIdentifier: PictureInPictureOverlay] = [:]
+
+    // MARK: In front for the window (#741)
+
+    /// macOS gives a trackpad pinch only to the app in front, and Arc's window resizes on a pinch once a click on it has
+    /// brought Arc forward: a press on Cra's brings Cra forward too (PictureInPictureFront), its browser windows left
+    /// where they were.
+    private var front = PictureInPictureFront()
+    /// A click or a key in another of Cra's windows while it is in front for the window: the user is using Cra.
+    private var frontUseMonitor: Any?
+
+    /// Cra is in front for the window only: a browser window that took the keyboard meanwhile (AppKit gives it back as
+    /// Cra comes forward) isn't in use, and an automatic Picture in Picture's video stays out.
+    var isInFrontForWindow: Bool { front.inFrontForWindow }
+
+    /// The browser windows' part as Cra comes forward for the window, set by AppDelegate (scripts/test-pip-overlay.sh
+    /// has none): called just before the activation, it returns what to call as the activation lands, `last` on the
+    /// final call.
+    var browserWindowsComingForward: (() -> (_ last: Bool) -> Void)?
+
+    /// A press on `overlay` (its video or its controls), before the press does what it does.
+    func pressed(on overlay: PictureInPictureOverlay) {
+        guard front.pressed(craActive: NSApp.isActive) == .comeForward else { return }
+        CraLog.note("pip: a press on the window brings Cra forward (#741)")
+        // A test copy behind the user's apps never takes the front (HitchMonitor.background): it says it would.
+        guard !HitchMonitor.background else { return front.craLeft() }
+        // The overlay is made key only after the activation: a panel made key before made AppKit count Cra as active
+        // while the window server didn't, and the activation did nothing.
+        overlay.takesKeyForGesture = true
+        let landed = browserWindowsComingForward?()
+        NSApp.activate(ignoringOtherApps: true)
+        for delay in [0.15, 0.4] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak overlay] in
+                if let overlay, NSApp.isActive, PictureInPictureChrome.shared.isInFrontForWindow, !overlay.isKeyWindow { overlay.makeKey() }
+                landed?(delay == 0.4)
+            }
+        }
+        if frontUseMonitor == nil {
+            frontUseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { event in
+                MainActor.assumeIsolated {
+                    let w = event.window
+                    if !(w is PictureInPictureOverlay), !(w.map { PictureInPictureChrome.shared.overlays[ObjectIdentifier($0)] != nil } ?? false) {
+                        PictureInPictureChrome.shared.endFront { $0.craUsed() }
+                    }
+                }
+                return event
+            }
+        }
+    }
+
+    /// Cra is no longer in front for the window only: the user is using it, or it went behind.
+    private func endFront(_ change: (inout PictureInPictureFront) -> Void) {
+        guard front.inFrontForWindow else { return }
+        change(&front)
+        for o in overlays.values { o.takesKeyForGesture = false }
+        frontUseMonitor.map(NSEvent.removeMonitor)
+        frontUseMonitor = nil
+    }
+
+
     private var observers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
     private var appObservers: [NSObjectProtocol] = []
 
@@ -167,6 +226,9 @@ final class PictureInPictureChrome {
         appObservers = [
             center.addObserver(forName: NSApplication.willBecomeActiveNotification, object: nil, queue: .main, using: reassert),
             center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main, using: reassert),
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in PictureInPictureChrome.shared.endFront { $0.craLeft() } }
+            },
             // The task is queued behind Chromium's observer, which was queued when the post came.
             NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main, using: reassert),
             // A display was unplugged, added or resized: the window goes back onto one display.
@@ -347,7 +409,8 @@ final class PictureInPictureChrome {
             for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
                 guard let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                                                  windowNumber: o.windowNumber, context: nil, eventNumber: 0, clickCount: count, pressure: 1) else { continue }
-                if type == .leftMouseDown { view.mouseDown(with: e) } else { view.mouseUp(with: e) }
+                // As a real click does on its way through the overlay (`PictureInPictureOverlay.sendEvent`, #741).
+                if type == .leftMouseDown { pressed(on: o); view.mouseDown(with: e) } else { view.mouseUp(with: e) }
             }
         }
     }
@@ -506,7 +569,16 @@ final class PictureInPictureOverlay: NSPanel {
 
     let controls = PictureInPictureControlsView(frame: .zero)
 
-    override var canBecomeKey: Bool { false }
+    /// Cra came forward for a press on the window (#741): the overlay has the keyboard meanwhile, so AppKit doesn't
+    /// give it to a browser window, which would bring an automatic Picture in Picture's video back into its tab.
+    var takesKeyForGesture = false
+    override var canBecomeKey: Bool { takesKeyForGesture }
+
+    /// A press anywhere on the window, its controls too, brings Cra forward first (#741).
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown { PictureInPictureChrome.shared.pressed(on: self) }
+        super.sendEvent(event)
+    }
     override var canBecomeMain: Bool { false }
 }
 

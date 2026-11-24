@@ -229,6 +229,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
+- **#741:** with a video in Picture in Picture and another app in front, pinch over the window: nothing happens, as in
+  Arc (macOS gives a pinch only to the app in front). Click the window once: Cra comes forward (its menu bar), no
+  browser window shows even for a moment, and a pinch now resizes it, again and again. The other app's windows stay
+  in front of Cra's browser window. Do it once from another app's full-screen Space too (#206): you stay on that Space.
+  (`pip-pinch-background` checks the click's decision in a test copy, which never comes forward.)
 - **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (it is off by default), hold ⌥ and ⌘ and
   click a link on a page with the pointer: the link opens in a Little Window and the page stays where it is, from
   a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
