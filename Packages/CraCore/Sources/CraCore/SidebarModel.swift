@@ -1029,7 +1029,8 @@ extension AppSettings {
         blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
         disabledCustomBlocklists = (try? c.decodeIfPresent([String].self, forKey: .disabledCustomBlocklists)) ?? []
         personalBlockFilters = try c.decodeIfPresent(String.self, forKey: .personalBlockFilters)
-        customBlocklists = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
+        let addresses = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
+        customBlocklists = DesktopFilterList.resolveProVariants(addresses)
         if let d = try? c.decodeIfPresent(LinkDestination.self, forKey: .defaultLinkDestination) {
             defaultLinkDestination = d
         } else {

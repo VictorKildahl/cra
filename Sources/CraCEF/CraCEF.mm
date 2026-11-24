@@ -3568,6 +3568,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)chromeHosting { return g_chromeHosting; }
 + (BOOL)supportsSparePages { return g_chromeHosting; }
 
+// CEF uses the native domain filter.
++ (void)setBundledNetworkRulesExpected:(BOOL)expected {}
 + (void)setContentBlockingEnabled:(BOOL)enabled { cra_blocker::Enabled().store(enabled); }
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }
 

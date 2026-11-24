@@ -1,6 +1,8 @@
 import AppKit
 import CraCEF
 
+if CommandLine.arguments.dropFirst().first == ChromiumFilterLists.origin { ChromiumFilterLists.watch() }
+
 // A staged update run once before it is installed, so macOS has checked the new bundle by the
 // time the user starts it (UpdatePrewarm). Nothing else of Cra runs.
 if ProcessInfo.processInfo.environment[UpdatePrewarm.environmentKey] == "1" { exit(0) }
@@ -55,7 +57,15 @@ MainActor.assumeIsolated {
     NativeMessagingHosts.link(into: AppPaths.chromiumCache)
 
     let extensions = ExtensionStore.loadList(profileIsFree: profileIsFree)
-    CraCEFRuntime.setExtensionPaths(extensions.paths, profiles: extensions.profiles)
+    var paths = extensions.paths
+    var scopes = extensions.profiles
+    if profileIsFree && EngineFramework.isChromiumEngine {
+        do {
+            paths.append(try ChromiumFilterLists.install())
+            scopes = scopes.map { $0 + ",*" }
+        } catch { CraLog.note("network filter setup failed: " + error.localizedDescription) }
+    }
+    CraCEFRuntime.setExtensionPaths(paths, profiles: scopes)
     if let p = extensions.profiles { CraLog.note("extension profiles: \(p)") }
 
     // Chromium's language follows macOS as in Chrome and Arc: it picks the voice for speech
@@ -90,6 +100,7 @@ MainActor.assumeIsolated {
     var ready = false
     CraCEFRuntime.whenReady {
         ready = true
+        ChromiumFilterLists.finishStartupProfileInstall()
         ChromiumBluetoothCache.install()
         ChromiumDockTile.install()
         ChromiumHistorySwipe.install()

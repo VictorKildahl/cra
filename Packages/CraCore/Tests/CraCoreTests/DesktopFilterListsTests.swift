@@ -29,6 +29,27 @@ struct DesktopFilterListsTests {
         #expect(settings.customFilterAddresses == [custom])
     }
 
+    @Test func proVariantsReplaceEachOtherAndAnnoyanceSwitchesAreIndependent() throws {
+        func address(_ name: String) throws -> String {
+            try #require(DesktopFilterList.catalog.first { $0.name == name }?.address)
+        }
+        let popup = try address("AdGuard Popups"), widget = try address("AdGuard Widgets")
+        let pro = try address("HaGeZi Multi PRO"), mini = try address("HaGeZi Multi PRO Mini")
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        #expect(settings.customBlocklists.isEmpty)
+        for item in [popup, widget, pro, mini] { settings.setFilterList(item, enabled: true) }
+        #expect(settings.customBlocklists == [popup, widget, mini])
+        settings.setFilterList(popup, enabled: false)
+        settings.setFilterList(pro, enabled: true)
+        #expect(settings.customBlocklists == [widget, pro])
+        for (saved, expected) in [([pro, widget, mini], [widget, mini]), ([mini, popup, pro], [popup, pro])] {
+            let data = try JSONEncoder().encode(["customBlocklists": saved])
+            let restored = try JSONDecoder().decode(AppSettings.self, from: data)
+            #expect(restored.customBlocklists == expected)
+        }
+        #expect(settings.customFilterAddresses.isEmpty)
+    }
+
     @Test func hostProjectionDoesNotWidenScopedFilters() {
         let list = DesktopHidingRules.read("""
         ||tracker.example^$third-party
@@ -42,6 +63,33 @@ struct DesktopFilterListsTests {
         """, address: "fixture", fetched: .distantPast)
         #expect(list.domains == ["tracker.example"])
         #expect(list.hidingRules.isEmpty)
+    }
+
+    @Test func chromiumNetworkConditionsAndCacheMigration() throws {
+        let text = """
+        0.0.0.0 ads.example
+        ||cdn.example/ad/*$script,third-party,domain=reader.example|~pay.reader.example
+        @@||cdn.example/ad/consent.js$script,domain=reader.example
+        @@||trusted.example^$document
+        ||cdn.example^$redirect=noop.js
+        """
+        let list = DesktopHidingRules.read(text, address: "fixture", fetched: Date(timeIntervalSince1970: 10))
+        #expect(CachedBlocklist(text: list.text) == list)
+        #expect(list.plainDomains == ["ads.example"])
+        let compiled = DesktopNetworkRules.compile(domains: list.plainDomains, lines: list.networkRules)
+        #expect(compiled.count == 4)
+        let rule = try #require(compiled.first { $0.condition.urlFilter == "||cdn.example/ad/*" })
+        #expect(rule.condition.resourceTypes == ["script"])
+        #expect(rule.condition.domainType == "thirdParty")
+        #expect(rule.condition.initiatorDomains == ["reader.example"])
+        #expect(rule.condition.excludedInitiatorDomains == ["pay.reader.example"])
+        let exception = try #require(compiled.first { $0.action.type == "allow" })
+        #expect(exception.priority > rule.priority)
+        #expect(exception.condition.urlFilter == "||cdn.example/ad/consent.js")
+        #expect(compiled.contains { $0.action.type == "allowAllRequests" })
+        let old = try #require(CachedBlocklist(text: "# url: abc\n# fetched: 2026-01-01T00:00:00Z\nold.example\n"))
+        #expect(!old.hasNetworkSource && old.domains == ["old.example"])
+        #expect(DesktopNetworkRules.compile(domains: [], lines: ["||bad.example^", "||bad.example^$badfilter"]).isEmpty)
     }
 
     @Test func hidingAndExceptionsUseDomainBoundaries() {

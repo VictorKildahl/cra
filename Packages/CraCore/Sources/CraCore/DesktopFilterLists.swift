@@ -15,19 +15,64 @@ public struct DesktopFilterList: Identifiable {
         self.regional = regional
     }
 
+    static let proAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
+    static let proMiniAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.mini-onlydomains.txt"
+
+    /// An older settings file can contain both addresses as custom subscriptions.
+    /// Keep the most recently added variant when restoring or importing that file.
+    static func resolveProVariants(_ addresses: [String]) -> [String] {
+        guard let full = addresses.lastIndex(of: proAddress),
+              let mini = addresses.lastIndex(of: proMiniAddress) else { return addresses }
+        let superseded = full > mini ? proMiniAddress : proAddress
+        return addresses.filter { $0 != superseded }
+    }
+
     public static let catalog = [
         Self("EasyList", "Ads on international sites", "https://easylist.to/easylist/easylist.txt"),
         Self("EasyPrivacy", "Tracking and analytics", "https://easylist.to/easylist/easyprivacy.txt"),
         Self("EasyList Cookie List", "Cookie notices", "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"),
         Self("Fanboy’s Annoyance List", "Overlays, social widgets and cookie notices", "https://easylist-downloads.adblockplus.org/fanboy-annoyance.txt"),
         Self("Fanboy’s Social Blocking List", "Social sharing buttons and widgets", "https://easylist-downloads.adblockplus.org/fanboy-social.txt"),
+        Self("AdGuard Popups", "Promotional popups and overlays", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_19_Annoyances_Popups/filter.txt"),
+        Self("AdGuard Widgets", "Third-party widgets, including support chats", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_22_Annoyances_Widgets/filter.txt"),
         Self("Adblock Warning Removal List", "Anti-adblock notices", "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt"),
         Self("StevenBlack Unified Hosts", "Advertising and tracking domains, also offered by Pi-hole", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"),
-        Self("HaGeZi Multi NORMAL", "A broader general-purpose domain list", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"),
-        Self("HaGeZi Multi PRO", "Stronger alternative to NORMAL. May affect more sites.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"),
-        Self("EasyList Germany", "German-language sites", "https://easylist.to/easylistgermany/easylistgermany.txt", regional: true),
+        Self("HaGeZi Multi NORMAL", "Start here for everyday browsing. Blocks ads and trackers while allowing crash reports, with a low risk of breaking sites.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"),
+        Self("HaGeZi Multi PRO Mini", "Choose this for a smaller download. Covers commonly visited domains from PRO, including trackers used for crash reports.", proMiniAddress),
+        Self("HaGeZi Multi PRO", "Choose this for the widest coverage, including less common tracking domains. Some sites may need an exception.", proAddress),
+        Self("Liste AR", "Arabic-language sites", "https://easylist-downloads.adblockplus.org/Liste_AR.txt", regional: true),
+        Self("Bulgarian List", "Bulgarian-language sites", "https://stanev.org/abp/adblock_bg.txt", regional: true),
+        Self("EasyList China", "Chinese-language sites", "https://easylist-downloads.adblockplus.org/easylistchina.txt", regional: true),
+        Self("AdGuard Chinese", "Chinese-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", regional: true),
+        Self("EasyList Czech and Slovak", "Czech and Slovak-language sites", "https://raw.githubusercontent.com/tomasko126/easylistczechandslovak/master/filters.txt", regional: true),
+        Self("EasyList Dutch", "Dutch-language sites", "https://easylist-downloads.adblockplus.org/easylistdutch.txt", regional: true),
+        Self("AdGuard Dutch", "Dutch-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_8_Dutch/filter.txt", regional: true),
         Self("Liste FR", "French-language sites", "https://easylist-downloads.adblockplus.org/liste_fr.txt", regional: true),
+        Self("AdGuard French", "French-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_16_French/filter.txt", regional: true),
+        Self("EasyList Germany", "German-language sites", "https://easylist.to/easylistgermany/easylistgermany.txt", regional: true),
+        Self("AdGuard German", "German-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_6_German/filter.txt", regional: true),
+        Self("void.gr", "Greek-language sites", "https://www.void.gr/kargig/void-gr-filters.txt", regional: true),
+        Self("hufilter", "Hungarian-language sites", "https://cdn.jsdelivr.net/gh/hufilter/hufilter@gh-pages/hufilter.txt", regional: true),
+        Self("IndianList", "Sites in Indian languages", "https://easylist-downloads.adblockplus.org/indianlist.txt", regional: true),
+        Self("ABPindo", "Indonesian and Malay-language sites", "https://raw.githubusercontent.com/ABPindo/indonesianadblockrules/master/subscriptions/abpindo.txt", regional: true),
         Self("EasyList Italy", "Italian-language sites", "https://easylist-downloads.adblockplus.org/easylistitaly.txt", regional: true),
+        Self("AdGuard Italian", "Italian-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_26_Italian/filter.txt", regional: true),
+        Self("Japanese Filters", "Japanese-language sites", "https://easylist-downloads.adblockplus.org/japanese-filters.txt", regional: true),
+        Self("AdGuard Japanese", "Japanese-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_7_Japanese/filter.txt", regional: true),
+        Self("YousList", "Korean-language sites", "https://raw.githubusercontent.com/yous/YousList/master/youslist.txt", regional: true),
+        Self("EasyList Lithuania", "Lithuanian-language sites", "https://raw.githubusercontent.com/EasyList-Lithuania/easylist_lithuania/master/easylistlithuania.txt", regional: true),
+        Self("Dandelion Sprout’s Nordic Filters", "Sites in Norway, Denmark, Iceland, Sweden and Finland", "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/NorwegianExperimentalList%20alternate%20versions/NordicFiltersABP-Inclusion.txt", regional: true),
+        Self("AdBlockFarsi", "Persian-language sites", "https://raw.githubusercontent.com/SlashArash/adblockfa/master/adblockfa.txt", regional: true),
+        Self("EasyList Polish", "Polish-language sites", "https://easylist-downloads.adblockplus.org/easylistpolish.txt", regional: true),
+        Self("AdGuard Polish", "Polish-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_27_Polish/filter.txt", regional: true),
+        Self("EasyList Portuguese", "Portuguese-language sites", "https://easylist-downloads.adblockplus.org/easylistportuguese.txt", regional: true),
+        Self("AdGuard Russian", "Russian-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_1_Russian/filter.txt", regional: true),
+        Self("EasyList Spanish", "Spanish-language sites", "https://easylist-downloads.adblockplus.org/easylistspanish.txt", regional: true),
+        Self("AdGuard Spanish/Portuguese", "Spanish and Portuguese-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_9_Spanish/filter.txt", regional: true),
+        Self("Turkish Filters", "Turkish-language sites", "https://easylist-downloads.adblockplus.org/turkish-filters.txt", regional: true),
+        Self("AdGuard Turkish", "Turkish-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_13_Turkish/filter.txt", regional: true),
+        Self("AdGuard Ukrainian", "Ukrainian-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_23_Ukrainian/filter.txt", regional: true),
+        Self("ABPVN", "Vietnamese-language sites", "https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn.txt", regional: true),
     ]
 }
 
@@ -40,7 +85,9 @@ public extension AppSettings {
     mutating func setFilterList(_ address: String, enabled: Bool) {
         disabledCustomBlocklists.removeAll { $0 == address }
         if enabled {
-            if !customBlocklists.contains(address) { customBlocklists.append(address) }
+            if !customBlocklists.contains(address) {
+                customBlocklists = DesktopFilterList.resolveProVariants(customBlocklists + [address])
+            }
         } else {
             customBlocklists.removeAll { $0 == address }
             if !DesktopFilterList.catalog.contains(where: { $0.address == address }) {
@@ -115,6 +162,8 @@ public struct DesktopHidingRules {
 
     public static func read(_ text: String, address: String, fetched: Date) -> CachedBlocklist {
         var networkLines: [Substring] = []
+        var requestRules: [String] = []
+        var plainDomains = Set<String>()
         var lines: [String] = []
         var allowed = Set<String>()
         var ancestorsOfAllowed = Set<String>()
@@ -132,34 +181,42 @@ public struct DesktopHidingRules {
                 lines.append(line)
                 continue
             }
-            // The engine blocks hosts for every third-party resource. Never turn a path,
-            // document type or site restriction into a blanket block.
-            if line.hasPrefix("||"), let dollar = line.firstIndex(of: "$") {
-                let options = line[line.index(after: dollar)...].lowercased().split(separator: ",")
-                if !options.allSatisfy({ $0 == "third-party" || $0 == "3p" }) {
+            switch ParsedBlocklist.classify(line) {
+            case .ignored, .comment:
+                networkLines.append(raw)
+            case .domains(let names, adblock: false):
+                plainDomains.formUnion(names)
+                networkLines.append(raw)
+            default:
+                if DesktopNetworkRules.parse(line) != nil || DesktopNetworkRules.disabledRule(line) != nil {
+                    requestRules.append(line)
+                } else {
                     skipped += 1
-                    continue
+                }
+                // Keep a conservative domain-only fallback for older engines and cold starts.
+                if line.hasPrefix("@@||") {
+                    let host = line.dropFirst(4).prefix { !"^/$|?*".contains($0) }
+                    if let domain = ParsedBlocklist.domain(host) {
+                        allowed.insert(domain)
+                        ancestorsOfAllowed.formUnion(Self.suffixes(of: domain))
+                    }
+                } else if case .domains(_, adblock: true) = ParsedBlocklist.classify(line) {
+                    let options = line.split(separator: "$", maxSplits: 1).dropFirst().first
+                    if options == nil || options == "third-party" || options == "3p" { networkLines.append(raw) }
                 }
             }
-            if line.hasPrefix("@@||") {
-                let host = line.dropFirst(4).prefix { !"^/$|?*".contains($0) }
-                if let domain = ParsedBlocklist.domain(host) {
-                    allowed.insert(domain)
-                    ancestorsOfAllowed.formUnion(Self.suffixes(of: domain))
-                }
-            }
-            networkLines.append(raw)
         }
         var parsed = ParsedBlocklist(text: networkLines.joined(separator: "\n"))
-        let before = parsed.domains.count
         if !allowed.isEmpty {
-            // A path-specific exception also keeps this host out of our domain-only blocker.
             parsed.domains.removeAll { host in
                 ancestorsOfAllowed.contains(host) || !allowed.isDisjoint(with: Self.suffixes(of: host))
             }
         }
-        parsed.skippedRules += skipped + before - parsed.domains.count
+        parsed.skippedRules = skipped
         var cache = CachedBlocklist(url: address, list: parsed, fetched: fetched)
+        if plainDomains != Set(parsed.domains) { cache.sourceHosts = plainDomains.sorted() }
+        cache.hasNetworkSource = true
+        cache.networkRules = requestRules
         cache.hidingRules = lines
         return cache
     }

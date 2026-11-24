@@ -20,7 +20,7 @@ struct PrivacyPane: View {
             SettingsHeader("Content blocking")
             SettingsFeatureCard {
                 SettingsToggleRow("Block ads and trackers",
-                                  detail: "Requests to known ad and tracker domains are cancelled, unless the domain belongs to the site you’re on.",
+                                  detail: "Cra’s built-in list combines AdAway and Anudeep’s Blacklist. It blocks third-party ad and tracker domains and works offline.",
                                   isOn: $store.settings.blockAdsAndTrackers)
                 SettingsCardDivider()
                 // Arc: Settings ▸ General "Block Cookie Banners", off by default.
@@ -89,6 +89,7 @@ struct PrivacyPane: View {
 private struct BlockListRows: View {
     @Environment(SidebarStore.self) private var store
     private let lists = BlockLists.shared
+    @State private var regionalListsExpanded = false
     @State private var adding = false
     @State private var editingRules = false
     @State private var draft = ""
@@ -114,14 +115,7 @@ private struct BlockListRows: View {
                     listRow(list.address, name: list.name, detail: list.detail)
                 }
             }
-            SettingsHeader("Regional lists").padding(.top, 14)
-            SettingsFeatureCard {
-                let regional = DesktopFilterList.catalog.filter(\.regional)
-                ForEach(regional) { list in
-                    if list.id != regional.first?.id { SettingsCardDivider() }
-                    listRow(list.address, name: list.name, detail: list.detail)
-                }
-            }
+            regionalListCard.padding(.top, 14)
             if !store.settings.customFilterAddresses.isEmpty || adding {
                 SettingsHeader("Your lists").padding(.top, 14)
                 SettingsFeatureCard {
@@ -132,11 +126,12 @@ private struct BlockListRows: View {
                     if adding { addListRow }
                 }
             }
+            if let failure = lists.networkFailure { SettingsFootnote(failure).foregroundStyle(.red) }
             if let error { SettingsFootnote(error).foregroundStyle(.red) }
             SettingsFootnote("Enabled lists update automatically. Downloads contact each list’s host, which can see your IP address. Filtering happens on this Mac.")
             SettingsHeader("Custom filters").padding(.top, 14)
             SettingsFeatureCard {
-                SettingsPlainRow("My filters", detail: "One domain or element filter per line.", trailing: {
+                SettingsPlainRow("My filters", detail: "One domain, network rule, exception or element filter per line.", trailing: {
                     Button("Edit…") { draft = store.settings.personalBlockFilters ?? ""; editingRules = true }
                         .disabled(!enabled || editingRules)
                 }) {
@@ -145,6 +140,8 @@ private struct BlockListRows: View {
                             .font(.system(.body, design: .monospaced))
                             .frame(minHeight: 84)
                             .accessibilityLabel("Custom filters")
+                        Text("To allow network requests on a site, enter @@||example.org^$document.")
+                            .font(.caption).foregroundStyle(.secondary)
                         HStack {
                             Button("Cancel") { editingRules = false }
                             Button("Save Changes") {
@@ -154,6 +151,37 @@ private struct BlockListRows: View {
                             .disabled(!enabled || draft == (store.settings.personalBlockFilters ?? ""))
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private var regionalListCard: some View {
+        let regional = DesktopFilterList.catalog.filter(\.regional)
+        let selected = Set(store.settings.customBlocklists)
+        let count = regional.filter { selected.contains($0.address) }.count
+        let summary = "\(count) of \(regional.count) selected"
+        return SettingsFeatureCard {
+            Button {
+                regionalListsExpanded.toggle()
+            } label: {
+                SettingsCardRow {
+                    Label("Regional lists", systemImage: "globe")
+                } trailing: {
+                    Text(summary).foregroundStyle(.secondary).monospacedDigit()
+                    Image(systemName: regionalListsExpanded ? "chevron.down" : "chevron.forward")
+                        .font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Regional lists")
+            .accessibilityValue(regionalListsExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
+
+            if regionalListsExpanded {
+                ForEach(regional) { list in
+                    SettingsCardDivider()
+                    listRow(list.address, name: list.name, detail: list.detail)
                 }
             }
         }

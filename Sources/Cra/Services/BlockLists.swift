@@ -20,6 +20,8 @@ final class BlockLists {
 
     @ObservationIgnored private var addresses: [String] = []
     @ObservationIgnored private var started = false
+    @ObservationIgnored private var loaded = false
+    private(set) var networkFailure: String?
     @ObservationIgnored private var refreshTimer: ScheduledWork?
     @ObservationIgnored private var clock: Scheduler = LiveScheduler.shared
     /// What the engine was last given: each address with its fetch date.
@@ -37,6 +39,8 @@ final class BlockLists {
     @ObservationIgnored private var downloadsEnabled = false
 
     nonisolated(unsafe) private static var lastDomains: [String]? // only accessed on queue
+
+    nonisolated(unsafe) private static var chromiumOwnsDomains = false // accessed on queue
 
     private init() {
         styles.totalCostLimit = 4 << 20
@@ -82,6 +86,7 @@ final class BlockLists {
                     (try? String(contentsOf: Self.cacheURL(address), encoding: .utf8)).flatMap(CachedBlocklist.init(text:))
                 }
                 DispatchQueue.main.async { [self] in
+                    loaded = true
                     for list in kept where addresses.contains(list.url) { cached[list.url] = list }
                     publish()
                     refreshDue(atLaunch: true)
@@ -105,12 +110,13 @@ final class BlockLists {
     func setDownloadsEnabled(_ enabled: Bool) {
         guard downloadsEnabled != enabled else { return }
         downloadsEnabled = enabled
+        publish()
         if enabled && started { refreshDue(atLaunch: true) }
     }
 
     /// Fetches the lists that are old, or that have no copy yet.
     private func refreshDue(atLaunch: Bool) {
-        CustomBlocklist.due(addresses, fetched: cached.mapValues(\.fetched), now: clock.now, atLaunch: atLaunch).forEach { fetch($0) }
+        CustomBlocklist.due(addresses, fetched: cached.filter { $0.value.hasNetworkSource }.mapValues(\.fetched), now: clock.now, atLaunch: atLaunch).forEach { fetch($0) }
     }
 
     /// Fetches (or reads) one list now. A failure keeps the copy it had.
@@ -123,7 +129,7 @@ final class BlockLists {
             let result: Result<CachedBlocklist, BlockListError> = await Task.detached(priority: .utility) {
                 outcome.flatMap { text in
                     let list = DesktopHidingRules.read(text, address: address, fetched: fetchedAt)
-                    guard !list.domains.isEmpty || !list.hidingRules.isEmpty else { return .failure(.noDomains) }
+                    guard !list.domains.isEmpty || !list.hidingRules.isEmpty || !list.networkRules.isEmpty else { return .failure(.noDomains) }
                     return .success(list)
                 }
             }.value
@@ -149,11 +155,13 @@ final class BlockLists {
 
     /// Gives the engine Cra's list with every added one, when that changed.
     private func publish() {
-        let key = [personal] + CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
+        guard loaded else { return }
+        let key = [personal, downloadsEnabled ? "on" : "off"] + CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
         guard key != publishedKey else { return }
         publishedKey = key
         let lists = addresses.compactMap { cached[$0] }
         let personalText = personal
+        let enabled = downloadsEnabled
         queue.async {
             if Self.bundled == nil {
                 let path = Bundle.main.path(forResource: "domains", ofType: "txt", inDirectory: "blocklist")
@@ -168,12 +176,74 @@ final class BlockLists {
                 styles.removeAllObjects()
                 hidingChanged?()
             }
-            if domains != Self.lastDomains {
-                CraCEFRuntime.setBlockedDomains(domains)
-                Self.lastDomains = domains
+            let sources = lists + [user]
+            let lines = sources.flatMap(\.networkRules)
+            if !ChromiumFilterLists.available || lines.isEmpty || !Self.chromiumOwnsDomains {
+                Self.setNativeDomains(domains)
+            }
+            if ChromiumFilterLists.available {
+                let useNetwork = enabled && !lines.isEmpty
+                let hosts = useNetwork ? CustomBlocklist.merged([Self.bundled ?? []] + sources.map(\.plainDomains)) : []
+                let rules = useNetwork ? DesktopNetworkRules.compile(domains: hosts, lines: lines) : []
+                do {
+                    let revision = try ChromiumFilterLists.publish(rules)
+                    DispatchQueue.main.async { [self] in
+                        guard publishedKey == key else { return }
+                        confirm(revision, key: key, hasNetworkRules: !lines.isEmpty, enabled: enabled, fallback: domains)
+                    }
+                } catch {
+                    ChromiumFilterLists.expectNetworkRules(false)
+                    Self.setNativeDomains(domains)
+                    Self.chromiumOwnsDomains = false
+                    DispatchQueue.main.async { [self] in
+                        if publishedKey == key { networkFailure = "Couldn’t save the network filters on this Mac." }
+                    }
+                }
             }
             CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")")
         }
+    }
+
+    /// Keep native host protection during startup and compilation. An acknowledgement means
+    /// Chromium has swapped rules atomically. A superseded acknowledgement cannot change the engine.
+    private func confirm(_ revision: String, key: [String], hasNetworkRules: Bool, enabled: Bool, fallback: [String]) {
+        networkFailure = nil
+        Task { [weak self] in
+            for _ in 0..<100 {
+                guard let self, publishedKey == key else { return }
+                let folder = ChromiumFilterLists.directory
+                if (try? String(contentsOf: folder.appendingPathComponent("applied"), encoding: .utf8)) == revision {
+                    queue.async {
+                        guard ChromiumFilterLists.isCurrent(revision) else { return }
+                        if hasNetworkRules && enabled {
+                            Self.setNativeDomains([])
+                            Self.chromiumOwnsDomains = true
+                        } else if !hasNetworkRules {
+                            Self.chromiumOwnsDomains = false
+                        }
+                        CraLog.note("network filter revision active: " + revision)
+                    }
+                    return
+                }
+                if (try? String(contentsOf: folder.appendingPathComponent("failed"), encoding: .utf8)) == revision { break }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            guard let self, publishedKey == key else { return }
+            queue.async {
+                guard ChromiumFilterLists.isCurrent(revision) else { return }
+                ChromiumFilterLists.expectNetworkRules(false)
+                Self.setNativeDomains(fallback)
+                Self.chromiumOwnsDomains = false
+            }
+            networkFailure = "Chromium couldn’t apply these network filters. The domain blocker is active. Try fewer lists and update again."
+        }
+    }
+
+    /// Only called on the publication queue.
+    nonisolated private static func setNativeDomains(_ domains: [String]) {
+        guard domains != lastDomains else { return }
+        CraCEFRuntime.setBlockedDomains(domains)
+        lastDomains = domains
     }
 
     /// A list as cra.log names it: its host, never the whole address (CraLog).
@@ -216,7 +286,7 @@ enum BlockListError: Error {
         case .status(let code): return "The server answered \(code). Cra tries again later."
         case .unreadable: return "Cra couldn’t read the file."
         case .tooBig: return "The list is bigger than 64 MB."
-        case .noDomains: return "Cra found no supported domain or element-hiding rules in this list."
+        case .noDomains: return "Cra found no supported domain, network or element-hiding rules in this list."
         }
     }
 }

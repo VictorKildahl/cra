@@ -496,6 +496,8 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// (or a parent domain) is on the blocked list are cancelled when they are third-party
 /// to the tab's top-level page. Main-frame navigations always load. Takes effect for
 /// the next request, any time, from any thread. Off until enabled.
+/// Chromium waits for the selected network rules in a newly loaded profile before navigating.
++ (void)setBundledNetworkRulesExpected:(BOOL)expected;
 + (void)setContentBlockingEnabled:(BOOL)enabled;
 + (BOOL)contentBlockingEnabled;
 /// Chrome's HTTPS-Only Mode ("Always use secure connections") in every profile:

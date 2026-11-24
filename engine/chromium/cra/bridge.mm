@@ -153,6 +153,12 @@
 #include "extensions/browser/extension_registrar.h"
 #include "chrome/browser/extensions/menu_manager.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/api/declarative_net_request/composite_matcher.h"
+#include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/views/controls/webview/cra_hosted_page.h"
@@ -245,6 +251,8 @@ NSString* g_extension_profiles = nil;
 int g_exit_code = 0;
 bool g_ready = false;
 bool g_quitting = false;
+// Published from the app’s filter queue. Chromium installs dynamic rules separately in each profile.
+std::atomic<bool> g_bundled_network_rules_expected{false};
 NSMutableArray<void (^)(void)>* g_ready_blocks = nil;
 // Chrome quits once nothing keeps it alive; in Chrome AppController does, which Cra's app replaces. Held from
 // start-up to Cra's quit.
@@ -2144,6 +2152,8 @@ bool HandleDebugMethod(content::WebContents* contents,
   // The page's DevTools protocol session, made on the first -sendDevToolsMethod:.
   std::unique_ptr<cra::PageSession> _session;
   NSString* _pendingURL;
+  NSString* _filterWaitingURL;
+  base::TimeTicks _filterWaitStarted;
   BOOL _waitingForPopup;
   BOOL _audioMuted;
   // A Boost's colorize, Arc's 6 comma-separated numbers; empty for none (#602).
@@ -2849,12 +2859,72 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
 
 #pragma mark Navigation
 
+// A new profile can create its first private page before its filter worker has
+// installed any rules. Wait for Chromium’s actual matcher before sending that page.
+- (BOOL)profileIsStartingFilters {
+  if (!g_bundled_network_rules_expected.load() || !cra_blocker::Enabled().load()) {
+    return NO;
+  }
+  constexpr char id[] = "nddccjlgchhhajchaphmkffkclfmcemb";
+  Profile* profile = Profile::FromBrowserContext(_contents->GetBrowserContext())->GetOriginalProfile();
+  auto* registry = extensions::ExtensionRegistry::Get(profile);
+  // An unavailable or policy-disabled helper uses the app’s domain fallback.
+  if (!registry->enabled_extensions().Contains(id)) {
+    return NO;
+  }
+  if (_isIncognito) {
+    bool allowed = false;
+    if (extensions::ExtensionsBrowserClient::Get()->IsolatedModeReplacesIncognito(profile) ||
+        (extensions::ExtensionPrefs::Get(profile)->ReadPrefAsBoolean(id, "incognito", &allowed) && !allowed)) {
+      return NO;
+    }
+  }
+  namespace dnr = extensions::declarative_net_request;
+  auto* service = dnr::RulesMonitorService::Get(profile);
+  auto* matcher = service ? service->ruleset_manager()->GetMatcherForExtension(id) : nullptr;
+  return !matcher || !matcher->GetMatcherWithID(dnr::kDynamicRulesetID);
+}
+
+- (void)resumeFilterNavigation {
+  if (!_filterWaitingURL || !_contents || _isClosed || _closeRequested || g_quitting) {
+    return;
+  }
+  if ([self profileIsStartingFilters]) {
+    if (base::TimeTicks::Now() - _filterWaitStarted < base::Seconds(20)) {
+      __weak CraBrowser* weakSelf = self;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        [weakSelf resumeFilterNavigation];
+      });
+      return;
+    }
+    NSString* url = _filterWaitingURL;
+    _filterWaitingURL = nil;
+    if ([_delegate respondsToSelector:@selector(browser:didFailLoadingURL:errorCode:)]) {
+      [_delegate browser:self didFailLoadingURL:url errorCode:net::ERR_BLOCKED_BY_CLIENT];
+    }
+    return;
+  }
+  NSString* url = _filterWaitingURL;
+  _filterWaitingURL = nil;
+  [self loadURL:url];
+}
+
 - (void)loadURL:(NSString*)url {
   if (!_contents) {
     _pendingURL = [url copy];
     return;
   }
   content::NavigationController::LoadURLParams params{GURL(UTF8(url))};
+  if (params.url.SchemeIsHTTPOrHTTPS() && [self profileIsStartingFilters]) {
+    bool already_waiting = _filterWaitingURL != nil;
+    _filterWaitingURL = [url copy];
+    if (!already_waiting) {
+      _filterWaitStarted = base::TimeTicks::Now();
+      [self resumeFilterNavigation];
+    }
+    return;
+  }
+  _filterWaitingURL = nil;
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
   // A new navigation, counted before Chrome ends the load still under way (which tells the app the page stopped
   // loading) and then starts this one: the app sees the new navigation's number first, as the CEF bridge has it.
@@ -2869,30 +2939,35 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
 }
 
 - (void)goBack {
+  _filterWaitingURL = nil;
   if (_contents && _contents->GetController().CanGoBack()) {
     _contents->GetController().GoBack();
   }
 }
 
 - (void)goForward {
+  _filterWaitingURL = nil;
   if (_contents && _contents->GetController().CanGoForward()) {
     _contents->GetController().GoForward();
   }
 }
 
 - (void)reload {
+  _filterWaitingURL = nil;
   if (_contents) {
     _contents->GetController().Reload(content::ReloadType::NORMAL, true);
   }
 }
 
 - (void)reloadIgnoringCache {
+  _filterWaitingURL = nil;
   if (_contents) {
     _contents->GetController().Reload(content::ReloadType::BYPASSING_CACHE, true);
   }
 }
 
 - (void)stopLoading {
+  _filterWaitingURL = nil;
   if (_contents) {
     _contents->Stop();
   }
@@ -4052,6 +4127,9 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
     }
   }
   g_document_start_params = all;
+}
++ (void)setBundledNetworkRulesExpected:(BOOL)expected {
+  g_bundled_network_rules_expected.store(expected);
 }
 + (void)setContentBlockingEnabled:(BOOL)enabled {
   cra_blocker::Enabled().store(enabled);

@@ -1,0 +1,38 @@
+diff --git a/extensions/browser/unpacked_installer.cc b/extensions/browser/unpacked_installer.cc
+--- a/extensions/browser/unpacked_installer.cc
++++ b/extensions/browser/unpacked_installer.cc
+@@ -10,3 +10,4 @@
++#include "base/base_paths.h"
+ #include "base/files/file_util.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+@@ -450,6 +451,29 @@
+         extension()->id(),
+         disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION);
+   }
++#if BUILDFLAG(IS_MAC)
++  // Provision Cra's signed filter once per regular profile. Chrome's normal
++  // installer applies policy checks and preserves later user choices.
++  if (!allow_incognito_access_.has_value() &&
++      extension()->id() == "nddccjlgchhhajchaphmkffkclfmcemb" &&
++      extension()->location() == mojom::ManifestLocation::kCommandLine &&
++      !ExtensionsBrowserClient::Get()->IsolatedModeReplacesIncognito(
++          browser_context_)) {
++    base::FilePath executable_dir;
++    bool previous_choice = false;
++    if (!prefs->ReadPrefAsBoolean(extension()->id(), "incognito",
++                                  &previous_choice) &&
++        base::PathService::Get(base::DIR_EXE, &executable_dir)) {
++      const auto bundled_path = executable_dir.DirName()
++                                    .AppendASCII("Resources")
++                                    .AppendASCII("blocklist")
++                                    .AppendASCII("chromium");
++      if (extension()->path() == bundled_path) {
++        set_allow_incognito_access(true);
++      }
++    }
++  }
++#endif
+   if (allow_file_access_.has_value()) {
+     prefs->SetAllowFileAccess(extension()->id(), *allow_file_access_);
+   }
