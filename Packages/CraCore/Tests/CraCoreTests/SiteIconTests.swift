@@ -60,3 +60,21 @@ struct SiteIconFetchTests {
         }
     }
 }
+
+/// Which bytes from a site are read as an SVG icon: SVG text, not a PDF or a web page.
+struct SiteIconSVGTests {
+    @Test func svgTextIsAnSVG() {
+        for text in [#"<svg xmlns="http://www.w3.org/2000/svg"/>"#, "\u{FEFF}  \n<svg viewBox='0 0 1 1'></svg>",
+                     #"<?xml version="1.0"?><!DOCTYPE svg><!-- logo --><svg xmlns="http://www.w3.org/2000/svg"/>"#] {
+            #expect(SiteIcon.isSVG(Data(text.utf8)), "\(text)")
+        }
+    }
+
+    @Test func otherBytesAreNot() {
+        let late = "<?xml version=\"1.0\"?>" + String(repeating: " ", count: 5000) + "<svg/>"
+        for text in ["%PDF-1.7\n", "<html><svg/></html>", "<?xml version=\"1.0\"?><rss/>", "<svgx/>", late, "", "   "] {
+            #expect(!SiteIcon.isSVG(Data(text.utf8)), "\(text.prefix(30))")
+        }
+        #expect(!SiteIcon.isSVG(Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])), "a PNG")
+    }
+}

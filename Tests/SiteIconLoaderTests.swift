@@ -20,6 +20,8 @@ enum SiteIconLoaderTests {
         ("deadline", aSiteThatHangsLetsGoAtTheDeadline),
         ("candidates", onlyThePagesBestIconsAreTried),
         ("redirect", aLocalSitesRedirectIsFollowed),
+        ("bomb", anIconClaimingAHugeSizeIsSkipped),
+        ("pdf", aPDFIsNoIcon),
     ]
 
     static func main() async {
@@ -181,6 +183,66 @@ enum SiteIconLoaderTests {
     /// Lets the main queue run what was queued on it (the loader's pump) and returns after.
     @MainActor private static func nextTurn() async {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in DispatchQueue.main.async { DispatchQueue.main.async { c.resume() } } }
+    }
+
+    /// A site's bytes are never decoded at the size they claim: a few KB claiming 20000 px took a GB and seconds.
+    @MainActor private static func anIconClaimingAHugeSizeIsSkipped() async {
+        let site = await LocalSite(pages: [
+            "/": .html(#"<link rel="icon" sizes="512x512" href="/huge.png">"#),
+            "/huge.png": .png(hugePNG(side: 20000)),
+            "/favicon.ico": .png(png(blue, side: 16)),
+        ])
+        let cache = FaviconCache(), loader = SiteIconLoader()
+        let start = Date()
+        await fetch(loader, "http://127.0.0.1:\(site.port)/", into: cache)
+        expect(Date().timeIntervalSince(start) < 1, "the huge icon is refused at once, not decoded: \(Date().timeIntervalSince(start)) s")
+        expect(site.paths == ["/", "/huge.png", "/favicon.ico"] && cache.image(forKey: "127.0.0.1").map(color) == blue,
+               "the next icon is stored instead: \(site.paths)")
+    }
+
+    /// Only bitmaps and SVG text are read: AppKit and ImageIO would also draw a site's PDF.
+    @MainActor private static func aPDFIsNoIcon() async {
+        let pdf = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 16, height: 16)
+        let ctx = CGContext(consumer: CGDataConsumer(data: pdf)!, mediaBox: &box, nil)!
+        ctx.beginPDFPage(nil)
+        ctx.setFillColor(CGColor(red: 1, green: 128 / 255, blue: 0, alpha: 1))
+        ctx.fill(box)
+        ctx.endPDFPage()
+        ctx.closePDF()
+        let site = await LocalSite(pages: [
+            "/": .html(#"<link rel="icon" sizes="64x64" href="/icon.pdf">"#),
+            "/icon.pdf": .init(type: "application/pdf", body: pdf as Data),
+            "/favicon.ico": .png(png(blue, side: 16)),
+        ])
+        // FaviconCache.png happens to refuse this PDF as well (no pixel size); the loader doesn't rely on it.
+        let svg = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>"#.utf8)
+        expect(!SiteIconLoader.isIcon(pdf as Data) && SiteIconLoader.isIcon(png(blue, side: 16)!) && SiteIconLoader.isIcon(svg),
+               "a PDF is no icon; a PNG and SVG text are")
+        let cache = FaviconCache(), loader = SiteIconLoader()
+        await fetch(loader, "http://127.0.0.1:\(site.port)/", into: cache)
+        expect(site.paths == ["/", "/icon.pdf", "/favicon.ico"] && cache.image(forKey: "127.0.0.1").map(color) == blue,
+               "the PDF is skipped for the next icon: \(site.paths) \(String(describing: cache.image(forKey: "127.0.0.1").map(color)))")
+    }
+
+    /// A black 1-bit PNG `side` px square, a few KB of zlib (as StoreTests' iconFilesAreDecodedSmall builds it).
+    private static func hugePNG(side: Int) -> Data {
+        func be32(_ v: UInt32) -> Data { withUnsafeBytes(of: v.bigEndian) { Data($0) } }
+        func crc32(_ d: Data) -> UInt32 {
+            var c: UInt32 = 0xFFFF_FFFF
+            for byte in d {
+                c ^= UInt32(byte)
+                for _ in 0..<8 { c = c & 1 == 1 ? (c >> 1) ^ 0xEDB8_8320 : c >> 1 }
+            }
+            return ~c
+        }
+        func chunk(_ type: String, _ body: Data) -> Data { let t = Data(type.utf8) + body; return be32(UInt32(body.count)) + t + be32(crc32(t)) }
+        let raw = side * (1 + (side + 7) / 8)  // every row: filter byte 0, then zero bits
+        let deflated = ((try? (Data(count: raw) as NSData).compressed(using: .zlib)) as Data?) ?? Data()
+        // zlib wraps the deflate stream: a header, and an Adler-32 that for zeros is (n mod 65521) << 16 | 1.
+        let zlib = Data([0x78, 0x01]) + deflated + be32(UInt32(raw % 65521) << 16 | 1)
+        let header = be32(UInt32(side)) + be32(UInt32(side)) + Data([1, 0, 0, 0, 0])
+        return Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + chunk("IHDR", header) + chunk("IDAT", zlib) + chunk("IEND", Data())
     }
 
     /// A square PNG of one colour, given as 0...255 components.

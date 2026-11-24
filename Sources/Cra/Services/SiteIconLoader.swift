@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// A site's icon for a row that shows none: sidebar tabs and favorites on screen, command-bar rows for
 /// the user's tabs, archive and history, and Library ▸ Boosts. Its home page's declared icons, then
@@ -70,8 +72,9 @@ final class SiteIconLoader {
         }
     }
 
-    /// The first of the home page's best icons that decodes. A page that answers with an error still
-    /// has /favicon.ico; a site that can't be reached is not asked again. Every request and redirect
+    /// The first of the home page's best icons that is `isIcon` and FaviconCache.png reads, which refuses one
+    /// claiming too many pixels before decoding it. A page that answers with an error still has
+    /// /favicon.ico; a site that can't be reached is not asked again. Every request and redirect
     /// passes SiteIcon.mayFetch, so a public page's icons never reach the local network.
     private nonisolated static func firstIcon(at origin: URL, session: URLSession) async -> Data? {
         let page: (data: Data, url: URL)?
@@ -81,10 +84,20 @@ final class SiteIconLoader {
         for url in candidates.prefix(candidateLimit) {
             guard !Task.isCancelled else { return nil }
             guard let data = try? await get(url, for: origin, limit: iconLimit, session: session)?.data, data.count <= iconLimit,
-                  let image = NSImage(data: data), let png = ZenImporter.faviconPNG(image) else { continue }
+                  isIcon(data), let png = FaviconCache.png(data) else { continue }
             return png
         }
         return nil
+    }
+
+    /// Whether a site's bytes may be read as an icon: a bitmap ImageIO knows, or SVG text. Not a PDF or
+    /// another format AppKit would draw when FaviconCache.png falls back to NSImage.
+    nonisolated static func isIcon(_ data: Data) -> Bool {
+        if let source = CGImageSourceCreateWithData(data as CFData, nil), let type = CGImageSourceGetType(source) {
+            // ImageIO names a PDF too (com.adobe.pdf), which is no image type.
+            return UTType(type as String)?.conforms(to: .image) == true
+        }
+        return SiteIcon.isSVG(data)
     }
 
     /// A 2xx response's body, cut off past `limit` bytes, and the address it came from after redirects;

@@ -38,6 +38,26 @@ public enum SiteIcon {
         return !isLocal(host: host) || isLocal(host: origin.host ?? "")
     }
 
+    /// Whether a site's bytes are an SVG: after a BOM and whitespace, an `<svg` element, or an XML prolog with
+    /// one in the first 4 KB. The loader reads only these and bitmaps, not a PDF that AppKit would also draw.
+    public static func isSVG(_ data: Data) -> Bool {
+        var head = Substring(String(decoding: data.prefix(4096), as: UTF8.self))
+        if head.first == "\u{FEFF}" { head = head.dropFirst() }
+        head = head.drop { $0.isWhitespace }
+        func element(at i: Substring.Index) -> Bool {
+            let rest = head[i...].dropFirst(4)
+            return head[i...].hasPrefix("<svg") && (rest.first.map { $0.isWhitespace || $0 == ">" || $0 == "/" } ?? false)
+        }
+        if let first = head.indices.first, element(at: first) { return true }
+        guard head.hasPrefix("<?xml") else { return false }
+        var from = head.startIndex
+        while let r = head.range(of: "<svg", range: from..<head.endIndex) {
+            if element(at: r.lowerBound) { return true }
+            from = r.upperBound
+        }
+        return false
+    }
+
     /// Whether `host` names the Mac itself or a machine on its network: localhost, an unqualified or
     /// `.local` name, and loopback, private, shared (100.64/10), link-local and unique-local addresses.
     public static func isLocal(host: String) -> Bool {

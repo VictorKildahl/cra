@@ -5,11 +5,9 @@ cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d /tmp/cra-site-icon-tests.XXXXXX)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 C=Packages/CraCore/Sources/CraCore
-# ZenImporter's 64 px cap, without the importers around it.
-{ echo "import AppKit"; echo "enum ZenImporter {"; sed -n '/static func faviconPNG/,/^    }/p' Sources/Cra/Services/Import/ZenImporter.swift; echo "}"; } > "$TEST_DIR/FaviconPNG.swift"
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
   "$C/SiteIconQueue.swift" "$C/SiteIcon.swift" "$C/FaviconKey.swift" "$C/FavoriteSelectionTint.swift" "$C/TabCustomIcon.swift" \
-  "$TEST_DIR/FaviconPNG.swift" Sources/Cra/Services/SiteIconLoader.swift Sources/Cra/Services/FaviconCache.swift \
+  Sources/Cra/Services/SiteIconLoader.swift Sources/Cra/Services/FaviconCache.swift \
   Sources/Cra/Services/Persistence.swift Sources/Cra/Services/CraLog.swift Sources/Cra/Perf/Perf.swift "$C"/Perf/*.swift \
   Tests/SiteIconLoaderTests.swift -o "$TEST_DIR/site-icon-tests"
 # Each test in a data folder of its own: they all fetch from 127.0.0.1, and the cache keeps icons on disk.
