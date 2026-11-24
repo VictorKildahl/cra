@@ -27,6 +27,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let statusBandDim = UIView()
     private var statusBandFill: String?
     var pagePushedBack = false
+    /// The chrome's moves under way: the sheet is put away when the last ends (`MobileSearchSheet.Settling`).
+    private var chromeMoves = MobileSearchSheet.Settling()
     /// The sheet is opening: keep the page as it is until the open animation lays it out, so a
     /// layout pass in between cannot apply the push-back in one frame.
     var pageOpening = false
@@ -443,6 +445,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func animateChrome(duration: TimeInterval, options: UIView.AnimationOptions) {
+        chromeMoves.began()
         UIView.animate(withDuration: duration, delay: 0, options: options.union([.beginFromCurrentState, .allowUserInteraction])) {
             self.pageOpening = false
             self.pageClosing = false
@@ -450,6 +453,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             self.bar.layoutIfNeeded()
             self.sheet.layoutIfNeeded()
         } completion: { _ in
+            // Only once every move has ended: one that moved nothing (a second keyboard notice) ends at once.
+            guard self.chromeMoves.ended() else { return }
             self.chromeSettled()
         }
     }
@@ -485,7 +490,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             pageOpening = false
             pageClosing = false
             layoutChrome()
-            chromeSettled()
+            if chromeMoves.running == 0 { chromeSettled() }
         }
     }
 

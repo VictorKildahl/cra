@@ -513,6 +513,10 @@ built release app with a test profile. Note anything that fails in the release's
   simulator records at a variable rate, so only a phone settles the timing; CraCore's
   `aLetGoSheetWaitsForTheKeyboardWhereItWasLeft` pins the hold.
 
+- **Closing the search sheet:** on a real iPhone beside Arc Search, open the sheet over a page and tap
+  above it: the field rides down on the keyboard into the + pill, and the bar's buttons come back as it
+  lands (`MobileSearchSheet.Settling`; the sheet vanished on the close's first frame).
+
 - **#572, the address turning editable:** on a real iPhone, tap the address in the page menu: the
   menu does not visibly close first. The editable field takes the capsule's place in the same
   panel and the keyboard lifts it from there, and the page behind does not zoom out or move: only

@@ -13,6 +13,23 @@ struct MobileChromeTests {
         #expect(MobileSearchSheet.top(screenHeight: 852, keyboardHeight: 291) == 259)
     }
 
+    /// The sheet is put away only when the last of the chrome's moves has ended. Closing, the keyboard's second
+    /// notice moves nothing and its move ends first, at once; it used to put the sheet away on the close's first frame.
+    @Test func theSheetIsPutAwayWhenTheLastMoveEnds() {
+        var settling = MobileSearchSheet.Settling()
+        settling.began() // the keyboard's frame change: the sheet goes down into the pill
+        settling.began() // its will-hide, which moves nothing
+        let willHideEnded = settling.ended()
+        #expect(!willHideEnded)
+        #expect(settling.running == 1)
+        let closeEnded = settling.ended()
+        #expect(closeEnded)
+        // An end with nothing running leaves it settled.
+        let extraEnded = settling.ended()
+        #expect(extraEnded)
+        #expect(settling.running == 0)
+    }
+
     /// In landscape the keyboard leaves little room: fewer rows, the field still on screen.
     @Test func theSheetKeepsItsFieldOnScreenInLandscape() {
         #expect(MobileSearchSheet.rowsInView(screenHeight: 852, keyboardHeight: 291, safeTop: 59) == 4)
