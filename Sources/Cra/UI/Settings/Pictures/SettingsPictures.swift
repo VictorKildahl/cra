@@ -117,6 +117,29 @@ extension SettingsArt {
         }
     }
 
+    /// The now-playing card at the bottom of the sidebar in the space's own colour, a selected tab's
+    /// white over it, with its play controls (#366).
+    static var nowPlayingTint: some View {
+        let t = ArtTint.mauve
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t, rows: 3) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+            ZStack {
+                RoundedRectangle(cornerRadius: 1.2, style: .continuous)
+                    .fill(t.theme.blendedToward(.white, NowPlayingTint.selectedWhite(dark: false)))
+                HStack(spacing: 1.6) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle().fill(t.ink.opacity(0.7)).frame(width: i == 1 ? 2.2 : 1.5, height: i == 1 ? 2.2 : 1.5)
+                    }
+                }
+            }
+            .frame(width: 13, height: 6)
+            .at(11.5, 42)
+        }
+    }
+
     /// The page fills the card, and the toolbar slides in over its top where the pointer is.
     static var autoHideToolbar: some View {
         let t = ArtTint.mint

@@ -178,7 +178,7 @@ enum ArcImporter {
             let created = refDate(it["createdAt"])
             let childIDs = it["childrenIds"] as? [String] ?? []
             if let tab = dataDict["tab"] as? [String: Any] {
-                guard let u = tab["savedURL"] as? String, !u.isEmpty else { return nil }
+                guard let u = tab["savedURL"] as? String, ImportedAddress.keeps(u) else { return nil }
                 return ImportedItem(customTitle: custom, pageTitle: tab["savedTitle"] as? String ?? "", url: u, createdAt: created,
                                     faviconPath: faviconFile(forItemID: id), liveItemURL: tagged(tab["liveItemID"], "url"))
             }
@@ -242,7 +242,7 @@ enum ArcImporter {
            let aitems = aroot["items"] as? [Any] {
             for case let e as [String: Any] in aitems {
                 guard let si = e["sidebarItem"] as? [String: Any], let d = si["data"] as? [String: Any],
-                      let tab = d["tab"] as? [String: Any], let u = tab["savedURL"] as? String, !u.isEmpty else { continue }
+                      let tab = d["tab"] as? [String: Any], let u = tab["savedURL"] as? String, ImportedAddress.keeps(u) else { continue }
                 let reason = (e["reason"] as? String) == "auto" ? ArchiveReason.auto : .manual
                 var spaceTitle: String?
                 if let src = e["source"] as? [String: Any], let sp = src["space"] as? [String: Any], let id = sp["_0"] as? String { spaceTitle = spaceTitleByID[id] }
@@ -377,7 +377,7 @@ enum DiaImporter {
                     guard let contents = tab["contents"] as? [[String: Any]] else { continue }
                     for content in contents {
                         guard let variant = content["variant"] as? [String: Any], let web = variant["webContent"] as? [String: Any],
-                              let w = web["_0"] as? [String: Any], let url = w["url"] as? String else { continue }
+                              let w = web["_0"] as? [String: Any], let url = w["url"] as? String, ImportedAddress.keeps(url) else { continue }
                         let item = ImportedItem(pageTitle: w["title"] as? String ?? "", url: url, createdAt: refDate(tab["creationDate"]))
                         if isFavorites { plan.favorites.append(item) } else { openTabs.append(item) }
                     }
@@ -394,7 +394,7 @@ enum DiaImporter {
                   let roots = root["roots"] as? [String: Any], let bar = roots["bookmark_bar"] as? [String: Any] else { continue }
             func convert(_ node: [String: Any]) -> ImportedItem? {
                 let name = node["name"] as? String ?? ""
-                if node["type"] as? String == "url", let u = node["url"] as? String {
+                if node["type"] as? String == "url", let u = node["url"] as? String, ImportedAddress.keeps(u) {
                     return ImportedItem(customTitle: name.isEmpty ? nil : name, pageTitle: name, url: u)
                 }
                 if node["type"] as? String == "folder" {

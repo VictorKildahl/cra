@@ -67,9 +67,12 @@ public enum AppLinks {
     /// a tab whose first navigation went to an app (external_protocol_handler.cc). It stayed as an empty
     /// about:blank window (#684).
     public static func closesRequester(currentURL: String, canGoBack: Bool) -> Bool {
-        guard !canGoBack else { return false }
-        return currentURL.isEmpty || currentURL == "about:blank" || currentURL.hasPrefix("about:blank#")
-            || currentURL.hasPrefix("about:blank?")
+        !canGoBack && isBlank(currentURL)
+    }
+
+    /// Whether `url` is no page at all: empty, or about:blank with or without a fragment or query.
+    static func isBlank(_ url: String) -> Bool {
+        url.isEmpty || url == "about:blank" || url.hasPrefix("about:blank#") || url.hasPrefix("about:blank?")
     }
 
     /// What `url` is for a link or window.open that wants a new tab, or a WebKit page's own

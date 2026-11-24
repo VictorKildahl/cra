@@ -41,6 +41,48 @@
      "_0": "work"
     }
    }
+  },
+  {
+   "sidebarItem": {
+    "id": "a3",
+    "title": null,
+    "childrenIds": [],
+    "createdAt": 800000000.0,
+    "data": {
+     "tab": {
+      "savedURL": "about:blank",
+      "savedTitle": "Blank"
+     }
+    }
+   },
+   "reason": "manual",
+   "archivedAt": 799999990.0,
+   "source": {
+    "space": {
+     "_0": "home"
+    }
+   }
+  },
+  {
+   "sidebarItem": {
+    "id": "a4",
+    "title": null,
+    "childrenIds": [],
+    "createdAt": 800000000.0,
+    "data": {
+     "tab": {
+      "savedURL": "blob:https://example.com/5f1c",
+      "savedTitle": "Download"
+     }
+    }
+   },
+   "reason": "manual",
+   "archivedAt": 799999990.0,
+   "source": {
+    "space": {
+     "_0": "home"
+    }
+   }
   }
  ]
 }

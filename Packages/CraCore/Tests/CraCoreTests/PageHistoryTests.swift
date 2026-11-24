@@ -46,6 +46,21 @@ struct PageHistoryTests {
         #expect(kept.contains(open) && kept.isSuperset(of: archive.prefix(25)) && kept.isDisjoint(with: archive.suffix(5)))
     }
 
+    /// A page nudged under 100 pt opens at the top; a real scroll is put back.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/656"))
+    func aSmallScrollOpensAtTheTop() {
+        #expect(!saved.restoresAtTop, "a file from before the scroll was kept")
+        var small = saved
+        small.scrollY = 99
+        #expect(small.restoresAtTop)
+        small.scrollY = 100
+        #expect(!small.restoresAtTop)
+        small.scrollY = 240
+        #expect(!small.restoresAtTop)
+        small.scrollY = nil
+        #expect(!small.restoresAtTop)
+    }
+
     /// The file round-trips (PageHistory/<tab id>.json).
     @Test func savesAndLoads() throws {
         let e = JSONEncoder()
@@ -53,5 +68,8 @@ struct PageHistoryTests {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
         #expect(try d.decode(PageHistory.self, from: e.encode(saved)) == saved)
+        var scrolled = saved
+        scrolled.scrollY = 42
+        #expect(try d.decode(PageHistory.self, from: e.encode(scrolled)) == scrolled)
     }
 }

@@ -41,7 +41,7 @@ final class PageMenuView: UIView {
     private let capsule = UIView()
     private let back = UIButton(type: .system)
     private let forward = UIButton(type: .system)
-    private let hostLabel = UILabel()
+    private let hostLabel = PageMenuAddressLabel()
     private let link = UIButton(type: .system)
     private let reload = UIButton(type: .system)
     private var tiles: [(MobilePageMenu.Tile, PageMenuTile)] = []
@@ -84,7 +84,10 @@ final class PageMenuView: UIView {
 
         for tile in MobilePageMenu.tiles(canSummarize: state.canSummarize) {
             let view = PageMenuTile(tile: tile)
-            view.addAction(UIAction { [weak self] _ in self?.delegate?.pageMenu(didPick: tile) }, for: .touchUpInside)
+            view.addAction(UIAction { [weak self, weak view] _ in
+                if let view { PressHaptics.release(view) }
+                self?.delegate?.pageMenu(didPick: tile)
+            }, for: .touchUpInside)
             tiles.append((tile, view))
             addSubview(view)
         }
@@ -96,11 +99,18 @@ final class PageMenuView: UIView {
             box.clipsToBounds = true
             addSubview(box)
         }
-        optionsHeader.addAction(UIAction { [weak self] _ in self?.toggleDisplayOptions() }, for: .touchUpInside)
+        optionsHeader.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            PressHaptics.release(self.optionsHeader)
+            self.toggleDisplayOptions()
+        }, for: .touchUpInside)
         optionsBox.addSubview(optionsHeader)
         for row in MobilePageMenu.displayOptions {
             let view = PageMenuRow(row: row, showsSeparator: true)
-            view.addAction(UIAction { [weak self] _ in self?.delegate?.pageMenu(didPick: row) }, for: .touchUpInside)
+            view.addAction(UIAction { [weak self, weak view] _ in
+                if let view { PressHaptics.release(view) }
+                self?.delegate?.pageMenu(didPick: row)
+            }, for: .touchUpInside)
             if row == .pageZoom {
                 view.onZoom = { [weak self] up in self?.delegate?.pageMenuZoom(up: up) }
                 view.onResetZoom = { [weak self] in self?.delegate?.pageMenuResetZoom() }
@@ -109,7 +119,11 @@ final class PageMenuView: UIView {
             options.append((row, view))
             optionsBox.addSubview(view)
         }
-        siteRow.addAction(UIAction { [weak self] _ in self?.delegate?.pageMenu(didPick: .siteSettings) }, for: .touchUpInside)
+        siteRow.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            PressHaptics.release(self.siteRow)
+            self.delegate?.pageMenu(didPick: .siteSettings)
+        }, for: .touchUpInside)
         siteBox.addSubview(siteRow)
 
         // "Arc scrubbed 22 trackers / Problems? Tap to restore original page": the whole card reloads
@@ -123,6 +137,7 @@ final class PageMenuView: UIView {
         footer.accessibilityTraits = .button
         footer.accessibilityLabel = MobilePageMenu.restoreHint
         footer.addTarget(self, action: #selector(withoutBlockersTapped), for: .touchUpInside)
+        footer.addTarget(self, action: #selector(footerPressed), for: .touchDown)
         addSubview(footer)
         scrubbed.isUserInteractionEnabled = false
         footer.addSubview(scrubbed)
@@ -142,6 +157,7 @@ final class PageMenuView: UIView {
         button.accessibilityIdentifier = id
         button.accessibilityLabel = label
         button.addTarget(self, action: action, for: .touchUpInside)
+        button.addTarget(self, action: #selector(capsuleTouchedDown(_:)), for: .touchDown)
         capsule.addSubview(button)
     }
 
@@ -184,7 +200,6 @@ final class PageMenuView: UIView {
     private func toggleDisplayOptions() {
         displayOptionsOpen.toggle()
         optionsHeader.setOpen(displayOptionsOpen)
-        UISelectionFeedbackGenerator().selectionChanged()
         delegate?.pageMenuDidChangeHeight()
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
             for (_, view) in self.options { view.alpha = self.displayOptionsOpen ? 1 : 0 }
@@ -203,7 +218,8 @@ final class PageMenuView: UIView {
         back.frame = CGRect(x: 25 - 22, y: mid - 22, width: 44, height: 44)
         forward.frame = CGRect(x: 65 - 22, y: mid - 22, width: 44, height: 44)
         link.frame = CGRect(x: width - 65 - 22, y: mid - 22, width: 44, height: 44)
-        reload.frame = CGRect(x: width - 27 - 22, y: mid - 22, width: 44, height: 44)
+        // The reload glyph reads a touch low in the capsule: its button sits 1 pt higher.
+        reload.frame = CGRect(x: width - 27 - 22, y: mid - 22 - 1, width: 44, height: 44)
         hostLabel.frame = CGRect(x: 92, y: 0, width: max(0, width - 184), height: capsule.bounds.height)
 
         let frames = MobilePageMenu.tileFrames(count: tiles.count, width: bounds.width)
@@ -213,7 +229,8 @@ final class PageMenuView: UIView {
         }
 
         let rowWidth = bounds.width - 2 * inset
-        let groupTop = inset + MobilePageMenu.capsuleHeight + MobilePageMenu.tilesGap + MobilePageMenu.tileHeight + MobilePageMenu.rowsGap
+        let groupTop = inset + MobilePageMenu.capsuleHeight + MobilePageMenu.tilesGap
+            + MobilePageMenu.tileSide(in: bounds.width) + MobilePageMenu.rowsGap
         let open = displayOptionsOpen
         optionsBox.frame = CGRect(x: inset, y: groupTop, width: rowWidth,
                                   height: CGFloat(open ? 1 + options.count : 1) * MobilePageMenu.rowHeight)
@@ -233,12 +250,43 @@ final class PageMenuView: UIView {
         }
     }
 
-    @objc private func backTapped() { delegate?.pageMenuGoBack() }
-    @objc private func forwardTapped() { delegate?.pageMenuGoForward() }
-    @objc private func reloadTapped() { delegate?.pageMenuReload() }
-    @objc private func linkTapped() { delegate?.pageMenuCopyLink() }
+    @objc private func backTapped() {
+        PressHaptics.release(back)
+        delegate?.pageMenuGoBack()
+    }
+
+    @objc private func forwardTapped() {
+        PressHaptics.release(forward)
+        delegate?.pageMenuGoForward()
+    }
+
+    @objc private func reloadTapped() {
+        PressHaptics.release(reload)
+        delegate?.pageMenuReload()
+    }
+
+    @objc private func linkTapped() {
+        PressHaptics.release(link)
+        delegate?.pageMenuCopyLink()
+    }
+
     @objc private func addressTapped() { delegate?.pageMenuEditAddress() }
+
+    @objc private func capsuleTouchedDown(_ button: UIButton) { PressHaptics.prepare(button) }
+
+    @objc private func footerPressed() { PressHaptics.press(footer) }
+
     @objc private func withoutBlockersTapped() { delegate?.pageMenuReloadWithoutBlockers() }
+}
+
+/// The address capsule's label: one very subtle tick as a finger comes down to edit the
+/// address, unless it is already being edited.
+final class PageMenuAddressLabel: UILabel {
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard !isFirstResponder else { return }
+        PressHaptics.press(self)
+    }
 }
 
 /// A square tile with its label underneath.
@@ -261,7 +309,7 @@ final class PageMenuTile: UIControl {
         icon.contentMode = .center
         box.addSubview(icon)
         label.text = tile.label
-        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.font = .systemFont(ofSize: 11, weight: .medium)
         label.textColor = Palette.primaryText
         label.textAlignment = .center
         label.adjustsFontSizeToFitWidth = true
@@ -283,15 +331,30 @@ final class PageMenuTile: UIControl {
         accessibilityTraits = pinned ? [.button, .selected] : .button
     }
 
+    /// Nudges the glyphs whose optical centre sits off the box's: the share arrow well up, the
+    /// folded page a little up, and the magnifier a touch down.
+    private var iconLift: CGFloat {
+        switch tile {
+        case .share: return -4
+        case .summarize: return -1
+        case .findOnPage: return 1
+        default: return 0
+        }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        box.frame = CGRect(x: 6, y: 0, width: bounds.width - 12, height: MobilePageMenu.tileHeight)
-        icon.frame = box.bounds
+        let side = bounds.width - 12
+        box.frame = CGRect(x: 6, y: 0, width: side, height: side)
+        icon.frame = box.bounds.offsetBy(dx: tile == .summarize ? -2 : 0, dy: iconLift)
         label.frame = CGRect(x: 0, y: box.frame.maxY + MobilePageMenu.tileLabelDrop - 10, width: bounds.width, height: 20)
     }
 
     override var isHighlighted: Bool {
-        didSet { box.alpha = isHighlighted ? 0.55 : 1 }
+        didSet {
+            PressHaptics.highlightChanged(for: self, from: oldValue, to: isHighlighted)
+            box.alpha = isHighlighted ? 0.55 : 1
+        }
     }
 
     private static func image(for tile: MobilePageMenu.Tile, pinned: Bool) -> UIImage? {
@@ -305,9 +368,11 @@ final class PageMenuTile: UIControl {
     }
 
     /// Arc Search's Summarize glyph: a page folded in three, as a zigzag of leaning panels.
+    /// Drawn 1 pt larger than the recording's 30 pt so it reads the same weight as the symbols.
     private static func foldedPage() -> UIImage {
-        let size = CGSize(width: 30, height: 30)
-        return UIGraphicsImageRenderer(size: size).image { _ in
+        let size = CGSize(width: 31, height: 31)
+        return UIGraphicsImageRenderer(size: size).image { context in
+            context.cgContext.scaleBy(x: size.width / 30, y: size.height / 30)
             let path = UIBezierPath()
             for (index, top) in [CGFloat(4), 11.6, 19.2].enumerated() {
                 let lean: CGFloat = index % 2 == 0 ? 3.5 : -3.5
@@ -384,12 +449,18 @@ final class PageMenuRow: UIControl {
                 button.accessibilityIdentifier = up ? "menu-zoom-in" : "menu-zoom-out"
                 button.accessibilityLabel = up ? "Zoom in" : "Zoom out"
                 button.addAction(UIAction { [weak self] _ in self?.onZoom?(up) }, for: .touchUpInside)
+                button.addAction(UIAction { [weak button] _ in
+                    if let button { PressHaptics.press(button) }
+                }, for: .touchDown)
                 stepper.addSubview(button)
             }
             zoomValue.titleLabel?.font = .systemFont(ofSize: 15, weight: .regular)
             zoomValue.tintColor = Palette.secondaryText
             zoomValue.accessibilityIdentifier = "menu-zoom-value"
             zoomValue.addAction(UIAction { [weak self] _ in self?.onResetZoom?() }, for: .touchUpInside)
+            zoomValue.addAction(UIAction { [weak zoomValue] _ in
+                if let zoomValue { PressHaptics.press(zoomValue) }
+            }, for: .touchDown)
             addSubview(zoomValue)
         }
         isAccessibilityElement = !isZoom
@@ -436,6 +507,9 @@ final class PageMenuRow: UIControl {
     }
 
     override var isHighlighted: Bool {
-        didSet { backgroundColor = isHighlighted && !isZoom ? Palette.barControlFill : .clear }
+        didSet {
+            PressHaptics.highlightChanged(for: self, from: oldValue, to: isHighlighted)
+            backgroundColor = isHighlighted && !isZoom ? Palette.barControlFill : .clear
+        }
     }
 }

@@ -118,16 +118,18 @@ enum ZenImporter {
     /// Older Zen wrote some flags as the strings "true"/"false".
     private static func flag(_ v: Any?) -> Bool { (v as? Bool) ?? ((v as? String) == "true") }
 
-    /// A pinned tab keeps the URL it was pinned with (Arc's savedURL), not where it navigated.
+    /// A pinned tab keeps the URL it was pinned with (Arc's savedURL), not where it navigated, unless
+    /// that page can't be imported: then it comes at the page it shows.
     private static func tabItem(_ t: [String: Any]) -> ImportedItem? {
         if flag(t["zenIsEmpty"]) || flag(t["zenIsGlance"]) { return nil }
         let entries = t["entries"] as? [[String: Any]] ?? []
         let current = entries.isEmpty ? nil : entries[min(max((t["index"] as? Int ?? entries.count) - 1, 0), entries.count - 1)]
         let home = (t["_zenPinnedInitialState"] as? [String: Any])?["entry"] as? [String: Any]
-        let entry = (flag(t["pinned"]) || flag(t["zenEssential"]) ? home : nil) ?? current
-        guard let url = entry?["url"] as? String, url.hasPrefix("http") else { return nil }
+        let pages = [flag(t["pinned"]) || flag(t["zenEssential"]) ? home : nil, current].compactMap { $0 }
+        guard let entry = pages.first(where: { ($0["url"] as? String).map(ImportedAddress.keeps) ?? false }),
+              let url = entry["url"] as? String else { return nil }
         let label = (t["zenStaticLabel"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        let title = (entry?["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? current?["title"] as? String ?? ""
+        let title = (entry["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? current?["title"] as? String ?? ""
         return ImportedItem(customTitle: label, pageTitle: title, url: url)
     }
 

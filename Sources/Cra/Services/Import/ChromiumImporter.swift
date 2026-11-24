@@ -86,7 +86,7 @@ enum ChromiumImporter {
         func convert(_ node: [String: Any]) -> ImportedItem? {
             let name = node["name"] as? String ?? ""
             let created = (node["date_added"] as? String).flatMap(Int64.init).map(date) ?? Date()
-            if node["type"] as? String == "url", let u = node["url"] as? String, u.hasPrefix("http") {
+            if node["type"] as? String == "url", let u = node["url"] as? String, ImportedAddress.keeps(u) {
                 return ImportedItem(customTitle: name.isEmpty ? nil : name, pageTitle: name, url: u, createdAt: created)
             }
             if node["type"] as? String == "folder" {
@@ -158,7 +158,7 @@ enum ChromiumImporter {
         return tabs.filter { !closedTabs.contains($0.key) && !closedWindows.contains($0.value.window) }
             .sorted { ($0.value.window, $0.value.index) < ($1.value.window, $1.value.index) }
             .compactMap { _, t -> ImportedItem? in
-                guard let nav = t.navs[t.selected] ?? t.navs.max(by: { $0.key < $1.key })?.value, nav.0.hasPrefix("http") else { return nil }
+                guard let nav = t.navs[t.selected] ?? t.navs.max(by: { $0.key < $1.key })?.value, ImportedAddress.keeps(nav.0) else { return nil }
                 return ImportedItem(pageTitle: nav.1, url: nav.0)
             }
     }

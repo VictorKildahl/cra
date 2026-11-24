@@ -1,25 +1,33 @@
 name: Engine updates
 
-# Daily check for a newer Chrome stable than the one Cra's engine is built from. When there is
-# one, scripts/check-engine-update.sh opens an issue with the commands that build it on the Mac
-# (docs/chromium-engine.md); the build itself does not run here.
+# Hourly: does the engine have every security fix Chrome stable has shipped? scripts/check-engine-update.sh reads
+# the builds Mac stable serves, the CVEs in the Chrome Releases posts and Chromium's commit messages (commits only,
+# ~40 s), and when the engine lacks a fix or stable is newer, opens or updates one issue naming the CVEs, their
+# severity and the build to move to, with the commands that build it on the Mac (docs/chromium-engine.md). The build
+# itself does not run here. Hourly because Chrome's 23 Nov 2026 critical fix (CVE-2026-134401) went unnoticed: the
+# daily check compared version numbers and the engine was on a newer Beta.
 on:
   schedule:
-    - cron: "23 6 * * *"
+    - cron: "23 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
   issues: write
 
+concurrency:
+  group: engine-updates
+  cancel-in-progress: false
+
 jobs:
   check:
-    name: Compare the engine with Chrome stable
+    name: Compare the engine with Chrome stable's security fixes
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check for a newer Chrome stable
+      - name: Check for missing Chrome security fixes
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/check-engine-update.sh --issue

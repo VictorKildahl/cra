@@ -186,6 +186,7 @@ final class LinkMenuTests: BrowserTestCase {
         host.tap()
         let field = app.textFields["search-field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["menu-host"].exists, "the menu gives way to the editable address")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         let value = field.value as? String ?? ""
         XCTAssertTrue(value.hasPrefix("data:text/html,") && value.contains("First"), "the page's address is in the field: \(value)")

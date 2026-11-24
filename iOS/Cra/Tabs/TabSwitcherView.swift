@@ -4,6 +4,8 @@ import UIKit
 protocol TabSwitcherDelegate: AnyObject {
     func tabSwitcher(_ switcher: TabSwitcherView, didSelect id: UUID)
     func tabSwitcher(_ switcher: TabSwitcherView, didClose id: UUID)
+    /// A tap on the row's background, away from the cards.
+    func tabSwitcherDidTapOutside(_ switcher: TabSwitcherView)
 }
 
 /// The tab switcher: every open tab as a card in one row (`MobileTabCarousel` places them).
@@ -111,11 +113,14 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
 
     private func card(at point: CGPoint) -> TabCardView? {
         // Newer cards are on top.
-        cards.reversed().first { $0.cardFrame.contains(point) }
+        cards.reversed().first { $0.cardFrame.contains(point) || $0.headerFrame.contains(point) }
     }
 
     @objc private func tapped(_ tap: UITapGestureRecognizer) {
-        guard let card = card(at: tap.location(in: self)) else { return }
+        guard let card = card(at: tap.location(in: self)) else {
+            delegate?.tabSwitcherDidTapOutside(self)
+            return
+        }
         delegate?.tabSwitcher(self, didSelect: card.tabID)
     }
 
@@ -212,6 +217,8 @@ final class TabCardView: UIView {
     private let icon = UIImageView()
     private let title = UILabel()
     private(set) var cardFrame: CGRect = .zero
+    /// The favicon and title above the card, which belong to it for a tap or a throw.
+    private(set) var headerFrame: CGRect = .zero
 
     init(tabID: UUID) {
         self.tabID = tabID
@@ -284,6 +291,7 @@ final class TabCardView: UIView {
 
         let side = MobileTabCarousel.headerIconSide * scale
         let headerY = frame.minY - MobileTabCarousel.headerGap * scale - side
+        headerFrame = CGRect(x: frame.minX, y: headerY - 1, width: frame.width, height: side + 2)
         icon.frame = CGRect(x: frame.minX + MobileTabCarousel.headerInset * scale, y: headerY, width: side, height: side)
         title.frame = CGRect(x: icon.frame.maxX + 7.5, y: headerY - 1, width: max(0, frame.maxX - icon.frame.maxX - 16), height: side + 2)
         icon.alpha = headerAlpha

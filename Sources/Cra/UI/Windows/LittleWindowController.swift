@@ -1993,15 +1993,23 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     /// The front one of the other Little Windows open on this Space (not a Peek, not minimized), in the
-    /// window server's order, front to back.
+    /// window server's order, front to back. One on another desktop isn't: it would switch macOS there (#738).
     private func frontLittleWindow() -> LittleWindowController? {
-        let others = app.littleWindows.filter { $0 !== self && !$0.isPeek && $0.window?.isVisible == true && $0.window?.isMiniaturized == false }
+        let others = app.littleWindows.filter { other in
+            guard other !== self, let w = other.window else { return false }
+            return LittleWindowReturn.canTakeKeyboard(isPeek: other.isPeek, visible: w.isVisible, miniaturized: w.isMiniaturized,
+                                                      onActiveSpace: w.isOnActiveSpace && !other.debugOnOtherDesktop)
+        }
         guard !others.isEmpty else { return nil }
         let order = (NSWindow.windowNumbers(options: []) ?? []).map(\.intValue)
         return others.min { a, b in
             (a.window.flatMap { order.firstIndex(of: $0.windowNumber) } ?? .max) < (b.window.flatMap { order.firstIndex(of: $0.windowNumber) } ?? .max)
         }
     }
+
+    /// Scenarios (cra://debug?littleOtherDesktop=): this window counts as on another desktop, which a test copy
+    /// can't make (#738).
+    var debugOnOtherDesktop = false
 
     /// Another Little Window closed while this one was next in front (#646): it comes forward with the keys.
     func takeKeyboard() {

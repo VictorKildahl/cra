@@ -85,6 +85,12 @@ final class TabStore {
     /// Where a flick up on the tab button goes: the tab looked at before this one.
     var previousTab: MobileTab? { document.previousTab }
 
+    /// The two tabs the button's preview shows: the previous one, then the one behind it.
+    var tabsBehindCurrent: [MobileTab] { document.tabsBehindCurrent }
+
+    /// The card the tab row opens focused on: the one to the left of the page on screen.
+    var switcherFocus: MobileTab? { document.switcherFocus }
+
     /// The open tab that opened `id`, through openers that have closed since.
     private func liveOpener(of id: UUID) -> WebPage? {
         var opener = pages[id]?.opener
@@ -204,7 +210,9 @@ final class TabStore {
 
     func snapshot(_ id: UUID) -> UIImage? {
         if let image = snapshots[id] { return image }
-        guard let image = UIImage(contentsOfFile: snapshotFile(id).path) else { return nil }
+        // A picture saved before captures were checked may be a black one: it is looked at once,
+        // here, and dropped rather than shown.
+        guard let image = UIImage(contentsOfFile: snapshotFile(id).path), !image.looksBlank else { return nil }
         snapshots[id] = image
         return image
     }
@@ -236,8 +244,15 @@ final class TabStore {
         guard let tab = (document.tabs + document.archived).first(where: { $0.id == page.tabID }), !tab.isIncognito,
               page.webView.backForwardList.currentItem != nil, let url = page.webView.url?.absoluteString,
               let state = page.webView.interactionState as? Data,
-              let data = try? JSONEncoder().encode(PageHistory(engine: .webKit, url: url, state: state, savedAt: now())) else { return }
+              let data = try? JSONEncoder().encode(PageHistory(engine: .webKit, url: url, state: state,
+                                                              scrollY: Self.scrollY(of: page.webView), savedAt: now())) else { return }
         try? data.write(to: historyFile(page.tabID), options: .atomic)
+    }
+
+    /// How far down the page is scrolled, from its content's top.
+    private static func scrollY(of webView: WKWebView) -> Double {
+        let scroll = webView.scrollView
+        return Double(max(0, scroll.contentOffset.y + scroll.adjustedContentInset.top))
     }
 
     /// Every page's place: the app is going to the background, where iOS may end it.

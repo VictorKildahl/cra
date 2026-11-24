@@ -873,6 +873,18 @@ final class SpaceListView: NSView, NSDraggingSource {
         for l in all.allObjects where l.ui === ui && l.spaceID == space { l.scrollToSelected() }
     }
 
+    /// Scenarios (cra://debug?rowPoint=<id>, #743): where a real pointer goes to rest on the middle of the
+    /// shown list's row for `itemID`, in top-left screen points, for scripts/scenario.sh's `click row <id> move`.
+    static func debugRowPoint(_ itemID: UUID, ui: SidebarUIState) -> NSPoint? {
+        for l in all.allObjects where l.ui === ui {
+            guard let row = l.views[.item(itemID)], let w = row.window, w.isVisible, !row.isHiddenOrHasHiddenAncestor,
+                  let top = NSScreen.screens.first?.frame.maxY else { continue }
+            let p = w.convertPoint(toScreen: row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil))
+            return NSPoint(x: p.x, y: top - p.y)
+        }
+        return nil
+    }
+
     /// Tests without the pointer (cra://debug?folderPreview=<id>): the folder's preview as if hovered.
     static func debugFolderPreview(_ folderID: UUID, ui: SidebarUIState) {
         for l in all.allObjects where l.ui === ui {

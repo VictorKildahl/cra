@@ -1,0 +1,21 @@
+# Settings ▸ Tabs ▸ "Player in the space's colour" (Ideas #366, whyady): the now-playing cards take the
+# sidebar's own colour under a selected tab's white instead of Arc's near-white or black. Off is Arc's, and
+# switching it recolours the cards at once on a dark space and a light one, and back.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Dark","emoji":"🌙","theme":{"colors":["#3A2F5B","#3A2F5B"],"intensity":0.5,"noise":0,"appearance":"dark","accent":"#3A2F5B","solid":true,"key":["#3A2F5B"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Light","emoji":"☀️","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+wait 1
+cra://debug?nowPlaying=state&label=arc-dark
+expect-log Cra nowPlaying\[arc-dark\] tint=arc fill=#09070E
+cra://debug?nowPlayingTint=theme
+wait 0.5
+cra://debug?nowPlaying=state&label=theme-dark
+expect-log Cra nowPlaying\[theme-dark\] tint=theme fill=#504C5E
+cra://action/space2
+wait 1
+cra://debug?nowPlaying=state&label=theme-light
+expect-log Cra nowPlaying\[theme-light\] tint=theme fill=#E7E8F6
+cra://debug?nowPlayingTint=arc
+wait 0.5
+cra://debug?nowPlaying=state&label=arc-light
+expect-log Cra nowPlaying\[arc-light\] tint=arc fill=#FBFBFE
