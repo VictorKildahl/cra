@@ -2130,7 +2130,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         peekParent?.syncPeekAddress()
         // Peek's bar takes the page's colour as the main window's does (#629): its top-right corner.
         if !loading, browser === self.browser {
-            ToolbarSampler.sample(browser) { [weak self, weak browser] hex in
+            ToolbarSampler.sample(browser, background: { [weak self] in self?.pageBackground }) { [weak self, weak browser] hex in
                 guard let self, let browser, browser === self.browser, !browser.isLoading else { return }
                 self.state.themeColor = hex
             }
@@ -2197,9 +2197,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) { state.themeColor = hex }
+    /// The page's own background as the engine last reported it ("" while a new page has none), for the bar's sample.
+    private var pageBackground = ""
     /// The page window trails the shell during a fast resize; the gap shows the page's colour
     /// (Arc's canvas while a new page has none yet).
     func browser(_ browser: CraBrowser, didReportBackgroundColor hex: String) {
+        if browser === self.browser { pageBackground = hex }
         shell.page.layer?.backgroundColor = (hex.isEmpty ? CraBrowser.pageCanvasColor : NSColor(Color(hex: hex))).cgColor
     }
     func browser(_ browser: CraBrowser, didChangeStatusMessage message: String) {}

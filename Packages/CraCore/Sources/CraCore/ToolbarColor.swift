@@ -46,6 +46,21 @@ public enum ToolbarSample {
     /// over another colour only tints it (Arc: mostly the colour below, some of the line's).
     public static let width = 2.0, height = 12.0
 
+    /// Until a page's first frame its view shows Arc's canvas (black while websites are dark, white while light;
+    /// engine 159.0.8154.13-16), and the load-end capture can land before that frame: a white page under dark
+    /// websites read black and kept a black bar until a reload. A reading of exactly the canvas is taken again
+    /// while the page's own background (root/body, reported by the engine; nil or "" before it has one) says it
+    /// isn't the canvas colour; a page whose background is that colour keeps the reading at once.
+    public static func readsOnlyTheCanvas(reading: String, canvas: String, background: String?) -> Bool {
+        guard reading.caseInsensitiveCompare(canvas) == .orderedSame else { return false }
+        guard let background, !background.isEmpty else { return true }
+        return background.caseInsensitiveCompare(canvas) != .orderedSame
+    }
+
+    /// How many more readings, and how far apart (seconds), before the canvas colour is taken as the page's: a page
+    /// that is the canvas colour at its top over another background still gets its bar within a second.
+    public static let canvasRetries = 4, canvasRetryDelay = 0.25
+
     /// A rectangle of a capture, in pixels from its top-left.
     public struct Patch: Equatable, Sendable {
         public var x, y, width, height: Int
