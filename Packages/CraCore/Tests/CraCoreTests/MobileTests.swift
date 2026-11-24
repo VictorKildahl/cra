@@ -1270,8 +1270,8 @@ struct MobileOnboardingTests {
         let fixed: CGFloat = 100, scalable: CGFloat = 640, available: CGFloat = 671
         // Cra Duo closed insets measured in build.md: top 0, bottom 34; design top padding 40.
         let top: CGFloat = 0, bottom: CGFloat = 34
-        let scale = MobileOnboarding.fitScale(available: available, fixed: fixed, scalable: scalable,
-                                             allowance: min(40 + top, bottom))
+        let scale = MobileOnboarding.fitScale(available: available, topInset: top, bottomInset: bottom,
+                                             heading: fixed - 40 - 24, scalable: scalable)
         #expect(scale < 1)
         #expect(abs(fixed + scalable * scale - available) < 1e-9)
     }
