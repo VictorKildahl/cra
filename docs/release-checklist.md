@@ -486,6 +486,11 @@ built release app with a test profile. Note anything that fails in the release's
   Summarize also on release, and the capsule only on release. Nothing with System Haptics off. The
   simulator plays no haptics; `BarHapticsTests` and `MenuHapticsTests` only count them.
 
+- **The pill's press:** on a real iPhone beside Arc Search, tap the New Tab pill quickly, then press and
+  hold it: it presses in under the finger (94 %, Arc Search's about 94.5 %) and comes back out without
+  growing past its size (it puffed up to 106 %). `PillPressTests` covers a held press; a quick tap's way
+  back needs an eye.
+
 - **#536:** on a TestFlight build, sign in to a site with a passkey saved in iCloud Keychain and
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in
   completes. The simulator only reaches the sheet (it has no Face ID enrolled or passkeys saved).
