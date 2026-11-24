@@ -243,9 +243,9 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                                       height: statusBar * size.width / max(full.width, 1))
             // Bounds and center, not frame: the card is rotated while dragging, and a frame set
             // through that rotation comes out smaller than the screen.
-            swipeNeighbour?.bounds = CGRect(origin: .zero, size: size)
-            swipeNeighbour?.center = center
-            swipeNeighbour?.layer.cornerRadius = 5 + 17 * p
+            flickCard?.bounds = CGRect(origin: .zero, size: size)
+            flickCard?.center = center
+            flickCard?.layer.cornerRadius = 5 + 17 * p
         }
         switch pan.state {
         case .began:
@@ -313,8 +313,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             flick.band = band
             // Above the bar: the card grows from the button itself, not out from behind it.
             view.addSubview(picture)
-            swipeNeighbour?.removeFromSuperview()
-            swipeNeighbour = picture
+            flickCard?.removeFromSuperview()
+            flickCard = picture
             place(0)
             // The page drops into a rounded card as soon as the drag starts, then follows the
             // hand into the corner.
@@ -346,7 +346,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .ended, .cancelled:
             barSwipeTarget = nil
             let generation = flick.generation
-            let picture = swipeNeighbour
+            let picture = flickCard
             let switches = pan.state == .ended && MobileSwipe.switchesToPreviousTab(dragUp: up, velocityUp: -pan.velocity(in: view).y)
             // Its lean's speed carries into the landing: read before the hand's clock stops.
             let spin = flick.swingRate
@@ -415,7 +415,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 } else {
                     picture?.removeFromSuperview()
                 }
-                if self.swipeNeighbour === picture { self.swipeNeighbour = nil }
+                if self.flickCard === picture { self.flickCard = nil }
                 self.flick.band = nil
                 self.flick.arrivingFill = nil
             }
@@ -512,7 +512,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
 
     /// The card hangs from the finger: straight until the hand pulls it sideways.
     private func applyFlickTilt() {
-        guard let card = swipeNeighbour else { return }
+        guard let card = flickCard else { return }
         card.transform = CGAffineTransform(rotationAngle: flick.swing)
         // A leaning card's corners reach above its own top, so its place gives way: no part of
         // it ever crosses the top of the screen.

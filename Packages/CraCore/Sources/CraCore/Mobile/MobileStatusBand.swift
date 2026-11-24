@@ -10,6 +10,13 @@ public enum MobileStatusBand {
         themeColor ?? underPage
     }
 
+    /// The band a tab brings to the tab row or a swipe, as hex: its page's own `fill` once that
+    /// page has loaded, else the top of the tab's picture (`pictureTop`). A page that has not
+    /// loaded reports nothing, or black, for the colour over it, so the picture comes first then.
+    public static func tabFill(pageFill: String?, pictureTop: String?, loaded: Bool) -> String? {
+        loaded ? pageFill ?? pictureTop : pictureTop ?? pageFill
+    }
+
     /// Whether the band shows: over a page shown full size, and not while the tab row is up,
     /// whose cards carry their own bands. The search sheet shrinks the band with the page instead
     /// of hiding it, so it does not come into this.

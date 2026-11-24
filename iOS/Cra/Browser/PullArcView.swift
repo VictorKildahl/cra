@@ -1,10 +1,12 @@
+import CraCore
 import UIKit
 
 /// The pull-to-refresh ring: a gradient arc that grows clockwise from the top, clear at its
 /// flat start. Its end ink goes from clear to the status bar's colour at 90 % as the pull fills,
 /// and a separate semicircular tip in that same ink sits on top of the stroke, so at the full
 /// circle the rounded end covers the start's seam. Reaching the line gives a clockwise bump,
-/// stronger the faster the pull, and a short pull unwinds back instead of fading.
+/// stronger the faster the pull, and a short pull unwinds back instead of fading. Its timing and
+/// spring are `MobilePullRing`'s.
 final class PullArcView: UIView {
     /// What the ring is doing after a release: it only ever plays one of these.
     private enum Playing { case bump, retract, success }
@@ -25,13 +27,12 @@ final class PullArcView: UIView {
     private var playFrom: CGFloat = 0
     private var playAt: CFTimeInterval = 0
     private var playDuration: TimeInterval = 0
-    private var bumpPeak: CGFloat = 0
-    private var bumpDecay: CGFloat = 8
+    private var bump = MobilePullRing.bump(speed: 0)
 
     /// The pull's speed in points a second, for the bump at the line.
     var speed: CGFloat = 0
 
-    /// The status bar's ink: white over a dark bar, dark grey over a light one.
+    /// The status bar's ink (`MobilePullRing.ink`).
     var color: UIColor = .white {
         didSet {
             guard color != oldValue else { return }
@@ -45,10 +46,8 @@ final class PullArcView: UIView {
     /// 0...1 through the pull. At 1 the ring is whole and gives its bump, once per crossing.
     var progress: CGFloat = 0 {
         didSet {
-            guard !isLeaving else { return }
-            let value = max(0, min(1, progress))
-            guard value != oldValue else { return }
-            render(value, fadeIn: true)
+            guard !isLeaving, progress != oldValue else { return }
+            render(progress)
         }
     }
 
@@ -108,8 +107,7 @@ final class PullArcView: UIView {
         guard rendered > 0.001 else { progress = 0; return }
         isLeaving = true
         stopBump(hide: true)
-        transform = .identity
-        play(.retract, from: rendered, for: Self.retractDuration)
+        play(.retract, from: rendered, for: MobilePullRing.retractDuration)
     }
 
     /// The pull reached the line: the solid second lap runs all the way round as the ring fades.
@@ -117,10 +115,12 @@ final class PullArcView: UIView {
         guard !isLeaving else { return }
         isLeaving = true
         stopBump(hide: false)
-        play(.success, from: loopExtra, for: Self.successDuration)
+        play(.success, from: loopExtra, for: MobilePullRing.successDuration)
     }
 
-    private func render(_ raw: CGFloat, fadeIn: Bool) {
+    /// Draws the ring `raw` (0...1) of the way round. While the finger pulls, it fades in over
+    /// the first few points; unwinding, it stays whole until it is gone.
+    private func render(_ raw: CGFloat) {
         let value = max(0, min(1, raw))
         rendered = value
         // Follow the finger frame for frame: no implicit easing on the layer's own changes.
@@ -131,13 +131,13 @@ final class PullArcView: UIView {
         fadeInk(value)
         gradient.locations = [NSNumber(value: 0), NSNumber(value: Double(max(value, 0.001)))]
         CATransaction.commit()
-        alpha = fadeIn ? min(1, value / 0.08) : (value > 0 ? 1 : 0)
+        alpha = isLeaving ? (value > 0 ? 1 : 0) : min(1, value / 0.08)
         if value < 0.999 {
             stopBump(hide: true)
             wasComplete = false
         } else if !wasComplete {
             wasComplete = true
-            bump()
+            startBump()
         }
     }
 
@@ -203,21 +203,12 @@ final class PullArcView: UIView {
 
     /// At the line the ring starts a second lap over the first. Its length springs out and back,
     /// its peak growing with how fast the pull was going.
-    private func bump() {
+    private func startBump() {
         guard !isLeaving else { return }
         stopBump(hide: true)
-        let fast = min(1, max(0, speed) / 2000)
-        bumpPeak = (1 + 29 * fast) * .pi / 180
-        // A slow pull damps at once; a faster one lets the spring swing again.
-        bumpDecay = 8 - 5 * fast
-        play(.bump, from: 0, for: Self.bumpDuration)
+        bump = MobilePullRing.bump(speed: speed)
+        play(.bump, from: 0, for: MobilePullRing.bumpDuration)
     }
-
-    private static let bumpDuration: TimeInterval = 0.25
-    private static let successDuration: TimeInterval = 0.3
-    private static let retractDuration: TimeInterval = 0.3
-    /// How far the second lap's end turns as it fades out on a full pull.
-    private static let successTurn: CGFloat = .pi * 0.6
 
     private func play(_ animation: Playing, from: CGFloat, for duration: TimeInterval) {
         stopPlaying()
@@ -234,31 +225,28 @@ final class PullArcView: UIView {
         let t = min(1, (CACurrentMediaTime() - playAt) / playDuration)
         switch playing {
         case .bump:
-            // The first out-swing is exactly the peak; each later swing is smaller, and disappears
-            // quickly for a slow pull.
-            renderLoop(bumpPeak * (exp(-bumpDecay * t) / exp(-bumpDecay * 0.25)) * abs(sin(2 * .pi * t)))
+            renderLoop(MobilePullRing.lap(bump, at: t))
             guard t >= 1 else { return }
             stopPlaying()
             stopBump(hide: true)
         case .retract:
-            render(playFrom * (1 - Self.eased(t)), fadeIn: false)
+            render(playFrom * (1 - Self.eased(t)))
             guard t >= 1 else { return }
             stopPlaying()
             isLeaving = false
             progress = 0
         case .success:
             let eased = Self.eased(t)
-            renderLoop(playFrom + Self.successTurn * eased)
+            renderLoop(playFrom + MobilePullRing.successTurn * eased)
             alpha = 1 - eased
             guard t >= 1 else { return }
             stopPlaying()
             alpha = 0
             stopBump(hide: true)
-            transform = .identity
             isLeaving = false
             progress = 0
         case nil:
-            stopPlaying()
+            break
         }
     }
 

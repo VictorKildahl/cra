@@ -497,7 +497,7 @@ built release app with a test profile. Note anything that fails in the release's
   a heavier tick; pushing the pull back up ticks down through them again, and past the line the pull can
   go further in silence. Pushing it back past the top hands the drag to the page's scrolling, so it
   continues without lifting. Letting go plays one medium impact as the page reloads; on a full pull the
-  solid second lap turns 80° in 0.2 s as it fades, and short of the line it unwinds back to the top. A
+  solid second lap turns 108° in 0.3 s as it fades, and short of the line it unwinds back to the top. A
   short pull and one dragged back up before letting go are silent. Nothing with System Haptics off.
   `MobilePullHapticsTests` pins the sequence; `PullHapticsTests` counts the ticks and checks the band
   meets the page.

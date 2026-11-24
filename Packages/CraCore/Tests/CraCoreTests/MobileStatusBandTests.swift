@@ -18,4 +18,14 @@ struct MobileStatusBandTests {
         #expect(!MobileStatusBand.shown(hasPage: false, switching: false))
         #expect(!MobileStatusBand.shown(hasPage: true, switching: true))
     }
+
+    /// A tab's band in the row or a swipe: its page's colour once it has loaded, its picture's
+    /// top before then, and whichever there is when the other is missing.
+    @Test func aTabsBandComesFromItsPageOnceLoaded() {
+        #expect(MobileStatusBand.tabFill(pageFill: "#7F6BAB", pictureTop: "#FFFFFF", loaded: true) == "#7F6BAB")
+        #expect(MobileStatusBand.tabFill(pageFill: "#000000", pictureTop: "#7F6BAB", loaded: false) == "#7F6BAB")
+        #expect(MobileStatusBand.tabFill(pageFill: nil, pictureTop: "#7F6BAB", loaded: true) == "#7F6BAB")
+        #expect(MobileStatusBand.tabFill(pageFill: "#7F6BAB", pictureTop: nil, loaded: false) == "#7F6BAB")
+        #expect(MobileStatusBand.tabFill(pageFill: nil, pictureTop: nil, loaded: false) == nil)
+    }
 }

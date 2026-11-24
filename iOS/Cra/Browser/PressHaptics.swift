@@ -12,7 +12,6 @@ enum PressHaptics {
     private static let soft = UIImpactFeedbackGenerator(style: .soft)
     private static let medium = UIImpactFeedbackGenerator(style: .medium)
     private static let heavy = UIImpactFeedbackGenerator(style: .heavy)
-    private static let pull = UIImpactFeedbackGenerator(style: .light)
     private static let selection = UISelectionFeedbackGenerator()
     private static weak var counter: UIView?
     private static var total = 0
@@ -60,13 +59,14 @@ enum PressHaptics {
         press(view)
     }
 
-    /// Pull to refresh moving through a detent: the tick `MobilePullHaptics` asked for, from
-    /// nearly silent to the strongest at the line. The line's own tick is a firmer impact.
+    /// Pull to refresh moving through a detent: the tick `MobilePullHaptics` asked for, a light
+    /// impact from nearly silent upwards. The line's own tick is a heavy impact at full strength
+    /// instead, firmer than any light one, so its `intensity` is not used.
     static func pullDetent(_ tick: MobilePullHaptics.Tick) {
         if tick.isFinal {
             heavy.impactOccurred(intensity: 1)
         } else {
-            pull.impactOccurred(intensity: CGFloat(tick.intensity))
+            light.impactOccurred(intensity: CGFloat(tick.intensity))
         }
         count()
     }
@@ -77,10 +77,12 @@ enum PressHaptics {
         count()
     }
 
-    /// Warms the pull's first tick and its heavier one at the line, so both play without a delay.
+    /// Warms the pull's ticks, the heavier one at the line and the release's, so none of them
+    /// plays late.
     static func preparePull() {
-        pull.prepare()
+        light.prepare()
         heavy.prepare()
+        medium.prepare()
     }
 
     private static func tick(for view: UIView, edge: MobilePressHaptics.Edge) -> MobilePressHaptics.Tick? {
