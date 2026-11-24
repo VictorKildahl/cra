@@ -20,6 +20,9 @@ import Foundation
 ///   and a mixed site's page (YouTube) is asked about its protected video
 ///   (docs/protected-media.md). The scripts and how a frame's request reaches the top frame are
 ///   CraCore's `WidevineSignal`, on the same per-launch event name.
+/// - `drmFailed`, `drmFailNext()`: Widevine failed to play in any of the page's frames (a licence
+///   refused, keys that can't play, a licence request no one answered): the site moves to
+///   Safari's engine (`WidevineSignal`, docs/protected-media.md).
 /// - `lt`: the top frame's long tasks (50 ms or more) for the performance recorder (GitHub #91):
 ///   a count, the total and the last 100 durations, which Cra reads and resets for the visible
 ///   tab every few seconds. No attribution, no addresses; the observer only runs when a long
@@ -46,12 +49,23 @@ enum PageScript {
     })();
     """
 
-    /// The page's world, in both engines: the Widevine request wrapper.
-    static let mainWorld = WidevineSignal.pageWorld(channel: channel)
+    /// The page's world, in both engines: the Widevine request wrapper and the watch on Widevine
+    /// that fails. CRA_WIDEVINE_KEY_SYSTEMS=<prefix,prefix> watches more key systems
+    /// (a scenario's Clear Key) and CRA_WIDEVINE_ANSWER_MS shortens the wait for a licence.
+    static let mainWorld: String = {
+        let env = ProcessInfo.processInfo.environment
+        let extra = (env["CRA_WIDEVINE_KEY_SYSTEMS"] ?? "").split(separator: ",").map(String.init)
+        let wait = env["CRA_WIDEVINE_ANSWER_MS"].flatMap(Int.init) ?? WidevineSignal.answerWithin
+        return WidevineSignal.pageWorld(channel: channel, keySystems: WidevineSignal.failingKeySystems + extra, answerWithin: wait)
+    }()
 
     /// Asked in Cra's isolated world of a mixed site's Chromium page, and left waiting: it answers
     /// with the page's address the next time the page asks for Widevine, in any frame.
     static let protectedVideoRequest = WidevineSignal.nextRequest
+
+    /// Asked in Cra's isolated world of a Chromium page whose site may move, and left waiting: it
+    /// answers with the page's address when Widevine fails there, in any frame.
+    static let widevineFailure = WidevineSignal.nextFailure
 
     /// Cra's isolated world.
     static let isolatedWorld = """

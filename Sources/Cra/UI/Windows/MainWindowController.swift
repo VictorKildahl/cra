@@ -4812,9 +4812,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// The Site Control Center's Safari's Engine switch: the site plays in WebKit (or Chromium)
     /// from now on, and the focused page opens again there. Choosing it is knowing about it: no toast.
     private func chooseSafariEngine(_ on: Bool, for url: String) {
-        PageEngines.choose(on ? .webKit : .chromium, for: url)
-        if on, let service = PageEngines.sites.serviceName(for: url) { PageEngines.told(service) }
-        if let id = browsers.visibleTabID { browsers.reopenInItsEngine(id) }
+        guard let id = browsers.visibleTabID else { return PageEngines.choose(on ? .webKit : .chromium, for: url) }
+        guard on else {
+            PageEngines.choose(.chromium, for: url)
+            return browsers.reopenInItsEngine(id)
+        }
+        // The page arrives signed in: its cookies go along (BrowserManager.moveSiteToSafariEngine).
+        browsers.moveSiteToSafariEngine(id, url: url)
+        if let service = PageEngines.sites.serviceName(for: url) { PageEngines.told(service) }
     }
 
     /// The help centre's page on why Spotify, Netflix and the others play in Safari's engine.

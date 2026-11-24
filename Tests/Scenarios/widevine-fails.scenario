@@ -1,0 +1,67 @@
+# Widevine that fails moves its site to Safari's engine by itself (WidevineSignal, docs/protected-media.md):
+# the services that want Verified Media Path refuse Cra's Chromium at the licence, and every one of them takes
+# FairPlay in WebKit. clearkey.html plays Clear Key, which this run watches as it would Widevine
+# (CRA_WIDEVINE_KEY_SYSTEMS), so its licence can be refused on purpose, with no network and no account.
+# Covers: a licence that works, and asking without playing, leave the page in Chromium; a refused licence and
+# one never answered move the site, signed in (Chromium's cookie goes along); the Site Control Center's switch
+# takes it back for good, so failing again there keeps it in Chromium.
+# No & in a script: it ends the cra:// query.
+env CRA_WIDEVINE_KEY_SYSTEMS=org.w3.clearkey
+env CRA_WIDEVINE_ANSWER_MS=1500
+# A second site, for the licence no one answers: ${MUSIC} is the fixture server as nts.live.
+arg --host-resolver-rules=MAP nts.live 127.0.0.1
+# Media keys need a secure context, which plain http to a host other than localhost isn't.
+arg --unsafely-treat-insecure-origin-as-secure=${MUSIC}
+budget rss=900 stalls50=40
+pace 0.5
+
+# A licence that works: the film plays in Chromium, and nothing moves (its timer included).
+cra://open?url=${ORIGIN}/clearkey.html?n=a
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.cookie='session=chromium; max-age=3600',play('good')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"licensed"
+# Asking for the key system without playing (a fingerprinting script) is nothing either.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"ask()","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"asked only"
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'a: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"a: Clear Key a, chromium, session=chromium"
+reject-log Widevine failed
+
+# A refused licence: the site moves to WebKit, at its address and signed in.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"play('bad')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"refused"
+expect-log Widevine failed on 127\.0\.0\.1: moves the site to Safari's engine
+expect-log copies 1 cookies of 127\.0\.0\.1 to WebKit
+expect-log moves to WebKit for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'moved: '+report()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"moved: Clear Key a, webkit, session=chromium"
+
+# Taken back with the switch, the site is kept in Chromium: a refused licence there moves it no more.
+cra://debug?safariEngine=off
+expect-log moves to Chromium for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"play('bad').then(r=>'kept '+r)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"kept refused"
+wait 2
+cra://debug?isolatedJS=['kept',window.__cra.drmFailed===true,'userAgentData' in navigator].join(' ')
+expect-log Cra isolatedJS → .*"value":"kept true true"
+
+# Switched on again, the site plays in WebKit; switched off, it's kept again.
+cra://debug?safariEngine=on
+expect-log moves to WebKit for 127\.0\.0\.1, as chosen
+wait 2
+cra://debug?safariEngine=off
+expect-log moves to Chromium for 127\.0\.0\.1, as chosen
+wait 2
+
+# Another site whose licence request no one answers moves by itself. (WebKit can't reach nts.live, which only
+# Chromium maps here: the move is what counts.)
+cra://open?url=${MUSIC}/clearkey.html?n=b
+expect-log loaded nts\.live \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"play('none')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"asked"
+expect-log Widevine failed on nts\.live: moves the site to Safari's engine
+expect-log moves to WebKit for nts\.live, as chosen
+cra://debug?checkStore=1

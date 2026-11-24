@@ -321,6 +321,12 @@ built release app with a test profile. Note anything that fails in the release's
   of youtube.com"; Google's stay in Chromium), the film goes on from where it was, and its quality menu offers
   more than 480p. An ordinary video opened in that tab is Chromium's again, extensions and all.
   The Chromium session is still signed in afterwards.
+- **Widevine that fails** (docs/protected-media.md; it takes an account, which widevine-fails.scenario's Clear Key
+  fixture can't stand in for): signed in in Chromium to a DRM service that isn't listed (Viaplay, Zattoo or RTL+),
+  play a film. Within seconds the tab opens again in WebKit, signed in (cra.log: "Widevine failed on <site>: moves the
+  site to Safari's engine", then "copies N cookies"), "<site> plays with Safari's engine" shows, and the film plays.
+  The Site Control Center's switch off takes it back to Chromium, and playing there again leaves it there. Shaka
+  Player's Widevine demo (shaka-player-demo.appspot.com), which plays in Chromium, doesn't move.
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
