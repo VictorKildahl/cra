@@ -1,0 +1,80 @@
+{
+  "releases": [
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/158.0.8127.37/releases/1",
+      "serving": {
+        "startTime": "2026-11-23T20:45:38.712280Z"
+      },
+      "fraction": 0.495,
+      "version": "158.0.8127.37"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/158.0.8127.38/releases/1",
+      "serving": {
+        "startTime": "2026-11-23T20:45:38.712280Z"
+      },
+      "fraction": 0.2475,
+      "version": "158.0.8127.38"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/158.0.8127.88/releases/1",
+      "serving": {
+        "startTime": "2026-11-23T20:45:38.712280Z"
+      },
+      "fraction": 0.2475,
+      "version": "158.0.8127.88"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/158.0.8127.89/releases/1",
+      "serving": {
+        "startTime": "2026-11-23T20:45:38.712280Z"
+      },
+      "fraction": 1,
+      "version": "158.0.8127.89"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/157.0.8103.81/releases/1",
+      "serving": {
+        "startTime": "2026-11-23T20:45:38.712280Z"
+      },
+      "fraction": 0.005,
+      "version": "157.0.8103.81"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/158.0.8127.37/releases/2",
+      "serving": {
+        "startTime": "2026-11-23T20:10:48.687587Z",
+        "endTime": "2026-11-23T20:45:38.712280Z"
+      },
+      "fraction": 0.99,
+      "version": "158.0.8127.37"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/157.0.8103.79/releases/1",
+      "serving": {
+        "startTime": "2026-11-19T20:04:45.275222Z",
+        "endTime": "2026-11-23T20:10:48.687587Z"
+      },
+      "fraction": 0.495,
+      "version": "157.0.8103.79"
+    },
+    {
+      "name": "chrome/platforms/mac/channels/stable/versions/159.0.8154.13/releases/1795028027",
+      "serving": {
+        "startTime": "2026-11-18T18:53:47.121342Z"
+      },
+      "fraction": 0.005,
+      "fractionGroup": "200",
+      "pinnable": false,
+      "rolloutData": [
+        {
+          "rolloutName": "159.0.8154.13 Rollout",
+          "tag": [
+            "rollout"
+          ]
+        }
+      ],
+      "version": "159.0.8154.13"
+    }
+  ]
+}

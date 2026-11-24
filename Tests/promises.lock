@@ -1662,6 +1662,14 @@
 #737   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
 #740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteKeepsItsPage  cf0f18574cfc
 #740   Tests/Scenarios/favorite-close-keeps-page.scenario  064e7c9c632b
+#742   Packages/CraCore/Tests/CraCoreTests/ImportedAddressTests.swift::keeps  d12bf4d6cfe2
+#742   Packages/CraCore/Tests/CraCoreTests/ImportedAddressTests.swift::leavesOut  029e2c535e51
+#742   Tests/StoreTests.swift::arcKeepsAnyAddress  202443ef7702
+#742   Tests/StoreTests.swift::firefoxImport  fb99d70755bf
+#742   Tests/StoreTests.swift::safariImport  e648939d04ea
+#742   Tests/StoreTests.swift::yabKeepsAnyAddress  beb119ce4cd6
+#742   Tests/StoreTests.swift::zenImport  aee71e143f82
+#743   Tests/Scenarios/folder-preview-adjacent.scenario  c80a395285c5
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

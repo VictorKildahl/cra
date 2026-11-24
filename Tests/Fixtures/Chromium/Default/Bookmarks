@@ -31,6 +31,43 @@
      "type": "url",
      "name": "Local",
      "url": "file:///etc/hosts"
+    },
+    {
+     "type": "folder",
+     "name": "Tools",
+     "children": [
+      {
+       "type": "url",
+       "name": "Bookmarklet",
+       "url": "javascript:void(document.title)"
+      },
+      {
+       "type": "url",
+       "name": "Settings",
+       "url": "chrome://settings/"
+      }
+     ]
+    },
+    {
+     "type": "folder",
+     "name": "Blank",
+     "children": [
+      {
+       "type": "url",
+       "name": "Blank",
+       "url": "about:blank"
+      },
+      {
+       "type": "url",
+       "name": "New Tab",
+       "url": "chrome://newtab/"
+      },
+      {
+       "type": "url",
+       "name": "Download",
+       "url": "blob:https://example.com/5f1c"
+      }
+     ]
     }
    ]
   },

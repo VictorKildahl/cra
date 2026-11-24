@@ -72,7 +72,8 @@ final class FolderPreviewController {
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, !self.panelHovered, self.anchor?.isHovered != true, !self.extended else { return }
-                self.close()
+                // The pointer moved on, maybe to the next folder, whose preview is on its way: let it come (#743).
+                self.close(keepingNext: true)
             }
         }
         closeWork = work
@@ -119,8 +120,10 @@ final class FolderPreviewController {
         extended = true
     }
 
-    func close(restoreFocus: Bool = true) {
-        showWork?.cancel()
+    /// `keepingNext`: a preview another folder's hover has on its way still comes. Moving straight to the
+    /// folder above or below lost it, as closing this one cancelled the next one's open (#743).
+    func close(restoreFocus: Bool = true, keepingNext: Bool = false) {
+        if !keepingNext { showWork?.cancel() }
         closeWork?.cancel()
         guard let panel, isOpen else { folderID = nil; return }
         let wasKey = panel.isKeyWindow

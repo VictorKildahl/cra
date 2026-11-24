@@ -2,8 +2,8 @@
 # Claude Code PreToolUse hook (Bash): before a release tag (vX.Y.Z) is pushed, checks that the
 # release ships the newest engine (the file keeps its CEF-era name: .claude/settings.json runs it). Blocks
 # (exit 2) when
-#   - Chrome's newest stable for macOS is newer than the engine scripts/fetch-engine.sh pins
-#     (scripts/check-engine-update.sh --check), or
+#   - the engine scripts/fetch-engine.sh pins lacks a security fix Chrome stable has shipped, or Chrome stable for
+#     macOS is newer (scripts/check-engine-update.sh --check), or
 #   - the pinned ENGINE_RELEASE lacks the Apple silicon or the Intel archive on GitHub, so the
 #     Release workflow's build.sh would fail to download it.
 # CRA_ALLOW_OLD_ENGINE=1 on the push skips the first check (release.sh honours it too). With CRA_ENGINE=cef on the
@@ -39,10 +39,10 @@ else
   if ! grep -q 'CRA_ALLOW_OLD_ENGINE=1' <<<"$command"; then
     if ! out="$(scripts/check-engine-update.sh --check 2>&1)"; then
       if grep -q "Could not read" <<<"$out"; then
-        echo "warning: couldn't read Chrome's version history; release.sh checks again" >&2
+        echo "warning: couldn't read Chrome's version history, release posts or commits; release.sh checks again" >&2
       else
         echo "$out" >&2
-        echo "Release blocked: Chrome has a newer stable than the engine. Build it first (docs/chromium-engine.md), or push with CRA_ALLOW_OLD_ENGINE=1 for an urgent fix." >&2
+        echo "Release blocked: the engine lacks Chrome stable's security fixes. Build the version above first (docs/chromium-engine.md), or push with CRA_ALLOW_OLD_ENGINE=1 for an urgent fix." >&2
         exit 2
       fi
     fi

@@ -1495,6 +1495,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["instantLinksSetting"] { store.settings.instantLinks = v == "on"; return }
             // pageMarginSetting=<points>: Settings ▸ Pages ▸ Margin moved to that value, as the slider does (Ideas #366).
             if let v = dict["pageMarginSetting"].flatMap(Double.init) { store.settings.pageMargin = v; return }
+            // nowPlayingTint=arc|theme: Settings ▸ Tabs ▸ "Player in the space's colour" switched (Ideas #366).
+            if let v = dict["nowPlayingTint"].flatMap(NowPlayingTint.init(rawValue:)) { store.settings.nowPlayingTint = v; return }
             // sidebarSide=left|right: Settings ▸ Sidebar on the right, as its switch sets it (#464).
             if let v = dict["sidebarSide"].flatMap(SidebarSide.init(rawValue:)) { store.settings.sidebarSide = v; return }
             if let v = dict["instantLinksFail"] {
@@ -2846,6 +2848,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                           e.hasNext ? 1 : 0, e.hasVideo ? 1 : 0, np.pictureInPicture.contains(e.id) ? 1 : 0)
                 }
                 if np.entries.isEmpty { NSLog("Cra nowPlaying%@ none", label) }
+                // The cards' colour: "Cra nowPlaying[<label>] tint=<arc|theme> fill=#RRGGBB" (Ideas #366).
+                NSLog("Cra nowPlaying%@ tint=%@ fill=%@", label, store.settings.nowPlayingTint.rawValue,
+                      (main.shell.sidebarHost as? SidebarView)?.debugPlayerFill ?? "none")
                 // Tabs whose speaker shows, card or not: "Cra nowPlaying[<label>] sounding <host> uncontrollable=…" (#411).
                 for rt in main.browsers.runtimes.values where rt.browser.isAudible {
                     NSLog("Cra nowPlaying%@ sounding %@ uncontrollable=%d", label, CraLog.host(rt.browser.currentURL),
@@ -2883,6 +2888,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let label = dict["folderPreviewLit"] {
                 guard let preview = FolderPreviewController.shared.preview else { NSLog("Cra folderPreview %@: closed", label); return }
                 NSLog("Cra folderPreview %@: lit=%@ top=%.0f", label, preview.debugLit.map(String.init).joined(separator: ","), preview.debugTop)
+                return
+            }
+            // rowPoint=<id>: "row point: <x> <y>", where scenario.sh's `click row <id> move` rests the real pointer (#743).
+            if let r = dict["rowPoint"] {
+                guard let id = UUID(uuidString: r), let p = SpaceListView.debugRowPoint(id, ui: main.sidebarUI) else {
+                    CraLog.note("row point: none"); return
+                }
+                CraLog.note("row point: \(Int(p.x)) \(Int(p.y))")
+                return
+            }
+            // folderPreviewOpen=<label>: "Cra folderPreview <label>: open=<folder id>" or "open=none" (#743).
+            if let label = dict["folderPreviewOpen"] {
+                let open = FolderPreviewController.shared.isOpen ? FolderPreviewController.shared.folderID?.uuidString ?? "none" : "none"
+                NSLog("Cra folderPreview %@: open=%@", label, open)
                 return
             }
             if let f = dict["folderPreview"] {

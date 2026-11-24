@@ -82,7 +82,7 @@ enum SafariImporter {
                 stack.append((unescape(ns.substring(with: m.range(at: 1))), []))
             } else if m.range(at: 2).location != NSNotFound {
                 let url = unescape(ns.substring(with: m.range(at: 2)))
-                guard url.hasPrefix("http") else { continue }
+                guard ImportedAddress.keeps(url) else { continue }
                 let title = unescape(ns.substring(with: m.range(at: 3)))
                 stack[stack.count - 1].items.append(ImportedItem(customTitle: title.isEmpty ? nil : title, pageTitle: title, url: url))
             } else if stack.count > 1 {

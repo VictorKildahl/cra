@@ -1,7 +1,9 @@
 #!/usr/bin/env python3 -I
 """Rebuilds User Data/Profile 1/tabs.db(-wal): a made-up Dia 1.55 sidebar encrypted the way Dia
 does it (SQLCipher 4, raw key from the Safe Storage secret "cra-test-secret"). The Work space's
-folder is only in the -wal, as Dia's recent edits often are. Needs the sqlite3 and openssl CLIs."""
+folder is only in the -wal, as Dia's recent edits often are. Needs the sqlite3 and openssl CLIs.
+StorableProfileContainers.json and User Data/Profile 1/Bookmarks, written by hand, are the files
+Dia kept before 1.55."""
 import base64, hashlib, hmac, os, shutil, sqlite3, subprocess, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +64,9 @@ def build(path, wal_path):
     t.tab(win, 0, "home", ("https://example.com/open", "Open", None))
     t.tab(win, 1, "home", ("https://example.com/left", "Left", None), ("https://example.com/right", "Right", None))
     t.tab(win, 2, "home", (None, None, None))
+    for i, url in enumerate(("file:///Users/me/notes.html", "javascript:void(document.title)", "chrome://settings/",
+                             "about:blank", "blob:https://example.com/5f1c")):
+        t.tab(win, 3 + i, "home", (url, "Odd %d" % i, None))
     wfav, _ = t.node("favorites", None, 40, "work")
     t.tab(wfav, 0, "work", ("https://example.com/jira", "Jira", None))
     db.commit(); db.close()

@@ -1,7 +1,7 @@
 // click: a real left click, through the window server as a mouse sends it, for scenarios about what a click on
 // an app that isn't in front does (#659: Cra comes forward for it before AppKit makes it active).
 //   click <pid> <x> <y> [n]   top-left screen points, n clicks (2 a double click, as a mouse sends it: click states 1
-//                         then 2 at the system's pace); clicks only when the window in front at that point is <pid>'s
+//                         then 2 at the system's pace; 0 only moves the pointer there, #743); clicks only when the window in front at that point is <pid>'s
 //                         (the Dock's and Notification Centre's full-screen layers aside), so it never lands in
 //                         another app; prints "clicked <x> <y>", or what is there instead and exits 3
 // Built by scripts/scenario.sh's `click` lines.
@@ -34,7 +34,7 @@ int main(int argc, const char* argv[]) {
     pid_t pid;
     NSString* owner = OwnerAt(p, &pid);
     if (pid != want) { printf("not clicked: %s (pid %d) is in front at %.0f %.0f\n", owner.UTF8String, pid, p.x, p.y); return 3; }
-    int clicks = argc > 4 ? MAX(1, atoi(argv[4])) : 1;
+    int clicks = argc > 4 ? MAX(0, atoi(argv[4])) : 1;
     CGEventSourceRef src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     CGEventRef move = CGEventCreateMouseEvent(src, kCGEventMouseMoved, p, kCGMouseButtonLeft);
     CGEventPost(kCGHIDEventTap, move);
@@ -51,7 +51,7 @@ int main(int argc, const char* argv[]) {
       }
     }
     CFRelease(src);
-    printf("clicked %.0f %.0f%s\n", p.x, p.y, clicks == 2 ? " twice" : "");
+    printf("%s %.0f %.0f%s\n", clicks == 0 ? "moved" : "clicked", p.x, p.y, clicks == 2 ? " twice" : "");
     return 0;
   }
 }

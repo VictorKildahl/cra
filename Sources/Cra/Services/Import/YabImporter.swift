@@ -96,13 +96,15 @@ enum YabImporter {
 
     private static func isTile(_ e: [String: Any]) -> Bool { (e["pin"] as? String).map { !$0.isEmpty } ?? false }
 
-    /// A tile or kept tab keeps the page it was pinned with (`home`), not where it navigated.
+    /// A tile or kept tab keeps the page it was pinned with (`home`), not where it navigated, unless
+    /// that page can't be imported: then it comes at the page it shows.
     private static func item(_ e: [String: Any], pinned: Bool) -> ImportedItem? {
-        let home = pinned ? (e["home"] as? String).flatMap { $0.isEmpty ? nil : $0 } : nil
-        guard let url = home ?? e["url"] as? String, url.hasPrefix("http://") || url.hasPrefix("https://") else { return nil }
-        let title = (home != nil ? e["homeTitle"] as? String : nil).flatMap { $0.isEmpty ? nil : $0 } ?? e["title"] as? String ?? ""
+        let home = pinned ? (e["home"] as? String).map { (url: $0, title: e["homeTitle"] as? String) } : nil
+        let current = (e["url"] as? String).map { (url: $0, title: e["title"] as? String) }
+        guard let page = [home, current].compactMap({ $0 }).first(where: { ImportedAddress.keeps($0.url) }) else { return nil }
+        let title = page.title.flatMap { $0.isEmpty ? nil : $0 } ?? e["title"] as? String ?? ""
         let custom = (e["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return ImportedItem(customTitle: custom, pageTitle: title, url: url)
+        return ImportedItem(customTitle: custom, pageTitle: title, url: page.url)
     }
 
     private static func folderChain(_ e: [String: Any]) -> [(id: String, name: String)] {

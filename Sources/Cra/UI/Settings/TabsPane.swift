@@ -64,6 +64,12 @@ struct TabsPane: View {
                 SettingsSwitchRow("Translucent sidebar",
                                   detail: "The sidebar and the window around your pages turn to glass, so what’s behind the window shows through, darkened on a dark theme. The floating sidebar lets the page under it show through.",
                                   isOn: $store.settings.translucentSidebar) { SettingsArt.translucentSidebar }
+                SettingsCardDivider()
+                // Ideas #366, not in Arc: the now-playing cards in the sidebar's colour (NowPlayingTint).
+                SettingsSwitchRow("Player in the space’s colour",
+                                  detail: "The now-playing player at the bottom of the sidebar takes your space’s colour, like a selected tab, instead of Arc’s white or black.",
+                                  isOn: Binding(get: { store.settings.nowPlayingTint == .theme },
+                                                set: { store.settings.nowPlayingTint = $0 ? .theme : .arc })) { SettingsArt.nowPlayingTint }
             }
 
             SettingsHeader("Pages").padding(.top, 20)

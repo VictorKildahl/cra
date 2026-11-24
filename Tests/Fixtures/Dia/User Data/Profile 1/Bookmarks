@@ -1,0 +1,63 @@
+{
+ "version": 1,
+ "roots": {
+  "bookmark_bar": {
+   "type": "folder",
+   "name": "Bookmarks bar",
+   "children": [
+    {
+     "type": "folder",
+     "name": "Reading",
+     "children": [
+      {
+       "type": "url",
+       "name": "Read",
+       "url": "https://example.com/read"
+      },
+      {
+       "type": "url",
+       "name": "Notes",
+       "url": "file:///Users/me/notes.html"
+      },
+      {
+       "type": "url",
+       "name": "Bookmarklet",
+       "url": "javascript:void(document.title)"
+      },
+      {
+       "type": "url",
+       "name": "Blank",
+       "url": "about:blank"
+      },
+      {
+       "type": "url",
+       "name": "Download",
+       "url": "blob:https://example.com/5f1c"
+      }
+     ]
+    },
+    {
+     "type": "folder",
+     "name": "Blank",
+     "children": [
+      {
+       "type": "url",
+       "name": "Blank",
+       "url": "about:blank"
+      }
+     ]
+    },
+    {
+     "type": "url",
+     "name": "Settings",
+     "url": "chrome://settings/"
+    },
+    {
+     "type": "url",
+     "name": "New Tab",
+     "url": "chrome://newtab/"
+    }
+   ]
+  }
+ }
+}
