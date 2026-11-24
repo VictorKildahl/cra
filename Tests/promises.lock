@@ -1657,6 +1657,9 @@
 #727   Tests/Scenarios/extension-popup-cmd-w.scenario  71fc9fb030d1
 #729   Packages/CraCore/Tests/CraCoreTests/CommandBarProfileScopeTests.swift::historyFromBeforeProfilesTakesThemFromChromium  fda6c9b60e93
 #729   Tests/StoreTests.swift::historyFromBeforeProfilesTakesThemFromChromium  64ca71182c54
+#730   Packages/CraCore/Tests/CraCoreTests/ChromiumHistorySearchTests.swift::askedFromTheSecondLetter  a24c20d09899
+#730   Packages/CraCore/Tests/CraCoreTests/ChromiumHistorySearchTests.swift::enginePagesHistoryJSONDoesntHaveBecomeRows  0ff306f48542
+#730   Tests/Scenarios/command-bar-whole-history.scenario  0c6afea7319e
 #731   Tests/Scenarios/extension-action-popup-other-window.scenario  079f17b32b4a
 #734   Tests/StoreTests.swift::yabImport  e5816eed3d90
 #737   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
