@@ -78,7 +78,7 @@
 #   requires screen
 #   port <n>                   serve ${PAGE} on a fixed port (snapshots show the address)
 # The fixture server answers an address with ?delay=<s> (or &delay=<s>) that many seconds late, and /auth with an
-# HTTP sign-in (401 Basic) until the browser sends a user name and password.
+# HTTP sign-in (401 Basic) until the browser sends a user name and password, and /redirect?to=<path> with a 302 there.
 # ${FIXTURES}, ${ORIGIN} (that server's http://127.0.0.1:<port>, which also answers a POST with 204,
 # logs it to server.log and keeps its body in posts/), ${PAGE} (Tests/Fixtures/Pages/page.html from a local server, so it has a host
 # for developer mode and tab sleep), ${WEBKIT} (that server as http://localhost:<port>, a host the
@@ -294,7 +294,7 @@ class Server(http.server.ThreadingHTTPServer):
 class Handler(http.server.SimpleHTTPRequestHandler):
     # ?delay=<s> anywhere in the address: the answer (a page, or a 404) comes that many seconds late.
     def do_GET(self):
-        import base64, html, re, time
+        import base64, html, re, time, urllib.parse
         # /auth: a page behind a user name and password (HTTP Basic), as a router or an intranet asks for one:
         # 401 until the browser sends credentials, then a page titled with the user it signed in as.
         if self.path.startswith("/auth"):
@@ -313,6 +313,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+        # /redirect?to=<path>: a 302 to that path on this server, as a link shortener or a sign-in hop answers.
+        if self.path.startswith("/redirect"):
+            to = re.search(r"[?&]to=([^&]+)", self.path)
+            self.send_response(302)
+            self.send_header("Location", urllib.parse.unquote(to.group(1)) if to else "/page.html")
+            self.end_headers()
             return
         m = re.search(r"[?&]delay=([0-9.]+)", self.path)
         if m:
