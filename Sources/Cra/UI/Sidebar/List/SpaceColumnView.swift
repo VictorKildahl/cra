@@ -1863,7 +1863,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         Self.moveToProfile(m, id, store)
         m.addItem(.separator())
         if open || ui.loadedTabIDs.contains(id) {
-            MenuItems.add(m, action: "closeTab", title: "Close Tab") { actions.closeTab(id) }
+            MenuItems.add(m, action: "closeTab", title: "Close Tab") { actions.closeTabFromItsMenu(id) }
         }
         // Arc deletes the favorite. A shared one goes as before; a space's own goes to the archive,
         // where Library can bring it back.
