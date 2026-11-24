@@ -32,14 +32,32 @@ enum YabImporter {
     static let firstID = "00000000-0000-0000-0000-000000000001"
     static let sharedPinsID = "00000000-0000-0000-0000-000000000A11"
 
-    static func plan() throws -> ImportPlan {
+    /// Yab's Settings › Spaces › Pins "In Every Space". Unset means Yab hasn't decided yet, and it
+    /// decides In Each Space for a Mac that already has spaces (SharedPins.decide), so as off.
+    static var pinsInEverySpace: Bool? { UserDefaults(suiteName: "dev.serafim.fast")?.object(forKey: "pins.everySpace") as? Bool }
+
+    static func plan(pinsInEverySpace everySpace: Bool? = YabImporter.pinsInEverySpace) throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Yab") }
-        // Yab's Settings › Spaces › Pins "In Every Space". Unset means Yab hasn't decided yet, and it
-        // decides In Each Space for a Mac that already has spaces (SharedPins.decide), so as off.
-        let everySpace = UserDefaults(suiteName: "dev.serafim.fast")?.object(forKey: "pins.everySpace") as? Bool
         var plan = try plan(supportDir: supportDir, pinsInEverySpace: everySpace)
-        ImportFavicons.attach(to: &plan.spaces, folder: "cra-yab-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
+        ImportFavicons.attach(to: &plan, folder: "cra-yab-favicons", from: ImportSource.Kind.yab.iconStores(dataDir: userData))
         return plan
+    }
+
+    /// Yab's own icon file for a page: the page's in icons/pages.json (`[["<host><path>", "<hash>"]]`,
+    /// file icons/pages/<hash>.png), else its host's, icons/<host>.png, both with `:<port>` when there is one.
+    static func ownIcons(supportDir dir: URL) -> (String) -> URL? {
+        let icons = dir.appendingPathComponent("icons", isDirectory: true)
+        let listed = (try? Data(contentsOf: icons.appendingPathComponent("pages.json")))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String]] } ?? []
+        let pages = Dictionary(listed.compactMap { $0.count == 2 ? ($0[0], $0[1]) : nil }, uniquingKeysWith: { first, _ in first })
+        return { url in
+            guard let c = URLComponents(string: url), let host = c.host?.lowercased(), !host.isEmpty else { return nil }
+            let site = host + (c.port.map { ":\($0)" } ?? "")
+            let page = pages[site + (c.percentEncodedPath.isEmpty ? "/" : c.percentEncodedPath)]
+                .flatMap { hash in hash.allSatisfy { $0.isLetter || $0.isNumber } ? "pages/\(hash).png" : nil }
+            return [page, "\(site).png"].compactMap { $0 }.map { icons.appendingPathComponent($0) }
+                .first { FileManager.default.fileExists(atPath: $0.path) }
+        }
     }
 
     static func plan(supportDir dir: URL, pinsInEverySpace: Bool?) throws -> ImportPlan {

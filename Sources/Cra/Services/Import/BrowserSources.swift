@@ -109,7 +109,7 @@ struct ImportSource: Identifiable, Hashable {
 
     func plan() throws -> ImportPlan {
         switch kind {
-        case .arc: return try ArcImporter.plan()
+        case .arc: return try ArcImporter.plan(favicons: dataDir)
         case .dia: return try DiaImporter.plan()
         case .yab: return try YabImporter.plan()
         case .ardia: return try ArdiaImporter.plan()
@@ -143,12 +143,9 @@ struct ImportSource: Identifiable, Hashable {
         }
     }
 
+    /// Each host's icon, from the same stores the import reads.
     func favicons(hosts: [String]) -> [String: NSImage] {
-        switch kind {
-        case .arc, .dia, .yab, .ardia, .chromium: return ChromiumImporter.favicons(userData: dataDir, hosts: hosts)
-        case .firefox, .zen: return FirefoxImporter.favicons(root: dataDir, hosts: hosts)
-        case .safari: return [:]
-        }
+        kind.iconStores(dataDir: dataDir).icons(hosts: hosts).compactMapValues { FaviconCache.png($0).flatMap(NSImage.init(data:)) }
     }
 
     func extensions() -> [ImportableExtension] {
@@ -167,5 +164,20 @@ struct ImportSource: Identifiable, Hashable {
         if let url = Bundle.main.url(forResource: id, withExtension: "png", subdirectory: "browsers"),
            let image = NSImage(contentsOf: url) { return image }
         return NSImage(systemSymbolName: "globe", accessibilityDescription: name) ?? NSImage()
+    }
+}
+
+extension ImportSource.Kind {
+    /// Where this browser keeps tab icons under `dataDir` (its ImportSource's): Yab's own icons/ folder,
+    /// then each browser's favicon databases. Arc's per-item caches are read with its sidebar, by item id.
+    func iconStores(dataDir: URL) -> ImportFavicons.Stores {
+        switch self {
+        case .yab:
+            return ImportFavicons.Stores(own: YabImporter.ownIcons(supportDir: dataDir.deletingLastPathComponent()),
+                                         databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
+        case .arc, .dia, .ardia, .chromium: return ImportFavicons.Stores(databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
+        case .firefox, .zen: return ImportFavicons.Stores(databases: { FirefoxImporter.favicons(root: dataDir, hosts: $0) })
+        case .safari: return ImportFavicons.Stores()
+        }
     }
 }

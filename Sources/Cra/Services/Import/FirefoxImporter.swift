@@ -42,6 +42,7 @@ enum FirefoxImporter {
         }
         space.today = openTabs(profile: profile)
         if !space.pinned.isEmpty || !space.today.isEmpty { plan.spaces.append(space) }
+        ImportFavicons.attach(to: &plan, folder: "cra-firefox-favicons", from: ImportSource.Kind.firefox.iconStores(dataDir: root))
         return plan
     }
 
@@ -120,20 +121,26 @@ enum FirefoxImporter {
         return n == size ? out : nil
     }
 
-    /// The largest icon per host from favicons.sqlite.
-    static func favicons(root: URL, hosts: [String]) -> [String: NSImage] {
+    /// The largest icon per host from favicons.sqlite, read in one pass over its pages, which have no
+    /// index on page_url.
+    static func favicons(root: URL, hosts: [String]) -> [String: Data] {
         guard let profile = defaultProfile(root: root),
               let db = SQLiteSnapshot(copying: profile.appendingPathComponent("favicons.sqlite")) else { return [:] }
-        var out: [String: NSImage] = [:]
-        for host in hosts {
-            let h = host.replacingOccurrences(of: "'", with: "")
-            let rows = db.rows("""
-                SELECT i.data FROM moz_icons i JOIN moz_icons_to_pages ip ON ip.icon_id = i.id JOIN moz_pages_w_icons p ON p.id = ip.page_id
-                WHERE p.page_url LIKE 'https://\(h)/%' OR p.page_url LIKE 'https://www.\(h)/%' ORDER BY i.width DESC LIMIT 1
-                """)
-            if let data = rows.first?["data"] as? Data, let img = NSImage(data: data) { out[host] = img }
+        var wanted: [String: [String]] = [:]
+        for host in hosts { for name in ImportFavicons.names(of: host) { wanted[name, default: []].append(host) } }
+        var best: [String: (icon: Int64, width: Int64)] = [:]
+        for r in db.rows("SELECT p.page_url, i.id, i.width FROM moz_pages_w_icons p JOIN moz_icons_to_pages ip ON ip.page_id = p.id JOIN moz_icons i ON i.id = ip.icon_id") {
+            guard let page = r["page_url"] as? String, let icon = r["id"] as? Int64, let width = r["width"] as? Int64,
+                  let owners = ImportFavicons.webHost(page).flatMap({ wanted[$0] }) else { continue }
+            for host in owners where width > best[host]?.width ?? -1 { best[host] = (icon, width) }
         }
-        return out
+        guard !best.isEmpty else { return [:] }
+        let ids = Set(best.values.map(\.icon)).map(String.init).joined(separator: ",")
+        var images: [Int64: Data] = [:]
+        for r in db.rows("SELECT id, data FROM moz_icons WHERE id IN (\(ids))") {
+            if let id = r["id"] as? Int64, let data = r["data"] as? Data { images[id] = data }
+        }
+        return best.compactMapValues { images[$0.icon] }
     }
 
     static func topSites(root: URL, limit: Int) -> [TopSite] {

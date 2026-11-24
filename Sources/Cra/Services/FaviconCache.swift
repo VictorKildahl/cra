@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import Observation
 
 /// Favicons keyed by host or by a tab's own icon (FaviconKey). Chromium hands us PNG bytes through the bridge;
@@ -175,5 +176,44 @@ final class FaviconCache {
     static func fileName(_ key: String) -> String {
         let safe = key.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? String($0) : "_" }.joined()
         return safe + ".png"
+    }
+
+    /// The most pixels a side of an icon file may claim: a small file can claim 40000 and cost a GB.
+    nonisolated static let largestSource = 1024
+
+    /// An icon file's bytes (another browser's store, a site) as a PNG at most `side` px on its long
+    /// side. ImageIO shrinks a bitmap without decoding it at full size; AppKit draws an SVG small.
+    nonisolated static func png(_ data: Data, side: Int = 64) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else {
+            return NSImage(data: data).flatMap { png($0, side: CGFloat(side)) }
+        }
+        // An .ico holds several sizes: the widest one not claiming too many pixels.
+        let sizes = (0..<CGImageSourceGetCount(source)).compactMap { i -> (index: Int, width: Int)? in
+            guard let p = CGImageSourceCopyPropertiesAtIndex(source, i, nil) as? [CFString: Any],
+                  let w = p[kCGImagePropertyPixelWidth] as? Int, let h = p[kCGImagePropertyPixelHeight] as? Int,
+                  w > 0, h > 0, max(w, h) <= largestSource else { return nil }
+            return (i, w)
+        }
+        guard let pick = sizes.max(by: { $0.width < $1.width }) else { return nil }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: side,
+                                        kCGImageSourceCreateThumbnailWithTransform: true]
+        guard let thumb = CGImageSourceCreateThumbnailAtIndex(source, pick.index, options as CFDictionary) else { return nil }
+        return NSBitmapImageRep(cgImage: thumb).representation(using: .png, properties: [:])
+    }
+
+    /// An image as a PNG at most `side` px on its long side, drawn at that size: for an image made in
+    /// code or an SVG, which can declare any size (drawn at it, one ran a 0.1.43 import out of memory).
+    nonisolated static func png(_ img: NSImage, side: CGFloat = 64) -> Data? {
+        guard img.size.width > 0, img.size.height > 0 else { return nil }
+        let scale = min(1, side / max(img.size.width, img.size.height))
+        let w = max(1, Int((img.size.width * scale).rounded())), h = max(1, Int((img.size.height * scale).rounded()))
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        img.draw(in: NSRect(x: 0, y: 0, width: w, height: h), from: .zero, operation: .copy, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])
     }
 }
