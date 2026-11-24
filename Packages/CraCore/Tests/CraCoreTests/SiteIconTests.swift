@@ -61,6 +61,25 @@ struct SiteIconFetchTests {
     }
 }
 
+/// Which formats a site's icon is read in: those favicons come in, not every format ImageIO parses.
+struct SiteIconFormatTests {
+    @Test func faviconFormatsAreRead() {
+        for type in ["public.png", "public.jpeg", "com.compuserve.gif", "com.microsoft.ico", "org.webmproject.webp", "com.microsoft.bmp"] {
+            #expect(SiteIcon.isIcon(imageType: type, data: Data()), "\(type)")
+        }
+        #expect(SiteIcon.isIcon(imageType: nil, data: Data("<svg/>".utf8)), "SVG text, which ImageIO doesn't type")
+    }
+
+    @Test func otherFormatsAreNot() {
+        for type in ["com.adobe.pdf", "com.adobe.raw-image", "com.canon.cr2-raw-image", "com.adobe.photoshop-image", "org.nema.dicom",
+                     "com.ilm.openexr-image", "public.tiff", "public.heic", "com.apple.icns", "com.apple.pict", "public.jpeg-xl"] {
+            #expect(!SiteIcon.isIcon(imageType: type, data: Data()), "\(type)")
+        }
+        #expect(!SiteIcon.isIcon(imageType: "com.adobe.raw-image", data: Data("<svg/>".utf8)), "a typed file is never read as SVG")
+        #expect(!SiteIcon.isIcon(imageType: nil, data: Data("%PDF-1.7".utf8)))
+    }
+}
+
 /// Which bytes from a site are read as an SVG icon: SVG text, not a PDF or a web page.
 struct SiteIconSVGTests {
     @Test func svgTextIsAnSVG() {

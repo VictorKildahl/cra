@@ -217,8 +217,17 @@ enum SiteIconLoaderTests {
         ])
         // FaviconCache.png happens to refuse this PDF as well (no pixel size); the loader doesn't rely on it.
         let svg = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>"#.utf8)
-        expect(!SiteIconLoader.isIcon(pdf as Data) && SiteIconLoader.isIcon(png(blue, side: 16)!) && SiteIconLoader.isIcon(svg),
-               "a PDF is no icon; a PNG and SVG text are")
+        let bitmap = NSBitmapImageRep(data: png(blue, side: 16)!)!
+        func encoded(_ type: NSBitmapImageRep.FileType) -> Data { bitmap.representation(using: type, properties: [:])! }
+        // An .ico holding one PNG: its header, one directory entry (16 px, 32 bpp, size, offset 22), the PNG.
+        let inner = png(blue, side: 16)!
+        let ico = Data([0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 1, 0, 32, 0]) + withUnsafeBytes(of: UInt32(inner.count).littleEndian) { Data($0) }
+            + withUnsafeBytes(of: UInt32(22).littleEndian) { Data($0) } + inner
+        for (name, data) in [("PNG", encoded(.png)), ("JPEG", encoded(.jpeg)), ("GIF", encoded(.gif)), ("BMP", encoded(.bmp)), ("ICO", ico), ("SVG", svg)] {
+            expect(SiteIconLoader.isIcon(data), "\(name) is read as an icon, as ImageIO types it")
+        }
+        expect(!SiteIconLoader.isIcon(pdf as Data) && !SiteIconLoader.isIcon(encoded(.tiff)), "a PDF or a TIFF is no icon")
+        expect((CGImageSourceCopyTypeIdentifiers() as? [String] ?? []).contains("org.webmproject.webp"), "WebP's identifier is ImageIO's")
         let cache = FaviconCache(), loader = SiteIconLoader()
         await fetch(loader, "http://127.0.0.1:\(site.port)/", into: cache)
         expect(site.paths == ["/", "/icon.pdf", "/favicon.ico"] && cache.image(forKey: "127.0.0.1").map(color) == blue,

@@ -1,6 +1,5 @@
 import AppKit
 import ImageIO
-import UniformTypeIdentifiers
 
 /// A site's icon for a row that shows none: sidebar tabs and favorites on screen, command-bar rows for
 /// the user's tabs, archive and history, and Library ▸ Boosts. Its home page's declared icons, then
@@ -90,14 +89,12 @@ final class SiteIconLoader {
         return nil
     }
 
-    /// Whether a site's bytes may be read as an icon: a bitmap ImageIO knows, or SVG text. Not a PDF or
-    /// another format AppKit would draw when FaviconCache.png falls back to NSImage.
+    /// Whether a site's bytes may be read as an icon (SiteIcon.isIcon), by the type ImageIO sniffs from
+    /// their header: a favicon format, or SVG text. Not a PDF, camera RAW or another format ImageIO or
+    /// AppKit would parse.
     nonisolated static func isIcon(_ data: Data) -> Bool {
-        if let source = CGImageSourceCreateWithData(data as CFData, nil), let type = CGImageSourceGetType(source) {
-            // ImageIO names a PDF too (com.adobe.pdf), which is no image type.
-            return UTType(type as String)?.conforms(to: .image) == true
-        }
-        return SiteIcon.isSVG(data)
+        let type = CGImageSourceCreateWithData(data as CFData, nil).flatMap(CGImageSourceGetType)
+        return SiteIcon.isIcon(imageType: type as String?, data: data)
     }
 
     /// A 2xx response's body, cut off past `limit` bytes, and the address it came from after redirects;

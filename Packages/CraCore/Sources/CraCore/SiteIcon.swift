@@ -38,6 +38,18 @@ public enum SiteIcon {
         return !isLocal(host: host) || isLocal(host: origin.host ?? "")
     }
 
+    /// The formats favicons come in, by ImageIO type identifier. Only these reach ImageIO's parsers from a
+    /// site, not camera RAW, PSD or the dozens of others it reads.
+    public static let imageTypes: Set<String> = [
+        "public.png", "public.jpeg", "com.compuserve.gif", "com.microsoft.ico", "org.webmproject.webp", "com.microsoft.bmp",
+    ]
+
+    /// Whether a site's bytes may be read as an icon: in one of `imageTypes`, as ImageIO typed them, or
+    /// SVG text, which ImageIO doesn't type.
+    public static func isIcon(imageType: String?, data: Data) -> Bool {
+        imageType.map(imageTypes.contains) ?? isSVG(data)
+    }
+
     /// Whether a site's bytes are an SVG: after a BOM and whitespace, an `<svg` element, or an XML prolog with
     /// one in the first 4 KB. The loader reads only these and bitmaps, not a PDF that AppKit would also draw.
     public static func isSVG(_ data: Data) -> Bool {
