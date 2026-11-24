@@ -936,6 +936,8 @@ public struct WindowPrefs: Codable, Equatable {
     /// The sidebar as it was last hidden or shown (⌘S, a drag of its edge), in any window: what a new
     /// window opens with, incognito and Blank Windows too. Arc's sidebarViewPreferences.sidebarMode (#644).
     public var sidebarVisibleInNewWindows = true
+    /// The profile picked for each site in a Little Window (Arc's domainToProfilePreferences).
+    public var siteProfiles = SiteProfiles()
 
     public init(sidebarWidth: Double = 328, expandedFolders: Set<UUID> = [], collapsedPinnedSpaces: Set<UUID> = [],
                 favoritesEmptyStateDismissed: Set<UUID> = [], peekedFolders: [UUID: [UUID]] = [:],
@@ -1135,6 +1137,7 @@ extension WindowPrefs {
         // Files from before #644 carry no choice: the first saved window's sidebar stands in for it.
         sidebarVisibleInNewWindows = try c.decodeIfPresent(Bool.self, forKey: .sidebarVisibleInNewWindows)
             ?? windows.first?.sidebarVisible ?? true
+        siteProfiles = (try? c.decodeIfPresent(SiteProfiles.self, forKey: .siteProfiles)) ?? SiteProfiles()
     }
 }
 

@@ -16,6 +16,10 @@
     ]
   ],
   "sidebarVisibleInNewWindows" : false,
+  "siteProfiles" : {
+    "gitlab.example.com" : "default",
+    "youtube.com" : "C0000000-0000-0000-0000-000000000001"
+  },
   "sidebarWidth" : 280,
   "windows" : [
     {

@@ -9,6 +9,9 @@ Client" only in Profile 2, and "Fixture Personal Off" in Default, turned off.
 StorableLinkRouting.json holds three Air Traffic Control routes: Google Meet to the most recent
 space, work.example.com to a Little Arc in Work (written by hand in Arc, #258) and an
 "Is equal to" route to Home, with Little Arc as the default.
+company.thebrowser.Browser.plist stands in for Arc's preferences: domainToProfilePreferences,
+the profile picked for a site in a Little Arc (example.com on Default, work.example.com on
+Profile 2, other.example.com on a Profile 9 no space is on).
 SidebarItemsFaviconCache holds an icon each for the pinned folder's two tabs (orange for
 home-p1, blue for home-p2), named md5(item id) as Arc names them: two tabs on one host with
 different icons (#673). ArchiveItemsFaviconCache holds a green icon for the archived tab a1,
