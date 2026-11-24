@@ -55,6 +55,11 @@ final class ExtensionActions {
             // profile's prefs ~10 s later, and triggerAction on it crashes Chromium (#41).
             if inDefaultProfile, await isTurnedOff(extensionID) { throw Failure.turnedOff }
             let tab = try await tabTarget(for: browser)
+            // Chrome runs the action on its window's active tab, whichever tab the target names (ExtensionActionViewModel::
+            // ExecuteUserAction): the page becomes that tab first. Cra makes a page the active tab as it takes the focus,
+            // a moment after the click, so the popup and its activeTab went to the page focused before: a Little Window's,
+            // or the blank page that keeps the profile's Chrome window open, which extensions can't see ("not a website", #731).
+            browser.setFocused(true)
             let before = WindowSnapshot()
             placingOwnPopup = true
             triggered = true

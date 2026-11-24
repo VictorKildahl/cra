@@ -1,0 +1,22 @@
+# promise: #731
+# An extension's toolbar popup runs on the page under its button, with a Little Window open too. Chrome runs a
+# triggered action on its window's active tab, not the tab it is asked for, and that tab followed the page Cra last
+# focused: the Little Window's, or the blank page that keeps the profile's Chrome window open, which extensions
+# can't see. uBlock Lite's popup then said "not a website" over google.com (#731). The fixture popup loads
+# page.html?n=popup-context-current-<n>-last-<n> naming the active tab it got ("none": no tab).
+budget rss=1100 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://debug?installExtension=${FIXTURES}/PopupContextExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=first
+wait 1
+cra://open?url=${PAGE}?n=site
+wait 2
+# A link from another app opens in a Little Window, whose page takes the focus.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+# The main window's button: its page, not the Little Window's.
+cra://debug?extensionAction=${POPUP_CONTEXT_EXTENSION_ID}
+expect-log "GET /page\.html\?n=popup-context-current-site-last-site HTTP
+reject-log "GET /page\.html\?n=popup-context-current-little
