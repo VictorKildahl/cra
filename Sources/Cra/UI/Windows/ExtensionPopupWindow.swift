@@ -312,6 +312,26 @@ final class ExtensionPopupWindow: NSWindow {
 
     /// The point (screen) the popup on screen hangs from, nil while none is.
     static var shownAnchor: NSPoint? { current.map { $0.anchor } }
+    /// Close Tab or Close Window (⌘W, ⇧⌘W, or what they are bound to) pressed in an extension's popup closes the popup,
+    /// as Arc's BrowserExtensionWindowController.closeCurrentItem: does. It closed the tab behind it (#727): Chrome's
+    /// bubble has the keyboard. `window` is the window the key went to. False when it isn't a popup's.
+    static func closes(forCloseCommandIn window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        if let w = current, let bubble = w.bubble, window === bubble || window === w {
+            w.performClose(nil)
+            return true
+        }
+        // The page window that stands in for a popup, or Chrome's window for its page inside it.
+        if let page = ExtensionPageWindow.shown, window === page || window.parent === page {
+            page.performClose(nil)
+            return true
+        }
+        return false
+    }
+
+    /// The window that has the keyboard while a popup is up (Chrome's bubble, or the page window that stands in for
+    /// a popup), for a scenario's keys (#727).
+    static var keyboardWindow: NSWindow? { current?.bubble ?? ExtensionPageWindow.shown }
     /// The frame (screen) of the popup on screen, nil while none is.
     static var shownFrame: NSRect? { current?.frame }
 
@@ -419,6 +439,7 @@ private final class TrafficLight: NSView {
 @MainActor
 final class ExtensionPageWindow: NSWindow, NSWindowDelegate, @preconcurrency CraBrowserDelegate {
     private static var current: ExtensionPageWindow?
+    static var shown: ExtensionPageWindow? { current?.isVisible == true ? current : nil }
     nonisolated static let minSize = NSSize(width: 25, height: 25)
     nonisolated static let maxSize = NSSize(width: 800, height: 600)
 

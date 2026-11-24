@@ -301,7 +301,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Extensions' shortcuts outside Global scope: Chrome catches them on its own window, which Cra never
         // shows, so Cra catches them first, pages included, as Chrome does (#701).
         extensionCommandMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            MainActor.assumeIsolated { self?.runExtensionCommand(event) == true ? nil : event }
+            MainActor.assumeIsolated {
+                guard let self else { return event }
+                return self.closesExtensionPopup(event) || self.runExtensionCommand(event) ? nil : event
+            }
         }
     }
 
@@ -1419,7 +1422,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     TestGesture.pageKey(String(k[0]), keyCode: code, modifiers: flags, in: roots, window: w, fromKeyboard: dict["source"] == "keyboard")
                 } else {
                     // The ⌘T bar, while it is open, has the keyboard; target=find sends it to the find bar's panel.
-                    let target = dict["target"] == "find" ? main.debugFindPanel
+                    // target=popup: an extension's popup has the keyboard, as after a click in it (#727).
+                    let target = dict["target"] == "popup" ? ExtensionPopupWindow.keyboardWindow
+                        : dict["target"] == "find" ? main.debugFindPanel
                         : dict["target"] == "littleFind" ? littleWindows.last?.finder.debugPanel : main.openCommandPanel
                     // source=keyboard: typed on the keyboard (source process 0), not posted by an app as a mouse driver does (#714).
                     TestGesture.key(String(k[0]), keyCode: code, modifiers: flags, in: target ?? w, fromKeyboard: dict["source"] == "keyboard")
@@ -3607,6 +3612,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// An extension's shortcut (chrome://extensions/shortcuts) pressed in a browser window: the ones that
     /// open its popup run as a click on its button does (#701); its own commands (chrome.commands.onCommand) go to
     /// the extension through the engine, with the page as the active tab. Global ones are the system's hot keys.
+    /// Close Tab or Close Window typed in an extension's popup: the popup closes, not the tab behind it (#727). Chrome's
+    /// bubble has the keyboard and would take the key before Cra's menu.
+    private func closesExtensionPopup(_ event: NSEvent) -> Bool {
+        guard !event.isARepeat, let id = bindings.action(for: event)?.id, ["closeTab", "closeWindow"].contains(id),
+              ExtensionPopupWindow.closes(forCloseCommandIn: event.window ?? NSApp.keyWindow) else { return false }
+        CraLog.note("extension popup: \(id) closes it")
+        return true
+    }
+
     private func runExtensionCommand(_ event: NSEvent) -> Bool {
         let held = event.modifierFlags.intersection([.command, .option, .control])
         guard !held.isEmpty, !event.isARepeat, let main, event.window === main.window || event.window?.parent === main.window else { return false }
@@ -3799,6 +3813,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             key.performClose(nil)
             return
         }
+        // An extension's popup in front, its menu item picked (#727).
+        if ["closeTab", "closeWindow"].contains(id), ExtensionPopupWindow.closes(forCloseCommandIn: NSApp.keyWindow) { return }
         // Settings in front closes on ⌘W, not the tab in the browser window behind it. With a
         // sheet up (an open panel) nothing closes: the sheet is answered first.
         if ["closeTab", "closeWindow"].contains(id), settingsInFront {
