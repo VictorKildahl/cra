@@ -3023,6 +3023,42 @@ final class SidebarStore {
         historyFile.save(Array(history.values), delay: 5)
     }
 
+    /// History saved before #609 has no profiles, so every profile's bar suggested it: the profiles'
+    /// own Chromium histories say whose each page was (CommandBarProfileScope.attributing, #729). Once,
+    /// off the main thread, at launch; nothing changes if a profile's History can't be read.
+    func attributeHistoryProfiles(chromium root: URL = AppPaths.chromiumCache, done: (@MainActor () -> Void)? = nil) {
+        guard history.values.contains(where: { $0.profiles == nil }) else { done?(); return }
+        let folders = [(CommandBarProfileScope.key(nil), "Default")]
+            + profiles.map { (CommandBarProfileScope.key($0.id), $0.directoryName) }
+        DispatchQueue.global(qos: .utility).async {
+            let urls = Self.chromiumHistoryURLs(root: root, folders: folders)
+            DispatchQueue.main.async { [weak self] in
+                if let self, let urls {
+                    let changed = CommandBarProfileScope.attributing(Array(self.history.values), chromiumURLs: urls)
+                    for e in changed { self.history[e.url] = e }
+                    if !changed.isEmpty {
+                        self.historyFile.save(Array(self.history.values), delay: 5)
+                        CraLog.note("history: \(changed.count) entries from before profiles took theirs from Chromium")
+                    }
+                }
+                done?()
+            }
+        }
+    }
+
+    /// The addresses each profile's Chromium History has, by CommandBarProfileScope.key; a profile
+    /// that never loaded a page has none. nil when a History is there but can't be read.
+    nonisolated static func chromiumHistoryURLs(root: URL, folders: [(key: String, folder: String)]) -> [String: Set<String>]? {
+        var out: [String: Set<String>] = [:]
+        for (key, folder) in folders {
+            let file = root.appendingPathComponent(folder, isDirectory: true).appendingPathComponent("History")
+            guard FileManager.default.fileExists(atPath: file.path) else { out[key] = []; continue }
+            guard let db = SQLiteSnapshot(copying: file), db.columns(of: "urls").contains("url") else { return nil }
+            out[key] = Set(db.rows("SELECT url FROM urls").compactMap { $0["url"] as? String })
+        }
+        return out
+    }
+
     /// An address entered in the command bar in `profile` (typed, or an Open URL or visited-page row picked;
     /// not a search): counted on its page, as Chromium's typed_count, so ⌘T completes the site's name to it
     /// (TypedCompletion, #667). A page not visited yet gets its entry now; its visit comes as it loads.

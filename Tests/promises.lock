@@ -1646,6 +1646,8 @@
 #726   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theButtonsSlideEasesOutInAboutAThirdOfASecond  39fad79abe89
 #726   Tests/Scenarios/library-button-slides.scenario  ddcde828c462
 #727   Tests/Scenarios/extension-popup-cmd-w.scenario  71fc9fb030d1
+#729   Packages/CraCore/Tests/CraCoreTests/CommandBarProfileScopeTests.swift::historyFromBeforeProfilesTakesThemFromChromium  fda6c9b60e93
+#729   Tests/StoreTests.swift::historyFromBeforeProfilesTakesThemFromChromium  64ca71182c54
 #731   Tests/Scenarios/extension-action-popup-other-window.scenario  079f17b32b4a
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b

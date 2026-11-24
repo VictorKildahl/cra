@@ -152,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeSystemWake()
         logSidebarProblems()
         LiveFolderManager.shared.start(store: store)
+        store.attributeHistoryProfiles()
         // A restart into an update while the user was away leaves the front app alone.
         if HitchMonitor.background {
             // Measured behind whatever is in front; still on screen, so pages keep drawing.
