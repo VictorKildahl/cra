@@ -110,7 +110,7 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 The icon grid's width cap (54074522) already fixed the open-screen icon-step overflow; the onboarding fit rule fixes the demo steps.
 
 Onboarding keeps the iPhone layout and scales down only a step's phone or icon grid when the step would otherwise leave the screen, as on the Duo's open and closed screens.
-On the Duo, onboarding's demo phone is a miniature of the Duo's closed or unfolded screen, chosen by a short screen with a one-sided safe-area inset; iPhones and iPads keep the iPhone mock. Duo-only Pinch and Blocking articles continue through the miniature to its clipped bottom edge; the Blocking article continues beneath the switch, which keeps the iPhone's proportional bottom offset.
+On the Duo, onboarding's demo phone is a miniature of the Duo's closed or unfolded screen, chosen by a short screen with a one-sided safe-area inset; iPhones and iPads keep the iPhone mock. The Duo-only Pinch article continues through the miniature to its clipped bottom edge. Blocking keeps the closed page blank below the photo; on the unfolded page, its article starts below the switch and continues past the clipped bottom edge. The switch keeps the iPhone's proportional bottom offset.
 
 The closed-screen harness repro is these two tests, run together on the existing Duo:
 
