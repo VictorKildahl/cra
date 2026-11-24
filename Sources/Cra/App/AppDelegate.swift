@@ -1212,7 +1212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         case "import":
             // Headless import (scripting): cra://import?source=arc&archive=1&settings=1
-            let plan = try? (q("source") == "dia" ? DiaImporter.plan() : ArcImporter.plan())
+            let plan = try? (q("source") == "dia" ? DiaImporter.plan() : ArcImporter.plan(favicons: ArcImporter.userData))
             if let plan {
                 let r = store.apply(plan, includeArchive: q("archive") != "0", includeSettings: q("settings") != "0")
                 favicons.reset()
