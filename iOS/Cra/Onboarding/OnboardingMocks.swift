@@ -542,14 +542,21 @@ struct BlockingDemo: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
-                    if mock.shape != .phone {
-                        Canvas { context, size in
-                            let text = Text("The coast rewards those who take the long way. Follow the trail above the water and the road soon disappears behind the hills. Around the next bend, a sheltered cove opens beneath the cliffs, with a narrow path winding down to the shore.\n\nStart early while the air is cool and the light is soft. The first stretch climbs gently through low brush before reaching an open ridge. From here, the route follows the headland, with views of the sea on one side and rolling hills on the other. Take your time at the overlooks: each turn reveals another stretch of coastline.\n\nFarther along, the trail drops into a quiet valley where the wind gives way to birdsong. A small footbridge crosses the stream before the path climbs again. This is a good place to pause, drink some water, and enjoy the shade before returning to the exposed ridge.\n\nBring water, a light layer, and sturdy shoes. Coastal weather can change quickly, and even a sunny morning can turn cool when fog rolls in from the water. Stay on the marked trail, give wildlife plenty of space, and leave the coves and hillsides as you found them.\n\nFor a shorter walk, turn back at the first overlook. If you have the afternoon, continue toward the far headland, where the trail opens onto a broad sweep of ocean. Find a spot out of the wind and watch the waves trace the shore below. The return follows the same path, but the changing light makes the landscape feel new.\n\nAs evening approaches, the hills soften into silhouettes and the sea takes on the colors of the sky. Walk back slowly, stopping once more at the ridge to look along the coast. There is always another bend in the trail, and another reason to return.")
-                                .font(.system(size: 10)).foregroundColor(.black.opacity(0.8))
-                            context.draw(text, in: CGRect(x: 16, y: 12, width: size.width - 32, height: mock.logicalSize.height))
+                    if mock.shape == .duoOpen {
+                        GeometryReader { proxy in
+                            let articleTop = proxy.frame(in: .named("blocking-screen")).minY
+                            let switchBottom = mock.logicalSize.height - 150 * mock.logicalSize.height / 640
+                            Canvas { context, size in
+                                let text = Text("The coast rewards those who take the long way. Follow the trail above the water and the road soon disappears behind the hills. Around the next bend, a sheltered cove opens beneath the cliffs, with a narrow path winding down to the shore.\n\nStart early while the air is cool and the light is soft. The first stretch climbs gently through low brush before reaching an open ridge. From here, the route follows the headland, with views of the sea on one side and rolling hills on the other. Take your time at the overlooks: each turn reveals another stretch of coastline.\n\nFarther along, the trail drops into a quiet valley where the wind gives way to birdsong. A small footbridge crosses the stream before the path climbs again. This is a good place to pause, drink some water, and enjoy the shade before returning to the exposed ridge.\n\nBring water, a light layer, and sturdy shoes. Coastal weather can change quickly, and even a sunny morning can turn cool when fog rolls in from the water. Stay on the marked trail, give wildlife plenty of space, and leave the coves and hillsides as you found them.\n\nFor a shorter walk, turn back at the first overlook. If you have the afternoon, continue toward the far headland, where the trail opens onto a broad sweep of ocean. Find a spot out of the wind and watch the waves trace the shore below. The return follows the same path, but the changing light makes the landscape feel new.\n\nAs evening approaches, the hills soften into silhouettes and the sea takes on the colors of the sky. Walk back slowly, stopping once more at the ridge to look along the coast. There is always another bend in the trail, and another reason to return.")
+                                    .font(.system(size: 10)).foregroundColor(.black.opacity(0.8))
+                                context.draw(text, in: CGRect(x: 16, y: 0, width: size.width - 32, height: mock.logicalSize.height))
+                            }
+                            .clipped()
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Trail article")
+                            .accessibilityIdentifier("onboarding-blocking-article")
+                            .padding(.top, max(12, switchBottom + 12 - articleTop))
                         }
-                        .clipped()
-                        .accessibilityHidden(true)
                     } else {
                         Spacer(minLength: 0)
                     }
@@ -570,6 +577,7 @@ struct BlockingDemo: View {
                 .padding(.bottom, 150 * mock.logicalSize.height / 640)
                 .accessibilityIdentifier("onboarding-blocking")
             }
+            .coordinateSpace(name: "blocking-screen")
             .frame(width: mock.logicalSize.width)
             .background(Color.white)
         }
