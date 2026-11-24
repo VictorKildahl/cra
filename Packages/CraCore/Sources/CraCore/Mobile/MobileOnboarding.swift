@@ -41,6 +41,27 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
 
 /// First launch, in Arc Search's order and (where they fit Cra) its words.
 public enum MobileOnboarding {
+    public struct Mock: Equatable {
+        public enum Shape: String { case phone, duoClosed, duoOpen }
+        public let shape: Shape
+        public let size: CGSize
+        public let sampleRows: Int
+        public let keyWidth: CGFloat
+    }
+
+    /// Phones are longer than 1.6 in either orientation; iPads are shorter but have no side inset.
+    /// The folding screen is both short and one-sided.
+    public static func mock(window: CGSize, safeLeft: CGFloat, safeRight: CGFloat) -> Mock {
+        guard max(window.width, window.height) / min(window.width, window.height) < 1.6,
+              (safeLeft > 0) != (safeRight > 0) else {
+            return Mock(shape: .phone, size: CGSize(width: 330, height: 640), sampleRows: 5, keyWidth: 26)
+        }
+        let closed = window.height > window.width
+        let size = closed ? CGSize(width: 330, height: 330 * window.height / window.width)
+                          : CGSize(width: 450 * window.width / window.height, height: 450)
+        return Mock(shape: closed ? .duoClosed : .duoOpen, size: size, sampleRows: 3, keyWidth: (size.width - 52) / 10)
+    }
+
     /// Keeps the exact iPhone layout while its small overflow stays on screen;
     /// otherwise shrinks only the step's picture to fit the available height.
     public static func fitScale(available: CGFloat, topInset: CGFloat, bottomInset: CGFloat, heading: CGFloat,

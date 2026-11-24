@@ -70,16 +70,21 @@ struct OnboardingView: View {
             VividBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 1 : 0)
             PaleBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 0 : 1)
             GeometryReader { geometry in
-                layout(in: geometry)
+                // Geometry offers the safe content area; the mock follows the whole window's aspect.
+                let insets = geometry.safeAreaInsets
+                let window = CGSize(width: geometry.size.width + insets.leading + insets.trailing,
+                                    height: geometry.size.height + insets.top + insets.bottom)
+                let mock = MobileOnboarding.mock(window: window, safeLeft: insets.leading, safeRight: insets.trailing)
+                layout(in: geometry, mock: mock)
                     .frame(width: geometry.size.width, height: geometry.size.height)
             }
         }
         .animation(.easeInOut(duration: 0.5), value: MobileOnboarding.isVivid(model.step))
     }
 
-    private func layout(in geometry: GeometryProxy) -> some View {
+    private func layout(in geometry: GeometryProxy, mock: MobileOnboarding.Mock) -> some View {
         ZStack {
-            content(in: geometry)
+            content(in: geometry, mock: mock)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 30)), removal: .opacity))
                 .id(model.step)
@@ -126,7 +131,7 @@ struct OnboardingView: View {
         }
     }
 
-    @ViewBuilder private func content(in geometry: GeometryProxy) -> some View {
+    @ViewBuilder private func content(in geometry: GeometryProxy, mock: MobileOnboarding.Mock) -> some View {
         switch model.step {
         case .welcome:
             WelcomeStep()
@@ -157,12 +162,12 @@ struct OnboardingView: View {
             }
             .padding(.top, 50)
         case .browseForMe:
-            demo(title: MobileOnboarding.browseTitle, in: geometry) {
-                BrowseDemo(progress: $model.progress)
+            demo(title: MobileOnboarding.browseTitle, in: geometry, mock: mock) {
+                BrowseDemo(mock: mock, progress: $model.progress)
             }
         case .pinch:
-            demo(title: MobileOnboarding.pinchTitle, in: geometry) {
-                PinchDemo(progress: $model.progress)
+            demo(title: MobileOnboarding.pinchTitle, in: geometry, mock: mock) {
+                PinchDemo(mock: mock, progress: $model.progress)
             }
         case .icon:
             let scale = MobileOnboarding.fitScale(available: geometry.size.height, topInset: geometry.safeAreaInsets.top,
@@ -182,8 +187,8 @@ struct OnboardingView: View {
             }
             .padding(.top, 50)
         case .blocking:
-            demo(title: MobileOnboarding.blockingTitle, in: geometry) {
-                BlockingDemo(blocks: $model.blocksAdsAndTrackers)
+            demo(title: MobileOnboarding.blockingTitle, in: geometry, mock: mock) {
+                BlockingDemo(mock: mock, blocks: $model.blocksAdsAndTrackers)
                     .blur(radius: model.progress == .done ? 6 : 0)
             }
         case .defaultBrowser:
@@ -210,21 +215,26 @@ struct OnboardingView: View {
         }
     }
 
-    private func demo<Picture: View>(title: String, in geometry: GeometryProxy, @ViewBuilder picture: () -> Picture) -> some View {
+    private func demo<Picture: View>(title: String, in geometry: GeometryProxy, mock: MobileOnboarding.Mock, @ViewBuilder picture: () -> Picture) -> some View {
         let scale = MobileOnboarding.fitScale(available: geometry.size.height, topInset: geometry.safeAreaInsets.top,
                                               bottomInset: geometry.safeAreaInsets.bottom, heading: headingHeight,
-                                              scalable: OnboardingMock.height)
+                                              scalable: mock.size.height)
         return VStack(spacing: 24) {
             StepHeading(title: title, progress: model.progress)
                 .fixedSize(horizontal: false, vertical: scale < 1)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headingHeight = $0 }
-            if scale < 1 {
-                picture()
-                    .scaleEffect(scale)
-                    .frame(width: 330 * scale, height: OnboardingMock.height * scale)
-            } else {
-                picture()
+            Group {
+                if scale < 1 {
+                    picture()
+                        .scaleEffect(scale)
+                        .frame(width: mock.size.width * scale, height: mock.size.height * scale)
+                } else {
+                    picture()
+                }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("onboarding-mock")
+            .accessibilityValue(mock.shape.rawValue)
         }
         .padding(.top, 40)
     }
