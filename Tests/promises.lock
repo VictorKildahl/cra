@@ -1672,6 +1672,12 @@
 #742   Tests/StoreTests.swift::yabKeepsAnyAddress  beb119ce4cd6
 #742   Tests/StoreTests.swift::zenImport  aee71e143f82
 #743   Tests/Scenarios/folder-preview-adjacent.scenario  c80a395285c5
+#752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::holdsFreeDescriptorsUntilReleased  a61f6e043252
+#752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::leavesAFileOfMacOSsOwnOpenAtLaunch  6dd77a599e1c
+#752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::leavesAFileSomethingElsePutThere  0621aafae1ca
+#752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::logLineSaysWhetherChromiumGetsThePipe  0c763e07cfbc
+#752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::takesOverDescriptorsALauncherLeftOpen  8e765f726695
+#752   Tests/Scenarios/extension-action-fds-held.scenario  121e1d606f04
 #756   Tests/FieldEditorSelectionTests.swift::longAddressShowsItsStart  f9dc277dacc7
 #756   Tests/FieldEditorSelectionTests.swift::startShownWhenFieldWasScrolledToTheEnd  b1b17fac4a60
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
