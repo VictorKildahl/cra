@@ -400,7 +400,7 @@ struct PinchDemo: View {
                 guard progress == .idle else { return }
                 if value < 0.85 { summarize() } else { withAnimation(.spring()) { scale = 1 } }
             })
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: mock.shape == .phone ? .ignore : .contain)
         .accessibilityLabel("We choose to go to the Moon")
         .accessibilityHint("Pinch to summarize")
         .accessibilityAction(named: "Summarize") { summarize() }
@@ -444,9 +444,17 @@ struct PinchDemo: View {
                 .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8)).padding(.horizontal, 14)
                 .frame(width: mock.columnWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
+            if mock.shape != .phone {
+                Text("No man can fully grasp how far and how fast we have come, but condense, if you will, the 50,000 years of man's recorded history in a time span of but a half-century. Stated in these terms, we know very little about the first 40 years, except at the end of them advanced man had learned to use the skins of animals to cover them. Then about 10 years ago, under this standard, man emerged from his caves to construct other kinds of shelter. Only five years ago man learned to write and use a cart with wheels. Christianity began less than two years ago. The printing press came this year, and then less than two months ago, during this whole 50-year span of human history, the steam engine provided a new source of power.\n\nNewton explored the meaning of gravity. Last month electric lights and telephones and automobiles and airplanes became available. Only last week did we develop penicillin and television and nuclear power, and now if America's new spacecraft succeeds in reaching Venus, we will have literally reached the stars before midnight tonight.\n\nThis is a breathtaking pace, and such a pace cannot help but create new ills as it dispels old, new ignorance, new problems, new dangers. Surely the opening vistas of space promise high costs and hardships, as well as high reward.\n\nSo it is not surprising that some would have us stay where we are a little longer to rest, to wait. But this city of Houston, this State of Texas, this country of the United States was not built by those who waited and rested and wished to look behind them. This country was conquered by those who moved forward—and so will space.\n\nWilliam Bradford, speaking in 1630 of the founding of the Plymouth Bay Colony, said that all great and honorable actions are accompanied with great difficulties, and both must be enterprised and overcome with answerable courage.\n\nIf this capsule history of our progress teaches us anything, it is that man, in his quest for knowledge and progress, is determined and cannot be deterred. The exploration of space will go ahead, whether we join in it or not, and it is one of the great adventures of all time, and no nation which expects to be the leader of other nations can expect to stay behind in the race for space.")
+                    .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8)).padding(.horizontal, 14)
+                    .frame(width: mock.columnWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("onboarding-pinch-continuation")
+            }
             Spacer(minLength: 0)
         }
         .frame(width: mock.logicalSize.width)
+        .fixedSize(horizontal: false, vertical: mock.shape != .phone)
     }
 
     private var hint: some View {
@@ -535,10 +543,18 @@ struct BlockingDemo: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
+                    if mock.shape != .phone {
+                        Text("The coast rewards those who take the long way. Follow the trail above the water and the road soon disappears behind the hills. Around the next bend, a sheltered cove opens beneath the cliffs, with a narrow path winding down to the shore.\n\nStart early while the air is cool and the light is soft. The first stretch climbs gently through low brush before reaching an open ridge. From here, the route follows the headland, with views of the sea on one side and rolling hills on the other. Take your time at the overlooks: each turn reveals another stretch of coastline.\n\nFarther along, the trail drops into a quiet valley where the wind gives way to birdsong. A small footbridge crosses the stream before the path climbs again. This is a good place to pause, drink some water, and enjoy the shade before returning to the exposed ridge.\n\nBring water, a light layer, and sturdy shoes. Coastal weather can change quickly, and even a sunny morning can turn cool when fog rolls in from the water. Stay on the marked trail, give wildlife plenty of space, and leave the coves and hillsides as you found them.\n\nFor a shorter walk, turn back at the first overlook. If you have the afternoon, continue toward the far headland, where the trail opens onto a broad sweep of ocean. Find a spot out of the wind and watch the waves trace the shore below. The return follows the same path, but the changing light makes the landscape feel new.\n\nAs evening approaches, the hills soften into silhouettes and the sea takes on the colors of the sky. Walk back slowly, stopping once more at the ridge to look along the coast. There is always another bend in the trail, and another reason to return.")
+                            .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8))
+                            .padding(.horizontal, 16).padding(.top, 12)
+                            .accessibilityIdentifier("onboarding-blocking-continuation")
+                    }
                     Spacer(minLength: 0)
                 }
                 .frame(width: mock.columnWidth)
                 .padding(.top, mock.shape == .phone ? 0 : 56)
+                .fixedSize(horizontal: false, vertical: mock.shape != .phone)
+                .frame(height: mock.shape == .phone ? nil : mock.logicalSize.height, alignment: .top)
                 .background(Color.white)
                 Toggle(isOn: $blocks.animation(.easeInOut(duration: 0.35))) {
                     Text(MobileOnboarding.blockingSwitch).font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
