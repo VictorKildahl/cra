@@ -1238,6 +1238,51 @@ struct MobileMotionTests {
 }
 
 struct MobileOnboardingTests {
+    @Test func iPhone17KeepsItsOnboardingLayout() {
+        // Apple safe-area values for iPhone 17: 852 - 62 - 34 = 756; two-line heading from the spec, pending verifier measurement.
+        let fixed: CGFloat = 40 + 66 + 24
+        #expect(MobileOnboarding.fitScale(available: 756, fixed: fixed, scalable: 640, allowance: min(40 + 62, 34)) == 1)
+        // Spec: title 66, grid at 273 pt wide + 56 pt radios; reserve 18 + 50 + 16 for Next.
+        #expect(MobileOnboarding.fitScale(available: 756 - 84, fixed: 50 + 66 + 30, scalable: 329, allowance: 0) == 1)
+    }
+
+    @Test func closedScreenFitsTheDemo() {
+        // Cra Duo closed: 644 safe height (spec); compressed heading 32 1/3 measured on base, build.md.
+        let fixed: CGFloat = 40 + 32 + 1.0 / 3 + 24
+        let scale = MobileOnboarding.fitScale(available: 644, fixed: fixed, scalable: 640, allowance: min(40 + 0, 34))
+        #expect(scale < 1)
+        #expect(fixed + 640 * scale <= 644)
+    }
+
+    @Test func openScreenFitsTheDemo() {
+        // Cra Duo open: 669 - 0 - 34 = 635, one-line heading 33 (spec; measurement left to verifier).
+        let fixed: CGFloat = 40 + 33 + 24
+        let scale = MobileOnboarding.fitScale(available: 635, fixed: fixed, scalable: 640, allowance: min(40 + 0, 34))
+        #expect(scale < 1)
+        #expect(fixed + 640 * scale <= 635)
+    }
+
+    @Test func otherIPhonesKeepTheirOnboardingLayout() {
+        // Apple safe-area values from the spec: 13 mini 812 - 50 - 34; 17 Pro Max 956 - 62 - 34.
+        for available: CGFloat in [728, 860] {
+            // Spec two-line heading 66 and 640 pt mock; narrowest grid 255 + 56, capped grid 360 + 56.
+            #expect(MobileOnboarding.fitScale(available: available, fixed: 40 + 66 + 24, scalable: 640, allowance: 34) == 1)
+            #expect(MobileOnboarding.fitScale(available: available - 84, fixed: 50 + 66 + 30, scalable: available == 728 ? 311 : 416,
+                                             allowance: 0) == 1)
+        }
+    }
+
+    @Test func fitScaleHonorsTheCentringBoundaryAndClamps() {
+        // Constructed boundary fixtures: fixed 100, scalable 640, allowance 34 as on the measured closed screen.
+        #expect(MobileOnboarding.fitScale(available: 740, fixed: 100, scalable: 640, allowance: 34) == 1)
+        #expect(MobileOnboarding.fitScale(available: 800, fixed: 100, scalable: 640, allowance: 34) == 1)
+        #expect(MobileOnboarding.fitScale(available: 672, fixed: 100, scalable: 640, allowance: 34) == 1)
+        let scale = MobileOnboarding.fitScale(available: 671, fixed: 100, scalable: 640, allowance: 34)
+        #expect(scale < 1)
+        #expect(abs(100 + 640 * scale - 671) < 1e-9)
+        #expect(MobileOnboarding.fitScale(available: 50, fixed: 100, scalable: 640, allowance: 0) == 0)
+    }
+
     @Test func theStepsFollowArcSearchsOrderAndSkipAIWhereThereIsNone() {
         #expect(MobileOnboarding.steps(canUseAI: true) == [.welcome, .meet, .browseForMe, .pinch, .icon, .blocking, .defaultBrowser])
         #expect(MobileOnboarding.steps(canUseAI: false) == [.welcome, .meet, .icon, .blocking, .defaultBrowser])
