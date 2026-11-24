@@ -400,7 +400,7 @@ struct PinchDemo: View {
                 guard progress == .idle else { return }
                 if value < 0.85 { summarize() } else { withAnimation(.spring()) { scale = 1 } }
             })
-        .accessibilityElement(children: mock.shape == .phone ? .ignore : .contain)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("We choose to go to the Moon")
         .accessibilityHint("Pinch to summarize")
         .accessibilityAction(named: "Summarize") { summarize() }
@@ -449,7 +449,6 @@ struct PinchDemo: View {
                     .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8)).padding(.horizontal, 14)
                     .frame(width: mock.columnWidth, alignment: .leading)
                     .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("onboarding-pinch-continuation")
             }
             Spacer(minLength: 0)
         }
