@@ -1265,6 +1265,17 @@ struct MobileOnboardingTests {
         #expect(fixed + 640 * scale <= 635)
     }
 
+    @Test func bottomInsetLimitsTheCentringAllowance() {
+        // Synthetic boundary: 100 + 640 - 671 = 69 pt overflow, between the 68 and 80 pt thresholds.
+        let fixed: CGFloat = 100, scalable: CGFloat = 640, available: CGFloat = 671
+        // Cra Duo closed insets measured in build.md: top 0, bottom 34; design top padding 40.
+        let top: CGFloat = 0, bottom: CGFloat = 34
+        let scale = MobileOnboarding.fitScale(available: available, fixed: fixed, scalable: scalable,
+                                             allowance: min(40 + top, bottom))
+        #expect(scale < 1)
+        #expect(abs(fixed + scalable * scale - available) < 1e-9)
+    }
+
     @Test func otherIPhonesKeepTheirOnboardingLayout() {
         // Apple safe-area values from the spec: 13 mini 812 - 50 - 34; 17 Pro Max 956 - 62 - 34.
         for available: CGFloat in [728, 860] {
