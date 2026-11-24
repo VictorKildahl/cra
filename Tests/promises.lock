@@ -1712,6 +1712,8 @@ crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfSessionTests
 crash-perf-counter-overflow Packages/CraCore/Tests/CraCoreTests/PerfStateTests.swift::historyFootprintSaturatesInsteadOfOverflowing  2a8c526e26ad
 crash-sign-in-dialog-tab-closed Tests/Scenarios/page-dialog-sign-in-tab-closed.scenario  d3ee757e488c
 crash-tab-group-closed-window Tests/Scenarios/engine-tab-group-closed-window.scenario  14b438f2b3b0
+crash-tab-row-quick-throws Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aCardLeavesTheRowByItsIDWhateverLandedBeforeIt  a0adfcb94778
+crash-tab-row-quick-throws Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aFlyingCardCantBeThrownTwice  550985764a2d
 crash-tooltip-over-sheet Tests/Scenarios/tooltip-over-sheet.scenario  c4535ba50b5b
 crash-web-store-install-after-tab-closes Tests/Scenarios/web-store-install-after-tab-closes.scenario  a5324abc50b7
 crash-webstore-install-double-report Tests/Scenarios/web-store-install-copy-reloads.scenario  bb32e7100ecc

@@ -16,7 +16,10 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     weak var delegate: TabSwitcherDelegate?
 
     private let background = CAGradientLayer()
-    private var cards: [TabCardView] = []
+    /// The cards in order, and which are flying off (`MobileTabRow`).
+    private var row = MobileTabRow(cards: [])
+    private var views: [UUID: TabCardView] = [:]
+    private var cards: [TabCardView] { row.cards.compactMap { views[$0] } }
     private(set) var position: CGFloat = 0
     private var dragStart: CGFloat = 0
     private var draggedCard: TabCardView?
@@ -62,14 +65,16 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
 
     /// Shows `tabs`, oldest first, focused on `focus`.
     func setTabs(_ tabs: [MobileTab], focus: UUID?, snapshot: (UUID) -> UIImage?, favicon: (MobileTab) -> UIImage?) {
-        cards.forEach { $0.removeFromSuperview() }
-        cards = tabs.enumerated().map { index, tab in
+        views.values.forEach { $0.removeFromSuperview() }
+        views = [:]
+        for (index, tab) in tabs.enumerated() {
             let card = TabCardView(tabID: tab.id)
             card.configure(title: tab.displayTitle, snapshot: snapshot(tab.id), favicon: favicon(tab), incognito: tab.isIncognito)
             card.accessibilityIdentifier = "tab-card-\(index)"
             addSubview(card)
-            return card
+            views[tab.id] = card
         }
+        row = MobileTabRow(cards: tabs.map(\.id))
         position = CGFloat(tabs.firstIndex { $0.id == focus } ?? max(0, tabs.count - 1))
         setNeedsLayout()
     }
@@ -94,7 +99,11 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             let placement = MobileTabCarousel.placement(relative: relative, in: screen)
             var frame = placement.frame
             frame = frame.insetBy(dx: frame.width * (1 - placement.scale) / 2, dy: frame.height * (1 - placement.scale) / 2)
-            if card === draggedCard { frame.origin.y += draggedOffset }
+            if row.isThrown(card.tabID) {
+                frame.origin.y -= screen.height
+            } else if card === draggedCard {
+                frame.origin.y += draggedOffset
+            }
             var fill: CGFloat = 0
             if let expandedIndex, expansion > 0 {
                 if index == expandedIndex {
@@ -112,8 +121,8 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     // MARK: Gestures
 
     private func card(at point: CGPoint) -> TabCardView? {
-        // Newer cards are on top.
-        cards.reversed().first { $0.cardFrame.contains(point) || $0.headerFrame.contains(point) }
+        // Newer cards are on top. One flying off is out of reach.
+        cards.reversed().first { row.canTake($0.tabID) && ($0.cardFrame.contains(point) || $0.headerFrame.contains(point)) }
     }
 
     @objc private func tapped(_ tap: UITapGestureRecognizer) {
@@ -145,7 +154,11 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
                 layoutCards()
             case .ended, .cancelled:
                 let closes = pan.state == .ended && MobileTabCarousel.closes(translation: translation.y, velocity: velocity.y)
-                if closes { throwAway(card, velocity: velocity.y) } else { settleDraggedCard() }
+                // The finger lets go of the card now, not when it lands: the next flick can come
+                // before that.
+                draggedCard = nil
+                draggedOffset = 0
+                if closes, row.startThrow(card.tabID) { throwAway(card) } else { settleCards() }
             default: break
             }
             return
@@ -166,39 +179,30 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    private func settleDraggedCard() {
+    /// A card let go without being thrown springs back into the row.
+    private func settleCards() {
         UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0,
                        options: [.allowUserInteraction, .beginFromCurrentState]) {
-            self.draggedOffset = 0
             self.layoutCards()
-        } completion: { _ in self.draggedCard = nil }
+        }
     }
 
-    private func throwAway(_ card: TabCardView, velocity: CGFloat) {
-        guard let index = cards.firstIndex(where: { $0 === card }) else { return }
+    /// Flies a card thrown in `row` off the top, then takes it out of the row by its id: other
+    /// cards thrown meanwhile may have landed first and moved it.
+    private func throwAway(_ card: TabCardView) {
         UISelectionFeedbackGenerator().selectionChanged()
         let id = card.tabID
-        let distance = bounds.height
         UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseIn, .beginFromCurrentState]) {
-            self.draggedOffset = -distance
             self.layoutCards()
             card.alpha = 0
         } completion: { _ in
             card.removeFromSuperview()
-            self.cards.remove(at: index)
-            self.draggedCard = nil
-            self.draggedOffset = 0
-            // The row closes the gap. A card thrown from behind the focus leaves the focus where
-            // it was; throwing the focused card hands the focus to the one after it.
-            var target = self.position.rounded()
-            if CGFloat(index) < target {
-                target -= 1
-                self.position -= 1
-            }
-            target = min(max(0, target), CGFloat(max(0, self.cards.count - 1)))
+            if self.views[id] === card { self.views[id] = nil }
+            guard let gap = self.row.finishThrow(id, position: self.position) else { return }
+            self.position = gap.position
             UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0,
                            options: [.allowUserInteraction]) {
-                self.position = target
+                self.position = CGFloat(gap.settle)
                 self.layoutCards()
             }
             self.delegate?.tabSwitcher(self, didClose: id)
