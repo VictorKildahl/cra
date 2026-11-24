@@ -90,7 +90,7 @@ struct OnboardingView: View {
                 .id(model.step)
             VStack(spacing: 0) {
                 Spacer()
-                Button(action: model.next) {
+                let next = Button(action: model.next) {
                     Text(MobileOnboarding.buttonTitle(for: model.step))
                         .scaledFont(size: 17, weight: .medium, relativeTo: .body)
                         .foregroundStyle(.white)
@@ -103,6 +103,11 @@ struct OnboardingView: View {
                 .opacity(MobileOnboarding.showsNext(model.step, tried: tried) && model.progress != .working ? 1 : 0)
                 .disabled(!MobileOnboarding.showsNext(model.step, tried: tried) || (model.step == .blocking && tried))
                 .accessibilityIdentifier("onboarding-next")
+                if mock.shape == .phone {
+                    next
+                } else {
+                    next.frame(maxWidth: mock.size.width)
+                }
                 if model.step == .defaultBrowser {
                     Button(MobileOnboarding.defaultBrowserSkip) { model.later() }
                         .scaledFont(size: 17, weight: .medium, relativeTo: .body)

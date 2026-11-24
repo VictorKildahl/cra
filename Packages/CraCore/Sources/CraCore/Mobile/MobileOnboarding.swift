@@ -45,8 +45,10 @@ public enum MobileOnboarding {
         public enum Shape: String { case phone, duoClosed, duoOpen }
         public let shape: Shape
         public let size: CGSize
-        public let sampleRows: Int
+        public let logicalSize: CGSize
+        public let columnWidth: CGFloat
         public let keyWidth: CGFloat
+        public let keyHeight: CGFloat
     }
 
     /// Phones are longer than 1.6 in either orientation; iPads are shorter but have no side inset.
@@ -54,12 +56,19 @@ public enum MobileOnboarding {
     public static func mock(window: CGSize, safeLeft: CGFloat, safeRight: CGFloat) -> Mock {
         guard max(window.width, window.height) / min(window.width, window.height) < 1.6,
               (safeLeft > 0) != (safeRight > 0) else {
-            return Mock(shape: .phone, size: CGSize(width: 330, height: 640), sampleRows: 5, keyWidth: 26)
+            return Mock(shape: .phone, size: CGSize(width: 330, height: 640),
+                        logicalSize: CGSize(width: 330, height: 640), columnWidth: 330, keyWidth: 26, keyHeight: 30)
         }
         let closed = window.height > window.width
         let size = closed ? CGSize(width: 330, height: 330 * window.height / window.width)
                           : CGSize(width: 450 * window.width / window.height, height: 450)
-        return Mock(shape: closed ? .duoClosed : .duoOpen, size: size, sampleRows: 3, keyWidth: (size.width - 52) / 10)
+        // The existing mock draws Apple's 393 pt phone at 330 pt.
+        let logicalSize = CGSize(width: window.width * 330 / 393, height: window.height * 330 / 393)
+        let columnWidth = closed ? logicalSize.width : min(logicalSize.width, 540) // SheetHost's wide content cap.
+        // Research's open keyboard: the first row spans 82% of the screen, with nine 4 pt gaps.
+        let keyWidth = closed ? (logicalSize.width - 52) / 10 : (0.82 * logicalSize.width - 36) / 10
+        return Mock(shape: closed ? .duoClosed : .duoOpen, size: size, logicalSize: logicalSize,
+                    columnWidth: columnWidth, keyWidth: keyWidth, keyHeight: closed ? 30 : 36)
     }
 
     /// Keeps the exact iPhone layout while its small overflow stays on screen;

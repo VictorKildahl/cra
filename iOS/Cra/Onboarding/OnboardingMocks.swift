@@ -92,9 +92,7 @@ struct PhoneMock<Screen: View>: View {
 
     private var foldedScreen: some View {
         screen
-            .frame(width: mock.size.width, height: mock.size.height, alignment: .top)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 6))
+            .frame(width: mock.logicalSize.width, height: mock.logicalSize.height, alignment: .top)
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 4) {
                     Text("9:41").font(.system(size: 12, weight: .semibold))
@@ -106,6 +104,10 @@ struct PhoneMock<Screen: View>: View {
                 .padding(.trailing, 14)
                 .accessibilityHidden(true)
             }
+            .scaleEffect(mock.size.width / mock.logicalSize.width, anchor: .topLeading)
+            .frame(width: mock.size.width, height: mock.size.height, alignment: .topLeading)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 6))
             .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
     }
 }
@@ -228,7 +230,8 @@ struct BrowseDemo: View {
                     .background(Color.black.opacity(0.06), in: Capsule())
                     .padding(.horizontal, 10)
                     .padding(.top, 10)
-                    ForEach(Array(MobileOnboarding.sampleQueries.prefix(mock.sampleRows).enumerated()), id: \.offset) { index, query in
+                    .frame(width: mock.columnWidth)
+                    ForEach(Array(MobileOnboarding.sampleQueries.enumerated()), id: \.offset) { index, query in
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass").font(.system(size: 10, weight: .medium))
                             Text(query).font(.system(size: 11, weight: .medium)).lineLimit(1)
@@ -252,8 +255,9 @@ struct BrowseDemo: View {
                         .foregroundStyle(.black)
                         .padding(.horizontal, 14)
                         .frame(height: 34)
+                        .frame(width: mock.columnWidth)
                     }
-                    MockKeyboard(keyWidth: mock.keyWidth).padding(.top, 6)
+                    MockKeyboard(keyWidth: mock.keyWidth, keyHeight: mock.keyHeight).padding(.top, 6)
                 }
                 .background(Color.white, in: UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18))
             }
@@ -289,6 +293,8 @@ struct BrowseDemo: View {
             }
             Spacer()
         }
+        .frame(width: mock.columnWidth)
+        .frame(width: mock.logicalSize.width)
         .padding(.top, mock.shape == .phone ? 0 : 56)
         .background(Color.white)
         .environment(\.colorScheme, .light)
@@ -311,11 +317,11 @@ private struct TryItArrow: View {
     var body: some View {
         Canvas { context, size in
             // Sheet: search field + rows + keyboard (four 30 pt rows, gaps, padding).
-            let keyboardHeight: CGFloat = 4 * 30 + 3 * 6 + 16 + 40
-            let sheetHeight: CGFloat = 40 + CGFloat(mock.sampleRows) * 34 + 6 + keyboardHeight
+            let keyboardHeight: CGFloat = 4 * mock.keyHeight + 3 * 6 + 16 + 40
+            let sheetHeight: CGFloat = 40 + CGFloat(MobileOnboarding.sampleQueries.count) * 34 + 6 + keyboardHeight
             let start = CGPoint(x: size.width / 2, y: mock.shape == .phone ? 84 : 14 + 30 + 18)
             // The shared path stops 6 pt before this point; put its tip 3 pt above the chip.
-            let chip = CGPoint(x: size.width - 48, y: mock.shape == .phone ? 256 : mock.size.height - sheetHeight + 40 + 7 + 3)
+            let chip = CGPoint(x: (size.width + mock.columnWidth) / 2 - 48, y: mock.shape == .phone ? 256 : mock.logicalSize.height - sheetHeight + 40 + 7 + 3)
             let corners = MobileCoachMark.path(from: start, toChipTop: chip)
             var path = Path()
             path.move(to: corners.start)
@@ -335,6 +341,7 @@ private struct TryItArrow: View {
 /// A light keyboard, drawn small.
 private struct MockKeyboard: View {
     let keyWidth: CGFloat
+    let keyHeight: CGFloat
     private let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 
     var body: some View {
@@ -343,13 +350,13 @@ private struct MockKeyboard: View {
                 HStack(spacing: 4) {
                     ForEach(Array(row), id: \.self) { key in
                         Text(String(key)).font(.system(size: 12))
-                            .frame(width: keyWidth, height: 30)
+                            .frame(width: keyWidth, height: keyHeight)
                             .background(.white, in: RoundedRectangle(cornerRadius: 4))
                             .shadow(color: .black.opacity(0.25), radius: 0, y: 1)
                     }
                 }
             }
-            RoundedRectangle(cornerRadius: 4).fill(.white).frame(width: 150 * keyWidth / 26, height: 30).shadow(color: .black.opacity(0.25), radius: 0, y: 1)
+            RoundedRectangle(cornerRadius: 4).fill(.white).frame(width: 150 * keyWidth / 26, height: keyHeight).shadow(color: .black.opacity(0.25), radius: 0, y: 1)
         }
         .foregroundStyle(.black)
         .frame(maxWidth: .infinity)
@@ -425,15 +432,21 @@ struct PinchDemo: View {
 
     private var page: some View {
         VStack(alignment: .leading, spacing: 8) {
-            moon.frame(height: 200).clipped().overlay(alignment: .top) { MockStatusBar(mock: mock, dark: true, overlay: true) }
+            moon.frame(width: mock.logicalSize.width, height: 200).clipped().overlay(alignment: .top) { MockStatusBar(mock: mock, dark: true, overlay: true) }
             Text("Address at Rice University on the Nation's Space Effort").font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
                 .padding(.horizontal, 14)
+                .frame(width: mock.columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             Text("Delivered at Rice University on September 12, 1962").font(.system(size: 9)).foregroundStyle(.gray).padding(.horizontal, 14)
+                .frame(width: mock.columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             Text("We meet at a college noted for knowledge, in a city noted for progress, in a state noted for strength, and we stand in need of all three, for we meet in an hour of change and challenge, in a decade of hope and fear, in an age of both knowledge and ignorance. The greater our knowledge increases, the greater our ignorance unfolds.\n\nDespite the striking fact that most of the scientists that the world has ever known are alive and working today, despite the fact that this Nation's own scientific manpower is doubling every 12 years in a rate of growth more than three times that of our population as a whole, despite that, the vast stretches of the unknown and the unanswered and the unfinished still far outstrip our collective comprehension.")
                 .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8)).padding(.horizontal, 14)
+                .frame(width: mock.columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             Spacer(minLength: 0)
         }
-        .frame(width: mock.size.width)
+        .frame(width: mock.logicalSize.width)
     }
 
     private var hint: some View {
@@ -442,11 +455,11 @@ struct PinchDemo: View {
             let pinch = CGFloat(min(1, max(0, (t - 0.4) / 1.0)))
             ZStack {
                 Circle().fill(Color(red: 0.35, green: 0.36, blue: 0.96).opacity(0.9)).frame(width: 30, height: 30)
-                    .position(x: mock.size.width * 210 / 330 - mock.size.width * 40 / 330 * pinch,
-                              y: mock.size.height * 330 / 640 + mock.size.height * 30 / 640 * pinch)
+                    .position(x: mock.logicalSize.width * 210 / 330 - mock.logicalSize.width * 40 / 330 * pinch,
+                              y: mock.logicalSize.height * 330 / 640 + mock.logicalSize.height * 30 / 640 * pinch)
                 Circle().fill(Color(red: 1, green: 0.24, blue: 0.42).opacity(0.9)).frame(width: 30, height: 30)
-                    .position(x: mock.size.width * 120 / 330 + mock.size.width * 40 / 330 * pinch,
-                              y: mock.size.height * 420 / 640 - mock.size.height * 30 / 640 * pinch)
+                    .position(x: mock.logicalSize.width * 120 / 330 + mock.logicalSize.width * 40 / 330 * pinch,
+                              y: mock.logicalSize.height * 420 / 640 - mock.logicalSize.height * 30 / 640 * pinch)
             }
         }
         .allowsHitTesting(false)
@@ -478,7 +491,8 @@ struct PinchDemo: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: mock.size.width)
+        .frame(width: mock.columnWidth)
+        .frame(width: mock.logicalSize.width)
         .padding(.top, mock.shape == .phone ? 0 : 56)
         .accessibilityIdentifier("onboarding-pinch-summary")
     }
@@ -523,7 +537,7 @@ struct BlockingDemo: View {
                     .padding(.top, 12)
                     Spacer(minLength: 0)
                 }
-                .frame(width: mock.size.width)
+                .frame(width: mock.columnWidth)
                 .padding(.top, mock.shape == .phone ? 0 : 56)
                 .background(Color.white)
                 Toggle(isOn: $blocks.animation(.easeInOut(duration: 0.35))) {
@@ -533,11 +547,13 @@ struct BlockingDemo: View {
                 .padding(.horizontal, 14)
                 .frame(height: 46)
                 .background(Color(white: 0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .frame(maxWidth: 310)
                 .padding(.horizontal, 10)
-                .padding(.bottom, 150 * mock.size.height / 640)
+                .frame(width: mock.columnWidth)
+                .padding(.bottom, 150 * mock.logicalSize.height / 640)
                 .accessibilityIdentifier("onboarding-blocking")
             }
+            .frame(width: mock.logicalSize.width)
+            .background(Color.white)
         }
         .environment(\.colorScheme, .light)
     }
@@ -573,7 +589,7 @@ struct BlockingDemo: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 150)
+            .frame(height: 150 * mock.logicalSize.height / 640)
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
