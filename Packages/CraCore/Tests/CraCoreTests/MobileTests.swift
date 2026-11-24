@@ -1248,7 +1248,9 @@ struct MobileOnboardingTests {
             let mock = MobileOnboarding.mock(window: window, safeLeft: left, safeRight: right)
             #expect(mock.shape == .phone)
             #expect(mock.size == CGSize(width: 330, height: 640)) // Existing phone design.
-            #expect(mock.sampleRows == 5)
+            #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.columnWidth == 330)
+            #expect(mock.keyHeight == 30)
             #expect(mock.keyWidth == 26)
         }
     }
@@ -1259,7 +1261,9 @@ struct MobileOnboardingTests {
             let mock = MobileOnboarding.mock(window: window, safeLeft: 0, safeRight: 0)
             #expect(mock.shape == .phone)
             #expect(mock.size == CGSize(width: 330, height: 640)) // Existing phone design.
-            #expect(mock.sampleRows == 5)
+            #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.columnWidth == 330)
+            #expect(mock.keyHeight == 30)
             #expect(mock.keyWidth == 26)
         }
     }
@@ -1270,8 +1274,13 @@ struct MobileOnboardingTests {
         #expect(mock.shape == .duoClosed)
         #expect(mock.size.width == 330) // Spec's retained phone width.
         #expect(abs(mock.size.width / mock.size.height / (466.0 / 678) - 1) < 0.005)
-        #expect(mock.sampleRows == 3) // Spec's three-row sheet.
-        #expect(mock.keyWidth == (330 - 52) / 10.0) // Ten keys, nine 4 pt gaps, two 8 pt margins.
+        // Job 010 window, at the existing mock's 330 / Apple's 393 pt phone width.
+        #expect(abs(mock.logicalSize.width - 466 * 330 / 393.0) < 0.01)
+        #expect(abs(mock.logicalSize.height - 678 * 330 / 393.0) < 0.01)
+        #expect(abs((mock.size.width / mock.logicalSize.width) / (mock.size.height / mock.logicalSize.height) - 1) < 0.005)
+        #expect(mock.columnWidth == mock.logicalSize.width)
+        #expect(mock.keyWidth == (mock.logicalSize.width - 52) / 10) // Existing keyboard margins.
+        #expect(mock.keyHeight == 30) // Existing phone keyboard height.
     }
 
     @Test func openMockMatchesTheWindow() {
@@ -1280,18 +1289,33 @@ struct MobileOnboardingTests {
         #expect(mock.shape == .duoOpen)
         #expect(mock.size.height == 450) // Spec's unfolded height above Next.
         #expect(abs(mock.size.width / mock.size.height / (951.0 / 669) - 1) < 0.005)
-        #expect(mock.sampleRows == 3) // Spec's three-row sheet.
-        #expect(mock.keyWidth == (mock.size.width - 52) / 10) // Ten keys and sheet margins.
+        // Job 010 window, at the existing mock's 330 / Apple's 393 pt phone width.
+        #expect(abs(mock.logicalSize.width - 951 * 330 / 393.0) < 0.01)
+        #expect(abs(mock.logicalSize.height - 669 * 330 / 393.0) < 0.01)
+        #expect(abs((mock.size.width / mock.logicalSize.width) / (mock.size.height / mock.logicalSize.height) - 1) < 0.005)
+        #expect(mock.columnWidth == 540) // SheetHost's wide content cap.
+        #expect(mock.keyWidth == (0.82 * mock.logicalSize.width - 36) / 10) // Research keyboard: 82% row, nine gaps.
+        #expect(mock.keyHeight == 36) // Research open keyboard, about 1.7:1 keys.
     }
 
     @Test func oneSidedInsetAloneDoesNotChooseAShortMock() {
         // Apple's 852x393 landscape size; synthetic one-sided 59 pt inset (spec 17f).
-        #expect(MobileOnboarding.mock(window: CGSize(width: 852, height: 393), safeLeft: 0, safeRight: 59).shape == .phone)
+        let mock = MobileOnboarding.mock(window: CGSize(width: 852, height: 393), safeLeft: 0, safeRight: 59)
+        #expect(mock.shape == .phone)
+        #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+        #expect(mock.columnWidth == 330)
+        #expect(mock.keyWidth == 26)
+        #expect(mock.keyHeight == 30)
     }
 
     @Test func splitViewKeepsThePhoneMock() {
         // Research's measured 469x669 Split View half; unmeasured insets supplied as 0 (spec 17g).
-        #expect(MobileOnboarding.mock(window: CGSize(width: 469, height: 669), safeLeft: 0, safeRight: 0).shape == .phone)
+        let mock = MobileOnboarding.mock(window: CGSize(width: 469, height: 669), safeLeft: 0, safeRight: 0)
+        #expect(mock.shape == .phone)
+        #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+        #expect(mock.columnWidth == 330)
+        #expect(mock.keyWidth == 26)
+        #expect(mock.keyHeight == 30)
     }
 
     @Test func postureMocksFitWithoutScaling() {

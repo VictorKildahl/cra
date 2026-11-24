@@ -1461,6 +1461,13 @@ final class OnboardingTests: BrowserTestCase {
         next.tap()
         XCTAssertTrue(app.switches["onboarding-blocking"].waitForExistence(timeout: 3), "blocking: switch appears")
         matches("blocking")
+        let mock = app.descendants(matching: .any).matching(identifier: "onboarding-mock").firstMatch
+        if mock.value as? String != "phone" {
+            XCTAssertLessThanOrEqual(next.frame.width, mock.frame.width + 1, "blocking: Next stays within the mock width")
+            let toggle = app.switches["onboarding-blocking"].frame
+            XCTAssertGreaterThanOrEqual(toggle.minX, mock.frame.minX + 1, "blocking: switch clears the left edge")
+            XCTAssertLessThanOrEqual(toggle.maxX, mock.frame.maxX - 1, "blocking: switch clears the right edge")
+        }
     }
     func testEveryStepFitsTheScreen() {
         launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
