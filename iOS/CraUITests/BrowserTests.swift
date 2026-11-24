@@ -1469,6 +1469,14 @@ final class OnboardingTests: BrowserTestCase {
             XCTAssertLessThanOrEqual(toggle.maxX, mock.frame.maxX - 1, "blocking: switch clears the right edge")
             XCTAssertEqual((mock.frame.maxY - toggle.maxY) / mock.frame.height, 150.0 / 640, accuracy: 0.02,
                            "blocking: switch keeps the phone's proportional bottom offset")
+            let article = app.descendants(matching: .any).matching(identifier: "onboarding-blocking-article").firstMatch
+            if mock.value as? String == "duoOpen" {
+                XCTAssertTrue(article.exists, "blocking: open page continues below the switch")
+                XCTAssertGreaterThanOrEqual(article.frame.minY, toggle.maxY + 1, "blocking: article clears the switch")
+                XCTAssertEqual(article.frame.maxY, mock.frame.maxY, accuracy: 1, "blocking: article reaches the clipped page edge")
+            } else {
+                XCTAssertFalse(article.exists, "blocking: closed page stays blank around Let's go")
+            }
         }
     }
     func testEveryStepFitsTheScreen() {
