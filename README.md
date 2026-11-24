@@ -15,7 +15,8 @@
   <a href="https://apps.apple.com/app/id6834101298">iPhone (App Store)</a> ·
   <a href="https://crabrowser.app">crabrowser.app</a> ·
   <a href="https://crabrowser.app/release-notes">What's new</a> ·
-  <a href="https://crabrowser.app/help">Help</a>
+  <a href="https://crabrowser.app/help">Help</a> ·
+  <a href="https://discord.gg/nQMSBTgFRy">Discord</a>
 </p>
 
 <p align="center">

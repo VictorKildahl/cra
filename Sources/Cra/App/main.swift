@@ -2,6 +2,9 @@ import AppKit
 import CraCEF
 
 if CommandLine.arguments.dropFirst().first == ChromiumFilterLists.origin { ChromiumFilterLists.watch() }
+// Chromium's DevTools pipe (extension buttons' popups) can only use descriptors 3 and 4: hold them before AppKit
+// or anything else opens a file, and let go just before Chromium starts (#752).
+let pipeDescriptorsAtLaunch = DevToolsPipeDescriptors.reserve()
 
 // A staged update run once before it is installed, so macOS has checked the new bundle by the
 // time the user starts it (UpdatePrewarm). Nothing else of Cra runs.
@@ -75,6 +78,9 @@ MainActor.assumeIsolated {
                                      preferredLanguages: Locale.preferredLanguages)
     CraLog.note("chromium locale: \(locale ?? "en-US (default)") for \(Locale.preferredLanguages.prefix(3).joined(separator: ","))")
     let useChromeStyle = ProcessInfo.processInfo.environment["CRA_CHROME_STYLE"] == "1"
+    // Freed last, right before the pipe is made (in initialize on CEF, as runMessageLoop starts on the engine).
+    let freed = DevToolsPipeDescriptors.release()
+    CraLog.note(DevToolsPipeDescriptors.logLine(found: pipeDescriptorsAtLaunch, freed: freed))
     let started = CraCEFRuntime.initialize(withCachePath: AppPaths.chromiumCache.path,
                                            userAgentProduct: "",
                                            logPath: AppPaths.log.path,

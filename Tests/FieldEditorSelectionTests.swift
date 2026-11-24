@@ -19,6 +19,7 @@ enum FieldEditorSelectionTests {
     }
 
     /// The bar opening on a long address: all of it selected, its first character in view.
+    // promise: #756
     @MainActor
     private static func longAddressShowsItsStart() {
         let (window, field) = make()
@@ -33,6 +34,7 @@ enum FieldEditorSelectionTests {
     /// The field still has focus and sits at the end of the last address (End, typing, or the
     /// caret the bar puts after a previewed row). The next address comes up selected and showed
     /// only its tail.
+    // promise: #756
     @MainActor
     private static func startShownWhenFieldWasScrolledToTheEnd() {
         let (window, field) = make()

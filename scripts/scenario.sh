@@ -47,6 +47,9 @@
 #                               import leaves an extension
 #   profile <folder>            its contents copied into the data folder before launch: files an
 #                               older Cra left (Tests/Fixtures/CEFProfile, Cra on CEF's cookies)
+#   hold-fds                    Cra starts with descriptors 3 and 4 already open (/dev/null), as a launcher that leaks
+#                               them, or macOS's own files opened before Chromium starts, leave them: where Chrome's
+#                               --remote-debugging-pipe has to go (#752)
 #   home                        a throwaway home folder, so downloads stay out of ~/Downloads
 #   crash-report <file>         copied into the throwaway home's Library/Logs/DiagnosticReports
 #                               before launch, as macOS leaves one (needs home)
@@ -429,10 +432,13 @@ while read -r _ f; do cp -R "$(expand "$f")/." "$DATA/"; done < <(grep '^profile
 while read -r _ f; do mkdir -p "$DATA/home/Library/Logs/DiagnosticReports" && cp "$(expand "$f")" "$DATA/home/Library/Logs/DiagnosticReports/"; done < <(grep '^crash-report ' "$FILE")
 for i in "${!app_env[@]}"; do app_env[$i]="$(expand "${app_env[$i]}")"; done
 
+# hold-fds: this shell holds 3 and 4 open while it starts Cra, so Cra inherits them (#752).
+grep -q '^hold-fds' "$FILE" && exec 3</dev/null 4</dev/null
 CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
   CRA_ARC_DIR="$FIXTURES/Arc" CRA_FLAGS="${CRA_FLAGS:-}" \
   "${app_env[@]}" "$EXE" ${app_args[@]+"${app_args[@]}"} >"$OUT/stdout.log" 2>&1 &
 PID=$!
+grep -q '^hold-fds' "$FILE" && exec 3<&- 4<&-
 PIDS+=("$PID")
 
 cleanup() {
@@ -629,7 +635,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       fi
       rm -rf "$APP" && mv "$next" "$APP"
       echo "  Cra.app replaced by $version${2:+ on another Chrome}" ;;
-    fresh|requires|port|seed|env|arg|extension|profile|home|crash-report) ;;
+    fresh|requires|port|seed|env|arg|extension|profile|home|crash-report|hold-fds) ;;
     *) problem "unknown scenario line: $line" ;;
   esac
 done < "$FILE"
