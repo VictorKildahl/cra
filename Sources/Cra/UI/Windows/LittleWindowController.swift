@@ -271,10 +271,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         peekParent = parent
         peekSourceTab = parent == nil ? nil : fromTab
         // Little Windows are normal browsing: they target the last normal window's space
-        // (a Peek: the space of the window it covers; a cra://open: the space it names).
-        target = LittleWindowTarget(requested: parent == nil ? space : nil)
-        state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID
-            ?? target.space(lastUsed: app.store.focusedSpaceID(window: app.store.lastNormalWindowID)))
+        // (a Peek: the space of the window it covers; a cra://open: the space it names; a link to a
+        // site whose profile was picked in a Little Window: a space on that profile).
+        let lastUsed = app.store.focusedSpaceID(window: app.store.lastNormalWindowID)
+        let siteSpace = parent == nil && space == nil && opener == nil && fromTab == nil
+            ? url.flatMap { app.store.prefs.siteProfiles.space(for: $0, lastUsed: lastUsed, in: app.store.orderedSpaces) } : nil
+        target = LittleWindowTarget(requested: parent == nil ? space ?? siteSpace : nil)
+        state = LittleWindowState(targetSpaceID: parent?.focusedSpaceID ?? target.space(lastUsed: lastUsed))
         commandBar = CommandBarController(engine: app.engine, store: app.store)
         let size = app.store.prefs.littleWindowSize.map { NSSizeFromString($0) }
             .flatMap { $0 == LittleMetrics.legacyDefaultSize ? nil : $0 }
@@ -1724,12 +1727,14 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         CraLog.note("little profile \(name): \(store.profileName(state.profileID)) at \(address ?? "-")")
     }
 
-    /// A page can't move between profiles: a new browser in the other one loads its address, which it returns.
+    /// A page can't move between profiles: a new browser in the other one loads its address, which it returns. The
+    /// profile is remembered for that address's site, as Arc's domainToProfilePreferences.
     @discardableResult
     private func reload(inProfile id: UUID?) -> String? {
         guard browser != nil else { return nil }
         state.profileID = id
         let address = LittleProfileChange.address(opened: openedURL, shown: currentURL)
+        store.prefs.siteProfiles.remember(id, for: address)
         replacePage(at: address)
         return address
     }

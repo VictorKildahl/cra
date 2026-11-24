@@ -3933,9 +3933,17 @@ events, the window recorded with `screencapture -V`.
 
 - [O static] `LittleBrowser.State` holds `profile: Profile` and `shouldShowProfileIndicators: Bool`;
   `LittleBrowserCreationProfileType = profile(Profile) | lastUsedProfileFromStandardWindow`, and the window
-  record keeps the profile (`little { profile: … }` in StorableWindows.json, above). So a Little Arc gets
-  the profile of the window used last when it opens and keeps it; "Open in <space>" follows the window used
-  last separately (issue #92).
+  record keeps the profile (`little { profile: … }` in StorableWindows.json, above). A Little Arc keeps the
+  profile it opened with; which one that is, the next entry says.
+- [O live] Arc 1.173.1, 25 Nov 2026, an installed Arc with two profiles and a year of use, links sent with
+  `open <url>` from another app, `defaults read company.thebrowser.Browser domainToProfilePreferences` before and
+  after, and screenshots of the address pill. Picking a profile in a Little Arc's pill writes
+  `domainToProfilePreferences` {site: profile folder ("Default", "Profile 1")}; a later pick on the same site
+  replaces it, and opening a link writes nothing. The site is the host without `www.`, a subdomain a site of its
+  own, and for a link that redirected it is the link's host (bit.ly, not where it went). A later link to a site
+  there opens in that profile and "Open in <space>" names a space on it, whichever window was used last; a site
+  not there takes the window used last (`lastUsedProfileFromStandardWindow`). With two spaces on the profile Arc
+  named the first in the sidebar. Not seen: whether a pick made in the window used last is written too.
 - [O static] The toolbar's ViewState has `profileName: String?`, drawn as `URLField.Accessory.profileIndicator
   {profileName, onClick}` in the address field (AX id `littleBrowserProfileIndicator`) by ProfilesUI's
   `ProfileIndicatorView` (`ProfileIndicatorConfig {profileName, tooltip, theme, size condensed|full,
@@ -3957,7 +3965,10 @@ events, the window recorded with `screencapture -V`.
   page's ticked, an NSAlert with that text and "Don’t ask again" (defaults
   `shouldBypassConfirmLittleWindowProfileDialog`), then the page reloads in a new browser in that profile:
   the link the window opened (or the address typed in it), never where its redirects ended (a sign-in page with
-  the first profile's challenge) (`LittleProfileChange`).
+  the first profile's challenge) (`LittleProfileChange`). The pick is remembered for that address's site
+  (`SiteProfiles` in windows.json); a link to the site opens in the space used last when it is on that profile,
+  else in the first space on it. An Arc import brings `domainToProfilePreferences` over for the profiles its
+  spaces are on.
 
 ## Peek and the copy toast's Share button (Arc 1.171, 3 Nov 2026, offline Arc)
 

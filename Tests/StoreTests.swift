@@ -161,6 +161,7 @@ enum StoreTests {
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
         arcLinkRoutes(store: composition.store)
         arcProfiles(plan: plan, store: composition.store)
+        arcSiteProfiles(plan: plan, store: composition.store)
     }
 
     // promise: #742
@@ -302,6 +303,23 @@ enum StoreTests {
         expect(to("work.example.com") == .littleWindow(space: work), "a Little Arc in Work opens a Little Window in Work")
         expect(to("example.com/standup") == .space(home) && to("meet.google.com") == .mostRecentSpace, "space routes keep their space")
         expect(store.settings.defaultLinkDestination == .littleWindowInUse, "Little Arc as the default stays in the space in use")
+    }
+
+    /// Arc's domainToProfilePreferences: the profile picked for each site in a Little Arc comes over on the
+    /// Cra profile its folder became.
+    @MainActor
+    private static func arcSiteProfiles(plan: ImportPlan, store: SidebarStore) {
+        let work = store.orderedSpaces.first { $0.title == "Work" }!, home = store.orderedSpaces.first { $0.title == "Home" }!
+        let client = store.profiles.first { $0.name == "Client" }
+        let sites = store.prefs.siteProfiles
+        expect(plan.settings.siteProfiles.map { "\($0.site) \($0.folder)" } == ["example.com Default", "other.example.com Profile 9", "work.example.com Profile 2"],
+               "the profile picked for each site in a Little Arc comes from the fixture's preferences, not this Mac's Arc")
+        expect(sites.profile(for: "https://work.example.com/a") == RememberedProfile(id: client?.id)
+               && sites.profile(for: "https://www.example.com/") == RememberedProfile(id: nil),
+               "each site keeps its Little Arc profile, on the Cra profile its folder became")
+        expect(sites.profile(for: "https://other.example.com/") == nil, "a site on a profile no imported space is on follows the window used last")
+        expect(sites.space(for: "https://work.example.com/", lastUsed: home.id, in: store.orderedSpaces) == work.id,
+               "so a Little Window on it opens in Work")
     }
 
     // promise: #131

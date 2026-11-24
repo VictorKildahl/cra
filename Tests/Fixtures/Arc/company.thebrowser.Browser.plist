@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>domainToProfilePreferences</key>
+	<dict>
+		<key>example.com</key>
+		<string>Default</string>
+		<key>work.example.com</key>
+		<string>Profile 2</string>
+		<key>other.example.com</key>
+		<string>Profile 9</string>
+	</dict>
+</dict>
+</plist>

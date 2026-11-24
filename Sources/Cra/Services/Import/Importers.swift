@@ -64,6 +64,12 @@ struct ImportedLinkRoute {
     var destination: ImportedLinkDestination
 }
 
+/// The profile folder picked for a site in a Little Arc.
+struct ImportedSiteProfile: Equatable {
+    var site: String
+    var folder: String
+}
+
 struct ImportedSettings {
     var autoArchive: AutoArchiveThreshold?
     var sidebarWidth: Double?
@@ -71,9 +77,12 @@ struct ImportedSettings {
     var toolbarShowsFullURL: Bool?
     var linkRoutes: [ImportedLinkRoute] = []
     var defaultLinkDestination: ImportedLinkDestination?
+    /// Arc's domainToProfilePreferences, by site, so two reads of one file are equal.
+    var siteProfiles: [ImportedSiteProfile] = []
 
     var isEmpty: Bool {
         autoArchive == nil && sidebarWidth == nil && showToolbar == nil && toolbarShowsFullURL == nil && linkRoutes.isEmpty && defaultLinkDestination == nil
+            && siteProfiles.isEmpty
     }
 }
 
@@ -148,6 +157,17 @@ enum ArcImporter {
     /// Arc's "Show Full URL" on the toolbar address (off by default); nil when Arc never stored it.
     static var showsFullURL: Bool? {
         UserDefaults(suiteName: "company.thebrowser.Browser")?.object(forKey: "toolbarShowFullURLsEnabledPreference") as? Bool
+    }
+
+    /// Arc's domainToProfilePreferences: site → profile folder ("Default", "Profile 1"), written when a
+    /// profile is picked in a Little Arc. Under CRA_ARC_DIR it is the fixture's
+    /// company.thebrowser.Browser.plist, so a test never reads this Mac's Arc.
+    static var siteProfileFolders: [String: String] {
+        let key = "domainToProfilePreferences"
+        if ProcessInfo.processInfo.environment["CRA_ARC_DIR"] != nil {
+            return NSDictionary(contentsOf: supportDir.appendingPathComponent("company.thebrowser.Browser.plist"))?[key] as? [String: String] ?? [:]
+        }
+        return UserDefaults(suiteName: "company.thebrowser.Browser")?.dictionary(forKey: key) as? [String: String] ?? [:]
     }
 
     /// With `favicons` (a User Data folder, for an import), a tab Arc's caches have no icon for takes its
@@ -265,6 +285,7 @@ enum ArcImporter {
         }
         plan.settings.showToolbar = showsToolbar
         plan.settings.toolbarShowsFullURL = showsFullURL
+        plan.settings.siteProfiles = siteProfileFolders.sorted { $0.key < $1.key }.map { ImportedSiteProfile(site: $0.key, folder: $0.value) }
         if let ldata = try? Data(contentsOf: supportDir.appendingPathComponent("StorableLinkRouting.json")),
            let lroot = try? JSONSerialization.jsonObject(with: ldata) as? [String: Any] {
             plan.settings.defaultLinkDestination = linkDestination(lroot["defaultDestination"], spaceTitles: spaceTitleByID)
@@ -620,6 +641,14 @@ extension SidebarStore {
             for r in plan.settings.linkRoutes where !settings.linkRoutes.contains(where: { $0.match == r.match && $0.text == r.text }) {
                 settings.linkRoutes.append(LinkRoute(match: r.match, text: r.text, destination: destination(r.destination)))
             }
+            // Little Arc's profile per site, on the Cra profile its folder became; a folder no imported
+            // space is on has no Cra profile, and its sites follow the window used last.
+            func profile(folder: String) -> RememberedProfile? {
+                if folder == "Default" { return RememberedProfile(id: nil) }
+                return result.profiles.folders[folder].flatMap { dir in profiles.first { $0.directoryName == dir } }.map { RememberedProfile(id: $0.id) }
+            }
+            prefs.siteProfiles.adopt(Dictionary(plan.settings.siteProfiles.compactMap { pick in profile(folder: pick.folder).map { (pick.site, $0) } },
+                                                uniquingKeysWith: { a, _ in a }))
         }
         touchAfterImport()
         return result
