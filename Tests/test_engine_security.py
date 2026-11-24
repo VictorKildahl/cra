@@ -87,10 +87,13 @@ class Cve2026134401(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("CVE-2026-134401", r.stdout)
 
-    def test_stable_is_what_is_served_not_the_versions_list(self):
-        # The versions list named 159.0.8154.13 first; no stable release ever served it.
-        source = es.Source(FIXTURES)
-        self.assertEqual(max(source.serving_stable()), (158, 0, 8127, 89))
+    def test_stable_is_what_most_macs_are_served(self):
+        # The versions list named 159.0.8154.13 first. Mac stable served it only as a 0.5 % early rollout (and
+        # 157.0.8103.81 to another 0.5 %); 158.0.8127.89 went to everyone else.
+        report = es.assess(es.Source(FIXTURES), (159, 0, 8154, 13))
+        self.assertEqual(report.stable, (158, 0, 8127, 89))
+        self.assertEqual(report.early, (159, 0, 8154, 13))
+        self.assertIn("159.0.8154.13 to 0.5 %", es.summary(report))
 
 
 class SameBranch(unittest.TestCase):
@@ -158,6 +161,26 @@ class OtherBranch(unittest.TestCase):
         self.assertEqual(report.target, (159, 0, 8154, 45))  # tagged 23 Nov, after the post
         r = run("--check", data=f.dir)
         self.assertIn("in the wild", r.stdout)
+
+    def branch_only(self, published):
+        """A post's fix whose only commit is a branch-only dependency roll: no main revision (the M157 ICU roll that
+        named two 157.0.8103.79 V8 CVEs, 604a1c1548)."""
+        f = Fixture(self).feed(post(published, "157.0.8103.79", [(444, "High", "CVE-2026-4", "Use after free in V8")]))
+        f.log("157.0.8103.79", commit("e" * 40, "2026-11-05T00:08:03-08:00",
+                                      "[M157] Roll src/third_party/icu/ 2a51536df..c670d12 (2 commits)\n\n"
+                                      "Bug: 574025697, 444\nCr-Commit-Position: refs/branch-heads/8103@{#1213}\n"
+                                      "Cr-Branched-From: e7baefea94b4a90087e3043e4a8effec33c2025f-refs/heads/main@{#1717349}\n"))
+        return es.assess(es.Source(f.dir), (159, 0, 8154, 13))
+
+    def test_a_branch_only_fix_counts_when_the_engine_was_tagged_after_the_post(self):
+        report = self.branch_only("2026-11-11T12:00:00-08:00")
+        self.assertEqual([x.status for x in report.fixes], [es.IN_ENGINE])
+        self.assertFalse(report.behind)
+
+    def test_a_branch_only_fix_after_the_engine_is_not_called_missing(self):
+        report = self.branch_only("2026-11-23T12:00:00-08:00")
+        self.assertEqual([x.status for x in report.fixes], [es.UNVERIFIED])
+        self.assertEqual(report.target, (159, 0, 8154, 45))
 
     def test_posts_from_well_before_the_engine_are_not_read(self):
         f = Fixture(self).feed(post("2026-10-01T12:00:00-07:00", "157.0.8103.20", [(333, "High", "CVE-2026-3", "Old")]))

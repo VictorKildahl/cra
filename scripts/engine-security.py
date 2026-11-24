@@ -44,6 +44,9 @@ RELEASES = ("https://versionhistory.googleapis.com/v1/chrome/platforms/mac/chann
 FEED = "https://chromereleases.googleblog.com/feeds/posts/default?alt=json&max-results=50"
 # Posts older than this before the engine's own tag are not read: their fixes were on main long before it.
 WINDOW = timedelta(days=21)
+# Stable is the newest build served to at least this share of Macs. Below it are early rollouts of the next Chrome
+# and holdbacks of the last (0.5 % each on 24 Nov 2026: 159.0.8154.13 and 157.0.8103.81).
+WIDE = 0.1
 # Commits fetched per tag: a branch's whole life (its Cr-Commit-Position stays under ~2500).
 DEPTH = 4000
 TITLE = "Chromium engine update available"
@@ -179,8 +182,10 @@ class Source:
             raise Unreadable(f"Could not read {what}: {error}") from error
 
     def serving_stable(self) -> list:
+        """(version, fraction of Macs) for each build Mac stable serves now."""
         rows = self._get(RELEASES, "stable-releases.json", "Chrome's version history").get("releases", [])
-        serving = [version(r["version"]) for r in rows if not r.get("serving", {}).get("endTime")]
+        serving = [(version(r["version"]), float(r.get("fraction", 0))) for r in rows
+                   if not r.get("serving", {}).get("endTime")]
         if not serving:
             raise Unreadable("Could not read Chrome's version history: no build is serving Mac stable")
         return serving
@@ -233,6 +238,8 @@ class Report:
     fixes: list
     target: Version | None
     newest_on_branch: Version | None
+    early: Version | None = None  # a newer build on an early rollout to a few Macs
+    early_share: float = 0
 
     @property
     def open_fixes(self) -> list:
@@ -244,7 +251,9 @@ class Report:
 
 
 def assess(source: Source, engine: Version) -> Report:
-    stable = max(source.serving_stable())
+    serving = source.serving_stable()
+    stable = max((v for v, share in serving if share >= WIDE), default=max(v for v, _ in serving))
+    early, early_share = max(((v, s) for v, s in serving if v > stable), default=(None, 0))
     tags = [t for t in source.branch_tags(engine) if t > engine]
     newest = max(tags) if tags else None
     engine_commits = None
@@ -267,23 +276,28 @@ def assess(source: Source, engine: Version) -> Report:
             continue
         for fix in post.fixes:
             fixes.append(fix)
-            landed = next((c for c in source.log(post.version) if fix.bug in c.bugs), None)
+            named = [c for c in source.log(post.version) if fix.bug in c.bugs]
+            # A commit that landed on main: its main revision says whether the engine's branch had left by then.
+            # Branch-only commits (a dependency roll merged into old branches, like M157's ICU roll naming two V8
+            # CVEs) and fixes in other repositories (V8, Skia, ANGLE: no chromium/src commit names them) say nothing.
+            landed = next((c for c in named if c.main_position), None)
             if any(fix.bug in c.bugs for c in engine_commits):
                 fix.status, fix.why = IN_ENGINE, f"merged into {show(engine)}'s branch"
-            elif landed and landed.main_position and branch_point and landed.main_position <= branch_point:
+            elif landed and branch_point and landed.main_position <= branch_point:
                 fix.status, fix.why = IN_ENGINE, (f"landed on main at #{landed.main_position}, before the branch "
                                                   f"(#{branch_point})")
             elif landed:
                 fix.status = MISSING
                 if newest and any(fix.bug in c.bugs for c in source.log(newest)):
                     fix.fixed_in = newest
-            elif engine_date > post.published:
-                # V8, Skia, ANGLE and other repositories: no chromium/src commit names the bug, but Chromium merges
-                # such fixes into every branch it ships, and the engine was tagged after the post.
-                fix.status, fix.why = IN_ENGINE, f"outside chromium/src; {show(engine)} was tagged after the post"
             else:
-                fix.status = UNVERIFIED
-                fix.why = "outside chromium/src (V8, Skia, ANGLE…), so no commit names it"
+                where = ("only in a branch-only commit of Chrome " if named else
+                         "no chromium/src commit of Chrome ") + f"{show(post.version)}'s branch names it"
+                if engine_date > post.published:
+                    # Chromium merges such fixes into every branch it ships, and the engine was tagged after the post.
+                    fix.status, fix.why = IN_ENGINE, f"{where}; {show(engine)} was tagged after the post"
+                else:
+                    fix.status, fix.why = UNVERIFIED, f"{where} (V8, Skia, ANGLE, ICU… or before that branch)"
     target = None
     if stable > engine:
         target = stable
@@ -292,7 +306,13 @@ def assess(source: Source, engine: Version) -> Report:
         if all(f.fixed_in for f in fixes if f.status == MISSING) and (
                 not open_after or source.log(newest)[0].date > max(open_after)):
             target = newest
-    return Report(engine, stable, fixes, target, newest)
+    return Report(engine, stable, fixes, target, newest, early, early_share)
+
+
+def serving_text(report: Report) -> str:
+    early = (f" ({show(report.early)} to {report.early_share * 100:g} % of Macs, an early rollout)"
+             if report.early else "")
+    return f"{show(report.stable)}{early}"
 
 
 def worst(fixes: list) -> str:
@@ -300,7 +320,7 @@ def worst(fixes: list) -> str:
 
 
 def summary(report: Report) -> str:
-    lines = [f"Engine: {show(report.engine)}", f"Chrome stable for Mac (serving): {show(report.stable)}"]
+    lines = [f"Engine: {show(report.engine)}", f"Chrome stable for Mac (serving): {serving_text(report)}"]
     if report.fixes:
         lines.append("Security fixes in Chrome stable posts:")
     for f in report.fixes:
@@ -335,7 +355,7 @@ def issue_title(report: Report) -> str:
 def issue_body(report: Report) -> str:
     fixes = report.open_fixes
     out = [f"Cra's engine is built from Chrome `{show(report.engine)}`. Chrome stable for macOS is serving "
-           f"`{show(report.stable)}`."]
+           f"{serving_text(report)}."]
     if fixes:
         out += ["", f"**The engine lacks {len(fixes)} security fix{'es' if len(fixes) > 1 else ''} Chrome stable "
                     "has shipped:**", "", "| Severity | CVE | What | Chrome post | In |", "|---|---|---|---|---|"]
