@@ -379,10 +379,13 @@ ungoogled-chromium's and the branding in the tree. Publish both CPUs into one pr
 `scripts/fetch-engine.sh` pins `ENGINE_VERSION` and `ENGINE_RELEASE`; bump the `-<n>` suffix to publish a changed
 build of the same Chrome version.
 
-**A release ships the newest engine.** Pushing a `vX.Y.Z` tag from Claude Code runs
-`scripts/check-cef-release-hook.sh` (the CEF-era name), which stops the push when Chrome's newest stable for macOS
-(Google's version history) is newer than `ENGINE_VERSION`, or when the pinned release lacks the arm64 or the
-Intel archive; `release.sh` checks again (`scripts/check-engine-update.sh --check`). `CRA_ALLOW_OLD_ENGINE=1`
+**A release ships an engine with every Chrome security fix.** Pushing a `vX.Y.Z` tag from Claude Code runs
+`scripts/check-cef-release-hook.sh` (the CEF-era name), which stops the push when `ENGINE_VERSION` lacks a security
+fix Chrome stable has shipped or the stable Mac build Google serves is newer, or when the pinned release lacks the
+arm64 or the Intel archive. The check reads each CVE in the Chrome Releases posts and looks for its bug in
+Chromium's commits, so an engine on a newer Beta branch is checked too (on 159.0.8154.13 Beta, the old number
+check missed 158's critical CVE-2026-134401). `.github/workflows/engine-updates.yml` runs it hourly and opens an
+issue naming the CVEs and the build to move to; `release.sh` checks again (`scripts/check-engine-update.sh --check`). `CRA_ALLOW_OLD_ENGINE=1`
 ships the pinned engine anyway, for an urgent fix while the new one builds; in CI that's the repository variable
 `CRA_ALLOW_OLD_ENGINE` = `1`, deleted after the release.
 

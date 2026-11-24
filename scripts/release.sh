@@ -18,8 +18,8 @@ export CRA_RELEASE=1
 IDENTITY="${CRA_SIGN_IDENTITY:--}"
 ARCHS="${CRA_ARCHS:-arm64 x86_64}"
 
-# A release ships the newest stable engine: Chromium fixes security bugs only in its newest
-# version. CRA_ALLOW_OLD_ENGINE=1 ships the pinned one anyway (an urgent fix while the new engine
+# A release ships an engine with every security fix Chrome stable has shipped: Chromium fixes security bugs only in
+# its newest builds. CRA_ALLOW_OLD_ENGINE=1 ships the pinned one anyway (an urgent fix while the new engine
 # is still building); say so in the release notes. CRA_ENGINE=cef releases on CEF, with CEF's check.
 if [ "${CRA_ENGINE:-chromium}" = cef ]; then
   if [ "${CRA_ALLOW_OLD_CEF:-}" != 1 ]; then
@@ -28,7 +28,7 @@ if [ "${CRA_ENGINE:-chromium}" = cef ]; then
   fi
 elif [ "${CRA_ALLOW_OLD_ENGINE:-}" != 1 ]; then
   scripts/check-engine-update.sh --check ||
-    { echo "Release stopped: the engine is behind Chrome stable (CRA_ALLOW_OLD_ENGINE=1 to ship it anyway)" >&2; exit 1; }
+    { echo "Release stopped: the engine lacks Chrome stable's security fixes (CRA_ALLOW_OLD_ENGINE=1 to ship it anyway)" >&2; exit 1; }
 fi
 
 # The Stable channel's release (GitHub #476, docs/release.md "Channels"): scripts/promote.sh sets it. Its own

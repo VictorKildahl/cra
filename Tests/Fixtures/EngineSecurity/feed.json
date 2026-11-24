@@ -1,0 +1,30 @@
+{
+  "feed": {
+    "entry": [
+      {
+        "title": {"type": "text", "$t": "Stable Channel Update for ChromeOS / ChromeOS Flex"},
+        "published": {"$t": "2026-11-23T18:54:25.241-08:00"},
+        "link": [{"rel": "alternate", "type": "text/html", "href": "https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-chromeos.html"}],
+        "content": {"type": "html", "$t": "<p>The Stable channel is being updated to 158.0.8127.140 for most ChromeOS devices.</p><p>[N/A][554051967] Critical CVE-2026-134401: Improper input validation in Variations.</p>"}
+      },
+      {
+        "title": {"type": "text", "$t": "Stable Channel Update for Desktop"},
+        "published": {"$t": "2026-11-23T12:52:51.321-08:00"},
+        "link": [{"rel": "replies", "href": "https://chromereleases.googleblog.com/feeds/comments"}, {"rel": "alternate", "type": "text/html", "href": "https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-desktop_01734282054.html"}],
+        "content": {"type": "html", "$t": "<span style=\"font-family: arial;\">The Stable channel has been updated to 158.0.8127.88/.89&nbsp;for Windows and Mac and 158.0.8127.88 for Linux, which will roll out over the coming days/weeks. A full list of changes in this build is available in the&nbsp;<a href=\"https://chromium.googlesource.com/chromium/src/+log/158.0.8127.37..158.0.8127.88?pretty=fuller&amp;n=10000\">Log</a>.</span><div><span style=\"font-family: arial;\"><br /></span></div><div><span style=\"font-family: arial;\"><b>Security Fixes and Rewards</b></span></div><div><span style=\"font-family: arial;\">This update includes&nbsp;1&nbsp;security fix. Please see the&nbsp;<a href=\"https://sites.google.com/a/chromium.org/dev/Home/chromium-security\">Chrome Security Page</a>&nbsp;for more information.</span></div><div><span style=\"font-family: arial;\"><br /></span></div><div><span style=\"font-family: arial;\">[N/A][<a href=\"https://issues.chromium.org/issues/554051967\">554051967</a>] Critical CVE-2026-134401: Improper input validation in Variations. <i>Reported by Google on 2026-08-28</i></span></div><div><span style=\"font-family: arial;\"><br /></span></div><div><span style=\"font-family: arial;\">We would also like to thank all security researchers that worked with us during the development cycle.</span></div>"}
+      },
+      {
+        "title": {"type": "text", "$t": "Extended Stable Update for Desktop"},
+        "published": {"$t": "2026-11-23T12:52:47.796-08:00"},
+        "link": [{"rel": "alternate", "type": "text/html", "href": "https://chromereleases.googleblog.com/2026/11/extended-stable-update-for-desktop.html"}],
+        "content": {"type": "html", "$t": "<p>The Extended Stable channel has been updated to 156.0.8078.114 for Windows and Mac.</p><p>[N/A][554051967] Critical CVE-2026-134401: Improper input validation in Variations.</p>"}
+      },
+      {
+        "title": {"type": "text", "$t": "Chrome Dev for Desktop Update"},
+        "published": {"$t": "2026-11-20T09:58:33.217-08:00"},
+        "link": [{"rel": "alternate", "type": "text/html", "href": "https://chromereleases.googleblog.com/2026/11/dev-channel-update-for-desktop.html"}],
+        "content": {"type": "html", "$t": "<p>The Dev channel has been updated to 160.0.8180.4 for Windows, Mac and Linux.</p>"}
+      }
+    ]
+  }
+}
