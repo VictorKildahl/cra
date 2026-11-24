@@ -490,22 +490,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installURLEventHandler()
     }
 
-    /// The window order as Cra comes forward, before AppKit raises its key and main window: a link clicked in
-    /// another app brings Cra forward (LaunchServices) before it arrives, so the browser window had already risen
-    /// over that app when the Little Window opened (#607).
-    private var stackBeforeActivation: (at: Date, stack: [StackedWindow])?
+    /// The window order and the browser window in use as Cra comes forward, before AppKit raises its key and main
+    /// window: a link clicked in another app brings Cra forward (LaunchServices) before it arrives, so the browser
+    /// window had already risen over that app when the Little Window opened (#607), and the window AppKit made key
+    /// had become the one in use.
+    private var beforeComingForward: BeforeComingForward?
     /// Cra is coming forward (from applicationWillBecomeActive to applicationDidBecomeActive): AppKit picks its key
     /// window then, the browser window at times before a Little Window, which isn't the browser in use (#659).
     private var comingForward = false
     /// cra://debug?keyOnComingForward=1: the next time Cra comes forward, the browser window is made key on the
     /// way, as AppKit does by itself at times (#659).
     private var debugKeyOnComingForward = false
+    /// keyOnComingForward's window=<n>: the nth browser window (oldest first) instead of the one in use.
+    private weak var debugKeyOnComingForwardWindow: NSWindow?
     func applicationWillBecomeActive(_ notification: Notification) {
-        stackBeforeActivation = (store.clock.now, StackedWindow.onScreen())
+        beforeComingForward = BeforeComingForward(at: store.clock.now, stack: StackedWindow.onScreen(), window: store.lastNormalWindowID)
         comingForward = true
         if debugKeyOnComingForward {
             debugKeyOnComingForward = false
-            main?.window?.makeKey()
+            (debugKeyOnComingForwardWindow ?? main?.window)?.makeKey()
+            debugKeyOnComingForwardWindow = nil
         }
     }
 
@@ -675,6 +679,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSLog("Cra: ignored %@ from another app (defaults write dk.kildahl.cra scriptingURLs -bool YES allows it)", url)
             }
             return
+        }
+        // Cra came forward for this link and AppKit made another browser window key on the way (a full-screen one on
+        // another display): the window in use is still the one before, and the link opens in its space and profile.
+        if let before = beforeComingForward?.forLink(at: store.clock.now, craActive: NSApp.isActive),
+           mainWindows.contains(where: { $0.windowID == before.window && !$0.isStandalone }) {
+            store.activeWindowID = before.window
         }
         // Links from other apps never land in an incognito window (Chrome does the same).
         useNormalWindow()
@@ -1058,8 +1068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // They go back at once, before the Little Window is made, and again as it comes up.
         var behind = BrowserWindowsBehind.none
         if activate {
-            let before = stackBeforeActivation.flatMap { fromOtherApp && NSApp.isActive
-                && store.clock.now.timeIntervalSince($0.at) <= FrontmostAppHistory.linkGrace ? $0.stack : nil }
+            let before = fromOtherApp ? beforeComingForward?.forLink(at: store.clock.now, craActive: NSApp.isActive)?.stack : nil
             behind = BrowserWindowsBehind(mainWindows.compactMap(\.window), stack: before ?? StackedWindow.onScreen())
             behind.putBack(clickedIfKey: false)
         }
@@ -1931,8 +1940,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // keyOnComingForward=1: the browser window made key the next time Cra comes forward, before the window
-            // AppKit gives the keyboard back to, as AppKit does by itself at times (#659).
-            if dict["keyOnComingForward"] != nil { debugKeyOnComingForward = true; return }
+            // AppKit gives the keyboard back to, as AppKit does by itself at times (#659). &window=<n>: the nth browser
+            // window (oldest first) instead, one other than the window in use.
+            if dict["keyOnComingForward"] != nil {
+                debugKeyOnComingForward = true
+                debugKeyOnComingForwardWindow = dict["window"].flatMap(Int.init)
+                    .flatMap { mainWindows.indices.contains($0) ? mainWindows[$0].window : nil }
+                return
+            }
             // littleFocus=<label> (#646, #641): whether Cra is the active app, which Little Window (oldest first) has
             // the keys, and how many other apps' windows are over the newest one
             // and (mainOver, #659) the browser window.
