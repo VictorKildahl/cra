@@ -9,8 +9,9 @@ import SwiftUI
 struct AppIconDock: View {
     var done: () -> Void = {}
     @State private var selected = MobileAppIcon(alternateName: UIApplication.shared.alternateIconName)
-    /// The sheet's width. An iPad's is wider than the row, which then sits in the middle, still;
-    /// an iPhone's is narrower, and the row scrolls from the left edge as in Arc Search.
+    /// The sheet's width. A sheet wider than the row keeps it still in the middle; a narrower one, an iPhone's
+    /// and, since Arc's icon set made the row 13 icons long, an iPad's too, scrolls it from the left edge as in
+    /// Arc Search.
     @State private var width: CGFloat = 0
 
     private static let icon: CGFloat = 78
@@ -40,14 +41,14 @@ struct AppIconDock: View {
             .padding(.horizontal, 18).padding(.top, 18)
             Spacer(minLength: 24)
             ScrollView(.horizontal, showsIndicators: false) {
-                ZStack(alignment: .bottomLeading) {
-                    shelf
-                    HStack(spacing: Self.gap) {
-                        ForEach(MobileAppIcon.allCases) { icon in iconView(icon) }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, Self.shelfFront + Self.shelfTop * 0.45)
+                HStack(spacing: Self.gap) {
+                    ForEach(MobileAppIcon.allCases) { icon in iconView(icon) }
                 }
+                .padding(.horizontal, 24)
+                .padding(.bottom, Self.shelfFront + Self.shelfTop * 0.45)
+                // Behind the row, so the shelf running past both ends doesn't count toward what scrolls:
+                // the row stops at its last icon instead of 430 pt of empty shelf.
+                .background(alignment: .bottomLeading) { shelf }
                 .frame(width: fits ? Self.rowWidth : nil, alignment: .leading)
                 .frame(width: fits ? width : nil)
             }

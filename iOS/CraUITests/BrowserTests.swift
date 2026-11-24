@@ -1936,8 +1936,9 @@ final class AppIconDockTests: BrowserTestCase {
         }
     }
 
-    /// On iPad the Change App Icon picker shows all four icons whole, at an iPhone's size: its grid
-    /// once stretched to the wide sheet, so the icons grew past 250 pt and the second row was cut off.
+    /// On iPad the Change App Icon picker shows its icons at an iPhone's size, two to a row: its grid once
+    /// stretched to the wide sheet, so the icons grew past 250 pt and the second row was cut off. The first rows
+    /// show whole, and the last icon scrolls into view.
     func testIconPickerFitsEveryIconOnIPad() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the iPhone opens the picker as a half sheet")
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
@@ -1950,6 +1951,64 @@ final class AppIconDockTests: BrowserTestCase {
             XCTAssertLessThanOrEqual(frame.width, 200, "\(icon) grew to the iPad sheet's width")
         }
         keep("app-icon-picker-ipad")
+        let last = app.buttons["icon-early-birds"]
+        for _ in 0..<8 where !(last.exists && sheet.contains(last.frame)) { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(last.exists && sheet.contains(last.frame), "the last icon never scrolled into the picker \(sheet)")
+    }
+
+    /// Arc's icon set with Cra's C (Provok's, in the Mac's Settings ▸ Icon since 23 Nov 2026) is on the iPhone too,
+    /// asked for on X by Chanan Krivisky: the App Icon picker shows all of it after Cra's own four, and picking one
+    /// changes the app's icon. The picker marks what iOS reports, so after a relaunch Candy is still the one marked.
+    /// The grid is lazy, so it scrolls to an icon before looking for it.
+    func testArcIconSetChangesTheAppIcon() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+        sleep(1)
+        keep("app-icon-picker-arc-set")
+        for icon in ["original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"] {
+            XCTAssertTrue(reveal(icon, down: true), "\(icon) is in the picker")
+        }
+        keep("app-icon-picker-arc-set-end")
+        XCTAssertTrue(reveal("candy", down: false))
+        app.buttons["icon-candy"].tap()
+        acknowledgeIconChange()
+        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "Candy is marked once picked")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["icon-segments"].isSelected)
+        XCTAssertTrue(reveal("candy", down: true))
+        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "iOS kept Candy as the app's icon")
+        keep("app-icon-picker-candy")
+
+        // Back to the app's own icon, so other tests start from it.
+        XCTAssertTrue(reveal("segments", down: false))
+        app.buttons["icon-segments"].tap()
+        acknowledgeIconChange()
+        XCTAssertTrue(app.buttons["icon-segments"].isSelected)
+    }
+
+    /// Scrolls the App Icon picker down (or back up) until the icon is on screen to tap.
+    private func reveal(_ icon: String, down: Bool) -> Bool {
+        let button = app.buttons["icon-\(icon)"]
+        let grid = app.scrollViews.firstMatch
+        for _ in 0..<8 where !(button.exists && button.isHittable) {
+            if down { grid.swipeUp(velocity: .slow) } else { grid.swipeDown(velocity: .slow) }
+        }
+        return button.exists && button.isHittable
+    }
+
+    /// iOS says "You have changed the icon for “Cra”" after a change; it shows in the app or in SpringBoard.
+    private func acknowledgeIconChange() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for host in [app!, springboard] {
+            let alert = host.alerts.firstMatch
+            if alert.waitForExistence(timeout: 3) {
+                alert.buttons.firstMatch.tap()
+                return
+            }
+        }
     }
 
     /// App Settings ▸ Change App Icon opens Arc Search's dock sheet with every icon on its shelf,
@@ -1973,10 +2032,11 @@ final class AppIconDockTests: BrowserTestCase {
         keep("icon-dock")
     }
 
-    /// On iPad the dock's row of icons sits in the middle of the sheet, under its title, instead
-    /// of against the left edge with empty shelf to the right.
-    func testIconDockCentresItsRowOnIPad() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "on iPhone the row is wider than the sheet and scrolls")
+    /// On iPad the dock's row of icons runs from the sheet's left margin and scrolls to its last icon, with no
+    /// empty shelf either side. With Cra's four it sat in the middle under the title; Arc's set (24 Nov 2026)
+    /// made the row wider than any iPad's sheet, so it scrolls as on the iPhone.
+    func testIconDockRowFillsTheSheetOnIPad() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the iPhone's row is covered by testChangeAppIconShowsTheDock")
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
@@ -1986,13 +2046,19 @@ final class AppIconDockTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
         for _ in 0..<3 where !row.isHittable { app.swipeUp() }
         row.tap()
-        let title = app.staticTexts["App Icon"]
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
         sleep(1)
-        let first = app.buttons["icon-segments"].frame, last = app.buttons["icon-violet"].frame
-        XCTAssertEqual((first.minX + last.maxX) / 2, title.frame.midX, accuracy: 6,
-                       "the icons run from \(first.minX) to \(last.maxX), not centred under the title at \(title.frame.midX)")
+        let shelf = app.scrollViews.containing(.button, identifier: "icon-segments").firstMatch
+        let first = app.buttons["icon-segments"].frame
+        XCTAssertEqual(first.minX, shelf.frame.minX + 24, accuracy: 6, "the row starts at \(first.minX), not the sheet's left margin \(shelf.frame.minX + 24)")
         keep("icon-dock-ipad")
+        let last = app.buttons["icon-early-birds"]
+        for _ in 0..<6 where !(last.exists && last.isHittable) { shelf.swipeLeft() }
+        sleep(1)
+        XCTAssertTrue(last.exists && last.isHittable, "the row never scrolled to Early Birds")
+        XCTAssertEqual(last.frame.maxX, shelf.frame.maxX - 24, accuracy: 6,
+                       "the row ends at \(last.frame.maxX), not the sheet's right margin \(shelf.frame.maxX - 24)")
+        keep("icon-dock-ipad-end")
     }
 }
 
