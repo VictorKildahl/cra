@@ -18,41 +18,6 @@ enum ImportMetrics {
     static let gap: CGFloat = 10
 }
 
-struct ImportColors {
-    let dark: Bool
-    var background: Color { dark ? .black : .white }
-    /// RebrandAppTitleText
-    var title: Color { dark ? .white.opacity(0.85) : .black.opacity(0.85) }
-    /// RebrandBodyText
-    var body: Color { dark ? .white.opacity(0.55) : .black.opacity(0.55) }
-    var ink: Color { dark ? .white : .black }
-    /// Browser card hairline: #5E5E5E / #9D9D9D over black.
-    var cardBorder: Color { dark ? .white.opacity(0.37) : .black.opacity(0.14) }
-    var cardBorderSelected: Color { dark ? .white.opacity(0.62) : .black.opacity(0.42) }
-    /// BrowserItemBackground (hover)
-    var cardHover: Color { dark ? .white.opacity(0.04) : .black.opacity(0.04) }
-    /// Radio ring: #505050 over black.
-    var radioRing: Color { dark ? .white.opacity(0.31) : .black.opacity(0.22) }
-    /// RebrandRowBackground / RebrandRowBorder
-    var rowFill: Color { dark ? .white.opacity(0.08) : .black.opacity(0.015) }
-    var rowFillHover: Color { dark ? .white.opacity(0.11) : .black.opacity(0.04) }
-    var rowBorder: Color { dark ? .white.opacity(0.16) : .black.opacity(0.08) }
-    /// ImportSelectionCaption
-    var caption: Color { dark ? .white.opacity(0.4) : .black.opacity(0.3) }
-    /// ButtonPrimaryBackground: #E0E0E0 over black.
-    var primaryFill: Color { dark ? Color(white: 0.878) : .black.opacity(0.85) }
-    var primaryFillHover: Color { dark ? Color(white: 0.92) : .black.opacity(0.9) }
-    var primaryText: Color { dark ? .black : .white }
-    var primaryTextDisabled: Color { dark ? Color(white: 0.5) : .white.opacity(0.5) }
-    /// ButtonDefaultBackground
-    var secondaryFill: Color { dark ? .white.opacity(0.08) : .black.opacity(0.08) }
-    var secondaryFillHover: Color { dark ? .white.opacity(0.1) : .black.opacity(0.1) }
-    /// ImportProgressItemBorder
-    var tileBorder: Color { dark ? .white.opacity(0.1) : .black.opacity(0.1) }
-    /// LoadingSubtitle
-    var loading: Color { dark ? .white.opacity(0.4) : .black.opacity(0.3) }
-}
-
 struct ImportFlowView: View {
     @Bindable var model: ImportFlowModel
     @Environment(\.colorScheme) private var scheme
@@ -618,57 +583,6 @@ private struct OpensSkipped: ViewModifier {
         } else {
             content
         }
-    }
-}
-
-/// What an import left out of one tile's kind, opened from that tile: each item's title, address
-/// and reason, and Copy for the whole list as plain text.
-struct SkippedList: View {
-    let report: ImportReport
-    let c: ImportColors
-    @State private var copyHover = false
-    @State private var rowsHeight: CGFloat = 0
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("\(report.skipped.count) not imported").font(.system(size: 14, weight: .medium)).foregroundStyle(c.title)
-                Spacer(minLength: 8)
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(report.plainText, forType: .string)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.on.doc").font(.system(size: 11, weight: .semibold))
-                        Text("Copy").font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundStyle(copyHover ? c.title : c.body)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .onHover { copyHover = $0 }
-            }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(report.skipped.indices, id: \.self) { i in
-                        let skip = report.skipped[i]
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(skip.title.isEmpty ? skip.url : skip.title).font(.system(size: 13, weight: .medium)).foregroundStyle(c.title).lineLimit(1)
-                            if !skip.url.isEmpty {
-                                Text(skip.url).font(.system(size: 11)).foregroundStyle(c.caption).lineLimit(1).truncationMode(.middle)
-                            }
-                            Text(skip.reason.text).font(.system(size: 11)).foregroundStyle(c.body).lineLimit(1)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                    }
-                }
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeight = $0 }
-            }
-            .frame(height: min(max(rowsHeight, 1), 280))
-        }
-        .padding(16)
-        .frame(width: 340)
     }
 }
 

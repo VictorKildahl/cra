@@ -147,6 +147,8 @@ to Markdown or `docs/` alone runs nothing.
   would pick.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
+- `scripts/test-skipped-list.sh`: the import window's skipped list (`SkippedList`) off screen: 8,500
+  rows open in under 2 s, built as they scroll in, and the list is as tall as its rows up to 280 pt.
 - `scripts/test-content-blocker.sh`: the engine's ad and tracker matching
   (`Sources/CraCEF/CraContentBlocker.h`) on Cra's own list, through a C shim: sites' own hosts
   stay first party, and what a site needs to load isn't on the list (Reddit, #586).
