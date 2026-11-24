@@ -150,15 +150,19 @@ enum ArcImporter {
         UserDefaults(suiteName: "company.thebrowser.Browser")?.object(forKey: "toolbarShowFullURLsEnabledPreference") as? Bool
     }
 
-    static func plan() throws -> ImportPlan {
+    /// With `favicons` (a User Data folder, for an import), a tab Arc's caches have no icon for takes its
+    /// host's from the Favicons databases there. Rebuild from Arc reads only the spaces and skips them.
+    static func plan(favicons userData: URL? = nil) throws -> ImportPlan {
         let url = supportDir.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url) else { throw ImportError.notFound("Arc") }
-        return try plan(sidebar: data)
+        var plan = try plan(sidebar: data)
+        if let userData { ImportFavicons.attach(to: &plan, folder: "cra-arc-favicons", from: ImportSource.Kind.arc.iconStores(dataDir: userData)) }
+        return plan
     }
 
-    /// The plan from a StorableSidebar.json's contents (cached favicons still come from `supportDir`,
-    /// profiles and their Favicons databases from `userData`).
-    static func plan(sidebar data: Data, userData: URL = ArcImporter.userData) throws -> ImportPlan {
+    /// The plan from a StorableSidebar.json's contents (favicons and profiles still come from
+    /// `supportDir`).
+    static func plan(sidebar data: Data) throws -> ImportPlan {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [[String: Any]] else { throw ImportError.unreadable("Arc's sidebar") }
@@ -266,7 +270,6 @@ enum ArcImporter {
             plan.settings.defaultLinkDestination = linkDestination(lroot["defaultDestination"], spaceTitles: spaceTitleByID)
             plan.settings.linkRoutes = (lroot["rules"] as? [[String: Any]] ?? []).compactMap { linkRoute($0, spaceTitles: spaceTitleByID) }
         }
-        ImportFavicons.attach(to: &plan, folder: "cra-arc-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
         return plan
     }
 
@@ -338,7 +341,8 @@ enum DiaImporter {
     }
 
     /// Dia 1.55 and later: the sidebar is in encrypted tabs.db files, read with the Keychain secret.
-    static var hasEncryptedSidebar: Bool { !DiaSidebar.databases(userData: userData).isEmpty }
+    static var hasEncryptedSidebar: Bool { hasEncryptedSidebar(userData: userData) }
+    static func hasEncryptedSidebar(userData: URL) -> Bool { !DiaSidebar.databases(userData: userData).isEmpty }
 
     /// With the "Dia Safe Storage" secret the spaces come from Dia's sidebar database; without
     /// it (or from an older Dia) from the files Dia kept before 1.55, which no longer follow
@@ -348,14 +352,14 @@ enum DiaImporter {
     static func plan(secret: String? = nil, userData: URL = DiaImporter.userData) throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Dia") }
         var plan = ImportPlan(source: "Dia")
-        if let secret, !DiaSidebar.databases(userData: userData).isEmpty {
+        if let secret, hasEncryptedSidebar(userData: userData) {
             plan.spaces = DiaSidebar.spaces(userData: userData, rootKey: ChromiumCrypto.key(fromSecret: secret))
             if plan.spaces.isEmpty { throw ImportError.unreadable("Dia's spaces and tabs") }
         } else {
             addLegacySidebar(to: &plan)
         }
         addArchive(to: &plan)
-        ImportFavicons.attach(to: &plan, folder: "cra-dia-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
+        ImportFavicons.attach(to: &plan, folder: "cra-dia-favicons", from: ImportSource.Kind.dia.iconStores(dataDir: userData))
         return plan
     }
 

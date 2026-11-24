@@ -22,7 +22,7 @@ enum ArdiaImporter {
     static func plan() throws -> ImportPlan {
         guard let data = try? Data(contentsOf: sessionFile) else { throw ImportError.notFound("Ardia") }
         var plan = try plan(session: data)
-        ImportFavicons.attach(to: &plan, folder: "cra-ardia-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
+        ImportFavicons.attach(to: &plan, folder: "cra-ardia-favicons", from: ImportSource.Kind.ardia.iconStores(dataDir: userData))
         return plan
     }
 

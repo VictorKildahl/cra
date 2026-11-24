@@ -30,10 +30,23 @@ final class ImportTree {
 }
 
 enum ImportFavicons {
-    /// Each item's favicon: one it has, else the file `own` finds for its URL in the browser's store, else its
-    /// host's from `icons` (by lowercased host), written as PNGs of at most 64 px in a new folder under `folder`.
-    static func attach(to plan: inout ImportPlan, folder: String, own: (String) -> URL? = { _ in nil },
-                       icons: ([String]) -> [String: NSImage]) {
+    /// Where a browser keeps tab icons on disk (ImportSource.Kind.iconStores): files of its own, found by
+    /// page URL, then its favicon databases, by lowercased host. Both give the icon file's bytes.
+    struct Stores {
+        var own: (String) -> URL? = { _ in nil }
+        var databases: ([String]) -> [String: Data] = { _ in [:] }
+
+        /// Each host's icon: the browser's own file for the host's front page, else its databases'.
+        func icons(hosts: [String]) -> [String: Data] {
+            var out: [String: Data] = [:]
+            for host in hosts { if let data = own("https://\(host)/").flatMap({ try? Data(contentsOf: $0) }) { out[host] = data } }
+            return out.merging(databases(hosts.filter { out[$0] == nil })) { own, _ in own }
+        }
+    }
+
+    /// Each item's favicon: one it has, else its own file in `stores`, else its host's from the databases,
+    /// written as PNGs of at most 64 px in a new folder under `folder`.
+    static func attach(to plan: inout ImportPlan, folder: String, from stores: Stores) {
         func visit(_ body: (String, inout String?) -> Void) {
             func walk(_ items: inout [ImportedItem]) {
                 for i in items.indices {
@@ -49,9 +62,9 @@ enum ImportFavicons {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("\(folder)/\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var written: [String: String] = [:]
-        func write(_ image: NSImage?, as source: String) -> String? {
+        func write(_ data: Data?, as source: String) -> String? {
             if let path = written[source] { return path }
-            guard let image, let png = ZenImporter.faviconPNG(image) else { return nil }
+            guard let data, let png = FaviconCache.png(data) else { return nil }
             let file = dir.appendingPathComponent("\(written.count).png")
             guard (try? png.write(to: file, options: .atomic)) != nil else { return nil }
             written[source] = file.path
@@ -61,14 +74,14 @@ enum ImportFavicons {
         var missing = Set<String>()
         visit { url, path in
             guard path == nil else { return }
-            if let file = own(url) { path = write(NSImage(contentsOf: file), as: file.path) }
+            if let file = stores.own(url) { path = write(try? Data(contentsOf: file), as: file.path) }
             if path == nil, let h = host(url) { missing.insert(h) }
         }
         guard !missing.isEmpty else { return }
-        let found = icons(Array(missing))
+        let found = stores.databases(Array(missing))
         visit { url, path in
-            guard path == nil, let h = host(url), let image = found[h] else { return }
-            path = write(image, as: "host " + h)
+            guard path == nil, let h = host(url), let data = found[h] else { return }
+            path = write(data, as: "host " + h)
         }
     }
 
@@ -85,8 +98,8 @@ enum ImportFavicons {
 
     /// A page's lowercased host when it is an http or https page, whatever its port.
     static func webHost(_ page: String) -> String? {
-        guard let url = URL(string: page), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
-        return url.host.flatMap { $0.isEmpty ? nil : $0.lowercased() }
+        guard let scheme = URL(string: page)?.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        return host(page)
     }
 
     /// An SQL condition on a page address `column` that holds for the pages of `host`'s `names`, under

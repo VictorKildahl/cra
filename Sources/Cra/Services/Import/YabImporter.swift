@@ -39,9 +39,7 @@ enum YabImporter {
     static func plan(pinsInEverySpace everySpace: Bool? = YabImporter.pinsInEverySpace) throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Yab") }
         var plan = try plan(supportDir: supportDir, pinsInEverySpace: everySpace)
-        ImportFavicons.attach(to: &plan, folder: "cra-yab-favicons", own: ownIcons(supportDir: supportDir)) {
-            ChromiumImporter.favicons(userData: userData, hosts: $0)
-        }
+        ImportFavicons.attach(to: &plan, folder: "cra-yab-favicons", from: ImportSource.Kind.yab.iconStores(dataDir: userData))
         return plan
     }
 

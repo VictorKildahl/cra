@@ -30,6 +30,8 @@ enum StoreTests {
         try ardiaImport()
         try yabImport()
         try yabOwnIcons()
+        pinPickerReadsTheImportsIconStores()
+        iconFilesAreDecodedSmall()
         faviconDatabaseLookup()
         try chromiumAndFirefoxPlansBringIcons()
         chromiumProfile()
@@ -244,8 +246,7 @@ enum StoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let userData = root.appendingPathComponent("User Data", isDirectory: true)
         makeChromiumUserData(userData, bookmarks: [], icons: [("http://example.com/", 20)])
-        let sidebar = try Data(contentsOf: ArcImporter.supportDir.appendingPathComponent("StorableSidebar.json"))
-        let withDatabase = try ArcImporter.plan(sidebar: sidebar, userData: userData)
+        let withDatabase = try ArcImporter.plan(favicons: userData)
         func all(_ items: [ImportedItem]) -> [ImportedItem] { items.flatMap { $0.isFolder ? all($0.children) : [$0] } }
         let home = withDatabase.spaces.first { $0.title == "Home" }.map { all($0.pinned) + all($0.today) } ?? []
         let uncached = home.first { $0.url == "https://example.com/today/1" }, news = home.first { $0.url == "https://example.com/news" }
@@ -530,7 +531,7 @@ enum StoreTests {
         try JSONSerialization.data(withJSONObject: root).write(to: session)
 
         let icons = YabImporter.supportDir.appendingPathComponent("icons", isDirectory: true)
-        func shrunk(_ file: String) -> Data? { NSImage(contentsOf: icons.appendingPathComponent(file)).flatMap { ZenImporter.faviconPNG($0) } }
+        func shrunk(_ file: String) -> Data? { (try? Data(contentsOf: icons.appendingPathComponent(file))).flatMap { FaviconCache.png($0) } }
         func icon(_ item: ImportedItem?) -> Data? { item?.faviconPath.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) } }
         let plan = try YabImporter.plan(pinsInEverySpace: nil)
         let personal = plan.spaces[0], work = plan.spaces[1]
@@ -549,6 +550,51 @@ enum StoreTests {
                "two tabs on one host keep their different icons after the import")
     }
 
+    /// The onboarding pin picker shows each site's icon from the stores the import reads: Yab's own
+    /// icons/ folder before its Favicons databases.
+    private static func pinPickerReadsTheImportsIconStores() {
+        let found = ImportSource.allCases.first { $0.id == "yab" }?.favicons(hosts: ["mail.example.com", "design.example.com"]) ?? [:]
+        expect(found["mail.example.com"] != nil, "a site Yab has an icon file for shows it in the pin picker")
+        expect(found["design.example.com"] == nil, "a site with no icon anywhere shows none")
+    }
+
+    /// Icon files come from other browsers' stores and, for unit 2, from sites: a bitmap is shrunk
+    /// without being decoded at the size it claims, so a 20000 px PNG of a few KB costs nothing.
+    private static func iconFilesAreDecodedSmall() {
+        let start = Date()
+        let bomb = FaviconCache.png(hugePNG(side: 20000))
+        expect(Date().timeIntervalSince(start) < 1, "a PNG claiming 20000 px is handled at once, not decoded at that size")
+        expect(bomb.flatMap(NSBitmapImageRep.init(data:)).map { $0.pixelsWide <= 64 } ?? true, "and gives at most a 64 px icon")
+
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 256, pixelsHigh: 128, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                   isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        let wide = rep?.representation(using: .png, properties: [:]).flatMap { FaviconCache.png($0) }.flatMap(NSBitmapImageRep.init(data:))
+        expect(wide?.pixelsWide == 64 && wide?.pixelsHigh == 32, "a 256 px bitmap icon is shrunk to 64 px, keeping its shape")
+        let svg = #"<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="orange"/></svg>"#
+        let drawn = FaviconCache.png(Data(svg.utf8)).flatMap(NSBitmapImageRep.init(data:))
+        expect(drawn != nil && (drawn?.pixelsWide ?? .max) <= 64, "an SVG, which ImageIO can't read, is drawn at 64 px")
+    }
+
+    /// A black 1-bit PNG `side` px square, a few KB of zlib: a decoder that trusts its size allocates GBs.
+    private static func hugePNG(side: Int) -> Data {
+        func be32(_ v: UInt32) -> Data { withUnsafeBytes(of: v.bigEndian) { Data($0) } }
+        func crc32(_ d: Data) -> UInt32 {
+            var c: UInt32 = 0xFFFF_FFFF
+            for byte in d {
+                c ^= UInt32(byte)
+                for _ in 0..<8 { c = c & 1 == 1 ? (c >> 1) ^ 0xEDB8_8320 : c >> 1 }
+            }
+            return ~c
+        }
+        func chunk(_ type: String, _ body: Data) -> Data { let t = Data(type.utf8) + body; return be32(UInt32(body.count)) + t + be32(crc32(t)) }
+        let raw = side * (1 + (side + 7) / 8)  // every row: filter byte 0, then zero bits
+        let deflated = ((try? (Data(count: raw) as NSData).compressed(using: .zlib)) as Data?) ?? Data()
+        // zlib wraps the deflate stream: a header, and an Adler-32 that for zeros is (n mod 65521) << 16 | 1.
+        let zlib = Data([0x78, 0x01]) + deflated + be32(UInt32(raw % 65521) << 16 | 1)
+        let header = be32(UInt32(side)) + be32(UInt32(side)) + Data([1, 0, 0, 0, 0])
+        return Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + chunk("IHDR", header) + chunk("IDAT", zlib) + chunk("IEND", Data())
+    }
+
     /// Chromium's Favicons and Firefox's favicons.sqlite hold icons by page address. A tab finds its
     /// host's under http or https, on any port, with www. added or dropped, but never a sibling's.
     private static func faviconDatabaseLookup() {
@@ -565,7 +611,7 @@ enum StoreTests {
         makeChromiumUserData(chromium, bookmarks: [], icons: rows)
         makeFirefoxData(firefox, bookmarks: [], icons: rows)
         for (name, found) in [("Chromium", ChromiumImporter.favicons(userData: chromium, hosts: hosts)), ("Firefox", FirefoxImporter.favicons(root: firefox, hosts: hosts))] {
-            let side = found.mapValues { $0.representations.first?.pixelsWide ?? 0 }
+            let side = found.mapValues { NSBitmapImageRep(data: $0)?.pixelsWide ?? 0 }
             expect(side["plain.example.com"] == 11, "\(name): a page loaded over http gives its host an icon")
             expect(side["ported.example.com"] == 12, "\(name): so does a page on a port")
             expect(side["www.bare.example.com"] == 13, "\(name): a www. host finds the bare host's icon")
@@ -660,7 +706,7 @@ enum StoreTests {
     /// A square PNG `side` px wide, as an SQL blob literal.
     private static func squarePNG(_ side: Int) -> String {
         let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { r in NSColor.orange.setFill(); r.fill(); return true }
-        return "X'" + (ZenImporter.faviconPNG(image) ?? Data()).map { String(format: "%02x", $0) }.joined() + "'"
+        return "X'" + (FaviconCache.png(image) ?? Data()).map { String(format: "%02x", $0) }.joined() + "'"
     }
 
     private static func writeSQLite(_ file: URL, _ sql: String) {

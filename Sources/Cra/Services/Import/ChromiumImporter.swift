@@ -67,7 +67,7 @@ enum ChromiumImporter {
             space.today = openTabs(profile: p.dir)
             if !space.pinned.isEmpty || !space.today.isEmpty { plan.spaces.append(space) }
         }
-        ImportFavicons.attach(to: &plan, folder: "cra-chromium-favicons") { favicons(userData: userData, hosts: $0) }
+        ImportFavicons.attach(to: &plan, folder: "cra-chromium-favicons", from: ImportSource.Kind.chromium.iconStores(dataDir: userData))
         return plan
     }
 
@@ -207,8 +207,8 @@ enum ChromiumImporter {
     }
 
     /// The largest cached icon for each host, from the profiles' Favicons databases.
-    static func favicons(userData: URL, hosts: [String]) -> [String: NSImage] {
-        var out: [String: NSImage] = [:]
+    static func favicons(userData: URL, hosts: [String]) -> [String: Data] {
+        var out: [String: Data] = [:]
         for p in profiles(userData: userData) {
             guard let db = SQLiteSnapshot(copying: p.dir.appendingPathComponent("Favicons")) else { continue }
             for host in hosts where out[host] == nil {
@@ -217,7 +217,7 @@ enum ChromiumImporter {
                     WHERE \(ImportFavicons.pages(of: host, column: "im.page_url"))
                     ORDER BY fb.width DESC LIMIT 1
                     """)
-                if let data = rows.first?["image_data"] as? Data, let img = NSImage(data: data) { out[host] = img }
+                if let data = rows.first?["image_data"] as? Data { out[host] = data }
             }
         }
         return out

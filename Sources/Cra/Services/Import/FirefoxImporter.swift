@@ -42,7 +42,7 @@ enum FirefoxImporter {
         }
         space.today = openTabs(profile: profile)
         if !space.pinned.isEmpty || !space.today.isEmpty { plan.spaces.append(space) }
-        ImportFavicons.attach(to: &plan, folder: "cra-firefox-favicons") { favicons(root: root, hosts: $0) }
+        ImportFavicons.attach(to: &plan, folder: "cra-firefox-favicons", from: ImportSource.Kind.firefox.iconStores(dataDir: root))
         return plan
     }
 
@@ -123,7 +123,7 @@ enum FirefoxImporter {
 
     /// The largest icon per host from favicons.sqlite, read in one pass over its pages, which have no
     /// index on page_url.
-    static func favicons(root: URL, hosts: [String]) -> [String: NSImage] {
+    static func favicons(root: URL, hosts: [String]) -> [String: Data] {
         guard let profile = defaultProfile(root: root),
               let db = SQLiteSnapshot(copying: profile.appendingPathComponent("favicons.sqlite")) else { return [:] }
         var wanted: [String: [String]] = [:]
@@ -136,9 +136,9 @@ enum FirefoxImporter {
         }
         guard !best.isEmpty else { return [:] }
         let ids = Set(best.values.map(\.icon)).map(String.init).joined(separator: ",")
-        var images: [Int64: NSImage] = [:]
+        var images: [Int64: Data] = [:]
         for r in db.rows("SELECT id, data FROM moz_icons WHERE id IN (\(ids))") {
-            if let id = r["id"] as? Int64, let data = r["data"] as? Data { images[id] = NSImage(data: data) }
+            if let id = r["id"] as? Int64, let data = r["data"] as? Data { images[id] = data }
         }
         return best.compactMapValues { images[$0.icon] }
     }
