@@ -1940,6 +1940,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // ("toolbar empty point: <x> <y>"), and toolbarZoom=<label> whether the window has zoomed since.
             // pageTop=point (#685): where scenario.sh's `click page-top` presses, 5 pt into the focused page's top, a third
             // of the way across: "page top point: <x> <y>", top-left screen points. toolbarZoom then says whether it zoomed.
+            // sidebarEmpty=point (#722): where scenario.sh's `click sidebar-empty` presses, in the docked sidebar's empty
+            // space a third of the way up from its bottom, a spot only the sidebar itself takes: "sidebar empty point: <x> <y>".
+            if dict["sidebarEmpty"] == "point" {
+                let host = main.shell.sidebarHost
+                guard let w = main.window, host.window === w, !host.isHidden, let frame = w.contentView?.superview,
+                      let top = NSScreen.screens.first?.frame.maxY else {
+                    CraLog.note("sidebar empty point: none"); return
+                }
+                let inWindow = host.convert(NSPoint(x: host.bounds.midX, y: host.isFlipped ? host.bounds.maxY - host.bounds.height / 3 : host.bounds.minY + host.bounds.height / 3), to: nil)
+                let onScreen = w.convertPoint(toScreen: inWindow)
+                let hit = frame.hitTest(frame.convert(inWindow, from: nil))
+                CraLog.note("sidebar empty hit: \(hit.map { String(describing: type(of: $0)) } ?? "nil")")
+                CraLog.note("sidebar empty point: \(Int(onScreen.x)) \(Int(top - onScreen.y))")
+                return
+            }
             if dict["pageTop"] == "point" {
                 guard let card = main.shell.focusedCard, let w = main.window, let top = NSScreen.screens.first?.frame.maxY else {
                     CraLog.note("page top point: none"); return
