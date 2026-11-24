@@ -148,7 +148,7 @@ final class SiteIconLoader {
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
             let (done, body, full) = lock.withLock { () -> (CheckedContinuation<(data: Data, url: URL)?, Error>?, Data, Bool) in
                 defer { self.done = nil }
-                return (self.done, data, full)
+                return (self.done, self.data, self.full)
             }
             guard let http = task.response as? HTTPURLResponse, error == nil || full else {
                 done?.resume(throwing: error ?? URLError(.badServerResponse))
