@@ -2890,6 +2890,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSLog("Cra folderPreview %@: lit=%@ top=%.0f", label, preview.debugLit.map(String.init).joined(separator: ","), preview.debugTop)
                 return
             }
+            // rowPoint=<id>: "row point: <x> <y>", where scenario.sh's `click row <id> move` rests the real pointer (#743).
+            if let r = dict["rowPoint"] {
+                guard let id = UUID(uuidString: r), let p = SpaceListView.debugRowPoint(id, ui: main.sidebarUI) else {
+                    CraLog.note("row point: none"); return
+                }
+                CraLog.note("row point: \(Int(p.x)) \(Int(p.y))")
+                return
+            }
+            // folderPreviewOpen=<label>: "Cra folderPreview <label>: open=<folder id>" or "open=none" (#743).
+            if let label = dict["folderPreviewOpen"] {
+                let open = FolderPreviewController.shared.isOpen ? FolderPreviewController.shared.folderID?.uuidString ?? "none" : "none"
+                NSLog("Cra folderPreview %@: open=%@", label, open)
+                return
+            }
             if let f = dict["folderPreview"] {
                 if let id = UUID(uuidString: f) { SpaceListView.debugFolderPreview(id, ui: main.sidebarUI) } else {
                     FolderPreviewController.shared.preview?.debugPointer(onRow: -1)

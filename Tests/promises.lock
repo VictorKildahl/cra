@@ -1663,6 +1663,7 @@
 #742   Tests/StoreTests.swift::safariImport  e648939d04ea
 #742   Tests/StoreTests.swift::yabKeepsAnyAddress  beb119ce4cd6
 #742   Tests/StoreTests.swift::zenImport  aee71e143f82
+#743   Tests/Scenarios/folder-preview-adjacent.scenario  c80a395285c5
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
