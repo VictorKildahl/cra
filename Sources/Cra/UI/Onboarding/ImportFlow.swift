@@ -24,25 +24,12 @@ struct ImportCategory: Identifiable {
     let symbol: String
     var detail: String
     var state: State = .waiting
+    /// The tile's count of what came over; its skipped items open from the tile.
+    var report: ImportReport?
 }
 
 extension ImportPlan {
-    /// The plan restricted to what the user picked.
-    func selecting(spaces: Set<Int>, favorites: Bool) -> ImportPlan {
-        var p = self
-        p.spaces = spaces.sorted().compactMap { $0 < self.spaces.count ? self.spaces[$0] : nil }
-        if !favorites { p.favorites = [] }
-        return p
-    }
-
     var isEmpty: Bool { spaces.isEmpty && favorites.isEmpty && archive.isEmpty }
-}
-
-extension ImportedSpace {
-    var itemCount: Int {
-        func count(_ items: [ImportedItem]) -> Int { items.reduce(0) { $0 + ($1.isFolder ? count($1.children) : 1) } }
-        return count(pinned) + count(today)
-    }
 }
 
 /// What the app does once the flow ends: focus the first imported space and,
@@ -483,19 +470,21 @@ final class ImportFlowModel {
         let plan = self.plan ?? ImportPlan(source: source?.name ?? "")
         let chosen = withExtensions ? extensions.filter { selectedExtensions.contains($0.id) } : []
         let selection = plan.selecting(spaces: selectedSpaces, favorites: includeFavorites)
+        // A tile with only skips still shows, so a file that could not be read is seen.
+        let expected = selection.report(includeArchive: includeArchive)
         var cats: [ImportCategory] = []
         if !selection.spaces.isEmpty {
             cats.append(ImportCategory(id: "spaces", title: "Spaces", symbol: "square.stack.fill",
                                        detail: count(selection.spaces.count, "space")))
-            cats.append(ImportCategory(id: "tabs", title: "Tabs & Folders", symbol: "pin.fill",
-                                       detail: count(selection.spaces.reduce(0) { $0 + $1.itemCount }, "tab")))
         }
-        let favoriteCount = selection.spaces.reduce(selection.favorites.count) { $0 + $1.favorites.count }
-        if favoriteCount > 0 {
-            cats.append(ImportCategory(id: "favorites", title: "Favorites", symbol: "star.fill", detail: count(favoriteCount, "favorite")))
+        if expected[.tabs].isShown {
+            cats.append(ImportCategory(id: "tabs", title: "Tabs & Folders", symbol: "pin.fill", detail: count(expected[.tabs].copied, "tab")))
         }
-        if includeArchive && !plan.archive.isEmpty {
-            cats.append(ImportCategory(id: "archive", title: "Archive", symbol: "archivebox.fill", detail: count(plan.archive.count, "tab")))
+        if expected[.favorites].isShown {
+            cats.append(ImportCategory(id: "favorites", title: "Favorites", symbol: "star.fill", detail: count(expected[.favorites].copied, "favorite")))
+        }
+        if expected[.archive].isShown {
+            cats.append(ImportCategory(id: "archive", title: "Archive", symbol: "archivebox.fill", detail: count(expected[.archive].copied, "tab")))
         }
         if !credentials.logins.isEmpty {
             cats.append(ImportCategory(id: "passwords", title: "Passwords", symbol: "key.fill", detail: count(credentials.logins.count, "password")))
@@ -543,7 +532,10 @@ final class ImportFlowModel {
                     categories[i].state = credentialsStaged ? .done : .failed
                 default:
                     if categories[i].id == "spaces" { categories[i].detail = count(result.spaces, "space") }
-                    if categories[i].id == "tabs" { categories[i].detail = count(result.tabs, "new tab") }
+                    if let kind = ["tabs": ImportKind.tabs, "favorites": .favorites, "archive": .archive][categories[i].id] {
+                        categories[i].detail = result.report[kind].summary
+                        categories[i].report = result.report[kind]
+                    }
                     try? await Task.sleep(nanoseconds: 420_000_000)
                     categories[i].state = .done
                 }

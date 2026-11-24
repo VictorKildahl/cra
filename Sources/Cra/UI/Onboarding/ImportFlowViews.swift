@@ -556,17 +556,30 @@ struct ExtensionIcon: View {
     }
 }
 
+/// A progress tile; one with skipped items opens their list when clicked.
 struct CategoryTile: View {
     let category: ImportCategory
     let c: ImportColors
     var height: CGFloat = 64
+    @State private var hover = false
+    @State private var showsSkipped = false
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let report = category.report.flatMap { $0.skipped.isEmpty ? nil : $0 }
         HStack(spacing: 12) {
             Image(systemName: category.symbol).font(.system(size: 15)).foregroundStyle(c.body).frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(category.title).font(.system(size: 14, weight: .medium)).foregroundStyle(c.title)
-                Text(category.detail).font(.system(size: 12)).foregroundStyle(c.caption).lineLimit(1)
+                if let report {
+                    ViewThatFits(in: .horizontal) {
+                        Text("\(category.detail) ›")
+                        Text("\(report.shortSummary) ›")
+                    }
+                    .font(.system(size: 12)).foregroundStyle(c.caption).lineLimit(1).underline(hover)
+                } else {
+                    Text(category.detail).font(.system(size: 12)).foregroundStyle(c.caption).lineLimit(1)
+                }
             }
             Spacer(minLength: 4)
             Group {
@@ -582,8 +595,80 @@ struct CategoryTile: View {
         }
         .padding(.horizontal, 14)
         .frame(width: ImportMetrics.card.width, height: height)
+        .background(shape.fill(hover && report != nil ? c.cardHover : .clear))
         .overlay(shape.strokeBorder(c.tileBorder, lineWidth: 1))
         .animation(.easeOut(duration: 0.2), value: category.state)
+        .contentShape(shape)
+        .onHover { hover = $0 }
+        .onTapGesture { if report != nil { showsSkipped = true } }
+        .modifier(OpensSkipped(on: report != nil) { showsSkipped = true })
+        .popover(isPresented: $showsSkipped, arrowEdge: .bottom) {
+            if let report { SkippedList(report: report, c: c) }
+        }
+    }
+}
+
+/// VoiceOver reads a tile with skipped items as one button that opens them; other tiles stay as they were.
+private struct OpensSkipped: ViewModifier {
+    let on: Bool
+    let open: () -> Void
+    func body(content: Content) -> some View {
+        if on {
+            content.accessibilityElement(children: .combine).accessibilityAddTraits(.isButton).accessibilityAction { open() }
+        } else {
+            content
+        }
+    }
+}
+
+/// What an import left out of one tile's kind, opened from that tile: each item's title, address
+/// and reason, and Copy for the whole list as plain text.
+struct SkippedList: View {
+    let report: ImportReport
+    let c: ImportColors
+    @State private var copyHover = false
+    @State private var rowsHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("\(report.skipped.count) not imported").font(.system(size: 14, weight: .medium)).foregroundStyle(c.title)
+                Spacer(minLength: 8)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(report.plainText, forType: .string)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc.on.doc").font(.system(size: 11, weight: .semibold))
+                        Text("Copy").font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(copyHover ? c.title : c.body)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { copyHover = $0 }
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(report.skipped.indices, id: \.self) { i in
+                        let skip = report.skipped[i]
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(skip.title.isEmpty ? skip.url : skip.title).font(.system(size: 13, weight: .medium)).foregroundStyle(c.title).lineLimit(1)
+                            if !skip.url.isEmpty {
+                                Text(skip.url).font(.system(size: 11)).foregroundStyle(c.caption).lineLimit(1).truncationMode(.middle)
+                            }
+                            Text(skip.reason.text).font(.system(size: 11)).foregroundStyle(c.body).lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeight = $0 }
+            }
+            .frame(height: min(max(rowsHeight, 1), 280))
+        }
+        .padding(16)
+        .frame(width: 340)
     }
 }
 

@@ -68,14 +68,18 @@ enum ArdiaImporter {
             var favorites: [ImportedItem] = []
             let pinned = ImportTree()
             var today: [ImportedItem] = []
+            var skipped: [ImportSkip] = []
 
             func take(_ t: [String: Any], folder: String?, folders: [String: [String: Any]]) {
                 let pin = t["pin"] as? [String: Any]
                 let pinnedFolder = folder.flatMap { folders[$0] }
                 let isPinned = pin != nil || pinnedFolder != nil
                 let key = (t["pinKey"] as? String) ?? (t["id"] as? String) ?? UUID().uuidString
-                guard seen.insert(key).inserted, let item = item(t, pinned: isPinned) else { return }
-                if pin?["as"] as? String == "tile" {
+                // A Top App left out is listed on the favorites tile.
+                let isTile = pin?["as"] as? String == "tile"
+                guard seen.insert(key).inserted,
+                      let item = item(t, pinned: isPinned, skip: { var s = $0; if isTile { s.kind = .favorites }; skipped.append(s) }) else { return }
+                if isTile {
                     // Cra's favorites have no folders: a Top Apps folder's tiles come over in its place.
                     favorites.append(item)
                 } else if isPinned {
@@ -106,6 +110,7 @@ enum ArdiaImporter {
             space.favorites = favorites
             space.pinned = pinned.items
             space.today = today
+            space.skipped = skipped
             // Every profile but the first signs in on a Chromium profile of its own.
             let dataID = (profile["dataId"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? pid
             if dataID != "default" {
@@ -144,11 +149,15 @@ enum ArdiaImporter {
     }
 
     /// A pinned tab or Top App keeps the page it was pinned with, not where it navigated, unless that
-    /// page can't be imported: then it comes at the page it shows.
-    private static func item(_ t: [String: Any], pinned: Bool) -> ImportedItem? {
+    /// page can't be imported: then it comes at the page it shows. `skip` hears of a tab left out.
+    private static func item(_ t: [String: Any], pinned: Bool, skip: (ImportSkip) -> Void) -> ImportedItem? {
         let home = pinned ? t["pinnedUrl"] as? String : nil
-        guard let url = [home, t["url"] as? String].compactMap({ $0 }).first(where: ImportedAddress.keeps) else { return nil }
         let custom = (t["customTitle"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let pages = [home, t["url"] as? String].compactMap { $0 }
+        guard let url = pages.first(where: ImportedAddress.keeps) else {
+            ImportSkip.leftOut(pages.first { ImportedAddress.leftOut($0) != nil }, title: custom ?? t["title"] as? String ?? "").map(skip)
+            return nil
+        }
         let created = (t["createdAt"] as? Double).flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0 / 1000) : nil } ?? Date()
         return ImportedItem(customTitle: custom, pageTitle: t["title"] as? String ?? "", url: url, createdAt: created)
     }
