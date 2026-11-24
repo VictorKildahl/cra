@@ -1669,8 +1669,10 @@
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsGivenToTheDockWhileItsCacheMayBeStale  9ac039c2814c
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsLeftToTheDockSoItFollowsTheIconStyle  d6d0d50c159d
 #739   Tests/Scenarios/app-icon-segments-dock.scenario  25c9642c4b70
+#740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closeTabInAFavoritesMenuLetsItsPageGo  37f7421f67ad
 #740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteKeepsItsPage  cf0f18574cfc
 #740   Tests/Scenarios/favorite-close-keeps-page.scenario  064e7c9c632b
+#740   Tests/Scenarios/favorite-menu-close-tab.scenario  36e494d807e0
 #741   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFrontTests.swift::aPressWithCraBehindBringsItForward  82011a6a304e
 #741   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFrontTests.swift::aPressWithCraInFrontChangesNothing  132ec3d7a13b
 #741   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFrontTests.swift::theBrowserWindowCountsOnceCraIsUsedOrLeft  7d7edcaea787

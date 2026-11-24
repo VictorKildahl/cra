@@ -5480,3 +5480,12 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   profile pair, 4,752 of 4,757 such entries were found, 12 of them in both (#729).
 - **Open question:** how Arc's bar ranks `searchHistory`'s results against open tabs, and its
   `maxResults`. Neither is in the strings.
+
+## Close Tab in a Favorite's menu (24 Nov 2026, Arc 1.173.1, #740)
+
+- **Seen in the reporter's Arc:** ⌘W on the Favorite shown only deselects it, and its page keeps running (c7541f37).
+  Close Tab in the Favorite's own right-click menu closes it: its page goes, and a click on the Favorite loads it again.
+  So the menu is the one way to let a Favorite's page go by hand.
+- **Cra:** `CloseSuccessor.pinnedClose(isFavorite:fromItsMenu:)`. The menu's Close Tab unloads the Favorite back to its
+  pinned page, whether it is shown or loaded behind another tab; ⌘W and every other close still only deselect it.
+- **Open questions:** Arc's Favorite split menu, and whether ⇧⌘T brings a Favorite closed this way back.

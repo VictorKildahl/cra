@@ -420,6 +420,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if mode == .editURL, let peek = self?.sidebarPeek { peek.openCommandBar() } else { self?.openCommandBar(mode, fromSidebarAddress: true) }
         }
         sidebarActions.closeTab = { [weak self] id in self?.closeTab(id) }
+        sidebarActions.closeTabFromItsMenu = { [weak self] id in self?.closeTab(id, fromItsMenu: true) }
         sidebarActions.moveBlankWindow = { [weak self] space in
             guard let self else { return }
             self.app.moveBlankWindow(self, toSpace: space)
@@ -3170,14 +3171,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Today tabs are archived. Pinned tabs and favorites stay; they unload
-    /// and return to their pinned page (Arc's close-on-pinned behaviour).
-    func closeTab(_ id: UUID) {
+    /// and return to their pinned page (Arc's close-on-pinned behaviour). A Favorite is only deselected, unless
+    /// `fromItsMenu` (its right-click menu's Close Tab), as in Arc (#740).
+    func closeTab(_ id: UUID, fromItsMenu: Bool = false) {
         guard let item = store.item(id), item.isTab else { return }
         if store.isPinned(id) {
             let panes = store.paneTabIDs(for: id)
             let wasSelected = selectedTabID.map(panes.contains) ?? false
             // A Favorite is only deselected: its page keeps running, and a click on it shows it as it was (#740).
-            if CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id)) == .deselectKeepingPage {
+            if CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id), fromItsMenu: fromItsMenu) == .deselectKeepingPage {
                 if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
                 CraLog.note("close tab: favorite deselected, its page kept")
                 return

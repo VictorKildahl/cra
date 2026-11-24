@@ -220,6 +220,8 @@ final class SidebarActions {
     /// A click on the sidebar's address: Arc's panel hanging from it (#663).
     var openAddressPanel: (CommandBarMode) -> Void = { _ in }
     var closeTab: (UUID) -> Void = { _ in }
+    /// Close Tab in a Favorite's right-click menu: it unloads, where ⌘W only deselects it (CloseSuccessor.pinnedClose).
+    var closeTabFromItsMenu: (UUID) -> Void = { _ in }
     /// A tab dragged out of every Cra window and let go there (screen point): Arc opens it in a
     /// Blank Window where it was dropped (GitHub #219).
     var tearOffTab: (UUID, NSPoint) -> Void = { _, _ in }
