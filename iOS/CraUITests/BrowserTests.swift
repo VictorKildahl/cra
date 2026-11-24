@@ -310,7 +310,9 @@ final class MenuHapticsTests: BrowserTestCase {
         app.buttons["bar-menu"].tap()
         XCTAssertTrue(app.buttons["menu-tile-summarize"].waitForExistence(timeout: 5))
         assertTicks(2, counter) { app.buttons["menu-tile-summarize"].tap() }
-        XCTAssertTrue(app.staticTexts["summary-overview"].waitForExistence(timeout: 10))
+        // The summary sheet, in whatever state: this one-heading page never gets an overview
+        // here (ReadingTests checks the summary itself, on an article).
+        XCTAssertTrue(app.buttons["summary-close"].waitForExistence(timeout: 10))
         app.buttons["summary-close"].tap()
         XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
 

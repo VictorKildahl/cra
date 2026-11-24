@@ -1532,7 +1532,7 @@
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theCapsulesButtonsTickOnlyAsTheFingerLetsGo  d0cc43b0e2ef
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theMenusTilesAndRowsTickOnPress  c7a41ea96da6
 #675   iOS/CraUITests/BrowserTests.swift::testBarButtonsTickOnceOnPress  3334c9ed75b8
-#675   iOS/CraUITests/BrowserTests.swift::testTheMenusControlsTickOnPressAndRelease  3097affae654
+#675   iOS/CraUITests/BrowserTests.swift::testTheMenusControlsTickOnPressAndRelease  2d86865d61cb
 #677   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoSpacesSavedBeforeKeepTheirColoursInTheDark  6a757e6f3485
 #677   Tests/Scenarios/auto-theme-dark-keeps-colour.scenario  70e97e843df1
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
