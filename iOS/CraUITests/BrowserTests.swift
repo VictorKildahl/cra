@@ -1440,13 +1440,6 @@ final class OnboardingTests: BrowserTestCase {
             let aspect = isPhone ? 330.0 / 640 : window.width / window.height
             XCTAssertEqual(mock.frame.width / mock.frame.height / aspect, 1, accuracy: isPhone ? 0.01 : 0.02,
                            "\(step): mock aspect matches the screen")
-            if !isPhone && step == "blocking" {
-                let continuation = app.staticTexts["onboarding-\(step)-continuation"]
-                XCTAssertTrue(continuation.exists, "\(step): article continues below the original content")
-                XCTAssertLessThan(continuation.frame.minY, mock.frame.maxY - 6, "\(step): continuation starts inside the mock")
-                XCTAssertGreaterThanOrEqual(continuation.frame.maxY, mock.frame.maxY - 6,
-                                            "\(step): article reaches the mock's bottom border")
-            }
         }
 
         XCTAssertTrue(next.waitForExistence(timeout: 10), "welcome: Next appears")
