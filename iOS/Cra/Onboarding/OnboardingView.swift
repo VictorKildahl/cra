@@ -58,23 +58,27 @@ final class OnboardingModel: ObservableObject {
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
 
-    @State private var headingHeight: CGFloat = 0
+    // Start with a two-line heading so the first demo frame already fits.
+    @State private var headingHeight: CGFloat = 66
     @State private var iconTitleHeight: CGFloat = 0
     @State private var iconGridHeight: CGFloat = 0
 
     private var tried: Bool { model.progress == .done }
 
     var body: some View {
-        GeometryReader { geometry in
-            layout(in: geometry)
-                .frame(width: geometry.size.width, height: geometry.size.height)
+        ZStack {
+            VividBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 1 : 0)
+            PaleBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 0 : 1)
+            GeometryReader { geometry in
+                layout(in: geometry)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
         }
+        .animation(.easeInOut(duration: 0.5), value: MobileOnboarding.isVivid(model.step))
     }
 
     private func layout(in geometry: GeometryProxy) -> some View {
         ZStack {
-            VividBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 1 : 0)
-            PaleBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 0 : 1)
             content(in: geometry)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 30)), removal: .opacity))
@@ -120,7 +124,6 @@ struct OnboardingView: View {
                     .transition(.move(edge: .bottom))
             }
         }
-        .animation(.easeInOut(duration: 0.5), value: MobileOnboarding.isVivid(model.step))
     }
 
     @ViewBuilder private func content(in geometry: GeometryProxy) -> some View {
@@ -162,8 +165,9 @@ struct OnboardingView: View {
                 PinchDemo(progress: $model.progress)
             }
         case .icon:
-            let scale = MobileOnboarding.fitScale(available: geometry.size.height - (18 + 50 + 16),
-                                                  fixed: 50 + iconTitleHeight + 30, scalable: iconGridHeight, allowance: 0)
+            let scale = MobileOnboarding.fitScale(available: geometry.size.height, topInset: geometry.safeAreaInsets.top,
+                                                  bottomInset: geometry.safeAreaInsets.bottom, heading: iconTitleHeight,
+                                                  scalable: iconGridHeight, topPadding: 50, spacing: 30, bottomReserved: 18 + 50 + 16)
             VStack(spacing: 30) {
                 OnboardingTitle(text: MobileOnboarding.iconTitle)
                     .fixedSize(horizontal: false, vertical: scale < 1)
@@ -207,16 +211,20 @@ struct OnboardingView: View {
     }
 
     private func demo<Picture: View>(title: String, in geometry: GeometryProxy, @ViewBuilder picture: () -> Picture) -> some View {
-        let scale = MobileOnboarding.fitScale(available: geometry.size.height, fixed: 40 + headingHeight + 24,
-                                              scalable: OnboardingMock.height,
-                                              allowance: min(40 + geometry.safeAreaInsets.top, geometry.safeAreaInsets.bottom))
+        let scale = MobileOnboarding.fitScale(available: geometry.size.height, topInset: geometry.safeAreaInsets.top,
+                                              bottomInset: geometry.safeAreaInsets.bottom, heading: headingHeight,
+                                              scalable: OnboardingMock.height)
         return VStack(spacing: 24) {
             StepHeading(title: title, progress: model.progress)
                 .fixedSize(horizontal: false, vertical: scale < 1)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headingHeight = $0 }
-            picture()
-                .scaleEffect(scale)
-                .frame(width: scale < 1 ? 330 * scale : nil, height: scale < 1 ? OnboardingMock.height * scale : nil)
+            if scale < 1 {
+                picture()
+                    .scaleEffect(scale)
+                    .frame(width: 330 * scale, height: OnboardingMock.height * scale)
+            } else {
+                picture()
+            }
         }
         .padding(.top, 40)
     }
@@ -341,6 +349,17 @@ struct AppIconGrid: View {
     static let maxWidth: CGFloat = 360
 
     var body: some View {
+        Group {
+            if scale < 1 {
+                grid.scaleEffect(scale)
+            } else {
+                grid
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var grid: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 22) {
             ForEach(icons) { icon in
                 Button { pick(icon) } label: {
@@ -375,8 +394,6 @@ struct AppIconGrid: View {
             }
         }
         .frame(maxWidth: Self.maxWidth)
-        .scaleEffect(scale)
-        .frame(maxWidth: .infinity)
     }
 }
 

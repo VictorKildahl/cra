@@ -43,7 +43,12 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
 public enum MobileOnboarding {
     /// Keeps the exact iPhone layout while its small overflow stays on screen;
     /// otherwise shrinks only the step's picture to fit the available height.
-    public static func fitScale(available: CGFloat, fixed: CGFloat, scalable: CGFloat, allowance: CGFloat) -> CGFloat {
+    public static func fitScale(available: CGFloat, topInset: CGFloat, bottomInset: CGFloat, heading: CGFloat,
+                                scalable: CGFloat, topPadding: CGFloat = 40, spacing: CGFloat = 24,
+                                bottomReserved: CGFloat = 0) -> CGFloat {
+        let available = available - bottomReserved
+        let fixed = topPadding + heading + spacing
+        let allowance = bottomReserved > 0 ? 0 : min(topPadding + topInset, bottomInset)
         if fixed + scalable - available <= 2 * allowance { return 1 }
         return min(1, max(0, (available - fixed) / scalable))
     }
