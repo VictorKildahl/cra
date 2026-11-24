@@ -29,6 +29,7 @@ enum StoreTests {
         try diaImport()
         try ardiaImport()
         try yabImport()
+        try yabKeepsAnyAddress()
         chromiumProfile()
         try firefoxImport()
         try zenImport()
@@ -458,16 +459,12 @@ enum StoreTests {
         let personal = plan.spaces[0], work = plan.spaces[1]
         expect(personal.favorites.compactMap(\.url) == ["https://mail.example.com/"] && personal.favorites[0].pageTitle == "Inbox",
                "a tile is a favorite, at the page it was pinned with")
-        expect(personal.pinned.map(\.pageTitle) == ["Clients", "Code", "Notes", "Status now"] && personal.pinned[0].isFolder,
+        expect(personal.pinned.map(\.pageTitle) == ["Clients", "Code"] && personal.pinned[0].isFolder,
                "kept tabs are pinned, a folder where its first tab is")
-        expect(personal.pinned.compactMap(\.url).contains("file:///Users/me/notes.html"), "a kept tab on a file on disk comes over")
-        expect(personal.pinned.last?.url == "https://status.example.com/now" && personal.pinned.last?.pageTitle == "Status now",
-               "a kept tab pinned with a new tab page comes over pinned, at the page it shows and that page's title")
         let clients = personal.pinned[0].children
         expect(clients.count == 1 && clients[0].pageTitle == "Work" && clients[0].children.first?.url == "https://tasks.example.com/"
                && clients[0].children.first?.customTitle == "Tasks", "folders nest through folderPath, renamed tabs keep their name")
-        expect(personal.today.compactMap(\.url) == ["https://news.example.com/", "javascript:void(document.title)", "chrome://settings/"],
-               "today's tabs come over whatever their address; about:blank, a new tab page and blob: left out")
+        expect(personal.today.compactMap(\.url) == ["https://news.example.com/"], "today's tabs come over, about:blank left out")
         expect(personal.emoji == "🏠" && personal.profile == nil && personal.theme?.accent == "#8DB6E6",
                "an emoji icon, the shared sign-ins on Default, a swatch as the theme")
         expect(work.favorites.compactMap(\.url) == ["https://docs.example.com/"],
@@ -505,6 +502,33 @@ enum StoreTests {
                && result.profiles.craFolder(forSource: "space-00000000-0000-0000-0000-000000000001") == "Default",
                "the Work space's cookies go to its Cra profile, the shared ones to Default")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+    }
+
+    /// Yab import keeps a tab whatever its address, and a kept tab pinned with a page that can't be
+    /// imported comes over pinned, at the page it shows. A copy of Tests/Fixtures/Yab with such tabs.
+    private static func yabKeepsAnyAddress() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("cra-yab-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: dir) }
+        try fm.copyItem(at: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab"), to: dir)
+        let session = dir.appendingPathComponent("session.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: session)) as! [String: Any]
+        let rows = root["tabs"] as! [[String: Any]]
+        let kept: [[String: Any]] = [
+            ["id": "k", "url": "file:///Users/me/notes.html", "title": "Notes", "kept": true],
+            ["id": "s", "url": "https://status.example.com/now", "title": "Status now", "kept": true, "home": "about:newtab", "homeTitle": "New Tab"],
+        ]
+        let open = ["javascript:void(document.title)", "chrome://settings/", "chrome://newtab/", "blob:https://news.example.com/5f1c"]
+            .enumerated().map { ["id": "o\($0.offset)", "url": $0.element, "title": $0.element] as [String: Any] }
+        root["tabs"] = rows.filter { $0["kept"] as? Bool == true || $0["pin"] != nil } + kept + rows.filter { $0["kept"] == nil && $0["pin"] == nil } + open
+        try JSONSerialization.data(withJSONObject: root).write(to: session)
+
+        let personal = try YabImporter.plan(supportDir: dir, pinsInEverySpace: nil).spaces[0]
+        expect(personal.pinned.compactMap(\.url).contains("file:///Users/me/notes.html"), "a kept tab on a file on disk comes over")
+        expect(personal.pinned.last?.url == "https://status.example.com/now" && personal.pinned.last?.pageTitle == "Status now",
+               "a kept tab pinned with a new tab page comes over pinned, at the page it shows and that page's title")
+        expect(personal.today.compactMap(\.url) == ["https://news.example.com/", "javascript:void(document.title)", "chrome://settings/"],
+               "today's tabs come over whatever their address; about:blank, a new tab page and blob: left out")
     }
 
     /// Chrome-family profiles (Tests/Fixtures/Chromium/Default): the last session's open tabs,
