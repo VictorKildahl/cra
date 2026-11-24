@@ -179,6 +179,22 @@ struct ModelFixtureTests {
         #expect(try Self.roundTrips(shown))
     }
 
+    /// The profile picked for each site in a Little Window outlives a relaunch, as Arc's
+    /// domainToProfilePreferences does. Files from before it pick none, and an unreadable entry costs
+    /// only the picks, not the windows.
+    @Test func littleWindowSiteProfilesLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("windows.json", as: WindowPrefs.self)
+        let work = UUID(uuidString: "C0000000-0000-0000-0000-000000000001")!
+        #expect(loaded.siteProfiles.profile(for: "https://www.youtube.com/watch") == RememberedProfile(id: work))
+        #expect(loaded.siteProfiles.profile(for: "https://gitlab.example.com/a") == RememberedProfile(id: nil))
+        #expect(recorded.siteProfiles == loaded.siteProfiles)
+        #expect(try Self.load("windows-legacy.json", as: WindowPrefs.self).loaded.siteProfiles == SiteProfiles())
+
+        let broken = Data(#"{"siteProfiles": ["youtube.com"], "littleWindowSize": "{480, 640}"}"#.utf8)
+        let prefs = try Self.decoder.decode(WindowPrefs.self, from: broken)
+        #expect(prefs.siteProfiles == SiteProfiles() && prefs.littleWindowSize == "{480, 640}")
+    }
+
     /// sync-history.json (#474): the last bundles sync wrote or applied, each a whole sidebar, so a
     /// bundle the other Mac wrote from one of them is merged rather than applied whole.
     @Test func syncHistoryLoadsAsRecorded() throws {
