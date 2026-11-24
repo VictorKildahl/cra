@@ -23,6 +23,19 @@ public enum CloseSuccessor {
         return i + 1 < list.count ? list[i + 1] : nil
     }
 
+    /// What ⌘W does to a selected pinned tab or Favorite.
+    public enum PinnedClose: Equatable, Sendable {
+        /// Deselected, its page left running: a Favorite (Arc 1.173.1, #740: a page's load time and counter carried
+        /// on after ⌘W and a click back, and its server saw no second load). Arc's WindowDeselectItemsConfiguration.
+        case deselectKeepingPage
+        /// Unloaded back to its pinned page: a pinned tab in the list, as in Arc.
+        case unloadToPinnedPage
+    }
+
+    public static func pinnedClose(isFavorite: Bool) -> PinnedClose {
+        isFavorite ? .deselectKeepingPage : .unloadToPinnedPage
+    }
+
     /// A pinned tab or favorite closing (it unloads): back to the previous tab while it has a
     /// page, else nothing. A pinned split hands over to nothing even then (Arc 1.171).
     public static func afterPinned<ID: Equatable>(closing: ID, isSplit: Bool, previous: ID?, hasPage: (ID) -> Bool) -> ID? {

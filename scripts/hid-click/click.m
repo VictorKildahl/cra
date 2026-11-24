@@ -13,7 +13,10 @@ static NSString* OwnerAt(CGPoint p, pid_t* pid) {
   for (NSDictionary* w in list) {
     NSString* owner = w[(id)kCGWindowOwnerName];
     if ([w[(id)kCGWindowLayer] intValue] >= 1000 || [w[(id)kCGWindowAlpha] doubleValue] <= 0) continue;
-    if ([@[ @"Dock", @"Notification Center", @"Window Server" ] containsObject:owner ?: @""]) continue;
+    // By bundle id: the owner's name is localised ("Notification Centre" on a British Mac).
+    NSString* bundle = [NSRunningApplication runningApplicationWithProcessIdentifier:[w[(id)kCGWindowOwnerPID] intValue]].bundleIdentifier;
+    if ([@[ @"com.apple.dock", @"com.apple.notificationcenterui" ] containsObject:bundle ?: @""] ||
+        [owner isEqualToString:@"Window Server"]) continue;
     CGRect r;
     if (!CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)w[(id)kCGWindowBounds], &r) || !CGRectContainsPoint(r, p)) continue;
     *pid = [w[(id)kCGWindowOwnerPID] intValue];

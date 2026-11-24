@@ -56,6 +56,7 @@ enum StoreTests {
         gitLabProfileChangeKeepsNavigatedPages()
         stampsUseTheClock()
         visitsRememberTheirProfile()
+        historyFromBeforeProfilesTakesThemFromChromium()
         persistenceFaults()
         incognitoStaysOffDisk()
         chromePagesLeaveIncognito()
@@ -394,14 +395,17 @@ enum StoreTests {
         for id in result.spaceIDs { store.deleteSpace(id) }
     }
 
+    // promise: #734
     /// Yab (X request, 18 Nov): spaces.json plus one session file per space
     /// (Tests/Fixtures/Yab). Tiles are favorites, kept tabs the pinned section in their folders,
-    /// the rest Today; a space without tiles of its own shows the shared ones. A space with
-    /// sign-ins of its own is on the Chromium folder its receipt names.
+    /// the rest Today. With "pins in every space" on, a space that signs in where the first one does
+    /// shows the shared tiles and a space with sign-ins of its own keeps its own (PR #734, Yab's
+    /// SharedPins.showsShared). A space with sign-ins of its own is on the Chromium folder its
+    /// receipt names.
     @MainActor
     private static func yabImport() throws {
         expect(YabImporter.isAvailable, "spaces.json counts as Yab data")
-        let plan = try YabImporter.plan()
+        let plan = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: nil)
         expect(plan.source == "Yab" && plan.spaces.map(\.title) == ["Personal", "Work"], "Yab's spaces come over in its order")
         let personal = plan.spaces[0], work = plan.spaces[1]
         expect(personal.favorites.compactMap(\.url) == ["https://mail.example.com/"] && personal.favorites[0].pageTitle == "Inbox",
@@ -414,7 +418,8 @@ enum StoreTests {
         expect(personal.today.compactMap(\.url) == ["https://news.example.com/"], "today's tabs come over, about:blank left out")
         expect(personal.emoji == "🏠" && personal.profile == nil && personal.theme?.accent == "#8DB6E6",
                "an emoji icon, the shared sign-ins on Default, a swatch as the theme")
-        expect(work.favorites.compactMap(\.url) == ["https://calendar.example.com/"], "a space without tiles of its own gets the shared ones")
+        expect(work.favorites.compactMap(\.url) == ["https://docs.example.com/"],
+               "pins in every space unset is Yab's In Each Space for a Mac in use: each space keeps its own tiles")
         expect(work.pinned.compactMap(\.url) == ["https://wiki.example.com/"] && work.today.compactMap(\.url) == ["https://design.example.com/"],
                "each space reads its own session file")
         expect(work.profile == ImportedProfile(folder: "space-9C6B1E52-3D1F-4C2B-8E37-5A0F1D2C3B4A", name: "Work"),
@@ -423,7 +428,13 @@ enum StoreTests {
                "an Icon-tab symbol and a colour of its own with grain")
         let shared = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: true)
         expect(shared.spaces[0].favorites.compactMap(\.url) == ["https://calendar.example.com/"],
-               "with pins in every space on, every space shows the shared tiles")
+               "with pins in every space on, a space that signs in where the first one does shows the shared tiles")
+        expect(shared.spaces[1].favorites.compactMap(\.url) == ["https://docs.example.com/"],
+               "with pins in every space on, a space with sign-ins of its own keeps its own tiles, not the shared ones")
+        let apart = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: false)
+        expect(apart.spaces[0].favorites.compactMap(\.url) == ["https://mail.example.com/"]
+               && apart.spaces[1].favorites.compactMap(\.url) == ["https://docs.example.com/"],
+               "with pins in every space off, each space keeps its own tiles and none gets the shared ones")
 
         let yab = ImportSource.allCases.first { $0.id == "yab" }, ardia = ImportSource.allCases.first { $0.id == "ardia" }
         expect(yab?.isAvailable == true && ardia?.isAvailable == true, "both are listed in the picker from their data alone")
@@ -1167,6 +1178,58 @@ enum StoreTests {
         expect(suggested(nil) == ["https://example.com/home", "https://example.com/both"], "Default's bar: \(suggested(nil))")
         expect(store.history["https://example.com/both"]?.profiles == ["default", work.id.uuidString], "each profile once, in visit order")
         expect(store.history["https://example.com/both"]?.visitCount == 3, "visits still count across profiles")
+    }
+
+    // promise: #729
+    /// history.json from before #609 has no profiles, so every profile's ⌘T suggested it. At launch each
+    /// such entry takes the profiles whose Chromium History has its page: Work's page is suggested on
+    /// Work only, Default's on Default only; one no History has stays on every profile. A History that
+    /// can't be read changes nothing.
+    @MainActor
+    private static func historyFromBeforeProfilesTakesThemFromChromium() {
+        func old(_ url: String) -> HistoryEntry {
+            HistoryEntry(url: url, title: "Old", lastVisit: Date(timeIntervalSince1970: 1_700_000_000), visitCount: 2)
+        }
+        let urls = ["https://example.com/work-only", "https://example.com/home-only", "https://example.com/expired"]
+        JSONStore<[HistoryEntry]>("history.json").saveNow(urls.map(old))
+        let store = AppComposition(clock: ManualScheduler()).store
+        let work = store.createProfile(name: "Work")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-chromium-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func history(_ folder: String, _ pages: [String]) {
+            let dir = root.appendingPathComponent(folder, isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            sqlite3_open(dir.appendingPathComponent("History").path, &db)
+            sqlite3_exec(db, "CREATE TABLE urls (id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR)", nil, nil, nil)
+            for p in pages { sqlite3_exec(db, "INSERT INTO urls (url, title) VALUES ('\(p)', '')", nil, nil, nil) }
+            sqlite3_close(db)
+        }
+        func attribute() {
+            var finished = false
+            store.attributeHistoryProfiles(chromium: root) { finished = true }
+            let deadline = Date().addingTimeInterval(10)
+            while !finished && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+            expect(finished, "the attribution finishes")
+        }
+        func suggested(_ profile: UUID?) -> Set<String> {
+            Set(store.history.values.filter { urls.contains($0.url) && CommandBarProfileScope.suggests($0, on: profile) }.map(\.url))
+        }
+        expect(urls.allSatisfy { store.history[$0]?.profiles == nil }, "entries from before #609 load with no profile")
+
+        // Work's History is there but isn't a Chromium History: nothing changes.
+        try? FileManager.default.createDirectory(at: root.appendingPathComponent(work.directoryName), withIntermediateDirectories: true)
+        try? Data("not a database".utf8).write(to: root.appendingPathComponent(work.directoryName).appendingPathComponent("History"))
+        history("Default", ["https://example.com/home-only"])
+        attribute()
+        expect(urls.allSatisfy { store.history[$0]?.profiles == nil }, "an unreadable History changes nothing")
+
+        try? FileManager.default.removeItem(at: root.appendingPathComponent(work.directoryName))
+        history(work.directoryName, ["https://example.com/work-only", "https://example.com/other"])
+        attribute()
+        expect(suggested(work.id) == ["https://example.com/work-only", "https://example.com/expired"], "Work's bar: \(suggested(work.id))")
+        expect(suggested(nil) == ["https://example.com/home-only", "https://example.com/expired"], "Default's bar: \(suggested(nil))")
+        expect(store.history["https://example.com/work-only"]?.visitCount == 2, "the entry keeps its visits")
     }
 
     /// A file that can't be read or written says so (a fault) instead of failing silently.

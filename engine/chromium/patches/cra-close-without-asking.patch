@@ -1,0 +1,35 @@
+Cra: a tab closed in Cra runs its page's beforeunload, pagehide and unload, as
+Chrome's ⌘W does (TabStripModel::CloseWebContentsAt), but never asks "Leave
+site?", as Arc never does. Discord takes its sign-in token out of localStorage
+while it thinks DevTools are open (outerWidth - innerWidth > 160, which Cra's
+sidebar is) and writes it back on beforeunload; Cra's old forced close skipped
+it and signed Discord out on every close (GitHub #705). The bridge marks the
+pages it closes (cra::g_closing_without_asking), and their "Leave site?" is
+answered "Leave" without showing.
+
+diff --git a/components/javascript_dialogs/app_modal_dialog_manager.cc b/components/javascript_dialogs/app_modal_dialog_manager.cc
+--- a/components/javascript_dialogs/app_modal_dialog_manager.cc
++++ b/components/javascript_dialogs/app_modal_dialog_manager.cc
+@@ -14,6 +14,7 @@
+ #include "base/no_destructor.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "build/build_config.h"
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
+ #include "components/javascript_dialogs/app_modal_dialog_manager_delegate.h"
+ #include "components/javascript_dialogs/app_modal_dialog_queue.h"
+ #include "components/javascript_dialogs/app_modal_dialog_view.h"
+@@ -162,6 +163,14 @@
+     return;
+   }
+ 
++  // Cra: a page Cra is closing ran its beforeunload and goes without asking
++  // "Leave site?", as Arc's tabs do (cra_engine_hooks.h, GitHub #705).
++  if (cra::g_closing_without_asking &&
++      cra::g_closing_without_asking(web_contents)) {
++    std::move(callback).Run(true, std::u16string());
++    return;
++  }
++
+   // Build the dialog message. We explicitly do _not_ allow the webpage to
+   // specify the contents of this dialog, as per the current spec
+   //

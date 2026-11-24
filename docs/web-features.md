@@ -20,6 +20,7 @@ window. Chrome's code for what a page asks often reads that `Browser` window, an
 | `chrome.action.openPopup()` always failed ("inactive window") | whether the window is active (never) | `cra-extension-popup-window.patch` |
 | Chrome's pointer-lock bubble at the top of Cra's window, none for a page's full screen (Arc: its toasts only) | the window's bubble; full screen is Cra's | Arc's toast: the pointer's from `cra-exclusive-access-notice.patch` (Chrome's bubble gets NONE), full screen's from Cra's own |
 | The Cast dialog (View ▸ Cast…, the page menu's Cast…) at the window's top left, over the sidebar; a page's `PresentationRequest.start()` got Chrome 159's media controls dialog, not Arc's Cast dialog | the Browser's top container, in the strip | `cra-cast-dialog.patch`: Chrome's own placement for a page without a Browser, centred on the page's top edge, and the Cast dialog for a page's request, as in Arc |
+| Closing a tab signed Discord out (#705): it writes its token back on `beforeunload`, and takes it out while it thinks DevTools are open (`outerWidth - innerWidth` > 160, which Cra's sidebar is) | nothing: Cra's close deleted the page without running its `beforeunload` or unload | engine -21, `cra-close-without-asking.patch`: Chrome's own tab close, its "Leave site?" answered Leave without showing, as Arc never asks |
 
 Chromium's own suites (`browser_tests`, `interactive_ui_tests`) and other browsers' tests (CEF's `ceftests`,
 Electron's specs, Brave's filtered upstream suites, Web Platform Tests) were looked at on 19 Nov 2026. None would

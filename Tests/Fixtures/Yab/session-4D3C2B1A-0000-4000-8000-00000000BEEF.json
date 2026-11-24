@@ -1,3 +1,4 @@
 {"tabs":[
+ {"id":"e","url":"https://docs.example.com/","title":"Docs","pin":"D"},
  {"id":"f","url":"https://wiki.example.com/","title":"Wiki","kept":true},
- {"id":"g","url":"https://design.example.com/","title":"Design"}],"active":1}
+ {"id":"g","url":"https://design.example.com/","title":"Design"}],"active":2}

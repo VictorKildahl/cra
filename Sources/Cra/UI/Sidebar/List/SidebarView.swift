@@ -62,6 +62,12 @@ final class SidebarView: NSView {
         guard let libraryHost else { return done("no library") }
         libraryHost.debugRail(page: page, hover: hover, press: press, done: done)
     }
+    /// The Library rail's back arrow (#726); false with no Library up.
+    func debugLibraryBack() -> Bool {
+        guard let libraryHost else { return false }
+        libraryHost.debugBack()
+        return true
+    }
     /// Arc's Create a Space page, over the space's column while one is being made.
     private var creationHost: SpaceCreationView?
     var debugSpaceCreation: String { creationHost?.debugLine ?? "none" }

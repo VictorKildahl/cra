@@ -8,7 +8,7 @@ class BrowserTestCase: XCTestCase {
 
     override func setUp() {
         continueAfterFailure = false
-        app = XCUIApplication()
+        app = WindowApplication()
     }
 
     /// Launches on an empty data folder.
@@ -24,8 +24,38 @@ class BrowserTestCase: XCTestCase {
             + "<body/bgcolor=\(color)><h1/style=font-family:-apple-system;padding:24px>\(title)</h1>"
     }
 
+    func capture() -> XCUIScreenshot? {
+        let captures: [(String, () -> XCUIScreenshot)] = [
+            ("XCUIScreen.main", { XCUIScreen.main.screenshot() }),
+            ("app.windows.firstMatch.screenshot()", { self.app.windows.firstMatch.screenshot() }),
+            ("app.screenshot()", { self.app.screenshot() })
+        ]
+        for (name, take) in captures {
+            let shot = take()
+            guard let image = shot.image.cgImage, let data = image.dataProvider?.data,
+                  let bytes = CFDataGetBytePtr(data) else { continue }
+            let stride = image.bitsPerPixel / 8
+            guard stride >= 3 else { continue }
+            let blank = (0..<10).allSatisfy { row in
+                (0..<10).allSatisfy { column in
+                    let x = (image.width - 1) * column / 9
+                    let y = (image.height - 1) * row / 9
+                    let i = y * image.bytesPerRow + x * stride
+                    return bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 0
+                }
+            }
+            if !blank {
+                print("XCTest capture: \(name)")
+                return shot
+            }
+        }
+        print("XCTest capture: all capture paths are blank")
+        return nil
+    }
+
     func keep(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        guard let shot = capture() else { return }
+        let attachment = XCTAttachment(screenshot: shot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -40,19 +70,52 @@ class BrowserTestCase: XCTestCase {
         let navigation = app.navigationBars["UIActivityContentView"]
         XCTAssertTrue(activity.waitForExistence(timeout: 5) || navigation.waitForExistence(timeout: 2),
                       "the share sheet opens")
+        let sheet = activity.exists && !activity.frame.isEmpty ? activity : navigation
+        let window = app.windows.firstMatch
         if UIDevice.current.userInterfaceIdiom == .pad {
-            let popover = activity.exists ? activity : navigation
-            XCTAssertTrue(popover.frame.insetBy(dx: -40, dy: -40).intersects(button.frame),
+            XCTAssertTrue(sheet.frame.insetBy(dx: -40, dy: -40).intersects(button.frame),
                           "the share popover is attached to its source button")
-            let outside = app.coordinate(withNormalizedOffset: .zero).withOffset(
-                CGVector(dx: app.frame.midX, dy: app.frame.maxY - 20))
-            XCTAssertFalse(popover.frame.contains(CGPoint(x: app.frame.midX, y: app.frame.maxY - 20)))
-            outside.tap()
+        }
+        // Phone sheets also expose a dismiss region; only a Popover owns an outside tap.
+        let popover = app.popovers.containing(.other, identifier: "ActivityListView").firstMatch
+        if popover.exists && !sheet.frame.isEmpty {
+            let bounds = window.frame.insetBy(dx: 20, dy: 40)
+            let points = [CGPoint(x: bounds.midX, y: bounds.minY), CGPoint(x: bounds.midX, y: bounds.maxY),
+                          CGPoint(x: bounds.minX, y: bounds.midY), CGPoint(x: bounds.maxX, y: bounds.midY)]
+            guard let outside = points.first(where: { !sheet.frame.contains($0) }) else {
+                return XCTFail("no point inside the window and outside the share popover")
+            }
+            window.coordinate(withNormalizedOffset: .zero).withOffset(
+                CGVector(dx: outside.x - window.frame.minX, dy: outside.y - window.frame.minY)).tap()
         } else {
-            app.swipeDown(velocity: .fast)
+            let close = app.buttons["header.closeButton"]
+            if close.exists && close.isHittable {
+                close.tap()
+            } else {
+                let visible = [activity, navigation].filter { $0.exists }.map { $0.frame.intersection(window.frame) }
+                    .first { !$0.isEmpty && !$0.isNull }
+                guard let visible else { return XCTFail("the share sheet has no visible drag area") }
+                let origin = window.coordinate(withNormalizedOffset: .zero)
+                let start = origin.withOffset(CGVector(dx: visible.midX - window.frame.minX,
+                                                       dy: visible.minY + min(30, visible.height / 2) - window.frame.minY))
+                let end = origin.withOffset(CGVector(dx: visible.midX - window.frame.minX,
+                                                     dy: window.frame.height - 20))
+                start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+            }
         }
         XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
         XCTAssertTrue(navigation.waitForNonExistence(timeout: 5))
+    }
+
+    func scrollUntilHittable(_ element: XCUIElement, scrollingDown: Bool = false, file: StaticString = #filePath, line: UInt = #line) {
+        // SwiftUI List exposes its sheet scroll view as a collection view.
+        let scroll = app.collectionViews.firstMatch
+        for _ in 0..<10 {
+            if element.isHittable { return }
+            XCTAssertTrue(scroll.waitForExistence(timeout: 5), "the sheet has a scroll view", file: file, line: line)
+            if scrollingDown { scroll.swipeDown() } else { scroll.swipeUp() }
+        }
+        XCTAssertTrue(element.isHittable, "sheet row \(element.identifier) stayed out of reach", file: file, line: line)
     }
 
     /// The bottom bar is back on screen once the keyboard is gone (GitHub #505: a keyboard that
@@ -357,14 +420,12 @@ final class SettingsTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         app.buttons["bar-settings"].tap()
         let button = app.buttons[identifier]
-        for _ in 0..<8 {
-            if button.isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(button.isHittable)
+        scrollUntilHittable(button)
         button.tap()
         closeShareSheet(openedFrom: button)
-        app.buttons["Done"].tap()
+        let done = app.buttons["Done"]
+        scrollUntilHittable(done, scrollingDown: true)
+        done.tap()
         XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
     }
 
@@ -387,6 +448,7 @@ final class SettingsTests: BrowserTestCase {
         XCTAssertTrue(app.switches["setting-block-ads"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.switches["setting-block-ads"].value as? String, "0")
         // App Settings is one step further, with the global options behind their own row.
+        scrollUntilHittable(app.buttons["setting-app-settings"])
         XCTAssertTrue(app.buttons["setting-app-settings"].waitForExistence(timeout: 5))
         app.buttons["setting-app-settings"].tap()
         XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
@@ -429,7 +491,7 @@ final class SettingsTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let licenses = app.buttons["setting-licenses"]
         XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
-        for _ in 0..<4 where !licenses.isHittable { app.swipeUp() }
+        scrollUntilHittable(licenses)
         XCTAssertTrue(app.buttons["setting-sync"].exists)
         XCTAssertTrue(app.buttons["setting-share-cra"].exists)
         XCTAssertTrue(app.buttons["setting-contact"].exists)
@@ -1428,13 +1490,16 @@ final class PageBasicsTests: BrowserTestCase {
     /// In dark mode a page that sets no colours of its own is white with black text, as in Safari
     /// and Arc Search. The web view used to be see-through over the black app background, which
     /// left such a page's black text on black.
-    func testAPageWithoutColoursStaysWhiteInDarkMode() {
+    func testAPageWithoutColoursStaysWhiteInDarkMode() throws {
         launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Plain</title><h1>Plain</h1>",
                 "-CraSearch", "NO", "-CraAppearance", "dark"])
         waitForPage("Plain")
         sleep(1)
         keep("plain-page-dark")
-        let shot = XCUIScreen.main.screenshot().image
+        guard let capture = capture() else {
+            throw XCTSkip("XCTest screen capture is blank on this display (iPhone Duo inner screen); the pixel check cannot judge Cra here")
+        }
+        let shot = capture.image
         guard let image = shot.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else {
             return XCTFail("no screenshot")
         }
@@ -1527,12 +1592,13 @@ final class EmptyHomeTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         app.buttons["bar-settings"].tap()
         let toggle = app.switches["setting-home-dots"]
-        for _ in 0..<6 where !toggle.isHittable { app.swipeUp() }
-        XCTAssertTrue(toggle.isHittable)
+        scrollUntilHittable(toggle)
         XCTAssertEqual(toggle.value as? String, "0", "off by default")
         toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
         XCTAssertEqual(toggle.value as? String, "1")
-        app.buttons["Done"].tap()
+        let done = app.buttons["Done"]
+        scrollUntilHittable(done, scrollingDown: true)
+        done.tap()
         let card = app.buttons["tab-card-0"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         sleep(1)
@@ -1668,6 +1734,7 @@ final class BrowseToggleTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         // The row's identifier lands on its menu's button (and its label and icon).
         let menu = app.buttons["setting-search-engine"]
+        scrollUntilHittable(menu)
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
         XCTAssertEqual(menu.label, "Google")
         menu.tap()
@@ -1826,7 +1893,7 @@ final class WidgetGuideTests: BrowserTestCase {
         let row = app.buttons["setting-add-widget"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
         // Further down the list.
-        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        scrollUntilHittable(row)
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
         let title = app.staticTexts["widget-guide-title"]
@@ -1893,7 +1960,7 @@ final class AppIconDockTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let row = app.buttons["setting-app-icon"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        scrollUntilHittable(row)
         row.tap()
         XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
         for icon in ["segments", "midnight", "mono", "violet"] {
@@ -1937,7 +2004,7 @@ final class LanguagesTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let menu = app.buttons["setting-languages"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !menu.isHittable { app.swipeUp() }
+        scrollUntilHittable(menu)
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
         XCTAssertEqual(menu.label, "Same as iPhone")
         menu.tap()
@@ -1951,7 +2018,7 @@ final class LanguagesTests: BrowserTestCase {
         sleep(1)
         app.buttons["bar-settings"].tap()
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !app.buttons["setting-languages"].isHittable { app.swipeUp() }
+        scrollUntilHittable(app.buttons["setting-languages"])
         XCTAssertEqual(app.buttons["setting-languages"].label, "French")
     }
 }
@@ -1966,7 +2033,7 @@ final class CustomSearchEngineTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let menu = app.buttons["setting-search-engine"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !menu.isHittable { app.swipeUp() }
+        scrollUntilHittable(menu)
         menu.tap()
         app.buttons["Custom"].firstMatch.tap()
         let field = app.alerts.textFields.firstMatch

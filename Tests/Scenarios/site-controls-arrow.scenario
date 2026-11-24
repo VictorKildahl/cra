@@ -1,0 +1,14 @@
+# promise: #723
+# The Site Control Center's arrow has the popover's fill, so arrow and panel are one shape, as Arc's are. The
+# popover's frame drew the arrow in its own material, a lighter grey than the panel's fill (GitHub #723,
+# mdrubelamin2, 0.1.54: RGB 66,66,74 against 39,39,40 in dark). The fill now sits behind the frame too, in the
+# panel's colour, for both appearances. The pixels themselves are on docs/release-checklist.md.
+budget rss=700 stalls50=8
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=arrow
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?siteControls=1
+wait 2
+cra://debug?siteControlsRead=arrow
+expect-log site controls arrow arrow: fill=.(272728 body=.272728|F4F4F5 body=.F4F4F5) behindFrame=1

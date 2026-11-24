@@ -49,4 +49,13 @@ struct CloseSuccessorTests {
     func theClosingTabIsNeverItsOwnSuccessor() {
         #expect(next("A", previous: "A", loaded: ["A"]) == "B")
     }
+
+    /// ⌘W on a Favorite only deselects it, its page left running, as in Arc 1.173.1 (#740: a test page's load time
+    /// and counter carried on, and the server saw no second load). A pinned tab still unloads back to its pinned page.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/740"))
+    func closingAFavoriteKeepsItsPage() {
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true) == .deselectKeepingPage)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: false) == .unloadToPinnedPage)
+    }
 }
+

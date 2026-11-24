@@ -105,6 +105,77 @@ the repo). The app record for `dk.kildahl.cra` has to exist in App Store Connect
 first upload. Builds are for iPhone and iPad (`TARGETED_DEVICE_FAMILY = 1,2`); `CRA_IOS_SIM="Cra iPad" scripts/ios.sh test …` runs the UI tests on an iPad simulator.
 Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <type id>`; names must not contain parentheses.
 
+### On the iPhone Duo
+
+The closed-screen harness repro is these two tests, run together on the existing Duo:
+
+```sh
+CRA_IOS_SIM="Cra Duo" scripts/ios.sh test CraUITests/GestureTests/testFlickingUpFromTheTabButtonTogglesTheTwoLatestTabs CraUITests/BrowseToggleTests/testBrowseForMeCanBeTheSearchEngine
+```
+
+On the unfixed harness the focused card is sought at an iPhone 17's fixed left edge, and
+the search-engine row is tapped without scrolling the short Settings sheet into view.
+
+Create the Duo explicitly on the installed iOS 27.1 runtime (find its id with
+`xcrun simctl list runtimes`):
+
+```sh
+xcrun simctl create "Cra Duo" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo <iOS 27.1 runtime id>
+CRA_IOS_SIM="Cra Duo" scripts/ios.sh test CraUITests/GestureTests CraUITests/SettingsTests
+```
+
+`scripts/ios.sh` would otherwise create an iPhone 17 under that name. Set posture (closed,
+half open, open) in Simulator, not in the script. The harness takes geometry from the app's
+window because `app.frame` is portrait-swapped when open. XCTest screenshots can be black on
+the inner screen; `CRA_IOS_SIM="Cra Duo" scripts/ios.sh shot /tmp/duo.png` is the picture to
+trust. Pass `--display` to `simctl io screenshot` too, or it can return the Duo's unlit display.
+On the open screen, `app.windows.firstMatch.screenshot()` produces pixels. The colour check
+tries screen, window, then app captures and reports which produced pixels. If all are blank,
+it skips.
+
+StatusBandTests skips on the Duo: the right-hand column or
+top-right status cluster has no top safe area, and band placement is an open product question
+(duo research, finding 8).
+
+Expected failures on the **closed** Duo (app bugs and unresolved iOS 27 behaviour; these tests
+remain enabled):
+
+| Test | Cause |
+| --- | --- |
+| `IncognitoTests/testAnIncognitoTabStaysOutOfTheRowAndTheArchive` | Accessories under status column (duo job 2) |
+| `SearchFieldTests/testTheIncognitoGlyphStaysPutWhenSwitchedOn` | Accessories under status column |
+| `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Accessories under status column |
+| `LinkMenuTests/testAPrivateTabsLinksStayPrivate` | Accessories under status column |
+| `LinkMenuTests/testSaveToPhotosFromAnImageKeepsTheAppRunning` | Image long-press menu does not open (unresolved) |
+| `PopupTests/testPrivatePopupSharesOnlyItsPrivateSourceAndClosesBackToIt` | Accessories under status column |
+| `SiteMatchTests/testSyncedSpaceSitesShowTheirPlaceAndOpen` | Accessories under status column |
+| `AppLinkTests/testALinkNoAppClaimsLoadsHere` | iOS 27/unresolved app-link handoff |
+| `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Custom engine not saved after the alert's Save (unresolved) |
+| `ExternalLinkTests/testATappedMessageLinkOpensMessages` | iOS 27 Messages handoff |
+| `PageRestoreTests/testAScrolledPageOpensWhereItWasAfterTheAppIsClosed` | Page restore unresolved |
+| `PlainHTTPTests/testBackFromARefusedAddressReturnsToThePageBefore` | Menu below the 678 pt screen after typing, on a reused simulator only; passes on a fresh Duo (unresolved) |
+| `ShareExtensionTests/testTheShareSheetSavesThroughTheExtension` | iOS 27 extension unresolved |
+| `AppIconDockTests/testChangeAppIconShowsTheDock` | Intermittent in research; passed rerun |
+
+Expected failures on the **open and half-open** Duo:
+
+| Test | Cause |
+| --- | --- |
+| `OnboardingTests/testOnboardingWalksThroughAndLeavesTheAppReadyToType` | Icon step overflows (duo job 1) |
+| `AppLinkTests/testALinkNoAppClaimsLoadsHere` | iOS 27/unresolved app-link handoff |
+| `ExternalLinkTests/testATappedMessageLinkOpensMessages` | iOS 27 Messages handoff |
+| `PageRestoreTests/testAScrolledPageOpensWhereItWasAfterTheAppIsClosed` | Page restore unresolved |
+| `ShareExtensionTests/testTheShareSheetSavesThroughTheExtension` | iOS 27 extension unresolved |
+| `PlainHTTPTests/testBackFromARefusedAddressReturnsToThePageBefore` | HTTP/keyboard unresolved |
+| `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Title never arrives |
+| `PageBasicsTests/testADownloadIsSavedAnnouncedAndListed` | Download name numbering |
+| `SpacesTests/testTheMacsSpacesOpenFromTheTabRow` | Synced Spaces unresolved |
+| `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Alert Save |
+
+These lists record the research expectations, not exemptions in the harness. Other failures
+need hierarchy or `simctl` screenshot evidence to distinguish a harness miss from a Cra bug.
+Locked test bodies and `Tests/promises.lock` stay unchanged.
+
 ## App Store
 
 Cra for iPhone is on the App Store (app 6834101298, "Cra Browser"): 0.1.0 (build 1265) was

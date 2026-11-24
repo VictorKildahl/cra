@@ -183,4 +183,35 @@ struct LibrarySwipeTests {
         #expect(abs(LibrarySwipe.response - 0.205) < 1e-9)
         #expect(abs(LibrarySwipe.omega - 2 * .pi / LibrarySwipe.response) < 1e-9)
     }
+
+    /// The Library button, ⇧⌘L and the Library's back arrow move it as a swipe does, wherever the sidebar is:
+    /// with the sidebar hidden it slides in under the floating sidebar and lands docked, and one that brought a
+    /// hidden sidebar out slides back out to it. It appeared at once from a hidden sidebar, and went back with the
+    /// tab list showing for a few frames and the page widening in steps (#726).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/726"))
+    func theButtonSlidesTheLibraryFromAHiddenSidebarAndBack() {
+        // Hidden, out over the page or not: in from the window's edge.
+        #expect(LibrarySwipe.buttonMotion(opening: true, sidebar: .hidden, swiping: false) == .slideFromHidden)
+        // Docked, it was brought out by the Library or not: the spring, both ways.
+        #expect(LibrarySwipe.buttonMotion(opening: false, sidebar: .docked, swiping: false) == .slide(to: 0))
+        #expect(LibrarySwipe.buttonMotion(opening: true, sidebar: .docked, swiping: false) == .slide(to: 1))
+        // A swipe in progress keeps the fingers in charge; the button lands it at once.
+        #expect(LibrarySwipe.buttonMotion(opening: true, sidebar: .docked, swiping: true) == .show)
+        #expect(LibrarySwipe.buttonMotion(opening: false, sidebar: .docked, swiping: true) == .close)
+        // A page full screen for its own (a video's): nothing to slide beside.
+        #expect(LibrarySwipe.buttonMotion(opening: true, sidebar: .none, swiping: false) == .show)
+        #expect(LibrarySwipe.buttonMotion(opening: false, sidebar: .none, swiping: false) == .close)
+    }
+
+    /// The button's slide is the swipe's settle: eased out, most of it in the first tenth of a second and done in
+    /// about a third, as Arc's (#726: 320 ms in the reporter's recording, the biggest step first).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/726"))
+    func theButtonsSlideEasesOutInAboutAThirdOfASecond() {
+        let w: CGFloat = 417
+        let done = stride(from: 0.0, through: 1.0, by: 1.0 / 120).first {
+            LibrarySwipe.isSettled(from: 0, velocity: 0, to: 1, at: CGFloat($0), width: w)
+        }
+        #expect(done.map { $0 > 0.25 && $0 < 0.45 } == true)
+        #expect(LibrarySwipe.settle(from: 0, velocity: 0, to: 1, at: 0.1) > 0.6)
+    }
 }

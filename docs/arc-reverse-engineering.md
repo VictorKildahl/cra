@@ -5460,3 +5460,23 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   (`codesign --strict` refuses com.apple.FinderInfo on the bundle; lsd kept registering it launch-disabled, GitHub
   #724). AppIconManager never puts the icon on Cra.app and takes off one an earlier Cra left (AppIconBundle);
   the Dock tile shows the pick. Scenario app-icon-signature.
+
+## Command bar history and profiles (23 Nov 2026, Arc 1.173.1, #729, #730)
+
+- **Arc has no history index of its own.** ArcCore (Arc's Chromium framework) has
+  `searchHistory:completion:` taking an `ArcHistoryQueryOptions` (`searchText`, `beginTime`,
+  `endTime`, `maxResults`, `duplicateHandlingPolicy`, `matchingAlgorithm`, over an
+  `arc::HistoryQueryOptions`) and answering `ArcHistoryItem`s (`historyID`, `url`, `urlSpec`,
+  `title`, `visitCount`, `typedCount`, `lastVisitTime`, `visitTime`). Read with `otool -oV` on
+  `Contents/Frameworks/ArcCore.framework/ArcCore`. A space's bar asks its profile's HistoryService,
+  so spaces on one profile share history and another profile's pages never come up.
+- **Arc doesn't expire history at Chromium's 90 days.** A Default `History` from daily use had
+  301,818 visits on 128,026 URLs, from 22 Jun 2024 to Nov 2026. Stock Chromium runs
+  `expirer_.StartExpiringOldStuff(base::Days(kExpireDaysThreshold))` with
+  `kExpireDaysThreshold = 90` (history_backend.h). Cra's oldest visit sat at 89 days, and visits
+  merged in from Arc went in the next sweep (#730).
+- **Cra's history.json from before #609 has no profiles**, so `CommandBarProfileScope` suggested it
+  everywhere. Each profile's own Chromium `History` (`urls.url`) says whose a page was: on one real
+  profile pair, 4,752 of 4,757 such entries were found, 12 of them in both (#729).
+- **Open question:** how Arc's bar ranks `searchHistory`'s results against open tabs, and its
+  `maxResults`. Neither is in the strings.
