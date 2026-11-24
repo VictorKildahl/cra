@@ -1930,6 +1930,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // littleCommit=<typed>: the newest Little Window's command bar commits its "Switch to"
             // row for what was typed, as ↩ on it does (#316).
             if let typed = dict["littleCommit"] { littleWindows.last?.debugCommit(typed); return }
+            // littleProfile=<name>: the newest Little Window's page moved to the profile of that name
+            // ("Default"), as a pick in its address pill's menu with "Don't ask again" on.
+            if let name = dict["littleProfile"] { littleWindows.last?.debugChangeProfile(named: name); return }
             // littleKey=<n>: the nth Little Window (oldest first) picked as Mission Control picks one (#581);
             // littleOrder=<label>: Cra's browser and Little Windows, front to back, as the window server has them.
             if let n = dict["littleKey"].flatMap(Int.init), littleWindows.indices.contains(n) { littleWindows[n].debugPick(); return }

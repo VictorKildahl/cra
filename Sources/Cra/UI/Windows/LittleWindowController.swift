@@ -233,6 +233,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// named, matching the page's profile, or the one picked in this window's command bar (#316),
     /// else the window used last's.
     private var target: LittleWindowTarget
+    /// The link the window opened, or the address last typed in it, before redirects: what a profile
+    /// change loads again (CraCore LittleProfileChange). Nil for a popup host.
+    private var openedURL: String?
     /// ⌥⌘N's card (GitHub #337, CraCore LittleCard): an empty Little Window is only its command bar,
     /// 490 × 329 pt at the top right of the screen, with no strip, traffic lights or page. A row that
     /// opens a page turns it into the full window (`expandCard`); anything else that closes the bar
@@ -390,6 +393,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let b = PageEngines.makeBrowser(frame: shell.page.bounds, url: url.map { $0.isEmpty ? "about:blank" : $0 }, delegate: self,
                                         incognito: false, profilePath: app.store.profilePath(profile: state.profileID), opener: opener)
         attach(b)
+        openedURL = url
         state.url = (url == "about:blank" ? "" : url) ?? ""
         observeBarSetting()
     }
@@ -1548,6 +1552,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let empty = !hasPage && browser?.canGoBack == false
         expandCard()
         state.url = url
+        openedURL = url
         // An empty window's page is about:blank: loading over it left that entry behind the first
         // page, so Back and the swipe back went to a blank page instead of closing the window
         // (#495). A new page at the address starts its history there.
@@ -1711,11 +1716,22 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         }
     }
 
-    /// A page can't move between profiles: a new browser in the other one loads its address.
-    private func reload(inProfile id: UUID?) {
-        guard browser != nil else { return }
+    /// `cra://debug?littleProfile=<name>`: the page moved to that profile, past the confirm `changeProfile` asks.
+    func debugChangeProfile(named name: String) {
+        let id = store.profiles.first { $0.name == name }?.id
+        guard id != nil || name == store.profileName(nil) else { return CraLog.note("little profile \(name): no such profile") }
+        let address = reload(inProfile: id)
+        CraLog.note("little profile \(name): \(store.profileName(state.profileID)) at \(address ?? "-")")
+    }
+
+    /// A page can't move between profiles: a new browser in the other one loads its address, which it returns.
+    @discardableResult
+    private func reload(inProfile id: UUID?) -> String? {
+        guard browser != nil else { return nil }
         state.profileID = id
-        replacePage(at: hasPage ? currentURL : "about:blank")
+        let address = LittleProfileChange.address(opened: openedURL, shown: currentURL)
+        replacePage(at: address)
+        return address
     }
 
     /// A new page at `url` in place of this window's, in the engine the address gets (a profile

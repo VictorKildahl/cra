@@ -3955,7 +3955,9 @@ events, the window recorded with `screencapture -V`.
 - Cra: `LittleWindowState.profileID` (set when the window opens, kept), `LittleProfileChip` in the pill left of
   the extensions button (the tooltip pill's 22 pt metrics, white 31/255), the menu Default | profiles with the
   page's ticked, an NSAlert with that text and "Don’t ask again" (defaults
-  `shouldBypassConfirmLittleWindowProfileDialog`), then the page reloads in a new browser in that profile.
+  `shouldBypassConfirmLittleWindowProfileDialog`), then the page reloads in a new browser in that profile:
+  the link the window opened (or the address typed in it), never where its redirects ended (a sign-in page with
+  the first profile's challenge) (`LittleProfileChange`).
 
 ## Peek and the copy toast's Share button (Arc 1.171, 3 Nov 2026, offline Arc)
 
