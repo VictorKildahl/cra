@@ -144,6 +144,8 @@ remain enabled):
 
 | Test | Cause |
 | --- | --- |
+| `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Link long-press menu does not open (unresolved, as Save to Photos) |
+| `LinkMenuTests/testAPrivateTabsLinksStayPrivate` | Link long-press menu does not open (unresolved, as Save to Photos) |
 | `LinkMenuTests/testSaveToPhotosFromAnImageKeepsTheAppRunning` | Image long-press menu does not open (unresolved) |
 | `AppLinkTests/testALinkNoAppClaimsLoadsHere` | iOS 27/unresolved app-link handoff |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Custom engine not saved after the alert's Save (unresolved) |
