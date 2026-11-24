@@ -1665,6 +1665,10 @@
 #737   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
 #738   Packages/CraCore/Tests/CraCoreTests/LittleWindowReturnTests.swift::aLittleWindowOnAnotherDesktopDoesntTakeTheKeyboard  dc7d41161e79
 #738   Tests/Scenarios/little-window-close-other-desktop.scenario  fac028a20117
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::aLaunchWithSegmentsLeavesTheApplicationIconAlone  25e46ecec582
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsGivenToTheDockWhileItsCacheMayBeStale  9ac039c2814c
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsLeftToTheDockSoItFollowsTheIconStyle  d6d0d50c159d
+#739   Tests/Scenarios/app-icon-segments-dock.scenario  25c9642c4b70
 #740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteKeepsItsPage  cf0f18574cfc
 #740   Tests/Scenarios/favorite-close-keeps-page.scenario  064e7c9c632b
 #742   Packages/CraCore/Tests/CraCoreTests/ImportedAddressTests.swift::keeps  d12bf4d6cfe2
