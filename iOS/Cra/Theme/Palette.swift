@@ -1,3 +1,4 @@
+import CraCore
 import UIKit
 
 /// The chrome's colours, sampled from Arc Search (docs/ios.md has the frames they came from).
@@ -13,6 +14,11 @@ enum Palette {
         guard color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a), a > 0.5 else { return nil }
         func byte(_ v: CGFloat) -> Int { Int((max(0, min(1, v)) * 255).rounded()) }
         return String(format: "#%02X%02X%02X", byte(r), byte(g), byte(b))
+    }
+
+    /// A CraCore `#RRGGBB` colour as a UIColor; nil when it is not one.
+    static func color(hex: String) -> UIColor? {
+        HexColor.components(hex).map { UIColor(red: $0.r, green: $0.g, blue: $0.b, alpha: 1) }
     }
 
     static func rgb(_ hex: UInt32, alpha: CGFloat = 1) -> UIColor {

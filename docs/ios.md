@@ -58,6 +58,7 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraFakeVoice <text>` | What voice search hears instead of the microphone |
 | `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
 | `-CraOnboarding YES` | Shows onboarding on a test's data folder |
+| `-CraCountHaptics YES` | Counts each haptic tick in its control's accessibility value and a hidden `haptic-count` element, for UI tests |
 
 Writing a UI test (`iOS/CraUITests`): pages are `data:` addresses passed with `-CraOpenURL`, so
 no test needs the network. The exceptions are the tests that need a real http(s) page (`PopupTests`' form POSTs, `PlainHTTPTests`, `CertificateTests`, `ExternalLinkTests`):

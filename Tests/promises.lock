@@ -1120,9 +1120,10 @@
 #536   iOS/CraUITests/PasskeyTests.swift::testASitesPasskeyRequestBringsUpTheSystemPasskeySheet  a58d934f1192
 #537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickGoesToTheTabLookedAtLast  0c1aadf12ada
 #537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickStartsAnywhereOnTheBarsLeftEnd  d1f9c085a9d4
-#537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickUpSwitchesByDistanceOrSpeed  e760a83f8970
-#537   iOS/CraUITests/BrowserTests.swift::testFlickingUpBesideTheTabButtonStillSwitches  31ecdee14f56
-#537   iOS/CraUITests/BrowserTests.swift::testFlickingUpFromTheTabButtonTogglesTheTwoLatestTabs  15227fb71e75
+#537   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFlickUpSwitchesByDistanceOrSpeed  3fb25556e309
+#537   iOS/CraUITests/BrowserTests.swift::testFlickingUpBesideTheTabButtonStillSwitches  226529ee3234
+#537   iOS/CraUITests/BrowserTests.swift::testFlickingUpFromTheBarsTopEdgeStillSwitches  ebc58fbb310d
+#537   iOS/CraUITests/BrowserTests.swift::testFlickingUpFromTheTabButtonTogglesTheTwoLatestTabs  2a8329f2144d
 #538   Packages/CraCore/Tests/CraCoreTests/AppleIntelligenceStatusTests.swift::appleSiliconMacWithoutTheModelIsNotToldItNeedsAppleSilicon  bb6a933de6bf
 #539   Tests/Scenarios/little-window-screenshot-pick.scenario  a4df2e9bd27b
 #540   Packages/CraCore/Tests/CraCoreTests/ToolbarAutoHideTests.swift::aPageInFullScreenHasNoBar  a35e4af16d57
@@ -1224,7 +1225,7 @@
 #572   iOS/CraUITests/LinkMenuTests.swift::testALinkOpensInIncognito  969d3c168d10
 #572   iOS/CraUITests/LinkMenuTests.swift::testAPrivateBackgroundTabWaitsInTheRow  0afc7b692cc1
 #572   iOS/CraUITests/LinkMenuTests.swift::testAPrivateTabsLinksStayPrivate  de3270f2fc1c
-#572   iOS/CraUITests/LinkMenuTests.swift::testTheMenusAddressIsEditedInThisTab  8dde1c42c286
+#572   iOS/CraUITests/LinkMenuTests.swift::testTheMenusAddressIsEditedInThisTab  e77e414daca3
 #573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aLostEndDoesntStrandTheWindow  a0bb37bd00af
 #573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aPinchAfterRestingFingersResizes  c9e5ac139e62
 #573   Packages/CraCore/Tests/CraCoreTests/PictureInPictureFingersTests.swift::aPinchThatStartsWithAChangeTakesTheWindow  ab5064e702c4
@@ -1449,6 +1450,7 @@
 #646   Tests/Scenarios/little-window-close-next.scenario  e56b9ac7f111
 #647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aPickedTabMovesToTheNewestEnd  d64f90ed30eb
 #647   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::archivingAPopupReturnsToItsOpener  c28451ef2820
+#647   iOS/CraUITests/TabOrderTests.swift::testAFlickUpOnTheTabButtonMovesItsTabToTheEndOfTheRow  1e8d19185cc8
 #647   iOS/CraUITests/TabOrderTests.swift::testAPickedTabMovesToTheEndOfTheRow  9332f7345e40
 #647   iOS/CraUITests/TabOrderTests.swift::testSwipingAPopupAwayReturnsToItsOpener  77038b0e6667
 #648   Packages/CraCore/Tests/CraCoreTests/PeekAddressTests.swift::aPeekInTheFieldOffersOnlyCopyLink  89551038f611
@@ -1471,7 +1473,9 @@
 #655   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theOpenSheetGoesDownTheWayItCameUp  dd08453b7060
 #655   iOS/CraUITests/SearchPullTests.swift::testDraggingTheEmptySheetDownFromAnywhereClosesIt  e65a5c271b34
 #655   iOS/CraUITests/SearchPullTests.swift::testTheOpenSheetDraggedDownStaysInSight  baa2ac21b197
+#656   Packages/CraCore/Tests/CraCoreTests/PageHistoryTests.swift::aSmallScrollOpensAtTheTop  2e646f0099a2
 #656   iOS/CraUITests/PageRestoreTests.swift::testAScrolledPageOpensWhereItWasAfterTheAppIsClosed  bc87e240b0d2
+#656   iOS/CraUITests/PageRestoreTests.swift::testASmallScrollComesBackAtTheTop  833299498bf1
 #657   Packages/CraCore/Tests/CraCoreTests/MobileStatusBandTests.swift::theBandTakesThePagesColour  53e8729415af
 #657   iOS/CraUITests/StatusBandTests.swift::testTheStatusBarSitsOnThePagesColour  a51edc261764
 #658   Packages/CraCore/Tests/CraCoreTests/EaselObjectsTests.swift::theColourPickerAppliesToTextToo  f107d7c5fd90
@@ -1524,9 +1528,11 @@
 #673   Tests/StoreTests.swift::importedTabsKeepTheirOwnIcons  6b33b1cf8f28
 #674   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::appSettingsUsesFullHeightOnIPadAndKeepsMediumOnIPhone  ab096e56dcb8
 #674   iOS/CraUITests/BrowserTests.swift::testAppSettingsOpensTallOnIPadAndHalfOnIPhone  1f7ec8f0e34a
-#675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aButtonTicksAsTheFingerComesDownAndAgainAsItLetsGo  5e1d23faefe8
-#675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::everyBarButtonTicksTheNewTabPillToo  6bed583c490a
-#675   iOS/CraUITests/BrowserTests.swift::testBarButtonsTickOnPressAndOnRelease  1a7789f226e9
+#675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theBarsButtonsTickOnlyAsTheFingerComesDown  fcf94e21a913
+#675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theCapsulesButtonsTickOnlyAsTheFingerLetsGo  d0cc43b0e2ef
+#675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theMenusTilesAndRowsTickOnPress  c7a41ea96da6
+#675   iOS/CraUITests/BrowserTests.swift::testBarButtonsTickOnceOnPress  3334c9ed75b8
+#675   iOS/CraUITests/BrowserTests.swift::testTheMenusControlsTickOnPressAndRelease  2d86865d61cb
 #677   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::autoSpacesSavedBeforeKeepTheirColoursInTheDark  6a757e6f3485
 #677   Tests/Scenarios/auto-theme-dark-keeps-colour.scenario  70e97e843df1
 #679   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::thePageStaysAgainstTheLibraryFromItsHiddenPlace  cb9c9e6fe724
