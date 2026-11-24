@@ -72,8 +72,8 @@ public enum MobilePageMenu {
         (width - 2 * tileSideInset - 3 * tileSpacing) / 4
     }
 
-    /// A tile's side: the four fill the width, and each button is square (Victor's call; the
-    /// recording's were 3 pt taller than wide).
+    /// A tile's side: the four fill the width, and each button is square (PR #733, a deviation:
+    /// the recording's were 3 pt taller than wide).
     public static func tileSide(in width: CGFloat) -> CGFloat {
         tileWidth(in: width)
     }
