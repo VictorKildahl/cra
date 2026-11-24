@@ -107,6 +107,8 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 ### On the iPhone Duo
 
+Onboarding keeps the iPhone layout and scales down only a step's phone or icon grid when the step would otherwise leave the screen, as on the Duo's open and closed screens.
+
 The closed-screen harness repro is these two tests, run together on the existing Duo:
 
 ```sh
@@ -161,7 +163,6 @@ Expected failures on the **open and half-open** Duo:
 
 | Test | Cause |
 | --- | --- |
-| `OnboardingTests/testOnboardingWalksThroughAndLeavesTheAppReadyToType` | Icon step overflows (duo job 1) |
 | `AppLinkTests/testALinkNoAppClaimsLoadsHere` | iOS 27/unresolved app-link handoff |
 | `ExternalLinkTests/testATappedMessageLinkOpensMessages` | iOS 27 Messages handoff |
 | `PageRestoreTests/testAScrolledPageOpensWhereItWasAfterTheAppIsClosed` | Page restore unresolved |

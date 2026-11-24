@@ -41,6 +41,13 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
 
 /// First launch, in Arc Search's order and (where they fit Cra) its words.
 public enum MobileOnboarding {
+    /// Keeps the exact iPhone layout while its small overflow stays on screen;
+    /// otherwise shrinks only the step's picture to fit the available height.
+    public static func fitScale(available: CGFloat, fixed: CGFloat, scalable: CGFloat, allowance: CGFloat) -> CGFloat {
+        if fixed + scalable - available <= 2 * allowance { return 1 }
+        return min(1, max(0, (available - fixed) / scalable))
+    }
+
     public enum Step: String, Equatable {
         case welcome, meet, browseForMe, pinch, icon, blocking, defaultBrowser
     }

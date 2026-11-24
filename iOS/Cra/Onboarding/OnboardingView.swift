@@ -58,13 +58,24 @@ final class OnboardingModel: ObservableObject {
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
 
+    @State private var headingHeight: CGFloat = 0
+    @State private var iconTitleHeight: CGFloat = 0
+    @State private var iconGridHeight: CGFloat = 0
+
     private var tried: Bool { model.progress == .done }
 
     var body: some View {
+        GeometryReader { geometry in
+            layout(in: geometry)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+
+    private func layout(in geometry: GeometryProxy) -> some View {
         ZStack {
             VividBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 1 : 0)
             PaleBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 0 : 1)
-            content
+            content(in: geometry)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 30)), removal: .opacity))
                 .id(model.step)
@@ -112,7 +123,7 @@ struct OnboardingView: View {
         .animation(.easeInOut(duration: 0.5), value: MobileOnboarding.isVivid(model.step))
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func content(in geometry: GeometryProxy) -> some View {
         switch model.step {
         case .welcome:
             WelcomeStep()
@@ -143,34 +154,34 @@ struct OnboardingView: View {
             }
             .padding(.top, 50)
         case .browseForMe:
-            VStack(spacing: 24) {
-                StepHeading(title: MobileOnboarding.browseTitle, progress: model.progress)
+            demo(title: MobileOnboarding.browseTitle, in: geometry) {
                 BrowseDemo(progress: $model.progress)
             }
-            .padding(.top, 40)
         case .pinch:
-            VStack(spacing: 24) {
-                StepHeading(title: MobileOnboarding.pinchTitle, progress: model.progress)
+            demo(title: MobileOnboarding.pinchTitle, in: geometry) {
                 PinchDemo(progress: $model.progress)
             }
-            .padding(.top, 40)
         case .icon:
+            let scale = MobileOnboarding.fitScale(available: geometry.size.height - (18 + 50 + 16),
+                                                  fixed: 50 + iconTitleHeight + 30, scalable: iconGridHeight, allowance: 0)
             VStack(spacing: 30) {
                 OnboardingTitle(text: MobileOnboarding.iconTitle)
-                AppIconGrid(icons: MobileAppIcon.onboardingChoices, selected: model.icon, onVivid: true) { icon in
+                    .fixedSize(horizontal: false, vertical: scale < 1)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { iconTitleHeight = $0 }
+                AppIconGrid(icons: MobileAppIcon.onboardingChoices, selected: model.icon, onVivid: true, scale: scale) { icon in
                     model.icon = icon
                     model.setIcon(icon)
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { iconGridHeight = $0 }
+                .frame(height: scale < 1 ? iconGridHeight * scale : nil)
                 .padding(.horizontal, 60)
             }
             .padding(.top, 50)
         case .blocking:
-            VStack(spacing: 24) {
-                StepHeading(title: MobileOnboarding.blockingTitle, progress: model.progress)
+            demo(title: MobileOnboarding.blockingTitle, in: geometry) {
                 BlockingDemo(blocks: $model.blocksAdsAndTrackers)
                     .blur(radius: model.progress == .done ? 6 : 0)
             }
-            .padding(.top, 40)
         case .defaultBrowser:
             VStack(spacing: 18) {
                 Spacer().frame(height: 110)
@@ -193,6 +204,21 @@ struct OnboardingView: View {
                     .padding(.horizontal, 44)
             }
         }
+    }
+
+    private func demo<Picture: View>(title: String, in geometry: GeometryProxy, @ViewBuilder picture: () -> Picture) -> some View {
+        let scale = MobileOnboarding.fitScale(available: geometry.size.height, fixed: 40 + headingHeight + 24,
+                                              scalable: OnboardingMock.height,
+                                              allowance: min(40 + geometry.safeAreaInsets.top, geometry.safeAreaInsets.bottom))
+        return VStack(spacing: 24) {
+            StepHeading(title: title, progress: model.progress)
+                .fixedSize(horizontal: false, vertical: scale < 1)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headingHeight = $0 }
+            picture()
+                .scaleEffect(scale)
+                .frame(width: scale < 1 ? 330 * scale : nil, height: scale < 1 ? OnboardingMock.height * scale : nil)
+        }
+        .padding(.top, 40)
     }
 
     /// The four pills' round icons: red, purple, blue, cyan.
@@ -306,6 +332,7 @@ struct AppIconGrid: View {
     let selected: MobileAppIcon
     /// On onboarding's gradient: white radios, and a white frame round the picked icon.
     var onVivid = false
+    var scale: CGFloat = 1
     let pick: (MobileAppIcon) -> Void
 
     /// The widest the grid gets on an iPhone (Settings' picker on a Pro Max: 440 pt less its
@@ -348,6 +375,7 @@ struct AppIconGrid: View {
             }
         }
         .frame(maxWidth: Self.maxWidth)
+        .scaleEffect(scale)
         .frame(maxWidth: .infinity)
     }
 }

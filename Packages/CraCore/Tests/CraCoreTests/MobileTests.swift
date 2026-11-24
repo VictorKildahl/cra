@@ -1247,11 +1247,14 @@ struct MobileOnboardingTests {
     }
 
     @Test func closedScreenFitsTheDemo() {
-        // Cra Duo closed: 644 safe height (spec); compressed heading 32 1/3 measured on base, build.md.
-        let fixed: CGFloat = 40 + 32 + 1.0 / 3 + 24
-        let scale = MobileOnboarding.fitScale(available: 644, fixed: fixed, scalable: 640, allowance: min(40 + 0, 34))
-        #expect(scale < 1)
-        #expect(fixed + 640 * scale <= 644)
+        // Cra Duo closed, build.md: safe height 644; heading 32 1/3 on base, 64 2/3 after fitting on head.
+        for heading: CGFloat in [32 + 1.0 / 3, 64 + 2.0 / 3] {
+            // Measured top inset 0 and bottom inset 34; design padding 40, gap 24, mock 640.
+            let fixed: CGFloat = 40 + heading + 24
+            let scale = MobileOnboarding.fitScale(available: 644, fixed: fixed, scalable: 640, allowance: min(40 + 0, 34))
+            #expect(scale < 1)
+            #expect(fixed + 640 * scale <= 644)
+        }
     }
 
     @Test func openScreenFitsTheDemo() {

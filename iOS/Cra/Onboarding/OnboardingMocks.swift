@@ -61,6 +61,10 @@ struct PaleBackdrop: View {
     }
 }
 
+enum OnboardingMock {
+    static let height: CGFloat = 640
+}
+
 /// A phone in the steps: a white frame with round corners, its screen clipped inside. It runs
 /// past the bottom of the step, under the button.
 struct PhoneMock<Screen: View>: View {
@@ -70,7 +74,7 @@ struct PhoneMock<Screen: View>: View {
 
     var body: some View {
         screen
-            .frame(width: 330, height: 640, alignment: .top)
+            .frame(width: 330, height: OnboardingMock.height, alignment: .top)
             .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 40, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 6))
             .shadow(color: .black.opacity(0.25), radius: 20, y: 8)

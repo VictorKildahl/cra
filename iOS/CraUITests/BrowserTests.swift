@@ -1456,7 +1456,8 @@ final class OnboardingTests: BrowserTestCase {
             attachment.name = "\(name).frames.txt"
             attachment.lifetime = .keepAlways
             add(attachment)
-            if check.exists { fits(check, step: name) } else { fits(title, step: name) }
+            fits(title, step: name)
+            if check.exists { fits(check, step: name) }
             if showsNext { fits(next, step: name) }
         }
 
@@ -1498,6 +1499,7 @@ final class OnboardingTests: BrowserTestCase {
         step("default")
         next.tap()
         XCTAssertTrue(app.staticTexts["onboarding-howto"].waitForExistence(timeout: 3), "how-to: sheet appears")
+        step("how-to")
         app.buttons["onboarding-later"].tap()
         XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5), "finished: search appears")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "finished: keyboard appears")
