@@ -14,7 +14,10 @@ struct MobilePullRingTests {
     @Test func theRingSitsCentredBelowTheBar() {
         let center = MobilePullRing.center(safeTop: 59, screenWidth: 440)
         #expect(center.x == 220)
-        #expect(center.y == 59 + 27.0 / 2 + 8)
+        // The safe top, half the 27 pt ring, and 8 pt below. Typed outside the macro: CI's
+        // compiler cannot type-check the literals inside #expect in time.
+        let expectedY: CGFloat = 59 + 13.5 + 8
+        #expect(center.y == expectedY)
         #expect(center.y - MobilePullRing.side(safeTop: 59) / 2 > 0, "all of it is on screen")
     }
 
@@ -41,8 +44,11 @@ struct MobilePullRingMotionTests {
     @Test func aFasterPullBumpsFurtherAndBouncier() {
         let slow = MobilePullRing.bump(speed: 0)
         let fast = MobilePullRing.bump(speed: 2000)
-        #expect(abs(slow.peak - .pi / 180) < 1e-9, "a slow pull barely nudges it: 1°")
-        #expect(abs(fast.peak - 30 * .pi / 180) < 1e-9, "30° at most")
+        let degree: CGFloat = .pi / 180
+        let slowGap: CGFloat = abs(slow.peak - degree)
+        let fastGap: CGFloat = abs(fast.peak - 30 * degree)
+        #expect(slowGap < 1e-9, "a slow pull barely nudges it: 1°")
+        #expect(fastGap < 1e-9, "30° at most")
         #expect(MobilePullRing.bump(speed: 5000) == fast)
         #expect(MobilePullRing.bump(speed: -100) == slow)
         #expect(MobilePullRing.bump(speed: .infinity) == slow, "a broken measurement is a slow pull")
@@ -67,7 +73,8 @@ struct MobilePullRingMotionTests {
 
     /// A full pull's lap turns 108° in 0.3 s as the ring fades, as docs/ios-parity.md says.
     @Test func aFullPullsLapTurnsAsItFades() {
-        #expect(abs(MobilePullRing.successTurn * 180 / .pi - 108) < 1e-9)
+        let degrees: CGFloat = MobilePullRing.successTurn * 180 / .pi
+        #expect(abs(degrees - 108) < 1e-9)
         #expect(MobilePullRing.successDuration == 0.3)
     }
 }
