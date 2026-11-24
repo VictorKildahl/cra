@@ -1,0 +1,32 @@
+# promise: #738
+# Little Windows on two desktops, each opened by a link from another app (`cover`, as in the report). Closing the
+# last one on this desktop goes back to the app in use here, as closing a single one does (#430). The one on the
+# other desktop took the keyboard instead (#646's rule), and macOS switched to that desktop. A test copy can't make
+# desktops, so littleOtherDesktop marks the first window as opened on another one.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+cra://open?url=${PAGE}?n=main
+wait 2
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=one
+wait 2
+cra://debug?littleOtherDesktop=0
+cra://debug?yieldTo=${COVER}
+wait 1
+cover link
+cra://debug?externalURL=${PAGE}?n=two
+wait 2
+cra://debug?littleFocus=open
+expect-log little focus open: active=1 key=little1 over=0 windows=2
+
+cra://action/closeTab
+wait 1.5
+cra://debug?littleFocus=closed
+expect-log little focus closed: active=0 key=none over=\S+ windows=1

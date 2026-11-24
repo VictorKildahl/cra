@@ -132,6 +132,22 @@ struct LittleWindowCloseNextTests {
         #expect(!LittleWindowReturn.nextTakesKeyboard(closingKeyWindow: true, craActive: true, movedToTab: false, littleWindowsLeft: false))
     }
 
+    /// Little Windows on two desktops: closing the last one on this desktop goes back to the app in use here. The one
+    /// on the other desktop took the keyboard instead, and macOS switched to that desktop (#738). One showing on
+    /// another display is on a Space in front, so it still takes the keyboard (#646).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/738"))
+    func aLittleWindowOnAnotherDesktopDoesntTakeTheKeyboard() {
+        #expect(LittleWindowReturn.canTakeKeyboard(isPeek: false, visible: true, miniaturized: false, onActiveSpace: true))
+        #expect(!LittleWindowReturn.canTakeKeyboard(isPeek: false, visible: true, miniaturized: false, onActiveSpace: false))
+        #expect(!LittleWindowReturn.canTakeKeyboard(isPeek: true, visible: true, miniaturized: false, onActiveSpace: true))
+        #expect(!LittleWindowReturn.canTakeKeyboard(isPeek: false, visible: false, miniaturized: false, onActiveSpace: true))
+        #expect(!LittleWindowReturn.canTakeKeyboard(isPeek: false, visible: true, miniaturized: true, onActiveSpace: true))
+        // None left on this desktop: the closing window's app comes back, as when the last one closes.
+        var back = LittleWindowReturn(app: Self.slack)
+        back.littleWindowBecameKey()
+        #expect(back.target(closingKeyWindow: true, craActive: true, movedToTab: false, littleWindowsLeft: false) == Self.slack)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/646"))
     func aCloseInTheBackgroundMovesNothingForward() {
         // An idle archive or a close while another app is in front: no window is raised.

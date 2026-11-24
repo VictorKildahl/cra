@@ -2007,6 +2007,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // littleOtherDesktop=<n> (#738): the n-th Little Window (oldest first, Peeks left out) counts as on another
+            // desktop, as if opened there; a test copy can't make or switch desktops.
+            if let n = dict["littleOtherDesktop"].flatMap(Int.init) {
+                let lw = littleWindows.filter { !$0.isPeek }
+                if lw.indices.contains(n) { lw[n].debugOnOtherDesktop = true }
+                return
+            }
             if let label = dict["littleFocus"] {
                 var key = NSApp.keyWindow
                 while let parent = key?.parent { key = parent }
