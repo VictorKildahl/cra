@@ -10,6 +10,9 @@ enum PressHaptics {
     private static let counts = LaunchOptions.value("CraCountHaptics") == "YES"
     private static let light = UIImpactFeedbackGenerator(style: .light)
     private static let soft = UIImpactFeedbackGenerator(style: .soft)
+    private static let medium = UIImpactFeedbackGenerator(style: .medium)
+    private static let heavy = UIImpactFeedbackGenerator(style: .heavy)
+    private static let pull = UIImpactFeedbackGenerator(style: .light)
     private static let selection = UISelectionFeedbackGenerator()
     private static weak var counter: UIView?
     private static var total = 0
@@ -22,7 +25,7 @@ enum PressHaptics {
         counter.isAccessibilityElement = true
         counter.accessibilityIdentifier = "haptic-count"
         counter.accessibilityLabel = "Haptics played"
-        counter.accessibilityValue = "0"
+        counter.accessibilityValue = "\(total)"
         counter.isUserInteractionEnabled = false
         view.addSubview(counter)
         self.counter = counter
@@ -57,6 +60,29 @@ enum PressHaptics {
         press(view)
     }
 
+    /// Pull to refresh moving through a detent: the tick `MobilePullHaptics` asked for, from
+    /// nearly silent to the strongest at the line. The line's own tick is a firmer impact.
+    static func pullDetent(_ tick: MobilePullHaptics.Tick) {
+        if tick.isFinal {
+            heavy.impactOccurred(intensity: 1)
+        } else {
+            pull.impactOccurred(intensity: CGFloat(tick.intensity))
+        }
+        count()
+    }
+
+    /// Pull to refresh reached its line and the finger let go: the reload starts.
+    static func pullRefresh() {
+        medium.impactOccurred()
+        count()
+    }
+
+    /// Warms the pull's first tick and its heavier one at the line, so both play without a delay.
+    static func preparePull() {
+        pull.prepare()
+        heavy.prepare()
+    }
+
     private static func tick(for view: UIView, edge: MobilePressHaptics.Edge) -> MobilePressHaptics.Tick? {
         guard let id = view.accessibilityIdentifier else { return nil }
         return MobilePressHaptics.tick(for: id, edge: edge)
@@ -75,6 +101,13 @@ enum PressHaptics {
         guard counts else { return }
         let played = view.accessibilityValue.flatMap { Int($0.split(separator: " ").last ?? "") } ?? 0
         view.accessibilityValue = "ticks \(played + 1)"
+        count()
+    }
+
+    /// Adds one to the test's running total, for ticks that belong to a control and for pull to
+    /// refresh's, which belong to none.
+    private static func count() {
+        guard counts else { return }
         total += 1
         counter?.accessibilityValue = "\(total)"
     }
