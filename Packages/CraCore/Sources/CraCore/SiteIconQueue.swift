@@ -6,32 +6,21 @@ import Foundation
 public struct SiteIconQueue {
     /// A row that shows no icon, as its view knows it.
     public struct Row {
-        /// Where the row's site comes from.
-        public enum Source: Equatable {
-            /// A sidebar tab, favorite or boost: a site the user saved.
-            case saved
-            /// A command-bar row for one of the user's tabs, archived tabs or visited pages.
-            case visited
-            /// A command-bar row for a popular domain, a typed address or a search engine's suggestion.
-            case preset
-        }
-
         public var url: String
         /// The key the row reads its icon under (a tab's `iconKey`, a suggestion's `faviconKey`).
         public var iconKey: String?
-        public var source: Source
-        /// Inside the list's clip view; a favorite's or command-bar row is.
-        public var inView: Bool
-        /// Its space is the one the window shows; true outside the sidebar.
-        public var spaceShown: Bool
+        /// A popular domain, typed address or search engine's suggestion in the command bar: a site the
+        /// user may never have been to, which is never asked.
+        public var preset: Bool
+        /// On screen: in its list's clip view, in the space the window shows.
+        public var visible: Bool
         public var incognito: Bool
 
-        public init(url: String, iconKey: String?, source: Source, inView: Bool = true, spaceShown: Bool = true, incognito: Bool) {
+        public init(url: String, iconKey: String?, preset: Bool = false, visible: Bool = true, incognito: Bool) {
             self.url = url
             self.iconKey = iconKey
-            self.source = source
-            self.inView = inView
-            self.spaceShown = spaceShown
+            self.preset = preset
+            self.visible = visible
             self.incognito = incognito
         }
     }
@@ -50,15 +39,14 @@ public struct SiteIconQueue {
 
     public init(cap: Int = 3) { self.cap = cap }
 
-    /// Queues the row's site when it may ask: a site the user saved or has been to, not from incognito,
-    /// and read under that site's key, so a custom icon or another site's never asks. A row in view in
-    /// the shown space goes before the rest. True while that site's fetch is still to come or running.
+    /// Queues the row's site when it may ask: not a preset, not from incognito, and read under that site's
+    /// key, so a custom icon or another site's never asks. A visible row goes before the rest. True while that site's fetch is still to come or running.
     @discardableResult
     public mutating func want(_ row: Row) -> Bool {
         // Rows ask on every redraw: a site asked before costs one address parse.
-        guard row.source != .preset, !row.incognito, let host = FaviconKey.key(for: row.url),
+        guard !row.preset, !row.incognito, let host = FaviconKey.key(for: row.url),
               row.iconKey.map(FaviconKey.siteKey(of:)) == host else { return false }
-        let isVisible = row.inView && row.spaceShown
+        let isVisible = row.visible
         guard !asked.contains(host) else {
             if isVisible, let i = margin.firstIndex(where: { $0.host == host }) { visible.append(margin.remove(at: i)) }
             return inFlight.contains(host) || visible.contains { $0.host == host } || margin.contains { $0.host == host }

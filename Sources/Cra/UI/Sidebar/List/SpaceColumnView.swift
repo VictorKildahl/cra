@@ -725,8 +725,7 @@ final class FavoritesGridView: NSView {
                         // A favorite that never loaded here: its site's icon, after those of the space on screen
                         // when this space is paged out of view.
                         SiteIconLoader.shared.want(.init(
-                            url: tab.url, iconKey: key, source: .saved,
-                            spaceShown: window != nil && store.focusedSpaceID(window: ui.windowID) == spaceID,
+                            url: tab.url, iconKey: key, visible: store.showsSpace(spaceID, in: self, window: ui.windowID),
                             incognito: store.isIncognito(space: spaceID)), into: favicons)
                     }
                     return FavoriteTileModel.Cell(id: p.id, title: p.displayTitle, icon: icon,

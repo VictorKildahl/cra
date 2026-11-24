@@ -30,6 +30,43 @@ public enum SiteIcon {
         return out
     }
 
+    /// Whether the icon loader may request `url`, a candidate or a redirect, for the site at `origin`: an
+    /// http(s) address, and one on the Mac or its local network only for a site that is local itself
+    /// (a dev server's page may use its own), so a public page can't make Cra send requests into the LAN.
+    public static func mayFetch(_ url: URL, for origin: URL) -> Bool {
+        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), let host = url.host, !host.isEmpty else { return false }
+        return !isLocal(host: host) || isLocal(host: origin.host ?? "")
+    }
+
+    /// Whether `host` names the Mac itself or a machine on its network: localhost, an unqualified or
+    /// `.local` name, and loopback, private, shared (100.64/10), link-local and unique-local addresses.
+    public static func isLocal(host: String) -> Bool {
+        var name = host.lowercased()
+        if name.hasPrefix("["), name.hasSuffix("]") { name = String(name.dropFirst().dropLast()) }
+        while name.hasSuffix(".") { name.removeLast() }
+        if name.contains(":") {
+            var v6 = in6_addr()
+            guard inet_pton(AF_INET6, name, &v6) == 1 else { return false }
+            let b = withUnsafeBytes(of: v6) { Array($0) }
+            if b[0..<10].allSatisfy({ $0 == 0 }), b[10] == 0xff, b[11] == 0xff { return isLocal(v4: b[12...].reduce(0) { $0 << 8 | UInt32($1) }) }
+            return b[0..<15].allSatisfy { $0 == 0 } && b[15] <= 1  // :: and ::1
+                || b[0] & 0xfe == 0xfc  // fc00::/7
+                || (b[0] == 0xfe && b[1] & 0xc0 == 0x80)  // fe80::/10
+        }
+        var v4 = in_addr()
+        // inet_aton also reads the short and numeric forms URLSession connects to (127.1, 2130706433).
+        if inet_aton(name, &v4) != 0 { return isLocal(v4: UInt32(bigEndian: v4.s_addr)) }
+        return name == "localhost" || name.hasSuffix(".localhost") || name.hasSuffix(".local") || !name.contains(".")
+    }
+
+    private static func isLocal(v4 a: UInt32) -> Bool {
+        let ranges: [(UInt32, UInt32)] = [
+            (0x0000_0000, 8), (0x0A00_0000, 8), (0x7F00_0000, 8), (0xA9FE_0000, 16),
+            (0xAC10_0000, 12), (0xC0A8_0000, 16), (0x6440_0000, 10),
+        ]
+        return ranges.contains { net, bits in a >> (32 - bits) == net >> (32 - bits) }
+    }
+
     private static func attribute(_ name: String, in tag: String) -> String? {
         let pattern = "(?i)(?:^|\\s)" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))"
         guard let re = try? NSRegularExpression(pattern: pattern),

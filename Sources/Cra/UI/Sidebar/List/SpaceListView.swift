@@ -419,11 +419,10 @@ final class SpaceListView: NSView, NSDraggingSource {
                 if img == nil {
                     // A tab that never loaded here: its site's icon, the rows on screen before those near it
                     // and those of spaces paged out of view.
-                    SiteIconLoader.shared.want(.init(
-                        url: tab.url, iconKey: tab.iconKey, source: .saved,
-                        inView: self.placed(row).intersects(self.scrollView.contentView.bounds),
-                        spaceShown: self.window != nil && store.focusedSpaceID(window: window) == self.spaceID,
-                        incognito: incognito), into: self.favicons)
+                    let visible = self.placed(row).intersects(self.scrollView.contentView.bounds)
+                        && store.showsSpace(self.spaceID, in: self, window: window)
+                    SiteIconLoader.shared.want(.init(url: tab.url, iconKey: tab.iconKey, visible: visible, incognito: incognito),
+                                               into: self.favicons)
                 }
                 let (homeImg, homeFlip) = navigatedAway ? icon(tab.customIconKey ?? FaviconKey.key(for: tab.savedURL)) : (img, flip)
                 let developerMode = store.settings.isDeveloperMode(url: tab.url)
@@ -1628,4 +1627,12 @@ final class SpaceListDocument: NSView {
     override func draggingExited(_ sender: NSDraggingInfo?) { list?.dragExited() }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { list?.performDrop(sender) ?? false }
     override func draggingEnded(_ sender: NSDraggingInfo) { list?.dragExited() }
+}
+
+extension SidebarStore {
+    /// Whether `view`, a sidebar view of `space`, is where the user can see it: in a window that shows that
+    /// space, not a page the pager keeps to one side. Rows on screen ask for site icons first.
+    func showsSpace(_ space: UUID, in view: NSView, window: UUID?) -> Bool {
+        view.window != nil && focusedSpaceID(window: window) == space
+    }
 }

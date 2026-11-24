@@ -29,13 +29,13 @@ struct Suggestion: Identifiable, Equatable {
     var loose = false
     /// A search engine's suggestion that is an address (a `.history` row the user may never have visited).
     var fromSearchEngine = false
-    /// Whether the row's site may be asked for its icon (SiteIconQueue): one of the user's tabs, archived
-    /// tabs or visited pages, never a popular domain, typed address or search engine's suggestion.
-    var siteIconSource: SiteIconQueue.Row.Source {
+    /// A site the user may never have been to, whose icon is not asked for (SiteIconQueue): anything but
+    /// one of the user's tabs, archived tabs or visited pages.
+    var isPresetSite: Bool {
         switch kind {
-        case .switchToTab, .archived: return .visited
-        case .history: return fromSearchEngine ? .preset : .visited
-        default: return .preset
+        case .switchToTab, .archived: return false
+        case .history: return fromSearchEngine
+        default: return true
         }
     }
     var tabID: UUID? {

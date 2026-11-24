@@ -71,14 +71,16 @@ final class SiteIconLoader {
     }
 
     /// The first of the home page's best icons that decodes. A page that answers with an error still
-    /// has /favicon.ico; a site that can't be reached is not asked again.
+    /// has /favicon.ico; a site that can't be reached is not asked again. Every request and redirect
+    /// passes SiteIcon.mayFetch, so a public page's icons never reach the local network.
     private nonisolated static func firstIcon(at origin: URL, session: URLSession) async -> Data? {
         let page: (data: Data, url: URL)?
-        do { page = try await get(origin, limit: pageLimit, session: session) } catch { return nil }
+        do { page = try await get(origin, for: origin, limit: pageLimit, session: session) } catch { return nil }
         let html = page.map { String(decoding: $0.data.prefix(pageLimit), as: UTF8.self) } ?? ""
-        for url in SiteIcon.candidates(html: html, base: page?.url ?? origin).prefix(candidateLimit) {
+        let candidates = SiteIcon.candidates(html: html, base: page?.url ?? origin).filter { SiteIcon.mayFetch($0, for: origin) }
+        for url in candidates.prefix(candidateLimit) {
             guard !Task.isCancelled else { return nil }
-            guard let data = try? await get(url, limit: iconLimit, session: session)?.data, data.count <= iconLimit,
+            guard let data = try? await get(url, for: origin, limit: iconLimit, session: session)?.data, data.count <= iconLimit,
                   let image = NSImage(data: data), let png = ZenImporter.faviconPNG(image) else { continue }
             return png
         }
@@ -86,9 +88,11 @@ final class SiteIconLoader {
     }
 
     /// A 2xx response's body, cut off past `limit` bytes, and the address it came from after redirects;
-    /// nil for another status. Throws when the site can't be reached.
-    private nonisolated static func get(_ url: URL, limit: Int, session: URLSession) async throws -> (data: Data, url: URL)? {
-        let body = Body(limit: limit)
+    /// nil for another status or a redirect `origin`'s site may not follow. Throws when the site can't be
+    /// reached or `url` may not be fetched.
+    private nonisolated static func get(_ url: URL, for origin: URL, limit: Int, session: URLSession) async throws -> (data: Data, url: URL)? {
+        guard SiteIcon.mayFetch(url, for: origin) else { throw URLError(.cancelled) }
+        let body = Body(origin: origin, limit: limit)
         let task = session.dataTask(with: url)
         task.delegate = body
         return try await withTaskCancellationHandler {
@@ -96,19 +100,30 @@ final class SiteIconLoader {
         } onCancel: { task.cancel() }
     }
 
-    /// A response's body, collected in the chunks URLSession delivers; the download stops past `limit` bytes.
+    /// A response's body, collected in the chunks URLSession delivers; the download stops past `limit` bytes,
+    /// and a redirect is followed only where `origin`'s site may fetch.
     private final class Body: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        private let origin: URL
         private let limit: Int
         private let lock = NSLock()
         private var data = Data()
         private var full = false
         private var done: CheckedContinuation<(data: Data, url: URL)?, Error>?
 
-        init(limit: Int) { self.limit = limit }
+        init(origin: URL, limit: Int) {
+            self.origin = origin
+            self.limit = limit
+        }
 
         func start(_ task: URLSessionDataTask, _ done: CheckedContinuation<(data: Data, url: URL)?, Error>) {
             lock.withLock { self.done = done }
             task.resume()
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+            // Refused, the redirect itself is the response, and it is no 2xx.
+            completionHandler(request.url.map { SiteIcon.mayFetch($0, for: origin) } == true ? request : nil)
         }
 
         func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {

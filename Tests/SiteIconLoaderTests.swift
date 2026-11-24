@@ -19,6 +19,7 @@ enum SiteIconLoaderTests {
         ("unreachable", aSiteThatCantBeReachedIsAskedOnce),
         ("deadline", aSiteThatHangsLetsGoAtTheDeadline),
         ("candidates", onlyThePagesBestIconsAreTried),
+        ("redirect", aLocalSitesRedirectIsFollowed),
     ]
 
     static func main() async {
@@ -40,7 +41,7 @@ enum SiteIconLoaderTests {
 
     /// A sidebar tab on `url` with no icon of its own yet.
     private static func tab(_ url: String, incognito: Bool = false) -> SiteIconQueue.Row {
-        .init(url: url, iconKey: FaviconKey.key(for: url), source: .saved, incognito: incognito)
+        .init(url: url, iconKey: FaviconKey.key(for: url), incognito: incognito)
     }
 
     /// Asks for `url`'s icon and waits for the fetch to end.
@@ -163,6 +164,20 @@ enum SiteIconLoaderTests {
         expect(site.paths == ["/", "/i8.png", "/i7.png", "/i6.png", "/i5.png"], "the page and its 4 best icons, no more: \(site.paths)")
     }
 
+    /// A local site's redirects within the Mac are followed (SiteIcon.mayFetch); CraCore's SiteIconFetchTests
+    /// hold what a public site's may not reach.
+    @MainActor private static func aLocalSitesRedirectIsFollowed() async {
+        let site = await LocalSite(pages: [
+            "/": .init(type: "text/html", body: Data(), reply: .redirect("/home/")),
+            "/home/": .html(#"<link rel="icon" href="orange.png">"#),
+            "/home/orange.png": .png(png(orange, side: 16)),
+        ])
+        let cache = FaviconCache(), loader = SiteIconLoader()
+        await fetch(loader, "http://127.0.0.1:\(site.port)/", into: cache)
+        expect(site.paths == ["/", "/home/", "/home/orange.png"], "the redirect and the icon it declares: \(site.paths)")
+        expect(cache.image(forKey: "127.0.0.1").map(color) == orange, "the icon is stored")
+    }
+
     /// Lets the main queue run what was queued on it (the loader's pump) and returns after.
     @MainActor private static func nextTurn() async {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in DispatchQueue.main.async { DispatchQueue.main.async { c.resume() } } }
@@ -194,8 +209,9 @@ enum SiteIconLoaderTests {
 /// An HTTP/1.1 site on 127.0.0.1 that serves `pages` by path, 404 otherwise, and records each request.
 final class LocalSite: @unchecked Sendable {
     struct Page {
-        /// What the site does once it has read the request: answers, closes the connection, or keeps it open.
-        enum Reply { case answer, drop, hang }
+        /// What the site does once it has read the request: answers, redirects to a path, closes the
+        /// connection, or keeps it open.
+        enum Reply: Equatable { case answer, redirect(String), drop, hang }
         var type: String
         var body: Data
         var reply = Reply.answer
@@ -250,7 +266,9 @@ final class LocalSite: @unchecked Sendable {
             while read(c, &buffer, buffer.count) > 0 {}
             return
         }
-        var out = Data("HTTP/1.1 \(page == nil ? "404 Not Found" : "200 OK")\r\nContent-Type: \(page?.type ?? "text/plain")\r\nContent-Length: \(page?.body.count ?? 0)\r\nConnection: close\r\n\r\n".utf8)
+        var status = page == nil ? "404 Not Found" : "200 OK"
+        if case .redirect(let to)? = page?.reply { status = "302 Found\r\nLocation: \(to)" }
+        var out = Data("HTTP/1.1 \(status)\r\nContent-Type: \(page?.type ?? "text/plain")\r\nContent-Length: \(page?.body.count ?? 0)\r\nConnection: close\r\n\r\n".utf8)
         out.append(page?.body ?? Data())
         out.withUnsafeBytes { raw in
             var sent = 0

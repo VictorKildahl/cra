@@ -6,8 +6,8 @@ import Testing
 /// command-bar row that shows a globe because no icon is stored.
 struct SiteIconQueueTests {
     /// A sidebar tab on `url` that reads its icon under the site's key.
-    private func tab(_ url: String, inView: Bool = true, spaceShown: Bool = true, incognito: Bool = false) -> SiteIconQueue.Row {
-        .init(url: url, iconKey: FaviconKey.key(for: url), source: .saved, inView: inView, spaceShown: spaceShown, incognito: incognito)
+    private func tab(_ url: String, visible: Bool = true, incognito: Bool = false) -> SiteIconQueue.Row {
+        .init(url: url, iconKey: FaviconKey.key(for: url), visible: visible, incognito: incognito)
     }
 
     private func drain(_ q: inout SiteIconQueue) -> [String] {
@@ -27,24 +27,17 @@ struct SiteIconQueueTests {
 
     @Test func aVisibleRowsSiteGoesBeforeAnEarlierMarginRow() {
         var q = SiteIconQueue(cap: 1)
-        q.want(tab("https://margin.com/", inView: false))
+        q.want(tab("https://margin.com/", visible: false))
         q.want(tab("https://shown.com/"))
         #expect(q.next()?.host == "shown.com")
         q.finished("shown.com")
         #expect(q.next()?.host == "margin.com")
     }
 
-    @Test func aRowInASpaceNotOnScreenRanksAsMargin() {
-        var q = SiteIconQueue(cap: 1)
-        q.want(tab("https://other-space.com/", spaceShown: false))
-        q.want(tab("https://this-space.com/"))
-        #expect(q.next()?.host == "this-space.com")
-    }
-
     @Test func aMarginSiteScrolledIntoViewMovesUp() {
         var q = SiteIconQueue(cap: 1)
-        q.want(tab("https://first.com/", inView: false))
-        q.want(tab("https://second.com/", inView: false))
+        q.want(tab("https://first.com/", visible: false))
+        q.want(tab("https://second.com/", visible: false))
         q.want(tab("https://second.com/other"))
         #expect(q.next()?.host == "second.com")
     }
@@ -52,7 +45,7 @@ struct SiteIconQueueTests {
     @Test func aSiteIsAskedOncePerSession() {
         var q = SiteIconQueue()
         q.want(tab("https://GitHub.com/a"))
-        q.want(tab("http://github.com/b", inView: false))
+        q.want(tab("http://github.com/b", visible: false))
         #expect(drain(&q) == ["github.com"])
         // Asked again while its fetch runs, and after it ended.
         let whileRunning = q.want(tab("https://github.com/c"))
@@ -67,15 +60,15 @@ struct SiteIconQueueTests {
     @Test func wantSaysWhetherTheSiteIsStillComing() {
         var q = SiteIconQueue()
         let first = q.want(tab("https://a.com/"))
-        let again = q.want(tab("https://a.com/x", inView: false))
-        let blank = q.want(.init(url: "about:blank", iconKey: "about", source: .saved, incognito: false))
+        let again = q.want(tab("https://a.com/x", visible: false))
+        let blank = q.want(.init(url: "about:blank", iconKey: "about", incognito: false))
         #expect(first && again && !blank)
     }
 
     @Test func onlyHttpAndHttpsAreAsked() {
         var q = SiteIconQueue()
         for url in ["file:///Users/me/a.html", "cra://settings", "about:blank", "data:text/html,hi", "chrome-extension://abc/p.html", "ftp://a.com/", "", "not a url"] {
-            q.want(.init(url: url, iconKey: FaviconKey.key(for: url) ?? "x", source: .saved, incognito: false))
+            q.want(.init(url: url, iconKey: FaviconKey.key(for: url) ?? "x", incognito: false))
         }
         #expect(q.next() == nil)
     }
@@ -102,9 +95,9 @@ struct SiteIconQueueTests {
     @Test func commandBarRowsAskOnlyForSitesTheUserHasBeenTo() {
         var q = SiteIconQueue()
         let url = "https://news.example.com/a"
-        let preset = q.want(.init(url: url, iconKey: "news.example.com", source: .preset, incognito: false))
+        let preset = q.want(.init(url: url, iconKey: "news.example.com", preset: true, incognito: false))
         #expect(!preset && q.next() == nil)
-        let visited = q.want(.init(url: url, iconKey: "news.example.com", source: .visited, incognito: false))
+        let visited = q.want(.init(url: url, iconKey: "news.example.com", incognito: false))
         #expect(visited && q.next()?.host == "news.example.com")
     }
 
@@ -112,10 +105,10 @@ struct SiteIconQueueTests {
         var q = SiteIconQueue()
         let url = "https://gitlab.com/group/project"
         for key in [nil, "custom-6f1c9a3e", "github.com", "github.com#tab-6f1c9a3e"] as [String?] {
-            q.want(.init(url: url, iconKey: key, source: .saved, incognito: false))
+            q.want(.init(url: url, iconKey: key, incognito: false))
         }
         #expect(q.next() == nil, "no key, a custom icon or another site's key never asks")
-        q.want(.init(url: url, iconKey: FaviconKey.key(site: "gitlab.com", tabID: UUID()), source: .saved, incognito: false))
+        q.want(.init(url: url, iconKey: FaviconKey.key(site: "gitlab.com", tabID: UUID()), incognito: false))
         #expect(q.next()?.host == "gitlab.com", "a tab's own key falls back to the site's")
     }
 }

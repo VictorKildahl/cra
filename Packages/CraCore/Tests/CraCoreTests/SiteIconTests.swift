@@ -26,3 +26,37 @@ struct SiteIconTests {
                 == ["https://github.com/a/static/fav.ico", "https://github.com/favicon.ico"])
     }
 }
+
+/// Where a site's icon may be fetched from: a public site's page or redirect never reaches the Mac
+/// itself or the local network, which only a local site of the user's own may.
+struct SiteIconFetchTests {
+    @Test func localHostsAreThoseOfTheMacAndItsNetwork() {
+        for host in ["localhost", "LOCALHOST.", "dev.localhost", "router", "printer.local", "127.0.0.1", "127.1", "2130706433", "0x7f000001",
+                     "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "100.127.255.255", "169.254.169.254", "0.0.0.0",
+                     "::1", "[::1]", "::", "fc00::1", "fd12:3456::1", "fe80::1", "::ffff:192.168.1.1", "::ffff:7f00:1"] {
+            #expect(SiteIcon.isLocal(host: host), "\(host)")
+        }
+        for host in ["example.com", "github.com", "172.32.0.1", "172.15.0.1", "100.128.0.1", "192.169.0.1", "8.8.8.8", "11.0.0.1",
+                     "2606:4700::1111", "::ffff:8.8.8.8", "local.example.com", "localhost.example.com"] {
+            #expect(!SiteIcon.isLocal(host: host), "\(host)")
+        }
+    }
+
+    @Test func aPublicSiteFetchesOnlyPublicAddresses() {
+        let origin = URL(string: "https://example.com/")!
+        for url in ["https://cdn.example.net/i.png", "http://example.com/favicon.ico"] {
+            #expect(SiteIcon.mayFetch(URL(string: url)!, for: origin), "\(url)")
+        }
+        for url in ["http://192.168.1.1/apply.cgi?x=1", "http://127.0.0.1:8080/", "http://localhost/", "http://[::1]/", "http://nas.local/",
+                    "http://169.254.169.254/latest/meta-data/", "http://intranet/", "file:///etc/passwd", "ftp://example.com/i.png"] {
+            #expect(!SiteIcon.mayFetch(URL(string: url)!, for: origin), "\(url)")
+        }
+    }
+
+    @Test func aLocalSiteMayFetchLocallyAndPublicly() {
+        let origin = URL(string: "http://localhost:3000/")!
+        for url in ["http://localhost:3000/favicon.ico", "http://127.0.0.1:5173/i.png", "https://cdn.example.net/i.png"] {
+            #expect(SiteIcon.mayFetch(URL(string: url)!, for: origin), "\(url)")
+        }
+    }
+}
