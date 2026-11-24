@@ -310,8 +310,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// The solid band behind the status bar over a page, in the page's colour, as in Arc Search (#657).
     func updateStatusBand() {
         let page = shownPage
-        let fill = page.flatMap { MobileStatusBand.fill(themeColor: Palette.hex($0.webView.themeColor, traits: traitCollection),
-                                                        underPage: Palette.hex($0.webView.underPageBackgroundColor, traits: traitCollection)) }
+        let fill = page.flatMap(bandFill(for:))
         // The page the flick brought now knows its band: it takes the bar back from the estimate.
         if let id = flick.statusPage, page?.tabID == id, fill != nil {
             flick.statusPage = nil
@@ -320,32 +319,39 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         // The band is the page's top: it shrinks from the status bar to nothing as the page is
         // pushed back, its bottom staying at the card's top edge.
-        let shown = fill != nil && MobileStatusBand.shown(hasPage: page != nil, searching: false)
+        let shown = MobileStatusBand.shown(hasPage: fill != nil, switching: switcher != nil)
         let safeTop = view.safeAreaInsets.top
         let pageScale = MobilePageBehindSearch.transform(in: pageContainer.bounds.size, safeTop: safeTop,
                                                          progress: drawerProgress).scale
         // A pull grows the band down with the page: its bottom stays on the page's visible top.
-        // The tab row's cards carry their own bands, so the page's band steps aside there.
+        // Its height keeps following the page while the tab row is up, so this band comes back
+        // full when the row closes; only its visibility goes.
         let pulled = pagePull ?? 0
-        let bandHeight = shown ? safeTop * (1 - drawerProgress) / max(pageScale, 0.001) + pulled : 0
-        let visible = shown && switcher == nil
+        let bandHeight = fill != nil ? safeTop * (1 - drawerProgress) / max(pageScale, 0.001) + pulled : 0
         statusBand.frame = CGRect(x: 0, y: 0, width: pageContainer.bounds.width, height: bandHeight)
         statusBandDim.frame = statusBand.frame
-        statusBandDim.alpha = visible ? MobilePageBehindSearch.dim * drawerProgress : 0
+        statusBandDim.alpha = shown ? MobilePageBehindSearch.dim * drawerProgress : 0
         if let color = fill.flatMap(Palette.color(hex:)) {
             statusBand.backgroundColor = color
         }
-        if statusBand.isHidden == visible || statusBandFill != fill {
-            statusBand.isHidden = !visible
+        if statusBand.isHidden == shown || statusBandFill != fill {
+            statusBand.isHidden = !shown
             statusBandFill = fill
             setNeedsStatusBarAppearanceUpdate()
         }
+    }
+
+    /// The band's colour for a page, as hex: its theme-color, else its own background.
+    private func bandFill(for page: WebPage) -> String? {
+        MobileStatusBand.fill(themeColor: Palette.hex(page.webView.themeColor, traits: traitCollection),
+                              underPage: Palette.hex(page.webView.underPageBackgroundColor, traits: traitCollection))
     }
 
     /// The band's bottom edge stays on the page's visible top as the pull grows it; the arrow
     /// sits in the middle of it and turns whole at the line.
     func updatePagePull(_ pull: CGFloat) {
         pullTraceMax = max(pullTraceMax, pull)
+        // Under half a point is the page still at its top: no band, no ring.
         pagePull = pull > 0.5 ? pull : nil
         // The page's frame moves down from the band's bottom; its content stays pinned inside it.
         shownPage?.webView.frame.origin.y = view.safeAreaInsets.top + (pagePull ?? 0)
@@ -361,13 +367,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let safeTop = view.safeAreaInsets.top
         // Below the Dynamic Island or notch and low enough that the whole ring shows: the page
         // comes down under it, and the ring stays put as it fills.
-        // Two points more side than the previous ring, so the radius grows one point at the same stroke.
-        let side = min(28, max(20, safeTop - 32))
+        let side = MobilePullRing.side(safeTop: safeTop)
         let size = CGSize(width: side, height: side)
         if pullArc.bounds.size != size {
             pullArc.bounds = CGRect(origin: .zero, size: size)
         }
-        pullArc.center = CGPoint(x: view.bounds.midX, y: safeTop + side / 2 + 8)
+        pullArc.center = MobilePullRing.center(safeTop: safeTop, screenWidth: view.bounds.width)
         // The ring takes the status bar's ink: white over a dark bar, dark grey over a light one.
         switch preferredStatusBarStyle {
         case .lightContent:
@@ -378,7 +383,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             pullArc.color = traitCollection.userInterfaceStyle == .dark ? .white : UIColor(white: 0.25, alpha: 1)
         }
         pullArc.speed = pullSpeed
-        pullArc.progress = min(1, (pagePull ?? 0) / MobileSwipe.pullToRefreshDistance)
+        pullArc.progress = MobilePullRing.progress(pull: pagePull ?? 0)
     }
 
     /// Records the pull's last live numbers for a UI test, after layout put the frames there.
@@ -858,13 +863,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return page
     }
 
-    /// The band colour a tab brings with it: its theme-color or own background, or the top of its
-    /// picture before it loads.
+    /// The band colour a tab brings with it: its page's theme-color or own background, or the top
+    /// of its picture before that page knows one. A tab with no page yet has only its picture, and
+    /// asking must not make the page: the tab row asks about every tab in it.
     func bandColour(for tab: MobileTab) -> UIColor? {
-        let page = page(for: tab)
         let picture = store.snapshot(tab.id)
-        let fill = MobileStatusBand.fill(themeColor: Palette.hex(page.webView.themeColor, traits: traitCollection),
-                                         underPage: Palette.hex(page.webView.underPageBackgroundColor, traits: traitCollection))
+        guard let page = store.existingPage(tab.id) else { return picture?.topBandColor() }
+        let fill = bandFill(for: page)
+        // A page that has not loaded reports nothing, or black, for the colour over it: take the
+        // band from the tab's own picture instead.
         return page.webView.url == nil
             ? picture?.topBandColor() ?? fill.flatMap(Palette.color(hex:))
             : fill.flatMap(Palette.color(hex:)) ?? picture?.topBandColor()
@@ -978,9 +985,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let focus = store.switcherFocus?.id
         let onRow = store.selected.map { !$0.isIncognito } ?? false
         // On a private page the private tabs waiting unseen are cards too, marked with the eyes.
-        switcher.setTabs(tabs, focus: focus, snapshot: store.snapshot,
-                         favicon: { $0.isIncognito ? UIImage(systemName: "eyes")?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal) : self.favicons.icon(for: $0.url) },
-                         band: { self.bandColour(for: $0) })
+        switcher.setTabs(
+            tabs, focus: focus,
+            snapshot: store.snapshot,
+            favicon: { tab in
+                tab.isIncognito
+                    ? UIImage(systemName: "eyes")?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal)
+                    : self.favicons.icon(for: tab.url)
+            },
+            band: { self.bandColour(for: $0) })
         // An incognito page has no card to shrink into; the row just appears.
         switcher.expandedID = onRow ? selected : nil
         switcher.expansion = onRow ? 1 : 0
@@ -1551,19 +1564,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func webPage(_ page: WebPage, didPull pull: CGFloat) {
         guard page === shownPage, !isSearching else { return }
         let now = CACurrentMediaTime()
-        if pull > 0.5, pagePull == nil {
-            // A new pull starts a new deepest point and speed for the trace and the bump.
+        if pagePull == nil {
+            // A new pull starts a new deepest point and a fresh speed for the line's bump.
             pullTraceMax = 0
             pullSpeed = 0
-            pullSample = (pull, now)
-        } else if let sample = pullSample, now > sample.at {
-            if pull > sample.pull {
-                pullSpeed = (pull - sample.pull) / (now - sample.at)
-            }
-            pullSample = (pull, now)
-        } else {
-            pullSample = (pull, now)
+            pullSample = nil
+        } else if let sample = pullSample, now > sample.at, pull > sample.pull {
+            pullSpeed = (pull - sample.pull) / (now - sample.at)
         }
+        pullSample = (pull, now)
         updatePagePull(pull)
     }
 

@@ -83,6 +83,31 @@ struct MobilePullHapticsTests {
         #expect(haptics.tick(pull: 79.5) == nil)
     }
 
+    /// A slow pull's last move can land past the line after the tick it last saw, and letting go
+    /// from there reloads: the line's tick plays on the release, once.
+    @Test func aReleasePastTheLinePlaysTheTickItSkipped() {
+        var haptics = MobilePullHaptics()
+        #expect(haptics.tick(pull: 126)?.isFinal == false)
+        let release = haptics.tickOnRelease(pull: 130)
+        #expect(release?.isFinal == true)
+        #expect(release?.intensity == MobilePullHaptics.strongest)
+        #expect(haptics.tickOnRelease(pull: 130) == nil, "only once")
+    }
+
+    @Test func aReleaseShortOfTheLineIsSilent() {
+        var haptics = MobilePullHaptics()
+        #expect(haptics.tick(pull: 100) != nil)
+        #expect(haptics.tickOnRelease(pull: 127) == nil)
+        #expect(haptics.tickOnRelease(pull: 0) == nil)
+    }
+
+    /// The line's tick already played: the release does not play it a second time.
+    @Test func aReleaseOnALineThatTickedIsSilent() {
+        var haptics = MobilePullHaptics()
+        #expect(haptics.tick(pull: 128)?.isFinal == true)
+        #expect(haptics.tickOnRelease(pull: 128) == nil)
+    }
+
     @Test func aNewDragStartsFromSilence() {
         var haptics = MobilePullHaptics()
         #expect(haptics.tick(pull: 60) != nil)

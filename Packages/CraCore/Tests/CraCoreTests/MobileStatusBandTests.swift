@@ -14,8 +14,8 @@ struct MobileStatusBandTests {
         #expect(MobileStatusBand.lightContent(fill: "#5B3E96"))
         #expect(!MobileStatusBand.lightContent(fill: "#FFFFFF"))
         #expect(!MobileStatusBand.lightContent(fill: "#F8D558"))
-        #expect(MobileStatusBand.shown(hasPage: true, searching: false))
-        #expect(!MobileStatusBand.shown(hasPage: false, searching: false))
-        #expect(!MobileStatusBand.shown(hasPage: true, searching: true))
+        #expect(MobileStatusBand.shown(hasPage: true, switching: false))
+        #expect(!MobileStatusBand.shown(hasPage: false, switching: false))
+        #expect(!MobileStatusBand.shown(hasPage: true, switching: true))
     }
 }

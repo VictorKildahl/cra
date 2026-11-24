@@ -45,8 +45,6 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// it follows the finger back up by the same amount it came down.
     private var pullStartTranslation: CGFloat = 0
     private var isPulling = false
-    /// The heavy tick at the refresh line has played for this pull.
-    private var finalTickPlayed = false
     /// Pinning the content offset calls this delegate again; this stops the recursion.
     private var isPinningScroll = false
 
@@ -325,7 +323,6 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         // Each pull starts from silence, and warming the generator keeps the first tick prompt.
         pull = 0
         isPulling = false
-        finalTickPlayed = false
         pullHaptics.reset()
         PressHaptics.preparePull()
     }
@@ -334,6 +331,13 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// does: the pull reads the finger exactly, both down and back up.
     private func dragTranslation(of scrollView: UIScrollView) -> CGFloat {
         scrollView.panGestureRecognizer.translation(in: webView.window ?? webView).y
+    }
+
+    /// Puts the content back at its top, where the page's frame begins: a pull moves the frame,
+    /// not the content, so the scroll view is never left scrolled.
+    private func pinToTop(_ scrollView: UIScrollView) {
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
+                                    animated: false)
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -348,14 +352,12 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             PressHaptics.pullRefresh()
             webView.reload()
         }
-        // The line's tick may not have fired before a slow pull's finger lifted; play it last.
-        if full, !finalTickPlayed {
-            finalTickPlayed = true
-            PressHaptics.pullDetent(MobilePullHaptics.Tick(intensity: MobilePullHaptics.strongest, isFinal: true))
+        // The line's tick may not have played before a slow pull's finger lifted; play it last.
+        if let tick = pullHaptics.tickOnRelease(pull: pull) {
+            PressHaptics.pullDetent(tick)
         }
         // The page's content stays at its top; the page's frame is what moved, and it goes back.
-        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
-                                    animated: false)
+        pinToTop(scrollView)
         pull = 0
         isPulling = false
         pullHaptics.reset()
@@ -367,8 +369,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         if restoresAtTop {
             restoresAtTop = false
             if offset > 0.5, offset < CGFloat(PageHistory.restoreAtTopBelow) {
-                scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
-                                            animated: false)
+                pinToTop(scrollView)
             }
             return
         }
@@ -386,33 +387,24 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             guard !isPinningScroll else { return }
             let translation = dragTranslation(of: scrollView)
             let pull = max(0, translation - pullStartTranslation)
-            if MobileSwipe.pullHandsOff(pull: pull, translationFromStart: translation - pullStartTranslation) {
+            if MobileSwipe.pullHandsOff(pull: pull) {
                 // Pushing back up past the top hands the rest of the drag to the page's own
                 // scrolling, so it continues into a normal scroll without a second gesture.
                 isPulling = false
                 self.pull = 0
                 pullHaptics.reset()
-                scrollView.contentOffset.y = -scrollView.adjustedContentInset.top
+                pinToTop(scrollView)
                 delegate?.webPageDidEndPull(self, full: false)
                 return
             }
             self.pull = pull
             if abs(offset) > 0.01 {
                 isPinningScroll = true
-                scrollView.contentOffset.y = -scrollView.adjustedContentInset.top
+                pinToTop(scrollView)
                 isPinningScroll = false
             }
-            if pull < MobileSwipe.pullToRefreshDistance - MobilePullHaptics.rearm {
-                finalTickPlayed = false
-            }
             if let tick = pullHaptics.tick(pull: pull) {
-                if tick.isFinal { finalTickPlayed = true }
                 PressHaptics.pullDetent(tick)
-            }
-            // A very slow approach can miss the line's own tick; make sure the full pull is felt.
-            if pull >= MobileSwipe.pullToRefreshDistance, !finalTickPlayed {
-                finalTickPlayed = true
-                PressHaptics.pullDetent(MobilePullHaptics.Tick(intensity: MobilePullHaptics.strongest, isFinal: true))
             }
             delegate?.webPage(self, didPull: pull)
             return

@@ -10,10 +10,11 @@ public enum MobileStatusBand {
         themeColor ?? underPage
     }
 
-    /// Whether the band is there: over a page shown full size, not while the search sheet has
-    /// pushed it back.
-    public static func shown(hasPage: Bool, searching: Bool) -> Bool {
-        hasPage && !searching
+    /// Whether the band shows: over a page shown full size, and not while the tab row is up,
+    /// whose cards carry their own bands. The search sheet shrinks the band with the page instead
+    /// of hiding it, so it does not come into this.
+    public static func shown(hasPage: Bool, switching: Bool) -> Bool {
+        hasPage && !switching
     }
 
     /// White time and battery over a dark band, black over a light one.

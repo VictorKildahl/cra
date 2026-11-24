@@ -182,9 +182,9 @@ public enum MobileSwipe {
         pullAtRelease >= pullToRefreshDistance
     }
 
-    /// Whether pushing a pull back past the top hands the rest of the drag to the page's own
+    /// Whether pushing a pull back to the top hands the rest of the drag to the page's own
     /// scrolling, rather than waiting for the finger to lift first.
-    public static func pullHandsOff(pull: CGFloat, translationFromStart: CGFloat) -> Bool {
-        pull <= 0 && translationFromStart <= 0
+    public static func pullHandsOff(pull: CGFloat) -> Bool {
+        pull <= 0
     }
 }

@@ -808,10 +808,9 @@ struct MobileSwipeTests {
     /// Pushing a pull back past the top hands the rest of the drag to the page's scrolling,
     /// instead of making the finger lift and start a second gesture.
     @Test func pushingAPullBackPastTheTopHandsOffToScrolling() {
-        #expect(MobileSwipe.pullHandsOff(pull: 0, translationFromStart: 0))
-        #expect(MobileSwipe.pullHandsOff(pull: 0, translationFromStart: -4))
-        #expect(!MobileSwipe.pullHandsOff(pull: 6, translationFromStart: 6))
-        #expect(!MobileSwipe.pullHandsOff(pull: 0, translationFromStart: 2), "still inside the pull")
+        #expect(MobileSwipe.pullHandsOff(pull: 0))
+        #expect(MobileSwipe.pullHandsOff(pull: -4))
+        #expect(!MobileSwipe.pullHandsOff(pull: 6))
     }
 
     /// #655: the open sheet dragged down keeps its top under the finger (the keyboard goes as the drag starts) and

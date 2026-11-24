@@ -301,14 +301,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             picture.accessibilityIdentifier = "previous-tab-card"
             // The page's coloured band under the status bar is the app's, not the site's, so the
             // card carries it too: the arriving tab looks as it will when it is on screen.
-            let arriving = page(for: target)
-            let fill = MobileStatusBand.fill(themeColor: Palette.hex(arriving.webView.themeColor, traits: traitCollection),
-                                             underPage: Palette.hex(arriving.webView.underPageBackgroundColor, traits: traitCollection))
-            // A page that has not loaded reports nothing, or black, for the colour over it: take
-            // the band from the tab's own picture instead.
-            let bandColour: UIColor? = arriving.webView.url == nil
-                ? arrivingImage?.topBandColor() ?? fill.flatMap(Palette.color(hex:))
-                : fill.flatMap(Palette.color(hex:)) ?? arrivingImage?.topBandColor()
+            let bandColour = bandColour(for: target)
             flick.arrivingFill = bandColour.flatMap { Palette.hex($0, traits: traitCollection) }
             let band = UIView()
             if let bandColour {
@@ -608,7 +601,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 swipeNeighbourCard = nil
                 swipeNeighbourStep = step
                 if let tab {
-                    let top = view.safeAreaInsets.top
+                    let top = pageContentFrame.minY
                     let card = UIView(frame: view.bounds)
                     card.backgroundColor = .systemBackground
                     card.clipsToBounds = true
@@ -617,8 +610,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                     content.contentMode = .scaleAspectFill
                     content.clipsToBounds = true
                     // The page's content sits below its band, not under it.
-                    content.frame = CGRect(x: 0, y: top, width: view.bounds.width,
-                                           height: max(0, view.bounds.height - top))
+                    content.frame = pageContentFrame
                     card.addSubview(content)
                     // The incoming tab already has its band at full height: only the tab row
                     // animates the band's size.

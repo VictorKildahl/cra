@@ -6,6 +6,9 @@ import UIKit
 /// circle the rounded end covers the start's seam. Reaching the line gives a clockwise bump,
 /// stronger the faster the pull, and a short pull unwinds back instead of fading.
 final class PullArcView: UIView {
+    /// What the ring is doing after a release: it only ever plays one of these.
+    private enum Playing { case bump, retract, success }
+
     private let gradient = CAGradientLayer()
     private let arc = CAShapeLayer()
     private let tip = CAShapeLayer()
@@ -15,23 +18,15 @@ final class PullArcView: UIView {
     private let stroke: CGFloat = 4.5
     private var rendered: CGFloat = 0
     private var wasComplete = false
-
     private var loopExtra: CGFloat = 0
-    private var bumpLink: CADisplayLink?
-    private var bumpAt: CFTimeInterval = 0
+
+    private var link: CADisplayLink?
+    private var playing: Playing?
+    private var playFrom: CGFloat = 0
+    private var playAt: CFTimeInterval = 0
+    private var playDuration: TimeInterval = 0
     private var bumpPeak: CGFloat = 0
     private var bumpDecay: CGFloat = 8
-    private let bumpDuration: TimeInterval = 0.26
-
-    private var successLink: CADisplayLink?
-    private var successFrom: CGFloat = 0
-    private var successAt: CFTimeInterval = 0
-    private let successDuration: TimeInterval = 0.2
-
-    private var retractLink: CADisplayLink?
-    private var retractFrom: CGFloat = 0
-    private var retractAt: CFTimeInterval = 0
-    private let retractDuration: TimeInterval = 0.22
 
     /// The pull's speed in points a second, for the bump at the line.
     var speed: CGFloat = 0
@@ -40,7 +35,20 @@ final class PullArcView: UIView {
     var color: UIColor = .white {
         didSet {
             guard color != oldValue else { return }
-            updateInk(rendered)
+            applyInk()
+        }
+    }
+
+    /// The ring is easing away after a release; the next pull waits for it.
+    private(set) var isLeaving = false
+
+    /// 0...1 through the pull. At 1 the ring is whole and gives its bump, once per crossing.
+    var progress: CGFloat = 0 {
+        didSet {
+            guard !isLeaving else { return }
+            let value = max(0, min(1, progress))
+            guard value != oldValue else { return }
+            render(value, fadeIn: true)
         }
     }
 
@@ -70,44 +78,48 @@ final class PullArcView: UIView {
         loopTip.strokeColor = nil
         loopTip.isHidden = true
         layer.addSublayer(loopTip)
-        updateInk(0)
+        applyInk()
+        fadeInk(0)
         alpha = 0
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    /// The ring is easing away after a release; the next pull waits for it.
-    private(set) var isLeaving = false
-
-    /// 0...1 through the pull. At 1 the ring is whole and gives its bump, once per crossing.
-    var progress: CGFloat = 0 {
-        didSet {
-            guard !isLeaving else { return }
-            let value = max(0, min(1, progress))
-            guard value != oldValue else { return }
-            render(value, fadeIn: true)
-        }
-    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         gradient.frame = bounds
         arc.frame = bounds
         tip.frame = bounds
-        let inset = stroke / 2
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
-        arc.path = UIBezierPath(arcCenter: center, radius: radius, startAngle: -.pi / 2,
-                                endAngle: .pi * 1.5, clockwise: true).cgPath
+        let path = ringPath
+        arc.path = path
         loop.frame = bounds
         loopTip.frame = bounds
-        loop.path = arc.path
+        loop.path = path
         placeLoopTip(loopExtra)
         placeTip(rendered)
     }
 
-    /// Draws `value` through the arc. The pull fades in quickly at the start; the retract stays
-    /// solid while its tip travels back to the top.
+    // MARK: Drawing
+
+    /// The pull did not reach the line: the tip unwinds back to the top rather than the ring
+    /// vanishing.
+    func dismiss() {
+        guard !isLeaving else { return }
+        guard rendered > 0.001 else { progress = 0; return }
+        isLeaving = true
+        stopBump(hide: true)
+        transform = .identity
+        play(.retract, from: rendered, for: Self.retractDuration)
+    }
+
+    /// The pull reached the line: the solid second lap runs all the way round as the ring fades.
+    func fulfilled() {
+        guard !isLeaving else { return }
+        isLeaving = true
+        stopBump(hide: false)
+        play(.success, from: loopExtra, for: Self.successDuration)
+    }
+
     private func render(_ raw: CGFloat, fadeIn: Bool) {
         let value = max(0, min(1, raw))
         rendered = value
@@ -116,7 +128,7 @@ final class PullArcView: UIView {
         CATransaction.setDisableActions(true)
         arc.strokeEnd = value
         placeTip(value)
-        updateInk(value)
+        fadeInk(value)
         gradient.locations = [NSNumber(value: 0), NSNumber(value: Double(max(value, 0.001)))]
         CATransaction.commit()
         alpha = fadeIn ? min(1, value / 0.08) : (value > 0 ? 1 : 0)
@@ -129,106 +141,46 @@ final class PullArcView: UIView {
         }
     }
 
-    /// The arc's end ink, from clear at the start to 90 % at the full circle. The tip shares it.
-    private func updateInk(_ value: CGFloat) {
-        let ink = color.withAlphaComponent(0.9 * value)
+    /// The ink everything here draws: clear at the ring's start, 90 % at its end. Set once per
+    /// colour; the pull's strength fades it, so a frame makes no new colours.
+    private func applyInk() {
+        let ink = color.withAlphaComponent(0.9)
         gradient.colors = [color.withAlphaComponent(0).cgColor, ink.cgColor]
         tip.fillColor = ink.cgColor
         loop.strokeColor = ink.cgColor
         loopTip.fillColor = ink.cgColor
     }
 
+    /// How strongly the ink shows: nil at the top, whole at the refresh line.
+    private func fadeInk(_ value: CGFloat) {
+        let fade = Float(min(1, max(0, value)))
+        gradient.opacity = fade
+        tip.opacity = fade
+        loop.opacity = fade
+        loopTip.opacity = fade
+    }
+
+    /// The ring's whole circle, inside the stroke.
+    private var ringPath: CGPath {
+        let radius = max(0, min(bounds.width, bounds.height) / 2 - stroke / 2)
+        return UIBezierPath(arcCenter: CGPoint(x: bounds.midX, y: bounds.midY), radius: radius,
+                            startAngle: -.pi / 2, endAngle: .pi * 1.5, clockwise: true).cgPath
+    }
+
+    /// The stroke's round end at `angle`, its flat edge on the stroke's butt end.
+    private func tipPath(at angle: CGFloat) -> CGPath {
+        let radius = max(0, min(bounds.width, bounds.height) / 2 - stroke / 2)
+        let point = CGPoint(x: bounds.midX + radius * cos(angle), y: bounds.midY + radius * sin(angle))
+        let path = UIBezierPath(arcCenter: point, radius: stroke / 2, startAngle: angle,
+                                endAngle: angle + .pi, clockwise: true)
+        path.close()
+        return path.cgPath
+    }
+
     /// The semicircular end, above the gradient, its flat edge on the stroke's butt end.
     private func placeTip(_ value: CGFloat) {
-        let inset = stroke / 2
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
-        let end = -.pi / 2 + 2 * .pi * value
-        let point = CGPoint(x: center.x + radius * cos(end), y: center.y + radius * sin(end))
-        let path = UIBezierPath()
-        path.addArc(withCenter: point, radius: inset, startAngle: end, endAngle: end + .pi, clockwise: true)
-        path.close()
-        tip.path = path.cgPath
+        tip.path = tipPath(at: -.pi / 2 + 2 * .pi * value)
         tip.isHidden = value <= 0.001
-    }
-
-    /// The pull did not reach the line: the tip unwinds back to the top rather than the ring
-    /// vanishing.
-    func dismiss() {
-        guard !isLeaving else { return }
-        guard rendered > 0.001 else { progress = 0; return }
-        isLeaving = true
-        stopBump(hide: true)
-        transform = .identity
-        retractFrom = rendered
-        retractAt = CACurrentMediaTime()
-        let link = CADisplayLink(target: self, selector: #selector(retractStep))
-        link.add(to: .main, forMode: .common)
-        retractLink = link
-    }
-
-    @objc private func retractStep() {
-        let t = min(1, (CACurrentMediaTime() - retractAt) / retractDuration)
-        let eased = 1 - pow(1 - t, 3)
-        render(retractFrom * (1 - eased), fadeIn: false)
-        guard t >= 1 else { return }
-        retractLink?.invalidate()
-        retractLink = nil
-        isLeaving = false
-        progress = 0
-    }
-
-    /// The pull reached the line: the solid second lap runs all the way round as the ring fades.
-    func fulfilled() {
-        guard !isLeaving else { return }
-        isLeaving = true
-        stopBump(hide: false)
-        successFrom = loopExtra
-        successAt = CACurrentMediaTime()
-        let link = CADisplayLink(target: self, selector: #selector(successStep))
-        link.add(to: .main, forMode: .common)
-        successLink = link
-    }
-
-    @objc private func successStep() {
-        let t = min(1, (CACurrentMediaTime() - successAt) / successDuration)
-        let eased = 1 - pow(1 - t, 3)
-        let extra = successFrom + (80 * .pi / 180) * eased
-        renderLoop(extra)
-        alpha = 1 - eased
-        guard t >= 1 else { return }
-        successLink?.invalidate()
-        successLink = nil
-        alpha = 0
-        stopBump(hide: true)
-        transform = .identity
-        isLeaving = false
-        progress = 0
-    }
-
-    /// At the line the ring starts a second lap over the first. Its length springs out and back,
-    /// its peak growing with how fast the pull was going.
-    private func bump() {
-        guard !isLeaving else { return }
-        stopBump(hide: true)
-        let fast = min(1, max(0, speed) / 2000)
-        bumpPeak = (1 + 29 * fast) * .pi / 180
-        // A slow pull damps at once; a faster one lets the spring swing again.
-        bumpDecay = 8 - 5 * fast
-        bumpAt = CACurrentMediaTime()
-        let link = CADisplayLink(target: self, selector: #selector(bumpStep))
-        link.add(to: .main, forMode: .common)
-        bumpLink = link
-    }
-
-    @objc private func bumpStep() {
-        let t = min(1, (CACurrentMediaTime() - bumpAt) / bumpDuration)
-        // The first out-swing is exactly the peak; each later swing is smaller, and disappears
-        // quickly for a slow pull.
-        let extra = bumpPeak * (exp(-bumpDecay * t) / exp(-bumpDecay * 0.25)) * abs(sin(2 * .pi * t))
-        renderLoop(extra)
-        guard t >= 1 else { return }
-        stopBump(hide: true)
     }
 
     /// The second lap's arc: solid ink from the top, with its own round end.
@@ -244,20 +196,85 @@ final class PullArcView: UIView {
     }
 
     private func placeLoopTip(_ extra: CGFloat) {
-        let inset = stroke / 2
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
-        let end = -.pi / 2 + extra
-        let point = CGPoint(x: center.x + radius * cos(end), y: center.y + radius * sin(end))
-        let path = UIBezierPath()
-        path.addArc(withCenter: point, radius: inset, startAngle: end, endAngle: end + .pi, clockwise: true)
-        path.close()
-        loopTip.path = path.cgPath
+        loopTip.path = tipPath(at: -.pi / 2 + extra)
     }
 
+    // MARK: Motion
+
+    /// At the line the ring starts a second lap over the first. Its length springs out and back,
+    /// its peak growing with how fast the pull was going.
+    private func bump() {
+        guard !isLeaving else { return }
+        stopBump(hide: true)
+        let fast = min(1, max(0, speed) / 2000)
+        bumpPeak = (1 + 29 * fast) * .pi / 180
+        // A slow pull damps at once; a faster one lets the spring swing again.
+        bumpDecay = 8 - 5 * fast
+        play(.bump, from: 0, for: Self.bumpDuration)
+    }
+
+    private static let bumpDuration: TimeInterval = 0.25
+    private static let successDuration: TimeInterval = 0.3
+    private static let retractDuration: TimeInterval = 0.3
+    /// How far the second lap's end turns as it fades out on a full pull.
+    private static let successTurn: CGFloat = .pi * 0.6
+
+    private func play(_ animation: Playing, from: CGFloat, for duration: TimeInterval) {
+        stopPlaying()
+        playing = animation
+        playFrom = from
+        playDuration = duration
+        playAt = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(step(_:)))
+        link.add(to: .main, forMode: .common)
+        self.link = link
+    }
+
+    @objc private func step(_ link: CADisplayLink) {
+        let t = min(1, (CACurrentMediaTime() - playAt) / playDuration)
+        switch playing {
+        case .bump:
+            // The first out-swing is exactly the peak; each later swing is smaller, and disappears
+            // quickly for a slow pull.
+            renderLoop(bumpPeak * (exp(-bumpDecay * t) / exp(-bumpDecay * 0.25)) * abs(sin(2 * .pi * t)))
+            guard t >= 1 else { return }
+            stopPlaying()
+            stopBump(hide: true)
+        case .retract:
+            render(playFrom * (1 - Self.eased(t)), fadeIn: false)
+            guard t >= 1 else { return }
+            stopPlaying()
+            isLeaving = false
+            progress = 0
+        case .success:
+            let eased = Self.eased(t)
+            renderLoop(playFrom + Self.successTurn * eased)
+            alpha = 1 - eased
+            guard t >= 1 else { return }
+            stopPlaying()
+            alpha = 0
+            stopBump(hide: true)
+            transform = .identity
+            isLeaving = false
+            progress = 0
+        case nil:
+            stopPlaying()
+        }
+    }
+
+    private static func eased(_ t: CGFloat) -> CGFloat {
+        1 - pow(1 - t, 3)
+    }
+
+    private func stopPlaying() {
+        link?.invalidate()
+        link = nil
+        playing = nil
+    }
+
+    /// Takes away the second lap's spring; `hide` also clears the lap the seam spring drew.
     private func stopBump(hide: Bool) {
-        bumpLink?.invalidate()
-        bumpLink = nil
+        if playing == .bump { stopPlaying() }
         guard hide else { return }
         loopExtra = 0
         CATransaction.begin()

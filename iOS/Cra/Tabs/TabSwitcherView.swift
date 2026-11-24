@@ -25,7 +25,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     var expansion: CGFloat = 0 { didSet { setNeedsLayout() } }
     /// The card that fills the screen at `expansion` 1.
     var expandedID: UUID?
-    /// The full-screen status band's height, which each card's own band is scaled from.
+    /// The status band's height at full size: each card's own band is that, scaled with the card.
     var bandHeight: CGFloat = 0 { didSet { setNeedsLayout() } }
 
     override init(frame: CGRect) {
@@ -278,8 +278,8 @@ final class TabCardView: UIView {
         accessibilityLabel = text
     }
 
-    /// Places the card. `frame` is its place in the row; `fill` (0…1) grows it to the page's own
-    /// `screen` below the status band, where the picture shows its whole content.
+    /// Places the card. `frame` is its place in the row; `fill` (0…1) grows it to the whole
+    /// `screen`, where its band takes the status bar's strip and its picture the rest.
     func layout(frame row: CGRect, screen: CGSize, bandHeight: CGFloat, fill: CGFloat, dim: CGFloat,
                 headerAlpha: CGFloat, scale: CGFloat) {
         let full = CGRect(origin: .zero, size: screen)
