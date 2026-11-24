@@ -1,0 +1,157 @@
+{
+ "containers": [
+  {
+   "id": {
+    "container": {
+     "favorites": {}
+    }
+   },
+   "tabs": [
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "https://example.com/mail",
+          "title": "Mail"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "about:blank",
+          "title": ""
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    }
+   ]
+  },
+  {
+   "id": {
+    "container": {
+     "window": {}
+    }
+   },
+   "tabs": [
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "https://example.com/open",
+          "title": "Open"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "file:///Users/me/notes.html",
+          "title": "Notes"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "javascript:void(document.title)",
+          "title": "Bookmarklet"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "chrome://settings/",
+          "title": "Settings"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "about:blank",
+          "title": ""
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "chrome://newtab/",
+          "title": "New Tab"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    },
+    {
+     "contents": [
+      {
+       "variant": {
+        "webContent": {
+         "_0": {
+          "url": "blob:https://example.com/5f1c",
+          "title": "Download"
+         }
+        }
+       }
+      }
+     ],
+     "creationDate": 800000000.0
+    }
+   ]
+  }
+ ]
+}

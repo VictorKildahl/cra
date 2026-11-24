@@ -43,4 +43,30 @@ struct CommandBarProfileScopeTests {
         #expect(!String(decoding: try JSONEncoder().encode(loaded), as: UTF8.self).contains("profiles"))
         #expect(try JSONDecoder().decode(HistoryEntry.self, from: JSONEncoder().encode(e)) == e)
     }
+
+    /// History from before #609 takes its profiles from the profiles' Chromium histories, once: a page
+    /// only Work's history has is suggested on Work only, one both have on both, one neither has (older
+    /// than Chromium's 90 days) on every profile, as before. Entries that have profiles don't change.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/729"))
+    func historyFromBeforeProfilesTakesThemFromChromium() {
+        func old(_ url: String) -> HistoryEntry {
+            HistoryEntry(url: url, title: "", lastVisit: Date(timeIntervalSince1970: 0), visitCount: 1)
+        }
+        var tagged = old("https://example.com/tagged")
+        tagged.visited(in: nil)
+        let entries = [old("https://example.com/work"), old("https://example.com/both"), old("https://example.com/gone"), tagged]
+        let chromium: [String: Set<String>] = [
+            work.uuidString: ["https://example.com/work", "https://example.com/both", "https://example.com/tagged"],
+            "default": ["https://example.com/both"],
+        ]
+        let changed = Dictionary(uniqueKeysWithValues: CommandBarProfileScope.attributing(entries, chromiumURLs: chromium).map { ($0.url, $0) })
+        #expect(changed["https://example.com/work"]?.profiles == [work.uuidString], "only Work's history has it")
+        #expect(changed["https://example.com/both"]?.profiles == ["default", work.uuidString], "both histories have it")
+        #expect(changed["https://example.com/gone"]?.profiles == ["default", work.uuidString], "no history has it: every profile, as before")
+        #expect(changed["https://example.com/tagged"] == nil, "an entry that has its profiles keeps them")
+        #expect(changed.count == 3)
+        let work = changed["https://example.com/work"]!
+        #expect(CommandBarProfileScope.suggests(work, on: self.work) && !CommandBarProfileScope.suggests(work, on: nil))
+        #expect(CommandBarProfileScope.attributing(entries, chromiumURLs: [:]).isEmpty, "no profile read: nothing changes")
+    }
 }

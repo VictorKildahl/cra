@@ -1,32 +1,38 @@
 import Foundation
 
-/// The iPhone app's icons: the Mac app's four.
+/// The iPhone app's icons: the Mac app's, in its order (Settings ▸ Icon, AppIconManager.presets): Segments, Arc's
+/// own icon set redrawn around Cra's C by Provok (brand/arc-icons), then Cra's earlier alternates.
 public enum MobileAppIcon: String, CaseIterable, Identifiable {
+    // Cra's own four first: the sheet is one row that scrolls sideways, and the icons onboarding offered stay in
+    // reach without scrolling. Arc's set follows in the Mac's order.
     case segments, midnight, mono, violet
+    case original, candy, hologram, neon
+    case flutedGlass = "fluted-glass"
+    case schoolbook, colorful, canary
+    case earlyBirds = "early-birds"
 
     public var id: String { rawValue }
 
     public var label: String {
         switch self {
         case .segments: return "Cra"
-        case .midnight: return "Midnight"
-        case .mono: return "Mono"
-        case .violet: return "Violet"
+        case .flutedGlass: return "Fluted Glass"
+        case .earlyBirds: return "Early Birds"
+        default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
         }
     }
 
-    /// The alternate icon's name for iOS; nil is the app's own icon.
+    /// The alternate icon's name for iOS (its set in the asset catalog, `AppIcon-<Label>`); nil is the app's own icon.
     public var alternateName: String? {
-        switch self {
-        case .segments: return nil
-        case .midnight: return "AppIcon-Midnight"
-        case .mono: return "AppIcon-Mono"
-        case .violet: return "AppIcon-Violet"
-        }
+        self == .segments ? nil : "AppIcon-" + label.replacingOccurrences(of: " ", with: "")
     }
 
     /// The picture the picker shows.
     public var previewName: String { (alternateName ?? "AppIcon") + "-Preview" }
+
+    /// Onboarding's icon step keeps Arc Search's two-by-two grid: Cra's own four. Settings ▸ App Icon and the
+    /// App Icon sheet offer every icon.
+    public static let onboardingChoices: [MobileAppIcon] = [.segments, .midnight, .mono, .violet]
 
     public init(alternateName: String?) {
         self = Self.allCases.first { $0.alternateName == alternateName } ?? .segments

@@ -1,28 +1,36 @@
 # Arc's icon set, redrawn around Cra's C by Provok (mat-up/cra-icons): each of the nine is in the Icon tab's
-# list and its picture ships in the app. Picking one puts it on Cra.app ("put on the app" needs the bundled
-# PNG; an id the list doesn't know is ignored and logs nothing). appIcon= picks without remembering, so the
-# run never writes the defaults the installed Cra reads, and it ends on Segments: the build is left as it was.
+# list and its picture ships in the app, so the Dock is given it ("given=<id>" needs the bundled PNG; an id the
+# list doesn't know is ignored). The pick never goes on Cra.app itself (#724). appIcon= picks without remembering,
+# so the run never writes the defaults the installed Cra reads.
 home
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
 cra://debug?appIcon=original
-expect-log app icon: original put on the app
+cra://debug?dockTile=original
+expect-log dock tile original: .* given=original$
 cra://debug?appIcon=candy
-expect-log app icon: candy put on the app
+cra://debug?dockTile=candy
+expect-log dock tile candy: .* given=candy$
 cra://debug?appIcon=hologram
-expect-log app icon: hologram put on the app
+cra://debug?dockTile=hologram
+expect-log dock tile hologram: .* given=hologram$
 cra://debug?appIcon=neon
-expect-log app icon: neon put on the app
+cra://debug?dockTile=neon
+expect-log dock tile neon: .* given=neon$
 cra://debug?appIcon=fluted-glass
-expect-log app icon: fluted-glass put on the app
+cra://debug?dockTile=fluted-glass
+expect-log dock tile fluted-glass: .* given=fluted-glass$
 cra://debug?appIcon=schoolbook
-expect-log app icon: schoolbook put on the app
+cra://debug?dockTile=schoolbook
+expect-log dock tile schoolbook: .* given=schoolbook$
 cra://debug?appIcon=colorful
-expect-log app icon: colorful put on the app
+cra://debug?dockTile=colorful
+expect-log dock tile colorful: .* given=colorful$
 cra://debug?appIcon=canary
-expect-log app icon: canary put on the app
+cra://debug?dockTile=canary
+expect-log dock tile canary: .* given=canary$
 cra://debug?appIcon=early-birds
-expect-log app icon: early-birds put on the app
+cra://debug?dockTile=early-birds
+expect-log dock tile early-birds: .* given=early-birds$
 cra://debug?appIcon=segments
-expect-log app icon: segments taken off the app
 cra://debug?bundleIcon=end
 expect-log bundle icon end: custom=0 file=0

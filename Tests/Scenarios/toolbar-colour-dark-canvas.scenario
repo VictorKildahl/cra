@@ -1,0 +1,22 @@
+# A white page under dark websites gets a white bar. Since engine 159.0.8154.13-16 a page's view shows Arc's
+# canvas (black while websites are dark) until the page's first frame, and the load-end capture the bar's colour
+# comes from (#629) could land before that frame: the bar read black over a white page and kept it until a reload.
+# The 0.1.55 release's toolbar snapshots caught it on a Mac in Dark mode. View ▸ Appearance ▸ Dark makes websites
+# dark here whatever the Mac is set to. The sampler reads again while it sees only the canvas (ToolbarSample).
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://action/appearanceDark
+wait 1
+cra://open?url=${PAGE}?n=first
+wait 4
+cra://debug?toolbarColor=first
+expect-log toolbar colour first: bar=FFFFFF$
+cra://action/reload
+wait 4
+cra://debug?toolbarColor=reloaded
+expect-log toolbar colour reloaded: bar=FFFFFF$
+# A page whose own top is black keeps a black bar: only the canvas is read again.
+cra://open?url=${ORIGIN}/toolbar-dark.html
+wait 4
+cra://debug?toolbarColor=dark
+expect-log toolbar colour dark: bar=0D1117$
+cra://action/appearanceAutomatic

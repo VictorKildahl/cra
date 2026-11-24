@@ -98,4 +98,21 @@ struct ToolbarSampleTests {
         let besideBar = ToolbarSample.patch(imageWidth: 1600, imageHeight: 400, scale: 2, scrollbarWidth: 15)
         #expect(besideBar == ToolbarSample.Patch(x: 1566, y: 0, width: 4, height: 24))
     }
+
+    /// Engine -16's pre-frame canvas: a white page under dark websites read black at load end (the 0.1.55 toolbar
+    /// snapshots). Only a reading of exactly the canvas is taken again, and only while the page's own background
+    /// isn't that colour.
+    @Test func onlyTheCanvasIsReadAgain() {
+        // A white page whose first frame hadn't come: read again, whether its background is known yet or not.
+        #expect(ToolbarSample.readsOnlyTheCanvas(reading: "#000000", canvas: "#000000", background: "#FFFFFF"))
+        #expect(ToolbarSample.readsOnlyTheCanvas(reading: "#000000", canvas: "#000000", background: ""))
+        #expect(ToolbarSample.readsOnlyTheCanvas(reading: "#000000", canvas: "#000000", background: nil))
+        #expect(ToolbarSample.readsOnlyTheCanvas(reading: "#ffffff", canvas: "#FFFFFF", background: "#0D1117"))
+        // A page that is the canvas colour: kept at once.
+        #expect(!ToolbarSample.readsOnlyTheCanvas(reading: "#000000", canvas: "#000000", background: "#000000"))
+        // Any other colour is the page's own.
+        #expect(!ToolbarSample.readsOnlyTheCanvas(reading: "#0D1117", canvas: "#000000", background: "#0D1117"))
+        #expect(!ToolbarSample.readsOnlyTheCanvas(reading: "#FFFFFF", canvas: "#000000", background: "#FFFFFF"))
+        #expect(ToolbarSample.canvasRetries * Int(ToolbarSample.canvasRetryDelay * 1000) <= 1000)
+    }
 }

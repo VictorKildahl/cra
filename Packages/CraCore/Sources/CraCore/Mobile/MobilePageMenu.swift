@@ -49,11 +49,10 @@ public enum MobilePageMenu {
     public static let capsuleHeight: CGFloat = 47.3
     /// Capsule to tiles.
     public static let tilesGap: CGFloat = 17.3
-    /// Four tiles fill the width: 18.33 pt in from each side, 20.33 pt apart (85.6 pt wide on a
-    /// 440 pt phone: tiles start at 55, 373, 691 and 1008 px), 88.7 pt tall.
-    public static let tileSideInset: CGFloat = 18.33
-    public static let tileSpacing: CGFloat = 20.33
-    public static let tileHeight: CGFloat = 88.7
+    /// Four tiles fill the width: 16.33 pt in from each side, 18.33 pt apart (88.1 pt square on
+    /// a 440 pt phone; slightly less horizontal padding than the recording's 18.33/20.33).
+    public static let tileSideInset: CGFloat = 16.33
+    public static let tileSpacing: CGFloat = 18.33
     public static let tileCornerRadius: CGFloat = 22
     /// A tile's label is centred this far under it.
     public static let tileLabelDrop: CGFloat = 15
@@ -68,26 +67,33 @@ public enum MobilePageMenu {
     public static let footerBottom: CGFloat = 22.3
     public static let cornerRadius: CGFloat = 38
 
-    /// The sheet's height, with Display Options closed or open, over a bottom safe area of `safeBottom`.
-    public static func height(displayOptionsOpen: Bool = false, safeBottom: CGFloat) -> CGFloat {
-        let group = CGFloat(displayOptionsOpen ? 1 + displayOptions.count : 1) * rowHeight
-        return inset + capsuleHeight + tilesGap + tileHeight + rowsGap + group + groupGap + rowHeight + groupGap
-            + footerHeight + footerBottom + safeBottom
-    }
-
     /// A tile's width in a sheet `width` wide.
     public static func tileWidth(in width: CGFloat) -> CGFloat {
         (width - 2 * tileSideInset - 3 * tileSpacing) / 4
+    }
+
+    /// A tile's side: the four fill the width, and each button is square (PR #733, a deviation:
+    /// the recording's were 3 pt taller than wide).
+    public static func tileSide(in width: CGFloat) -> CGFloat {
+        tileWidth(in: width)
+    }
+
+    /// The sheet's height, with Display Options closed or open, in a sheet `width` wide over a
+    /// bottom safe area of `safeBottom`.
+    public static func height(displayOptionsOpen: Bool = false, width: CGFloat, safeBottom: CGFloat) -> CGFloat {
+        let group = CGFloat(displayOptionsOpen ? 1 + displayOptions.count : 1) * rowHeight
+        return inset + capsuleHeight + tilesGap + tileSide(in: width) + rowsGap + group + groupGap + rowHeight + groupGap
+            + footerHeight + footerBottom + safeBottom
     }
 
     /// Where the tiles go in a sheet `width` wide: four fill it; fewer keep the same spacing, centred.
     public static func tileFrames(count: Int, width: CGFloat) -> [CGRect] {
         guard count > 0 else { return [] }
         let top = inset + capsuleHeight + tilesGap
-        let tile = tileWidth(in: width)
-        let span = CGFloat(count) * tile + CGFloat(count - 1) * tileSpacing
+        let side = tileSide(in: width)
+        let span = CGFloat(count) * side + CGFloat(count - 1) * tileSpacing
         let start = (width - span) / 2
-        return (0..<count).map { CGRect(x: start + CGFloat($0) * (tile + tileSpacing), y: top, width: tile, height: tileHeight) }
+        return (0..<count).map { CGRect(x: start + CGFloat($0) * (side + tileSpacing), y: top, width: side, height: side) }
     }
 
     /// Page zoom steps: a tenth at a time, half to triple size.

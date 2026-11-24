@@ -157,7 +157,7 @@ struct OnboardingView: View {
         case .icon:
             VStack(spacing: 30) {
                 OnboardingTitle(text: MobileOnboarding.iconTitle)
-                AppIconGrid(selected: model.icon, onVivid: true) { icon in
+                AppIconGrid(icons: MobileAppIcon.onboardingChoices, selected: model.icon, onVivid: true) { icon in
                     model.icon = icon
                     model.setIcon(icon)
                 }
@@ -299,8 +299,10 @@ private struct HowToSheet: View {
     }
 }
 
-/// The app's icons in a grid with a radio mark under each: onboarding's step and Settings' picker.
+/// The app's icons in a grid with a radio mark under each: onboarding's step (Cra's own four) and Settings'
+/// picker (every icon, scrolling).
 struct AppIconGrid: View {
+    var icons = MobileAppIcon.allCases
     let selected: MobileAppIcon
     /// On onboarding's gradient: white radios, and a white frame round the picked icon.
     var onVivid = false
@@ -313,7 +315,7 @@ struct AppIconGrid: View {
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 22) {
-            ForEach(MobileAppIcon.allCases) { icon in
+            ForEach(icons) { icon in
                 Button { pick(icon) } label: {
                     VStack(spacing: 10) {
                         Image(icon.previewName)

@@ -11,8 +11,13 @@ final class PageGestureTests: BrowserTestCase {
 
     /// A quick drag, or with `settle` a slow one held at its end, so the page doesn't coast on.
     private func drag(fromX: CGFloat, toX: CGFloat, y: CGFloat, settle: Bool = false) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: fromX, dy: y))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: toX, dy: y))
+        // The rightmost fifth includes the closed Duo's status column; keep page drags clear.
+        // shortcut: only the iPhone Duo simulator's model id is known; revisit for a real Duo or other side status bars.
+        let window = app.windows.firstMatch
+        let maxX: CGFloat = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] == "iPhone19,4"
+            && window.frame.width < window.frame.height ? 0.8 : 0.99
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: min(maxX, max(0.01, fromX)), dy: min(0.99, max(0.01, y))))
+        let end = window.coordinate(withNormalizedOffset: CGVector(dx: min(maxX, max(0.01, toX)), dy: min(0.99, max(0.01, y))))
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: settle ? .slow : .fast, thenHoldForDuration: settle ? 0.4 : 0)
         sleep(1)
     }

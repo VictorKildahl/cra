@@ -125,7 +125,7 @@ enum DiaSidebar {
                 let created = date(tabs[id]?["creation_date"]) ?? created
                 return kids.flatMap { items($0, created: created) }
             case "content_pane":
-                guard let p = panes[id], let url = p["url"] as? String, !url.isEmpty else { return [] }
+                guard let p = panes[id], let url = p["url"] as? String, ImportedAddress.keeps(url) else { return [] }
                 let custom = (p["custom_title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 return [ImportedItem(customTitle: custom, pageTitle: p["title"] as? String ?? "", url: url, createdAt: created)]
             case "group":

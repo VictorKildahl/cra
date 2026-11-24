@@ -68,7 +68,7 @@ enum FirefoxImporter {
             let created = (r["dateAdded"] as? Int64).map { Date(timeIntervalSince1970: Double($0) / 1_000_000) } ?? Date()
             switch r["type"] as? Int64 {
             case 1:
-                guard let u = r["url"] as? String, u.hasPrefix("http") else { return nil }
+                guard let u = r["url"] as? String, ImportedAddress.keeps(u) else { return nil }
                 return ImportedItem(customTitle: title.isEmpty ? nil : title, pageTitle: title.isEmpty ? (r["ptitle"] as? String ?? "") : title,
                                     url: u, createdAt: created)
             case 2:
@@ -100,7 +100,7 @@ enum FirefoxImporter {
             for t in w["tabs"] as? [[String: Any]] ?? [] {
                 guard let entries = t["entries"] as? [[String: Any]], !entries.isEmpty else { continue }
                 let index = min(max((t["index"] as? Int ?? entries.count) - 1, 0), entries.count - 1)
-                guard let u = entries[index]["url"] as? String, u.hasPrefix("http") else { continue }
+                guard let u = entries[index]["url"] as? String, ImportedAddress.keeps(u) else { continue }
                 out.append(ImportedItem(pageTitle: entries[index]["title"] as? String ?? "", url: u))
             }
         }

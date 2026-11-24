@@ -12,13 +12,13 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
     private let content: UIView
     /// Holds the content: it scrolls only when the panel is taller than the screen (landscape).
     private let scroller = UIScrollView()
-    private let panelHeight: (CGFloat) -> CGFloat
+    private let panelHeight: (CGFloat, CGFloat) -> CGFloat
     private var shown = false
     private var dragOffset: CGFloat = 0
     var onDismiss: (() -> Void)?
 
-    /// `height` gets the bottom safe area and returns the panel's height.
-    init(content: UIView, cornerRadius: CGFloat, height: @escaping (CGFloat) -> CGFloat) {
+    /// `height` gets the bottom safe area and the panel's width and returns the panel's height.
+    init(content: UIView, cornerRadius: CGFloat, height: @escaping (CGFloat, CGFloat) -> CGFloat) {
         self.content = content
         panelHeight = height
         super.init(frame: .zero)
@@ -53,11 +53,11 @@ final class SheetHost: UIView, UIGestureRecognizerDelegate {
         super.layoutSubviews()
         dim.frame = bounds
         // The panel's own height, but never past the top of the screen: what doesn't fit scrolls.
-        let full = panelHeight(safeAreaInsets.bottom)
+        let width = min(bounds.width, 540)
+        let full = panelHeight(safeAreaInsets.bottom, width)
         let height = min(full, bounds.height - safeAreaInsets.top - 8)
         let top = shown ? bounds.height - height + dragOffset : bounds.height
         // On iPad the panel keeps a phone-like width, centred (Arc Search's iPad menu was not seen).
-        let width = min(bounds.width, 540)
         panel.frame = CGRect(x: (bounds.width - width) / 2, y: top, width: width, height: height)
         material.frame = panel.bounds
         scroller.frame = panel.bounds

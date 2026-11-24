@@ -37,6 +37,8 @@ public enum CraCEFRuntime {
 /// `open`: the app subclasses it (WebKitBrowser, faked in AppServices.swift).
 @MainActor
 open class CraBrowser {
+    /// The canvas before a page's first frame (the real bridge: black while websites are dark); white here.
+    public class var pageCanvasColor: NSColor { .white }
     public weak var delegate: CraBrowserDelegate?
     public let containerView: NSView
     public var hostWindow: NSWindow?

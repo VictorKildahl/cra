@@ -1,4 +1,5 @@
 import AppKit
+import Security
 import Observation
 import UniformTypeIdentifiers
 
@@ -66,12 +67,12 @@ final class AppIconManager {
     /// download view draws it too (ChromiumDockTile).
     @ObservationIgnored private(set) var dockImage: NSImage?
 
-    /// At start-up, before the Dock first draws the running app's tile. The bundle gets the picked icon
-    /// again too: an update replaces Cra.app with one that has only its own (as Arc's applier does).
+    /// At start-up, before the Dock first draws the running app's tile. A Finder icon 0.1.54 or 0.1.55 put on
+    /// Cra.app comes off (#724).
     func applyAtLaunch() {
         // Segments too: the Dock may still have the icon a pick put on the bundle last time (AppIconBundle.dockImage).
         setDockImage()
-        applyToBundle(atLaunch: true)
+        applyToBundle()
     }
 
     /// Cra just came back to the Dock (Keep Cra in the menu bar, #231). macOS registers the app
@@ -130,47 +131,68 @@ final class AppIconManager {
     /// Cra.app's own changes, off the main thread and one after another (AppIconBundle).
     private static let bundleQueue = DispatchQueue(label: "dk.kildahl.cra.app-icon-bundle", qos: .utility)
 
-    /// The picked icon on Cra.app, for Finder, /Applications, Launchpad and Spotlight, which never draw the
-    /// Dock tile's (X, 20 Nov 2026); the bundle's own icon takes it off. Finder keeps it as a custom icon
-    /// (an `Icon\r` file and a FinderInfo flag) outside Contents: `codesign --strict` names the attribute,
-    /// but Gatekeeper accepts the app, as it does Arc.app carrying its picked icon the same way.
-    private func applyToBundle(atLaunch: Bool = false) {
-        let id = selectedID, defaultID = Self.defaultID
-        let source = imageURL(for: id)
+    /// Cra.app never carries the picked icon (GitHub #724): Finder's custom icon on the bundle (an `Icon\r` file and
+    /// com.apple.FinderInfo, as 0.1.54 and 0.1.55 put it there) breaks the app's signature, and lsd kept registering
+    /// it launch-disabled. The Dock tile shows the pick. One an earlier Cra put on comes off, at launch or at a pick.
+    private func applyToBundle() {
+        let id = selectedID
         let bundle = Bundle.main.bundleURL
         Self.bundleQueue.async {
-            switch AppIconBundle.change(picked: id, defaultID: defaultID, bundleHasCustomIcon: Self.hasCustomIcon(bundle), atLaunch: atLaunch) {
-            case .none:
-                return
-            case .put:
-                guard let image = source.flatMap(NSImage.init(contentsOf:)) else {
-                    CraLog.note("app icon: \(id) not put on the app, no image")
-                    return
-                }
-                let done = NSWorkspace.shared.setIcon(image, forFile: bundle.path, options: [])
-                CraLog.note("app icon: \(id) \(done ? "put on the app" : "not put on the app (can't write \(bundle.path))")")
-            case .takeOff:
-                let done = NSWorkspace.shared.setIcon(nil, forFile: bundle.path, options: [])
-                CraLog.note("app icon: \(id) \(done ? "taken off the app" : "not taken off the app (can't write \(bundle.path))")")
-            }
+            guard AppIconBundle.change(bundleHasFinderIcon: Self.hasFinderIcon(bundle)) == .takeOff else { return }
+            var done = NSWorkspace.shared.setIcon(nil, forFile: bundle.path, options: [])
+            // setIcon(nil) clears both; anything it left would still fail `codesign --strict`.
+            removexattr(bundle.path, "com.apple.FinderInfo", 0)
+            try? FileManager.default.removeItem(at: bundle.appendingPathComponent("Icon\r"))
+            done = done && !Self.hasFinderIcon(bundle)
+            CraLog.note("app icon: \(id) \(done ? "taken off the app" : "not taken off the app (can't write \(bundle.path))")")
         }
     }
 
-    /// For cra://debug?bundleIcon=<label>: Finder's custom icon flag on the app, and whether its `Icon\r`
-    /// file holds an icon, read after the changes queued before it.
+    /// For cra://debug?bundleIconPut=<id> (#724): puts that icon on Cra.app as Finder's custom icon, the way 0.1.54
+    /// and 0.1.55 did, so a scenario can check that a launch takes it off again.
+    func putBundleIconForTest(_ id: String) {
+        let bundle = Bundle.main.bundleURL
+        let image = imageURL(for: id).flatMap(NSImage.init(contentsOf:))
+        Self.bundleQueue.async {
+            let done = image.map { NSWorkspace.shared.setIcon($0, forFile: bundle.path, options: []) } ?? false
+            CraLog.note("app icon: \(id) \(done ? "put on the app for a test" : "not put on the app")")
+        }
+    }
+
+    /// For cra://debug?bundleIcon=<label>: Finder's custom icon flag on the app, whether its `Icon\r` file holds
+    /// an icon, and whether the app passes `codesign --strict` (#724), read after the changes queued before it.
     func logBundleIcon(_ label: String) {
         let bundle = Bundle.main.bundleURL
         Self.bundleQueue.async {
             let fork = bundle.appendingPathComponent("Icon\r").path + "/..namedfork/rsrc"
             let size = ((try? FileManager.default.attributesOfItem(atPath: fork))?[.size] as? Int) ?? 0
-            CraLog.note("bundle icon \(label): custom=\(Self.hasCustomIcon(bundle) ? 1 : 0) file=\(size > 0 ? 1 : 0)")
+            CraLog.note("bundle icon \(label): custom=\(Self.hasCustomIcon(bundle) ? 1 : 0) file=\(size > 0 ? 1 : 0) strict=\(Self.strictSignature(bundle))")
         }
     }
 
-    nonisolated private static func hasCustomIcon(_ bundle: URL) -> Bool {
+    nonisolated private static func finderInfo(_ bundle: URL) -> [UInt8]? {
         var info = [UInt8](repeating: 0, count: 32)
         let n = getxattr(bundle.path, "com.apple.FinderInfo", &info, info.count, 0, 0)
-        return n > 0 && AppIconBundle.hasCustomIcon(finderInfo: Array(info.prefix(n)))
+        return n >= 0 ? Array(info.prefix(n)) : nil
+    }
+
+    nonisolated private static func hasCustomIcon(_ bundle: URL) -> Bool {
+        finderInfo(bundle).map(AppIconBundle.hasCustomIcon(finderInfo:)) ?? false
+    }
+
+    nonisolated private static func hasFinderIcon(_ bundle: URL) -> Bool {
+        AppIconBundle.hasFinderIcon(finderInfo: finderInfo(bundle),
+                                    iconFile: FileManager.default.fileExists(atPath: bundle.appendingPathComponent("Icon\r").path))
+    }
+
+    /// What `codesign --verify --strict` says of the app: "valid", or Security's error code (-66999 for Finder's
+    /// icon on the bundle, "resource fork, Finder information, or similar detritus not allowed"). The sideband
+    /// flag is the part of --strict that refuses it; strict validation alone passes such a bundle.
+    nonisolated private static func strictSignature(_ bundle: URL) -> String {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(bundle as CFURL, [], &code) == errSecSuccess, let code else { return "unreadable" }
+        let status = SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSRestrictSidebandData), nil)
+        return status == errSecSuccess ? "valid" : "\(status)"
     }
 
     private func setDockImage() {

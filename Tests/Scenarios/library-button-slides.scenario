@@ -1,0 +1,48 @@
+# promise: #726
+# The Library button and the Library's back arrow slide it as Arc's do, on the swipe's eased-out spring (about a
+# third of a second), with the sidebar docked and with it hidden. From a hidden sidebar it appeared at once, and its
+# back arrow hid it at once: the tab list showed over the Library for a few frames and the page widened in steps.
+budget rss=700 stalls50=10
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=library-slide
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# Docked: in by the button, out by the back arrow, both on the spring.
+cra://action/openLibrary
+expect-log library button: opens it slide\(to: 1\.0\)$
+wait 1.5
+expect-log library slid in on [1-9][0-9]+ frames
+cra://debug?libraryBack=1
+expect-log library back arrow: pressed
+expect-log library button: leaves it slide\(to: 0\.0\)$
+wait 1.5
+expect-log library slid out on [1-9][0-9]+ frames
+# Hidden and out over the page: in from the window's edge under the floating sidebar, landing docked.
+cra://action/toggleSidebar
+wait 1
+cra://debug?floatingSidebar=hold
+wait 1
+cra://action/openLibrary
+expect-log library button: opens it slideFromHidden, the floating sidebar out
+wait 1.5
+expect-log library slid in from the hidden sidebar on [1-9][0-9]+ frames
+expect-log library swipe from the hidden sidebar: lands docked 417 pt wide
+cra://debug?windowState=in
+expect-log window state in: main0 .* lightsHidden=0 .* floating=none
+# Its back arrow slides it back out to the hidden sidebar, with no tab list on the way.
+cra://debug?libraryBack=1
+expect-log library button: leaves it slide\(to: 0\.0\) to the hidden sidebar
+wait 1.5
+expect-log library slid out to the hidden sidebar on [1-9][0-9]+ frames
+expect-log library left by a swipe: the sidebar hides again
+cra://debug?windowState=out
+expect-log window state out: main0 .* lightsHidden=1 .* card=10,10,10,10
+# ⇧⌘L from the hidden sidebar with the floating one away: the same slide in.
+cra://debug?floatingSidebar=0
+wait 1
+cra://action/openLibrary
+expect-log library button: opens it slideFromHidden, the floating sidebar away
+wait 1.5
+cra://debug?windowState=key
+expect-log window state key: main0 .* lightsHidden=0 .* floating=none

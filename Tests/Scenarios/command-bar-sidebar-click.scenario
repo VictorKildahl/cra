@@ -1,0 +1,27 @@
+# promise: #722
+# A click on the docked sidebar's empty space, under its rows, closes the open ⌘T bar, as Arc's does. Reported as
+# leaving the bar open (GitHub #722, mdrubelamin2, 0.1.54, seen once in a recording). Not reproduced with a real
+# click, through the window server (scripts/hid-click/click.m), on a page, in an empty window or after a space
+# change; this pins that the click lands on the sidebar's own view and closes the bar.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=600 stalls50=10
+pace 0.5
+cra://open?url=${PAGE}?n=sidebar-click
+wait 2
+cra://debug?mainFrame=100,100,1000,700
+wait 1
+cra://debug?activate=1
+wait 1
+# A real click on the page makes Cra the active app, as the reporter's was, so the bar's panel takes the keys.
+click page-top
+wait 1
+cra://commandbar
+wait 1
+cra://debug?commandBarRows=before
+expect-log Cra command bar rows before: open=1
+click sidebar-empty
+expect-log sidebar empty hit: SpaceListDocument
+wait 1
+cra://debug?commandBarRows=after
+expect-log Cra command bar rows after: open=0

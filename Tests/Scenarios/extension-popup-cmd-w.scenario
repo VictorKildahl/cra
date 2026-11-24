@@ -1,0 +1,32 @@
+# promise: #727
+# ⌘W with an extension's popup in front closes the popup, not the tab behind it, as Arc's extension window does
+# (BrowserExtensionWindowController.closeCurrentItem:). The popup's page has the keyboard (Chrome's bubble), and
+# Cra's Close Tab took the ⌘W and closed the tab under it (#727, from the ⌘E picker). ⌘W again, with no popup,
+# closes the tab as before.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/PopupContextExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=first
+wait 1
+cra://open?url=${PAGE}?n=site
+wait 2
+cra://debug?extensionAction=${POPUP_CONTEXT_EXTENSION_ID}
+expect-log "GET /page\.html\?n=popup-context-current-site-last-site HTTP
+wait 1
+cra://debug?extensionPopup=open
+expect-log extension popup open: shown
+# ⌘W in the popup: it closes, and the tab stays.
+cra://debug?key=w,13,1048576&target=popup
+wait 1
+cra://debug?extensionPopup=after
+expect-log extension popup after: closed
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'tab '+location.search","returnByValue":true}
+expect-log "value":"tab \?n=site"
+# ⌘W with no popup, typed in the page (which has the keyboard since the popup ran on it): the tab closes.
+cra://debug?key=w,13,1048576&page=1
+expect-log close tab: 
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'then '+location.search","returnByValue":true}
+expect-log "value":"then \?n=first"

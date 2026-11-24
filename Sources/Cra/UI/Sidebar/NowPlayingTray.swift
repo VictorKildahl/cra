@@ -48,9 +48,11 @@ enum NowPlayingMetrics {
 /// The card's colours for a theme colour and scheme. Arc derives them from the window palette
 /// (`backgroundExtra`, `PlaybackControlForeground`, `tintedLight`, `shadedDark`); Cra has no Arc
 /// palette, so its shades are rebuilt from the theme colour (SpaceTheme.shadedDark).
+/// Settings ▸ Tabs ▸ "Player in the space's colour" (`tint` .theme, Ideas #366, not in Arc): the fill
+/// is the sidebar's own colour under a selected tab's white (NowPlayingTint.themeFill); the rest stays.
 struct NowPlayingColors {
     let isDark: Bool
-    let fill: NSColor
+    private(set) var fill: NSColor
     let foreground: NSColor
     let title: NSColor
     let hover: NSColor
@@ -59,7 +61,7 @@ struct NowPlayingColors {
     let trackEmpty: NSColor
     let knob: NSColor
 
-    init(themeColor hex: String?, dark: Bool) {
+    init(themeColor hex: String?, dark: Bool, tint: NowPlayingTint = .arc, ground: NSColor? = nil) {
         let c = HexColor.components(hex ?? "") ?? (0.5, 0.5, 0.5)
         let (h, s, _) = SpaceTheme.hsb(c.r, c.g, c.b)
         let grey = s < 0.05
@@ -88,6 +90,17 @@ struct NowPlayingColors {
             trackEmpty = NSColor.black.withAlphaComponent(0.18)
             knob = .white
         }
+        if tint == .theme, let g = ground?.usingColorSpace(.sRGB) {
+            let f = NowPlayingTint.themeFill(ground: (Double(g.redComponent), Double(g.greenComponent), Double(g.blueComponent)), dark: dark)
+            fill = NSColor(srgbRed: f.r, green: f.g, blue: f.b, alpha: 1)
+        }
+    }
+
+    /// The fill as "#RRGGBB", for cra://debug's player readout.
+    var fillHex: String {
+        let c = fill.usingColorSpace(.sRGB) ?? fill
+        return String(format: "#%02X%02X%02X", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
+                      Int((c.blueComponent * 255).rounded()))
     }
 
     var disabled: NSColor { foreground.withAlphaComponent(foreground.alphaComponent / 3) }
@@ -137,11 +150,15 @@ final class NowPlayingTrayView: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// The space's theme colour and scheme, for the cards' palette.
-    func setTheme(_ hex: String?, dark: Bool) {
-        colors = NowPlayingColors(themeColor: hex, dark: dark)
+    /// The space's theme colour and scheme, for the cards' palette; `tint` and `ground` (the sidebar's
+    /// colour where the cards sit) for the theme-coloured cards (Ideas #366).
+    func setTheme(_ hex: String?, dark: Bool, tint: NowPlayingTint = .arc, ground: NSColor? = nil) {
+        colors = NowPlayingColors(themeColor: hex, dark: dark, tint: tint, ground: ground)
         for c in cards.values { c.colors = colors }
     }
+
+    /// cra://debug's readout: the cards' fill now ("#RRGGBB").
+    var debugFillHex: String { colors.fillHex }
 
     private func observe() {
         let shown = withObservationTracking { () -> [(NowPlaying.Entry, NowPlayingCardModel)] in

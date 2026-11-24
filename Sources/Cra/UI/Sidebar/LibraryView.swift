@@ -109,6 +109,9 @@ final class LibraryView: NSView {
         rail.debug(page: page, hover: hover, press: press, done: done)
     }
 
+    /// Scenarios (#726): the rail's back arrow, as its click sends it.
+    func debugBack() { rail.onBack() }
+
     /// Scenarios (#649): see LibraryListView.debugDownloadMore.
     func debugDownloadMore() -> String { list.debugDownloadMore() }
 

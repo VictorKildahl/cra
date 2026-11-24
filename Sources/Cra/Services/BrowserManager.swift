@@ -1738,7 +1738,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         guard let rt = runtimes[id], rt.toolbarSamplePending, !rt.discarded, visibleTabIDs.contains(id) else { return }
         rt.toolbarSamplePending = false
         let revision = rt.navigationRevision
-        ToolbarSampler.sample(rt.browser) { [weak self, weak rt] hex in
+        ToolbarSampler.sample(rt.browser, background: { [weak rt] in rt?.backgroundColor }) { [weak self, weak rt] hex in
             // A reading that lands after the page moved on isn't the new page's colour.
             guard let self, let rt, self.runtimes[id] === rt, rt.navigationRevision == revision, !rt.browser.isLoading else { return }
             self.browser(rt.browser, didReportThemeColor: hex)

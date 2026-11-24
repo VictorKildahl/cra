@@ -62,6 +62,9 @@
 #                               (requires screen), as Cra comes forward for it as for a mouse (#659)
 #   click toolbar-empty double  a real double click the same way on the focused page's toolbar where no button is (#685)
 #   click page-top double       the same 5 pt into the focused page's top (#685)
+#   click sidebar-empty         a real click the same way on the docked sidebar's empty space, under its rows (#722)
+#   click row <id> [move]       a real click the same way on the middle of the sidebar row for that item; with `move`
+#                               the pointer only moves there, as a hand rests it on the row (#743)
 #   bare-helper <suffix>        runs the engine's "Cra Helper (<suffix>)" with no arguments, as macOS launches the
 #                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   replace-app [chrome]        Cra.app replaced while Cra runs, as `brew upgrade --greedy` does: a scenario with this
@@ -575,9 +578,12 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         little-close) ask="littleClose=point"; mark="little close point:" ;;
         toolbar-empty) ask="toolbarDoubleClick=point"; mark="toolbar empty point:" ;;
         page-top) ask="pageTop=point"; mark="page top point:" ;;
+        sidebar-empty) ask="sidebarEmpty=point"; mark="sidebar empty point:" ;;
+        row) ask="rowPoint=${3:-}"; mark="row point:" ;;
         *) problem "click: unknown target ${2:-}"; continue ;;
       esac
       count=1; [ "${3:-}" = "double" ] && count=2
+      [ "${2:-}" = row ] && [ "${4:-}" = "move" ] && count=0
       [ -x "$OUT/click" ] || clang -fobjc-arc -framework AppKit "$ROOT/scripts/hid-click/click.m" -o "$OUT/click" 2>"$OUT/click-build.log"
       [ -x "$OUT/click" ] || { problem "the click helper did not build (click-build.log)"; continue; }
       seen=$(cat "$DATA"/cra*.log 2>/dev/null | grep -c "$mark")

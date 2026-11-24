@@ -18,6 +18,7 @@ suite "CraCore" swift test --package-path Packages/CraCore
 suite "Shipped-issue tests" scripts/promises.py
 suite "Shipped-issue lock" python3 Tests/test_promises.py
 suite "Engine element checks" python3 Tests/test_element_checks.py
+suite "Engine security check" python3 Tests/test_engine_security.py
 suite "Web features map" python3 -I scripts/web-features.py
 suite "Web features check" python3 Tests/test_web_features.py
 suite "Notarize dist (#720)" scripts/test-notarize-dist.sh

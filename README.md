@@ -138,8 +138,8 @@ anonymous daily usage stats and crash reports, never the sites you visit
 requests to more than 22,000 ad and tracker domains.
 
 Pages run in Chromium's sandbox with site isolation, passwords and cookies are encrypted
-with a key in your Keychain, and new Chromium releases are checked daily and shipped as
-signed updates. [crabrowser.app/security](https://crabrowser.app/security) says what is
+with a key in your Keychain, and Chrome's security fixes are checked hourly and shipped
+as signed updates. [crabrowser.app/security](https://crabrowser.app/security) says what is
 and isn't covered. To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Support Cra

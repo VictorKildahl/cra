@@ -2,25 +2,25 @@ import CraCore
 import Testing
 
 struct AppIconBundleTests {
-    /// X, 20 Nov 2026: a picked icon (an .icns of the user's own) changed the Dock but not Finder or
-    /// /Applications. Arc puts the picked icon on its app too, and again at every launch, since an update
-    /// replaces the bundle; picking Arc's own icon takes it off.
-    @Test func aPickedIconGoesOnTheAppAndTheDefaultComesOff() {
-        #expect(AppIconBundle.change(picked: "midnight", defaultID: "segments", bundleHasCustomIcon: false) == .put)
-        // Already on it, perhaps another icon picked before: put it again (Arc's applier does the same).
-        #expect(AppIconBundle.change(picked: "custom", defaultID: "segments", bundleHasCustomIcon: true) == .put)
-        #expect(AppIconBundle.change(picked: "segments", defaultID: "segments", bundleHasCustomIcon: true) == .takeOff)
-        // The bundle's own icon and nothing on it: the app never writes to its bundle.
-        #expect(AppIconBundle.change(picked: "segments", defaultID: "segments", bundleHasCustomIcon: false) == .none)
+    /// GitHub #724: a picked icon on Cra.app (Finder's `Icon\r` file and its com.apple.FinderInfo flag) breaks the
+    /// app's signature: `codesign --strict` refuses the attribute, and lsd kept registering the app launch-disabled
+    /// with trustd busy. The app never puts an icon on itself, whatever is picked; the Dock tile (applicationIconImage
+    /// and the CraDockTile plug-in) shows the pick.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/724")) func theAppNeverPutsAnIconOnItself() {
+        #expect(AppIconBundle.change(bundleHasFinderIcon: false) == .none)
     }
 
-    /// At launch the picked icon goes back on only when an update brought a bundle without it, so a launch
-    /// doesn't rewrite the app each time; Segments still takes a leftover one off.
-    @Test func atLaunchOnlyWhatIsMissing() {
-        #expect(AppIconBundle.change(picked: "midnight", defaultID: "segments", bundleHasCustomIcon: false, atLaunch: true) == .put)
-        #expect(AppIconBundle.change(picked: "midnight", defaultID: "segments", bundleHasCustomIcon: true, atLaunch: true) == .none)
-        #expect(AppIconBundle.change(picked: "segments", defaultID: "segments", bundleHasCustomIcon: true, atLaunch: true) == .takeOff)
-        #expect(AppIconBundle.change(picked: "segments", defaultID: "segments", bundleHasCustomIcon: false, atLaunch: true) == .none)
+    /// One that 0.1.54 or 0.1.55 put there comes off at the next launch or pick, so the signature holds again.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/724")) func anIconAnEarlierCraPutOnTheAppComesOff() {
+        #expect(AppIconBundle.change(bundleHasFinderIcon: true) == .takeOff)
+    }
+
+    /// `codesign --strict` refuses a com.apple.FinderInfo attribute on the bundle whatever it holds, and the
+    /// `Icon\r` file is outside the sealed Contents: either counts as an icon on the app.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/724")) func anythingOfAFinderIconCounts() {
+        #expect(!AppIconBundle.hasFinderIcon(finderInfo: nil, iconFile: false))
+        #expect(AppIconBundle.hasFinderIcon(finderInfo: [UInt8](repeating: 0, count: 32), iconFile: false))
+        #expect(AppIconBundle.hasFinderIcon(finderInfo: nil, iconFile: true))
     }
 
     /// Finder's custom icon flag (kHasCustomIcon, 0x0400) is in the finder flags, bytes 8-9 of the
@@ -38,12 +38,11 @@ struct AppIconBundleTests {
     }
 
     /// Segments, the bundle's own, is given to the Dock like any other pick. Left to the Dock, the bundle's icon came
-    /// from its cache: since a pick goes on Cra.app (056ae73b) that was the icon picked before, so picking Segments
-    /// after Original kept Original in the Dock (Victor, 23 Nov 2026).
+    /// from its cache: after 0.1.54 put a pick on Cra.app (056ae73b) that was the icon picked before, so picking
+    /// Segments after Original kept Original in the Dock (Victor, 23 Nov 2026).
     @Test func theDockIsGivenSegmentsToo() {
         #expect(AppIconBundle.dockImage(picked: "segments", defaultID: "segments") == "segments")
         #expect(AppIconBundle.dockImage(picked: "original", defaultID: "segments") == "original")
         #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments") == "custom")
     }
 }
-

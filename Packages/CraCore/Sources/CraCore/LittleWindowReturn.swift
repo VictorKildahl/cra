@@ -79,6 +79,15 @@ public struct LittleWindowReturn: Equatable {
         return app
     }
 
+    /// Whether another open Little Window can take the keyboard as one closes (#646): not a Peek, shown, not
+    /// minimized, and on a Space in front (`onActiveSpace`, NSWindow.isOnActiveSpace: this desktop, or the one
+    /// showing on another display). One on another desktop doesn't count: making it key switched macOS to that
+    /// desktop, away from the app in use on this one (#738). With none left here, the closing window goes back to
+    /// the app it was opened over, as the last one does.
+    public static func canTakeKeyboard(isPeek: Bool, visible: Bool, miniaturized: Bool, onActiveSpace: Bool) -> Bool {
+        !isPeek && visible && !miniaturized && onActiveSpace
+    }
+
     /// Whether the Little Window in front takes the keyboard as `closing` goes (#646): it had the
     /// keyboard while Cra was in front, and its page didn't move into a tab (the browser window has it then).
     public static func nextTakesKeyboard(closingKeyWindow: Bool, craActive: Bool, movedToTab: Bool, littleWindowsLeft: Bool) -> Bool {

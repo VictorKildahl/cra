@@ -8,7 +8,7 @@ class BrowserTestCase: XCTestCase {
 
     override func setUp() {
         continueAfterFailure = false
-        app = XCUIApplication()
+        app = WindowApplication()
     }
 
     /// Launches on an empty data folder.
@@ -24,8 +24,38 @@ class BrowserTestCase: XCTestCase {
             + "<body/bgcolor=\(color)><h1/style=font-family:-apple-system;padding:24px>\(title)</h1>"
     }
 
+    func capture() -> XCUIScreenshot? {
+        let captures: [(String, () -> XCUIScreenshot)] = [
+            ("XCUIScreen.main", { XCUIScreen.main.screenshot() }),
+            ("app.windows.firstMatch.screenshot()", { self.app.windows.firstMatch.screenshot() }),
+            ("app.screenshot()", { self.app.screenshot() })
+        ]
+        for (name, take) in captures {
+            let shot = take()
+            guard let image = shot.image.cgImage, let data = image.dataProvider?.data,
+                  let bytes = CFDataGetBytePtr(data) else { continue }
+            let stride = image.bitsPerPixel / 8
+            guard stride >= 3 else { continue }
+            let blank = (0..<10).allSatisfy { row in
+                (0..<10).allSatisfy { column in
+                    let x = (image.width - 1) * column / 9
+                    let y = (image.height - 1) * row / 9
+                    let i = y * image.bytesPerRow + x * stride
+                    return bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 0
+                }
+            }
+            if !blank {
+                print("XCTest capture: \(name)")
+                return shot
+            }
+        }
+        print("XCTest capture: all capture paths are blank")
+        return nil
+    }
+
     func keep(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        guard let shot = capture() else { return }
+        let attachment = XCTAttachment(screenshot: shot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -40,19 +70,52 @@ class BrowserTestCase: XCTestCase {
         let navigation = app.navigationBars["UIActivityContentView"]
         XCTAssertTrue(activity.waitForExistence(timeout: 5) || navigation.waitForExistence(timeout: 2),
                       "the share sheet opens")
+        let sheet = activity.exists && !activity.frame.isEmpty ? activity : navigation
+        let window = app.windows.firstMatch
         if UIDevice.current.userInterfaceIdiom == .pad {
-            let popover = activity.exists ? activity : navigation
-            XCTAssertTrue(popover.frame.insetBy(dx: -40, dy: -40).intersects(button.frame),
+            XCTAssertTrue(sheet.frame.insetBy(dx: -40, dy: -40).intersects(button.frame),
                           "the share popover is attached to its source button")
-            let outside = app.coordinate(withNormalizedOffset: .zero).withOffset(
-                CGVector(dx: app.frame.midX, dy: app.frame.maxY - 20))
-            XCTAssertFalse(popover.frame.contains(CGPoint(x: app.frame.midX, y: app.frame.maxY - 20)))
-            outside.tap()
+        }
+        // Phone sheets also expose a dismiss region; only a Popover owns an outside tap.
+        let popover = app.popovers.containing(.other, identifier: "ActivityListView").firstMatch
+        if popover.exists && !sheet.frame.isEmpty {
+            let bounds = window.frame.insetBy(dx: 20, dy: 40)
+            let points = [CGPoint(x: bounds.midX, y: bounds.minY), CGPoint(x: bounds.midX, y: bounds.maxY),
+                          CGPoint(x: bounds.minX, y: bounds.midY), CGPoint(x: bounds.maxX, y: bounds.midY)]
+            guard let outside = points.first(where: { !sheet.frame.contains($0) }) else {
+                return XCTFail("no point inside the window and outside the share popover")
+            }
+            window.coordinate(withNormalizedOffset: .zero).withOffset(
+                CGVector(dx: outside.x - window.frame.minX, dy: outside.y - window.frame.minY)).tap()
         } else {
-            app.swipeDown(velocity: .fast)
+            let close = app.buttons["header.closeButton"]
+            if close.exists && close.isHittable {
+                close.tap()
+            } else {
+                let visible = [activity, navigation].filter { $0.exists }.map { $0.frame.intersection(window.frame) }
+                    .first { !$0.isEmpty && !$0.isNull }
+                guard let visible else { return XCTFail("the share sheet has no visible drag area") }
+                let origin = window.coordinate(withNormalizedOffset: .zero)
+                let start = origin.withOffset(CGVector(dx: visible.midX - window.frame.minX,
+                                                       dy: visible.minY + min(30, visible.height / 2) - window.frame.minY))
+                let end = origin.withOffset(CGVector(dx: visible.midX - window.frame.minX,
+                                                     dy: window.frame.height - 20))
+                start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+            }
         }
         XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
         XCTAssertTrue(navigation.waitForNonExistence(timeout: 5))
+    }
+
+    func scrollUntilHittable(_ element: XCUIElement, scrollingDown: Bool = false, file: StaticString = #filePath, line: UInt = #line) {
+        // SwiftUI List exposes its sheet scroll view as a collection view.
+        let scroll = app.collectionViews.firstMatch
+        for _ in 0..<10 {
+            if element.isHittable { return }
+            XCTAssertTrue(scroll.waitForExistence(timeout: 5), "the sheet has a scroll view", file: file, line: line)
+            if scrollingDown { scroll.swipeDown() } else { scroll.swipeUp() }
+        }
+        XCTAssertTrue(element.isHittable, "sheet row \(element.identifier) stayed out of reach", file: file, line: line)
     }
 
     /// The bottom bar is back on screen once the keyboard is gone (GitHub #505: a keyboard that
@@ -120,7 +183,8 @@ final class TabSwitcherTests: BrowserTestCase {
         waitForPage("Second")
     }
 
-    /// The tab stack opens the row of cards, newest in focus; a tap on the older card opens it.
+    /// The tab stack opens the row of cards focused on the older card to the page's left; a tap
+    /// on either card opens it.
     func testTheRowShowsEveryTabAndATapOpensOne() {
         openTwoTabs()
         app.buttons["bar-tabs"].tap()
@@ -152,27 +216,28 @@ final class TabSwitcherTests: BrowserTestCase {
     }
 }
 
-/// The bottom bar's buttons tick under the finger as Arc Search's do (#675). The simulator plays no haptics, so with
-/// `-CraCountHaptics YES` each button counts the ticks it played.
+/// The bottom bar's buttons tick once under the finger and nothing as it lets go (#675,
+/// Victor's call). The simulator plays no haptics, so with `-CraCountHaptics YES` each button
+/// counts the ticks it played.
 final class BarHapticsTests: BrowserTestCase {
     // promise: #675
-    func testBarButtonsTickOnPressAndOnRelease() {
+    func testBarButtonsTickOnceOnPress() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraCountHaptics", "YES"])
         waitForPage("First")
-        // The New Tab pill, which gave nothing before: one tick down, one up (read once the sheet has gone and
-        // the pill is back on screen).
+        // The New Tab pill: one tick down, none up (read once the sheet has gone and the pill
+        // is back on screen).
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
         XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 5))
         waitForBarOnScreen()
-        XCTAssertEqual(app.buttons["bar-search"].value as? String, "ticks 2")
+        XCTAssertEqual(app.buttons["bar-search"].value as? String, "ticks 1")
         // The menu button.
         app.buttons["bar-menu"].tap()
         XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["bar-menu"].value as? String, "ticks 2")
+        XCTAssertEqual(app.buttons["bar-menu"].value as? String, "ticks 1")
         // The tab stack, then Settings in the tab switcher.
         app.buttons["bar-tabs"].tap()
         let settings = app.buttons["bar-settings"]
@@ -181,11 +246,95 @@ final class BarHapticsTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
-        XCTAssertEqual(settings.value as? String, "ticks 2")
+        XCTAssertEqual(settings.value as? String, "ticks 1")
         // Back on the page by its card, where the tab stack shows again.
         app.buttons["tab-card-0"].tap()
         XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["bar-tabs"].value as? String, "ticks 2")
+        XCTAssertEqual(app.buttons["bar-tabs"].value as? String, "ticks 1")
+    }
+}
+
+/// The page menu's controls tick as the drawer's design says: its tiles and rows as the finger
+/// comes down, Pin and Summarize again as it lets go, and the capsule's Back, Forward, Reload
+/// and Copy Link only as it lets go. `-CraCountHaptics YES` keeps a running total in the hidden
+/// `haptic-count` element, which outlives a tap that puts the menu away.
+final class MenuHapticsTests: BrowserTestCase {
+    // promise: #675
+    func testTheMenusControlsTickOnPressAndRelease() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO",
+                "-CraCountHaptics", "YES", "-CraFakeModel", "YES"])
+        waitForPage("First")
+        let counter = app.descendants(matching: .any)["haptic-count"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 5))
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-pin"].waitForExistence(timeout: 5))
+
+        // Pin ticks down and up.
+        assertTicks(2, counter) { app.buttons["menu-tile-pin"].tap() }
+        XCTAssertEqual(app.buttons["menu-tile-pin"].label, "Pinned")
+
+        // Display Options and the zoom stepper tick on press only.
+        assertTicks(1, counter) { app.buttons["menu-row-displayOptions"].tap() }
+        XCTAssertTrue(app.buttons["menu-zoom-in"].waitForExistence(timeout: 3))
+        assertTicks(1, counter) { app.buttons["menu-zoom-in"].tap() }
+        XCTAssertEqual(app.buttons["menu-zoom-value"].label, "110%")
+        assertTicks(1, counter) { app.buttons["menu-zoom-value"].tap() }
+
+        // The address ticks on press and opens the sheet to edit it; a second page gives Back
+        // and Forward their release-only ticks without putting the menu away.
+        assertTicks(1, counter) { app.staticTexts["menu-host"].tap() }
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(Self.page("Second") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-back"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-back"].tap() }
+        assertTicks(1, counter) { app.buttons["menu-forward"].tap() }
+
+        // Reload and Copy Link tick as the finger lets go, and put the menu away.
+        assertTicks(1, counter) { app.buttons["menu-reload"].tap() }
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-copy-link"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-copy-link"].tap() }
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+
+        // Share ticks on press only.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-share"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-tile-share"].tap() }
+        closeShareSheet(openedFrom: app.buttons["bar-menu"])
+
+        // Summarize ticks down and up.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-summarize"].waitForExistence(timeout: 5))
+        assertTicks(2, counter) { app.buttons["menu-tile-summarize"].tap() }
+        // The summary sheet, in whatever state: this one-heading page never gets an overview
+        // here (ReadingTests checks the summary itself, on an article).
+        XCTAssertTrue(app.buttons["summary-close"].waitForExistence(timeout: 10))
+        app.buttons["summary-close"].tap()
+        XCTAssertTrue(app.buttons["bar-menu"].waitForExistence(timeout: 5))
+
+        // The footer ticks on press only and puts the menu away.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-reload-without-blockers"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-reload-without-blockers"].tap() }
+        XCTAssertFalse(app.staticTexts["menu-host"].waitForExistence(timeout: 2))
+
+        // Find on Page ticks on press only.
+        app.buttons["bar-menu"].tap()
+        XCTAssertTrue(app.buttons["menu-tile-findOnPage"].waitForExistence(timeout: 5))
+        assertTicks(1, counter) { app.buttons["menu-tile-findOnPage"].tap() }
+    }
+
+    private func assertTicks(_ expected: Int, _ counter: XCUIElement,
+                             file: StaticString = #filePath, line: UInt = #line,
+                             _ action: () -> Void) {
+        let before = Int(counter.value as? String ?? "") ?? -1
+        action()
+        let after = Int(counter.value as? String ?? "") ?? -1
+        XCTAssertEqual(after - before, expected, "ticks on one press", file: file, line: line)
     }
 }
 
@@ -273,14 +422,12 @@ final class SettingsTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         app.buttons["bar-settings"].tap()
         let button = app.buttons[identifier]
-        for _ in 0..<8 {
-            if button.isHittable { break }
-            app.swipeUp()
-        }
-        XCTAssertTrue(button.isHittable)
+        scrollUntilHittable(button)
         button.tap()
         closeShareSheet(openedFrom: button)
-        app.buttons["Done"].tap()
+        let done = app.buttons["Done"]
+        scrollUntilHittable(done, scrollingDown: true)
+        done.tap()
         XCTAssertTrue(app.buttons["bar-settings"].waitForExistence(timeout: 5))
     }
 
@@ -303,6 +450,7 @@ final class SettingsTests: BrowserTestCase {
         XCTAssertTrue(app.switches["setting-block-ads"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.switches["setting-block-ads"].value as? String, "0")
         // App Settings is one step further, with the global options behind their own row.
+        scrollUntilHittable(app.buttons["setting-app-settings"])
         XCTAssertTrue(app.buttons["setting-app-settings"].waitForExistence(timeout: 5))
         app.buttons["setting-app-settings"].tap()
         XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
@@ -345,7 +493,7 @@ final class SettingsTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let licenses = app.buttons["setting-licenses"]
         XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
-        for _ in 0..<4 where !licenses.isHittable { app.swipeUp() }
+        scrollUntilHittable(licenses)
         XCTAssertTrue(app.buttons["setting-sync"].exists)
         XCTAssertTrue(app.buttons["setting-share-cra"].exists)
         XCTAssertTrue(app.buttons["setting-contact"].exists)
@@ -644,22 +792,6 @@ final class GestureTests: BrowserTestCase {
         sleep(1)
     }
 
-    /// The title of the tab on screen: opens the tab row, reads the focused card (the selected
-    /// tab) and goes back into it.
-    private func shownTabTitle() -> String {
-        app.buttons["bar-tabs"].tap()
-        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
-        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
-        sleep(1)
-        // The focused card is the one whose left edge is 83 pt in.
-        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
-        let title = focused?.label ?? ""
-        focused?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
-        sleep(1)
-        return title
-    }
-
     /// A swipe along the bottom bar goes to the neighbouring tab: right for the older one, left
     /// for the newer.
     func testSwipingTheBarMovesBetweenTabs() {
@@ -692,7 +824,7 @@ final class GestureTests: BrowserTestCase {
         sleep(1)
         drag(fromX: 0.8, toX: 0.1, y: 0.5)
         sleep(1)
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
     }
 
     /// A drag up from the bottom bar opens the tab row, as the tab stack button does.
@@ -703,6 +835,25 @@ final class GestureTests: BrowserTestCase {
         start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.55)), withVelocity: .default, thenHoldForDuration: 0)
         XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["bar-spaces"].exists)
+    }
+
+    /// The tabs button opens on the card behind the page, the one to its left, and a tap on the
+    /// row's background goes back to the page that was on screen rather than that card.
+    func testTheTabRowOpensOnTheLeftCardAndOutsideGoesBackToThePage() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        app.buttons["bar-tabs"].tap()
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
+        sleep(1)
+        // The focused card is the one whose left edge is 83 pt in: First, the tab to the left.
+        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
+        XCTAssertEqual(focused?.label, "First")
+        // The empty background returns to Second, the page that was open.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        waitForPage("Second")
+        XCTAssertFalse(app.buttons["tab-card-0"].exists)
     }
 
     // promise: #537
@@ -717,12 +868,12 @@ final class GestureTests: BrowserTestCase {
         // was on screen last.
         drag(fromX: 0.3, toX: 0.9, y: 0.95)
         sleep(1)
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
         flickUpFromTheTabButton()
         XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
-        XCTAssertEqual(shownTabTitle(), "Third")
+        waitForPage("Third")
         flickUpFromTheTabButton()
-        XCTAssertEqual(shownTabTitle(), "Second")
+        waitForPage("Second")
         keep("flicked back")
     }
 
@@ -740,8 +891,29 @@ final class GestureTests: BrowserTestCase {
                     withVelocity: .fast, thenHoldForDuration: 0)
         sleep(1)
         XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
-        XCTAssertEqual(shownTabTitle(), "First")
+        waitForPage("First")
         keep("flicked from beside the button")
+    }
+
+    // promise: #537
+    /// The flick works from the bar's top edge too, above the button's own height: the pan
+    /// begins a few points up the way, and that used to be read as a start above the bar, so
+    /// the row opened instead.
+    func testFlickingUpFromTheBarsTopEdgeStillSwitches() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        let button = app.buttons["bar-tabs"]
+        // Just inside the bar's top edge: the button's expanded 47 pt frame starts 6 pt above
+        // the visual circle, and the bar's own top is 8 pt above that.
+        let start = button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: -(button.frame.height / 2 + 4)))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)),
+                    withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+        XCTAssertFalse(app.buttons["tab-card-0"].exists, "the flick switches tabs; it does not open the row")
+        waitForPage("First")
+        keep("flicked from the bar's top edge")
     }
 
     // promise: #509
@@ -1320,13 +1492,16 @@ final class PageBasicsTests: BrowserTestCase {
     /// In dark mode a page that sets no colours of its own is white with black text, as in Safari
     /// and Arc Search. The web view used to be see-through over the black app background, which
     /// left such a page's black text on black.
-    func testAPageWithoutColoursStaysWhiteInDarkMode() {
+    func testAPageWithoutColoursStaysWhiteInDarkMode() throws {
         launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Plain</title><h1>Plain</h1>",
                 "-CraSearch", "NO", "-CraAppearance", "dark"])
         waitForPage("Plain")
         sleep(1)
         keep("plain-page-dark")
-        let shot = XCUIScreen.main.screenshot().image
+        guard let capture = capture() else {
+            throw XCTSkip("XCTest screen capture is blank on this display (iPhone Duo inner screen); the pixel check cannot judge Cra here")
+        }
+        let shot = capture.image
         guard let image = shot.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else {
             return XCTFail("no screenshot")
         }
@@ -1419,12 +1594,13 @@ final class EmptyHomeTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         app.buttons["bar-settings"].tap()
         let toggle = app.switches["setting-home-dots"]
-        for _ in 0..<6 where !toggle.isHittable { app.swipeUp() }
-        XCTAssertTrue(toggle.isHittable)
+        scrollUntilHittable(toggle)
         XCTAssertEqual(toggle.value as? String, "0", "off by default")
         toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
         XCTAssertEqual(toggle.value as? String, "1")
-        app.buttons["Done"].tap()
+        let done = app.buttons["Done"]
+        scrollUntilHittable(done, scrollingDown: true)
+        done.tap()
         let card = app.buttons["tab-card-0"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         sleep(1)
@@ -1560,6 +1736,7 @@ final class BrowseToggleTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         // The row's identifier lands on its menu's button (and its label and icon).
         let menu = app.buttons["setting-search-engine"]
+        scrollUntilHittable(menu)
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
         XCTAssertEqual(menu.label, "Google")
         menu.tap()
@@ -1718,7 +1895,7 @@ final class WidgetGuideTests: BrowserTestCase {
         let row = app.buttons["setting-add-widget"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
         // Further down the list.
-        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        scrollUntilHittable(row)
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
         let title = app.staticTexts["widget-guide-title"]
@@ -1759,8 +1936,9 @@ final class AppIconDockTests: BrowserTestCase {
         }
     }
 
-    /// On iPad the Change App Icon picker shows all four icons whole, at an iPhone's size: its grid
-    /// once stretched to the wide sheet, so the icons grew past 250 pt and the second row was cut off.
+    /// On iPad the Change App Icon picker shows its icons at an iPhone's size, two to a row: its grid once
+    /// stretched to the wide sheet, so the icons grew past 250 pt and the second row was cut off. The first rows
+    /// show whole, and the last icon scrolls into view.
     func testIconPickerFitsEveryIconOnIPad() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the iPhone opens the picker as a half sheet")
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
@@ -1773,6 +1951,64 @@ final class AppIconDockTests: BrowserTestCase {
             XCTAssertLessThanOrEqual(frame.width, 200, "\(icon) grew to the iPad sheet's width")
         }
         keep("app-icon-picker-ipad")
+        let last = app.buttons["icon-early-birds"]
+        for _ in 0..<8 where !(last.exists && sheet.contains(last.frame)) { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(last.exists && sheet.contains(last.frame), "the last icon never scrolled into the picker \(sheet)")
+    }
+
+    /// Arc's icon set with Cra's C (Provok's, in the Mac's Settings ▸ Icon since 23 Nov 2026) is on the iPhone too,
+    /// asked for on X by Chanan Krivisky: the App Icon picker shows all of it after Cra's own four, and picking one
+    /// changes the app's icon. The picker marks what iOS reports, so after a relaunch Candy is still the one marked.
+    /// The grid is lazy, so it scrolls to an icon before looking for it.
+    func testArcIconSetChangesTheAppIcon() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+        sleep(1)
+        keep("app-icon-picker-arc-set")
+        for icon in ["original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"] {
+            XCTAssertTrue(reveal(icon, down: true), "\(icon) is in the picker")
+        }
+        keep("app-icon-picker-arc-set-end")
+        XCTAssertTrue(reveal("candy", down: false))
+        app.buttons["icon-candy"].tap()
+        acknowledgeIconChange()
+        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "Candy is marked once picked")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["icon-segments"].isSelected)
+        XCTAssertTrue(reveal("candy", down: true))
+        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "iOS kept Candy as the app's icon")
+        keep("app-icon-picker-candy")
+
+        // Back to the app's own icon, so other tests start from it.
+        XCTAssertTrue(reveal("segments", down: false))
+        app.buttons["icon-segments"].tap()
+        acknowledgeIconChange()
+        XCTAssertTrue(app.buttons["icon-segments"].isSelected)
+    }
+
+    /// Scrolls the App Icon picker down (or back up) until the icon is on screen to tap.
+    private func reveal(_ icon: String, down: Bool) -> Bool {
+        let button = app.buttons["icon-\(icon)"]
+        let grid = app.scrollViews.firstMatch
+        for _ in 0..<8 where !(button.exists && button.isHittable) {
+            if down { grid.swipeUp(velocity: .slow) } else { grid.swipeDown(velocity: .slow) }
+        }
+        return button.exists && button.isHittable
+    }
+
+    /// iOS says "You have changed the icon for “Cra”" after a change; it shows in the app or in SpringBoard.
+    private func acknowledgeIconChange() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for host in [app!, springboard] {
+            let alert = host.alerts.firstMatch
+            if alert.waitForExistence(timeout: 3) {
+                alert.buttons.firstMatch.tap()
+                return
+            }
+        }
     }
 
     /// App Settings ▸ Change App Icon opens Arc Search's dock sheet with every icon on its shelf,
@@ -1785,7 +2021,7 @@ final class AppIconDockTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let row = app.buttons["setting-app-icon"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+        scrollUntilHittable(row)
         row.tap()
         XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
         for icon in ["segments", "midnight", "mono", "violet"] {
@@ -1796,10 +2032,11 @@ final class AppIconDockTests: BrowserTestCase {
         keep("icon-dock")
     }
 
-    /// On iPad the dock's row of icons sits in the middle of the sheet, under its title, instead
-    /// of against the left edge with empty shelf to the right.
-    func testIconDockCentresItsRowOnIPad() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "on iPhone the row is wider than the sheet and scrolls")
+    /// On iPad the dock's row of icons runs from the sheet's left margin and scrolls to its last icon, with no
+    /// empty shelf either side. With Cra's four it sat in the middle under the title; Arc's set (24 Nov 2026)
+    /// made the row wider than any iPad's sheet, so it scrolls as on the iPhone.
+    func testIconDockRowFillsTheSheetOnIPad() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the iPhone's row is covered by testChangeAppIconShowsTheDock")
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
@@ -1809,13 +2046,19 @@ final class AppIconDockTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
         for _ in 0..<3 where !row.isHittable { app.swipeUp() }
         row.tap()
-        let title = app.staticTexts["App Icon"]
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
         sleep(1)
-        let first = app.buttons["icon-segments"].frame, last = app.buttons["icon-violet"].frame
-        XCTAssertEqual((first.minX + last.maxX) / 2, title.frame.midX, accuracy: 6,
-                       "the icons run from \(first.minX) to \(last.maxX), not centred under the title at \(title.frame.midX)")
+        let shelf = app.scrollViews.containing(.button, identifier: "icon-segments").firstMatch
+        let first = app.buttons["icon-segments"].frame
+        XCTAssertEqual(first.minX, shelf.frame.minX + 24, accuracy: 6, "the row starts at \(first.minX), not the sheet's left margin \(shelf.frame.minX + 24)")
         keep("icon-dock-ipad")
+        let last = app.buttons["icon-early-birds"]
+        for _ in 0..<6 where !(last.exists && last.isHittable) { shelf.swipeLeft() }
+        sleep(1)
+        XCTAssertTrue(last.exists && last.isHittable, "the row never scrolled to Early Birds")
+        XCTAssertEqual(last.frame.maxX, shelf.frame.maxX - 24, accuracy: 6,
+                       "the row ends at \(last.frame.maxX), not the sheet's right margin \(shelf.frame.maxX - 24)")
+        keep("icon-dock-ipad-end")
     }
 }
 
@@ -1829,7 +2072,7 @@ final class LanguagesTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let menu = app.buttons["setting-languages"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !menu.isHittable { app.swipeUp() }
+        scrollUntilHittable(menu)
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
         XCTAssertEqual(menu.label, "Same as iPhone")
         menu.tap()
@@ -1843,7 +2086,7 @@ final class LanguagesTests: BrowserTestCase {
         sleep(1)
         app.buttons["bar-settings"].tap()
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !app.buttons["setting-languages"].isHittable { app.swipeUp() }
+        scrollUntilHittable(app.buttons["setting-languages"])
         XCTAssertEqual(app.buttons["setting-languages"].label, "French")
     }
 }
@@ -1858,7 +2101,7 @@ final class CustomSearchEngineTests: BrowserTestCase {
         app.buttons["bar-settings"].tap()
         let menu = app.buttons["setting-search-engine"]
         XCTAssertTrue(app.buttons["setting-default-browser"].waitForExistence(timeout: 5))
-        for _ in 0..<3 where !menu.isHittable { app.swipeUp() }
+        scrollUntilHittable(menu)
         menu.tap()
         app.buttons["Custom"].firstMatch.tap()
         let field = app.alerts.textFields.firstMatch

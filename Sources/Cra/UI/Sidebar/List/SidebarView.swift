@@ -62,6 +62,12 @@ final class SidebarView: NSView {
         guard let libraryHost else { return done("no library") }
         libraryHost.debugRail(page: page, hover: hover, press: press, done: done)
     }
+    /// The Library rail's back arrow (#726); false with no Library up.
+    func debugLibraryBack() -> Bool {
+        guard let libraryHost else { return false }
+        libraryHost.debugBack()
+        return true
+    }
     /// Arc's Create a Space page, over the space's column while one is being made.
     private var creationHost: SpaceCreationView?
     var debugSpaceCreation: String { creationHost?.debugLine ?? "none" }
@@ -79,6 +85,8 @@ final class SidebarView: NSView {
     private(set) var palette: SpacePalette
     private var lastSpaceID: UUID?
     private var shownTheme: SpaceTheme?
+    /// The player's colour setting and the glass it was drawn for (Ideas #366), to recolour it on a change.
+    private var shownPlayerLook: (tint: NowPlayingTint, glass: Bool)?
     private var shownLibrary: LibraryPage?
 
     init(store: SidebarStore, ui: SidebarUIState, actions: SidebarActions, favicons: FaviconCache) {
@@ -165,6 +173,9 @@ final class SidebarView: NSView {
         v.tailX = bin.midX - 8
     }
 
+    /// cra://debug's readout of the now-playing cards' fill (Ideas #366).
+    var debugPlayerFill: String { player.debugFillHex }
+
     required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
@@ -174,13 +185,18 @@ final class SidebarView: NSView {
         let (space, library, trayOpen, recentCount) = withObservationTracking {
             let space = store.focusedSpace(window: ui.windowID)
             _ = SystemAppearance.shared.isDark
+            _ = store.settings.nowPlayingTint
+            _ = SidebarGlassSetting.shared.isOn
             bannerHeight = UpdateBannerView.preferredHeight
             return (space, ui.libraryPage, ui.downloadsListOpen, DownloadHistory.shared.recent.count)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
+        let playerLook = (tint: store.settings.nowPlayingTint, glass: SidebarGlassSetting.shared.isOn)
         let paletteChanged = lastSpaceID == nil || space.theme.shown != shownTheme || space.id != lastSpaceID
+            || shownPlayerLook.map { $0 != playerLook } ?? true
         shownTheme = space.theme.shown
+        shownPlayerLook = playerLook
         if space.id != lastSpaceID {
             // A drag that hovered another space's icon carries the picks there; its end clears them.
             if lastSpaceID != nil, ui.draggingID == nil { ui.clearPicks() }
@@ -193,7 +209,8 @@ final class SidebarView: NSView {
             bannerHost.colors = colors
             let shown = space.theme.shown
             bannerHost.themeColor = shown.accent ?? shown.colors.first
-            player.setTheme(shown.accent ?? shown.colors.first, dark: palette.isDark)
+            player.setTheme(shown.accent ?? shown.colors.first, dark: palette.isDark, tint: playerLook.tint,
+                            ground: NSColor(palette.playerGround))
             libraryHost?.palette = palette
             creationHost?.palette = palette
             newSpacePlus.ink = colors.textPrimary

@@ -1,0 +1,49 @@
+# promise: #721
+# With Settings ▸ Advanced "Only this space’s tabs" on, the ⌘T bar's tab list follows a space change under
+# the open bar, as Arc's does: opened in Home it lists Home's open tab, and after the window goes to Work
+# (here ⌃2, the bar still open) it lists Work's instead (each space's front tab is the current one, which the bar leaves out), without closing and opening the bar again.
+port 47127
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "commandBarCurrentSpaceOnly": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"\ud83c\udfe0","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"\ud83d\udcbc","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://action/space2
+wait 1
+cra://open?url=${PAGE}?n=work-open
+wait 2
+cra://open?url=${PAGE}?n=work-front
+wait 2
+cra://action/space1
+wait 1
+cra://open?url=${PAGE}?n=home-open
+wait 2
+cra://open?url=${PAGE}?n=home-front
+wait 2
+cra://commandbar?query=open
+wait 1
+cra://debug?commandBarRows=in-home
+expect-log Cra command bar rows in-home: open=1.*tab:[^ ]*n=home-open
+reject-log Cra command bar rows in-home:.*tab:[^ ]*n=work-open
+cra://action/space2
+wait 1
+cra://debug?commandBarRows=in-work
+expect-log Cra command bar rows in-work: open=1.*tab:[^ ]*n=work-open
+reject-log Cra command bar rows in-work:.*tab:[^ ]*n=home-open
+cra://action/space1
+wait 1
+cra://debug?commandBarRows=back-home
+expect-log Cra command bar rows back-home: open=1.*tab:[^ ]*n=home-open
+reject-log Cra command bar rows back-home:.*tab:[^ ]*n=work-open
+cra://dismiss
+wait 1
+# The empty bar too (Arc's recent tabs, the reporter's case), opened in Home.
+cra://commandbar
+wait 1
+cra://debug?commandBarRows=empty-home
+expect-log Cra command bar rows empty-home: open=1.*tab:[^ ]*n=home-open
+reject-log Cra command bar rows empty-home:.*tab:[^ ]*n=work-
+cra://action/space2
+wait 1
+cra://debug?commandBarRows=empty-work
+expect-log Cra command bar rows empty-work: open=1.*tab:[^ ]*n=work-open
+reject-log Cra command bar rows empty-work:.*tab:[^ ]*n=home-
+cra://dismiss

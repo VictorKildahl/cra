@@ -1,0 +1,24 @@
+# promise: #740
+# ⌘W on a selected Favorite deselects it and its page keeps running, as in Arc 1.173.1: a click on the Favorite shows
+# the same page again, as it was, with no new load. Cra unloaded it back to its saved page, and the next click loaded
+# it afresh (a draft, a call, a player lost). A pinned tab still unloads (pinned-tab ⌘W, CloseSuccessor).
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=fav
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+wait 1
+# Something only this load of the page has.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.mark='kept','marked')","returnByValue":true}
+expect-log "value":"marked"
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://debug?selectTab=n=fav
+wait 1
+cra://action/closeTab
+wait 2
+cra://debug?selectTab=n=fav
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'favorite '+(window.mark||'reloaded')","returnByValue":true}
+expect-log "value":"favorite kept"

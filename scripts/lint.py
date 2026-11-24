@@ -127,7 +127,7 @@ def findings():
                 if not os.path.isdir(os.path.join(ROOT, "Tests", "Fixtures", name)):
                     hit("importer-without-fixture", f"{rel}:{name}", i)
             if rel == "Services/AppIconManager.swift":
-                for icon in re.findall(r'\bOption\(id: "(\w+)"', line):
+                for icon in re.findall(r'\bOption\(id: "([\w-]+)"', line):
                     if not os.path.isfile(os.path.join(ROOT, "resources", "app-icons", f"{icon}.png")):
                         hit("app-icon-without-png", f"{rel}:{icon}", i)
     icons = os.path.join(ROOT, "resources", "app-icons")

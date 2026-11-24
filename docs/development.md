@@ -27,7 +27,8 @@ Cra runs on Chrome's own framework with a thin layer of Cra's code built into it
 `scripts/build-chromium.sh` builds it from a Chrome stable tag (~45 GB, 2–4 h a CPU) with the layer, Cra's
 patches and ungoogled-chromium's in `engine/chromium` (`apply.sh` puts them in the tree);
 `CRA_ENGINE_OUT=<out dir> scripts/build.sh` builds the app on such a local build. `scripts/check-engine-update.sh`
-says when Chrome has a newer stable; a release needs the newest.
+says when the engine lacks a security fix Chrome stable has shipped (each CVE in Chrome's release posts, traced
+through Chromium's commits) or stable is newer; a release needs every fix.
 
 `CRA_ENGINE=cef scripts/build.sh` still builds on CEF: `scripts/fetch-cef.sh` downloads Cra's CEF build
 (`scripts/build-cef.sh`, `scripts/cef-patches`, published by `scripts/publish-cef.sh`) into `vendor/cef`, and

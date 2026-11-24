@@ -6,6 +6,8 @@ final class WKWebViewConfiguration {}
 final class UIImage {
     init?(contentsOfFile: String) { return nil }
     func jpegData(compressionQuality: Double) -> Data? { nil }
+    /// A capture that came back black (ImageSampling.swift): never one here.
+    var looksBlank: Bool { false }
 }
 // CraCore's PageEngine (ProtectedMedia.swift), which PageHistory names, without the rest of that file.
 public enum PageEngine: String, Equatable, Sendable {
@@ -14,9 +16,16 @@ public enum PageEngine: String, Equatable, Sendable {
 }
 final class WKBackForwardListItem {}
 final class WKBackForwardList { var currentItem: WKBackForwardListItem? }
-// What TabStore reads of a page to keep its place (#656): its back and forward list, address and state.
+// What TabStore reads of a page to keep its place (#656): its back and forward list, address, state and scroll.
+// How far the page is scrolled, which TabStore keeps with its place (#656).
+struct UIEdgeInsets { var top: CGFloat = 0 }
+final class UIScrollView {
+    var contentOffset = CGPoint(x: 0, y: 0)
+    var adjustedContentInset = UIEdgeInsets()
+}
 final class WKWebView {
     let backForwardList = WKBackForwardList()
+    let scrollView = UIScrollView()
     var url: URL?
     var interactionState: Any?
 }

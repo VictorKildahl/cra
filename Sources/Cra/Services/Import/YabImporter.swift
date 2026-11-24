@@ -2,10 +2,12 @@ import AppKit
 
 // Yab (folder "Fast" before Oct 2026) lists its spaces in <support>/spaces.json and keeps each
 // space's tabs in a file of its own: session.json for the first space, session-<space id>.json for
-// the others, and session-…0A11.json for the pinned tiles every space shares when "pins in every
-// space" is on. Each entry is one tab, in sidebar order: a tile (`pin`, Arc's favorite), then kept
-// tabs (`kept`, Arc's pinned), then today's. A kept tab names its folder (`folder`, `folderName`)
-// and the folders that one is in (`folderPath`, from the top down).
+// the others, and session-…0A11.json for the shared tiles. With "pins in every space" on, every
+// space that signs in where the first one does shows those, and a space with sign-ins of its own
+// shows tiles of its own (Yab's SharedPins.showsShared). Each entry is one tab, in sidebar order: a
+// tile (`pin`, Arc's favorite), then kept tabs (`kept`, Arc's pinned), then today's. A kept tab
+// names its folder (`folder`, `folderName`) and the folders that one is in (`folderPath`, from the
+// top down).
 //
 // Its Chromium profiles are <support>/Chromium/space-<id>: the shared one for spaces that use the
 // first space's sign-ins, and one per space with sign-ins of its own, found through the receipts
@@ -32,8 +34,8 @@ enum YabImporter {
 
     static func plan() throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Yab") }
-        // Yab's Settings › Tabs "Pins in every space"; without it, a space with no tiles of its own
-        // shows the shared ones.
+        // Yab's Settings › Spaces › Pins "In Every Space". Unset means Yab hasn't decided yet, and it
+        // decides In Each Space for a Mac that already has spaces (SharedPins.decide), so as off.
         let everySpace = UserDefaults(suiteName: "dev.serafim.fast")?.object(forKey: "pins.everySpace") as? Bool
         var plan = try plan(supportDir: supportDir, pinsInEverySpace: everySpace)
         ImportFavicons.attach(to: &plan.spaces, folder: "cra-yab-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
@@ -53,8 +55,9 @@ enum YabImporter {
             guard let id = s["id"] as? String else { continue }
             let file = id.uppercased() == firstID ? "session.json" : "session-\(id.uppercased()).json"
             var rows = entries(dir.appendingPathComponent(file))
-            let ownTiles = rows.contains { isTile($0) }
-            if pinsInEverySpace == true || (pinsInEverySpace == nil && !ownTiles) {
+            // The shared tiles head a space that signs in where the first one does; one with sign-ins
+            // of its own keeps its own tiles, as the shared ones would sign in as someone else there.
+            if pinsInEverySpace == true && s["ownSignIns"] as? Bool != true {
                 rows = shared.filter(isTile) + rows.filter { !isTile($0) }
             }
 
@@ -93,13 +96,15 @@ enum YabImporter {
 
     private static func isTile(_ e: [String: Any]) -> Bool { (e["pin"] as? String).map { !$0.isEmpty } ?? false }
 
-    /// A tile or kept tab keeps the page it was pinned with (`home`), not where it navigated.
+    /// A tile or kept tab keeps the page it was pinned with (`home`), not where it navigated, unless
+    /// that page can't be imported: then it comes at the page it shows.
     private static func item(_ e: [String: Any], pinned: Bool) -> ImportedItem? {
-        let home = pinned ? (e["home"] as? String).flatMap { $0.isEmpty ? nil : $0 } : nil
-        guard let url = home ?? e["url"] as? String, url.hasPrefix("http://") || url.hasPrefix("https://") else { return nil }
-        let title = (home != nil ? e["homeTitle"] as? String : nil).flatMap { $0.isEmpty ? nil : $0 } ?? e["title"] as? String ?? ""
+        let home = pinned ? (e["home"] as? String).map { (url: $0, title: e["homeTitle"] as? String) } : nil
+        let current = (e["url"] as? String).map { (url: $0, title: e["title"] as? String) }
+        guard let page = [home, current].compactMap({ $0 }).first(where: { ImportedAddress.keeps($0.url) }) else { return nil }
+        let title = page.title.flatMap { $0.isEmpty ? nil : $0 } ?? e["title"] as? String ?? ""
         let custom = (e["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return ImportedItem(customTitle: custom, pageTitle: title, url: url)
+        return ImportedItem(customTitle: custom, pageTitle: title, url: page.url)
     }
 
     private static func folderChain(_ e: [String: Any]) -> [(id: String, name: String)] {

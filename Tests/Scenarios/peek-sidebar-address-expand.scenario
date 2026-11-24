@@ -1,9 +1,9 @@
-# promise: #706
+# promise: #706 #737
 # With the address in the sidebar, a Peek that goes any way other than Esc or its close button (Expand, Add to
 # Split, the page's own window.close()) left the sidebar's address field on its page for good: every tab showed
 # the Peek's address, ← → ↻ acted on nothing, and hovering the field showed no extensions or site controls. The
 # Peek ends in windowWillClose, while its window is still visible and it isn't marked as closing, so it still
-# counted as the Peek in front (#648's PeekAddress). Esc is covered by peek-sidebar-address.
+# counted as the Peek in front (#648's PeekAddress). Esc is covered by peek-sidebar-address. #737 reported it on 0.1.54 too (stuck on a Meet page).
 budget rss=900 stalls50=40
 pace 0.5
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekInEveryTab": true}

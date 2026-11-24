@@ -42,6 +42,9 @@ struct SpacePalette {
     var darkGradient = false
     /// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366): the colours over SidebarGlass's material.
     var glass = false
+    /// The sidebar's colour at the bottom of the tab list, opaque, as it shows over its material: what a
+    /// now-playing card in the theme's colour is laid over (NowPlayingTint.theme, Ideas #366).
+    var playerGround: Color = .clear
 
     /// Arc's one-colour opacity (SpaceTheme.solidAlpha, where the measurements are).
     static func solidAlpha(intensity: Double) -> Double { SpaceTheme.solidAlpha(intensity: intensity) }
@@ -137,7 +140,9 @@ extension SpaceTheme {
         let material = glass ? SidebarGlass.ground(dark: dark) : overMaterial && lightMaterial ? 0.75 : 0.2
         let ground = alphaTop < 1 ? Color(white: material).blendedToward(stops[0], alphaTop) : stops[0]
         let darkFill = ground.blendedToward(.white, 0.14)
-        return SpacePalette(
+        let bottom = stops[stops.count - 1]
+        let playerGround = alphaBottom < 1 ? Color(white: material).blendedToward(bottom, alphaBottom) : bottom
+        var palette = SpacePalette(
             isDark: dark,
             gradientColors: stops,
             textPrimary: dark ? .white.opacity(0.92) : SpaceTheme.inkColor(self.accent ?? base[0]),
@@ -171,6 +176,8 @@ extension SpaceTheme {
             vibrant: vibrant || solid || glass,
             solid: overMaterial
         )
+        palette.playerGround = playerGround
+        return palette
     }
 }
 
