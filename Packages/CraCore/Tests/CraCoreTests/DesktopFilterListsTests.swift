@@ -92,6 +92,15 @@ struct DesktopFilterListsTests {
         #expect(DesktopNetworkRules.compile(domains: [], lines: ["||bad.example^", "||bad.example^$badfilter"]).isEmpty)
     }
 
+    @Test func unsupportedDomainAnchorDoesNotInvalidateTheRestOfASubscription() {
+        let lines = ["||*cdn.example/ads/*.gif$image", "@@||*cdn.example/ads/*.gif$image", "||cdn.example/ads/*$image"]
+        let list = DesktopHidingRules.read(lines.joined(separator: "\n"), address: "https://example.com/list", fetched: .now)
+        #expect(list.networkRules == [lines[2]])
+        // An existing cache can still contain the unsupported filters after an upgrade.
+        let compiled = DesktopNetworkRules.compile(domains: [], lines: lines)
+        #expect(compiled.map(\.condition.urlFilter) == ["||cdn.example/ads/*"])
+    }
+
     @Test func hidingAndExceptionsUseDomainBoundaries() {
         let list = DesktopHidingRules.read("""
         ||tracker.example^

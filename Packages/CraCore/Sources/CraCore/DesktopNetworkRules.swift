@@ -39,8 +39,9 @@ public enum DesktopNetworkRules {
         let allow = line.hasPrefix("@@")
         let body = allow ? line.dropFirst(2) : line[...]
         let parts = body.split(separator: "$", maxSplits: 1, omittingEmptySubsequences: false)
+        // Chromium rejects the entire dynamic update if a domain anchor starts with a wildcard.
         guard let pattern = parts.first, !pattern.isEmpty, pattern.utf8.count <= 2000,
-              !pattern.contains("#"), !pattern.contains(where: { !$0.isASCII || $0.isWhitespace }),
+              !pattern.hasPrefix("||*"), !pattern.contains("#"), !pattern.contains(where: { !$0.isASCII || $0.isWhitespace }),
               !(pattern.count > 1 && pattern.first == "/" && pattern.last == "/") else { return nil }
         var c = Condition()
         var included = Set<String>()
