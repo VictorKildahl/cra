@@ -1423,6 +1423,45 @@ final class VoiceFromFieldTests: BrowserTestCase {
 }
 
 final class OnboardingTests: BrowserTestCase {
+
+    func testTheDemoPhoneMatchesTheScreen() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPads keep the phone mock")
+        launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
+        let next = app.buttons["onboarding-next"]
+        let check = app.descendants(matching: .any)["onboarding-check"]
+
+        func matches(_ step: String) {
+            let mock = app.descendants(matching: .any).matching(identifier: "onboarding-mock").firstMatch
+            XCTAssertTrue(mock.waitForExistence(timeout: 3), "\(step): mock appears")
+            let window = app.windows.firstMatch.frame
+            let isPhone = max(window.width, window.height) / min(window.width, window.height) >= 1.6
+            let shape = isPhone ? "phone" : window.height > window.width ? "duoClosed" : "duoOpen"
+            XCTAssertEqual(mock.value as? String, shape, "\(step): mock matches the screen shape")
+            let aspect = isPhone ? 330.0 / 640 : window.width / window.height
+            XCTAssertEqual(mock.frame.width / mock.frame.height / aspect, 1, accuracy: isPhone ? 0.01 : 0.02,
+                           "\(step): mock aspect matches the screen")
+        }
+
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "welcome: Next appears")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Meet your new favorite browser"].waitForExistence(timeout: 3), "meet: title appears")
+        next.tap()
+        XCTAssertTrue(app.buttons["onboarding-try"].waitForExistence(timeout: 3), "browse: Try appears")
+        matches("browse")
+        app.buttons["onboarding-try"].tap()
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "browse-done: check appears")
+        next.tap()
+        let page = app.descendants(matching: .any)["onboarding-pinch-page"]
+        XCTAssertTrue(page.waitForExistence(timeout: 3), "pinch: page appears")
+        matches("pinch")
+        page.pinch(withScale: 0.5, velocity: -1)
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "pinch-done: check appears")
+        next.tap()
+        XCTAssertTrue(app.buttons["icon-violet"].waitForExistence(timeout: 3), "icon: grid appears")
+        next.tap()
+        XCTAssertTrue(app.switches["onboarding-blocking"].waitForExistence(timeout: 3), "blocking: switch appears")
+        matches("blocking")
+    }
     func testEveryStepFitsTheScreen() {
         launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
         continueAfterFailure = true

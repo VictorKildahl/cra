@@ -1238,6 +1238,71 @@ struct MobileMotionTests {
 }
 
 struct MobileOnboardingTests {
+
+    @Test func longPhonesKeepThePhoneMock() {
+        // Apple's published portrait sizes and landscape safe areas (spec 17a, 17b).
+        for (window, left, right) in [(CGSize(width: 393, height: 852), CGFloat(0), CGFloat(0)),
+                                      (CGSize(width: 852, height: 393), 59, 59),
+                                      (CGSize(width: 375, height: 667), 0, 0),
+                                      (CGSize(width: 667, height: 375), 0, 0)] {
+            let mock = MobileOnboarding.mock(window: window, safeLeft: left, safeRight: right)
+            #expect(mock.shape == .phone)
+            #expect(mock.size == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.sampleRows == 5)
+            #expect(mock.keyWidth == 26)
+        }
+    }
+
+    @Test func iPadsKeepThePhoneMock() {
+        // Apple's published 11-inch iPad sizes and side safe areas (spec 17c).
+        for window in [CGSize(width: 834, height: 1194), CGSize(width: 1194, height: 834)] {
+            let mock = MobileOnboarding.mock(window: window, safeLeft: 0, safeRight: 0)
+            #expect(mock.shape == .phone)
+            #expect(mock.size == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.sampleRows == 5)
+            #expect(mock.keyWidth == 26)
+        }
+    }
+
+    @Test func closedMockMatchesTheWindow() {
+        // Job 010 verify.md: closed window 466x678, side insets 0 and 84 (spec 17d).
+        let mock = MobileOnboarding.mock(window: CGSize(width: 466, height: 678), safeLeft: 0, safeRight: 84)
+        #expect(mock.shape == .duoClosed)
+        #expect(mock.size.width == 330) // Spec's retained phone width.
+        #expect(abs(mock.size.width / mock.size.height / (466.0 / 678) - 1) < 0.005)
+        #expect(mock.sampleRows == 3) // Spec's three-row sheet.
+        #expect(mock.keyWidth == (330 - 52) / 10.0) // Ten keys, nine 4 pt gaps, two 8 pt margins.
+    }
+
+    @Test func openMockMatchesTheWindow() {
+        // Job 010 verify.md: open window 951x669, side insets 0 and 84 (spec 17e).
+        let mock = MobileOnboarding.mock(window: CGSize(width: 951, height: 669), safeLeft: 0, safeRight: 84)
+        #expect(mock.shape == .duoOpen)
+        #expect(mock.size.height == 450) // Spec's unfolded height above Next.
+        #expect(abs(mock.size.width / mock.size.height / (951.0 / 669) - 1) < 0.005)
+        #expect(mock.sampleRows == 3) // Spec's three-row sheet.
+        #expect(mock.keyWidth == (mock.size.width - 52) / 10) // Ten keys and sheet margins.
+    }
+
+    @Test func oneSidedInsetAloneDoesNotChooseAShortMock() {
+        // Apple's 852x393 landscape size; synthetic one-sided 59 pt inset (spec 17f).
+        #expect(MobileOnboarding.mock(window: CGSize(width: 852, height: 393), safeLeft: 0, safeRight: 59).shape == .phone)
+    }
+
+    @Test func splitViewKeepsThePhoneMock() {
+        // Research's measured 469x669 Split View half; unmeasured insets supplied as 0 (spec 17g).
+        #expect(MobileOnboarding.mock(window: CGSize(width: 469, height: 669), safeLeft: 0, safeRight: 0).shape == .phone)
+    }
+
+    @Test func postureMocksFitWithoutScaling() {
+        // Job 010 window/insets; spec's default headings 66 closed and 33 open (spec 17h).
+        for (window, available, heading) in [(CGSize(width: 466, height: 678), CGFloat(644), CGFloat(66)),
+                                            (CGSize(width: 951, height: 669), 635, 33)] {
+            let mock = MobileOnboarding.mock(window: window, safeLeft: 0, safeRight: 84)
+            #expect(MobileOnboarding.fitScale(available: available, topInset: 0, bottomInset: 34,
+                                             heading: heading, scalable: mock.size.height) == 1)
+        }
+    }
     @Test func iPhone17KeepsItsOnboardingLayout() {
         // Apple safe-area values for iPhone 17: 852 - 62 - 34 = 756; two-line heading from the spec, pending verifier measurement.
         #expect(MobileOnboarding.fitScale(available: 756, topInset: 62, bottomInset: 34, heading: 66, scalable: 640) == 1)
