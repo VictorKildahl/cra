@@ -1649,6 +1649,7 @@
 #729   Packages/CraCore/Tests/CraCoreTests/CommandBarProfileScopeTests.swift::historyFromBeforeProfilesTakesThemFromChromium  fda6c9b60e93
 #729   Tests/StoreTests.swift::historyFromBeforeProfilesTakesThemFromChromium  64ca71182c54
 #731   Tests/Scenarios/extension-action-popup-other-window.scenario  079f17b32b4a
+#734   Tests/StoreTests.swift::yabImport  e5816eed3d90
 #737   Tests/Scenarios/peek-sidebar-address-expand.scenario  82ca5b49ff0e
 #740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteKeepsItsPage  cf0f18574cfc
 #740   Tests/Scenarios/favorite-close-keeps-page.scenario  064e7c9c632b

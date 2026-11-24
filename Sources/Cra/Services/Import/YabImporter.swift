@@ -2,11 +2,12 @@ import AppKit
 
 // Yab (folder "Fast" before Oct 2026) lists its spaces in <support>/spaces.json and keeps each
 // space's tabs in a file of its own: session.json for the first space, session-<space id>.json for
-// the others, and session-…0A11.json for the shared tiles, which a space without tiles of its own
-// shows unless "pins in every space" is off. Each entry is one tab, in sidebar order: a tile
-// (`pin`, Arc's favorite), then kept tabs (`kept`, Arc's pinned), then today's. A kept tab names
-// its folder (`folder`, `folderName`) and the folders that one is in (`folderPath`, from the top
-// down).
+// the others, and session-…0A11.json for the shared tiles. With "pins in every space" on, every
+// space that signs in where the first one does shows those, and a space with sign-ins of its own
+// shows tiles of its own (Yab's SharedPins.showsShared). Each entry is one tab, in sidebar order: a
+// tile (`pin`, Arc's favorite), then kept tabs (`kept`, Arc's pinned), then today's. A kept tab
+// names its folder (`folder`, `folderName`) and the folders that one is in (`folderPath`, from the
+// top down).
 //
 // Its Chromium profiles are <support>/Chromium/space-<id>: the shared one for spaces that use the
 // first space's sign-ins, and one per space with sign-ins of its own, found through the receipts
@@ -33,8 +34,8 @@ enum YabImporter {
 
     static func plan() throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Yab") }
-        // Yab's Settings › Tabs "Pins in every space": on or unset, a space with no tiles of its own
-        // shows the shared ones; off, no space does.
+        // Yab's Settings › Spaces › Pins "In Every Space". Unset means Yab hasn't decided yet, and it
+        // decides In Each Space for a Mac that already has spaces (SharedPins.decide), so as off.
         let everySpace = UserDefaults(suiteName: "dev.serafim.fast")?.object(forKey: "pins.everySpace") as? Bool
         var plan = try plan(supportDir: supportDir, pinsInEverySpace: everySpace)
         ImportFavicons.attach(to: &plan.spaces, folder: "cra-yab-favicons") { ChromiumImporter.favicons(userData: userData, hosts: $0) }
@@ -54,8 +55,9 @@ enum YabImporter {
             guard let id = s["id"] as? String else { continue }
             let file = id.uppercased() == firstID ? "session.json" : "session-\(id.uppercased()).json"
             var rows = entries(dir.appendingPathComponent(file))
-            let ownTiles = rows.contains { isTile($0) }
-            if pinsInEverySpace != false && !ownTiles {
+            // The shared tiles head a space that signs in where the first one does; one with sign-ins
+            // of its own keeps its own tiles, as the shared ones would sign in as someone else there.
+            if pinsInEverySpace == true && s["ownSignIns"] as? Bool != true {
                 rows = shared.filter(isTile) + rows.filter { !isTile($0) }
             }
 

@@ -395,10 +395,13 @@ enum StoreTests {
         for id in result.spaceIDs { store.deleteSpace(id) }
     }
 
+    // promise: #734
     /// Yab (X request, 18 Nov): spaces.json plus one session file per space
     /// (Tests/Fixtures/Yab). Tiles are favorites, kept tabs the pinned section in their folders,
-    /// the rest Today; a space without tiles of its own shows the shared ones. A space with
-    /// sign-ins of its own is on the Chromium folder its receipt names.
+    /// the rest Today. With "pins in every space" on, a space that signs in where the first one does
+    /// shows the shared tiles and a space with sign-ins of its own keeps its own (PR #734, Yab's
+    /// SharedPins.showsShared). A space with sign-ins of its own is on the Chromium folder its
+    /// receipt names.
     @MainActor
     private static func yabImport() throws {
         expect(YabImporter.isAvailable, "spaces.json counts as Yab data")
@@ -415,7 +418,8 @@ enum StoreTests {
         expect(personal.today.compactMap(\.url) == ["https://news.example.com/"], "today's tabs come over, about:blank left out")
         expect(personal.emoji == "🏠" && personal.profile == nil && personal.theme?.accent == "#8DB6E6",
                "an emoji icon, the shared sign-ins on Default, a swatch as the theme")
-        expect(work.favorites.compactMap(\.url) == ["https://calendar.example.com/"], "a space without tiles of its own gets the shared ones")
+        expect(work.favorites.compactMap(\.url) == ["https://docs.example.com/"],
+               "pins in every space unset is Yab's In Each Space for a Mac in use: each space keeps its own tiles")
         expect(work.pinned.compactMap(\.url) == ["https://wiki.example.com/"] && work.today.compactMap(\.url) == ["https://design.example.com/"],
                "each space reads its own session file")
         expect(work.profile == ImportedProfile(folder: "space-9C6B1E52-3D1F-4C2B-8E37-5A0F1D2C3B4A", name: "Work"),
@@ -423,14 +427,14 @@ enum StoreTests {
         expect(work.symbol == "briefcase" && work.theme?.accent == "#7FB8A3" && work.theme?.noise == 0.4,
                "an Icon-tab symbol and a colour of its own with grain")
         let shared = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: true)
-        expect(shared.spaces[0].favorites.compactMap(\.url) == ["https://mail.example.com/"],
-               "with pins in every space on, a space with tiles of its own keeps them")
-        expect(shared.spaces[1].favorites.compactMap(\.url) == ["https://calendar.example.com/"],
-               "with pins in every space on, a space without tiles of its own gets the shared ones")
+        expect(shared.spaces[0].favorites.compactMap(\.url) == ["https://calendar.example.com/"],
+               "with pins in every space on, a space that signs in where the first one does shows the shared tiles")
+        expect(shared.spaces[1].favorites.compactMap(\.url) == ["https://docs.example.com/"],
+               "with pins in every space on, a space with sign-ins of its own keeps its own tiles, not the shared ones")
         let apart = try YabImporter.plan(supportDir: YabImporter.supportDir, pinsInEverySpace: false)
-        expect(apart.spaces[0].favorites.compactMap(\.url) == ["https://mail.example.com/"],
-               "with pins in every space off, a space keeps its own tiles")
-        expect(apart.spaces[1].favorites.isEmpty, "with pins in every space off, no space gets the shared tiles")
+        expect(apart.spaces[0].favorites.compactMap(\.url) == ["https://mail.example.com/"]
+               && apart.spaces[1].favorites.compactMap(\.url) == ["https://docs.example.com/"],
+               "with pins in every space off, each space keeps its own tiles and none gets the shared ones")
 
         let yab = ImportSource.allCases.first { $0.id == "yab" }, ardia = ImportSource.allCases.first { $0.id == "ardia" }
         expect(yab?.isAvailable == true && ardia?.isAvailable == true, "both are listed in the picker from their data alone")
