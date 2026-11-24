@@ -3172,9 +3172,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     func closeTab(_ id: UUID) {
         guard let item = store.item(id), item.isTab else { return }
         if store.isPinned(id) {
-            // A pinned split closes as one: every pane unloads and goes back to its page.
             let panes = store.paneTabIDs(for: id)
             let wasSelected = selectedTabID.map(panes.contains) ?? false
+            // A Favorite is only deselected: its page keeps running, and a click on it shows it as it was (#740).
+            if CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id)) == .deselectKeepingPage {
+                if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+                CraLog.note("close tab: favorite deselected, its page kept")
+                return
+            }
+            // A pinned split closes as one: every pane unloads and goes back to its page.
             for p in store.closePinnedTab(id, wasOpen: wasSelected) {
                 for w in app.mainWindows { w.browsers.unload(p); w.dropPeeks(from: p) }
             }
