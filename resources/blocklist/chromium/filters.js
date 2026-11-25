@@ -39,16 +39,24 @@ function connect() {
                     const snapshot = JSON.parse(json);
                     if (snapshot.revision !== id) return;
                     const stored = await chrome.storage.local.get('revision');
-                    if (stored.revision === id) {
-                        if (current()) connection.postMessage({ applied: id });
-                        return;
+                    // Session rules have a separate quota and are restored after each browser restart.
+                    const dnr = chrome.declarativeNetRequest;
+                    const session = await chrome.storage.session.get('siteRevision');
+                    if (session.siteRevision !== id) {
+                        const old = await dnr.getSessionRules();
+                        if (!current()) return;
+                        const next = snapshot.siteExceptions || [];
+                        if (old.length || next.length) {
+                            await dnr.updateSessionRules({ removeRuleIds: old.map(rule => rule.id), addRules: next });
+                        }
+                        await chrome.storage.session.set({ siteRevision: id });
                     }
-                    const old = await chrome.declarativeNetRequest.getDynamicRules();
-                    if (!current()) return;
-                    await chrome.declarativeNetRequest.updateDynamicRules({
-                        removeRuleIds: old.map(rule => rule.id), addRules: snapshot.rules
-                    });
-                    await chrome.storage.local.set({ revision: id });
+                    if (stored.revision !== id) {
+                        const old = await dnr.getDynamicRules();
+                        if (!current()) return;
+                        await dnr.updateDynamicRules({ removeRuleIds: old.map(rule => rule.id), addRules: snapshot.rules });
+                        await chrome.storage.local.set({ revision: id });
+                    }
                     if (current()) connection.postMessage({ applied: id });
                 });
             } else if (message.error) {

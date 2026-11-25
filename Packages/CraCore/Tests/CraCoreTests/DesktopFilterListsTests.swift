@@ -29,7 +29,7 @@ struct DesktopFilterListsTests {
         #expect(settings.customFilterAddresses == [custom])
     }
 
-    @Test func proVariantsReplaceEachOtherAndAnnoyanceSwitchesAreIndependent() throws {
+    @Test func subscriptionSwitchesAreIndependent() throws {
         func address(_ name: String) throws -> String {
             try #require(DesktopFilterList.catalog.first { $0.name == name }?.address)
         }
@@ -38,16 +38,49 @@ struct DesktopFilterListsTests {
         var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
         #expect(settings.customBlocklists.isEmpty)
         for item in [popup, widget, pro, mini] { settings.setFilterList(item, enabled: true) }
-        #expect(settings.customBlocklists == [popup, widget, mini])
+        #expect(settings.customBlocklists == [popup, widget, pro, mini])
         settings.setFilterList(popup, enabled: false)
         settings.setFilterList(pro, enabled: true)
-        #expect(settings.customBlocklists == [widget, pro])
-        for (saved, expected) in [([pro, widget, mini], [widget, mini]), ([mini, popup, pro], [popup, pro])] {
+        #expect(settings.customBlocklists == [widget, pro, mini])
+        for saved in [[pro, widget, mini], [mini, popup, pro]] {
             let data = try JSONEncoder().encode(["customBlocklists": saved])
             let restored = try JSONDecoder().decode(AppSettings.self, from: data)
-            #expect(restored.customBlocklists == expected)
+            #expect(restored.customBlocklists == saved)
         }
         #expect(settings.customFilterAddresses.isEmpty)
+    }
+
+    @Test func legacyOffAndIndependentChoicesSurviveReload() throws {
+        let old = Data(#"{"blockAdsAndTrackers":false,"customBlocklists":["https://example.org/list"],"personalBlockFilters":"ads.example"}"#.utf8)
+        var settings = try JSONDecoder().decode(AppSettings.self, from: old)
+        #expect(!settings.hasActiveBlockFilters)
+        #expect(settings.customFilterAddresses == ["https://example.org/list"])
+        #expect(settings.activePersonalFilters == nil)
+        settings.setFilterList("https://example.org/list", enabled: true)
+        settings = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(settings.hasActiveBlockFilters && !settings.blockAdsAndTrackers)
+        settings.setFilterList("https://example.org/list", enabled: false)
+        settings.personalFiltersEnabled = true
+        #expect(settings.hasActiveBlockFilters && settings.activePersonalFilters == "ads.example")
+        settings.adAwayEnabled = true
+        #expect(!settings.anudeepEnabled)
+    }
+
+    @Test func sitePauseIsExactPersistentAndReversible() throws {
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        let host = try #require(AppSettings.filterHost("https://News.Example:8443/article"))
+        #expect(host == "news.example")
+        #expect(AppSettings.filterHost("file:///tmp/test") == nil)
+        settings.toggleFilters(on: host)
+        let saved = try JSONEncoder().encode(settings)
+        settings = try JSONDecoder().decode(AppSettings.self, from: saved)
+        #expect(settings.pausedFilterHosts == [host])
+        let rules = DesktopNetworkRules.siteExceptions(for: [host], after: 100)
+        #expect(rules.map(\.id) == [101, 102])
+        #expect(rules.allSatisfy { $0.priority > 4 && $0.action.type == "allowAllRequests" && $0.condition.resourceTypes == ["main_frame"] })
+        settings.toggleFilters(on: host)
+        #expect(settings.pausedFilterHosts == nil)
+        #expect(settings.blockAdsAndTrackers)
     }
 
     @Test func hostProjectionDoesNotWidenScopedFilters() {

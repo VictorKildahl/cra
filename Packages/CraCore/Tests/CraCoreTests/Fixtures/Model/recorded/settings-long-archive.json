@@ -1,9 +1,10 @@
 {
+  "adAwayEnabled" : true,
+  "anudeepEnabled" : true,
   "autoArchive" : "thirtyDays",
   "autoArchiveDays" : 90,
   "autoArchiveEnabled" : true,
   "autoPictureInPicture" : true,
-  "blockAdsAndTrackers" : true,
   "chromeEngine" : true,
   "defaultLinkDestination" : {
     "littleWindow" : {
@@ -42,6 +43,7 @@
   "peekOnShiftClick" : true,
   "perfHidesSiteNames" : false,
   "perfRecording" : true,
+  "personalFiltersEnabled" : true,
   "searchEngine" : "bing",
   "searchSuggestions" : true,
   "showSpaceHeaderOnSingleSpace" : true,

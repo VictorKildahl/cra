@@ -5,10 +5,13 @@
 // A request is blocked when its host, or any parent domain of it, is on the
 // list and the request is third-party to the top-level page. Lookups run on
 // CEF's IO thread for every subresource, so the list is an immutable set
-// published through an atomic pointer and never locked.
+// shared by concurrent readers.
 #pragma once
 
 #include <atomic>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -19,15 +22,31 @@ using DomainSet = std::unordered_set<std::string>;
 
 inline std::atomic<bool>& Enabled() { static std::atomic<bool> v{false}; return v; }
 
-// Replaced sets are never freed: an IO-thread lookup may still be reading the
-// old one, and the list is swapped once per launch in practice.
-inline std::atomic<const DomainSet*>& Domains() { static std::atomic<const DomainSet*> v{nullptr}; return v; }
+struct BlockerState {
+    std::shared_mutex mutex;
+    std::unique_ptr<const DomainSet> domains;
+    DomainSet pausedHosts;
+};
 
-inline void Publish(const DomainSet* set) { Domains().store(set, std::memory_order_release); }
+inline BlockerState& State() { static auto* const state = new BlockerState; return *state; }
+
+inline void Publish(const DomainSet* set) {
+    std::unique_ptr<const DomainSet> next(set);
+    auto& state = State();
+    std::unique_lock lock(state.mutex);
+    state.domains.swap(next);
+}
+
+inline void SetPausedHosts(DomainSet hosts) {
+    auto& state = State();
+    std::unique_lock lock(state.mutex);
+    state.pausedHosts.swap(hosts);
+}
 
 inline size_t Count() {
-    const DomainSet* s = Domains().load(std::memory_order_acquire);
-    return s ? s->size() : 0;
+    auto& state = State();
+    std::shared_lock lock(state.mutex);
+    return state.domains ? state.domains->size() : 0;
 }
 
 inline char Lower(char c) { return (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c; }
@@ -127,7 +146,10 @@ inline bool IsIPLiteral(std::string_view host) {
 // page host (non-web top-level page) never blocks.
 inline bool ShouldBlock(const std::string& requestHost, const std::string& pageHost) {
     if (!Enabled().load(std::memory_order_relaxed)) return false;
-    const DomainSet* set = Domains().load(std::memory_order_acquire);
+    auto& state = State();
+    std::shared_lock lock(state.mutex);
+    if (state.pausedHosts.count(pageHost)) return false;
+    const DomainSet* set = state.domains.get();
     if (!set || set->empty() || requestHost.empty() || pageHost.empty() || IsIPLiteral(requestHost)) return false;
     std::string entry = MatchedEntry(*set, requestHost);
     if (entry.empty()) return false;

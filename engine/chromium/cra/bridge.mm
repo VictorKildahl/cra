@@ -4157,6 +4157,12 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   return cra_blocker::Enabled().load();
 }
 
++ (void)setContentBlockingPausedHosts:(NSArray<NSString*>*)hosts {
+    cra_blocker::DomainSet paused;
+    for (NSString* host in hosts) paused.insert(host.UTF8String ?: "");
+    cra_blocker::SetPausedHosts(std::move(paused));
+}
+
 + (void)setBlockedDomains:(NSArray<NSString*>*)domains {
   auto* set = new cra_blocker::DomainSet();
   for (NSString* domain in domains) {

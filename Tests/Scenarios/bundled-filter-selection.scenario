@@ -1,0 +1,22 @@
+# Both fixture hosts resolve to the local server. Only the selected offline source should block.
+port 47149
+pace 0.5
+arg --host-resolver-rules=MAP cra-fixture.247realmedia.com 127.0.0.1, MAP 002-slq-470.mktoresp.com 127.0.0.1
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"adAwayEnabled":true,"anudeepEnabled":false}
+cra://open?url=${PAGE}?n=bundled
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+expect-log block lists: [1-9][0-9]* domains, 0 added lists
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://cra-fixture.247realmedia.com:47149/page.html?probe=adaway',{mode:'no-cors'}).then(()=>'sent',e=>'adaway:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"adaway:TypeError"
+reject-log GET /page\.html\?probe=adaway
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://002-slq-470.mktoresp.com:47149/page.html?probe=anudeep',{mode:'no-cors'}).then(()=>'anudeep:sent',e=>e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"anudeep:sent"
+expect-log GET /page\.html\?probe=anudeep
+cra://debug?toggleSiteFilters=http://127.0.0.1:47149/page.html
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://cra-fixture.247realmedia.com:47149/page.html?probe=paused',{mode:'no-cors'}).then(()=>'paused:sent',e=>e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:sent"
+expect-log GET /page\.html\?probe=paused
+cra://debug?toggleSiteFilters=http://127.0.0.1:47149/page.html
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://cra-fixture.247realmedia.com:47149/page.html?probe=resumed',{mode:'no-cors'}).then(()=>'sent',e=>'resumed:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:TypeError"
+reject-log GET /page\.html\?probe=resumed

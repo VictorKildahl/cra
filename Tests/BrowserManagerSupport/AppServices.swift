@@ -45,6 +45,7 @@ struct TestItem {
 enum TestRoot { case today }
 @MainActor final class BlockLists {
     static let shared = BlockLists()
+    func isPaused(url: String) -> Bool { false }
     func style(for host: String) -> String { "" }
 }
 

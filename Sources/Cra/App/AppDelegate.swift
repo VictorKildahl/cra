@@ -279,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         BlockLists.shared.hidingChanged = { [weak self] in
             for window in self?.mainWindows ?? [] { window.browsers.refreshElementHiding() }
         }
-        observeChanges(of: { [store] in store.settings.personalBlockFilters }) {
+        observeChanges(of: { [store] in store.settings.activePersonalFilters }) {
             BlockLists.shared.setPersonal($0)
         }
         observeHttpsOnly()
@@ -465,10 +465,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var globalHotkey: GlobalHotkey?
 
     private func observeContentBlocking() {
-        observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }) { [weak self] enabled in
-            CraCEFRuntime.setContentBlockingEnabled(enabled)
-            BlockLists.shared.setDownloadsEnabled(enabled)
-            for window in self?.mainWindows ?? [] { window.browsers.refreshElementHiding() }
+        observeChanges(of: { [store] in store.settings.pausedFilterHosts ?? [] }) {
+            BlockLists.shared.setPausedHosts($0)
+        }
+        observeChanges(of: { [store] in store.settings.hasActiveBlockFilters }) {
+            CraCEFRuntime.setContentBlockingEnabled($0)
+        }
+        observeChanges(of: { [store] in
+            (store.settings.adAwayEnabled ? ["adaway"] : []) + (store.settings.anudeepEnabled ? ["anudeep"] : [])
+        }) {
+            BlockLists.shared.setBundledSources($0)
         }
     }
 
@@ -2825,7 +2831,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Settings ▸ Privacy ▸ Fingerprinting protection on or off, as its switch sets it.
             if let v = dict["fingerprinting"] { store.settings.fingerprintingProtection = v == "on"; return }
             // Settings ▸ Privacy without the pointer (#507): blockLists=<address,…>|none sets the added
-            // block lists, blockAds=on|off the switch they sit under.
+            // block lists, blockAds=on|off both offline sources.
+            if let url = dict["toggleSiteFilters"], let host = AppSettings.filterHost(url) {
+                store.settings.toggleFilters(on: host)
+                return
+            }
             if let v = dict["blockLists"] { store.settings.customBlocklists = v == "none" ? [] : v.split(separator: ",").map(String.init); return }
             if let v = dict["blockAds"] {
                 store.settings.blockAdsAndTrackers = v == "on"

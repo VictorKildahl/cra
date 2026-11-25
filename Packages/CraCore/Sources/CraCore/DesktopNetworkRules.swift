@@ -14,8 +14,8 @@ public enum DesktopNetworkRules {
         public var isUrlFilterCaseSensitive: Bool?
     }
 
-    public struct Rule: Encodable {
-        public struct Action: Encodable { public let type: String }
+    public struct Rule: Codable {
+        public struct Action: Codable { public let type: String }
         public let id: Int
         public let priority: Int
         public let action: Action
@@ -108,6 +108,21 @@ public enum DesktopNetworkRules {
         guard options.contains("badfilter") else { return nil }
         let remaining = options.filter { $0 != "badfilter" }.joined(separator: ",")
         return String(line[..<dollar]) + (remaining.isEmpty ? "" : "$" + remaining)
+    }
+
+    public static let dynamicRuleLimit = 30_000
+
+    /// A main-frame exception covers the whole document, including embedded frames.
+    /// Anchoring the scheme and the end of the host keeps sibling hosts and subdomains independent.
+    public static func siteExceptions(for hosts: [String], after count: Int) -> [Rule] {
+        var rules: [Rule] = []
+        for host in hosts.sorted() {
+            for scheme in ["http", "https"] {
+                let condition = Condition(urlFilter: "|\(scheme)://\(host)^", requestDomains: [host], resourceTypes: ["main_frame"])
+                rules.append(Rule(id: count + rules.count + 1, priority: 5, action: .init(type: "allowAllRequests"), condition: condition))
+            }
+        }
+        return rules
     }
 
     /// One group for hosts with identical conditions. Large DNS subscriptions therefore use

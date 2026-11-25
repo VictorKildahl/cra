@@ -1,6 +1,6 @@
 # promise: #507
 # Block lists follow Settings ▸ Privacy while Cra runs, with no restart: a list added blocks its
-# domains from the next request, the Block ads and trackers switch turns it off and on with Cra's
+# domains from the next request, its selection stays independent of Cra's
 # own list, and a removed list stops blocking and loses its kept copy. Settings are changed with
 # cra://debug?blockLists= and ?blockAds=, as the Privacy pane writes them. The list is the
 # fixture server's Tests/Fixtures/Pages/blocklist-abp.txt; the names map to that server, so the run
@@ -27,12 +27,12 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-sl
 expect-log Cra cdp Runtime.evaluate .*"value":"with-list:TypeError"
 reject-log probe=with-list
 
-# The switch the lists sit under: off lets it through, on blocks it again.
+# Switching the built-in sources off and on preserves the selected subscription.
 cra://debug?blockAds=off
 expect-log block ads and trackers: off
 cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=switch-off',{mode:'no-cors'}).then(()=>'switch-off:sent',e=>'switch-off:'+e.name)","awaitPromise":true}
-expect-log Cra cdp Runtime.evaluate .*"value":"switch-off:sent"
-expect-log GET /page\.html\?probe=switch-off
+expect-log Cra cdp Runtime.evaluate .*"value":"switch-off:TypeError"
+reject-log GET /page\.html\?probe=switch-off
 cra://debug?blockAds=on
 expect-log block ads and trackers: on
 cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://ads.judi-slot.example:'+location.port+'/page.html?probe=switch-on',{mode:'no-cors'}).then(()=>'switch-on:sent',e=>'switch-on:'+e.name)","awaitPromise":true}

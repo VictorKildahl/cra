@@ -6,73 +6,69 @@ public struct DesktopFilterList: Identifiable {
     public let name: String
     public let detail: String
     public let address: String
-    public let regional: Bool
+    public enum Category: String {
+        case ads, tracking, annoyances, mixed, regional
+    }
 
-    private init(_ name: String, _ detail: String, _ address: String, regional: Bool = false) {
+    public let category: Category
+    public var regional: Bool { category == .regional }
+
+    private init(_ name: String, _ detail: String, _ address: String, category: Category) {
         self.name = name
         self.detail = detail
         self.address = address
-        self.regional = regional
+        self.category = category
     }
 
     static let proAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
     static let proMiniAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.mini-onlydomains.txt"
 
-    /// An older settings file can contain both addresses as custom subscriptions.
-    /// Keep the most recently added variant when restoring or importing that file.
-    static func resolveProVariants(_ addresses: [String]) -> [String] {
-        guard let full = addresses.lastIndex(of: proAddress),
-              let mini = addresses.lastIndex(of: proMiniAddress) else { return addresses }
-        let superseded = full > mini ? proMiniAddress : proAddress
-        return addresses.filter { $0 != superseded }
-    }
-
     public static let catalog = [
-        Self("EasyList", "Ads on international sites", "https://easylist.to/easylist/easylist.txt"),
-        Self("EasyPrivacy", "Tracking and analytics", "https://easylist.to/easylist/easyprivacy.txt"),
-        Self("EasyList Cookie List", "Cookie notices", "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"),
-        Self("Fanboy’s Annoyance List", "Overlays, social widgets and cookie notices", "https://easylist-downloads.adblockplus.org/fanboy-annoyance.txt"),
-        Self("Fanboy’s Social Blocking List", "Social sharing buttons and widgets", "https://easylist-downloads.adblockplus.org/fanboy-social.txt"),
-        Self("AdGuard Popups", "Promotional popups and overlays", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_19_Annoyances_Popups/filter.txt"),
-        Self("AdGuard Widgets", "Third-party widgets, including support chats", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_22_Annoyances_Widgets/filter.txt"),
-        Self("Adblock Warning Removal List", "Anti-adblock notices", "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt"),
-        Self("StevenBlack Unified Hosts", "Advertising and tracking domains, also offered by Pi-hole", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"),
-        Self("HaGeZi Multi NORMAL", "Start here for everyday browsing. Blocks ads and trackers while allowing crash reports, with a low risk of breaking sites.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"),
-        Self("HaGeZi Multi PRO Mini", "A smaller download for everyday sites, including common crash trackers. Selecting Mini switches off full PRO.", proMiniAddress),
-        Self("HaGeZi Multi PRO", "Covers less common trackers as well. Choose it for maximum coverage if you can make site exceptions. Switches off PRO Mini.", proAddress),
-        Self("Liste AR", "Arabic-language sites", "https://easylist-downloads.adblockplus.org/Liste_AR.txt", regional: true),
-        Self("Bulgarian List", "Bulgarian-language sites", "https://stanev.org/abp/adblock_bg.txt", regional: true),
-        Self("EasyList China", "Chinese-language sites", "https://easylist-downloads.adblockplus.org/easylistchina.txt", regional: true),
-        Self("AdGuard Chinese", "Chinese-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", regional: true),
-        Self("EasyList Czech and Slovak", "Czech and Slovak-language sites", "https://raw.githubusercontent.com/tomasko126/easylistczechandslovak/master/filters.txt", regional: true),
-        Self("EasyList Dutch", "Dutch-language sites", "https://easylist-downloads.adblockplus.org/easylistdutch.txt", regional: true),
-        Self("AdGuard Dutch", "Dutch-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_8_Dutch/filter.txt", regional: true),
-        Self("Liste FR", "French-language sites", "https://easylist-downloads.adblockplus.org/liste_fr.txt", regional: true),
-        Self("AdGuard French", "French-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_16_French/filter.txt", regional: true),
-        Self("EasyList Germany", "German-language sites", "https://easylist.to/easylistgermany/easylistgermany.txt", regional: true),
-        Self("AdGuard German", "German-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_6_German/filter.txt", regional: true),
-        Self("void.gr", "Greek-language sites", "https://www.void.gr/kargig/void-gr-filters.txt", regional: true),
-        Self("hufilter", "Hungarian-language sites", "https://cdn.jsdelivr.net/gh/hufilter/hufilter@gh-pages/hufilter.txt", regional: true),
-        Self("IndianList", "Sites in Indian languages", "https://easylist-downloads.adblockplus.org/indianlist.txt", regional: true),
-        Self("ABPindo", "Indonesian and Malay-language sites", "https://raw.githubusercontent.com/ABPindo/indonesianadblockrules/master/subscriptions/abpindo.txt", regional: true),
-        Self("EasyList Italy", "Italian-language sites", "https://easylist-downloads.adblockplus.org/easylistitaly.txt", regional: true),
-        Self("AdGuard Italian", "Italian-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_26_Italian/filter.txt", regional: true),
-        Self("Japanese Filters", "Japanese-language sites", "https://easylist-downloads.adblockplus.org/japanese-filters.txt", regional: true),
-        Self("AdGuard Japanese", "Japanese-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_7_Japanese/filter.txt", regional: true),
-        Self("YousList", "Korean-language sites", "https://raw.githubusercontent.com/yous/YousList/master/youslist.txt", regional: true),
-        Self("EasyList Lithuania", "Lithuanian-language sites", "https://raw.githubusercontent.com/EasyList-Lithuania/easylist_lithuania/master/easylistlithuania.txt", regional: true),
-        Self("Dandelion Sprout’s Nordic Filters", "Sites in Norway, Denmark, Iceland, Sweden and Finland", "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/NorwegianExperimentalList%20alternate%20versions/NordicFiltersABP-Inclusion.txt", regional: true),
-        Self("AdBlockFarsi", "Persian-language sites", "https://raw.githubusercontent.com/SlashArash/adblockfa/master/adblockfa.txt", regional: true),
-        Self("EasyList Polish", "Polish-language sites", "https://easylist-downloads.adblockplus.org/easylistpolish.txt", regional: true),
-        Self("AdGuard Polish", "Polish-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_27_Polish/filter.txt", regional: true),
-        Self("EasyList Portuguese", "Portuguese-language sites", "https://easylist-downloads.adblockplus.org/easylistportuguese.txt", regional: true),
-        Self("AdGuard Russian", "Russian-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_1_Russian/filter.txt", regional: true),
-        Self("EasyList Spanish", "Spanish-language sites", "https://easylist-downloads.adblockplus.org/easylistspanish.txt", regional: true),
-        Self("AdGuard Spanish/Portuguese", "Spanish and Portuguese-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_9_Spanish/filter.txt", regional: true),
-        Self("Turkish Filters", "Turkish-language sites", "https://easylist-downloads.adblockplus.org/turkish-filters.txt", regional: true),
-        Self("AdGuard Turkish", "Turkish-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_13_Turkish/filter.txt", regional: true),
-        Self("AdGuard Ukrainian", "Ukrainian-language sites", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_23_Ukrainian/filter.txt", regional: true),
-        Self("ABPVN", "Vietnamese-language sites", "https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn.txt", regional: true),
+        Self("EasyList", "Ads on international sites", "https://easylist.to/easylist/easylist.txt", category: .ads),
+        Self("EasyPrivacy", "Tracking and analytics", "https://easylist.to/easylist/easyprivacy.txt", category: .tracking),
+        Self("EasyList Cookie List", "Cookie notices", "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt", category: .annoyances),
+        Self("Fanboy’s Annoyance List", "Overlays, social widgets and cookie notices", "https://easylist-downloads.adblockplus.org/fanboy-annoyance.txt", category: .annoyances),
+        Self("Fanboy’s Social Blocking List", "Social sharing buttons and widgets", "https://easylist-downloads.adblockplus.org/fanboy-social.txt", category: .annoyances),
+        Self("AdGuard Popups", "Promotional popups and overlays", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_19_Annoyances_Popups/filter.txt", category: .annoyances),
+        Self("AdGuard Widgets", "Third-party widgets, including support chats", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_22_Annoyances_Widgets/filter.txt", category: .annoyances),
+        Self("Adblock Warning Removal List", "Anti-adblock notices", "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt", category: .ads),
+        Self("StevenBlack Unified Hosts", "Advertising and tracking domains", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", category: .ads),
+        Self("HaGeZi Multi NORMAL", "For everyday browsing. Blocks ad, tracker, phishing and malware domains while allowing crash reports.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt", category: .mixed),
+        Self("HaGeZi Multi PRO Mini", "A smaller download for everyday sites, including common crash trackers. Its domains are included in full PRO.", proMiniAddress, category: .mixed),
+        Self("HaGeZi Multi PRO", "Covers less common trackers as well. Choose it for maximum coverage if you can make site exceptions.", proAddress, category: .mixed),
+        Self("Arabic", "Liste AR", "https://easylist-downloads.adblockplus.org/Liste_AR.txt", category: .regional),
+        Self("Bulgarian", "Bulgarian List", "https://stanev.org/abp/adblock_bg.txt", category: .regional),
+        Self("Chinese", "EasyList China", "https://easylist-downloads.adblockplus.org/easylistchina.txt", category: .regional),
+        Self("Chinese", "AdGuard Chinese", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", category: .regional),
+        Self("Czech and Slovak", "EasyList Czech and Slovak", "https://raw.githubusercontent.com/tomasko126/easylistczechandslovak/master/filters.txt", category: .regional),
+        Self("Dutch", "EasyList Dutch", "https://easylist-downloads.adblockplus.org/easylistdutch.txt", category: .regional),
+        Self("Dutch", "AdGuard Dutch", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_8_Dutch/filter.txt", category: .regional),
+        Self("French", "Liste FR", "https://easylist-downloads.adblockplus.org/liste_fr.txt", category: .regional),
+        Self("French", "AdGuard French", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_16_French/filter.txt", category: .regional),
+        Self("German", "EasyList Germany", "https://easylist.to/easylistgermany/easylistgermany.txt", category: .regional),
+        Self("German", "AdGuard German", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_6_German/filter.txt", category: .regional),
+        Self("Greek", "void.gr", "https://www.void.gr/kargig/void-gr-filters.txt", category: .regional),
+        Self("Hungarian", "hufilter", "https://cdn.jsdelivr.net/gh/hufilter/hufilter@gh-pages/hufilter.txt", category: .regional),
+        Self("Indian languages", "IndianList", "https://easylist-downloads.adblockplus.org/indianlist.txt", category: .regional),
+        Self("Indonesian and Malay", "ABPindo", "https://raw.githubusercontent.com/ABPindo/indonesianadblockrules/master/subscriptions/abpindo.txt", category: .regional),
+        Self("Italian", "EasyList Italy", "https://easylist-downloads.adblockplus.org/easylistitaly.txt", category: .regional),
+        Self("Italian", "AdGuard Italian", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_26_Italian/filter.txt", category: .regional),
+        Self("Japanese", "Japanese Filters", "https://easylist-downloads.adblockplus.org/japanese-filters.txt", category: .regional),
+        Self("Japanese", "AdGuard Japanese", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_7_Japanese/filter.txt", category: .regional),
+        Self("Korean", "YousList", "https://raw.githubusercontent.com/yous/YousList/master/youslist.txt", category: .regional),
+        Self("Lithuanian", "EasyList Lithuania", "https://raw.githubusercontent.com/EasyList-Lithuania/easylist_lithuania/master/easylistlithuania.txt", category: .regional),
+        Self("Nordic countries", "Dandelion Sprout’s Nordic Filters", "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/NorwegianExperimentalList%20alternate%20versions/NordicFiltersABP-Inclusion.txt", category: .regional),
+        Self("Persian", "AdBlockFarsi", "https://raw.githubusercontent.com/SlashArash/adblockfa/master/adblockfa.txt", category: .regional),
+        Self("Polish", "EasyList Polish", "https://easylist-downloads.adblockplus.org/easylistpolish.txt", category: .regional),
+        Self("Polish", "AdGuard Polish", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_27_Polish/filter.txt", category: .regional),
+        Self("Portuguese", "EasyList Portuguese", "https://easylist-downloads.adblockplus.org/easylistportuguese.txt", category: .regional),
+        Self("Russian", "AdGuard Russian", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_1_Russian/filter.txt", category: .regional),
+        Self("Spanish", "EasyList Spanish", "https://easylist-downloads.adblockplus.org/easylistspanish.txt", category: .regional),
+        Self("Spanish and Portuguese", "AdGuard Spanish/Portuguese", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_9_Spanish/filter.txt", category: .regional),
+        Self("Turkish", "Turkish Filters", "https://easylist-downloads.adblockplus.org/turkish-filters.txt", category: .regional),
+        Self("Turkish", "AdGuard Turkish", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_13_Turkish/filter.txt", category: .regional),
+        Self("Ukrainian", "AdGuard Ukrainian", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_23_Ukrainian/filter.txt", category: .regional),
+        Self("Vietnamese", "ABPVN", "https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn.txt", category: .regional),
     ]
 }
 
@@ -86,7 +82,7 @@ public extension AppSettings {
         disabledCustomBlocklists.removeAll { $0 == address }
         if enabled {
             if !customBlocklists.contains(address) {
-                customBlocklists = DesktopFilterList.resolveProVariants(customBlocklists + [address])
+                customBlocklists.append(address)
             }
         } else {
             customBlocklists.removeAll { $0 == address }

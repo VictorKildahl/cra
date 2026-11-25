@@ -65,14 +65,15 @@ enum ChromiumFilterLists {
     private struct Snapshot: Encodable {
         let revision: String
         let rules: [DesktopNetworkRules.Rule]
+        let siteExceptions: [DesktopNetworkRules.Rule]
     }
 
     /// Publish the notification last, so readers always have a complete replacement.
     @discardableResult
-    static func publish(_ rules: [DesktopNetworkRules.Rule]) throws -> String {
+    static func publish(_ rules: [DesktopNetworkRules.Rule], siteExceptions: [DesktopNetworkRules.Rule] = []) throws -> String {
         let revision = UUID().uuidString
         let encoder = JSONEncoder()
-        try encoder.encode(Snapshot(revision: revision, rules: rules)).write(to: directory.appendingPathComponent("rules.json"), options: .atomic)
+        try encoder.encode(Snapshot(revision: revision, rules: rules, siteExceptions: siteExceptions)).write(to: directory.appendingPathComponent("rules.json"), options: .atomic)
         try encoder.encode(["revision": revision]).write(to: directory.appendingPathComponent("revision.json"), options: .atomic)
         expectNetworkRules(!rules.isEmpty)
         return revision

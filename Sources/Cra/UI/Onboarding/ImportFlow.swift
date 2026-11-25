@@ -200,10 +200,14 @@ final class ImportFlowModel {
         }
     }
 
-    /// Dia's disclosure step: the ad and tracker blocker checkbox.
-    var blockAdsAndTrackers: Bool {
-        get { store.settings.blockAdsAndTrackers }
-        set { store.settings.blockAdsAndTrackers = newValue }
+    var adAwayEnabled: Bool {
+        get { store.settings.adAwayEnabled }
+        set { store.settings.adAwayEnabled = newValue }
+    }
+
+    var anudeepEnabled: Bool {
+        get { store.settings.anudeepEnabled }
+        set { store.settings.anudeepEnabled = newValue }
     }
 
     /// Dia's disclosure step, its other checkbox ("Help improve Dia by sharing content data"):

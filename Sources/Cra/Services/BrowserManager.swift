@@ -1618,7 +1618,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             }
             shareTheme(id, with: browser)
             applyBoost(to: browser, clearing: false)
-            if let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+            if !BlockLists.shared.isPaused(url: browser.currentURL), let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
         }
         delegate?.browserManagerDidUpdate(id)
     }
@@ -1631,7 +1631,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let browser = runtime.browser
         guard let url = URL(string: browser.currentURL), let scheme = url.scheme,
               ["http", "https"].contains(scheme.lowercased()), let host = url.host else { return }
-        let css = store.settings.blockAdsAndTrackers ? BlockLists.shared.style(for: host) : ""
+        let css = BlockLists.shared.style(for: host)
         guard runtime.hasElementHidingStyle || !css.isEmpty else { return }
         adopt(css, as: "__craListFilters", in: browser)
         runtime.hasElementHidingStyle = !css.isEmpty

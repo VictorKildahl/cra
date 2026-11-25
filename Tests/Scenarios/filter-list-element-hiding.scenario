@@ -1,5 +1,5 @@
 # A subscription added in Privacy hides an element in an ordinary Chromium document.
-# Switching the blocker off restores it, and switching it on re-applies the rule on the open page.
+# Switching the offline sources off preserves the subscription. Removing it restores the element.
 port 47134
 pace 0.5
 budget rss=800 stalls50=30
@@ -11,10 +11,16 @@ cra://debug?blockLists=http://127.0.0.1:47134/blocklist-abp.txt
 expect-log block lists: [0-9]+ domains, 1 added list
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'added:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
 expect-log Cra cdp Runtime.evaluate .*"value":"added:none"
+cra://debug?toggleSiteFilters=http://127.0.0.1:47134/page.html
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'paused:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:block"
+cra://debug?toggleSiteFilters=http://127.0.0.1:47134/page.html
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'resumed:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:none"
 cra://debug?blockAds=off
 expect-log block ads and trackers: off
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'off:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
-expect-log Cra cdp Runtime.evaluate .*"value":"off:block"
+expect-log Cra cdp Runtime.evaluate .*"value":"off:none"
 cra://debug?blockAds=on
 expect-log block ads and trackers: on
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'on:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}

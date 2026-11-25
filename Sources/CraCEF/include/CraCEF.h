@@ -533,6 +533,7 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// secure DNS setting changes.
 + (void)setSecureDNSChangeHandler:(nullable void (^)(void))handler;
 /// Replaces the blocked list (bare domains; a domain also covers its subdomains).
++ (void)setContentBlockingPausedHosts:(NSArray<NSString *> *)hosts;
 + (void)setBlockedDomains:(NSArray<NSString *> *)domains;
 /// Reads and installs a list file off the main thread: one domain per line or
 /// hosts-file lines ("0.0.0.0 example.com"), # comments. The completion gets the

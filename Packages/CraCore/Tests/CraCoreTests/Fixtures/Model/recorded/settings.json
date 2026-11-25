@@ -1,8 +1,9 @@
 {
+  "adAwayEnabled" : false,
+  "anudeepEnabled" : false,
   "autoArchive" : "sevenDays",
   "autoArchiveEnabled" : false,
   "autoPictureInPicture" : false,
-  "blockAdsAndTrackers" : false,
   "chromeEngine" : false,
   "defaultLinkDestination" : {
     "space" : {
@@ -66,6 +67,7 @@
   "peekOnShiftClick" : false,
   "perfHidesSiteNames" : true,
   "perfRecording" : false,
+  "personalFiltersEnabled" : false,
   "searchEngine" : "kagi",
   "searchSuggestions" : false,
   "showSpaceHeaderOnSingleSpace" : false,
