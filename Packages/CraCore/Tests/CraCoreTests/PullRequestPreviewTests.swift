@@ -104,6 +104,30 @@ struct PullRequestPreviewTests {
         #expect(card.labels.allSatisfy { $0.color == nil })
     }
 
+    @Test func labelTextContrast() throws {
+        func label(_ hex: String) throws -> PullRequestPreview.Label {
+            let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR",
+                                           details: .init(labels: [.init(name: "label", color: hex)]))
+            return try #require(PullRequestPreview.card(item: item, checks: nil, now: now).labels.first)
+        }
+        func luminance(_ color: RGB) -> Double {
+            func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+            return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
+        }
+        let dark = try label("#2700AF")
+        let text = try #require(dark.textColor)
+        #expect((luminance(text) + 0.05) / (luminance(RGB(25 / 255, 24 / 255, 23 / 255)) + 0.05) >= 4.5)
+        #expect(dark.color == RGB(39 / 255, 0, 175 / 255))
+        let original = try #require(dark.color)
+        #expect(abs(SpaceTheme.hsl(text).h - SpaceTheme.hsl(original).h) < 0.000001)
+        for hex in ["#39d965", "FFFFFF", "F8F8F8"] {
+            let bright = try label(hex)
+            #expect(bright.textColor == bright.color)
+        }
+        let invalid = try label("invalid")
+        #expect(invalid.color == nil && invalid.textColor == nil)
+    }
+
     @Test func githubAgeBoundaries() {
         for (seconds, age) in [(59.0, "just now"), (60, "1 minute ago"), (120, "2 minutes ago"),
                                (3600, "1 hour ago"), (82800, "23 hours ago"), (86400, "yesterday"),

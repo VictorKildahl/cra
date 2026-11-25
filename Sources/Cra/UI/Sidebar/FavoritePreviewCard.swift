@@ -1016,8 +1016,9 @@ private struct PullRequestPreviewView: View {
     var body: some View {
         CardStyle.card(
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "arrow.triangle.pull")
-                    .font(.system(size: 14)).foregroundStyle(card.draft ? CardStyle.secondary : green)
+                PullRequestGlyph(draft: card.draft)
+                    .fill(card.draft ? CardStyle.secondary : green)
+                    .frame(width: 14, height: 14)
                     .frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(card.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(CardStyle.text)
@@ -1055,7 +1056,8 @@ private struct PullRequestPreviewView: View {
                         FlowRow(spacing: 5) {
                             ForEach(Array(card.labels.enumerated()), id: \.offset) { _, label in
                                 let color = label.color.map { Color(red: $0.r, green: $0.g, blue: $0.b) } ?? CardStyle.secondary
-                                Text(label.name).font(.system(size: 11, weight: .medium)).foregroundStyle(color)
+                                let textColor = label.textColor.map { Color(red: $0.r, green: $0.g, blue: $0.b) } ?? CardStyle.secondary
+                                Text(label.name).font(.system(size: 11, weight: .medium)).foregroundStyle(textColor)
                                     .lineLimit(1).truncationMode(.tail)
                                     .padding(.horizontal, 7).padding(.vertical, 2)
                                     .frame(maxWidth: FavoritePreviewMetrics.width - 2 * FavoritePreviewMetrics.inset - 24)
@@ -1086,5 +1088,49 @@ private struct PullRequestPreviewView: View {
             Text(text).foregroundStyle(CardStyle.text)
         }
         .font(.system(size: 12))
+    }
+}
+
+// GitHub Octicons git-pull-request(-draft)-16 SVG outlines: github.com/primer/octicons, MIT licence.
+private struct PullRequestGlyph: Shape {
+    let draft: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        func circle(_ x: Double, _ y: Double, _ radius: Double, hole: Bool = false) {
+            path.move(to: CGPoint(x: x + radius, y: y))
+            path.addArc(center: CGPoint(x: x, y: y), radius: radius,
+                        startAngle: .degrees(0), endAngle: .degrees(hole ? -360 : 360), clockwise: hole)
+            path.closeSubpath()
+        }
+        let left = draft ? 3.25 : 3.75
+        for (x, y) in [(left, 3.25), (left, 12.75), (12.75, 12.75)] {
+            circle(x, y, 2.25)
+            circle(x, y, 0.75, hole: true)
+        }
+        path.addRect(CGRect(x: left - 0.75, y: 5.372, width: 1.5, height: 5.256))
+        if draft {
+            circle(12.75, 7.5, 1.25)
+            circle(12.75, 3.25, 1.25)
+        } else {
+            path.move(to: CGPoint(x: 7.177, y: 3.073))
+            path.addLine(to: CGPoint(x: 9.573, y: 0.677))
+            path.addCurve(to: CGPoint(x: 10, y: 0.854), control1: CGPoint(x: 9.731, y: 0.519), control2: CGPoint(x: 10, y: 0.631))
+            path.addLine(to: CGPoint(x: 10, y: 2.5))
+            path.addLine(to: CGPoint(x: 11, y: 2.5))
+            path.addCurve(to: CGPoint(x: 13.5, y: 5), control1: CGPoint(x: 12.381, y: 2.5), control2: CGPoint(x: 13.5, y: 3.619))
+            path.addLine(to: CGPoint(x: 13.5, y: 10.628))
+            path.addLine(to: CGPoint(x: 12, y: 10.628))
+            path.addLine(to: CGPoint(x: 12, y: 5))
+            path.addCurve(to: CGPoint(x: 11, y: 4), control1: CGPoint(x: 12, y: 4.448), control2: CGPoint(x: 11.552, y: 4))
+            path.addLine(to: CGPoint(x: 10, y: 4))
+            path.addLine(to: CGPoint(x: 10, y: 5.646))
+            path.addCurve(to: CGPoint(x: 9.573, y: 5.823), control1: CGPoint(x: 10, y: 5.869), control2: CGPoint(x: 9.731, y: 5.981))
+            path.addLine(to: CGPoint(x: 7.177, y: 3.427))
+            path.addCurve(to: CGPoint(x: 7.177, y: 3.073), control1: CGPoint(x: 7.079, y: 3.329), control2: CGPoint(x: 7.079, y: 3.171))
+            path.closeSubpath()
+        }
+        return path.applying(CGAffineTransform(scaleX: rect.width / 16, y: rect.height / 16)
+            .concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
     }
 }

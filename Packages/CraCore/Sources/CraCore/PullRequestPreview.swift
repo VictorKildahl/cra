@@ -41,6 +41,7 @@ public enum PullRequestPreview {
     public struct Label: Equatable {
         public var name: String
         public var color: RGB?
+        public var textColor: RGB? { color.map { PullRequestPreview.labelTextColor($0) } }
     }
     public struct Checks: Equatable {
         public enum State { case passed, failed, pending }
@@ -102,6 +103,27 @@ public enum PullRequestPreview {
         let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard digits.allSatisfy(\.isHexDigit), let color = HexColor.components(digits) else { return nil }
         return RGB(color.r, color.g, color.b)
+    }
+
+    private static func labelTextColor(_ color: RGB) -> RGB {
+        func luminance(_ c: RGB) -> Double {
+            func linear(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+            return 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+        }
+        let target = 4.5 * (luminance(RGB(25 / 255, 24 / 255, 23 / 255)) + 0.05) - 0.05
+        guard luminance(color) < target else { return color }
+        let (h, s, l) = SpaceTheme.hsl(color)
+        let hue = SpaceTheme.rgb(h: h, s: 1, v: 1)
+        func at(_ lightness: Double) -> RGB {
+            let chroma = (1 - abs(2 * lightness - 1)) * s, m = lightness - chroma / 2
+            return RGB(m + hue.0 * chroma, m + hue.1 * chroma, m + hue.2 * chroma)
+        }
+        var low = l, high = 1.0
+        for _ in 0..<40 {
+            let middle = (low + high) / 2
+            if luminance(at(middle)) < target { low = middle } else { high = middle }
+        }
+        return at(high)
     }
 
     private static func age(seconds: TimeInterval) -> String {
