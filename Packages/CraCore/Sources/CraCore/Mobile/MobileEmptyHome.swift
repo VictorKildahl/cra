@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the empty home screen (no tab open, no tab row) shows. Arc Search's own is the default: its gradient with
+/// What the empty home screen (no tab open) shows. Arc Search's own is the default: its gradient with
 /// Cra's logo in the middle, which spins when flicked. App Settings ▸ Rippling Dots (Cra's own, not Arc Search's,
 /// PR #708) lays a field of dots that ripple under a finger (`MobileRipples`) on a near-black backdrop, near-white in
 /// light mode, keeps the logo over it, shows "Tap to search" over the pill and floats the bar's buttons without
@@ -19,9 +19,18 @@ public struct MobileEmptyHome: Equatable, Sendable {
     public var showsSearchHint: Bool
     /// The bar's buttons float on the backdrop without the bar's slab.
     public var barFloats: Bool
+    /// The bar is the tab row's: Spaces, the plus and Settings, not the tab stack and the page menu, which have
+    /// nothing to show with no tabs open.
+    public var barShowsTabRow: Bool
 
-    /// `home`: no tab is open and the tab row isn't up. `searching`: the search sheet is up, `incognitoSearch` with
-    /// its incognito grey; `pulling`: the sheet is being pulled out of the pill.
+    /// Whether the empty home is on screen: no tab is open, so the tab row would have no cards. The home is that
+    /// empty row: the logo (and the dots) with the row's buttons, and the tab button opens no blank row over it.
+    public static func isHome(tabOnScreen: Bool, rowTabs: Int) -> Bool {
+        !tabOnScreen && rowTabs == 0
+    }
+
+    /// `home`: no tab is open (`isHome`). `searching`: the search sheet is up, `incognitoSearch` with its incognito
+    /// grey; `pulling`: the sheet is being pulled out of the pill.
     public init(dots: Bool, home: Bool, searching: Bool, incognitoSearch: Bool, pulling: Bool) {
         backdrop = dots ? .dots : .arcSearch
         showsLogo = home && !searching
@@ -29,5 +38,6 @@ public struct MobileEmptyHome: Equatable, Sendable {
         showsDots = dots && home && !(searching && incognitoSearch)
         showsSearchHint = dots && home && !searching && !pulling
         barFloats = dots && home
+        barShowsTabRow = home
     }
 }
