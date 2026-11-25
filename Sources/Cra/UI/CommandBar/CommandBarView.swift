@@ -32,8 +32,21 @@ final class CommandBarView: NSView {
     private let keycapLabel = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     private let divider = NSView()
     private var rows: [CommandBarRowView] = []
+    /// The rows' clip: five in view (four over the banner), the rest scroll behind them (#805).
+    private let list = CommandBarList()
+    /// The first row in view (CraCore CommandBarRowWindow), and the one the rows were last laid out for.
+    private var firstRow = 0
+    private var laidOutFirstRow = 0
+    private var shownRows = 0
     /// cra://debug?commandBarIcon (#755): the n-th row's favicon as it is drawn.
     func debugRowIcon(_ i: Int) -> String { rows.indices.contains(i) && !rows[i].isHidden ? rows[i].debugIcon : "none" }
+    /// cra://debug?commandBarShown (#805): the rows in view, as drawn: listed, first in view, and each row
+    /// showing inside the clip, top down.
+    var debugShown: String {
+        let inView = rows.indices.filter { !rows[$0].isHidden && rows[$0].frame.intersects(list.bounds) }
+            .sorted { rows[$0].frame.minY < rows[$1].frame.minY }
+        return "listed=\(controller.result.items.count) first=\(firstRow) inView=\(inView.map(String.init).joined(separator: ",")) selected=\(controller.selectedIndex) height=\(Int(list.frame.height))"
+    }
     /// ⌥⌘⌫ in the bar's panel (#779): the selected row, when it is a visited page's.
     func deleteSelectedSuggestion() { controller.delete() }
     /// cra://debug?commandBarDelete (#779): the n-th row's ✕ in screen points.
@@ -100,7 +113,9 @@ final class CommandBarView: NSView {
         keycap.layer?.cornerCurve = .continuous
         keycapLabel.stringValue = "Tab"
         keycap.addSubview(keycapLabel)
-        for v in [material, tint, leadingIcon, text.field, info, closeTile, pill, hint, keycap, divider, notice] as [NSView] { addSubview(v) }
+        list.wantsLayer = true
+        list.layer?.masksToBounds = true
+        for v in [material, tint, leadingIcon, text.field, info, closeTile, pill, hint, keycap, divider, list, notice] as [NSView] { addSubview(v) }
         layer?.addSublayer(border)
         border.zPosition = 10
         sync()
@@ -283,10 +298,17 @@ final class CommandBarView: NSView {
                 self.controller.delete(row: i)
             }
             rows.append(r)
-            addSubview(r)
+            list.addSubview(r)
         }
+        // The rows in view: the selected one always is, the list moving a row at a time (#805).
+        shownRows = CommandBarRowWindow.shown(count: items.count, banner: c.showsNoticeBanner)
+        let first = CommandBarRowWindow.first(selected: c.selectedIndex, count: items.count, shown: shownRows, previous: firstRow)
+        if first != firstRow { c.listScrolled() }
+        firstRow = first
         for (i, r) in rows.enumerated() {
-            guard i < items.count else { r.isHidden = true; continue }
+            // Out of view: hidden, so its hover area can't sit over the field. One sliding out stays until its slide ends.
+            let sliding = laidOutFirstRow != firstRow && (laidOutFirstRow..<laidOutFirstRow + shownRows).contains(i)
+            guard i < items.count, (firstRow..<firstRow + shownRows).contains(i) || sliding else { r.isHidden = true; continue }
             r.isHidden = false
             let s = items[i]
             let icon = s.faviconKey.flatMap { favicons.image(forKey: $0) }
@@ -375,10 +397,30 @@ final class CommandBarView: NSView {
         } else {
             divider.frame = NSRect(x: 16, y: fh, width: max(0, b.width - 32), height: 1)
         }
-        var y: CGFloat = fh + 6
-        for r in rows where !r.isHidden {
-            r.frame = NSRect(x: 10, y: y, width: b.width - 20, height: Self.rowHeight)
-            y += Self.rowHeight + 4
+        // The rows' clip spans the rows in view; each row sits at its place in the whole list, offset by the
+        // first one in view. A step that scrolls slides them a row (Arc animates it), then hides the one that left.
+        let pitch = Self.rowHeight + 4
+        list.frame = NSRect(x: 0, y: fh + 6, width: b.width, height: CGFloat(shownRows) * pitch)
+        let scrolled = laidOutFirstRow != firstRow
+        laidOutFirstRow = firstRow
+        let frames = rows.indices.map { i in NSRect(x: 10, y: CGFloat(i - firstRow) * pitch, width: b.width - 20, height: Self.rowHeight) }
+        if scrolled && window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                for (r, f) in zip(rows, frames) where !r.isHidden { r.animator().frame = f }
+            }, completionHandler: { [weak self] in
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    for (i, r) in self.rows.enumerated() where !(self.firstRow..<self.firstRow + self.shownRows).contains(i) { r.isHidden = true }
+                }
+            })
+            for (r, f) in zip(rows, frames) where r.isHidden { r.frame = f }
+        } else {
+            for (i, (r, f)) in zip(rows, frames).enumerated() {
+                r.frame = f
+                if !(firstRow..<firstRow + shownRows).contains(i) { r.isHidden = true }
+            }
         }
         // Arc: 60 pt at the bottom, edge to edge under the outline, in the last row's place.
         let nh = CGFloat(SearchSuggestionsNotice.bannerHeight)
@@ -922,4 +964,9 @@ private final class NoticeButton: NSView {
         onClick()
         return true
     }
+}
+
+/// The command bar's rows, top down, clipped to the ones in view (#805).
+private final class CommandBarList: NSView {
+    override var isFlipped: Bool { true }
 }

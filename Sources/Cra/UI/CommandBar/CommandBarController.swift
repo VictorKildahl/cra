@@ -321,7 +321,10 @@ final class CommandBarController {
     }
 
     /// Row places the panel is sized for: the rows and the banner.
-    var rowPlaces: Int { SearchSuggestionsNotice.rowPlaces(rows: result.items.count, banner: showsNoticeBanner) }
+    /// The places the bar is sized for: the rows in view (Arc's five; more scroll behind them, #805) and the banner's.
+    var rowPlaces: Int {
+        SearchSuggestionsNotice.rowPlaces(rows: CommandBarRowWindow.shown(count: result.items.count, banner: showsNoticeBanner), banner: showsNoticeBanner)
+    }
 
     /// The (i): the banner takes the last row's place.
     func showNotice() {
@@ -377,14 +380,18 @@ final class CommandBarController {
         selectedIndex = index
     }
 
-    /// What the engine listed, less the last row while the banner has its place.
+    /// What the engine listed, as this window lists it. All of it: the rows past the ones in view
+    /// scroll into it (#805); the banner takes a place in view, not a row.
     private func listed(_ r: SuggestionResult) -> SuggestionResult {
         hoverGate.listChanged(pointerAt: NSEvent.mouseLocation)
         var r = r
         r.items = r.items.map(inWindow)
-        let n = SearchSuggestionsNotice.rowsListed(r.items.count, maxRows: SuggestionEngine.maxRows, banner: showsNoticeBanner)
-        if n < r.items.count { r.items.removeLast(r.items.count - n) }
         return r
+    }
+
+    /// The list scrolled under a resting pointer (#805): the row now under it isn't hovered.
+    func listScrolled() {
+        hoverGate.listChanged(pointerAt: NSEvent.mouseLocation)
     }
 
     /// An open tab's or an archived page's row as this window's bar lists it: in a Little Window, a

@@ -1,0 +1,33 @@
+# promise: #805
+# Arc's ⌘T holds more rows than the five it shows (the reporter's recording of Arc): ↓ past the fifth row
+# scrolls the list a row at a time, past the last row the selection goes back to the top. Cra listed five
+# rows and no more, so twenty pages matching "zephyr" offered five; Arc lists fifteen rows.
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "searchSuggestions": false}
+seed history.json [{"url":"https://zephyr01.example.com/","title":"Zephyr page 01","lastVisit":"2026-11-21T01:00:00Z","visitCount":3},{"url":"https://zephyr02.example.com/","title":"Zephyr page 02","lastVisit":"2026-11-22T02:00:00Z","visitCount":3},{"url":"https://zephyr03.example.com/","title":"Zephyr page 03","lastVisit":"2026-11-23T03:00:00Z","visitCount":3},{"url":"https://zephyr04.example.com/","title":"Zephyr page 04","lastVisit":"2026-11-24T04:00:00Z","visitCount":3},{"url":"https://zephyr05.example.com/","title":"Zephyr page 05","lastVisit":"2026-11-20T05:00:00Z","visitCount":3},{"url":"https://zephyr06.example.com/","title":"Zephyr page 06","lastVisit":"2026-11-21T06:00:00Z","visitCount":3},{"url":"https://zephyr07.example.com/","title":"Zephyr page 07","lastVisit":"2026-11-22T07:00:00Z","visitCount":3},{"url":"https://zephyr08.example.com/","title":"Zephyr page 08","lastVisit":"2026-11-23T08:00:00Z","visitCount":3},{"url":"https://zephyr09.example.com/","title":"Zephyr page 09","lastVisit":"2026-11-24T09:00:00Z","visitCount":3},{"url":"https://zephyr10.example.com/","title":"Zephyr page 10","lastVisit":"2026-11-20T00:00:00Z","visitCount":3},{"url":"https://zephyr11.example.com/","title":"Zephyr page 11","lastVisit":"2026-11-21T01:00:00Z","visitCount":3},{"url":"https://zephyr12.example.com/","title":"Zephyr page 12","lastVisit":"2026-11-22T02:00:00Z","visitCount":3},{"url":"https://zephyr13.example.com/","title":"Zephyr page 13","lastVisit":"2026-11-23T03:00:00Z","visitCount":3},{"url":"https://zephyr14.example.com/","title":"Zephyr page 14","lastVisit":"2026-11-24T04:00:00Z","visitCount":3},{"url":"https://zephyr15.example.com/","title":"Zephyr page 15","lastVisit":"2026-11-20T05:00:00Z","visitCount":3},{"url":"https://zephyr16.example.com/","title":"Zephyr page 16","lastVisit":"2026-11-21T06:00:00Z","visitCount":3},{"url":"https://zephyr17.example.com/","title":"Zephyr page 17","lastVisit":"2026-11-22T07:00:00Z","visitCount":3},{"url":"https://zephyr18.example.com/","title":"Zephyr page 18","lastVisit":"2026-11-23T08:00:00Z","visitCount":3},{"url":"https://zephyr19.example.com/","title":"Zephyr page 19","lastVisit":"2026-11-24T09:00:00Z","visitCount":3},{"url":"https://zephyr20.example.com/","title":"Zephyr page 20","lastVisit":"2026-11-20T00:00:00Z","visitCount":3}]
+wait 2
+cra://commandbar?query=zephyr
+wait 2
+cra://debug?commandBarRows=opened
+expect-log Cra command bar rows opened: open=1 mode=newTab selected=0 ([a-z]+:\S+ \| ){14}[a-z]+:\S+ completion=
+cra://debug?commandBarShown=opened
+expect-log command bar shown opened: listed=15 first=0 inView=0,1,2,3,4 selected=0 height=250
+cra://debug?commandBarMove=4
+wait 1
+cra://debug?commandBarShown=fifth
+expect-log command bar shown fifth: listed=15 first=0 inView=0,1,2,3,4 selected=4
+cra://debug?commandBarMove=1
+wait 1
+cra://debug?commandBarShown=sixth
+expect-log command bar shown sixth: listed=15 first=1 inView=1,2,3,4,5 selected=5
+cra://debug?commandBarMove=9
+wait 1
+cra://debug?commandBarShown=last
+expect-log command bar shown last: listed=15 first=10 inView=10,11,12,13,14 selected=14
+cra://debug?commandBarMove=1
+wait 1
+cra://debug?commandBarShown=wrapped
+expect-log command bar shown wrapped: listed=15 first=0 inView=0,1,2,3,4 selected=0
+cra://debug?commandBarMove=-1
+wait 1
+cra://debug?commandBarShown=back
+expect-log command bar shown back: listed=15 first=10 inView=10,11,12,13,14 selected=14
