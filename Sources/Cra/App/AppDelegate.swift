@@ -1219,7 +1219,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let plan {
                 let r = store.apply(plan, includeArchive: q("archive") != "0", includeSettings: q("settings") != "0")
                 favicons.reset()
-                NSLog("Cra: imported %d spaces, %d tabs, %d folders, %d archived", r.spaces, r.tabs, r.folders, r.archived)
+                NSLog("Cra: imported %d spaces, %d tabs, %d folders, %d archived, %d of %d tabs copied", r.spaces, r.tabs, r.folders, r.archived,
+                      r.report[.tabs].copied, r.report[.tabs].total)
             }
         case "debug":
             var dict: [String: String] = [:]

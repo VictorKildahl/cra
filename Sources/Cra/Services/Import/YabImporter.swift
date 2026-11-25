@@ -75,16 +75,19 @@ enum YabImporter {
             var rows = entries(dir.appendingPathComponent(file))
             // The shared tiles head a space that signs in where the first one does; one with sign-ins
             // of its own keeps its own tiles, as the shared ones would sign in as someone else there.
-            if pinsInEverySpace == true && s["ownSignIns"] as? Bool != true {
+            let sharesTiles = pinsInEverySpace == true && s["ownSignIns"] as? Bool != true
+            if sharesTiles {
                 rows = shared.filter(isTile) + rows.filter { !isTile($0) }
             }
 
             var favorites: [ImportedItem] = []
             let kept = ImportTree()
             var today: [ImportedItem] = []
+            var skipped: [ImportSkip] = []
             for e in rows {
                 let pinned = isTile(e) || e["kept"] as? Bool == true
-                guard let item = item(e, pinned: pinned) else { continue }
+                // A tile left out is listed on the favorites tile.
+                guard let item = item(e, pinned: pinned, skip: { var s = $0; if isTile(e) { s.kind = .favorites }; skipped.append(s) }) else { continue }
                 if isTile(e) {
                     if !favorites.contains(where: { $0.url == item.url }) { favorites.append(item) }
                 } else if pinned {
@@ -101,6 +104,8 @@ enum YabImporter {
             space.pinned = kept.items
             space.today = today
             space.profile = profile(of: s, among: spaces, supportDir: dir)
+            space.skipped = skipped
+            space.favoritesList = sharesTiles ? sharedPinsID : nil
             plan.spaces.append(space)
         }
         return plan
@@ -115,11 +120,16 @@ enum YabImporter {
     private static func isTile(_ e: [String: Any]) -> Bool { (e["pin"] as? String).map { !$0.isEmpty } ?? false }
 
     /// A tile or kept tab keeps the page it was pinned with (`home`), not where it navigated, unless
-    /// that page can't be imported: then it comes at the page it shows.
-    private static func item(_ e: [String: Any], pinned: Bool) -> ImportedItem? {
+    /// that page can't be imported: then it comes at the page it shows. `skip` hears of a tab left out.
+    private static func item(_ e: [String: Any], pinned: Bool, skip: (ImportSkip) -> Void) -> ImportedItem? {
         let home = pinned ? (e["home"] as? String).map { (url: $0, title: e["homeTitle"] as? String) } : nil
         let current = (e["url"] as? String).map { (url: $0, title: e["title"] as? String) }
-        guard let page = [home, current].compactMap({ $0 }).first(where: { ImportedAddress.keeps($0.url) }) else { return nil }
+        let pages = [home, current].compactMap { $0 }
+        guard let page = pages.first(where: { ImportedAddress.keeps($0.url) }) else {
+            let left = pages.first { ImportedAddress.leftOut($0.url) != nil }
+            ImportSkip.leftOut(left?.url, title: (e["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? left?.title ?? "").map(skip)
+            return nil
+        }
         let title = page.title.flatMap { $0.isEmpty ? nil : $0 } ?? e["title"] as? String ?? ""
         let custom = (e["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return ImportedItem(customTitle: custom, pageTitle: title, url: page.url)

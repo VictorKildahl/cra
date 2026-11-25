@@ -50,9 +50,11 @@ enum SafariImporter {
         guard let root = locate(in: folder) else { throw SafariExportError.missingFiles }
         var plan = ImportPlan(source: "Safari")
         if let html = try? String(contentsOf: root.appendingPathComponent("Bookmarks.html"), encoding: .utf8) {
-            let (favorites, folders) = bookmarks(html: html)
+            var skipped: [ImportSkip] = []
+            let (favorites, folders) = bookmarks(html: html, skip: { skipped.append($0) })
             let pinned = favorites + folders
-            if !pinned.isEmpty { plan.spaces.append(ImportedSpace(title: "Safari", emoji: "🧭", theme: nil, pinned: pinned)) }
+            if !pinned.isEmpty { plan.spaces.append(ImportedSpace(title: "Safari", emoji: "🧭", theme: nil, pinned: pinned, skipped: skipped)) }
+            else { plan.skipped = skipped }
         }
         let logins = (try? String(contentsOf: root.appendingPathComponent("Passwords.csv"), encoding: .utf8)).map(PasswordCSV.logins) ?? []
         let sites = (try? Data(contentsOf: root.appendingPathComponent("History.json"))).map { topSites($0) } ?? []
@@ -70,8 +72,8 @@ enum SafariImporter {
 
     /// Netscape bookmark file: `<DT><H3>` opens a folder whose items follow in
     /// a `<DL>`, `<DT><A HREF>` is a bookmark. Safari's Favorites folder becomes
-    /// the pinned list; the Reading List is left out.
-    static func bookmarks(html: String) -> (favorites: [ImportedItem], folders: [ImportedItem]) {
+    /// the pinned list; the Reading List is left out. `skip` hears of each bookmark left out.
+    static func bookmarks(html: String, skip: (ImportSkip) -> Void = { _ in }) -> (favorites: [ImportedItem], folders: [ImportedItem]) {
         let pattern = #"<DT><H3[^>]*>(.*?)</H3>|<DT><A [^>]*HREF="([^"]*)"[^>]*>(.*?)</A>|</DL>"#
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return ([], []) }
         // Stack of open folders; the bottom one is the file's root.
@@ -82,8 +84,12 @@ enum SafariImporter {
                 stack.append((unescape(ns.substring(with: m.range(at: 1))), []))
             } else if m.range(at: 2).location != NSNotFound {
                 let url = unescape(ns.substring(with: m.range(at: 2)))
-                guard ImportedAddress.keeps(url) else { continue }
                 let title = unescape(ns.substring(with: m.range(at: 3)))
+                guard ImportedAddress.keeps(url) else {
+                    // The Reading List stays out whole, so nothing in it is listed.
+                    if stack.count < 2 || stack[1].name.lowercased() != "reading list" { ImportSkip.leftOut(url, title: title).map(skip) }
+                    continue
+                }
                 stack[stack.count - 1].items.append(ImportedItem(customTitle: title.isEmpty ? nil : title, pageTitle: title, url: url))
             } else if stack.count > 1 {
                 let done = stack.removeLast()

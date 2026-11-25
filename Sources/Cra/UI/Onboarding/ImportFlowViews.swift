@@ -18,41 +18,6 @@ enum ImportMetrics {
     static let gap: CGFloat = 10
 }
 
-struct ImportColors {
-    let dark: Bool
-    var background: Color { dark ? .black : .white }
-    /// RebrandAppTitleText
-    var title: Color { dark ? .white.opacity(0.85) : .black.opacity(0.85) }
-    /// RebrandBodyText
-    var body: Color { dark ? .white.opacity(0.55) : .black.opacity(0.55) }
-    var ink: Color { dark ? .white : .black }
-    /// Browser card hairline: #5E5E5E / #9D9D9D over black.
-    var cardBorder: Color { dark ? .white.opacity(0.37) : .black.opacity(0.14) }
-    var cardBorderSelected: Color { dark ? .white.opacity(0.62) : .black.opacity(0.42) }
-    /// BrowserItemBackground (hover)
-    var cardHover: Color { dark ? .white.opacity(0.04) : .black.opacity(0.04) }
-    /// Radio ring: #505050 over black.
-    var radioRing: Color { dark ? .white.opacity(0.31) : .black.opacity(0.22) }
-    /// RebrandRowBackground / RebrandRowBorder
-    var rowFill: Color { dark ? .white.opacity(0.08) : .black.opacity(0.015) }
-    var rowFillHover: Color { dark ? .white.opacity(0.11) : .black.opacity(0.04) }
-    var rowBorder: Color { dark ? .white.opacity(0.16) : .black.opacity(0.08) }
-    /// ImportSelectionCaption
-    var caption: Color { dark ? .white.opacity(0.4) : .black.opacity(0.3) }
-    /// ButtonPrimaryBackground: #E0E0E0 over black.
-    var primaryFill: Color { dark ? Color(white: 0.878) : .black.opacity(0.85) }
-    var primaryFillHover: Color { dark ? Color(white: 0.92) : .black.opacity(0.9) }
-    var primaryText: Color { dark ? .black : .white }
-    var primaryTextDisabled: Color { dark ? Color(white: 0.5) : .white.opacity(0.5) }
-    /// ButtonDefaultBackground
-    var secondaryFill: Color { dark ? .white.opacity(0.08) : .black.opacity(0.08) }
-    var secondaryFillHover: Color { dark ? .white.opacity(0.1) : .black.opacity(0.1) }
-    /// ImportProgressItemBorder
-    var tileBorder: Color { dark ? .white.opacity(0.1) : .black.opacity(0.1) }
-    /// LoadingSubtitle
-    var loading: Color { dark ? .white.opacity(0.4) : .black.opacity(0.3) }
-}
-
 struct ImportFlowView: View {
     @Bindable var model: ImportFlowModel
     @Environment(\.colorScheme) private var scheme
@@ -556,17 +521,30 @@ struct ExtensionIcon: View {
     }
 }
 
+/// A progress tile; one with skipped items opens their list when clicked.
 struct CategoryTile: View {
     let category: ImportCategory
     let c: ImportColors
     var height: CGFloat = 64
+    @State private var hover = false
+    @State private var showsSkipped = false
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let report = category.report.flatMap { $0.skipped.isEmpty ? nil : $0 }
         HStack(spacing: 12) {
             Image(systemName: category.symbol).font(.system(size: 15)).foregroundStyle(c.body).frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(category.title).font(.system(size: 14, weight: .medium)).foregroundStyle(c.title)
-                Text(category.detail).font(.system(size: 12)).foregroundStyle(c.caption).lineLimit(1)
+                if let report {
+                    ViewThatFits(in: .horizontal) {
+                        Text("\(category.detail) ›")
+                        Text("\(report.shortSummary) ›")
+                    }
+                    .font(.system(size: 12)).foregroundStyle(c.caption).lineLimit(1).underline(hover)
+                } else {
+                    Text(category.detail).font(.system(size: 12)).foregroundStyle(c.caption).lineLimit(1)
+                }
             }
             Spacer(minLength: 4)
             Group {
@@ -582,8 +560,29 @@ struct CategoryTile: View {
         }
         .padding(.horizontal, 14)
         .frame(width: ImportMetrics.card.width, height: height)
+        .background(shape.fill(hover && report != nil ? c.cardHover : .clear))
         .overlay(shape.strokeBorder(c.tileBorder, lineWidth: 1))
         .animation(.easeOut(duration: 0.2), value: category.state)
+        .contentShape(shape)
+        .onHover { hover = $0 }
+        .onTapGesture { if report != nil { showsSkipped = true } }
+        .modifier(OpensSkipped(on: report != nil) { showsSkipped = true })
+        .popover(isPresented: $showsSkipped, arrowEdge: .bottom) {
+            if let report { SkippedList(report: report, c: c) }
+        }
+    }
+}
+
+/// VoiceOver reads a tile with skipped items as one button that opens them; other tiles stay as they were.
+private struct OpensSkipped: ViewModifier {
+    let on: Bool
+    let open: () -> Void
+    func body(content: Content) -> some View {
+        if on {
+            content.accessibilityElement(children: .combine).accessibilityAddTraits(.isButton).accessibilityAction { open() }
+        } else {
+            content
+        }
     }
 }
 

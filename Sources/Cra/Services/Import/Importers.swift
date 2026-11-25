@@ -18,6 +18,9 @@ struct ImportedItem {
     var liveFolder: LiveFolderData?
     /// The live item a tab in a live folder stands for (Arc: `liveItemID.url`).
     var liveItemURL: String?
+    /// The source's list a favorite came from, when it isn't its space's (Arc: the Top Apps
+    /// container a space shows or borrows). The favorites tile counts each list once.
+    var favoritesList: String?
 }
 
 struct ImportedSpace {
@@ -32,6 +35,11 @@ struct ImportedSpace {
     var today: [ImportedItem] = []
     /// The source browser's profile the space was on, when it is not Default (Arc, GitHub #131).
     var profile: ImportedProfile?
+    /// The source's list `favorites` is, when spaces share it (Zen's Essentials, Yab's shared tiles);
+    /// nil for the space's own. A favorite's own `favoritesList` comes first.
+    var favoritesList: String?
+    /// What the importer left out of this space, listed after the import.
+    var skipped: [ImportSkip] = []
 }
 
 /// A Chromium profile of the source browser: its folder under `User Data` and the name it shows.
@@ -84,6 +92,10 @@ struct ImportPlan {
     var favorites: [ImportedItem] = []
     var archive: [ImportedArchiveEntry] = []
     var settings = ImportedSettings()
+    /// What the importer left out that belongs to no space it brings, listed after the import.
+    var skipped: [ImportSkip] = []
+    /// Archived tabs the importer left out, listed when the archive comes over.
+    var archiveSkipped: [ImportSkip] = []
 
     var tabCount: Int {
         func count(_ items: [ImportedItem]) -> Int { items.reduce(0) { $0 + ($1.isFolder ? count($1.children) : 1) } }
@@ -92,6 +104,39 @@ struct ImportPlan {
     var folderCount: Int {
         func count(_ items: [ImportedItem]) -> Int { items.reduce(0) { $0 + ($1.isFolder ? 1 + count($1.children) : 0) } }
         return spaces.reduce(count(favorites)) { $0 + count($1.favorites) + count($1.pinned) + count($1.today) }
+    }
+
+    /// The plan restricted to what the user picked.
+    func selecting(spaces: Set<Int>, favorites: Bool) -> ImportPlan {
+        var p = self
+        p.spaces = spaces.sorted().compactMap { $0 < self.spaces.count ? self.spaces[$0] : nil }
+        if !favorites {
+            p.favorites = []
+            // What was left out of the favorites of no space goes with them.
+            p.skipped.removeAll { $0.kind == .favorites }
+        }
+        return p
+    }
+
+    /// What the import counts and lists, a tile each: the spaces' pinned and Today tabs, the
+    /// favorites, the archive when it comes over, and the skips that go with them. Favorites of no
+    /// space are a list of their own ("").
+    func report(includeArchive: Bool) -> ImportReports {
+        func urls(_ items: [ImportedItem]) -> [String] { items.flatMap { $0.isFolder ? urls($0.children) : [$0.url].compactMap { $0 } } }
+        let lists = spaces.enumerated().map { i, sp in sp.favoritesList.map { "list " + $0 } ?? "space \(i)" }
+        let favorites = urls(favorites).map { (list: "", url: $0) } + spaces.indices.flatMap { i in
+            spaces[i].favorites.flatMap { item in urls([item]).map { (list: item.favoritesList.map { "list " + $0 } ?? lists[i], url: $0) } }
+        }
+        let skips = spaces.indices.flatMap { i in spaces[i].skipped.map { (list: $0.favoritesList.map { "list " + $0 } ?? lists[i], skip: $0) } }
+            + (skipped + (includeArchive ? archiveSkipped : [])).map { (list: "", skip: $0) }
+        return ImportReports(tabs: spaces.reduce(0) { $0 + $1.itemCount }, favorites: favorites, archive: includeArchive ? archive.count : 0, skipped: skips)
+    }
+}
+
+extension ImportedSpace {
+    var itemCount: Int {
+        func count(_ items: [ImportedItem]) -> Int { items.reduce(0) { $0 + ($1.isFolder ? count($1.children) : 1) } }
+        return count(pinned) + count(today)
     }
 }
 
@@ -160,9 +205,10 @@ enum ArcImporter {
         return plan
     }
 
-    /// The plan from a StorableSidebar.json's contents (favicons and profiles still come from
-    /// `supportDir`).
-    static func plan(sidebar data: Data) throws -> ImportPlan {
+    /// The plan from a StorableSidebar.json's contents and a StorableArchiveItems.json's (favicons
+    /// and profiles still come from `supportDir`).
+    static func plan(sidebar data: Data,
+                     archive: Data? = try? Data(contentsOf: supportDir.appendingPathComponent("StorableArchiveItems.json"))) throws -> ImportPlan {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [[String: Any]] else { throw ImportError.unreadable("Arc's sidebar") }
@@ -171,6 +217,8 @@ enum ArcImporter {
         // A damaged file can list an id twice: the later entry wins, as when Arc decodes it.
         let items = Dictionary(pairs(main["items"]), uniquingKeysWith: { _, later in later })
         var spaceTitleByID: [String: String] = [:]
+        // What `convert` leaves out, taken by the list being converted.
+        var refused: [ImportSkip] = []
 
         func convert(_ id: String) -> ImportedItem? {
             guard let it = items[id], let dataDict = it["data"] as? [String: Any] else { return nil }
@@ -178,7 +226,10 @@ enum ArcImporter {
             let created = refDate(it["createdAt"])
             let childIDs = it["childrenIds"] as? [String] ?? []
             if let tab = dataDict["tab"] as? [String: Any] {
-                guard let u = tab["savedURL"] as? String, ImportedAddress.keeps(u) else { return nil }
+                guard let u = tab["savedURL"] as? String, ImportedAddress.keeps(u) else {
+                    ImportSkip.leftOut(tab["savedURL"] as? String, title: custom ?? tab["savedTitle"] as? String ?? "").map { refused.append($0) }
+                    return nil
+                }
                 return ImportedItem(customTitle: custom, pageTitle: tab["savedTitle"] as? String ?? "", url: u, createdAt: created,
                                     faviconPath: faviconFile(forItemID: id), liveItemURL: tagged(tab["liveItemID"], "url"))
             }
@@ -199,14 +250,17 @@ enum ArcImporter {
         let profileNames = ChromiumImporter.profileNames(userData: userData)
 
         // Favorites (topApps): one container per profile, shared by that profile's spaces.
-        var favoritesByProfile: [(profile: NSDictionary, items: [ImportedItem])] = []
-        var allFavorites: [ImportedItem] = []
-        for (_, it) in items {
+        var favoritesByProfile: [(profile: NSDictionary, id: String, items: [ImportedItem])] = []
+        var allFavorites: [ImportedItem] = [], favoritesSkipped: [String: [ImportSkip]] = [:]
+        for (id, it) in items {
             guard let d = it["data"] as? [String: Any], let c = d["itemContainer"] as? [String: Any],
                   let type = c["containerType"] as? [String: Any], let top = type["topApps"] as? [String: Any] else { continue }
-            let favs = (it["childrenIds"] as? [String] ?? []).compactMap(convert)
+            let favs = (it["childrenIds"] as? [String] ?? []).compactMap(convert).map { var f = $0; f.favoritesList = id; return f }
+            // A favorite left out goes with every space that shows its list, and is listed once.
+            favoritesSkipped[id] = refused.map { var s = $0; s.kind = .favorites; s.favoritesList = id; return s }
+            refused = []
             allFavorites += favs
-            if let profile = top["_0"] as? NSDictionary { favoritesByProfile.append((profile, favs)) }
+            if let profile = top["_0"] as? NSDictionary { favoritesByProfile.append((profile, id, favs)) }
         }
 
         for (sid, space) in pairs(main["spaces"]) {
@@ -229,20 +283,29 @@ enum ArcImporter {
             // preset: that shifted every later space onto another colour (issue #30).
             var sp = ImportedSpace(title: title, emoji: icon.emoji, symbol: icon.symbol, theme: ArcThemeImport.theme(from: space) ?? SpaceTheme.presets[0])
             let profile = space["profile"] as? NSDictionary
-            sp.favorites = favoritesByProfile.first { $0.profile.isEqual(profile) }?.items ?? allFavorites
+            let own = favoritesByProfile.first { $0.profile.isEqual(profile) }
+            sp.favorites = own?.items ?? allFavorites
+            sp.skipped = own.map { favoritesSkipped[$0.id] ?? [] } ?? favoritesSkipped.keys.sorted().flatMap { favoritesSkipped[$0] ?? [] }
             sp.profile = ImportProfileMap.arcProfileFolder(space["profile"]).map { ImportedProfile(folder: $0, name: profileNames[$0] ?? $0) }
             if let p = pinnedID, let c = items[p] { sp.pinned = (c["childrenIds"] as? [String] ?? []).compactMap(convert) }
             if let t = todayID, let c = items[t] { sp.today = (c["childrenIds"] as? [String] ?? []).compactMap(convert) }
+            sp.skipped += refused
+            refused = []
             plan.spaces.append(sp)
         }
 
         // Archive
-        if let adata = try? Data(contentsOf: supportDir.appendingPathComponent("StorableArchiveItems.json")),
+        if let adata = archive,
            let aroot = try? JSONSerialization.jsonObject(with: adata) as? [String: Any],
            let aitems = aroot["items"] as? [Any] {
             for case let e as [String: Any] in aitems {
                 guard let si = e["sidebarItem"] as? [String: Any], let d = si["data"] as? [String: Any],
-                      let tab = d["tab"] as? [String: Any], let u = tab["savedURL"] as? String, ImportedAddress.keeps(u) else { continue }
+                      let tab = d["tab"] as? [String: Any] else { continue }
+                guard let u = tab["savedURL"] as? String, ImportedAddress.keeps(u) else {
+                    let title = si["title"] as? String ?? tab["savedTitle"] as? String ?? ""
+                    ImportSkip.leftOut(tab["savedURL"] as? String, title: title, kind: .archive).map { plan.archiveSkipped.append($0) }
+                    continue
+                }
                 let reason = (e["reason"] as? String) == "auto" ? ArchiveReason.auto : .manual
                 var spaceTitle: String?
                 if let src = e["source"] as? [String: Any], let sp = src["space"] as? [String: Any], let id = sp["_0"] as? String { spaceTitle = spaceTitleByID[id] }
@@ -251,7 +314,12 @@ enum ArcImporter {
                                                          faviconPath: (si["id"] as? String).flatMap { faviconFile(forItemID: $0, in: "ArchiveItemsFaviconCache") }))
             }
             plan.archive.sort { $0.archivedAt > $1.archivedAt }
-            if plan.archive.count > 1500 { plan.archive.removeLast(plan.archive.count - 1500) }
+            if plan.archive.count > 1500 {
+                plan.archiveSkipped += plan.archive[1500...].map {
+                    ImportSkip(title: $0.customTitle ?? $0.pageTitle, url: $0.url, reason: .olderArchive(limit: 1500), kind: .archive)
+                }
+                plan.archive.removeLast(plan.archive.count - 1500)
+            }
         }
 
         // Settings
@@ -348,27 +416,27 @@ enum DiaImporter {
     /// it (or from an older Dia) from the files Dia kept before 1.55, which no longer follow
     /// the sidebar: the open tabs as of then and the bookmarks bar. A secret that opens no
     /// sidebar database throws rather than fall back to those stale files. The sidebar database and
-    /// favicons come from `userData`.
-    static func plan(secret: String? = nil, userData: URL = DiaImporter.userData) throws -> ImportPlan {
+    /// favicons come from `userData`, the older files and the archive from `dir`.
+    static func plan(secret: String? = nil, supportDir dir: URL = DiaImporter.supportDir, userData: URL = DiaImporter.userData) throws -> ImportPlan {
         guard isAvailable else { throw ImportError.notFound("Dia") }
         var plan = ImportPlan(source: "Dia")
         if let secret, hasEncryptedSidebar(userData: userData) {
             plan.spaces = DiaSidebar.spaces(userData: userData, rootKey: ChromiumCrypto.key(fromSecret: secret))
             if plan.spaces.isEmpty { throw ImportError.unreadable("Dia's spaces and tabs") }
         } else {
-            addLegacySidebar(to: &plan)
+            addLegacySidebar(to: &plan, supportDir: dir, userData: userData)
         }
-        addArchive(to: &plan)
+        addArchive(to: &plan, supportDir: dir)
         ImportFavicons.attach(to: &plan, folder: "cra-dia-favicons", from: ImportSource.Kind.dia.iconStores(dataDir: userData))
         return plan
     }
 
-    private static func addLegacySidebar(to plan: inout ImportPlan) {
+    private static func addLegacySidebar(to plan: inout ImportPlan, supportDir: URL, userData: URL) {
         // Open tabs and the favorites container.
         if let data = try? Data(contentsOf: supportDir.appendingPathComponent("StorableProfileContainers.json")),
            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let containers = root["containers"] as? [[String: Any]] {
-            var openTabs: [ImportedItem] = []
+            var openTabs: [ImportedItem] = [], openSkipped: [ImportSkip] = []
             for c in containers {
                 let idInfo = c["id"] as? [String: Any]
                 let kind = idInfo?["container"] as? [String: Any]
@@ -377,13 +445,19 @@ enum DiaImporter {
                     guard let contents = tab["contents"] as? [[String: Any]] else { continue }
                     for content in contents {
                         guard let variant = content["variant"] as? [String: Any], let web = variant["webContent"] as? [String: Any],
-                              let w = web["_0"] as? [String: Any], let url = w["url"] as? String, ImportedAddress.keeps(url) else { continue }
+                              let w = web["_0"] as? [String: Any], let url = w["url"] as? String else { continue }
+                        guard ImportedAddress.keeps(url) else {
+                            let skip = ImportSkip.leftOut(url, title: w["title"] as? String ?? "", kind: isFavorites ? .favorites : .tabs)
+                            if isFavorites { plan.skipped += [skip].compactMap { $0 } } else { openSkipped += [skip].compactMap { $0 } }
+                            continue
+                        }
                         let item = ImportedItem(pageTitle: w["title"] as? String ?? "", url: url, createdAt: refDate(tab["creationDate"]))
                         if isFavorites { plan.favorites.append(item) } else { openTabs.append(item) }
                     }
                 }
             }
-            if !openTabs.isEmpty { plan.spaces.append(ImportedSpace(title: "Dia", emoji: "🌀", theme: nil, today: openTabs)) }
+            if !openTabs.isEmpty { plan.spaces.append(ImportedSpace(title: "Dia", emoji: "🌀", theme: nil, today: openTabs, skipped: openSkipped)) }
+            else { plan.skipped += openSkipped }
         }
 
         // Bookmarks: Dia keeps imported Arc spaces as folders on the bookmarks bar.
@@ -392,36 +466,52 @@ enum DiaImporter {
             let bm = supportDir.appendingPathComponent("User Data/\(prof)/Bookmarks")
             guard let data = try? Data(contentsOf: bm), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let roots = root["roots"] as? [String: Any], let bar = roots["bookmark_bar"] as? [String: Any] else { continue }
+            // The tile a bookmark left out is listed on: favorites for the bar's own and its Favorites folder's.
+            var kind = ImportKind.tabs, refused: [ImportSkip] = []
             func convert(_ node: [String: Any]) -> ImportedItem? {
                 let name = node["name"] as? String ?? ""
                 if node["type"] as? String == "url", let u = node["url"] as? String, ImportedAddress.keeps(u) {
                     return ImportedItem(customTitle: name.isEmpty ? nil : name, pageTitle: name, url: u)
                 }
+                if node["type"] as? String == "url" { ImportSkip.leftOut(node["url"] as? String, title: name, kind: kind).map { refused.append($0) } }
                 if node["type"] as? String == "folder" {
                     let kids = (node["children"] as? [[String: Any]] ?? []).compactMap(convert)
                     return ImportedItem(customTitle: name, pageTitle: name, url: nil, isFolder: true, children: kids)
                 }
                 return nil
             }
+            // A row goes with the space its bookmark's folder becomes, else with the plan.
+            func file(_ skips: [ImportSkip], in space: String?) {
+                if let i = space.flatMap({ t in plan.spaces.firstIndex { $0.title == t } }) { plan.spaces[i].skipped += skips } else { plan.skipped += skips }
+            }
             for child in bar["children"] as? [[String: Any]] ?? [] {
-                guard let item = convert(child) else { continue }
+                kind = child["type"] as? String == "url" || (child["name"] as? String)?.lowercased() == "favorites" ? .favorites : .tabs
+                refused = []
+                guard let item = convert(child) else { file(refused, in: nil); continue }
                 if item.isFolder {
                     if item.pageTitle.lowercased() == "favorites" { plan.favorites.append(contentsOf: item.children.filter { !$0.isFolder }) }
                     else if !item.children.isEmpty {
                         if let i = plan.spaces.firstIndex(where: { $0.title == item.pageTitle }) { plan.spaces[i].pinned.append(contentsOf: item.children) }
                         else { plan.spaces.append(ImportedSpace(title: item.pageTitle, emoji: "📁", theme: nil, pinned: item.children)) }
                     }
+                    file(refused, in: kind == .favorites || item.children.isEmpty ? nil : item.pageTitle)
                 } else {
                     plan.favorites.append(item)
+                    file(refused, in: nil)
                 }
             }
+            kind = .tabs
+            refused = []
             if let other = roots["other"] as? [String: Any], let kids = (other["children"] as? [[String: Any]])?.compactMap(convert), !kids.isEmpty {
                 plan.spaces.append(ImportedSpace(title: "Other Bookmarks", emoji: "🔖", theme: nil, pinned: kids))
+                file(refused, in: "Other Bookmarks")
+            } else {
+                file(refused, in: nil)
             }
         }
     }
 
-    private static func addArchive(to plan: inout ImportPlan) {
+    private static func addArchive(to plan: inout ImportPlan, supportDir: URL) {
         // Auto-archive store (best effort; shape varies between Dia versions).
         if let data = try? Data(contentsOf: supportDir.appendingPathComponent("StorableAutoArchive.json")),
            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -431,6 +521,8 @@ enum DiaImporter {
                     if let (url, title) = firstURL(in: t) {
                         plan.archive.append(ImportedArchiveEntry(customTitle: nil, pageTitle: title, url: url,
                                                                  archivedAt: refDate(t["archivedAt"] ?? t["archiveDate"] ?? t["date"]), reason: .auto, spaceTitle: "Dia"))
+                    } else if let (url, title) = anyURL(in: t), let skip = ImportSkip.notAWebPage(url, title: title, kind: .archive) {
+                        plan.archiveSkipped.append(skip)
                     }
                 }
             }
@@ -446,6 +538,15 @@ enum DiaImporter {
         }
         return nil
     }
+
+    /// The first address of any scheme, for an archived tab `firstURL` finds none in.
+    private static func anyURL(in obj: Any) -> (String, String)? {
+        if let d = obj as? [String: Any] {
+            if let u = d["url"] as? String { return (u, d["title"] as? String ?? "") }
+            return d.values.lazy.compactMap(anyURL).first
+        }
+        return (obj as? [Any])?.lazy.compactMap(anyURL).first
+    }
 }
 
 // MARK: - Applying
@@ -455,6 +556,8 @@ extension SidebarStore {
         var spaces = 0; var tabs = 0; var folders = 0; var archived = 0; var spaceIDs: [UUID] = []
         /// The Cra profile each source profile of an imported space landed in.
         var profiles = ImportProfileMap()
+        /// How much of the plan is in Cra, and what was left out, a tile each.
+        var report = ImportReports(tabs: 0, favorites: [], archive: 0, skipped: [])
     }
 
     /// Add a plan to the sidebar. Like Dia, every imported space is a new one (importing
@@ -464,6 +567,8 @@ extension SidebarStore {
     @discardableResult
     func apply(_ plan: ImportPlan, includeArchive: Bool, includeSettings: Bool, replacing: [UUID] = []) -> ImportResult {
         var result = ImportResult()
+        // A tab or favorite Cra already has (an earlier import, the same address twice here) counts as copied.
+        result.report = plan.report(includeArchive: includeArchive)
 
         // A pinned tab that has navigated still counts as present via its home URL.
         func existingURLs(under container: UUID) -> Set<String> {
@@ -546,6 +651,12 @@ extension SidebarStore {
                 self.items[folder.id]?.liveFolder = live
                 setExpanded(folder.id, false)
                 result.folders += 1
+            }
+            // A child that stands for no live item stays out, a folder with every tab in it.
+            func tabs(_ item: ImportedItem) -> [ImportedItem] { item.isFolder ? item.children.flatMap(tabs) : [item] }
+            for tab in it.children.filter({ $0.liveItemURL == nil }).flatMap(tabs) {
+                result.report[.tabs].copied -= 1
+                if let url = tab.url { result.report[.tabs].skipped.append(ImportSkip(title: tab.customTitle ?? tab.pageTitle, url: url, reason: .notALiveItem)) }
             }
             insert(it.children.filter { $0.liveItemURL != nil }, into: folder.id, skip: existingURLs(under: folder.id), pinned: pinned)
         }

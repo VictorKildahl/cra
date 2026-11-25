@@ -116,6 +116,8 @@ enum DiaSidebar {
         let groups = byID("SELECT id, title FROM tab_groups")
         let tabs = byID("SELECT id, creation_date FROM tabs")
         let panes = byID("SELECT p.id, p.custom_title, w.url, w.title FROM content_panes p JOIN web_contents w ON w.content_pane_id = p.id")
+        // What `items` leaves out, taken by the space and list being read.
+        var refused: [ImportSkip] = []
 
         func items(_ node: [String: Any], created: Date) -> [ImportedItem] {
             let id = node["entity_id"] as? String ?? ""
@@ -125,8 +127,12 @@ enum DiaSidebar {
                 let created = date(tabs[id]?["creation_date"]) ?? created
                 return kids.flatMap { items($0, created: created) }
             case "content_pane":
-                guard let p = panes[id], let url = p["url"] as? String, ImportedAddress.keeps(url) else { return [] }
+                guard let p = panes[id], let url = p["url"] as? String else { return [] }
                 let custom = (p["custom_title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                guard ImportedAddress.keeps(url) else {
+                    ImportSkip.leftOut(url, title: custom ?? p["title"] as? String ?? "").map { refused.append($0) }
+                    return []
+                }
                 return [ImportedItem(customTitle: custom, pageTitle: p["title"] as? String ?? "", url: url, createdAt: created)]
             case "group":
                 let title = groups[id]?["title"] as? String ?? "Folder"
@@ -145,9 +151,13 @@ enum DiaSidebar {
         return db.rows("SELECT id, title, theme FROM spaces ORDER BY creation_date").map { row in
             let id = row["id"] as? String ?? ""
             var space = ImportedSpace(title: row["title"] as? String ?? "Space", emoji: "🗂️", theme: theme(row["theme"] as? String))
+            refused = []
             space.favorites = contents(of: "favorites", in: id)
+            space.skipped = refused.map { var s = $0; s.kind = .favorites; return s }
+            refused = []
             space.pinned = contents(of: "pinned_container", in: id)
             space.today = contents(of: "window", in: id)
+            space.skipped += refused
             return space
         }
     }
