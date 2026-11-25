@@ -1,0 +1,31 @@
+# A subscription added in Privacy hides an element in an ordinary Chromium document.
+# Switching the offline sources off preserves the subscription. Removing it restores the element.
+port 47134
+pace 0.5
+budget rss=800 stalls50=30
+cra://open?url=${PAGE}?n=filter-list
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const e=document.createElement('div');e.id='filter-list-fixture';e.className='iklan-banner';document.body.append(e);return 'before:'+getComputedStyle(e).display})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before:block"
+cra://debug?blockLists=http://127.0.0.1:47134/blocklist-abp.txt
+expect-log block lists: [0-9]+ domains, 1 added list
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'added:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"added:none"
+cra://debug?toggleSiteFilters=http://127.0.0.1:47134/page.html
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'paused:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:block"
+cra://debug?toggleSiteFilters=http://127.0.0.1:47134/page.html
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'resumed:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:none"
+cra://debug?blockAds=off
+expect-log block ads and trackers: off
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'off:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"off:none"
+cra://debug?blockAds=on
+expect-log block ads and trackers: on
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'on:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"on:none"
+cra://debug?blockLists=none
+expect-log block lists: [0-9]+ domains, 0 added lists
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'removed:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"removed:block"

@@ -249,13 +249,15 @@ final class SiteControlCenterView: NSView {
         let store = store, url = url
         var rowsSpec: [(String, String, String, Bool, () -> Void)] = [
             ("hammer.fill", "Developer Mode", developer ? "On" : "Off", developer, { store.settings.toggleDeveloperMode(url: url) }),
-            ("shield.fill", "Block Ads & Trackers", store.settings.blockAdsAndTrackers ? "On" : "Off",
-             store.settings.blockAdsAndTrackers, { store.settings.blockAdsAndTrackers.toggle() }),
             ("gearshape.fill", "Automatic Picture-In-Picture", autoPiP ? "Allowed" : "Disabled",
              autoPiP, { store.settings.toggleAutoPictureInPicture(url: url) }),
         ]
         // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
-        if protectedMedia != nil { rowsSpec.remove(at: 1) }
+        if protectedMedia == nil, let host = AppSettings.filterHost(url) {
+            let active = store.settings.pausedFilterHosts?.contains(host) != true
+            rowsSpec.insert(("shield.fill", "Filter lists on this site", active ? "On" : "Paused · Reload page",
+                             active, { store.settings.toggleFilters(on: host) }), at: 1)
+        }
         // A page that plays DRM, or one in WebKit: which engine plays this site, or for a mixed
         // site (YouTube) its protected videos or just this one (docs/protected-media.md).
         if let row = safariEngine {

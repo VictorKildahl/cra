@@ -1,0 +1,3 @@
+! Title: Request type and site exceptions
+||assets.fixture.example:47136/icon-blue.png$xmlhttprequest
+@@||assets.fixture.example:47136/icon-blue.png$xmlhttprequest,domain=reader.example

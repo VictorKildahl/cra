@@ -158,7 +158,15 @@
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/browser/extension_registrar.h"
 #include "chrome/browser/extensions/menu_manager.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/browser/unpacked_installer.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/api/declarative_net_request/composite_matcher.h"
+#include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/views/controls/webview/cra_hosted_page.h"
@@ -252,6 +260,8 @@ NSString* g_extension_profiles = nil;
 int g_exit_code = 0;
 bool g_ready = false;
 bool g_quitting = false;
+// Published from the app’s filter queue. Chromium installs dynamic rules separately in each profile.
+std::atomic<bool> g_bundled_network_rules_expected{false};
 NSMutableArray<void (^)(void)>* g_ready_blocks = nil;
 // Chrome quits once nothing keeps it alive; in Chrome AppController does, which Cra's app replaces. Held from
 // start-up to Cra's quit.
@@ -846,7 +856,7 @@ class PageHost : public TabStripModelObserver {
     // process; about:blank took one of its own for as long as Cra ran.
     std::unique_ptr<content::WebContents> blank =
         content::WebContents::Create(content::WebContents::CreateParams(browser->GetProfile()));
-    placeholder_ = blank.get();
+    placeholder_ = blank->GetWeakPtr();
     // Not a tab to extensions (chrome.tabs.query, chrome.windows.getAll), as a spare page isn't.
     placeholder_->SetUserData(content::CraSparePageKey(), std::make_unique<base::SupportsUserData::Data>());
     browser->GetTabStripModel()->AppendWebContents(std::move(blank), /*foreground=*/true);
@@ -891,7 +901,7 @@ class PageHost : public TabStripModelObserver {
   // marks it as its own and takes its view.
   void KeepPlaceholderActive() {
     TabStripModel* tabs = browser_->GetTabStripModel();
-    int index = tabs->GetIndexOfWebContents(placeholder_);
+    int index = tabs->GetIndexOfWebContents(placeholder_.get());
     if (index != TabStripModel::kNoTab && tabs->active_index() != index) {
       tabs->ActivateTabAt(index);
     }
@@ -905,7 +915,7 @@ class PageHost : public TabStripModelObserver {
     }
     for (const auto& inserted : change.GetInsert()->contents) {
       content::WebContents* page = inserted.contents;
-      if (page == placeholder_ || BrowserFor(page)) {
+      if (page == placeholder_.get() || BrowserFor(page)) {
         continue;
       }
       // The page that opened it: the frame for window.open, else the tab strip's opener (a link opened
@@ -935,7 +945,7 @@ class PageHost : public TabStripModelObserver {
              base::WeakPtr<content::WebContents> opener,
              base::WeakPtr<content::WebContents> before,
              bool background) {
-    if (!page) {
+    if (!page || !browser_) {
       return;
     }
     // Only a page that opened in front: a background one (an extension's tabs.create with active: false) leaves
@@ -992,7 +1002,7 @@ class PageHost : public TabStripModelObserver {
   }
 
   raw_ptr<BrowserWindowInterface> browser_;
-  raw_ptr<content::WebContents> placeholder_ = nullptr;
+  base::WeakPtr<content::WebContents> placeholder_;
 };
 
 std::map<Profile*, PageHost*>& Hosts() {
@@ -1547,6 +1557,7 @@ bool IsHost(BrowserWindowInterface* browser) {
 class StrayWindows : public BrowserCollectionObserver, public TabStripModelObserver {
  public:
   void Start() { observation_.Observe(GlobalBrowserCollection::GetInstance()); }
+  void Stop() { observation_.Reset(); }
 
   void OnBrowserCreated(BrowserWindowInterface* browser) override {
     if (g_making_host || IsHost(browser)) {
@@ -2200,6 +2211,8 @@ bool HandleDebugMethod(content::WebContents* contents,
   // The page's DevTools protocol session, made on the first -sendDevToolsMethod:.
   std::unique_ptr<cra::PageSession> _session;
   NSString* _pendingURL;
+  NSString* _filterWaitingURL;
+  base::TimeTicks _filterWaitStarted;
   BOOL _waitingForPopup;
   BOOL _audioMuted;
   // A Boost's colorize, Arc's 6 comma-separated numbers; empty for none (#602).
@@ -2912,12 +2925,77 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
 
 #pragma mark Navigation
 
+// A new profile can create its first private page before its filter worker has
+// installed any rules. Wait for Chromium’s actual matcher before sending that page.
+- (BOOL)profileIsStartingFilters {
+  if (!g_bundled_network_rules_expected.load() || !cra_blocker::Enabled().load()) {
+    return NO;
+  }
+  [CraCEFRuntime synchronizeBundledNetworkFilter];
+  constexpr char id[] = "nddccjlgchhhajchaphmkffkclfmcemb";
+  Profile* profile = Profile::FromBrowserContext(_contents->GetBrowserContext())->GetOriginalProfile();
+  auto* registry = extensions::ExtensionRegistry::Get(profile);
+  auto* client = extensions::ExtensionsBrowserClient::Get();
+  if (_isIncognito) {
+    bool allowed = false;
+    if (client->IsolatedModeReplacesIncognito(profile) ||
+        (extensions::ExtensionPrefs::Get(profile)->ReadPrefAsBoolean(id, "incognito", &allowed) && !allowed)) {
+      return NO;
+    }
+  }
+  if (!registry->enabled_extensions().Contains(id)) {
+    // A cold profile has no registry entry yet. Installation finishes asynchronously,
+    // so releasing its first navigation here would send it before filtering starts.
+    return !registry->GetInstalledExtension(id) &&
+           (!extensions::ExtensionSystem::Get(profile)->is_ready() ||
+            extensions::UnpackedInstaller::IsBundledCraFilterPending(profile));
+  }
+  namespace dnr = extensions::declarative_net_request;
+  auto* service = dnr::RulesMonitorService::Get(profile);
+  auto* matcher = service ? service->ruleset_manager()->GetMatcherForExtension(id) : nullptr;
+  return !matcher || !matcher->GetMatcherWithID(dnr::kDynamicRulesetID);
+}
+
+- (void)resumeFilterNavigation {
+  if (!_filterWaitingURL || !_contents || _isClosed || _closeRequested || g_quitting) {
+    return;
+  }
+  if ([self profileIsStartingFilters]) {
+    if (base::TimeTicks::Now() - _filterWaitStarted < base::Seconds(20)) {
+      __weak CraBrowser* weakSelf = self;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        [weakSelf resumeFilterNavigation];
+      });
+      return;
+    }
+    NSString* url = _filterWaitingURL;
+    _filterWaitingURL = nil;
+    if ([_delegate respondsToSelector:@selector(browser:didFailLoadingURL:errorCode:)]) {
+      [_delegate browser:self didFailLoadingURL:url errorCode:net::ERR_BLOCKED_BY_CLIENT];
+    }
+    return;
+  }
+  NSString* url = _filterWaitingURL;
+  _filterWaitingURL = nil;
+  [self loadURL:url];
+}
+
 - (void)loadURL:(NSString*)url {
   if (!_contents) {
     _pendingURL = [url copy];
     return;
   }
   content::NavigationController::LoadURLParams params{GURL(UTF8(url))};
+  if (params.url.SchemeIsHTTPOrHTTPS() && [self profileIsStartingFilters]) {
+    bool already_waiting = _filterWaitingURL != nil;
+    _filterWaitingURL = [url copy];
+    if (!already_waiting) {
+      _filterWaitStarted = base::TimeTicks::Now();
+      [self resumeFilterNavigation];
+    }
+    return;
+  }
+  _filterWaitingURL = nil;
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
   // A new navigation, counted before Chrome ends the load still under way (which tells the app the page stopped
   // loading) and then starts this one: the app sees the new navigation's number first, as the CEF bridge has it.
@@ -2932,30 +3010,35 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
 }
 
 - (void)goBack {
+  _filterWaitingURL = nil;
   if (_contents && _contents->GetController().CanGoBack()) {
     _contents->GetController().GoBack();
   }
 }
 
 - (void)goForward {
+  _filterWaitingURL = nil;
   if (_contents && _contents->GetController().CanGoForward()) {
     _contents->GetController().GoForward();
   }
 }
 
 - (void)reload {
+  _filterWaitingURL = nil;
   if (_contents) {
     _contents->GetController().Reload(content::ReloadType::NORMAL, true);
   }
 }
 
 - (void)reloadIgnoringCache {
+  _filterWaitingURL = nil;
   if (_contents) {
     _contents->GetController().Reload(content::ReloadType::BYPASSING_CACHE, true);
   }
 }
 
 - (void)stopLoading {
+  _filterWaitingURL = nil;
   if (_contents) {
     _contents->Stop();
   }
@@ -4111,6 +4194,7 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
     return;
   }
   g_quitting = true;
+  Strays().Stop();
   cra::DropSparePages();
   cra::StopProfilePrefs();
   cra::DetachHostWindows();
@@ -4200,11 +4284,29 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   }
   g_document_start_params = all;
 }
++ (void)setBundledNetworkRulesExpected:(BOOL)expected {
+  if (g_bundled_network_rules_expected.exchange(expected) != expected) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self synchronizeBundledNetworkFilter];
+    });
+  }
+}
+
++ (void)synchronizeBundledNetworkFilter {
+  extensions::UnpackedInstaller::SetBundledCraFilterActive(
+      g_bundled_network_rules_expected.load());
+}
 + (void)setContentBlockingEnabled:(BOOL)enabled {
   cra_blocker::Enabled().store(enabled);
 }
 + (BOOL)contentBlockingEnabled {
   return cra_blocker::Enabled().load();
+}
+
++ (void)setContentBlockingPausedHosts:(NSArray<NSString*>*)hosts {
+    cra_blocker::DomainSet paused;
+    for (NSString* host in hosts) paused.insert(host.UTF8String ?: "");
+    cra_blocker::SetPausedHosts(std::move(paused));
 }
 
 + (void)setBlockedDomains:(NSArray<NSString*>*)domains {

@@ -8,6 +8,9 @@ names removed) and with entries dropped when a parent domain is already listed,
 because Cra blocks a listed domain together with its subdomains. Fetched
 2026-10-25.
 
+adaway.txt and anudeep.txt contain the same source snapshots separately for the
+macOS switches. Each file drops subdomains covered by its own parent entries.
+
 filters.txt is Cra's own (MIT License, like the rest of Cra): a few rules in
 Adblock Plus syntax for ad networks that move to new domains faster than a
 domain list can follow. The iPhone blocks them under Block Ads. No third-party

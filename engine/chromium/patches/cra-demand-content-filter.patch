@@ -1,0 +1,192 @@
+diff --git a/chrome/browser/extensions/extension_service.cc b/chrome/browser/extensions/extension_service.cc
+index af3992f..44f05a6 100644
+--- a/chrome/browser/extensions/extension_service.cc
++++ b/chrome/browser/extensions/extension_service.cc
+@@ -415,7 +415,7 @@ void ExtensionService::EnabledReloadableExtensions() {
+ }
+
+ void ExtensionService::LoadExtensionsFromCommandLineFlag(
+-    const char* switch_name) {
++    const char* switch_name, base::FilePath only_path) {
+   CHECK(switch_name == switches::kLoadExtension ||
+         switch_name == switches::kDisableExtensionsExcept);
+   if (!command_line_->HasSwitch(switch_name)) {
+@@ -482,9 +482,23 @@ void ExtensionService::LoadExtensionsFromCommandLineFlag(
+         continue;
+       }
+     }
++    const base::FilePath path(t.token_piece());
++    if (!only_path.empty() && only_path != path) {
++      continue;
++    }
++#if BUILDFLAG(IS_MAC)
++    if (switch_name == switches::kLoadExtension &&
++        UnpackedInstaller::DeferBundledCraFilter(
++            profile_, path,
++            base::BindRepeating(&ExtensionService::LoadExtensionsFromCommandLineFlag,
++                                AsExtensionServiceWeakPtr(), switches::kLoadExtension,
++                                path))) {
++      continue;
++    }
++#endif
+     std::string extension_id;
+     UnpackedInstaller::Create(profile_)->LoadFromCommandLine(
+-        base::FilePath(t.token_piece()), &extension_id,
++        path, &extension_id,
+         /*only-allow-apps=*/false);
+     if (switch_name == switches::kDisableExtensionsExcept) {
+       extension_registrar_->AddDisableFlagExemptedExtension(extension_id);
+diff --git a/chrome/browser/extensions/extension_service.h b/chrome/browser/extensions/extension_service.h
+index 0b6bd99..ec127f7 100644
+--- a/chrome/browser/extensions/extension_service.h
++++ b/chrome/browser/extensions/extension_service.h
+@@ -258,7 +258,8 @@ class ExtensionService : public ExtensionServiceInterface,
+
+  private:
+   // Loads extensions specified via a command line flag/switch.
+-  void LoadExtensionsFromCommandLineFlag(const char* switch_name);
++  void LoadExtensionsFromCommandLineFlag(const char* switch_name,
++                                         base::FilePath only_path = {});
+ #if BUILDFLAG(IS_CHROMEOS)
+   void LoadSigninProfileTestExtension(const std::string& path);
+ #endif
+diff --git a/extensions/browser/unpacked_installer.cc b/extensions/browser/unpacked_installer.cc
+index f3468a2..1ac7945 100644
+--- a/extensions/browser/unpacked_installer.cc
++++ b/extensions/browser/unpacked_installer.cc
+@@ -45,6 +45,7 @@
+ #include "extensions/browser/preload_check_group.h"
+ #include "extensions/browser/requirements_checker.h"
+ #include "extensions/browser/ruleset_parse_result.h"
++#include "extensions/browser/unloaded_extension_reason.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
+ #include "extensions/common/extension.h"
+@@ -70,16 +71,45 @@ namespace {
+ constexpr char kCraFilterId[] = "nddccjlgchhhajchaphmkffkclfmcemb";
+ constexpr char kCraPendingFilterKey = 0;
+
+-bool IsBundledCraFilter(const Extension& extension) {
++constexpr char kCraFilterSubscriptionKey = 0;
++bool g_cra_filter_active = false;
++
++base::RepeatingClosureList& CraFilterSubscribers() {
++  static base::NoDestructor<base::RepeatingClosureList> subscribers;
++  return *subscribers;
++}
++
++struct CraFilterSubscription : base::SupportsUserData::Data {
++  explicit CraFilterSubscription(base::CallbackListSubscription value)
++      : subscription(std::move(value)) {}
++  base::CallbackListSubscription subscription;
++};
++
++bool IsBundledCraFilterPath(const base::FilePath& path) {
+   base::FilePath executable_dir;
+-  return extension.id() == kCraFilterId &&
+-         extension.location() == mojom::ManifestLocation::kCommandLine &&
+-         base::PathService::Get(base::DIR_EXE, &executable_dir) &&
+-         extension.path() == executable_dir.DirName()
++  return base::PathService::Get(base::DIR_EXE, &executable_dir) &&
++         path == executable_dir.DirName()
+                                  .AppendASCII("Resources")
+                                  .AppendASCII("blocklist")
+                                  .AppendASCII("chromium");
+ }
++
++bool IsBundledCraFilter(const Extension& extension) {
++  return extension.id() == kCraFilterId &&
++         extension.location() == mojom::ManifestLocation::kCommandLine &&
++         IsBundledCraFilterPath(extension.path());
++}
++
++void UnloadBundledCraFilter(content::BrowserContext* context) {
++  auto* registry = ExtensionRegistry::Get(context);
++  const Extension* active = registry->enabled_extensions().GetByID(kCraFilterId);
++  if (active && IsBundledCraFilter(*active)) {
++    // Deactivate the worker and DNR matcher. Keep explicit private-window
++    // choices, disable reasons and all other user preferences.
++    ExtensionRegistrar::Get(context)->RemoveExtension(
++        kCraFilterId, UnloadedExtensionReason::DISABLE);
++  }
++}
+ #endif
+
+ const char16_t kUnpackedExtensionsBlocklistedError[] =
+@@ -164,6 +194,49 @@ void UnpackedInstaller::Load(const base::FilePath& path_in) {
+ }
+
+ #if BUILDFLAG(IS_MAC)
++// static
++void UnpackedInstaller::SetBundledCraFilterActive(bool active) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (g_cra_filter_active != active) {
++    g_cra_filter_active = active;
++    CraFilterSubscribers().Notify();
++  }
++}
++
++// static
++bool UnpackedInstaller::DeferBundledCraFilter(content::BrowserContext* context,
++                                              const base::FilePath& path,
++                                              base::RepeatingClosure load) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  if (!IsBundledCraFilterPath(path)) {
++    return false;
++  }
++  if (!context->GetUserData(&kCraFilterSubscriptionKey)) {
++    auto on_change = base::BindRepeating(
++        [](base::WeakPtr<content::BrowserContext> profile,
++           base::RepeatingClosure reload) {
++          if (!profile || profile->ShutdownStarted()) {
++            return;
++          }
++          if (g_cra_filter_active) {
++            // Re-enter the regular command-line policy and profile-scope checks.
++            reload.Run();
++          } else {
++            UnloadBundledCraFilter(profile.get());
++          }
++        }, context->GetWeakPtr(), std::move(load));
++    context->SetUserData(&kCraFilterSubscriptionKey,
++        std::make_unique<CraFilterSubscription>(
++            CraFilterSubscribers().Add(std::move(on_change))));
++  }
++  if (!g_cra_filter_active) {
++    UnloadBundledCraFilter(context);
++    return true;
++  }
++  return ExtensionRegistry::Get(context)->GetInstalledExtension(kCraFilterId) ||
++         IsBundledCraFilterPending(context);
++}
++
+ // static
+ bool UnpackedInstaller::IsBundledCraFilterPending(content::BrowserContext* context) {
+   return context->GetUserData(&kCraPendingFilterKey) != nullptr;
+@@ -289,6 +362,9 @@ void UnpackedInstaller::OnInstallChecksComplete(
+ #if BUILDFLAG(IS_MAC)
+   if (IsBundledCraFilter(*extension())) {
+     browser_context_->RemoveUserData(&kCraPendingFilterKey);
++    if (!g_cra_filter_active) {
++      return;
++    }
+   }
+ #endif
+   if (errors.empty()) {
+diff --git a/extensions/browser/unpacked_installer.h b/extensions/browser/unpacked_installer.h
+index 0768786..9b89fdc 100644
+--- a/extensions/browser/unpacked_installer.h
++++ b/extensions/browser/unpacked_installer.h
+@@ -64,6 +64,12 @@ class UnpackedInstaller : public base::RefCountedThreadSafe<
+   void Load(const base::FilePath& extension_path);
+
+ #if BUILDFLAG(IS_MAC)
++  // The signed filter is needed only for network rules that the native host
++  // blocker cannot express. All three calls run on the UI thread.
++  static void SetBundledCraFilterActive(bool active);
++  static bool DeferBundledCraFilter(content::BrowserContext* context,
++                                    const base::FilePath& path,
++                                    base::RepeatingClosure load);
+   // True only while this profile is installing the signed filter bundled in Cra.
+   static bool IsBundledCraFilterPending(content::BrowserContext* context);
+ #endif

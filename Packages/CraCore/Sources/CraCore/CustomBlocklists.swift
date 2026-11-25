@@ -284,6 +284,12 @@ public struct CachedBlocklist: Equatable {
     public var title: String?
     public var fetched: Date
     public var domains: [String]
+    public var hidingRules: [String] = []
+    public var networkRules: [String] = []
+    public var hasNetworkSource = false
+    // Mixed lists keep the original hosts independently of their legacy ABP domain projection.
+    public var sourceHosts: [String]?
+    public var plainDomains: [String] { sourceHosts ?? domains }
     public var skippedRules: Int
 
     public init(url: String, list: ParsedBlocklist, fetched: Date) {
@@ -313,6 +319,13 @@ public struct CachedBlocklist: Equatable {
         if let title { lines.append("# title: " + oneLine(title)) }
         lines.append("# fetched: " + Self.dateFormatter().string(from: fetched))
         lines.append("# skipped: \(skippedRules)")
+        if hasNetworkSource { lines.append("# network-format: 1") }
+        if let sourceHosts {
+            lines.append("# separate-hosts: 1")
+            lines.append(contentsOf: sourceHosts.map { "# host: " + $0 })
+        }
+        lines.append(contentsOf: networkRules.map { "# net: " + $0 })
+        lines.append(contentsOf: hidingRules.map { "# hide: " + $0 })
         return (lines + domains).joined(separator: "\n") + "\n"
     }
 
@@ -333,7 +346,12 @@ public struct CachedBlocklist: Equatable {
             func value(_ key: String) -> String? {
                 body.hasPrefix(key + ":") ? body.dropFirst(key.count + 1).trimmingCharacters(in: .whitespaces) : nil
             }
-            if let v = value("url") { url = v }
+            if let v = value("hide") { hidingRules.append(v) }
+            else if value("separate-hosts") == "1" { sourceHosts = [] }
+            else if let v = value("host"), let domain = ParsedBlocklist.domain(v[...]) { sourceHosts?.append(domain) }
+            else if let v = value("net") { networkRules.append(v) }
+            else if value("network-format") == "1" { hasNetworkSource = true }
+            else if let v = value("url") { url = v }
             else if let v = value("title") { title = v }
             else if let v = value("fetched") { fetched = Self.dateFormatter().date(from: v) }
             else if let v = value("skipped") { skipped = Int(v) ?? 0 }

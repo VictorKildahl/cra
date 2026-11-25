@@ -512,6 +512,10 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// (or a parent domain) is on the blocked list are cancelled when they are third-party
 /// to the tab's top-level page. Main-frame navigations always load. Takes effect for
 /// the next request, any time, from any thread. Off until enabled.
+/// Chromium waits for the selected network rules in a newly loaded profile before navigating.
++ (void)setBundledNetworkRulesExpected:(BOOL)expected;
+/// Apply the most recent helper activation on the Chromium UI thread.
++ (void)synchronizeBundledNetworkFilter;
 + (void)setContentBlockingEnabled:(BOOL)enabled;
 + (BOOL)contentBlockingEnabled;
 /// Chrome's HTTPS-Only Mode ("Always use secure connections") in every profile:
@@ -545,6 +549,7 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// secure DNS setting changes.
 + (void)setSecureDNSChangeHandler:(nullable void (^)(void))handler;
 /// Replaces the blocked list (bare domains; a domain also covers its subdomains).
++ (void)setContentBlockingPausedHosts:(NSArray<NSString *> *)hosts;
 + (void)setBlockedDomains:(NSArray<NSString *> *)domains;
 /// Reads and installs a list file off the main thread: one domain per line or
 /// hosts-file lines ("0.0.0.0 example.com"), # comments. The completion gets the

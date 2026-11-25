@@ -1,0 +1,64 @@
+# A single URL can be a blocked fetch, a permitted image, or an allowed fetch
+# on one specific site. The local HTTP server observes the successful requests.
+port 47136
+pace 0.5
+budget rss=800 stalls50=30
+arg --host-resolver-rules=MAP assets.fixture.example 127.0.0.1, MAP reader.example 127.0.0.1, MAP other.example 127.0.0.1
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?blockAds=off
+expect-log block ads and trackers: off
+cra://open?url=http://other.example:47136/page.html
+expect-log loaded other\.example \(HTTP 200\)
+cra://debug?blockLists=http://127.0.0.1:47136/network-filter-test.txt
+expect-log GET /network-filter-test\.txt
+expect-log block lists: [0-9]+ domains, 1 added list
+expect-log network filter revision active:
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?blocked',{mode:'no-cors'}).then(()=>'sent',e=>'blocked:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"blocked:TypeError"
+reject-log GET /icon-blue\.png\?blocked
+
+# The website switch suspends all network filters only for this top-level host.
+cra://debug?toggleSiteFilters=http://other.example:47136/page.html
+wait 2
+cra://open?url=http://other.example:47136/page.html?paused
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?paused',{mode:'no-cors'}).then(()=>'paused:sent',e=>e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:sent"
+expect-log GET /icon-blue\.png\?paused
+cra://debug?toggleSiteFilters=http://other.example:47136/page.html
+wait 2
+cra://open?url=http://other.example:47136/page.html?resumed
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?resumed',{mode:'no-cors'}).then(()=>'sent',e=>'resumed:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:TypeError"
+reject-log GET /icon-blue\.png\?resumed
+
+# Drop the last network list and reload it in the same running profile.
+cra://debug?blockLists=none
+expect-log block lists: [0-9]+ domains, 0 added lists
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?withoutlist',{mode:'no-cors'}).then(()=>'sent',e=>e.name)","awaitPromise":true}
+expect-log GET /icon-blue\.png\?withoutlist
+cra://debug?blockLists=http://127.0.0.1:47136/network-filter-test.txt
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?reselected',{mode:'no-cors'}).then(()=>'sent',e=>'reselected:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"reselected:TypeError"
+reject-log GET /icon-blue\.png\?reselected
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const i=new Image();i.onload=()=>r('image:'+i.naturalWidth);i.onerror=()=>r('failed');i.src='http://assets.fixture.example:47136/icon-blue.png?image'})","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"image:[1-9]
+expect-log GET /icon-blue\.png\?image
+cra://open?url=http://reader.example:47136/page.html
+expect-log loaded reader\.example \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?allowed',{mode:'no-cors'}).then(()=>'allowed',e=>e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"allowed"
+expect-log GET /icon-blue\.png\?allowed
+
+# Select a fresh named profile without starting an HTTP page in it. The first
+# private document requests both an allowed image and a blocked fetch during load.
+cra://open?url=about:blank&space=A0000000-0000-0000-0000-000000000002
+cra://debug?incognitoWindow=http://other.example:47136/filter-first-navigation.html
+expect-log GET /filter-first-navigation\.html
+expect-log GET /icon-blue\.png\?privateimage
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Request blocked"
+reject-log GET /icon-blue\.png\?privatedeny

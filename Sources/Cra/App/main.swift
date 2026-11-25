@@ -1,6 +1,7 @@
 import AppKit
 import CraCEF
 
+if CommandLine.arguments.dropFirst().first == ChromiumFilterLists.origin { ChromiumFilterLists.watch() }
 // Chromium's DevTools pipe (extension buttons' popups) can only use descriptors 3 and 4: hold them before AppKit
 // or anything else opens a file, and let go just before Chromium starts (#752).
 let pipeDescriptorsAtLaunch = DevToolsPipeDescriptors.reserve()
@@ -59,7 +60,15 @@ MainActor.assumeIsolated {
     NativeMessagingHosts.link(into: AppPaths.chromiumCache)
 
     let extensions = ExtensionStore.loadList(profileIsFree: profileIsFree)
-    CraCEFRuntime.setExtensionPaths(extensions.paths, profiles: extensions.profiles)
+    var paths = extensions.paths
+    var scopes = extensions.profiles
+    if profileIsFree && EngineFramework.isChromiumEngine {
+        do {
+            paths.append(try ChromiumFilterLists.install())
+            scopes = scopes.map { $0 + ",*" }
+        } catch { CraLog.note("network filter setup failed: " + error.localizedDescription) }
+    }
+    CraCEFRuntime.setExtensionPaths(paths, profiles: scopes)
     if let p = extensions.profiles { CraLog.note("extension profiles: \(p)") }
 
     // Chromium's language follows macOS as in Chrome and Arc: it picks the voice for speech
@@ -97,6 +106,7 @@ MainActor.assumeIsolated {
     var ready = false
     CraCEFRuntime.whenReady {
         ready = true
+        ChromiumFilterLists.finishStartupProfileInstall()
         ChromiumBluetoothCache.install()
         ChromiumDockTile.install()
         ChromiumHistorySwipe.install()

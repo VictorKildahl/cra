@@ -19,5 +19,5 @@ expect-log bcdp Extensions.getExtensions → .*Fixtures\\/UnpackedExtension
 relaunch
 wait 3
 cra://debug?bcdp=Extensions.getExtensions
-wait 1
-reject-log bcdp Extensions.getExtensions → .*\},\{
+expect-log bcdp Extensions.getExtensions → .*Fixtures\\/UnpackedExtension
+reject-log bcdp Extensions.getExtensions → .*"name":"Cra Unpacked Fixture".*"name":"Cra Unpacked Fixture"

@@ -167,7 +167,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
 
     /// On/off, choice and number settings: the ones a report may name when they differ from the default.
     public static let reportedSettings: Set<String> = [
-        "askOnPage", "autoArchive", "autoArchiveEnabled", "autoPictureInPicture", "backgroundTabsBelowCurrent", "blockAdsAndTrackers", "blockCookieBanners",
+        "askOnPage", "autoArchive", "autoArchiveEnabled", "autoPictureInPicture", "backgroundTabsBelowCurrent", "adAwayEnabled", "anudeepEnabled", "personalFiltersEnabled", "blockCookieBanners",
         "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chromeEngine",
         "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "editAddressInPlace", "favoriteLogoOutline", "favoritePreviews", "fingerprintingProtection", "fiveSecondPreviews",
         "folderPreviews", "hapticFeedbackOnReorder", "httpsOnly", "instantLinks", "keepInMenuBar", "littleWindowArchiveAfter",
@@ -187,7 +187,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "keepActiveSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "profileAutoArchive", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated", "commandBarScopeMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar", "autoHideLittleWindowToolbar", "autoHidePeekToolbar",
-        "commandBarSiteColor", "sidebarSide", "customBlocklists", "edgeToEdgeRoundedCorners", "pageMargin", "translucentSidebar", "nowPlayingTint",
+        "commandBarSiteColor", "sidebarSide", "customBlocklists", "disabledCustomBlocklists", "edgeToEdgeRoundedCorners", "pageMargin", "translucentSidebar", "nowPlayingTint",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {

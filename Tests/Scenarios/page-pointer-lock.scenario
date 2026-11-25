@@ -18,9 +18,11 @@ wait 2
 cra://debug?activate=1
 wait 1
 cra://debug?clickAt=760,500
-wait 1
-cra://debug?cdp=Runtime.evaluate&params={"expression":"(document.getElementById('lock').requestPointerLock(),'lock asked')","userGesture":true}
-expect-log "value":"lock asked"
+# Pointer lock requires the document in the key window to have focus.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(resolve=>{const started=performance.now();function check(){if(document.hasFocus())resolve('page focused');else if(performance.now()-started>5000)resolve('focus timed out');else setTimeout(check,50)}check()})","awaitPromise":true}
+expect-log "value":"page focused"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('lock').requestPointerLock().then(()=>'lock acquired')","awaitPromise":true,"userGesture":true}
+expect-log "value":"lock acquired"
 wait 1
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'lock '+said.join(',')"}
 expect-log "value":"lock pointerlock:on"
@@ -36,8 +38,8 @@ wait 1
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'after escape '+said.join(',')"}
 expect-log "value":"after escape pointerlock:on,pointerlock:off"
 # The page can take it again and let go itself.
-cra://debug?cdp=Runtime.evaluate&params={"expression":"(said.length=0,document.getElementById('lock').requestPointerLock(),'lock again')","userGesture":true}
-wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(said.length=0,document.getElementById('lock').requestPointerLock().then(()=>'lock again'))","awaitPromise":true,"userGesture":true}
+expect-log "value":"lock again"
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(document.exitPointerLock(),'unlocking')"}
 wait 1
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'unlocked '+said.join(',')"}

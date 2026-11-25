@@ -1,8 +1,9 @@
 {
+  "adAwayEnabled" : true,
+  "anudeepEnabled" : true,
   "autoArchive" : "thirtyDays",
   "autoArchiveEnabled" : true,
   "autoPictureInPicture" : true,
-  "blockAdsAndTrackers" : true,
   "chromeEngine" : true,
   "defaultLinkDestination" : {
     "mostRecentSpace" : {
@@ -41,6 +42,7 @@
   "peekOnShiftClick" : true,
   "perfHidesSiteNames" : false,
   "perfRecording" : true,
+  "personalFiltersEnabled" : true,
   "searchEngine" : "duckduckgo",
   "searchSuggestions" : true,
   "showSpaceHeaderOnSingleSpace" : true,

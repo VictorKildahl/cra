@@ -1,8 +1,9 @@
 {
+  "adAwayEnabled" : true,
+  "anudeepEnabled" : true,
   "autoArchive" : "twelveHours",
   "autoArchiveEnabled" : true,
   "autoPictureInPicture" : true,
-  "blockAdsAndTrackers" : true,
   "chromeEngine" : true,
   "defaultLinkDestination" : {
     "littleWindow" : {
@@ -32,6 +33,7 @@
   "peekOnShiftClick" : true,
   "perfHidesSiteNames" : false,
   "perfRecording" : true,
+  "personalFiltersEnabled" : true,
   "searchEngine" : "google",
   "searchSuggestions" : true,
   "showSpaceHeaderOnSingleSpace" : true,

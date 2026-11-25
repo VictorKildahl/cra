@@ -7,6 +7,7 @@ import CraCEF
 final class TabRuntime {
     let tabID: UUID
     let browser: CraBrowser
+    var hasElementHidingStyle = false
     var progress: Double = 0
     /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
@@ -1624,11 +1625,29 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
         if committed {
+            if let runtime = runtimes[id] {
+                runtime.hasElementHidingStyle = false
+                applyElementHiding(to: runtime)
+            }
             shareTheme(id, with: browser)
             applyBoost(to: browser, clearing: false)
-            if let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+            if !BlockLists.shared.isPaused(url: browser.currentURL), let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
         }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    func refreshElementHiding() {
+        for runtime in runtimes.values { applyElementHiding(to: runtime) }
+    }
+
+    private func applyElementHiding(to runtime: TabRuntime) {
+        let browser = runtime.browser
+        guard let url = URL(string: browser.currentURL), let scheme = url.scheme,
+              ["http", "https"].contains(scheme.lowercased()), let host = url.host else { return }
+        let css = BlockLists.shared.style(for: host)
+        guard runtime.hasElementHidingStyle || !css.isEmpty else { return }
+        adopt(css, as: "__craListFilters", in: browser)
+        runtime.hasElementHidingStyle = !css.isEmpty
     }
 
     /// Arc's "Allow websites to get your theme data": the space's palette as `--arc-palette-*` and

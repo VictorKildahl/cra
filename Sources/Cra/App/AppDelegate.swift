@@ -290,10 +290,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// checkbox). The bundled list (resources/blocklist) and the lists added in Settings (#507)
     /// are read off the main thread; the switch and the lists follow the settings live, no restart.
     private func startContentBlocking() {
+        observeContentBlocking()
         observeChanges(of: { [store] in store.settings.customBlocklists }) { [composition] in
             BlockLists.shared.set(addresses: $0, clock: composition.clock)
         }
-        observeContentBlocking()
+        BlockLists.shared.hidingChanged = { [weak self] in
+            for window in self?.mainWindows ?? [] { window.browsers.refreshElementHiding() }
+        }
+        observeChanges(of: { [store] in store.settings.activePersonalFilters }) {
+            BlockLists.shared.setPersonal($0)
+        }
         observeHttpsOnly()
         // Arc's "Archive Little Arcs after:": a Little Window left alone that long closes, its page archived.
         littleWindowArchiveCheck = composition.clock.every(60) { [weak self] in self?.archiveIdleLittleWindows() }
@@ -519,7 +525,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var globalHotkey: GlobalHotkey?
 
     private func observeContentBlocking() {
-        observeChanges(of: { [store] in store.settings.blockAdsAndTrackers }, apply: CraCEFRuntime.setContentBlockingEnabled)
+        observeChanges(of: { [store] in store.settings.pausedFilterHosts ?? [] }) {
+            BlockLists.shared.setPausedHosts($0)
+        }
+        observeChanges(of: { [store] in store.settings.hasActiveBlockFilters }) {
+            CraCEFRuntime.setContentBlockingEnabled($0)
+        }
+        observeChanges(of: { [store] in
+            (store.settings.adAwayEnabled ? ["adaway"] : []) + (store.settings.anudeepEnabled ? ["anudeep"] : [])
+        }) {
+            BlockLists.shared.setBundledSources($0)
+        }
     }
 
     /// The last update notice toasted this launch (UpdateNotice.toast), and how many were.
@@ -3049,7 +3065,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Settings ▸ Privacy ▸ Fingerprinting protection on or off, as its switch sets it.
             if let v = dict["fingerprinting"] { store.settings.fingerprintingProtection = v == "on"; return }
             // Settings ▸ Privacy without the pointer (#507): blockLists=<address,…>|none sets the added
-            // block lists, blockAds=on|off the switch they sit under.
+            // block lists, blockAds=on|off both offline sources.
+            if let url = dict["toggleSiteFilters"], let host = AppSettings.filterHost(url) {
+                store.settings.toggleFilters(on: host)
+                return
+            }
             if let v = dict["blockLists"] { store.settings.customBlocklists = v == "none" ? [] : v.split(separator: ",").map(String.init); return }
             if let v = dict["blockAds"] {
                 store.settings.blockAdsAndTrackers = v == "on"

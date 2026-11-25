@@ -5,7 +5,7 @@ import Observation
 /// Settings ▸ Privacy ▸ Block lists (#507): lists added on top of the one Cra ships. Each is
 /// fetched (or read, for a file), kept in the data folder's Blocklists folder and fetched again
 /// once it's old (CustomBlocklist.isDue). The engine gets Cra's own list and every added list's
-/// domains as one set, which the Block ads and trackers switch turns on and off.
+/// domains as one set. Each source can be switched independently.
 @MainActor
 @Observable
 final class BlockLists {
@@ -20,6 +20,8 @@ final class BlockLists {
 
     @ObservationIgnored private var addresses: [String] = []
     @ObservationIgnored private var started = false
+    @ObservationIgnored private var loaded = false
+    private(set) var networkFailure: String?
     @ObservationIgnored private var refreshTimer: ScheduledWork?
     @ObservationIgnored private var clock: Scheduler = LiveScheduler.shared
     /// What the engine was last given: each address with its fetch date.
@@ -30,7 +32,63 @@ final class BlockLists {
     /// A list bigger than this isn't a block list.
     private static let maxBytes = 64 << 20
 
-    private init() {}
+    @ObservationIgnored var hidingChanged: (() -> Void)?
+    @ObservationIgnored private var hiding = DesktopHidingRules(lines: [])
+    @ObservationIgnored private let styles = NSCache<NSString, NSString>()
+    @ObservationIgnored private var personal = ""
+    @ObservationIgnored private var bundledSources: [String] = []
+
+    nonisolated(unsafe) private static var lastDomains: [String]? // only accessed on queue
+
+    nonisolated(unsafe) private static var chromiumOwnsDomains = false // accessed on queue
+
+    @ObservationIgnored private var pausedHosts: Set<String> = []
+
+    /// The last accepted inputs survive a restart with an oversized pending selection.
+    private struct AcceptedFilters: Codable {
+        let domains: [String]
+        let hiding: [String]
+        let rules: [DesktopNetworkRules.Rule]
+    }
+
+    nonisolated private static var acceptedURL: URL {
+        ChromiumFilterLists.directory.appendingPathComponent("accepted-filters.json")
+    }
+
+    func setPausedHosts(_ hosts: Set<String>) {
+        guard hosts != pausedHosts else { return }
+        pausedHosts = hosts
+        if CraCEFRuntime.responds(to: NSSelectorFromString("setContentBlockingPausedHosts:")) {
+            CraCEFRuntime.setContentBlockingPausedHosts(hosts.sorted())
+        }
+        hidingChanged?()
+        publish()
+    }
+
+    func isPaused(url: String) -> Bool {
+        guard let host = AppSettings.filterHost(url) else { return false }
+        return pausedHosts.contains(host)
+    }
+
+    private init() {
+        styles.totalCostLimit = 4 << 20
+        styles.countLimit = 32
+    }
+
+    func setPersonal(_ text: String?) {
+        let next = text ?? ""
+        guard next != personal else { return }
+        personal = next
+        publish()
+    }
+
+    func style(for host: String) -> String {
+        if pausedHosts.contains(host.lowercased()) { return "" }
+        if let value = styles.object(forKey: host as NSString) { return value as String }
+        let value = hiding.css(host: host)
+        styles.setObject(value as NSString, forKey: host as NSString, cost: value.utf8.count)
+        return value
+    }
 
     static var folder: URL {
         let url = AppPaths.supportDir.appendingPathComponent("Blocklists", isDirectory: true)
@@ -43,7 +101,7 @@ final class BlockLists {
     }
 
     /// The bundled list (resources/blocklist), read once on `queue`.
-    nonisolated(unsafe) private static var bundled: [String]?
+    nonisolated(unsafe) private static var bundled: [String: [String]] = [:]
 
     /// `settings.customBlocklists` now. The first call (at launch) reads the kept copies, gives the
     /// engine its set and fetches what's old; later ones forget removed lists and fetch added ones.
@@ -57,6 +115,7 @@ final class BlockLists {
                     (try? String(contentsOf: Self.cacheURL(address), encoding: .utf8)).flatMap(CachedBlocklist.init(text:))
                 }
                 DispatchQueue.main.async { [self] in
+                    loaded = true
                     for list in kept where addresses.contains(list.url) { cached[list.url] = list }
                     publish()
                     refreshDue(atLaunch: true)
@@ -77,22 +136,28 @@ final class BlockLists {
         added.forEach { fetch($0) }
     }
 
+    func setBundledSources(_ sources: [String]) {
+        guard bundledSources != sources else { return }
+        bundledSources = sources
+        publish()
+    }
+
     /// Fetches the lists that are old, or that have no copy yet.
     private func refreshDue(atLaunch: Bool) {
-        CustomBlocklist.due(addresses, fetched: cached.mapValues(\.fetched), now: clock.now, atLaunch: atLaunch).forEach { fetch($0) }
+        CustomBlocklist.due(addresses, fetched: cached.filter { $0.value.hasNetworkSource }.mapValues(\.fetched), now: clock.now, atLaunch: atLaunch).forEach { fetch($0) }
     }
 
     /// Fetches (or reads) one list now. A failure keeps the copy it had.
     func fetch(_ address: String) {
-        guard !fetching.contains(address), let url = URL(string: address) else { return }
+        guard addresses.contains(address), !fetching.contains(address), let url = URL(string: address) else { return }
         fetching.insert(address)
         let fetchedAt = clock.now
         Task { [weak self] in
             let outcome = await Self.load(url)
             let result: Result<CachedBlocklist, BlockListError> = await Task.detached(priority: .utility) {
                 outcome.flatMap { text in
-                    let list = CachedBlocklist(url: address, list: ParsedBlocklist(text: text), fetched: fetchedAt)
-                    guard !list.domains.isEmpty else { return .failure(.noDomains) }
+                    let list = DesktopHidingRules.read(text, address: address, fetched: fetchedAt)
+                    guard !list.domains.isEmpty || !list.hidingRules.isEmpty || !list.networkRules.isEmpty else { return .failure(.noDomains) }
                     return .success(list)
                 }
             }.value
@@ -118,19 +183,132 @@ final class BlockLists {
 
     /// Gives the engine Cra's list with every added one, when that changed.
     private func publish() {
-        let key = CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
+        guard loaded else { return }
+        let pauses = pausedHosts.sorted()
+        let key = [personal, bundledSources.joined(separator: ","), pauses.joined(separator: ",")] + CustomBlocklist.engineKey(addresses, fetched: cached.mapValues(\.fetched))
         guard key != publishedKey else { return }
         publishedKey = key
-        let lists = addresses.compactMap { cached[$0]?.domains }
+        let lists = addresses.compactMap { cached[$0] }
+        let personalText = personal
+        let selected = bundledSources
         queue.async {
-            if Self.bundled == nil {
-                let path = Bundle.main.path(forResource: "domains", ofType: "txt", inDirectory: "blocklist")
-                Self.bundled = path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }.map { ParsedBlocklist(text: $0).domains } ?? []
+            for source in selected where Self.bundled[source] == nil {
+                let path = Bundle.main.path(forResource: source, ofType: "txt", inDirectory: "blocklist")
+                Self.bundled[source] = path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }.map { ParsedBlocklist(text: $0).domains } ?? []
             }
-            let domains = CustomBlocklist.merged([Self.bundled ?? []] + lists)
-            CraCEFRuntime.setBlockedDomains(domains)
+            let base = selected.flatMap { Self.bundled[$0] ?? [] }
+            let user = DesktopHidingRules.read(personalText, address: "", fetched: .distantPast)
+            let sources = lists + [user]
+            let lines = sources.flatMap(\.networkRules)
+            let useNetwork = ChromiumFilterLists.available && !lines.isEmpty
+            let hosts = useNetwork ? CustomBlocklist.merged([base] + sources.map(\.plainDomains)) : []
+            let candidate = AcceptedFilters(domains: CustomBlocklist.merged([base] + sources.map(\.domains)),
+                                            hiding: sources.flatMap(\.hidingRules),
+                                            rules: useNetwork ? DesktopNetworkRules.compile(domains: hosts, lines: lines) : [])
+            var active = candidate
+            var notice: String?
+            let count = candidate.rules.count
+            if count > DesktopNetworkRules.dynamicRuleLimit {
+                let prior = (try? Data(contentsOf: Self.acceptedURL)).flatMap { try? JSONDecoder().decode(AcceptedFilters.self, from: $0) }
+                active = prior ?? AcceptedFilters(domains: base, hiding: [], rules: [])
+                let kept = prior == nil ? "Only the selected built-in lists are active." : "Your previous filters remain active."
+                notice = "Selection needs \(count) network rules. Chromium allows \(DesktopNetworkRules.dynamicRuleLimit). " + kept
+            }
+            let limitNotice = notice
+            let domains = active.domains
+            let hiding = DesktopHidingRules(lines: active.hiding)
+            DispatchQueue.main.async { [self] in
+                guard publishedKey == key else { return }
+                self.hiding = hiding
+                styles.removeAllObjects()
+                hidingChanged?()
+            }
+            let rules = active.rules
+            if !ChromiumFilterLists.available || rules.isEmpty || !Self.chromiumOwnsDomains {
+                Self.setNativeDomains(domains)
+            }
+            if ChromiumFilterLists.available {
+                let hasRules = !rules.isEmpty
+                do {
+                    let exceptions = hasRules ? DesktopNetworkRules.siteExceptions(for: pauses, after: 0) : []
+                    let revision = try ChromiumFilterLists.publish(rules, siteExceptions: exceptions)
+                    DispatchQueue.main.async { [self] in
+                        guard publishedKey == key else { return }
+                        confirm(revision, key: key, hasNetworkRules: hasRules, filters: candidate, fallback: domains, notice: limitNotice)
+                    }
+                } catch {
+                    ChromiumFilterLists.expectNetworkRules(false)
+                    Self.setNativeDomains(domains)
+                    Self.chromiumOwnsDomains = false
+                    DispatchQueue.main.async { [self] in
+                        if publishedKey == key { networkFailure = "Couldn’t save the network filters on this Mac." }
+                    }
+                }
+            }
             CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")")
         }
+    }
+
+    /// Keep native host protection during startup and compilation. An acknowledgement means
+    /// Chromium has swapped rules atomically. A superseded acknowledgement cannot change the engine.
+    private func confirm(_ revision: String, key: [String], hasNetworkRules: Bool, filters: AcceptedFilters, fallback: [String], notice: String?) {
+        networkFailure = notice
+        if !hasNetworkRules && CraCEFRuntime.responds(to: NSSelectorFromString("synchronizeBundledNetworkFilter")) {
+            CraCEFRuntime.synchronizeBundledNetworkFilter()
+            queue.async {
+                guard ChromiumFilterLists.isCurrent(revision) else { return }
+                Self.chromiumOwnsDomains = false
+                if notice == nil { Self.keep(filters) }
+                Self.setNativeDomains(fallback)
+                CraLog.note("native domain filters active: " + revision)
+            }
+            return
+        }
+        Task { [weak self] in
+            for _ in 0..<100 {
+                guard let self, publishedKey == key else { return }
+                let folder = ChromiumFilterLists.directory
+                if (try? String(contentsOf: folder.appendingPathComponent("applied"), encoding: .utf8)) == revision {
+                    queue.async {
+                        guard ChromiumFilterLists.isCurrent(revision) else { return }
+                        if notice == nil { Self.keep(filters) }
+                        if hasNetworkRules {
+                            Self.setNativeDomains([])
+                            Self.chromiumOwnsDomains = true
+                        } else {
+                            Self.chromiumOwnsDomains = false
+                        }
+                        CraLog.note("network filter revision active: " + revision)
+                    }
+                    return
+                }
+                if (try? String(contentsOf: folder.appendingPathComponent("failed"), encoding: .utf8)) == revision { break }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            guard let self, publishedKey == key else { return }
+            queue.async {
+                guard ChromiumFilterLists.isCurrent(revision) else { return }
+                ChromiumFilterLists.expectNetworkRules(false)
+                Self.setNativeDomains(fallback)
+                Self.chromiumOwnsDomains = false
+            }
+            networkFailure = "Chromium couldn’t apply these network filters. The domain blocker is active. Try fewer lists and update again."
+        }
+    }
+
+    nonisolated private static func keep(_ filters: AcceptedFilters) {
+        do {
+            try JSONEncoder().encode(filters).write(to: acceptedURL, options: .atomic)
+        } catch {
+            CraLog.note("Could not save the accepted filters for restart: " + error.localizedDescription)
+        }
+    }
+
+    /// Only called on the publication queue.
+    nonisolated private static func setNativeDomains(_ domains: [String]) {
+        guard domains != lastDomains else { return }
+        CraCEFRuntime.setBlockedDomains(domains)
+        lastDomains = domains
     }
 
     /// A list as cra.log names it: its host, never the whole address (CraLog).
@@ -144,6 +322,7 @@ final class BlockLists {
             return text(data)
         }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        request.httpShouldHandleCookies = false
         request.setValue("text/plain, */*", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
@@ -172,7 +351,7 @@ enum BlockListError: Error {
         case .status(let code): return "The server answered \(code). Cra tries again later."
         case .unreadable: return "Cra couldn’t read the file."
         case .tooBig: return "The list is bigger than 64 MB."
-        case .noDomains: return "Cra found no domain rules it can use in this list."
+        case .noDomains: return "Cra found no supported domain, network or element-hiding rules in this list."
         }
     }
 }

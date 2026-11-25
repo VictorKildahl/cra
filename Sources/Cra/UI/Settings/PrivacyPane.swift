@@ -1,15 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Dia's Privacy pane: a "Content blocking" card of switches (Block ads / Block cookie banners /
-/// Block trackers) and a "Data" card, each setting a row with what it does under its name. Cra ships one
-/// ad-and-tracker domain list, so it has one switch, with the lists people add under it (#507). Fingerprinting protection, under them, is Cra's
-/// own (neither Arc nor Dia has it). The Data card's usage-data row ("Share
-/// content data to help improve Dia") is Cra's usage stats, with crash reports under it; "Connections"
-/// is Chrome's "Always use secure connections". "Data" holds Arc's Clear Browsing Data (Arc keeps
-/// it in Settings ▸ Profiles and opens Chrome's Privacy and security page; Cra opens Chrome's
-/// Delete browsing data dialog itself, the step after). "Connections" also holds Chromium's
-/// secure DNS setting, which Arc and Dia leave to chrome://settings/security (#133).
 struct PrivacyPane: View {
     @Environment(SidebarStore.self) private var store
     let actions: SettingsActions
@@ -17,26 +8,9 @@ struct PrivacyPane: View {
     var body: some View {
         @Bindable var store = store
         SettingsCardPane {
-            SettingsHeader("Content blocking")
-            SettingsFeatureCard {
-                SettingsToggleRow("Block ads and trackers",
-                                  detail: "Requests to known ad and tracker domains are cancelled, unless the domain belongs to the site you’re on.",
-                                  isOn: $store.settings.blockAdsAndTrackers)
-                SettingsCardDivider()
-                BlockListRows(addresses: $store.settings.customBlocklists, enabled: store.settings.blockAdsAndTrackers)
-                SettingsCardDivider()
-                // Arc: Settings ▸ General "Block Cookie Banners", off by default.
-                SettingsToggleRow("Block cookie banners",
-                                  detail: "Cookie banners from the common consent tools are hidden. Pages load again with the change.",
-                                  isOn: $store.settings.blockCookieBanners)
-                SettingsCardDivider()
-                // Not in Arc: Cra's Chromium (fingerprinting-protection.patch).
-                SettingsToggleRow("Fingerprinting protection",
-                                  detail: "Sites that tell browsers apart by reading back drawings, 3D graphics or sound get faint noise in what they read, different for each site and each time Cra opens. Sites also see 8 processor cores.",
-                                  isOn: $store.settings.fingerprintingProtection)
-            }
+            BlockListRows()
 
-            SettingsHeader("Connections").padding(.top, 20)
+            SettingsHeader("Connection security").padding(.top, 20)
             SettingsFeatureCard {
                 SettingsToggleRow("Always use secure connections",
                                   detail: "Pages load over HTTPS. Before opening a public site that doesn’t support it, Cra warns you first. Addresses on your own network, such as 192.168… or a .local name, load as they are.",
@@ -85,54 +59,176 @@ struct PrivacyPane: View {
     }
 }
 
-/// Block lists added on top of Cra's own (#507, in neither Arc nor Dia): a regional list or a
-/// bigger one, by address or from a file, blocked under "Block ads and trackers" (BlockLists).
-/// Each added list is a line with its name, what it blocks and a remove button.
+/// Catalog entries stay visible when switched off. A custom subscription stays until removed.
 private struct BlockListRows: View {
-    @Binding var addresses: [String]
-    let enabled: Bool
+    @Environment(SidebarStore.self) private var store
     private let lists = BlockLists.shared
+    @State private var regionalListsExpanded = false
     @State private var adding = false
+    @State private var editingRules = false
+    @State private var draft = ""
     @State private var text = ""
     @State private var error: String?
 
-    var body: some View {
-        SettingsPlainRow("Block lists",
-                         detail: "Add a list to block more, like ads in your country. Cra uses its domain rules (hosts files, domain lists and Adblock Plus “||domain^” rules) and fetches it again when Cra opens, once a day at most.",
-                         trailing: {
-                             Button("Add List…") { error = nil; text = ""; adding = true }
-                                 .disabled(!enabled || adding)
-                         }) {
-            if !addresses.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(addresses, id: \.self) { BlockListLine(address: $0, lists: lists, remove: remove) }
-                }
-                .padding(.top, 4)
-                .opacity(enabled ? 1 : 0.5)
-            }
-        }
-        if adding {
+    private func rows(_ category: DesktopFilterList.Category) -> some View {
+        let entries = DesktopFilterList.catalog.filter { $0.category == category }
+        return ForEach(entries) { list in
             SettingsCardDivider()
-            SettingsCardRow {
-                TextField("List address", text: $text, prompt: Text("https://example.com/list.txt"))
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-                    .onSubmit(addTyped)
-            } trailing: {
-                Button("Choose File…", action: chooseFile)
-                Button("Cancel") { adding = false; error = nil }
-                Button("Add", action: addTyped)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+            listRow(list.address, name: list.name, detail: list.detail)
+        }
+    }
+
+    var body: some View {
+        @Bindable var store = store
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader("Ad blocking")
+            SettingsFeatureCard {
+                SettingsToggleRow("AdAway", detail: "Built in. Blocks third-party ad and tracker domains, including in-app advertising networks.", isOn: $store.settings.adAwayEnabled)
+                SettingsCardDivider()
+                SettingsToggleRow("Anudeep’s Blacklist", detail: "Built in. Blocks third-party connections to known advertising and tracking servers.", isOn: $store.settings.anudeepEnabled)
+                rows(.ads)
+            }
+            regionalListCard.padding(.top, 14)
+            SettingsHeader("Tracking protection").padding(.top, 14)
+            SettingsFeatureCard {
+                SettingsToggleRow("Fingerprinting protection",
+                                  detail: "Makes it harder to recognise your browser across sites. Cra adds small variations to canvas, WebGL and offline audio readings for each site and session, and reports eight processor cores.",
+                                  isOn: $store.settings.fingerprintingProtection)
+                rows(.tracking)
+            }
+            SettingsHeader("Cookie banners and page annoyances").padding(.top, 14)
+            SettingsFeatureCard {
+                SettingsToggleRow("Hide common cookie banners",
+                                  detail: "Hides notices from common consent tools. Open pages reload when you change this setting.",
+                                  isOn: $store.settings.blockCookieBanners)
+                rows(.annoyances)
+            }
+            SettingsHeader("Security and privacy lists").padding(.top, 14)
+            SettingsFeatureCard {
+                ForEach(DesktopFilterList.catalog.filter { $0.category == .mixed }) { list in
+                    listRow(list.address, name: list.name, detail: list.detail)
+                    if list.id != DesktopFilterList.catalog.last(where: { $0.category == .mixed })?.id { SettingsCardDivider() }
+                }
+            }
+            SettingsFootnote("These lists block connections to third-party domains on pages you visit. Opening a listed address directly does not show a warning.")
+            HStack {
+                SettingsHeader("Manage lists")
+                Spacer()
+                Button("Update Enabled Lists") { store.settings.customBlocklists.forEach { lists.fetch($0) } }
+                    .disabled(store.settings.customBlocklists.isEmpty || !lists.fetching.isEmpty)
+                Button("Add List…") { error = nil; text = ""; adding = true }.disabled(adding)
+            }.padding(.top, 14)
+            if !store.settings.customFilterAddresses.isEmpty || adding {
+                SettingsHeader("Your lists").padding(.top, 14)
+                SettingsFeatureCard {
+                    ForEach(store.settings.customFilterAddresses, id: \.self) { address in
+                        listRow(address, name: lists.cached[address]?.name ?? address, detail: address, removable: true)
+                        if address != store.settings.customFilterAddresses.last || adding { SettingsCardDivider() }
+                    }
+                    if adding { addListRow }
+                }
+            }
+            if let failure = lists.networkFailure { SettingsFootnote(failure).foregroundStyle(.red) }
+            if let error { SettingsFootnote(error).foregroundStyle(.red) }
+            SettingsFootnote("Enabled lists update automatically. Downloads contact each list’s host, which can see your IP address. Filtering happens on this Mac.")
+            SettingsHeader("Custom filters").padding(.top, 14)
+            SettingsFeatureCard {
+                SettingsToggleRow("Use my filters", detail: "Apply your saved rules.", isOn: $store.settings.personalFiltersEnabled)
+                SettingsCardDivider()
+                SettingsPlainRow("My filters", detail: "One domain, network rule, exception or element filter per line.", trailing: {
+                    Button("Edit…") { draft = store.settings.personalBlockFilters ?? ""; editingRules = true }
+                        .disabled(editingRules)
+                }) {
+                    if editingRules {
+                        TextEditor(text: $draft)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 84)
+                            .accessibilityLabel("Custom filters")
+                        Text("To allow network requests on a site, enter @@||example.org^$document.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Cancel") { editingRules = false }
+                            Button("Save Changes") {
+                                store.settings.personalBlockFilters = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : draft
+                                editingRules = false
+                            }
+                            .disabled(draft == (store.settings.personalBlockFilters ?? ""))
+                        }
+                    }
+                }
             }
         }
-        if let error {
-            SettingsFootnote(error).foregroundStyle(.red).padding(.bottom, 8)
+    }
+
+    private var regionalListCard: some View {
+        let regional = DesktopFilterList.catalog.filter(\.regional)
+            .sorted { lhs, rhs in
+                let languageOrder = lhs.name.localizedStandardCompare(rhs.name)
+                if languageOrder == .orderedSame { return lhs.detail.localizedStandardCompare(rhs.detail) == .orderedAscending }
+                return languageOrder == .orderedAscending
+            }
+        let selected = Set(store.settings.customBlocklists)
+        let count = regional.filter { selected.contains($0.address) }.count
+        let summary = "\(count) of \(regional.count) selected"
+        return SettingsFeatureCard {
+            Button {
+                regionalListsExpanded.toggle()
+            } label: {
+                SettingsCardRow {
+                    Label("Regional lists", systemImage: "globe")
+                } trailing: {
+                    Text(summary).foregroundStyle(.secondary).monospacedDigit()
+                    Image(systemName: regionalListsExpanded ? "chevron.down" : "chevron.forward")
+                        .font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Regional lists")
+            .accessibilityValue(regionalListsExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
+
+            if regionalListsExpanded {
+                ForEach(regional) { list in
+                    SettingsCardDivider()
+                    listRow(list.address, name: list.name, detail: list.detail)
+                }
+            }
+        }
+    }
+
+    private func listRow(_ address: String, name: String, detail: String, removable: Bool = false) -> some View {
+        SettingsPlainRow(name, detail: name == detail ? "" : detail, trailing: {
+            if lists.fetching.contains(address) { ProgressView().controlSize(.mini) }
+            if removable {
+                Button { store.settings.forgetFilterList(address) } label: { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless).help("Remove this list").accessibilityLabel("Remove " + name)
+            }
+            Toggle(name, isOn: Binding(
+                get: { store.settings.customBlocklists.contains(address) },
+                set: { store.settings.setFilterList(address, enabled: $0) }
+            ))
+            .toggleStyle(.arcSwitch).labelsHidden()
+            .accessibilityLabel(Text(verbatim: name == detail ? name : name + ", " + detail))
+            .help(address)
+        }) {
+            if let failure = lists.failures[address] { Text(failure).font(.caption).foregroundStyle(.red) }
+        }
+    }
+
+    private var addListRow: some View {
+        SettingsCardRow {
+            TextField("List address", text: $text, prompt: Text("https://example.com/list.txt"))
+                .textFieldStyle(.roundedBorder).onSubmit(addTyped)
+        } trailing: {
+            Button("Choose File…", action: chooseFile)
+            Button("Cancel") { adding = false; error = nil }
+            Button("Add", action: addTyped).keyboardShortcut(.defaultAction)
+                .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
 
     private func addTyped() {
-        apply(CustomBlocklist.adding(text, to: addresses, httpsOnly: false))
+        apply(CustomBlocklist.adding(text, to: store.settings.customBlocklists, httpsOnly: false))
     }
 
     private func chooseFile() {
@@ -141,7 +237,7 @@ private struct BlockListRows: View {
         panel.allowsMultipleSelection = false
         panel.message = "Choose a block list: a hosts file, a list of domains or an Adblock Plus list."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        apply(CustomBlocklist.adding(url, to: addresses))
+        apply(CustomBlocklist.adding(url, to: store.settings.customBlocklists))
     }
 
     private func apply(_ addition: CustomBlocklist.Addition) {
@@ -150,7 +246,7 @@ private struct BlockListRows: View {
             error = "Enter the list’s web address, like https://example.com/list.txt."
             return
         case .added(let next):
-            addresses = next
+            if let address = next.last { store.settings.setFilterList(address, enabled: true) }
         case .alreadyAdded:
             break
         }
@@ -158,51 +254,6 @@ private struct BlockListRows: View {
         adding = false
     }
 
-    private func remove(_ address: String) {
-        addresses.removeAll { $0 == address }
-    }
-}
-
-/// One added list: its name, then what it blocks and when it was fetched, or why it couldn't be.
-private struct BlockListLine: View {
-    let address: String
-    let lists: BlockLists
-    let remove: (String) -> Void
-
-    var body: some View {
-        let list = lists.cached[address]
-        HStack(alignment: .center, spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(list?.name ?? fallbackName).font(.system(size: 12, weight: .medium)).foregroundStyle(.primary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .help(address)
-                if let failure = lists.failures[address] {
-                    Text(failure).foregroundStyle(.red)
-                } else if let list {
-                    Text(CustomBlocklist.summary(domains: list.domains.count, skippedRules: list.skippedRules)
-                         + " · Updated " + list.fetched.formatted(.relative(presentation: .named)))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Fetching…").foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 8)
-            if lists.fetching.contains(address) {
-                ProgressView().controlSize(.mini)
-            } else if lists.failures[address] != nil {
-                Button("Try Again") { lists.fetch(address) }.buttonStyle(.link)
-            }
-            Button { remove(address) } label: { Image(systemName: "minus.circle") }
-                .buttonStyle(.borderless)
-                .help("Remove this list")
-                .accessibilityLabel("Remove \(list?.name ?? fallbackName)")
-        }
-    }
-
-    private var fallbackName: String {
-        guard let url = URL(string: address) else { return address }
-        return url.isFileURL ? url.lastPathComponent : (url.host ?? address)
-    }
 }
 
 /// Chromium's secure DNS setting (chrome://settings/security) as a menu, under "Always use

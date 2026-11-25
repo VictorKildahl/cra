@@ -3571,6 +3571,9 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (BOOL)chromeHosting { return g_chromeHosting; }
 + (BOOL)supportsSparePages { return g_chromeHosting; }
 
+// CEF uses the native domain filter.
++ (void)setBundledNetworkRulesExpected:(BOOL)expected {}
++ (void)synchronizeBundledNetworkFilter {}
 + (void)setContentBlockingEnabled:(BOOL)enabled { cra_blocker::Enabled().store(enabled); }
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }
 
@@ -3611,6 +3614,12 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     }
     if (g_incognitoContext && g_incognitoReady) ApplyFingerprintingProtection(g_incognitoContext);
 }
++ (void)setContentBlockingPausedHosts:(NSArray<NSString*>*)hosts {
+    cra_blocker::DomainSet paused;
+    for (NSString* host in hosts) paused.insert(host.UTF8String ?: "");
+    cra_blocker::SetPausedHosts(std::move(paused));
+}
+
 + (void)setBlockedDomains:(NSArray<NSString*>*)domains {
     auto* set = new cra_blocker::DomainSet();
     set->reserve(domains.count);

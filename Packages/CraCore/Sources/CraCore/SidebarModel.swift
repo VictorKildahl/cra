@@ -646,11 +646,37 @@ public struct AppSettings: Codable, Equatable {
     public var autoPictureInPictureSites: [String: Bool] = [:]
     /// Dia's onboarding privacy choice "Block third-party ads and trackers": requests
     /// to listed ad and tracker domains are cancelled unless they are first-party.
-    public var blockAdsAndTrackers: Bool = true
+    public var adAwayEnabled = true
+    public var anudeepEnabled = true
+    /// Combined state for the debug command that toggles both offline sources.
+    public var blockAdsAndTrackers: Bool {
+        get { adAwayEnabled || anudeepEnabled }
+        set { adAwayEnabled = newValue; anudeepEnabled = newValue }
+    }
     /// Settings ▸ Privacy ▸ Block lists (#507, not in Arc or Dia): the addresses of lists added on top
-    /// of Cra's own, blocked under `blockAdsAndTrackers` (CustomBlocklist). Fetched copies live in
+    /// of Cra's own, selected independently (CustomBlocklist). Fetched copies live in
     /// the data folder's Blocklists folder.
     public var customBlocklists: [String] = []
+    public var disabledCustomBlocklists: [String] = []
+    public var personalBlockFilters: String?
+    /// Exact HTTP(S) hosts where the user paused list filtering.
+    public var pausedFilterHosts: Set<String>?
+    public static func filterHost(_ address: String) -> String? {
+        guard let url = URL(string: address), let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme), let host = url.host?.lowercased(), !host.isEmpty else { return nil }
+        return host
+    }
+    public mutating func toggleFilters(on host: String) {
+        var hosts = pausedFilterHosts ?? []
+        if !hosts.insert(host).inserted { hosts.remove(host) }
+        pausedFilterHosts = hosts.isEmpty ? nil : hosts
+    }
+
+    public var personalFiltersEnabled = true
+    public var activePersonalFilters: String? { personalFiltersEnabled ? personalBlockFilters : nil }
+    public var hasActiveBlockFilters: Bool {
+        blockAdsAndTrackers || !customBlocklists.isEmpty || !(activePersonalFilters ?? "").isEmpty
+    }
     /// Dia's Tabs ▸ "Haptic feedback when reordering tabs" (tabReorderingHapticsEnabled).
     public var hapticFeedbackOnReorder: Bool = true
     /// Dia's Advanced ▸ "Warn before quitting" (shouldWarnBeforeQuitting, off by default).
@@ -994,7 +1020,7 @@ public struct RankingData: Codable, Equatable {
 // Tolerant decoding so new preference keys never reset the file.
 extension AppSettings {
     /// Keys earlier versions wrote; read once and replaced.
-    private enum LegacyKeys: String, CodingKey { case openExternalLinksInLittleWindow }
+    private enum LegacyKeys: String, CodingKey { case openExternalLinksInLittleWindow, blockAdsAndTrackers }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1026,8 +1052,21 @@ extension AppSettings {
         chromeEngine = try c.decodeIfPresent(Bool.self, forKey: .chromeEngine) ?? true
         autoPictureInPicture = try c.decodeIfPresent(Bool.self, forKey: .autoPictureInPicture) ?? true
         autoPictureInPictureSites = (try? c.decodeIfPresent([String: Bool].self, forKey: .autoPictureInPictureSites)) ?? [:]
-        blockAdsAndTrackers = try c.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
-        customBlocklists = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
+        let old = try decoder.container(keyedBy: LegacyKeys.self)
+        let oldMaster = try old.decodeIfPresent(Bool.self, forKey: .blockAdsAndTrackers) ?? true
+        adAwayEnabled = try c.decodeIfPresent(Bool.self, forKey: .adAwayEnabled) ?? oldMaster
+        anudeepEnabled = try c.decodeIfPresent(Bool.self, forKey: .anudeepEnabled) ?? oldMaster
+        disabledCustomBlocklists = (try? c.decodeIfPresent([String].self, forKey: .disabledCustomBlocklists)) ?? []
+        personalBlockFilters = try c.decodeIfPresent(String.self, forKey: .personalBlockFilters)
+        let addresses = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
+        pausedFilterHosts = try c.decodeIfPresent(Set<String>.self, forKey: .pausedFilterHosts)
+        let previousPersonalSetting = try c.decodeIfPresent(Bool.self, forKey: .personalFiltersEnabled)
+        let legacyMasterOff = !c.contains(.adAwayEnabled) && !c.contains(.anudeepEnabled) && !oldMaster
+        personalFiltersEnabled = previousPersonalSetting ?? !legacyMasterOff
+        customBlocklists = addresses
+        if legacyMasterOff {
+            for address in customBlocklists { setFilterList(address, enabled: false) }
+        }
         if let d = try? c.decodeIfPresent(LinkDestination.self, forKey: .defaultLinkDestination) {
             defaultLinkDestination = d
         } else {
