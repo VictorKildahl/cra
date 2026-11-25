@@ -953,9 +953,9 @@ final class SidebarStore {
         return items[copy.id]
     }
 
-    /// Arc saves a duplicate read and never visited (isUnread false, no timeLastActiveAt): no unread
+    /// Arc saves a duplicate (and a Favorite's separated page, #801) read and never visited (isUnread false, no timeLastActiveAt): no unread
     /// dot, and not among ⌃Tab's recent tabs, unlike a tab a link opens in the background.
-    private func markDuplicateRead(_ id: UUID) {
+    func markDuplicateRead(_ id: UUID) {
         guard var it = items[id], var t = it.tab else { return }
         t.timeLastActiveAt = nil
         it.data = .tab(t)

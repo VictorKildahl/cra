@@ -493,6 +493,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         sidebarActions.resetPinnedTab = { [weak self] id in self?.resetPinnedTab(id) }
         sidebarActions.shareTabInstead = { [weak self] id in self?.shareTabInstead(id) }
         sidebarActions.separatePinnedTab = { [weak self] id in self?.separatePinnedTab(id) }
+        sidebarActions.separateFavorite = { [weak self] id in self?.separateFavorite(id) }
         sidebarActions.editPinnedURL = { [weak self] id in self?.editPinnedURL(id) }
         sidebarActions.showToast = { [weak self] text in self?.showToast(text) }
         sidebarActions.openURL = { [weak self] url in
@@ -3267,6 +3268,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         _ = store.createTab(url: t.url, title: t.savedTitle, in: store.spaceID(ofItem: id), select: false, index: 0)
         resetPinnedTab(id)
         store.selectTab(id, window: windowID)
+    }
+
+    /// Arc's ⌘-click on a Favorite (#801, Arc 1.174.2 measured 25 Nov 2026): its page moves to a new Today
+    /// tab at the top, in the background and saved read, never visited; the Favorite stays open, back on its
+    /// pinned page if it was away, on it or not. Arc moves the live page; here the new tab loads it, and a
+    /// Favorite at home keeps its own.
+    func separateFavorite(_ id: UUID) {
+        guard let t = store.item(id)?.tab, store.isFavorite(id) else { return }
+        let page = store.createTab(url: t.url, title: t.savedTitle, in: store.spaceID(ofItem: id), select: false, index: 0)
+        store.markDuplicateRead(page.id)
+        if t.url != t.savedURL { resetPinnedTab(id) }
+        store.selectTab(id, window: windowID)
+        CraLog.note("favorite separated: page to a new Today tab at the top, favorite \(t.url != t.savedURL ? "back on its pinned page" : "kept")")
     }
 
     /// Edit Pinned URL… (#54): Arc's dialog with the pinned URL. A page showing the old
