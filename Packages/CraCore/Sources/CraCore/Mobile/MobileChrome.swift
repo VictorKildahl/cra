@@ -197,7 +197,7 @@ public struct MobileBarCollapse: Equatable {
 
     /// Whether a page `contentHeight` tall has more to scroll than the `pageHeight` its screen
     /// allows, by more than `minimumScrollable`. A page that fits, or has only a little to
-    /// scroll, has nothing behind the bar worth hiding, so it keeps the bar out.
+    /// scroll, has nothing behind the bar worth hiding, so the bar stays.
     public static func scrolls(contentHeight: CGFloat, pageHeight: CGFloat) -> Bool {
         contentHeight > pageHeight + minimumScrollable
     }

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
-(PasskeyTests), a block list and the script it stops (BlockingTests), a plain-http page and one to come back to from a refused address (PlainHTTPTests),
-links and a script redirect to other apps' addresses (ExternalLinkTests), a page naming two icons
-(TabSwitcherIconTests), a long page with a link to a short one (CollapseBottomBarTests) and, given
-a certificate, the same pages over
-HTTPS with that certificate, which the simulator can't verify (CertificateTests). No external
-requests."""
+(PasskeyTests), a block list and the script it stops (BlockingTests), a plain-http page and one
+to come back to from a refused address (PlainHTTPTests), links and a script redirect to other
+apps' addresses (ExternalLinkTests), a page naming two icons (TabSwitcherIconTests), a long page
+with a link to a short one and a two-tone page for the bottom bar's tests (CollapseBottomBarTests,
+PageUnderBarTests) and, given a certificate, the same pages over HTTPS with that certificate,
+which the simulator can't verify (CertificateTests). No external requests."""
 import argparse
 import html
 import struct

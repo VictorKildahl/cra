@@ -143,7 +143,8 @@ it skips.
 
 StatusBandTests skips on the Duo: the right-hand column or
 top-right status cluster has no top safe area, and band placement is an open product question
-(duo research, finding 8).
+(duo research, finding 8). PageUnderBarTests skips before iOS 26 (no obscured content insets)
+and on the Duo (the pixel check).
 
 Expected failures on the **closed** Duo (app bugs and unresolved iOS 27 behaviour; these tests
 remain enabled):

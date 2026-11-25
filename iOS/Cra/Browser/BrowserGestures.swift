@@ -758,7 +758,9 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             }
         case .none: break
         }
-        // What comes next arrives from the side the old page left to.
+        // What comes next arrives from the side the old page left to. The floor under it takes
+        // the arriving page's colour, if it is another tab.
+        showSwapBackdrop(for: shownPage)
         pageContainer.transform = CGAffineTransform(translationX: -away * 0.3, y: 0)
         pageContainer.alpha = 0
         UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut]) {

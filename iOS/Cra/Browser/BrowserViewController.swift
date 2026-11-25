@@ -37,7 +37,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let pageContainer = PassthroughView()
     /// A solid page-coloured floor under a page while it slides across: a gap or a fade must show
     /// the page's own colour, not the app's backdrop, through the bar's material.
-    let swapBackdrop = UIView()
+    private let swapBackdrop = UIView()
     /// Darkens the page while it sits pushed back behind the search sheet.
     let pageDim = UIView()
     /// The band behind the status bar over a page (updateStatusBand), and the colour it shows.
@@ -129,11 +129,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// so a tab comes in with the page's whole bottom and gains nothing on landing.
     var pageViewHeight: CGFloat { pageViewFrame(top: view.safeAreaInsets.top, barProgress: 1).height }
 
-    /// The page's view bottom: the safe area's edge with the page under the bar, else the bar's
-    /// top on iOS before 26.
-    var pageViewBottom: CGFloat {
-        Self.pageRunsUnderBar ? view.bounds.height - view.safeAreaInsets.bottom : tabArea.maxY
-    }
+    /// The page's view bottom with the bar open: the safe area's edge under the bar, the bar's
+    /// top before iOS 26.
+    var pageViewBottom: CGFloat { pageViewFrame(top: view.safeAreaInsets.top, barProgress: 0).maxY }
 
     /// The page's frame as it is now.
     var pageContentFrame: CGRect { pageFrame(barProgress: barCollapse.progress) }
@@ -157,14 +155,27 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, bottom - safeTop))
     }
 
+    /// How much of the bar lies over the page's view at `progress`: its whole height with the bar
+    /// open, none with it closed, and following the finger in between.
+    private static func barOverlap(_ progress: CGFloat) -> CGFloat {
+        MobileBottomBar.height * (1 - min(1, max(0, progress)))
+    }
+
+    /// The page's content insets: the notch's sides and, with the page under the bar, the bar's
+    /// height as scroll room, so the page's last points can come above it.
+    private func pageContentInsets(barProgress: CGFloat) -> UIEdgeInsets {
+        let safe = view.safeAreaInsets
+        let bottom = Self.pageRunsUnderBar ? Self.barOverlap(barProgress) : 0
+        return UIEdgeInsets(top: 0, left: safe.left, bottom: bottom, right: safe.right)
+    }
+
     /// Lays the page out above the bar's top while the bar's own height of it shows under the
-    /// bar's material: zero with the bar closed, the bar's height with it open, and following the
-    /// finger in between. On iOS 26's obscured content insets, the page's `svh` and its sticky or
-    /// fixed bottom elements stay on the bar's top rather than under it.
+    /// bar's material, following the finger. On iOS 26's obscured content insets, the page's `svh`
+    /// and its sticky or fixed bottom elements stay on the bar's top rather than under it.
     private func updatePageObscuredInsets(barProgress: CGFloat) {
         guard Self.pageRunsUnderBar, let page = shownPage else { return }
         if #available(iOS 26.0, *) {
-            let bottom = MobileBottomBar.height * (1 - min(1, max(0, barProgress)))
+            let bottom = Self.barOverlap(barProgress)
             var insets = page.webView.obscuredContentInsets
             if abs(insets.bottom - bottom) > 0.01 {
                 insets.bottom = bottom
@@ -173,8 +184,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             // The obscured area is scroll room too: without it the last of the page lines up
             // with the safe area's edge, under the bar, and cannot be scrolled above it.
             let scroll = page.webView.scrollView
-            let safe = view.safeAreaInsets
-            let content = UIEdgeInsets(top: 0, left: safe.left, bottom: bottom, right: safe.right)
+            let content = pageContentInsets(barProgress: barProgress)
             if scroll.contentInset != content {
                 scroll.contentInset = content
             }
@@ -185,7 +195,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// closed: a page that fits there can never need the bar out of the way.
     private func scrolls(_ page: WebPage) -> Bool {
         MobileBarCollapse.scrolls(contentHeight: page.webView.scrollView.contentSize.height,
-                                  pageHeight: pageFrame(barProgress: 1).height)
+                                  pageHeight: pageViewHeight)
     }
 
     /// The tab's visible area: under the iOS status bar and above the app's bottom bar, open.
@@ -682,9 +692,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// runs under it, so the page's last points can scroll above the bar.
     func updatePageInsets() {
         guard let scroll = shownPage?.webView.scrollView else { return }
-        let safe = view.safeAreaInsets
-        let bottom = Self.pageRunsUnderBar ? MobileBottomBar.height * (1 - barCollapse.progress) : 0
-        let insets = UIEdgeInsets(top: 0, left: safe.left, bottom: bottom, right: safe.right)
+        let insets = pageContentInsets(barProgress: barCollapse.progress)
         if scroll.contentInset != insets {
             scroll.contentInset = insets
         }
