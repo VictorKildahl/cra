@@ -58,19 +58,39 @@ final class OnboardingModel: ObservableObject {
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
 
+    // Start with a two-line heading so the first demo frame already fits.
+    @State private var headingHeight: CGFloat = 66
+    @State private var iconTitleHeight: CGFloat = 0
+    @State private var iconGridHeight: CGFloat = 0
+
     private var tried: Bool { model.progress == .done }
 
     var body: some View {
         ZStack {
             VividBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 1 : 0)
             PaleBackdrop().ignoresSafeArea().opacity(MobileOnboarding.isVivid(model.step) ? 0 : 1)
-            content
+            GeometryReader { geometry in
+                // Geometry offers the safe content area; the mock follows the whole window's aspect.
+                let insets = geometry.safeAreaInsets
+                let window = CGSize(width: geometry.size.width + insets.leading + insets.trailing,
+                                    height: geometry.size.height + insets.top + insets.bottom)
+                let mock = MobileOnboarding.mock(window: window, safeLeft: insets.leading, safeRight: insets.trailing)
+                layout(in: geometry, mock: mock)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+        }
+        .animation(.easeInOut(duration: 0.5), value: MobileOnboarding.isVivid(model.step))
+    }
+
+    private func layout(in geometry: GeometryProxy, mock: MobileOnboarding.Mock) -> some View {
+        ZStack {
+            content(in: geometry, mock: mock)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 30)), removal: .opacity))
                 .id(model.step)
             VStack(spacing: 0) {
                 Spacer()
-                Button(action: model.next) {
+                let next = Button(action: model.next) {
                     Text(MobileOnboarding.buttonTitle(for: model.step))
                         .scaledFont(size: 17, weight: .medium, relativeTo: .body)
                         .foregroundStyle(.white)
@@ -83,6 +103,11 @@ struct OnboardingView: View {
                 .opacity(MobileOnboarding.showsNext(model.step, tried: tried) && model.progress != .working ? 1 : 0)
                 .disabled(!MobileOnboarding.showsNext(model.step, tried: tried) || (model.step == .blocking && tried))
                 .accessibilityIdentifier("onboarding-next")
+                if mock.shape == .phone {
+                    next
+                } else {
+                    next.frame(maxWidth: mock.size.width)
+                }
                 if model.step == .defaultBrowser {
                     Button(MobileOnboarding.defaultBrowserSkip) { model.later() }
                         .scaledFont(size: 17, weight: .medium, relativeTo: .body)
@@ -109,10 +134,9 @@ struct OnboardingView: View {
                     .transition(.move(edge: .bottom))
             }
         }
-        .animation(.easeInOut(duration: 0.5), value: MobileOnboarding.isVivid(model.step))
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func content(in geometry: GeometryProxy, mock: MobileOnboarding.Mock) -> some View {
         switch model.step {
         case .welcome:
             WelcomeStep()
@@ -143,34 +167,35 @@ struct OnboardingView: View {
             }
             .padding(.top, 50)
         case .browseForMe:
-            VStack(spacing: 24) {
-                StepHeading(title: MobileOnboarding.browseTitle, progress: model.progress)
-                BrowseDemo(progress: $model.progress)
+            demo(title: MobileOnboarding.browseTitle, in: geometry, mock: mock) {
+                BrowseDemo(mock: mock, progress: $model.progress)
             }
-            .padding(.top, 40)
         case .pinch:
-            VStack(spacing: 24) {
-                StepHeading(title: MobileOnboarding.pinchTitle, progress: model.progress)
-                PinchDemo(progress: $model.progress)
+            demo(title: MobileOnboarding.pinchTitle, in: geometry, mock: mock) {
+                PinchDemo(mock: mock, progress: $model.progress)
             }
-            .padding(.top, 40)
         case .icon:
+            let scale = MobileOnboarding.fitScale(available: geometry.size.height, topInset: geometry.safeAreaInsets.top,
+                                                  bottomInset: geometry.safeAreaInsets.bottom, heading: iconTitleHeight,
+                                                  scalable: iconGridHeight, topPadding: 50, spacing: 30, bottomReserved: 18 + 50 + 16)
             VStack(spacing: 30) {
                 OnboardingTitle(text: MobileOnboarding.iconTitle)
-                AppIconGrid(icons: MobileAppIcon.onboardingChoices, selected: model.icon, onVivid: true) { icon in
+                    .fixedSize(horizontal: false, vertical: scale < 1)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { iconTitleHeight = $0 }
+                AppIconGrid(icons: MobileAppIcon.onboardingChoices, selected: model.icon, onVivid: true, scale: scale) { icon in
                     model.icon = icon
                     model.setIcon(icon)
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { iconGridHeight = $0 }
+                .frame(height: scale < 1 ? iconGridHeight * scale : nil)
                 .padding(.horizontal, 60)
             }
             .padding(.top, 50)
         case .blocking:
-            VStack(spacing: 24) {
-                StepHeading(title: MobileOnboarding.blockingTitle, progress: model.progress)
-                BlockingDemo(blocks: $model.blocksAdsAndTrackers)
+            demo(title: MobileOnboarding.blockingTitle, in: geometry, mock: mock) {
+                BlockingDemo(mock: mock, blocks: $model.blocksAdsAndTrackers)
                     .blur(radius: model.progress == .done ? 6 : 0)
             }
-            .padding(.top, 40)
         case .defaultBrowser:
             VStack(spacing: 18) {
                 Spacer().frame(height: 110)
@@ -193,6 +218,30 @@ struct OnboardingView: View {
                     .padding(.horizontal, 44)
             }
         }
+    }
+
+    private func demo<Picture: View>(title: String, in geometry: GeometryProxy, mock: MobileOnboarding.Mock, @ViewBuilder picture: () -> Picture) -> some View {
+        let scale = MobileOnboarding.fitScale(available: geometry.size.height, topInset: geometry.safeAreaInsets.top,
+                                              bottomInset: geometry.safeAreaInsets.bottom, heading: headingHeight,
+                                              scalable: mock.size.height)
+        return VStack(spacing: 24) {
+            StepHeading(title: title, progress: model.progress)
+                .fixedSize(horizontal: false, vertical: scale < 1)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headingHeight = $0 }
+            Group {
+                if scale < 1 {
+                    picture()
+                        .scaleEffect(scale)
+                        .frame(width: mock.size.width * scale, height: mock.size.height * scale)
+                } else {
+                    picture()
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("onboarding-mock")
+            .accessibilityValue(mock.shape.rawValue)
+        }
+        .padding(.top, 40)
     }
 
     /// The four pills' round icons: red, purple, blue, cyan.
@@ -306,6 +355,7 @@ struct AppIconGrid: View {
     let selected: MobileAppIcon
     /// On onboarding's gradient: white radios, and a white frame round the picked icon.
     var onVivid = false
+    var scale: CGFloat = 1
     let pick: (MobileAppIcon) -> Void
 
     /// The widest the grid gets on an iPhone (Settings' picker on a Pro Max: 440 pt less its
@@ -314,6 +364,17 @@ struct AppIconGrid: View {
     static let maxWidth: CGFloat = 360
 
     var body: some View {
+        Group {
+            if scale < 1 {
+                grid.scaleEffect(scale)
+            } else {
+                grid
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var grid: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22), count: 2), spacing: 22) {
             ForEach(icons) { icon in
                 Button { pick(icon) } label: {
@@ -348,7 +409,6 @@ struct AppIconGrid: View {
             }
         }
         .frame(maxWidth: Self.maxWidth)
-        .frame(maxWidth: .infinity)
     }
 }
 

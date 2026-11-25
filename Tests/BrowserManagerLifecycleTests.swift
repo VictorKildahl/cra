@@ -270,6 +270,7 @@ enum BrowserManagerLifecycleTests {
         await pageProbeCase()
         await pageEngineCase()
         await protectedVideoCase()
+        await widevineFailureCase()
         await backgroundTabToastCase()
         backgroundPageStartsHiddenCase()
         pageHistoryCase()
@@ -838,6 +839,51 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    /// Widevine that fails on an ordinary site (WidevineSignal's failure watch): the site is chosen
+    /// for Safari's engine, the cookies its page sends go to the profile's WebKit store, and the
+    /// page opens in WebKit in its pane. A site taken back to Chromium (kept) isn't watched.
+    @MainActor
+    private static func widevineFailureCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let url = "https://drm.example.test/watch/1"
+        let tab = store.createTab(url: url).id
+        let other = store.createTab(url: "https://example.test/b").id
+        manager.show([tab, other], focused: other, focus: false)
+        func pending(_ browser: CraBrowser, _ method: String) -> Int { browser.replies.filter { $0.method == method }.count }
+        let page = manager.runtime(for: tab)!.browser
+        page.navigate(to: url)
+        expect(!(page is WebKitBrowser) && pending(page, "cra:Runtime.evaluate") == 1 && page.lastIsolatedParams.contains("drmFailNext"),
+               "an ordinary site's page opens in Chromium, watched for Widevine that fails")
+
+        // Nothing failed (the page went away, the watch answered empty): nothing moves.
+        page.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":""}}"#)
+        await drainMainQueue()
+        expect(manager.runtime(for: tab)?.browser === page && PageEngines.sites.engine(for: url) != .webKit, "an empty answer moves nothing")
+
+        // It failed: the site plays in WebKit from now on, signed in, in its pane.
+        page.navigate(to: url)
+        page.reply(to: "cra:Runtime.evaluate", with: #"{"result":{"type":"string","value":"\#(url)"}}"#)
+        await drainMainQueue()
+        expect(PageEngines.sites.engine(for: "https://drm.example.test/other") == .webKit, "the site is chosen for Safari's engine")
+        expect(pending(page, "Network.getAllCookies") == 1, "the page is asked for the cookies it sends")
+        page.reply(to: "Network.getAllCookies", with: #"{"cookies":[{"name":"session","value":"s","domain":".example.test","path":"/","expires":-1,"session":true},{"name":"other","value":"o","domain":".bank.example","path":"/","expires":-1,"session":true}]}"#)
+        await drainMainQueue()
+        let moved = manager.runtime(for: tab)?.browser
+        expect(moved is WebKitBrowser && moved?.currentURL == url, "the page opens in WebKit at its address")
+        expect(WebKitStores.added.last?.cookies.map(\.domain) == [".example.test"], "only the cookies the page sends go along")
+        expect(manager.visibleTabIDs == [tab, other] && manager.visibleTabID == other, "the split keeps its panes, order and focus")
+
+        // Taken back to Chromium, the site stays there and isn't watched again.
+        PageEngines.choose(.chromium, for: url)
+        manager.reopenInItsEngine(tab)
+        await drainMainQueue()
+        let back = manager.runtime(for: tab)!.browser
+        back.navigate(to: url)
+        expect(!(back is WebKitBrowser) && !back.lastIsolatedParams.contains("drmFailNext"), "a site taken back to Chromium isn't watched")
+        manager.closeAll()
+    }
+
     /// A mixed site's page (YouTube) that asks for Widevine (ProtectedVideoPages): the window is told to
     /// ask; Once moves that page to WebKit with its place in the video and the site's cookies, in its
     /// pane; the tab's next video goes back to Chromium; with Always the page moves unasked; the Site
@@ -856,10 +902,12 @@ enum BrowserManagerLifecycleTests {
         func pending(_ browser: CraBrowser, _ method: String) -> Int { browser.replies.filter { $0.method == method }.count }
         let sites = PageEngines.sites
 
-        // Only a mixed site's Chromium page is asked to tell when it wants Widevine.
+        // Only a mixed site's Chromium page is asked to tell when it wants Widevine; an ordinary
+        // site's is only watched for Widevine that fails (widevineFailureCase).
         let plain = manager.runtime(for: other)!.browser
         plain.navigate(to: "https://example.test/c")
-        expect(pending(plain, "cra:Runtime.evaluate") == 0, "an ordinary site's page isn't asked about Widevine")
+        expect(pending(plain, "cra:Runtime.evaluate") == 1 && !plain.lastIsolatedParams.contains("drmNext") && plain.lastIsolatedParams.contains("drmFailNext"),
+               "an ordinary site's page isn't asked about Widevine, only watched for Widevine that fails")
         let chromium = manager.runtime(for: tab)!.browser
         expect(!(chromium is WebKitBrowser), "a mixed site's page opens in Chromium")
         chromium.navigate(to: film)

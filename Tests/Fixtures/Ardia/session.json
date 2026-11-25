@@ -8,7 +8,7 @@
  "settings":{"shareTabsAcrossWindows":false},
  "windows":[
   {"id":"w-2","profileId":"default","tabIds":["t-1b","t-8"],"activeTabIds":{},"frame":[0,0,900,700],"createdAt":0},
-  {"id":"w-1","profileId":"default","tabIds":["t-1","t-2","t-3","t-4","t-7","t-5","t-9","t-6","t-10","t-11","t-12","t-13","t-14"],"activeTabIds":{"default":"t-4"},"frame":[0,0,1440,900],"createdAt":0}],
+  {"id":"w-1","profileId":"default","tabIds":["t-1","t-2","t-3","t-4","t-7","t-5","t-9","t-6","t-10","t-11","t-12","t-13","t-14","t-15"],"activeTabIds":{"default":"t-4"},"frame":[0,0,1440,900],"createdAt":0}],
  "windowOrder":["w-2","w-1"],"focusedWindowId":"w-1",
  "tabs":[
   {"id":"t-1","pinKey":"k-mail","windowId":"w-1","profileId":"default","url":"https://mail.example.com/inbox/42","title":"Message","pin":{"as":"tile"},"pinnedUrl":"https://mail.example.com/","customTitle":null,"customIcon":null,"page":{"kind":"asleep"},"createdAt":1731900000000,"lastActiveAt":0},
@@ -25,7 +25,8 @@
   {"id":"t-11","windowId":"w-1","profileId":"p-work","url":"javascript:void(document.title)","title":"Bookmarklet","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
   {"id":"t-12","windowId":"w-1","profileId":"p-work","url":"chrome://settings/","title":"Settings","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
   {"id":"t-13","windowId":"w-1","profileId":"p-work","url":"about:blank","title":"","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
-  {"id":"t-14","windowId":"w-1","profileId":"p-work","url":"blob:https://design.example.com/5f1c","title":"Download","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0}],
+  {"id":"t-14","windowId":"w-1","profileId":"p-work","url":"blob:https://design.example.com/5f1c","title":"Download","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0},
+  {"id":"t-15","windowId":"w-1","profileId":"default","url":"cra://settings","title":"Cra Settings","pin":null,"pinnedUrl":null,"page":{"kind":"idle"},"createdAt":0}],
  "groups":[
   {"id":"g-1","windowId":"w-1","profileId":"default","name":"Dev","icon":null,"color":"blue","collapsed":false,"pinned":true,"tabIds":["t-2","t-3"]},
   {"id":"g-2","windowId":"w-1","profileId":"default","name":"Reading","icon":null,"color":null,"collapsed":true,"pinned":true,"tabIds":["t-3"],"parentId":"g-1"},

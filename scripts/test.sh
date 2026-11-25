@@ -50,10 +50,12 @@ if [ "${1:-}" != core ]; then
   suite "Extension state" scripts/test-extension-state.sh
   suite "Extension store migration" scripts/test-extension-store-migration.sh
   suite "Store and importers" scripts/test-store.sh
+  suite "Site icons" scripts/test-site-icons.sh
   suite "Tidy Downloads lifecycle" scripts/test-tidy-downloads.sh
   suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
   suite "Policies" scripts/test-policies.sh
+  suite "Import skipped list" scripts/test-skipped-list.sh
   suite "Content blocker" scripts/test-content-blocker.sh
   suite "WebKit stores" scripts/test-webkit-stores.sh
   suite "Update channels" scripts/test-update-channels.sh
@@ -67,6 +69,7 @@ if [ "${1:-}" != core ]; then
   suite "Emoji label" scripts/test-emoji-label.sh
   suite "Theme noise" scripts/test-theme-noise.sh
   suite "Chromium window corners" scripts/test-chromium-window-corners.sh
+  suite "Tooltip cover (#770)" scripts/test-tooltip-cover.sh
   suite "Picture in Picture corners" scripts/test-pip-corners.sh
   suite "Picture in Picture overlay" scripts/test-pip-overlay.sh
   suite "Music notes pixels" scripts/test-music-notes.sh

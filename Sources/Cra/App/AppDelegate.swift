@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     private var bootstrapped = false
     private var extensionCommandMonitor: Any?
+    /// The front window's page offered to the user's iPhone through Handoff (#745).
+    private lazy var handoff = HandoffPublisher { [weak self] in self?.handoffPage() }
     private var pendingURLs: [String] = []
     private var settingsWindow: NSWindow?
     private var settingsController: SettingsWindowController?
@@ -51,6 +53,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DockedWindowAccessibility.install()
         SystemAppearance.shared.start()
         DocumentPictureInPictureSpring.shared.start()
+        // Coming forward for a press on Picture in Picture's window (#741), AppKit raised a browser window over the app
+        // the user was in for a moment, even one that couldn't take the keyboard (Victor, 24 Nov 2026): those behind
+        // another window are out of sight while the activation lands and come back where they were, and meanwhile no
+        // browser window takes the keyboard or main.
+        PictureInPictureChrome.shared.browserWindowsComingForward = { [unowned self] in
+            let behind = BrowserWindowsBehind(mainWindows.compactMap(\.window), stack: StackedWindow.onScreen())
+            CraWindow.stayBehindWhileComingForward = true
+            behind.takeOut()
+            return { last in
+                behind.bringBackIn()
+                if last { CraWindow.stayBehindWhileComingForward = false }
+            }
+        }
         installURLEventHandler()
         observeFrontmostApp()
         PerfCEF.install(app: self)
@@ -144,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installKeyFallbackMonitor()
         installSideButtonKeyMonitor()
         installCommandFileWatcher()
+        handoff.start()
         MCPServer.shared.start(app: self)
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
@@ -1222,7 +1238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let plan {
                 let r = store.apply(plan, includeArchive: q("archive") != "0", includeSettings: q("settings") != "0")
                 favicons.reset()
-                NSLog("Cra: imported %d spaces, %d tabs, %d folders, %d archived", r.spaces, r.tabs, r.folders, r.archived)
+                NSLog("Cra: imported %d spaces, %d tabs, %d folders, %d archived, %d of %d tabs copied", r.spaces, r.tabs, r.folders, r.archived,
+                      r.report[.tabs].copied, r.report[.tabs].total)
             }
         case "debug":
             var dict: [String: String] = [:]
@@ -1804,14 +1821,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let label = dict["label"] ?? title
                 func all(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(all) }
                 let host = main.shell.sidebarHost
-                let found: (any ArcTooltipTarget & NSView)? = dict["tile"] == "1"
-                    ? all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
-                    : all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                // under=downloads (#770): the pointer on the open Library downloads' first row, and the tab row under it.
+                let underDownloads = dict["under"] == "downloads" ? (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.debugFirstRowInWindow : nil
+                let found: (any ArcTooltipTarget & NSView)? = if let at = underDownloads {
+                    all(host).compactMap { $0 as? TabRowView }.first { $0.window != nil && $0.convert($0.bounds, to: nil).contains(at) && !$0.isHiddenOrHasHiddenAncestor }
+                } else if dict["tile"] == "1" {
+                    all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
+                } else {
+                    all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                }
                 guard let row = found else {
-                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(title)")
+                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(dict["under"].map { "under \($0)" } ?? title)")
                     return
                 }
-                let p = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+                let p = underDownloads ?? row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
                 let inWindow = window.contentView.map { $0.bounds.contains($0.convert(p, from: nil)) } ?? false
                 let time = ProcessInfo.processInfo.systemUptime
                 for view in all(host) {
@@ -1838,7 +1861,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 case let t as FavoriteTileView: hovered = t.debugHovering ? t.text : "none"
                 default: hovered = "none"
                 }
-                let tip = ArcTooltipController.pointerArea(of: row).contains(window.convertPoint(toScreen: p))
+                let tip = ArcTooltipController.ownsTip(row, at: window.convertPoint(toScreen: p))
                 CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered) tip=\(tip ? 1 : 0)")
                 return
             }
@@ -2283,6 +2306,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 if case .switchToTab = row.kind { CraLog.note("command bar pick \(text): tab") } else { CraLog.note("command bar pick \(text): other") }
                 main.commandBar.commit(row)
+                return
+            }
+            // commandBarIcon=<text> (#755): the open bar's row whose address holds <text> selected, then its favicon as
+            // drawn: on the white tile, and in the row's colour when it is a light mark.
+            if let text = dict["commandBarIcon"] {
+                let bar = main.commandBar
+                guard let i = bar.result.items.firstIndex(where: { $0.url?.contains(text) == true }) else {
+                    CraLog.note("command bar icon \(text): none in \(bar.result.items.count) rows"); return
+                }
+                bar.moveSelection(by: i - bar.selectedIndex)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self else { return }
+                    CraLog.note("command bar icon \(text): row=\(i) selected=\(self.main.commandBar.selectedIndex) \(self.main.debugCommandBarIcon(i))")
+                }
                 return
             }
             // commandBarReturn=<label>: Return in the browser window's open bar, on the selected row (#667).
@@ -2762,6 +2799,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // What the Dock tile and the ⌘-Tab switcher show for Cra (#319).
             // What the last look at the sync folder found, and whether a mix is being waited out (#378).
             if let label = dict["sync"] { CraLog.note("sync \(label): \(composition.sync.readout())"); return }
+            // handoff=<label>: the page Handoff offers the user's iPhone now (#745).
+            if let label = dict["handoff"] { CraLog.note("handoff \(label): \(handoff.offered?.absoluteString ?? "none")"); return }
             if let label = dict["dockTile"] { CraLog.note("dock tile \(label): \(AppIconManager.shared.dockTileReadout())"); return }
             // appIcon=<id>: picks an icon without remembering it; bundleIcon=<label>: Finder's icon on the app.
             if let id = dict["appIcon"] { AppIconManager.shared.select(id, remember: false); return }
@@ -3565,6 +3604,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // window's (FileMenu.shows, #644).
             let rowHidden = !FileMenu.shows(action.id, tabSelected: self.store.selectedTabID != nil)
             if !rowHidden, NSApp.mainMenu?.performKeyEquivalent(with: event) == true { return nil }
+            // A dimmed row's key goes on to an extension that has it, as in Arc: Obsidian Web Clipper's ⌘⇧O in a
+            // browser window, where Show Little Window "Open In" Menu can't run (#744).
+            if ExtensionCommands.extensionTakes(craMenuRanIt: false, craRowHidden: rowHidden), self.runExtensionCommand(event) { return nil }
             self.perform(action.id)
             return nil
         }
@@ -3700,9 +3742,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return true
     }
 
+    /// A key a page in a browser window is about to get (the engine's key hook, before the page): an extension's shortcut
+    /// comes first, as in Chrome and Arc. Cra hands ⌘ keys to the page that has the keyboard before the app-wide watch
+    /// that runs extensions' shortcuts sees them (CraApplication.sendEvent), so the clipper's ⌘⇧O, and any ⌘ key set for
+    /// "Activate the extension", reached only the page and then Cra's own command (#744). A key whose Cra row can run
+    /// here stays Cra's.
+    func runExtensionCommandBeforePage(_ event: NSEvent) -> Bool {
+        // Typing: an extension's shortcut always holds ⌘, ⌥ or ⌃.
+        guard !event.modifierFlags.isDisjoint(with: [.command, .option, .control]) else { return false }
+        let action = bindings.action(for: event)
+        let hidden = action.map { !FileMenu.shows($0.id, tabSelected: store.selectedTabID != nil) } ?? false
+        let canRun = action.map { a in menuRow(a.id).map { validateMenuItem($0) } ?? true }
+        guard ExtensionCommands.extensionTakesBeforePage(craRowCanRun: canRun, craRowHidden: hidden) else { return false }
+        return runExtensionCommand(event)
+    }
+
+    /// The menu bar's row for one of Cra's commands, if it has one.
+    private func menuRow(_ id: String) -> NSMenuItem? {
+        func find(_ menu: NSMenu) -> NSMenuItem? {
+            for item in menu.items {
+                if item.representedObject as? String == id, item.target === self { return item }
+                if let sub = item.submenu, let found = find(sub) { return found }
+            }
+            return nil
+        }
+        return NSApp.mainMenu.flatMap(find)
+    }
+
+    /// The key press an extension's shortcut last ran for: the app-wide watch and the page's key hook can both see one.
+    private var extensionCommandPress: TimeInterval?
+
     private func runExtensionCommand(_ event: NSEvent) -> Bool {
         let held = event.modifierFlags.intersection([.command, .option, .control])
         guard !held.isEmpty, !event.isARepeat, let main, event.window === main.window || event.window?.parent === main.window else { return false }
+        if extensionCommandPress == event.timestamp { return true }
         // chrome://extensions/shortcuts records a key by its press: Chrome holds its shortcuts back there.
         if main.selectedTab?.tab?.url.hasPrefix("chrome://extensions") == true { return false }
         let path = store.profilePath(profile: main.focusedSpace.profileID)
@@ -3711,6 +3784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard !bindings.isEmpty,
               let binding = ExtensionCommands.binding(in: bindings, characters: event.charactersIgnoringModifiers ?? "",
                                                       keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) else { return false }
+        extensionCommandPress = event.timestamp
         guard ExtensionCommands.opensPopup(binding.command) else {
             // Its own command: the engine delivers it to the extension with this page as the active tab (engine -19).
             let page = main.currentBrowser
@@ -3722,6 +3796,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         CraLog.note("extension command \(binding.extensionID.prefix(8)): opens its popup")
         main.runExtensionAction(binding.extensionID)
         return true
+    }
+
+    /// The page Handoff offers: a Little Window's or Peek's while it is in front, else the active window's selected tab.
+    private func handoffPage() -> HandoffPublisher.Page? {
+        if let little = keyLittleWindow {
+            return .init(address: little.state.url, offTheRecord: little.browser?.isIncognito ?? false)
+        }
+        guard let main else { return nil }
+        return .init(address: main.selectedTab?.tab?.url ?? "", offTheRecord: main.isIncognito)
     }
 
     func handleReservedKey(_ event: NSEvent) -> Bool {

@@ -41,4 +41,25 @@ struct ExtensionCommandsTests {
         #expect(ExtensionCommands.opensPopup("_execute_page_action"))
         #expect(!ExtensionCommands.opensPopup("lock"))
     }
+
+    /// Obsidian Web Clipper's ⌘⇧O is Cra's Show Little Window "Open In" Menu too, dimmed in a browser window: the key
+    /// goes to the extension there, as in Arc. Where Cra's row runs, or is hidden but its key still acts, Cra keeps it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/744"))
+    func anExtensionGetsAKeyWhoseCraRowIsDimmed() {
+        #expect(ExtensionCommands.extensionTakes(craMenuRanIt: false, craRowHidden: false))
+        #expect(!ExtensionCommands.extensionTakes(craMenuRanIt: true, craRowHidden: false))
+        #expect(!ExtensionCommands.extensionTakes(craMenuRanIt: false, craRowHidden: true))
+    }
+
+    /// A ⌘ key typed in a page reaches Cra before the page only through the engine's key hook: there an extension's
+    /// shortcut comes first, as in Chrome and Arc. ⌘⇧Y, which Cra has no command for, and the clipper's ⌘⇧O, whose Cra
+    /// row is dimmed in a browser window, are the extension's; a Cra row that runs, or a hidden one whose key still
+    /// acts, keeps its key.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/744"))
+    func anExtensionsKeyComesBeforeThePage() {
+        #expect(ExtensionCommands.extensionTakesBeforePage(craRowCanRun: nil, craRowHidden: false))
+        #expect(ExtensionCommands.extensionTakesBeforePage(craRowCanRun: false, craRowHidden: false))
+        #expect(!ExtensionCommands.extensionTakesBeforePage(craRowCanRun: true, craRowHidden: false))
+        #expect(!ExtensionCommands.extensionTakesBeforePage(craRowCanRun: false, craRowHidden: true))
+    }
 }

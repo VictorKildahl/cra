@@ -1,0 +1,38 @@
+# promise: crash-webkit-tab-closed-entering-fullscreen
+# A WebKit tab (a DRM service's, ${WEBKIT} here) closed while its video was still going into full screen: its view came
+# down with WebKit's entry pending, WebKit's full-screen controller went away with it, and WebKit stopped Cra on its own
+# trap (beganEnterFullScreen) a few seconds later. The view now waits for WebKit, asks it to leave once in, and goes once
+# it is out. Closing a tab already in full screen takes the same way. Page races alone (leave while entering, enter
+# while leaving) never trapped.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=60
+pace 0.5
+cra://debug?windowSize=1200x800
+cra://open?url=${WEBKIT}/media.html?n=behind
+expect-log loaded localhost \(HTTP 200\)
+cra://open?url=${WEBKIT}/media.html?n=entering
+wait 3
+cra://debug?activate=1
+wait 1
+
+# Closed 0.1 s after the page asked for full screen, while WebKit is still on its way in.
+pace 0.1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(document.getElementById('player').requestFullscreen(),'enter')"}
+cra://action/closeTab
+pace 0.5
+expect-log its view waits for WebKit
+# WebKit's trap came when its exit finished, seconds later: give it time.
+wait 15
+
+# Closed in full screen.
+cra://open?url=${WEBKIT}/media.html?n=inside
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(document.getElementById('player').requestFullscreen(),'enter inside')"}
+wait 3
+cra://action/closeTab
+wait 10
+cra://open?url=${WEBKIT}/media.html?n=after
+expect-log GET /media.html\?n=after
+wait 2
+reject-log fault:

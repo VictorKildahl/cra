@@ -229,6 +229,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Peek, Little Window, Picture in Picture, split view, Capture
 
+- **#741:** with a video in Picture in Picture and another app in front, pinch over the window: nothing happens, as in
+  Arc (macOS gives a pinch only to the app in front). Click the window once: Cra comes forward (its menu bar), no
+  browser window shows even for a moment, and a pinch now resizes it, again and again. The other app's windows stay
+  in front of Cra's browser window. Do it once from another app's full-screen Space too (#206): you stay on that Space.
+  (`pip-pinch-background` checks the click's decision in a test copy, which never comes forward.)
 - **#373:** with Settings ▸ Links ▸ "⌥⌘-click opens a Little Window" on (it is off by default), hold ⌥ and ⌘ and
   click a link on a page with the pointer: the link opens in a Little Window and the page stays where it is, from
   a normal tab, a pinned tab, a target=_blank link and a WebKit tab (a DRM site, whose page gets no posted click). With the switch off, ⌥⌘-click opens Split View (#298);
@@ -316,6 +321,12 @@ built release app with a test profile. Note anything that fails in the release's
   of youtube.com"; Google's stay in Chromium), the film goes on from where it was, and its quality menu offers
   more than 480p. An ordinary video opened in that tab is Chromium's again, extensions and all.
   The Chromium session is still signed in afterwards.
+- **Widevine that fails** (docs/protected-media.md; it takes an account, which widevine-fails.scenario's Clear Key
+  fixture can't stand in for): signed in in Chromium to a DRM service that isn't listed (Viaplay, Zattoo or RTL+),
+  play a film. Within seconds the tab opens again in WebKit, signed in (cra.log: "Widevine failed on <site>: moves the
+  site to Safari's engine", then "copies N cookies"), "<site> plays with Safari's engine" shows, and the film plays.
+  The Site Control Center's switch off takes it back to Chromium, and playing there again leaves it there. Shaka
+  Player's Widevine demo (shaka-player-demo.appspot.com), which plays in Chromium, doesn't move.
 - **#172:** with a space on its own profile, a Little Window from that space and a Peek from its
   tab see that profile's cookies. The chip names the profile; switching it reloads the page in
   the other profile.
@@ -448,6 +459,13 @@ built release app with a test profile. Note anything that fails in the release's
 - **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
   signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
   Cra, in the space Air Traffic Control picks, and not in Safari.
+- **#753, dialog corners on macOS 15:** on a Mac with macOS 15, press ⌘Q (with Ask before quitting on) and open
+  New Profile. No white shows in the dialog's corners: the dark card rounds with the sheet. On macOS 26 they
+  keep Arc's rounder corners. `DialogCornerTests` pins the radius; only macOS 15's own sheet shows the fit.
+- **#745, Handoff to the iPhone:** with the release app in front on a web page, swipe up to the app
+  switcher on an iPhone signed in to the same Apple Account. A Handoff suggestion at the bottom opens
+  that page in the iPhone's default browser. Another tab's page replaces it; an incognito window or a
+  chrome:// page offers none. `handoff-offers-page` pins what Cra offers; only a phone shows it arrives.
 - **#261, #195:** with Stage Manager on, use Cra full screen with 20 or more visited tabs for ten
   minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
   minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs
@@ -480,11 +498,21 @@ built release app with a test profile. Note anything that fails in the release's
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
   lists Cra too. Needs a real iPhone and Apple's signing: the policy test only sees the file.
 
+- **Opening the search sheet (`MobileSearchMotion`):** on a real iPhone in dark mode beside Arc Search, over a
+  page: tap the pill. The sheet moves on the frame after the finger lifts, solid from the start, the plus at the
+  field's left with "Search..." to its right, and the mic and eyes come in over the second half. Needs a human eye:
+  the simulator's frame timing is not the phone's.
+
 - **#675:** on a TestFlight build on a real iPhone with System Haptics on, press the New Tab pill, the
   tab stack and the up arrow: one very subtle tick as the finger comes down and nothing as it lets go. In
   the page menu, tapping the address gives the same subtle tick; the tiles and rows a light one, Pin and
   Summarize also on release, and the capsule only on release. Nothing with System Haptics off. The
   simulator plays no haptics; `BarHapticsTests` and `MenuHapticsTests` only count them.
+
+- **The pill's press:** on a real iPhone beside Arc Search, tap the New Tab pill quickly, then press and
+  hold it: it presses in under the finger (94 %, Arc Search's about 94.5 %) and comes back out without
+  growing past its size (it puffed up to 106 %). `PillPressTests` covers a held press; a quick tap's way
+  back needs an eye.
 
 - **#536:** on a TestFlight build, sign in to a site with a passkey saved in iCloud Keychain and
   one saved in 1Password (webauthn.io works for both): iOS's passkey sheet comes up and the sign-in
@@ -513,12 +541,22 @@ built release app with a test profile. Note anything that fails in the release's
   simulator records at a variable rate, so only a phone settles the timing; CraCore's
   `aLetGoSheetWaitsForTheKeyboardWhereItWasLeft` pins the hold.
 
+- **Closing the search sheet:** on a real iPhone beside Arc Search, open the sheet over a page and tap
+  above it: the field rides down on the keyboard into the + pill, and the bar's buttons come back as it
+  lands (`MobileSearchSheet.Settling`; the sheet vanished on the close's first frame).
+
 - **#572, the address turning editable:** on a real iPhone, tap the address in the page menu: the
   menu does not visibly close first. The editable field takes the capsule's place in the same
   panel and the keyboard lifts it from there, and the page behind does not zoom out or move: only
   the + button's search pushes it back, and dragging this panel down leaves the page still. The
   simulator records animations at a variable rate, so
   only a phone settles the handoff; `testTheMenusAddressIsEditedInThisTab` pins the end state.
+
+- **A choice in the search sheet (`MobileSheetLeave`):** on a real iPhone in dark mode beside Arc Search, with
+  google.com's dark theme on, search for google.com from a page and from the empty home screen. The sheet rises and
+  fades, the screen goes black without lightening on the way (the band under the Dynamic Island included), and the
+  page appears without a white frame. `testAPageOpenedFromTheSheetIsCoveredUntilItHasDrawn` checks the page and the
+  band are out of sight under the cover; the timing needs a human eye.
 
 ## Not pinned yet
 

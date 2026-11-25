@@ -66,7 +66,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// what voice search hears instead of the microphone (`-CraShowVoice YES` holds the voice overlay
 /// up with it, for a screenshot), `-CraOnboarding YES` to show onboarding on a test's data folder,
 /// `-CraCountHaptics YES` for the bar's buttons and the page menu's controls to count their
-/// ticks in their accessibility value (PressHaptics).
+/// ticks in their accessibility value (PressHaptics), `-CraHoldPill YES` for the New Tab pill to stay
+/// pressed in, as under a finger.
 enum LaunchOptions {
     /// The argument after `-<name>` on the command line, exactly as given. (UserDefaults would
     /// read it as a property list and drop quotes from it.)
@@ -99,6 +100,8 @@ enum LaunchOptions {
     static var showsVoiceOverlay: Bool { LaunchOptions.value("CraShowVoice") == "YES" }
     /// `-CraHoldConnecting YES` keeps the Spaces sheet on "Connecting", for a screenshot.
     static var holdsConnecting: Bool { LaunchOptions.value("CraHoldConnecting") == "YES" }
+    /// `-CraHoldPill YES` keeps the New Tab pill pressed in, as under a finger, for a test to measure.
+    static var holdsPill: Bool { LaunchOptions.value("CraHoldPill") == "YES" }
     static var summarizesFirstPage: Bool { LaunchOptions.value("CraSummarize") == "YES" }
     /// `-CraAIState off|preparing|unsupported` stands in for Apple Intelligence's state in tests.
     static var aiState: MobileAIState? {

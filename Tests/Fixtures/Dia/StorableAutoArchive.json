@@ -1,0 +1,12 @@
+{
+ "containers": [
+  {
+   "archivedTabs": [
+    {"archivedAt": 800000000.0, "tab": {"url": "https://example.com/archived", "title": "Archived"}},
+    {"archivedAt": 800000100.0, "tab": {"url": "chrome://settings/", "title": "Settings"}},
+    {"archivedAt": 800000200.0, "tab": {"url": "about:blank", "title": ""}},
+    {"archivedAt": 800000300.0, "tab": {"url": "chrome://newtab/", "title": "New Tab"}}
+   ]
+  }
+ ]
+}

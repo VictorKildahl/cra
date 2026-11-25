@@ -13,9 +13,11 @@ Everything else stays in Chromium.
   [#66](https://github.com/VictorKildahl/cra/issues/66#issuecomment-6666097911).
 - **EZDRM's public FairPlay stream**: plays end to end (certificate, licence, keys, 720p video).
 
-It isn't only a fixed list of sites. Any other site that asks for Widevine gets a **Safari's
-Engine** switch in its Site Control Center, and with it on the site plays in WebKit from then on
-(see [How it works](#how-it-works)).
+It isn't only a fixed list of sites. **Any other site whose Widevine fails moves to WebKit by
+itself**: when its licence is refused, its keys can't play or its licence request goes unanswered,
+the site plays in Safari's engine from then on, signed in, and Cra says so (see
+[Widevine that fails](#widevine-that-fails)). A site that only asks for Widevine also gets a
+**Safari's Engine** switch in its Site Control Center, which moves it or takes it back by hand.
 
 A third kind is the site that is mostly not DRM: YouTube, where a film bought or rented plays at
 480p in Cra's Chromium among ordinary videos that play fine. There Cra asks, and moves only the
@@ -74,7 +76,8 @@ licence, keys usable, 720p playing). That is the whole requirement.
   (`Page.addScriptToEvaluateOnNewDocument` in the bridge), which doesn't reach it. That needs
   the bridge to attach to such frames or to inject from the renderer. On, the site plays in WebKit from then on and the page reopens there.
   A WebKit page shows it on, so a listed site can be taken back to Chromium the same way
-  (`ProtectedMediaSites.choosing`, kept in the data folder's `protected-media.json`). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
+  (`ProtectedMediaSites.choosing`, kept in the data folder's `protected-media.json`). A site whose
+  Widevine fails doesn't wait for the switch: it moves by itself ([Widevine that fails](#widevine-that-fails)). They are players, not whole domains, except where nothing else signs in through the service (Max sends `play.max.com` on to `www.hbomax.com` and signs in on its own hosts):
   other sites send their "Sign in with Spotify/Tidal/Deezer" through `accounts.spotify.com`,
   `login.tidal.com` and `connect.deezer.com`, and those must finish in the engine they started in.
 - **A page Cra opens** (a tab restored or created, a link opened in a new tab, a Little Window, an
@@ -89,6 +92,45 @@ licence, keys usable, 720p playing). That is the whole requirement.
   Only Cra's own navigation (the URL bar) picks the engine again.
 - **A popup** (`window.open`) keeps its opener's engine, so `window.opener` still works for
   sign-in windows.
+
+## Widevine that fails
+
+The services that want VMP refuse Cra's Chromium at the licence, and every one of them also
+serves FairPlay to Safari. So a site that isn't on the list isn't left to fail: when its Widevine
+fails, it moves to WebKit as if its switch had been turned on.
+
+- **What counts as failing** (CraCore's `WidevineSignal`, in every frame as the request wrapper
+  is): a key session whose keys went to a `<video>` or `<audio>` element (`setMediaKeys`), and then
+  its licence was refused (`MediaKeySession.update` rejected), every key came back
+  `output-restricted` or `internal-error`, or a licence request (`message`) went unanswered for
+  10 seconds while the session stayed open. Only playback fails. A page that only asks for
+  Widevine, as fingerprinting scripts do, a session no element plays, a session the page closed,
+  and a film that plays in Chromium (one usable key is enough, SD included) tell nothing.
+  Told once per session; a player frame's failure is its page's, as its request is.
+- **Which pages** (`ProtectedMediaSites.movesWhenWidevineFails`): a Chromium page of any site
+  that isn't listed and isn't mixed (a mixed site asks per video instead), and isn't one the user
+  took back to Chromium. Not an incognito page, so no site is written to disk from one; its
+  switch still shows. The page tells Cra itself (`BrowserManager.watchWidevineFailure`): PageScript's
+  `drmFailNext()` in Cra's world is a promise left waiting in the page, which settles when
+  Widevine fails there. Nothing polls.
+- **The move** (`BrowserManager.moveSiteToSafariEngine`, the same as the switch turned on): the
+  site goes into `protected-media.json`'s `added`, the cookies the page sends (its host's and
+  its parent domains', and its subdomains': `ProtectedVideoHandoff.cookies(forPageAt:)`) go to the
+  profile's WebKit store, and the tab's page opens again in WebKit at its address, in its split
+  pane. A copy that fails or takes over 2 seconds moves the page all the same, which then asks to
+  sign in. The switch turned on by hand moves the same way, cookies included, so a site moved
+  either way arrives signed in.
+- **Telling:** the once-per-service toast, "<site> plays with Safari's engine" with **Why?**,
+  which opens the Site Control Center: its Protected Media card says what changes, and its
+  switch is there.
+- **Taking it back:** the switch turned off puts the site back in Chromium and keeps it there:
+  `protected-media.json`'s `kept` (written only once it has an entry) lists it, and Widevine
+  failing there moves it no more. Turning the switch on again lifts that.
+
+Scenario `widevine-fails` covers it with Clear Key, which every Chromium has and whose licence a
+fixture can refuse on purpose (`CRA_WIDEVINE_KEY_SYSTEMS=org.w3.clearkey` watches it as Widevine,
+`CRA_WIDEVINE_ANSWER_MS` shortens the wait). Whether a real service that isn't listed moves and
+then plays is a line in the release checklist: it needs an account.
 
 ## Protected videos on an ordinary site
 

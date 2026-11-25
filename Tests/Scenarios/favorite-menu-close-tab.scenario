@@ -1,0 +1,31 @@
+# promise: #740
+# Close Tab in a Favorite's right-click menu closes it, as in Arc 1.173.1: its page is let go, and a click on the
+# Favorite loads it afresh. Only ⌘W keeps a Favorite's page running (favorite-close-keeps-page). Before, the menu's
+# Close Tab only deselected the Favorite too, and on one loaded behind another tab it did nothing at all.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=fav
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.mark='kept','marked')","returnByValue":true}
+expect-log "value":"marked"
+cra://open?url=${PAGE}?n=other
+wait 2
+# The Favorite shown: Close Tab unloads it, and the tab shown before it comes back.
+cra://debug?selectTab=n=fav
+wait 1
+cra://debug?favoriteMenu=1&label=shown&run=Close Tab
+expect-log favorite menu shown ran Close Tab: saved=unmuted page=not loaded$
+expect-log favorite menu shown favorites: n=fav today: n=other open: n=other$
+cra://debug?selectTab=n=fav
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'favorite '+(window.mark||'reloaded')","returnByValue":true}
+expect-log "value":"favorite reloaded"
+# Loaded behind another tab: Close Tab still lets its page go, and the open tab stays.
+cra://debug?selectTab=n=other
+wait 1
+cra://debug?favoriteMenu=1&label=behind&run=Close Tab
+expect-log favorite menu behind ran Close Tab: saved=unmuted page=not loaded$
+expect-log favorite menu behind favorites: n=fav today: n=other open: n=other$

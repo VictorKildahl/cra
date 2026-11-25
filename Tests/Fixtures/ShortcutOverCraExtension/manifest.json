@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Shortcut Over Cra Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: the toolbar popup's shortcut is Command+Shift+O, as Obsidian Web Clipper's is, a key Cra also has (Show Little Window 'Open In' Menu, from Arc) for a command that runs only while a Little Window is in front (GitHub #744). The popup loads a fixture page to say it opened.",
+  "permissions": ["storage"],
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["origin.js"] }],
+  "action": { "default_popup": "popup.html", "default_title": "Cra Shortcut Over Cra Fixture" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+O", "mac": "Command+Shift+O" },
+      "description": "Open the popup"
+    }
+  }
+}

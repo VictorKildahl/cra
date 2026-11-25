@@ -92,7 +92,7 @@ public enum MCPAgentSetup {
                     apps: ["Cursor"], bundleIDs: ["com.todesktop.230313mzl4w4u92"],
                     markers: [".cursor"], afterAdding: "Cursor lists Cra in Settings ▸ MCP; new chats can use it."),
         MCPAgentApp(id: "t3-code", name: "T3 Code", detail: "", popular: true,
-                    files: [codex, claudeCode], apps: ["T3 Code", "T3 Code (Alpha)"], bundleIDs: [],
+                    files: [codex, claudeCode], apps: ["T3 Code", "T3 Code (Alpha)", "T3 Code (Beta)", "T3 Code (Nightly)"], bundleIDs: [],
                     markers: [], afterAdding: "New T3 Code threads can use Cra."),
         MCPAgentApp(id: "conductor", name: "Conductor", detail: "", popular: true,
                     files: [claudeCode, codex], apps: ["Conductor"], bundleIDs: ["com.conductor.app"],

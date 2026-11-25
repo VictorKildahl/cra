@@ -1,0 +1,24 @@
+# promise: #744
+# An extension's ⌘ shortcut typed while a page has the keyboard opens its popup, as in Chrome and Arc, where an
+# extension's shortcuts come before the page. Cra hands ⌘ keys to the page first (CraApplication.sendEvent, Chrome's
+# rule for pages), past the app-wide watch that runs extensions' shortcuts, and what the page left went to Cra's own
+# commands only: Obsidian Web Clipper's ⌘⇧O, or any ⌘ key set for "Activate the extension", did nothing, while its
+# ⌥⇧ shortcuts worked. The keys go to the page's view as a typed ⌘ key does, with the toolbar hidden (Arc's default):
+# ⌘⇧Y, which Cra has no command for, and ⌘⇧O, Cra's dimmed Show Little Window "Open In" Menu in a browser window.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?installExtension=${FIXTURES}/PageShortcutExtension
+cra://debug?installExtension=${FIXTURES}/ShortcutOverCraExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=page-shortcut
+wait 3
+cra://debug?chromePref=extensions.commands
+expect-log chrome pref extensions\.commands: .*"mac:Command\+Shift\+Y":\{"command_name":"_execute_action"
+cra://debug?key=Y,16,1179648&page=1&source=keyboard
+expect-log extension command [a-p]{8}: opens its popup
+expect-log "GET /page\.html\?n=page-shortcut-popup-opened HTTP
+cra://dismiss
+wait 1
+cra://debug?key=O,31,1179648&page=1&source=keyboard
+expect-log "GET /page\.html\?n=shortcut-over-cra-popup-opened HTTP

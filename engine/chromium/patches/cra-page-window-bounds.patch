@@ -1,0 +1,86 @@
+Cra: a page Cra hosts sees its own column as its window. Cra's pages sit in
+Cra's window beside its sidebar, not in a window of Chrome's, and Chrome gave
+them the whole NSWindow as their window: window.outerWidth - innerWidth was
+the sidebar's width (345 in a normal window). Sites read that as DevTools being
+open. Discord then takes its sign-in token out of localStorage until its page
+goes, so every other Discord tab opened on its login page while one was open.
+The page's window (outerWidth, outerHeight, screenX, screenY) is now its
+column, from the window's top to the page's bottom, as a page in Chrome's
+window sees it, and it follows the page when the sidebar slides. The page's
+own bounds (GetViewBounds: popups, IME, drag) are unchanged, and so is every
+page in a window of Chrome's (one with a parent ui::Layer).
+
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.h b/content/browser/renderer_host/render_widget_host_view_mac.h
+index 119556d..292c30e 100644
+--- a/content/browser/renderer_host/render_widget_host_view_mac.h
++++ b/content/browser/renderer_host/render_widget_host_view_mac.h
+@@ -662,6 +662,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
+   // (where the origin is the upper-left corner of Screen::GetPrimaryDisplay).
+   gfx::Rect window_frame_in_screen_dip_;
+ 
++  // Cra: whether the view draws into a ui::Layer of a window of Chrome's. A
++  // page Cra hosts never does: it sits in Cra's window, beside its sidebar.
++  bool cra_has_parent_ui_layer_ = false;
++
+   // Whether or not the NSView's NSWindow is the key window.
+   bool is_window_key_ = false;
+ 
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.mm b/content/browser/renderer_host/render_widget_host_view_mac.mm
+index 031d41c..9e5407f 100644
+--- a/content/browser/renderer_host/render_widget_host_view_mac.mm
++++ b/content/browser/renderer_host/render_widget_host_view_mac.mm
+@@ -409,6 +409,7 @@ void RenderWidgetHostViewMac::MigrateNSViewBridge(
+ }
+ 
+ void RenderWidgetHostViewMac::SetParentUiLayer(ui::Layer* parent_ui_layer) {
++  cra_has_parent_ui_layer_ = parent_ui_layer != nullptr;
+   if (parent_ui_layer) {
+     // The first time that we display using a parent ui::Layer, permanently
+     // switch from drawing using Cocoa to only drawing using ui::Views. Erase
+@@ -1564,6 +1565,20 @@ void RenderWidgetHostViewMac::TransformPointToRootSurface(gfx::PointF* point) {
+ }
+ 
+ gfx::Rect RenderWidgetHostViewMac::GetBoundsInScreen() {
++  // Cra: a page Cra hosts sits in Cra's window beside its sidebar, not in a
++  // window of Chrome's. The window the page sees (window.outerWidth, screenX)
++  // is its own column, from the window's top to the page's bottom, as a page
++  // in Chrome's window sees its window. With the sidebar counted, outerWidth -
++  // innerWidth was over 300, and sites took it for open DevTools: Discord took
++  // its sign-in out of storage, so its other tabs opened signed out. The
++  // page's own bounds (GetViewBounds) stay as they are.
++  if (!cra_has_parent_ui_layer_ && widget_type_ == WidgetType::kFrame &&
++      !IsHeadless() && !window_frame_in_screen_dip_.IsEmpty()) {
++    const gfx::Rect view = GetViewBounds();
++    const int top = window_frame_in_screen_dip_.y();
++    if (view.width() > 0 && view.bottom() > top)
++      return gfx::Rect(view.x(), top, view.width(), view.bottom() - top);
++  }
+   return window_frame_in_screen_dip_;
+ }
+ 
+@@ -2080,6 +2095,7 @@ void RenderWidgetHostViewMac::OnBoundsInWindowChanged(
+     bool attached_to_window) {
+   bool view_size_changed =
+       view_bounds_in_window_dip_.size() != view_bounds_in_window_dip.size();
++  const gfx::Rect cra_old_view_bounds = view_bounds_in_window_dip_;
+ 
+   if (attached_to_window) {
+     view_bounds_in_window_dip_ = view_bounds_in_window_dip;
+@@ -2092,6 +2108,17 @@ void RenderWidgetHostViewMac::OnBoundsInWindowChanged(
+ 
+   if (view_size_changed)
+     UpdateScreenInfo();
++
++  // Cra: a page Cra hosts has its own column as its window (GetBoundsInScreen),
++  // so the page hears of it when the view moves in its window too (the sidebar
++  // sliding away), not only when the window moves.
++  if (!cra_has_parent_ui_layer_ && !destroy_pending() &&
++      view_bounds_in_window_dip_ != cra_old_view_bounds) {
++    if (host()->delegate())
++      host()->delegate()->SendScreenRects();
++    else
++      host()->SendScreenRects();
++  }
+ }
+ 
+ void RenderWidgetHostViewMac::OnWindowFrameInScreenChanged(

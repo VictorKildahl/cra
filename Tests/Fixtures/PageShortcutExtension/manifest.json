@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Cra Page Shortcut Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: the toolbar popup's shortcut is Command+Shift+Y, a ⌘ key Cra has no command for, as a user sets one for 'Activate the extension' in chrome://extensions/shortcuts (GitHub #744). Typed while a page has the keyboard it must still open the popup, which loads a fixture page to say it opened.",
+  "permissions": ["storage"],
+  "content_scripts": [{ "matches": ["http://127.0.0.1/*"], "js": ["origin.js"] }],
+  "action": { "default_popup": "popup.html", "default_title": "Cra Page Shortcut Fixture" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
+      "description": "Open the popup"
+    }
+  }
+}

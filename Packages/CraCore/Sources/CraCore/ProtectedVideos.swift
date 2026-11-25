@@ -218,18 +218,90 @@ public struct ProtectedVideoPages: Equatable, Sendable {
 ///
 /// Once a page has asked, each `encrypted` media event counts as asking again: a player that
 /// changes videos without a navigation may keep the key system it got and not ask twice.
+///
+/// **Widevine that fails** (`__cra.drmFailed`, `__cra.drmFailNext()`): the services that want
+/// Verified Media Path refuse Cra's Chromium at the licence (Spotify's 403, Disney+'s error 83).
+/// A key session counts as failed when its keys went to a `<video>` or `<audio>` element
+/// (`setMediaKeys`) and then the licence was refused (`update` rejected), every key came back
+/// `output-restricted` or `internal-error`, or a licence request went unanswered for
+/// `answerWithin` while the session stayed open. Only playback fails: a page that only asks for
+/// Widevine (a fingerprinting script) or plays in Chromium tells nothing. Told once per session,
+/// to the top frame the same way as a request.
 public enum WidevineSignal {
-    /// The page's world, in every frame: the wrapper.
-    public static func pageWorld(channel: String) -> String {
-        """
+    /// The key systems whose failures move a site: Widevine's. A test run adds
+    /// Clear Key (`CRA_WIDEVINE_KEY_SYSTEMS`), which every Chromium has, to fail on purpose.
+    public static let failingKeySystems = ["com.widevine"]
+
+    /// How long a licence request may go unanswered before it counts as refused, in ms.
+    public static let answerWithin = 10_000
+
+    /// The page's world, in every frame: the wrapper, and the watch on Widevine that fails.
+    public static func pageWorld(channel: String, keySystems: [String] = failingKeySystems, answerWithin: Int = answerWithin) -> String {
+        let systems = (try? JSONEncoder().encode(keySystems)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        return """
         (() => {
           const proto = window.Navigator?.prototype, request = proto?.requestMediaKeySystemAccess;
           if (!request) return;
-          Object.defineProperty(proto, 'requestMediaKeySystemAccess', { configurable: true, writable: true,
-            value: { requestMediaKeySystemAccess(keySystem, configs) {
-              if (String(keySystem).startsWith('com.widevine')) dispatchEvent(new CustomEvent('\(channel)d'));
-              return request.call(this, keySystem, configs);
-            } }.requestMediaKeySystemAccess });
+          const watched = \(systems), watches = k => watched.some(p => String(k).startsWith(p));
+          const keysWatched = new WeakSet(), attached = new WeakSet();
+          const keysOf = new WeakMap(), asked = new WeakMap(), failed = new WeakSet();
+          const wrap = (o, name, f) => {
+            const old = o?.[name];
+            if (typeof old !== 'function') return;
+            const value = { [name](...a) { return f.call(this, old, a); } }[name];
+            Object.defineProperty(value, 'length', { value: old.length });
+            Object.defineProperty(o, name, { configurable: true, writable: true, value });
+          };
+          const then = (r, f) => { if (r && typeof r.then === 'function') r.then(f, () => {}); };
+          wrap(proto, 'requestMediaKeySystemAccess', function (old, [keySystem, configs]) {
+            if (String(keySystem).startsWith('com.widevine')) dispatchEvent(new CustomEvent('\(channel)d'));
+            return old.call(this, keySystem, configs);
+          });
+          const fail = session => {
+            const keys = keysOf.get(session);
+            if (!keys || !attached.has(keys) || failed.has(session)) return;
+            failed.add(session);
+            dispatchEvent(new CustomEvent('\(channel)x'));
+          };
+          // Known by its own keySystem: Shaka Player 4 gets the access from
+          // navigator.mediaCapabilities.decodingInfo, never from requestMediaKeySystemAccess.
+          wrap(window.MediaKeySystemAccess?.prototype, 'createMediaKeys', function (old, a) {
+            const r = old.apply(this, a);
+            let keySystem = '';
+            try { keySystem = this.keySystem; } catch {}
+            if (watches(keySystem)) then(r, k => { if (k && typeof k === 'object') keysWatched.add(k); });
+            return r;
+          });
+          wrap(window.HTMLMediaElement?.prototype, 'setMediaKeys', function (old, a) {
+            if (a[0] && keysWatched.has(a[0])) attached.add(a[0]);
+            return old.apply(this, a);
+          });
+          wrap(window.MediaKeys?.prototype, 'createSession', function (old, a) {
+            const s = old.apply(this, a);
+            if (!keysWatched.has(this) || !s || typeof s.addEventListener !== 'function') return s;
+            keysOf.set(s, this);
+            const n = { asked: 0, answered: 0, closed: false };
+            asked.set(s, n);
+            then(s.closed, () => { n.closed = true; });
+            s.addEventListener('message', e => {
+              if (e.messageType && e.messageType !== 'license-request') return;
+              const mine = ++n.asked;
+              setTimeout(() => { if (!n.closed && n.answered < mine) fail(s); }, \(answerWithin));
+            });
+            s.addEventListener('keystatuseschange', () => {
+              const all = [];
+              try { s.keyStatuses.forEach(status => all.push(status)); } catch {}
+              if (all.length && all.every(x => x === 'output-restricted' || x === 'internal-error')) fail(s);
+            });
+            return s;
+          });
+          wrap(window.MediaKeySession?.prototype, 'update', function (old, a) {
+            const n = asked.get(this);
+            if (n) n.answered = n.asked;
+            const r = old.apply(this, a);
+            if (n && r && typeof r.then === 'function') r.then(null, () => fail(this));
+            return r;
+          });
         })();
         """
     }
@@ -256,6 +328,32 @@ public enum WidevineSignal {
           e.stopImmediatePropagation();
           drmAsked();
         }, true);
+        cra.drmFailedN = 0;
+        cra.drmFailedSeen = 0;
+        const drmFailed = () => { cra.drmFailed = true; cra.drmFailedN++; cra.drmFailTell?.(); };
+        addEventListener('\(channel)x', () => {
+          drmFailed();
+          if (drmTop) return;
+          try { window.top.dispatchEvent(new CustomEvent('\(channel)x')); } catch {
+            try { window.top.postMessage('\(channel)y', '*'); } catch {}
+          }
+        });
+        if (drmTop) addEventListener('message', e => {
+          if (e.data !== '\(channel)y') return;
+          e.stopImmediatePropagation();
+          drmFailed();
+        }, true);
+        cra.drmFailNext = () => new Promise(done => {
+          cra.drmFailStop?.();
+          cra.drmFailStop = () => done('');
+          cra.drmFailTell = () => {
+            if (cra.drmFailedN <= cra.drmFailedSeen) return;
+            cra.drmFailedSeen = cra.drmFailedN;
+            cra.drmFailTell = cra.drmFailStop = null;
+            done(location.href);
+          };
+          cra.drmFailTell();
+        });
         cra.drmNext = () => new Promise(done => {
           cra.drmStop?.();
           cra.drmStop = () => done('');
@@ -273,6 +371,11 @@ public enum WidevineSignal {
     /// Asked in Cra's isolated world of the top frame, and left waiting (`drmNext`). A page that
     /// navigates away ends it with an error.
     public static let nextRequest = "window.__cra?.drmNext?.() ?? ''"
+
+    /// Asked in Cra's isolated world of the top frame of any Chromium page that may move
+    /// (`ProtectedMediaSites.movesWhenWidevineFails`), and left waiting (`drmFailNext`): it settles
+    /// with the page's address when Widevine fails in any of its frames.
+    public static let nextFailure = "window.__cra?.drmFailNext?.() ?? ''"
 }
 
 /// What goes with a page when it moves to WebKit for a protected video: the place in the video
@@ -339,15 +442,33 @@ public enum ProtectedVideoHandoff {
     /// partitioned cookie belongs to an embed on another site and stays. Nothing else in the
     /// profile is touched, and an answer that can't be read copies nothing.
     public static func cookies(fromProtocolAnswer json: String, for site: MixedMediaSite, now: Date = Date()) -> [HTTPCookie] {
+        let domains = cookieDomains(for: site)
+        return cookies(fromProtocolAnswer: json, now: now) { host in
+            domains.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+                && !site.excludedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+        }
+    }
+
+    /// The cookies that go with a whole site moving to WebKit, from the page at `url`
+    /// (the Safari's Engine switch, or Widevine that failed): those the page sends (its host's and
+    /// its parent domains') and its subdomains', so it arrives signed in. Nothing of another site.
+    public static func cookies(fromProtocolAnswer json: String, forPageAt url: String, now: Date = Date()) -> [HTTPCookie] {
+        guard let page = ProtectedMediaSites.webHost(of: url) else { return [] }
+        return cookies(fromProtocolAnswer: json, now: now) { host in
+            page == host || page.hasSuffix("." + host) || host.hasSuffix("." + page)
+        }
+    }
+
+    /// Chromium's answer to Network.getAllCookies as cookies, those of a domain `keeps` takes
+    /// (without its leading dot), still good at `now` and not partitioned.
+    private static func cookies(fromProtocolAnswer json: String, now: Date, keeps: (String) -> Bool) -> [HTTPCookie] {
         guard let root = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
               let list = root["cookies"] as? [[String: Any]] else { return [] }
-        let domains = cookieDomains(for: site)
         return list.compactMap { c in
             guard let name = c["name"] as? String, !name.isEmpty, let value = c["value"] as? String,
                   let domain = (c["domain"] as? String)?.lowercased(), c["partitionKey"] == nil else { return nil }
             let host = domain.hasPrefix(".") ? String(domain.dropFirst()) : domain
-            guard domains.contains(where: { host == $0 || host.hasSuffix("." + $0) }),
-                  !site.excludedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
+            guard !host.isEmpty, keeps(host) else { return nil }
             var p: [HTTPCookiePropertyKey: Any] = [.name: name, .value: value, .domain: domain, .path: c["path"] as? String ?? "/"]
             if c["session"] as? Bool != true, let expires = c["expires"] as? Double, expires > 0 {
                 let date = Date(timeIntervalSince1970: expires)

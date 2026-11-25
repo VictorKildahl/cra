@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Clear Key fixture</title>
+<style>body { font: 15px -apple-system, sans-serif; margin: 40px; }</style>
+<!-- A player whose licence can be refused, for Tests/Scenarios/widevine-fails.scenario. It plays Clear Key, which
+     every Chromium has: the scenario runs Cra with CRA_WIDEVINE_KEY_SYSTEMS=org.w3.clearkey, so a Clear Key session
+     counts as Widevine would (WidevineSignal, docs/protected-media.md). ?n=<name> names it ("Clear Key <name>").
+     play('good') answers the licence request with a working key, play('bad') with one the CDM refuses (as Spotify's
+     licence server refuses a Chromium without Verified Media Path), play('none') never answers; each says
+     "licensed", "refused" or "asked". ask() only asks for the key system, as a fingerprinting script does.
+     report() says where the page is: "Clear Key a, chromium, session=1". No network, no media file. -->
+<h1>Clear Key fixture</h1>
+<video id="v" muted playsinline width="320"></video>
+<script>
+  const v = document.getElementById('v');
+  const name = () => new URLSearchParams(location.search).get('n') || '0';
+  document.title = 'Clear Key ' + name();
+  const config = [{ initDataTypes: ['keyids'], videoCapabilities: [{ contentType: 'video/webm; codecs="vp8"' }] }];
+  const kid = 'AAECAwQFBgcICQoLDA0ODw';
+  const licences = {
+    good: JSON.stringify({ keys: [{ kty: 'oct', kid, k: 'EBESExQVFhcYGRobHB0eHw' }], type: 'temporary' }),
+    bad: 'not a licence',
+  };
+  function ask() { return navigator.requestMediaKeySystemAccess('org.w3.clearkey', config).then(() => 'asked only', e => 'no ' + e.name); }
+  function play(answer) {
+    return navigator.requestMediaKeySystemAccess('org.w3.clearkey', config)
+      .then(a => a.createMediaKeys())
+      .then(keys => v.setMediaKeys(keys).then(() => keys))
+      .then(keys => new Promise(done => {
+        const s = keys.createSession();
+        s.addEventListener('message', () => {
+          if (!(answer in licences)) return done('asked');
+          s.update(new TextEncoder().encode(licences[answer])).then(() => done('licensed'), () => done('refused'));
+        });
+        s.generateRequest('keyids', new TextEncoder().encode(JSON.stringify({ kids: [kid] }))).catch(e => done('no request ' + e.name));
+      }), e => 'no keys ' + e.name);
+  }
+  function report() {
+    const engine = 'userAgentData' in navigator ? 'chromium' : 'webkit';
+    return [document.title, engine, document.cookie].join(', ');
+  }
+</script>

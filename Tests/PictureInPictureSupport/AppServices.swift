@@ -19,3 +19,8 @@ final class ArcTooltipAnchorView: NSView {
     var text = ""
     static func attach(to control: NSView, help: String) -> ArcTooltipAnchorView { ArcTooltipAnchorView() }
 }
+
+/// A test copy that stays behind the user's apps (CRA_TEST_BACKGROUND): this harness's windows don't.
+enum HitchMonitor {
+    static let background = false
+}

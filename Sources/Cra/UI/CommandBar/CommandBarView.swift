@@ -32,6 +32,8 @@ final class CommandBarView: NSView {
     private let keycapLabel = NSTextField.sidebarLabel(size: 13, weight: .semibold)
     private let divider = NSView()
     private var rows: [CommandBarRowView] = []
+    /// cra://debug?commandBarIcon (#755): the n-th row's favicon as it is drawn.
+    func debugRowIcon(_ i: Int) -> String { rows.indices.contains(i) && !rows[i].isHidden ? rows[i].debugIcon : "none" }
     private var syncQueued = false
     private var attached = false
     /// Arc's address panel from the sidebar (#663): a 45 pt input row, 13 pt type, titles only.
@@ -279,7 +281,12 @@ final class CommandBarView: NSView {
             guard i < items.count else { r.isHidden = true; continue }
             r.isHidden = false
             let s = items[i]
-            r.show(s, icon: s.faviconKey.flatMap { favicons.image(forKey: $0) }, selected: i == c.selectedIndex, highlight: highlight,
+            let icon = s.faviconKey.flatMap { favicons.image(forKey: $0) }
+            if icon == nil, let url = s.url {
+                let incognito = c.store.window().isIncognito || s.tabID.map(c.store.isIncognito(item:)) == true
+                SiteIconLoader.shared.want(.init(url: url, iconKey: s.faviconKey, preset: s.isPresetSite, incognito: incognito), into: favicons)
+            }
+            r.show(s, icon: icon, selected: i == c.selectedIndex, highlight: highlight,
                    otherSpace: s.spaceID.flatMap { $0 != c.focusedSpaceID && s.tabID != nil ? c.spaceName($0) : nil },
                    dark: dark, compact: compact)
         }
@@ -516,6 +523,43 @@ private struct CommandBarSplash: View {
 }
 
 /// One suggestion: icon, "Title — detail", and "Switch to Tab" + arrow for open tabs.
+/// Favicons measured once (CraCore FaviconInk) and their template copies, kept as long as the image is.
+@MainActor
+enum FaviconMarks {
+    private static let marks = NSMapTable<NSImage, NSNumber>.weakToStrongObjects()
+    private static let templates = NSMapTable<NSImage, NSImage>.weakToStrongObjects()
+
+    static func isLightMark(_ image: NSImage) -> Bool {
+        if let known = marks.object(forKey: image) { return known.boolValue }
+        let answer = measure(image)?.isLightMark ?? false
+        marks.setObject(NSNumber(value: answer), forKey: image)
+        return answer
+    }
+
+    /// The image drawn by its shape only, in the view's tint.
+    static func template(of image: NSImage) -> NSImage {
+        if let t = templates.object(forKey: image) { return t }
+        let t = (image.copy() as? NSImage) ?? image
+        t.isTemplate = true
+        templates.setObject(t, forKey: image)
+        return t
+    }
+
+    private static func measure(_ image: NSImage) -> FaviconInk? {
+        let side = 24
+        var rect = NSRect(x: 0, y: 0, width: side, height: side)
+        guard let cg = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        return drawn ? FaviconInk(rgbaPremultiplied: pixels) : nil
+    }
+}
+
 final class CommandBarRowView: NSView {
     var onHover: () -> Void = {}
     var onClick: () -> Void = {}
@@ -551,6 +595,10 @@ final class CommandBarRowView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// cra://debug?commandBarIcon (#755): "tile=<0|1> tinted=<0|1>", whether the favicon sits on the white tile
+    /// and is drawn in the row's colour.
+    var debugIcon: String { "tile=\(iconBox.isHidden || icon.isHidden ? 0 : 1) tinted=\(icon.contentTintColor != nil && icon.image?.isTemplate == true ? 1 : 0)" }
+
     /// `compact`: Arc's address panel from the sidebar (#663), 13 pt titles without their address.
     func show(_ s: Suggestion, icon image: NSImage?, selected: Bool, highlight: NSColor, otherSpace: String?, dark: Bool, compact: Bool = false) {
         if let o = shown, o.0 == s, o.1 === image, o.2 == selected, o.3 == highlight, o.4 == otherSpace, o.5 == dark, o.6 == compact { return }
@@ -564,9 +612,12 @@ final class CommandBarRowView: NSView {
             icon.isHidden = false
             emoji.isHidden = true
             iconBox.isHidden = !selected
-            icon.image = image
+            // A light, colourless mark (GitHub's white octocat on a dark page) in the row's colour on the white
+            // tile, as the arrow is: white on white it was a plain square (#755).
+            let mark = selected && FaviconMarks.isLightMark(image)
+            icon.image = mark ? FaviconMarks.template(of: image) : image
             icon.imageScaling = .scaleProportionallyUpOrDown
-            icon.contentTintColor = nil
+            icon.contentTintColor = mark ? highlight.withAlphaComponent(1) : nil
             iconBox.layer?.backgroundColor = NSColor.white.cgColor
         } else if case .switchSpace = s.kind, let t = s.trailing {
             icon.isHidden = true

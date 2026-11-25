@@ -14,7 +14,10 @@ struct DialogSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(DialogTheme.card, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            // No rounder than the sheet it covers: macOS 15's 10 pt sheet showed white in a 16 pt card's corners (#753).
+            .background(DialogTheme.card, in: RoundedRectangle(
+                cornerRadius: DialogCorner.radius(cornerRadius, macOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
+                style: .continuous))
             .environment(\.colorScheme, .dark)
     }
 }

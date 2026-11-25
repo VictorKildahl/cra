@@ -1,6 +1,14 @@
 import CoreGraphics
 import Foundation
 
+public enum MobileSideInsets {
+    /// Only portrait-shaped windows with side insets use them: the closed Duo's status column, leaving ordinary iPhones unchanged.
+    public static func applied(size: CGSize, safeLeft: CGFloat, safeRight: CGFloat) -> (left: CGFloat, right: CGFloat) {
+        guard size.height > size.width, safeLeft > 0 || safeRight > 0 else { return (0, 0) }
+        return (safeLeft, safeRight)
+    }
+}
+
 /// The iPhone app's chrome, in points, measured from Arc Search on an iPhone 15 Pro
 /// (393 × 852 pt, 2.2545 px per point in the 886 × 1920 recording; docs/ios.md says how).
 public enum MobileSearchSheet {
@@ -21,6 +29,11 @@ public enum MobileSearchSheet {
     public static let bottomInset: CGFloat = 8
     /// The sheet's top corners.
     public static let cornerRadius: CGFloat = 38
+
+    public static func openFieldFrame(width: CGFloat, sideInsets: (left: CGFloat, right: CGFloat)) -> CGRect {
+        CGRect(x: sideInsets.left + fieldSideInset, y: topInset,
+               width: width - sideInsets.left - sideInsets.right - 2 * fieldSideInset, height: fieldHeight)
+    }
 
     /// The sheet's height above the keyboard: 302 pt, whatever is typed.
     public static var height: CGFloat {
@@ -72,6 +85,24 @@ public enum MobileSearchSheet {
         let accessory = accessoryFrame(field: field)
         let width = labelledWidth ?? accessory.width
         return CGRect(x: field.maxX - 18.5 - width, y: accessory.minY, width: width, height: accessory.height)
+    }
+
+    /// The chrome's moves under way (the sheet, the bar, the page behind). The sheet is put away into the pill only
+    /// once the last of them has ended. Closing, the keyboard sends two notices and each starts a move; the second
+    /// moves nothing, so it ended at once and put the sheet away on the close's first frame, leaving the keyboard to
+    /// go down on its own. Arc Search's field rides down on the keyboard into the + pill.
+    public struct Settling: Equatable, Sendable {
+        public private(set) var running = 0
+
+        public init() {}
+
+        public mutating func began() { running += 1 }
+
+        /// One has ended: whether it was the last.
+        public mutating func ended() -> Bool {
+            running = max(0, running - 1)
+            return running == 0
+        }
     }
 }
 

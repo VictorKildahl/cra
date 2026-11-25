@@ -57,5 +57,14 @@ struct CloseSuccessorTests {
         #expect(CloseSuccessor.pinnedClose(isFavorite: true) == .deselectKeepingPage)
         #expect(CloseSuccessor.pinnedClose(isFavorite: false) == .unloadToPinnedPage)
     }
-}
 
+    /// Close Tab in a Favorite's right-click menu closes it, as in Arc 1.173.1: its page is let go, and a click on the
+    /// Favorite loads it again. Only ⌘W keeps the page running (#740). Before, the menu's Close Tab did what ⌘W does,
+    /// so nothing let a Favorite's page go, and on a Favorite loaded in the background it did nothing at all.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/740"))
+    func closeTabInAFavoritesMenuLetsItsPageGo() {
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: true) == .unloadToPinnedPage, "its menu's Close Tab unloads it")
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: false) == .deselectKeepingPage, "⌘W still keeps it (#740)")
+        #expect(CloseSuccessor.pinnedClose(isFavorite: false, fromItsMenu: true) == .unloadToPinnedPage)
+    }
+}

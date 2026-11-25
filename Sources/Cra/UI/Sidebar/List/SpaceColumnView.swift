@@ -721,6 +721,13 @@ final class FavoritesGridView: NSView {
                 let cells = panes.map { p in
                     let key = p.tab?.iconKey
                     let icon = favicons.image(forKey: key)
+                    if icon == nil, let tab = p.tab {
+                        // A favorite that never loaded here: its site's icon, after those of the space on screen
+                        // when this space is paged out of view.
+                        SiteIconLoader.shared.want(.init(
+                            url: tab.url, iconKey: key, visible: store.showsSpace(spaceID, in: self, window: ui.windowID),
+                            incognito: store.isIncognito(space: spaceID)), into: favicons)
+                    }
                     return FavoriteTileModel.Cell(id: p.id, title: p.displayTitle, icon: icon,
                                                   glyphDark: icon == nil ? nil : favicons.glyphIsDark(forKey: key),
                                                   selectionColors: logoOutline ? favicons.selectionColors(forKey: key) : nil)
@@ -1863,7 +1870,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         Self.moveToProfile(m, id, store)
         m.addItem(.separator())
         if open || ui.loadedTabIDs.contains(id) {
-            MenuItems.add(m, action: "closeTab", title: "Close Tab") { actions.closeTab(id) }
+            MenuItems.add(m, action: "closeTab", title: "Close Tab") { actions.closeTabFromItsMenu(id) }
         }
         // Arc deletes the favorite. A shared one goes as before; a space's own goes to the archive,
         // where Library can bring it back.

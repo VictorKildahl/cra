@@ -1,0 +1,25 @@
+# promise: #741
+# A click on the Picture in Picture window with another app in front brings Cra forward, as Arc 1.173.1's does, so a
+# pinch after it resizes the window. macOS gives a trackpad pinch only to the app in front, and Cra's window is a
+# non-activating panel (#206): a click left Cra behind and the pinch went nowhere (Arc's own window doesn't take a
+# pinch before that click either). Cra comes forward without its browser windows, which stay behind the app the user
+# was in, and an automatic Picture in Picture's video stays out (CraCore PictureInPictureFront). A test copy stays
+# behind the user's apps, so here the decision is read in the log: the copy is in the background, and the click
+# brings it forward.
+budget rss=900 stalls50=20
+cra://open?url=file://${FIXTURES}/Pages/video.html
+expect-log loaded file:
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.getElementById('v').requestPictureInPicture().then(()=>'pip:open')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"pip:open"
+wait 1
+cra://debug?pipSize=0.30
+expect-log pip: resized to
+wait 1
+reject-log pip: a press on the window brings Cra forward
+cra://debug?pipClick=1
+expect-log pip: a press on the window brings Cra forward \(#741\)
+wait 1
+# The pinch itself, as before (#534).
+cra://debug?pipPinch=0.1,0.1,0.1
+expect-log pip: pinched [0-9]+×[0-9]+ → [0-9]+×[0-9]+

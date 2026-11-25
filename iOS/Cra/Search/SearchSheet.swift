@@ -47,6 +47,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         didSet { if rowsInView != oldValue { setNeedsLayout() } }
     }
 
+    var sideInsets: (left: CGFloat, right: CGFloat) = (0, 0) { didSet { setNeedsLayout() } }
     /// The pill's frame in this view's coordinates, for the closed end of the morph.
     var collapsedFieldFrame: CGRect = .zero
     /// 0 when closed into the bar, 1 when open. Set inside an animation block, then lay out.
@@ -383,11 +384,33 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
 
     // MARK: Layout
 
+    /// The openness the last layout was for: where an animated move starts (`fade`).
+    private var laidOutOpenness: CGFloat?
+
+    /// Sets `views`' alpha for openness `t`, faded over `span` of it. In an animated move from another openness the fade
+    /// takes its own part of the move (`MobileSearchMotion.fadeWindow`): UIKit would otherwise run every alpha from
+    /// start to end with the whole move, a solid surface's included.
+    private func fade(_ views: [UIView], over span: ClosedRange<CGFloat>, from start: CGFloat, to t: CGFloat) {
+        let alpha = MobileSearchMotion.opacity(openness: t, over: span)
+        let duration = UIView.inheritedAnimationDuration
+        guard duration > 0, start != t else {
+            views.forEach { $0.alpha = alpha }
+            return
+        }
+        let window = MobileSearchMotion.fadeWindow(from: start, to: t, over: span)
+        UIView.animate(withDuration: duration * (window.upperBound - window.lowerBound), delay: duration * window.lowerBound,
+                       options: [.overrideInheritedDuration, .overrideInheritedCurve, .curveLinear, .beginFromCurrentState]) {
+            views.forEach { $0.alpha = alpha }
+        }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         let t = openness
+        let start = laidOutOpenness ?? t
+        laidOutOpenness = t
         surface.frame = bounds
-        surface.alpha = t
+        fade([surface], over: MobileSearchMotion.surfaceSpan, from: start, to: t)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         surfaceTint.frame = CGRect(x: 0, y: 0, width: bounds.width, height: MobileSearchSheet.height)
@@ -399,8 +422,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                                    width: bounds.width * 0.8, height: MobileSearchSheet.height * 0.75)
         CATransaction.commit()
 
-        let open = CGRect(x: MobileSearchSheet.fieldSideInset, y: MobileSearchSheet.topInset,
-                          width: bounds.width - 2 * MobileSearchSheet.fieldSideInset, height: MobileSearchSheet.fieldHeight)
+        let open = MobileSearchSheet.openFieldFrame(width: bounds.width, sideInsets: sideInsets)
         let closed = collapsedFieldFrame.isEmpty ? open : collapsedFieldFrame
         let frame = CGRect(x: closed.minX + (open.minX - closed.minX) * t, y: closed.minY + (open.minY - closed.minY) * t,
                            width: closed.width + (open.width - closed.width) * t,
@@ -408,18 +430,19 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         fieldBackground.frame = frame
         fieldBackground.layer.cornerRadius = frame.height / 2 + (SearchField.cornerRadius - frame.height / 2) * t
         fieldBackground.openness = t
+        // The pill's plus keeps to the leading end as it grows, the placeholder coming in to its right (Arc Search).
+        fieldBackground.plusCenter = MobileSearchMotion.plusCenter(closedWidth: closed.width, openness: t)
 
-        // Text starts 24.5 pt inside the field; the accessory's centre is 29.5 pt from its right end.
-        field.frame = CGRect(x: frame.minX + 24.5, y: frame.minY, width: max(0, frame.width - 24.5 - 52), height: frame.height)
+        // Text starts 24.5 pt inside the open field; the accessory's centre is 29.5 pt from its right end.
+        let textInset = MobileSearchMotion.textInset(closedWidth: closed.width, openness: t)
+        field.frame = CGRect(x: frame.minX + textInset, y: frame.minY, width: max(0, frame.width - textInset - 52), height: frame.height)
         field.alpha = t
         let accessory = MobileSearchSheet.accessoryFrame(field: frame)
         clearButton.frame = accessory
         // Off or with its "Incognito" label, the toggle's glyph keeps one place (#654).
         incognitoButton.frame = MobileSearchSheet.incognitoToggleFrame(field: frame, labelledWidth: isIncognito ? 130 : nil)
-        clearButton.alpha = t
-        incognitoButton.alpha = t
         micButton.frame = accessory.offsetBy(dx: -38, dy: 0)
-        micButton.alpha = t
+        fade([clearButton, incognitoButton, micButton], over: MobileSearchMotion.accessorySpan, from: start, to: t)
         // Arc Search's note sits 187 pt below the sheet's top edge.
         incognitoNote.frame = CGRect(x: 0, y: 187 - 12, width: bounds.width, height: 24)
         incognitoNote.alpha = t
@@ -529,6 +552,8 @@ final class FieldBackgroundView: UIView {
             plus.alpha = 1 - openness
         }
     }
+    /// The plus's centre, from the left end (`MobileSearchMotion.plusCenter`).
+    var plusCenter: CGFloat = 0 { didSet { if plusCenter != oldValue { setNeedsLayout() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -554,7 +579,7 @@ final class FieldBackgroundView: UIView {
         super.layoutSubviews()
         gradient.frame = bounds
         pill.frame = bounds
-        plus.frame = bounds
+        plus.frame = CGRect(x: plusCenter - bounds.height / 2, y: 0, width: bounds.height, height: bounds.height)
     }
 
     private func applyColors() {

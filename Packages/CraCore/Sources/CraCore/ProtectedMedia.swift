@@ -276,6 +276,15 @@ public struct ProtectedMediaSites: Equatable, Sendable {
         return (added, removed)
     }
 
+    /// Whether a Chromium page at `url` moves to WebKit, its site with it, when its Widevine fails
+    /// (`WidevineSignal`): any site that isn't listed or mixed (a mixed site asks per video), unless
+    /// the user took it back to Chromium (`ProtectedMediaChoices.kept`). An incognito page doesn't,
+    /// so no site is written to disk from it: its Safari's Engine switch still shows.
+    public func movesWhenWidevineFails(at url: String, choices: ProtectedMediaChoices, incognito: Bool) -> Bool {
+        guard isEnabled, !incognito, let host = Self.webHost(of: url), listedHost(for: url) == nil, mixedSite(for: url) == nil else { return false }
+        return !choices.kept.compactMap(Self.normalizedHost).contains { host == Self.split($0).host || host.hasSuffix("." + Self.split($0).host) }
+    }
+
     /// The service's name for a page at `url` ("Spotify"); a host someone added names itself.
     public func serviceName(for url: String) -> String? {
         listedHost(for: url).map { Self.serviceNames[$0] ?? $0 }
@@ -326,15 +335,19 @@ public struct ProtectedMediaChoices: Codable, Equatable, Sendable {
     /// Mixed sites (`MixedMediaSite.host`) whose protected videos move to WebKit without asking:
     /// the prompt's Always. Not `added`, which is the whole site.
     public var protectedVideos: [String]
+    /// Sites the user took back to Chromium with the Safari's Engine switch: Widevine that fails
+    /// there doesn't move them again (`ProtectedMediaSites.movesWhenWidevineFails`).
+    public var kept: [String]
 
-    public init(added: [String] = [], removed: [String] = [], told: [String] = [], protectedVideos: [String] = []) {
+    public init(added: [String] = [], removed: [String] = [], told: [String] = [], protectedVideos: [String] = [], kept: [String] = []) {
         self.added = added
         self.removed = removed
         self.told = told
         self.protectedVideos = protectedVideos
+        self.kept = kept
     }
 
-    private enum CodingKeys: String, CodingKey { case added, removed, told, protectedVideos }
+    private enum CodingKeys: String, CodingKey { case added, removed, told, protectedVideos, kept }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -342,21 +355,37 @@ public struct ProtectedMediaChoices: Codable, Equatable, Sendable {
         removed = try c.decodeIfPresent([String].self, forKey: .removed) ?? []
         told = try c.decodeIfPresent([String].self, forKey: .told) ?? []
         protectedVideos = try c.decodeIfPresent([String].self, forKey: .protectedVideos) ?? []
+        kept = try c.decodeIfPresent([String].self, forKey: .kept) ?? []
     }
 
-    /// `protectedVideos` is written only once it has an entry, so a file without one stays as it was.
+    /// `protectedVideos` and `kept` are written only once they have an entry, so a file without
+    /// them stays as it was.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(added, forKey: .added)
         try c.encode(removed, forKey: .removed)
         try c.encode(told, forKey: .told)
         if !protectedVideos.isEmpty { try c.encode(protectedVideos, forKey: .protectedVideos) }
+        if !kept.isEmpty { try c.encode(kept, forKey: .kept) }
     }
 
-    /// After choosing `engine` for `url`'s site.
+    /// After choosing `engine` for `url`'s site. Chromium keeps the site there (`kept`); WebKit
+    /// lifts that for the site and anything it falls under.
     public func choosing(_ engine: PageEngine, for url: String) -> ProtectedMediaChoices {
         let r = ProtectedMediaSites.choosing(engine, for: url, added: added, removed: removed)
-        return ProtectedMediaChoices(added: r.added, removed: r.removed, told: told, protectedVideos: protectedVideos)
+        var kept = self.kept
+        if let host = ProtectedMediaSites.webHost(of: url) {
+            switch engine {
+            case .chromium:
+                if !kept.contains(host) { kept.append(host) }
+            case .webKit:
+                kept.removeAll { entry in
+                    let k = ProtectedMediaSites.normalizedHost(entry) ?? entry
+                    return host == k || host.hasSuffix("." + k)
+                }
+            }
+        }
+        return ProtectedMediaChoices(added: r.added, removed: r.removed, told: told, protectedVideos: protectedVideos, kept: kept)
     }
 
     /// After the user closed `service`'s toast.
