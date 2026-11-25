@@ -1372,8 +1372,8 @@
 #620   Tests/Scenarios/incognito-extension-list.scenario  25db6fe8b583
 #620   Tests/Scenarios/incognito-space-profile.scenario  2e76ee02603e
 #620   Tests/StoreTests.swift::incognitoKeepsItsSpacesProfile  c9a5e854a829
-#621   Tests/Scenarios/extension-action-other-profiles.scenario  b337359c249a
-#621   Tests/Scenarios/extension-capture-other-profiles.scenario  2b7dac778076
+#621   Tests/Scenarios/extension-action-other-profiles.scenario  7f0e637cb7c0
+#621   Tests/Scenarios/extension-capture-other-profiles.scenario  652b58bfd185
 #622   Packages/CraCore/Tests/CraCoreTests/TabsMenuTests.swift::aLittleWindowInFrontDimsTheTabRows  bcd7c394cab4
 #622   Packages/CraCore/Tests/CraCoreTests/TabsMenuTests.swift::anEmptySpaceOffersOnlyNewTabAndNewFolder  1135e1e8a412
 #622   Packages/CraCore/Tests/CraCoreTests/TabsMenuTests.swift::arcSections  a9f98d460f76
@@ -1756,6 +1756,11 @@
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::hoveredIsAnOrdinaryHoveredRow  2cb70b0a584a
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::theOpenBarStillMakesItTheSelectedRow  6bf41727ea47
 #788   Tests/Scenarios/new-tab-row-hover.scenario  334910194caa
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::onByDefaultAndKept  749d58c0b0d5
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::switchedOffNothingOffersThem  0f6711c3ed71
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::switchedOnThePhoneDecides  a5a7c92e9fa6
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::theSwitchShowsWhereTheFeaturesCould  4a21fcc21e76
+#792   iOS/CraUITests/BrowserTests.swift::testSwitchingAppleIntelligenceOffTakesBrowseForMeAway  453574528caf
 #793   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::anOpenPagesOwnFaviconComesBeforeItsTouchIcon  f5c792bdd31b
 #796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::everyQueryWordCanMatchTitleOrURL  c3d5a243d397
 #796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::queryAndSidebarFiltersIgnoreCase  0cdd99cfbc19
@@ -1765,6 +1770,11 @@
 #798   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::spaceIconReadsOnItsTile  18146ccc0c97
 #798   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::spaceIconStaysWhiteWhereWhiteReads  bec91484a81d
 #798   Tests/Scenarios/little-window-space-icons.scenario  f1ad53d6cb2e
+#800   Tests/Scenarios/empty-pane-no-window-drag.scenario  59cfd4919c8c
+#803   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoritePlayingSoundLetsItsPageGo  e122cb183ce8
+#803   Tests/Scenarios/favorite-close-playing.scenario  8bbf7e9c41d3
+#804   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteAwayFromItsPageTakesItBack  24e2ad793049
+#804   Tests/Scenarios/favorite-close-away.scenario  963e4b2355f1
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

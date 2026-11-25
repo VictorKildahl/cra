@@ -112,8 +112,16 @@ final class PaneToolbarView: NSView {
         urlButton.action = { [weak self] in self?.editURL() }
         urlButton.onCopy = { [weak self] in self?.copyURL() }
         urlButton.menuProvider = { [weak self] in self?.addressMenu() }
-        urlButton.onCommit = { [weak self] in self?.actions.loadTyped($0) }
-        urlButton.onEditingChange = { [weak self] in self?.editVeil.isHidden = !$0 }
+        urlButton.onCommit = { [weak self] typed in
+            guard let self else { return }
+            // The normal bar edits in place only with Settings ▸ Tabs' switch (SidebarAddressEdit),
+            // and Return goes where the sidebar's would; the developer bar loads in the tab (#42).
+            if self.model.kind == .normal, let id = self.model.tabID { self.actions.commitTabAddress(id, typed) } else { self.actions.loadTyped(typed) }
+        }
+        urlButton.onEditingChange = { [weak self] in
+            self?.editVeil.isHidden = !$0
+            self?.needsLayout = true
+        }
         editVeil.wantsLayer = true
         editVeil.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.09).cgColor
         for v in [hairline, editVeil, devDivider, devTrailingDivider, urlButton, placeholderLabel] as [NSView] {
@@ -253,6 +261,23 @@ final class PaneToolbarView: NSView {
         }
         return m
     }
+
+    /// Scenarios: a press on the address, as a click does, then the field's state.
+    func debugAddressClick() -> String {
+        guard !urlButton.isHidden else { return "hidden" }
+        urlButton.action()
+        return debugAddressState
+    }
+    /// "editing <text>, wide" while the address is edited in place (wide: the field takes the bar's
+    /// middle, not the host's width), "not editing", or "hidden" with no address on the bar.
+    var debugAddressState: String {
+        guard !urlButton.isHidden else { return "hidden" }
+        layoutSubtreeIfNeeded()
+        guard let text = urlButton.editingText else { return "not editing" }
+        return "editing \(text), " + (urlButton.frame.width >= bounds.width / 2 ? "wide" : "narrow")
+    }
+    /// Scenarios: replace the edited text, then Return (commit) or Escape.
+    func debugAddressType(_ text: String, commit: Bool) -> Bool { urlButton.debugType(text, commit: commit) }
 
     /// Scenarios (#694): "hover=black 5% url=black 5%", the fills under the pointer on this bar.
     var debugHover: String {
@@ -452,7 +477,9 @@ final class PaneToolbarView: NSView {
         left = l
         right = r
 
-        if m.kind != .developer || m.tabID != old.tabID { urlButton.endEditing(commit: false) }
+        if m.kind != old.kind || m.tabID != old.tabID || m.kind == .normal && !store.settings.editAddressInPlace {
+            urlButton.endEditing(commit: false)
+        }
         switch m.kind {
         case .normal, .developer:
             urlButton.isHidden = false
@@ -578,6 +605,9 @@ final class PaneToolbarView: NSView {
         // The middle, between the groups with the HStack's 6 pt spacing around it.
         let a = leftEnd + (left.isEmpty ? 0 : 6), b = rightStart - (right.isEmpty ? 0 : 6)
         switch m.kind {
+        case .normal where urlButton.isEditing:
+            // Edited in place: the field takes the room between the groups, as the developer bar's does.
+            urlButton.frame = NSRect(x: a + 8, y: (h - 28) / 2, width: max(0, b - a - 16), height: 28)
         case .normal:
             // Spacer(min 8) either side, the URL centred between them.
             let room = max(0, b - a - 2 * (8 + 6))
@@ -609,9 +639,16 @@ final class PaneToolbarView: NSView {
     }
 
     /// Arc: the developer bar edits its full URL in place (ContentPanelTextField, GitHub #42); every
-    /// other bar opens the command bar.
+    /// other bar opens the command bar, unless Settings ▸ Tabs' "Edit the address in place" is on.
     private func editURL() {
-        if model.kind == .developer, !urlButton.isHidden { urlButton.beginEditing(); return }
+        let hasTab = (model.kind == .normal || model.kind == .developer) && !urlButton.isHidden
+        if SidebarAddressEdit.toolbarClick(developer: model.kind == .developer, editInPlace: store.settings.editAddressInPlace,
+                                           hasTab: hasTab) == .editInPlace {
+            // A split pane's bar edits its own tab: the pane takes the focus first, as Copy does.
+            if let id = paneTabID { actions.focusPane(id) }
+            urlButton.beginEditing()
+            return
+        }
         if let id = paneTabID { actions.editPaneURL(id) } else { actions.openCommandBar(model.kind == .noTab ? .newTab : .editURL) }
     }
 
@@ -1058,6 +1095,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
             let textStart = lead + Self.textStart - Self.pillStart
             label.frame = NSRect(x: textStart - SidebarText.inset, y: (h - lh) / 2,
                                  width: max(0, bounds.width - textStart - Self.pillPad) + 2 * SidebarText.inset, height: lh)
+            field?.frame = label.frame
             copyTip.frame = NSRect(x: 0, y: 0, width: lead, height: h)
             tip.frame = NSRect(x: lead, y: 0, width: max(0, bounds.width - lead), height: h)
             return
@@ -1074,6 +1112,16 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
     }
 
     var isEditing: Bool { field != nil }
+    /// The text in the address field while it is edited in place.
+    var editingText: String? { field?.stringValue }
+
+    /// Scenarios: the field's text replaced, then Return (commit) or Escape.
+    func debugType(_ text: String, commit: Bool) -> Bool {
+        guard let f = field else { return false }
+        f.stringValue = text
+        endEditing(commit: commit)
+        return true
+    }
 
     /// The full URL becomes editable where it is drawn, all of it selected, in Arc's selection tint.
     func beginEditing() {
@@ -1082,7 +1130,7 @@ final class ToolbarURLButton: NSView, NSTextFieldDelegate {
         f.isBordered = false
         f.drawsBackground = false
         f.focusRingType = .none
-        f.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        f.font = developer ? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular) : NSFont.systemFont(ofSize: 13)
         f.textColor = ink
         f.cell?.isScrollable = true
         f.cell?.wraps = false

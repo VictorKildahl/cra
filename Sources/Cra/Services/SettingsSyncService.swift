@@ -489,7 +489,7 @@ final class SettingsSyncService {
             error = nil
             stateFile.save(state)
             if let id = manifest.id {
-                history.remember(id, bundle.document)
+                history.remember(id, bundle.document, settings: bundle.settings)
                 historyFile.save(history)
             }
         } catch {
@@ -504,7 +504,8 @@ final class SettingsSyncService {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
-                                    id: UUID(), parentIDs: parentIDs)
+                                    id: UUID(), parentIDs: parentIDs,
+                                    autoArchived: SyncAutoArchive.listed(store.autoArchivedTabs, now: clock.now))
         try coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
         return manifest
     }
@@ -604,26 +605,47 @@ final class SettingsSyncService {
     /// here since is kept (SidebarMerge); the user's "Use That Sidebar" and an import take it whole.
     private func apply(_ manifest: SyncManifest, _ bundle: Bundle, merge: Bool = true, remember: Bool = true) {
         var document = bundle.document
-        if merge, let base = history.base(for: manifest) {
-            document = SidebarMerge.merge(base: base, local: localBundle().document, remote: bundle.document)
+        var settings = bundle.settings
+        if merge, var base = history.base(for: manifest) {
+            let local = localBundle()
+            // An archive pass that ran before a look on the other Mac reached it is undone (SyncAutoArchive): the base
+            // forgets the tab, so the merge keeps the copy one Mac still has.
+            let localIDs = Set(local.document.items.map(\.id)), remoteIDs = Set(bundle.document.items.map(\.id))
+            let archivedHere = Dictionary(store.autoArchivedTabs.map { ($0.id, $0.at) }, uniquingKeysWith: max)
+                .filter { !localIDs.contains($0.key) && remoteIDs.contains($0.key) }
+            let archivedThere = manifest.autoArchivedTabs.filter { localIDs.contains($0.key) && !remoteIDs.contains($0.key) }
+            let back = SyncAutoArchive.undone(archived: archivedHere, seen: bundle.document.lastActive, limit: store.autoArchiveChoice(forTab:))
+                .union(SyncAutoArchive.undone(archived: archivedThere, seen: local.document.lastActive, limit: store.autoArchiveChoice(forTab:)))
+            if !back.isEmpty {
+                CraLog.note("sync: \(back.count) tabs archived before a look on the other Mac arrived stay in the sidebar")
+                base = base.removing(back)
+            }
+            document = SidebarMerge.merge(base: base, local: local.document, remote: bundle.document)
+            // A setting changed here since that bundle stays, as the sidebar's changes do; a history from an older Cra
+            // has no settings to merge against, and the bundle's replace this Mac's as before.
+            if let baseSettings = history.baseSettings(for: manifest) {
+                settings = SettingsMerge.merge(base: baseSettings, local: local.settings, remote: bundle.settings)
+            }
             CraLog.note("sync: \(manifest.device)'s bundle merged with what changed here since the one it was written from")
         }
         store.replace(document: document)
-        store.settings = store.settings.applyingSynced(bundle.settings)
+        store.forgetAutoArchived(Set(document.items.map(\.id)))
+        store.settings = store.settings.applyingSynced(settings)
         try? bundle.keybindings.write(to: AppPaths.file(SettingsSync.keybindingsName), options: .atomic)
         keybindingsChanged()
         guard remember else { return }
         state.lastApplied = manifest
         if let id = manifest.id {
-            history.remember(id, bundle.document)
+            history.remember(id, bundle.document, settings: bundle.settings)
             historyFile.save(history)
         }
         // What is here now is what the folder holds: nothing to write back until something changes
         // here. This Mac's own hashes, since a repaired sidebar need not encode to the same bytes.
         // A merge that kept something changed here differs from the folder's: it goes up on this look.
-        let hashes = document == bundle.document ? localHashes() ?? manifest.files : manifest.files
+        let same = document == bundle.document && settings == bundle.settings
+        let hashes = same ? localHashes() ?? manifest.files : manifest.files
         state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: hashes)
-        writtenShape = document == bundle.document ? currentShape() : nil
+        writtenShape = same ? currentShape() : nil
         if manifest.deviceID != deviceID, !state.devices.contains(manifest.device) { state.devices.append(manifest.device) }
         otherDevices = state.devices
         lastSync = manifest.writtenAt

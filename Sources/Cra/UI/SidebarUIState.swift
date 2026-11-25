@@ -296,6 +296,8 @@ final class SidebarActions {
     /// The sidebar URL field edited in place (#344): Return with what was typed, in the selected
     /// tab or, for another host from a pinned tab, a new one (SidebarAddressEdit.commit).
     var commitAddress: (String) -> Void = { _ in }
+    /// The toolbar's address edited in place: the same, for the tab its bar shows (a split pane's own).
+    var commitTabAddress: (UUID, String) -> Void = { _, _ in }
     /// A typed URL or search in a new tab (⌘ + New Tab pastes the clipboard's text).
     var openTyped: (String) -> Void = { _ in }
 }

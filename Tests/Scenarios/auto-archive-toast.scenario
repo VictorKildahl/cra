@@ -1,0 +1,24 @@
+# Arc's "Auto archived N tabs" toast. Today tabs last seen weeks ago are archived by the launch's pass, as after a night
+# away or the restart an automatic update makes, and that left an emptier sidebar with nothing said (X, Chris Coyier,
+# 25 Nov 2026: "all my tabs are gone"). The count waits until someone is at Cra (Cra coming forward, or a key, click or
+# scroll in it) and the toast's click opens the Archive. AutoArchiveNotice (CraCore) decides the words and when;
+# StoreTests.autoArchiveCounts what a pass counts.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "autoArchive": "twelveHours", "autoArchiveEnabled": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-01T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-01T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-01T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":["E0000000-0000-0000-0000-000000000001","E0000000-0000-0000-0000-000000000002"],"isUnread":false,"createdAt":"2026-11-01T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"E0000000-0000-0000-0000-000000000001","parentID":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-01T08:00:00Z","data":{"tab":{"_0":{"url":"https://example.invalid/codepen","savedTitle":"Codepen","timeLastActiveAt":"2026-11-01T08:00:00Z"}}}},{"id":"E0000000-0000-0000-0000-000000000002","parentID":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-01T08:00:00Z","data":{"tab":{"_0":{"url":"https://example.invalid/admin","savedTitle":"Admin","timeLastActiveAt":"2026-11-01T08:00:00Z"}}}}]}
+wait 2
+expect-log auto archive: 2 tabs, 2 waiting for the toast$
+
+# Someone brings Cra forward: one toast for both, Arc's words.
+cra://debug?appActivated=1
+expect-log auto archive toast: Auto archived 2 tabs$
+cra://debug?toastShown=up
+expect-log toast shown up: yes$
+
+# Its click opens the Archive, where the tabs are.
+cra://debug?clickToast=1
+wait 1
+cra://debug?libraryShown=clicked
+expect-log library shown clicked: archive$
+cra://debug?checkStore=1
+reject-log fault:

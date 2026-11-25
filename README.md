@@ -68,7 +68,7 @@ layer built in, so sites and Chrome extensions work as they do in Chrome.
 | Split View | ✅ |
 | Picture in Picture | ✅ |
 | Developer Mode | ✅ |
-| Library | ✅ |
+| Library | ✅ Media, Downloads, Easels, Spaces, Boosts and Archive; screenshots you take show up by themselves in the Library button's downloads list, ready to drag onto a page |
 | Air Traffic Control | ✅ |
 | Live folders | ✅ |
 | Profiles | ✅ |
@@ -78,7 +78,7 @@ layer built in, so sites and Chrome extensions work as they do in Chrome.
 | Easels | ✅ |
 | Boosts | ✅ |
 | Peek | ✅ |
-| Netflix, Disney+, Spotify and other DRM streaming | ✅ In Safari's engine with Apple's FairPlay; Disney+ and Prime Video [confirmed playing signed in](docs/protected-media.md#confirmed-playing), and any other site that asks for DRM can switch over |
+| Netflix, Disney+, Spotify and other DRM streaming | ✅ In Safari's engine with Apple's FairPlay; Disney+ and Prime Video [confirmed playing signed in](docs/protected-media.md#confirmed-playing). Not only a fixed list: [any site whose Widevine fails](docs/protected-media.md#widevine-that-fails) moves to Safari's engine by itself, signed in |
 | Notes | Left out: Arc itself no longer makes new Notes |
 | Arc Max | Ask on Page, Instant Links, Tidy Tabs, Tidy Tab Titles, Tidy Downloads and 5-Second Previews, on the Mac's Apple Intelligence; only Instant Links' search queries leave the Mac, to the search engine |
 

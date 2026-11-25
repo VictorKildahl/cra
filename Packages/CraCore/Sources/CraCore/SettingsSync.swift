@@ -25,9 +25,12 @@ public struct SyncManifest: Codable, Equatable {
     /// Missing in a bundle from an older Cra, which is applied whole.
     public var id: UUID?
     public var parentIDs: [UUID]?
+    /// Tabs the writing Mac's archive pass took lately, by id string → when (SyncAutoArchive): the other Mac keeps one it
+    /// had looked at meanwhile. Missing in a bundle from an older Cra.
+    public var autoArchived: [String: Date]?
 
     public init(version: Int = SyncManifest.currentVersion, device: String, deviceID: String, writtenAt: Date, files: [String: String],
-                id: UUID? = nil, parentIDs: [UUID]? = nil) {
+                id: UUID? = nil, parentIDs: [UUID]? = nil, autoArchived: [UUID: Date]? = nil) {
         self.version = version
         self.device = device
         self.deviceID = deviceID
@@ -35,6 +38,14 @@ public struct SyncManifest: Codable, Equatable {
         self.files = files
         self.id = id
         self.parentIDs = parentIDs
+        self.autoArchived = autoArchived.map { Dictionary(uniqueKeysWithValues: $0.map { ($0.key.uuidString, $0.value) }) }
+    }
+
+    /// `autoArchived` by id.
+    public var autoArchivedTabs: [UUID: Date] {
+        var out: [UUID: Date] = [:]
+        for (k, v) in autoArchived ?? [:] { if let id = UUID(uuidString: k) { out[id] = v } }
+        return out
     }
 }
 

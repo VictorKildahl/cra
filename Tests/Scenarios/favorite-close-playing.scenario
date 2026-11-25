@@ -1,0 +1,28 @@
+# promise: #803
+# ⌘W on a Favorite whose page is making sound closes it, as in Arc 1.174.2: the page is let go, so a video in it
+# stops, and a click on the Favorite loads it afresh. A silent Favorite still only deselects (favorite-close-keeps-page,
+# #740). 0.1.56 kept every Favorite's page on ⌘W, so a YouTube video played on behind the next tab.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=fav
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(window.mark='kept','marked')","returnByValue":true}
+expect-log "value":"marked"
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://debug?selectTab=n=fav
+wait 1
+# A quiet tone (the music-notes recipe), and Chromium's speaker comes on.
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"(async()=>{const n=16000,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));w(0,'RIFF');v.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n,true);for(let i=0;i<8000;i++)v.setInt16(44+2*i,Math.round(33*Math.sin(2*Math.PI*440*i/8000)),true);const a=document.createElement('audio');a.loop=true;a.src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));document.body.append(a);await a.play();return 'fav:'+(a.paused?'paused':'playing')})()"}
+expect-log "value":"fav:playing"
+wait 2
+cra://action/closeTab
+expect-log close tab: favorite playing sound unloaded$
+wait 2
+cra://debug?selectTab=n=fav
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'favorite '+(window.mark||'reloaded')","returnByValue":true}
+expect-log "value":"favorite reloaded"

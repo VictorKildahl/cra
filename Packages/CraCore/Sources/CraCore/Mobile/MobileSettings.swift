@@ -153,9 +153,9 @@ public struct MobileSettings: Codable, Equatable {
     /// Default Site Settings ▸ Block Lists (#507, not in Arc Search): addresses of lists added on top
     /// of Cra's own, blocked where Block Ads is on (CustomBlocklist).
     public var customBlocklists: [String] = []
-    /// App Settings ▸ Rippling Dots (not in Arc Search, PR #708): the empty home screen's dot field under the logo
-    /// (`MobileEmptyHome`). Off: Arc Search's gradient and logo.
-    public var homeDots = false
+    /// App Settings ▸ Apple Intelligence (#792, not in Arc Search): off hides Browse for Me and Summarize
+    /// (`MobileAIState.shown(userWantsThem:)`).
+    public var appleIntelligence = true
 
     public init() {}
 
@@ -177,7 +177,7 @@ public struct MobileSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip, hasDismissedSyncCard, hasSeenSharePrompt, customBlocklists, homeDots
+        case searchEngine, archiveAfter, opensKeyboardOnLaunch, openAppLinksIn, siteDefaults, siteOverrides, hasSeenOnboarding, searchesWithBrowseForMe, answerLanguage, customSearchURL, searchesWithCustom, hasSearched, hasSeenBlockTip, hasDismissedSyncCard, hasSeenSharePrompt, customBlocklists, appleIntelligence
     }
 
     public init(from decoder: Decoder) throws {
@@ -197,7 +197,7 @@ public struct MobileSettings: Codable, Equatable {
         hasDismissedSyncCard = (try? c.decodeIfPresent(Bool.self, forKey: .hasDismissedSyncCard)) ?? false
         hasSeenSharePrompt = (try? c.decodeIfPresent(Bool.self, forKey: .hasSeenSharePrompt)) ?? false
         customBlocklists = (try? c.decodeIfPresent([String].self, forKey: .customBlocklists)) ?? []
-        homeDots = (try? c.decodeIfPresent(Bool.self, forKey: .homeDots)) ?? false
+        appleIntelligence = (try? c.decodeIfPresent(Bool.self, forKey: .appleIntelligence)) ?? true
         answerLanguage = (try? c.decodeIfPresent(String.self, forKey: .answerLanguage)).flatMap { MobileLanguages.codes.contains($0) ? $0 : nil }
     }
 

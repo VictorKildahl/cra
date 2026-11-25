@@ -91,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         store.tidyTabsChanged = { [unowned self] enabled in if !enabled { TidyTabsService.shared.cancelAll(store: self.store) } }
         store.tidyTabsSpaceRemoved = { [unowned self] in TidyTabsService.shared.cancel($0, store: self.store) }
         LinkSummaryPreviewController.shared.bindEligibility(to: store)
+        // Screenshots the system takes show up in the downloads list by themselves (Arc's Library button).
+        ScreenshotWatcher.shared.start(store: store)
         store.tidyTabTitlesChanged = { enabled in if !enabled { TidyTitlesService.shared.cancelAll() } }
         TidyTabsService.shared.titlesUnavailable = { TidyTitlesService.shared.cancelAll() }
         // A tip takes the tones of the space its browser window is in (the sidebar may be a
@@ -161,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installCommandFileWatcher()
         handoff.start()
         MCPServer.shared.start(app: self)
-        composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
+        composition.startPeriodicWork(autoArchived: { [weak self] in self?.noteAutoArchived($0) }) { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
         composition.sync.start()
         SharingService.shared.start(store: store, clock: composition.clock)
@@ -355,6 +357,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    // MARK: "Auto archived N tabs"
+
+    private static let autoArchiveNoticeKey = "autoArchiveNoticePending"
+    /// Arc's toast after an archive pass, held until someone is at Cra (AutoArchiveNotice). Kept in the defaults, so
+    /// the count from before an update restart overnight is still said in the morning.
+    private var autoArchiveNotice = AutoArchiveNotice(pending: UserDefaults.standard.integer(forKey: AppDelegate.autoArchiveNoticeKey)) {
+        didSet { UserDefaults.standard.set(autoArchiveNotice.pending, forKey: Self.autoArchiveNoticeKey) }
+    }
+    /// While a count waits with Cra in front: the first key, click or scroll there means someone is back.
+    private var autoArchiveReturnMonitor: Any?
+
+    private func noteAutoArchived(_ count: Int) {
+        guard count > 0 else { return }
+        autoArchiveNotice.archived(count)
+        CraLog.note("auto archive: \(count) tabs, \(autoArchiveNotice.pending) waiting for the toast")
+        showAutoArchiveNotice(becameActive: false)
+    }
+
+    private func showAutoArchiveNotice(becameActive: Bool) {
+        guard autoArchiveNotice.pending > 0, !isOnboarding, !mainWindows.isEmpty else { return }
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        let present = becameActive || AutoArchiveNotice.userPresent(appActive: NSApp.isActive, idleSeconds: idle)
+        guard let text = autoArchiveNotice.take(userPresent: present) else {
+            watchForReturnToAutoArchiveNotice()
+            return
+        }
+        if let m = autoArchiveReturnMonitor { NSEvent.removeMonitor(m); autoArchiveReturnMonitor = nil }
+        CraLog.note("auto archive toast: \(text)")
+        // A click opens the Archive, where the tabs are.
+        let window = main
+        window?.showToast(text) { [weak window] in window?.showLibrary(.archive) }
+    }
+
+    private func watchForReturnToAutoArchiveNotice() {
+        guard autoArchiveReturnMonitor == nil else { return }
+        autoArchiveReturnMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .scrollWheel, .mouseMoved]) { [weak self] event in
+            // After the event, so a click that lands keeps its target and the toast comes up beside it.
+            DispatchQueue.main.async { self?.showAutoArchiveNotice(becameActive: false) }
+            return event
+        }
+    }
+
     /// Chromium's audio service as the Mac went to sleep: waking says whether it lived (#286).
     private var audioServiceBeforeSleep: pid_t?
 
@@ -514,6 +558,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("key on coming forward: in use \(inUse)")
             }
         }
+        // Someone brought Cra forward: they're here to read what was archived while they were away.
+        showAutoArchiveNotice(becameActive: true)
     }
 
     /// The window order and the browser window in use as Cra comes forward, before AppKit raises its key and main
@@ -696,6 +742,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             main.showWindow(nil)
             if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
             BoostInstall.offer(url, over: main.window, from: "another app")
+            return
+        }
+        // An easel's Open in Cra (crabrowser.app/easel): asked about first, as a boost is.
+        if EaselShare.isEaselLink(url) {
+            main.showWindow(nil)
+            if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
+            EaselShare.offer(url, over: main.window, from: "another app")
             return
         }
         if let u = URL(string: url), u.scheme?.lowercased() == "cra" {
@@ -1529,6 +1582,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // instantLinks=<label>: the Instant Links row and the last run, as one line (#407).
             if let v = dict["instantLinksSetting"] { store.settings.instantLinks = v == "on"; return }
+            // editAddressInPlace=on|off: Settings ▸ Tabs ▸ "Edit the address in place" switched (#344).
+            if let v = dict["editAddressInPlace"] { store.settings.editAddressInPlace = v == "on"; return }
             // pageMarginSetting=<points>: Settings ▸ Pages ▸ Margin moved to that value, as the slider does (Ideas #366).
             if let v = dict["pageMarginSetting"].flatMap(Double.init) { store.settings.pageMargin = v; return }
             // nowPlayingTint=arc|theme: Settings ▸ Tabs ▸ "Player in the space's colour" switched (Ideas #366).
@@ -1753,6 +1808,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let chromium = CraCEFRuntime.extensionSettings(forProfile: nil)?.contains(id) == true
                 let cra = ExtensionStore.shared.entries.contains { $0.extensionID == id }
                 CraLog.note("extension remove \(id.prefix(8)): in chromium=\(chromium ? 1 : 0) in cra=\(cra ? 1 : 0)")
+                return
+            }
+            // currentSpace=<label>: the window's space and the profile its pages use, so a scenario set up with spaces on
+            // other profiles shows it really ran there (#621's scenarios ran on Default while their seed didn't load).
+            if let label = dict["currentSpace"] {
+                let space = main.focusedSpace
+                CraLog.note("current space \(label): \(space.title) profile=\(main.store.profileName(space.profileID))")
                 return
             }
             // extensionMenu=<id>: the toolbar's right-click menu for that pinned extension (#695); press=<row> chooses one.
@@ -2851,6 +2913,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // bundleIconPut=<id>: that icon on Cra.app as 0.1.54 put it, for a launch to take off (#724).
             if let id = dict["bundleIconPut"] { AppIconManager.shared.putBundleIconForTest(id); return }
             // How far the open downloads list's hover reaches below its rows, and what a press there hits (#575).
+            // fakeScreenshot=<name>: a small picture in ~/Pictures carrying macOS's screen-capture mark, as
+            // ⇧⌘4 leaves one, for Spotlight to find; fakeScreenshot=-<name> deletes it again.
+            if let name = dict["fakeScreenshot"] {
+                ScreenshotWatcher.writeFakeScreenshot(named: name)
+                return
+            }
+            // downloadsList=<label>: the hover list's rows, oldest first, screenshots marked (Arc's Library button).
+            if let label = dict["downloadsList"] {
+                let rows = DownloadHistory.shared.recent.map { row -> String in
+                    if case .finished(let e) = row, DownloadHistory.shared.isScreenshot(e) { return "screenshot:" + row.name }
+                    return row.name
+                }
+                CraLog.note("downloads list \(label): \(rows.joined(separator: " | "))")
+                return
+            }
             if let label = dict["downloadsTray"] {
                 let tray = (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.hoverReadout ?? "none"
                 CraLog.note("downloads tray \(label): open=\(main.sidebarUI.downloadsListOpen) \(tray)")
@@ -3060,6 +3137,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
             // The URL field edited in place (#344): a click on it, then typing and Return or Escape.
             if let step = dict["urlFieldEdit"] { main.debugURLFieldEdit(step); return }
+            // The toolbar's address edited in place (Settings ▸ Tabs, with the toolbar shown).
+            if let step = dict["toolbarAddressEdit"] { main.debugToolbarAddressEdit(step); return }
             // The sidebar header's address row (#648): "sidebar address <label>: url=… back=… forward=…",
             // and a press on its back, forward or reload.
             if let label = dict["sidebarAddress"] {

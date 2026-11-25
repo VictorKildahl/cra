@@ -1,0 +1,28 @@
+# promise: #804
+# ⌘W on a silent Favorite away from its pinned page takes it back there, as in Arc 1.174.2: the pinned page loads in the
+# background at the moment of ⌘W, and a click on the Favorite shows that load. 0.1.56 left it on the page it had moved
+# to (#740 kept every silent Favorite's page as it was), so CRM tools pinned as Favorites no longer went back on ⌘W.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=home
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://debug?cdp=Page.navigate&params={"url":"${PAGE}?n=away"}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'at=' + location.search"}
+expect-log "value":"at=\?n=away"
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://debug?selectTab=n=away
+wait 1
+cra://action/closeTab
+expect-log close tab: favorite deselected, back to its pinned page$
+wait 3
+cra://debug?selectTab=n=home
+wait 0.5
+# On its pinned page, and loaded before the click (at ⌘W), not by it.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'favorite ' + location.search + ' ' + (performance.now() > 2500 ? 'loaded at close' : 'loaded by the click')","returnByValue":true}
+expect-log "value":"favorite \?n=home loaded at close"
+cra://debug?checkStore=1

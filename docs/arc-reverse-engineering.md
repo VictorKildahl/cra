@@ -5525,3 +5525,30 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
 - **Cra:** `CloseSuccessor.pinnedClose(isFavorite:fromItsMenu:)`. The menu's Close Tab unloads the Favorite back to its
   pinned page, whether it is shown or loaded behind another tab; ⌘W and every other close still only deselect it.
 - **Open questions:** Arc's Favorite split menu, and whether ⇧⌘T brings a Favorite closed this way back.
+
+## ⌘W on a Favorite playing sound (25 Nov 2026, Arc 1.174.2, #803)
+
+- **Measured** in an offline copy of Arc (fake home, localhost only), on a local page made the first Favorite. The page
+  posts its state every second (load id, `currentTime`, `paused`, `visibilityState`, Picture in Picture):
+  - A video **with sound**: ⌘W fired `pagehide` at once and nothing more came. A click on the Favorite loaded it
+    afresh (new load id, video at 0 s). No Picture in Picture; the window showed no page.
+  - A page **without media**: ⌘W only hid it (`visibilitychange` hidden, ticks went on), and a click showed the same
+    load again, as #740 measured in 1.173.1.
+  - A **muted** video: like the page without media. Chromium paused it while hidden (its rule for muted autoplay)
+    and it played on from the same second when shown again.
+- **Cra:** `CloseSuccessor.pinnedClose(isFavorite:fromItsMenu:audible:)`, with Chromium's `isAudible` (2 s hold) for
+  `audible`. A Favorite making sound unloads back to its pinned page on ⌘W; a silent one is only deselected. Scenario
+  `favorite-close-playing`.
+- **Open questions:** whether a page the user muted (tab Mute) counts as making sound in Arc.
+
+## ⌘W on a Favorite away from its pinned page (25 Nov 2026, Arc 1.174.2, #804)
+
+- **Measured** in the offline copy, as for #803: the first Favorite's pinned page (`pin.html`) moved itself to a second
+  page of the same site (`away.html`) 3 s after loading; both post their state every second.
+  - ⌘W deselected the Favorite (the window showed the space's other tab) and `away.html` went hidden. At the same
+    moment `pin.html` loaded again, hidden: Arc sent the Favorite back to its pinned page in the background.
+  - A click on the Favorite showed that load (same load id, `visibilitychange` visible, no new load).
+- **Cra:** `CloseSuccessor.pinnedClose(…, awayFromPinnedPage:)` → `.deselectGoingHome`: deselect, then reset every pane
+  away from its pinned page (`resetPinnedTab`, which loads the pinned page in the kept browser). Sound still closes it
+  (#803), Close Tab in its menu still unloads it (#740). Scenario `favorite-close-away`.
+- **Open questions:** whether ⇧⌘T brings back the page the Favorite was on.

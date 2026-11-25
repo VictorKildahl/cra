@@ -198,21 +198,17 @@ struct MobileRipplesTests {
 }
 
 struct MobileEmptyHomeTests {
-    /// Arc Search's empty home (its gradient and the logo) stays the default; Rippling Dots is an App Setting, off
-    /// in a settings file from an older build, and keeps the logo over the dots (Victor, 23 Nov 2026, PR #708).
-    @Test func theDotsAreASettingAndTheLogoStays() throws {
-        #expect(MobileSettings().homeDots == false)
-        let older = try JSONDecoder().decode(MobileSettings.self, from: Data(#"{"opensKeyboardOnLaunch":false}"#.utf8))
-        #expect(older.homeDots == false)
-        var on = MobileSettings()
-        on.homeDots = true
-        #expect(try JSONDecoder().decode(MobileSettings.self, from: JSONEncoder().encode(on)).homeDots)
-
-        let arc = MobileEmptyHome(dots: false, home: true, searching: false, incognitoSearch: false, pulling: false)
-        #expect(arc.backdrop == .arcSearch && arc.showsLogo && !arc.showsDots && !arc.showsSearchHint && !arc.barFloats)
-
-        let dots = MobileEmptyHome(dots: true, home: true, searching: false, incognitoSearch: false, pulling: false)
-        #expect(dots.backdrop == .dots && dots.showsLogo && dots.showsDots && dots.showsSearchHint && dots.barFloats)
+    /// The dots are the empty home's only look (Victor, 25 Nov 2026): no switch, the logo over them, "Tap to
+    /// search" over the pill and the bar floating. A settings file from a build that had App Settings ▸ Rippling
+    /// Dots, on or off, still loads, and the old key isn't written back.
+    @Test func theDotsAreTheEmptyHome() throws {
+        let home = MobileEmptyHome(home: true, searching: false, incognitoSearch: false, pulling: false)
+        #expect(home.showsLogo && home.showsDots && home.showsSearchHint && home.barFloats)
+        for old in [#"{"opensKeyboardOnLaunch":false,"homeDots":false}"#, #"{"homeDots":true}"#] {
+            let settings = try JSONDecoder().decode(MobileSettings.self, from: Data(old.utf8))
+            let saved = try #require(String(data: JSONEncoder().encode(settings), encoding: .utf8))
+            #expect(!saved.contains("homeDots"))
+        }
     }
 
     /// With no tabs open the home showed the tab stack and the page menu, and the tab button put a blank row over
@@ -222,22 +218,20 @@ struct MobileEmptyHomeTests {
         #expect(!MobileEmptyHome.isHome(tabOnScreen: false, rowTabs: 2), "tabs to show in the row")
         #expect(!MobileEmptyHome.isHome(tabOnScreen: true, rowTabs: 0), "a private page, which has no card")
         #expect(!MobileEmptyHome.isHome(tabOnScreen: true, rowTabs: 1))
-        for dots in [false, true] {
-            let home = MobileEmptyHome(dots: dots, home: true, searching: false, incognitoSearch: false, pulling: false)
-            #expect(home.showsLogo && home.barShowsTabRow)
-            let page = MobileEmptyHome(dots: dots, home: false, searching: false, incognitoSearch: false, pulling: false)
-            #expect(!page.barShowsTabRow, "a page has the tab stack and its menu")
-        }
+        let home = MobileEmptyHome(home: true, searching: false, incognitoSearch: false, pulling: false)
+        #expect(home.showsLogo && home.barShowsTabRow)
+        let page = MobileEmptyHome(home: false, searching: false, incognitoSearch: false, pulling: false)
+        #expect(!page.barShowsTabRow, "a page has the tab stack and its menu")
     }
 
     @Test func theSheetAndPagesCoverIt() {
-        let searching = MobileEmptyHome(dots: true, home: true, searching: true, incognitoSearch: false, pulling: false)
+        let searching = MobileEmptyHome(home: true, searching: true, incognitoSearch: false, pulling: false)
         #expect(!searching.showsLogo && searching.showsDots && !searching.showsSearchHint, "the dots stay behind the sheet")
-        let incognito = MobileEmptyHome(dots: true, home: true, searching: true, incognitoSearch: true, pulling: false)
+        let incognito = MobileEmptyHome(home: true, searching: true, incognitoSearch: true, pulling: false)
         #expect(!incognito.showsDots, "not behind incognito's grey")
-        let pulling = MobileEmptyHome(dots: true, home: true, searching: false, incognitoSearch: false, pulling: true)
+        let pulling = MobileEmptyHome(home: true, searching: false, incognitoSearch: false, pulling: true)
         #expect(!pulling.showsSearchHint)
-        let page = MobileEmptyHome(dots: true, home: false, searching: false, incognitoSearch: false, pulling: false)
+        let page = MobileEmptyHome(home: false, searching: false, incognitoSearch: false, pulling: false)
         #expect(!page.showsLogo && !page.showsDots && !page.showsSearchHint && !page.barFloats)
     }
 }

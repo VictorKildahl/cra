@@ -69,3 +69,40 @@ public enum AutoArchive {
         return tabs.filter { !selected.contains($0.id) && $0.lastActive < cutoff }.map(\.id)
     }
 }
+
+/// Arc's toast after an archive pass, "Auto archived %d tabs" (Toasts, "Toast indicating that tabs were
+/// archived"). A pass mostly runs while nobody is looking, overnight or at the launch an automatic update
+/// makes, and the sidebar is just emptier in the morning (X, 25 Nov 2026). So the count waits for someone at
+/// Cra to read it, adding up over passes, and is said once.
+public struct AutoArchiveNotice: Equatable, Sendable {
+    /// Tabs archived since the toast last showed.
+    public private(set) var pending: Int
+
+    public init(pending: Int = 0) {
+        self.pending = max(0, pending)
+    }
+
+    /// Input this recent, with Cra the active app, means someone is at it.
+    public static let presenceWindow: TimeInterval = 60
+
+    public static func userPresent(appActive: Bool, idleSeconds: TimeInterval) -> Bool {
+        appActive && idleSeconds < presenceWindow
+    }
+
+    /// Arc's words; one tab is "1 tab", where Arc's single format says "1 tabs".
+    public static func text(count: Int) -> String {
+        count == 1 ? "Auto archived 1 tab" : "Auto archived \(count) tabs"
+    }
+
+    public mutating func archived(_ count: Int) {
+        pending += max(0, count)
+    }
+
+    /// The toast's words when someone is there and tabs wait, which clears the count; otherwise nil and
+    /// the count keeps waiting.
+    public mutating func take(userPresent: Bool) -> String? {
+        guard userPresent, pending > 0 else { return nil }
+        defer { pending = 0 }
+        return Self.text(count: pending)
+    }
+}

@@ -328,6 +328,7 @@ final class SidebarView: NSView {
         guard page != shownLibrary, ui.libraryReveal == nil else { return }
         let opening = shownLibrary == nil && page != nil
         shownLibrary = page
+        if opening { ScreenshotWatcher.shared.libraryOpened() }
         if let page {
             let host = libraryHost ?? makeLibraryHost(page)
             host.page = page
@@ -891,7 +892,7 @@ final class SidebarURLPill: NSView, NSTextFieldDelegate {
     /// The address the field stands for (its tip), for scenarios.
     var shownURL: String { url }
     private var tabID: UUID?
-    /// Settings ▸ Tabs "Edit the address in the sidebar" (#344): a click edits in place.
+    /// Settings ▸ Tabs "Edit the address in place" (#344): a click edits in place.
     private var editInPlace = false
     /// The address field while it is edited in place (#344), and the tab it edits.
     private var field: NSTextField?

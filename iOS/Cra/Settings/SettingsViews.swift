@@ -19,7 +19,7 @@ final class SettingsModel: ObservableObject {
     var showSpaces: () -> Void = {}
     var shareCra: (CGRect) -> Void = { _ in }
     var done: () -> Void = {}
-    /// Something changed: the browser lays out again (App Settings ▸ Rippling Dots changes the empty home screen).
+    /// Something changed: the browser lays out again.
     var changed: () -> Void = {}
 
     init(store: MobileSettingsStore, host: String?, canSummarize: Bool) {
@@ -288,6 +288,15 @@ struct AppSettingsList: View {
                          options: [nil] + MobileLanguages.codes.map(Optional.some),
                          title: { code in code.map { Locale.current.localizedString(forLanguageCode: $0)?.capitalized ?? $0 } ?? "Same as iPhone" })
                     .accessibilityIdentifier("setting-languages")
+                // #792, not in Arc Search: where Apple Intelligence can't be turned on, Browse for Me and
+                // Summarize can go. Only on a phone that could run them.
+                if BrowseForMe.deviceState.offersSwitch {
+                    Toggle(isOn: model.binding(\.appleIntelligence)) {
+                        SettingLabel(title: "Apple Intelligence", symbol: "sparkles", color: .pink,
+                                     subtitle: "Browse for Me and Summarize")
+                    }
+                    .accessibilityIdentifier("setting-apple-intelligence")
+                }
             }
             .settingsRow()
             Section {
@@ -295,11 +304,6 @@ struct AppSettingsList: View {
                     SettingLabel(title: "Auto-Open Keyboard", symbol: "keyboard.fill", color: .yellow)
                 }
                 .accessibilityIdentifier("setting-keyboard-on-launch")
-                Toggle(isOn: model.binding(\.homeDots)) {
-                    SettingLabel(title: "Rippling Dots", symbol: "circle.grid.3x3.fill", color: .indigo,
-                                 subtitle: "Dots under the logo when no tab is open")
-                }
-                .accessibilityIdentifier("setting-home-dots")
                 ValueRow(label: SettingLabel(title: "Archive Inactive Tabs", symbol: "archivebox.fill", color: .purple),
                          selection: model.binding(\.archiveAfter), options: MobileArchiveAfter.allCases, title: \.settingValue)
                     .accessibilityIdentifier("setting-archive-after")

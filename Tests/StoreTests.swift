@@ -63,6 +63,7 @@ enum StoreTests {
         chromiumManifestV2Import()
         zenFaviconSize()
         autoArchive()
+        autoArchiveCounts()
         longAutoArchive()
         profileAutoArchive()
         tabSleepCadence()
@@ -1557,6 +1558,31 @@ enum StoreTests {
         let later = store.createTab(url: "https://example.com/later", select: false)
         clock.advance(by: 48 * 3600)
         expect(!archived(later.id), "with auto-archive off nothing is archived")
+    }
+
+    /// Each pass says how many tabs it sent to the Archive, for Arc's "Auto archived N tabs" toast (X, 25 Nov 2026:
+    /// tabs archived overnight looked lost). The launch's pass counts too: after a night away or an update restart it
+    /// is the one that archives. An empty tab leaves nothing in the Archive and isn't counted.
+    @MainActor
+    private static func autoArchiveCounts() {
+        let clock = ManualScheduler()
+        let composition = AppComposition(clock: clock)
+        let store = composition.store
+        store.settings.autoArchiveEnabled = true
+        store.settings.autoArchive = .twelveHours
+        _ = store.createTab(url: "https://example.com/night-one", select: false)
+        _ = store.createTab(url: "https://example.com/night-two", select: false)
+        _ = store.createTab(url: "", select: false)
+        _ = store.createTab(url: "https://example.com/shown", select: true)
+        // Away all night: the next launch's pass archives them.
+        clock.advance(by: 13 * 3600)
+        var passes: [Int] = []
+        composition.startPeriodicWork(autoArchived: { passes.append($0) }) {}
+        expect(passes == [2], "the launch's pass counts the two pages, not the empty tab or the selected one: \(passes)")
+        _ = store.createTab(url: "https://example.com/later", select: false)
+        clock.advance(by: 12 * 3600 + AppComposition.autoArchiveInterval + 1)
+        expect(passes.last == 1, "a later pass counts its own: \(passes)")
+        expect(passes.dropFirst().dropLast().allSatisfy { $0 == 0 }, "passes that archive nothing say 0: \(passes)")
     }
 
     // promise: #278
@@ -3965,6 +3991,9 @@ enum StoreTests {
         syncLeavesAMixToItsWriterOnANewMac()
         syncKeepsAClosedTabClosed()
         syncKeepsAClosedTabClosedAfterTwoWritesThere()
+        syncKeepsASettingChangedBeforeTheOtherMacWrote()
+        syncKeepsATabSeenOnTheOtherMac()
+        syncKeepsATabSeenHereThatTheOtherMacArchivedFirst()
     }
 
     /// A tab closed on one Mac came back (reported by a user, 13 Nov 2026). The other Mac still
@@ -4062,6 +4091,158 @@ enum StoreTests {
         clockB.advance(by: 60)
         syncB.poll()
         expect(b.item(doomed.id) == nil && b.item(opened.id) != nil, "the close reaches the second Mac and its tab stays")
+        syncA.disable(); syncB.disable()
+    }
+
+    /// A setting changed on one Mac was lost when the other Mac, before iCloud brought it the change, wrote its bundle
+    /// for a change of its own: the bundle's settings replaced this Mac's whole, while its sidebar was merged (X, Chris
+    /// Coyier, 25 Nov 2026: "Archive tabs after" Never on one Mac, 12 hours on the other). Settings are merged field by
+    /// field against the bundle both Macs had, as the sidebar is.
+    @MainActor
+    private static func syncKeepsASettingChangedBeforeTheOtherMacWrote() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-settings-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        a.settings.autoArchiveEnabled = true
+        a.settings.autoArchive = .twelveHours
+        a.settings.warnBeforeQuitting = false
+        let tab = a.createTab(url: "https://example.com/kept", title: "Kept")
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+        expect(b.settings.autoArchive(profileID: nil) == .after(.twelveHours), "both Macs start on 12 hours")
+
+        let bundle = folder.appendingPathComponent(SettingsSync.folderName)
+        let names = [SettingsSync.manifestName] + SettingsSync.fileNames
+        let before = Dictionary(uniqueKeysWithValues: names.map { ($0, try? Data(contentsOf: bundle.appendingPathComponent($0))) })
+        // The first Mac turns auto-archive off and writes; iCloud hasn't brought it to the second Mac yet.
+        clockA.advance(by: 10); clockB.advance(by: 10)
+        a.settings.setAutoArchive(.never, profileID: nil, otherProfiles: [])
+        syncA.poll()
+        for name in names { try? before[name]??.write(to: bundle.appendingPathComponent(name)) }
+        // Meanwhile the second Mac renames a tab and changes a setting of its own, and writes.
+        clockB.advance(by: 5)
+        b.updateTab(tab.id, title: "Kept, renamed")
+        b.settings.warnBeforeQuitting = true
+        syncB.poll()
+
+        clockA.advance(by: 60)
+        syncA.poll()
+        expect(a.settings.autoArchive(profileID: nil) == .never, "the first Mac keeps Never when the second Mac's bundle arrives")
+        expect(a.settings.warnBeforeQuitting, "and takes the setting the second Mac changed")
+        expect(a.item(tab.id)?.displayTitle == "Kept, renamed", "and its sidebar change")
+        clockB.advance(by: 60)
+        syncB.poll()
+        expect(b.settings.autoArchive(profileID: nil) == .never, "Never reaches the second Mac")
+        expect(b.settings.warnBeforeQuitting, "which keeps its own change")
+        syncA.disable(); syncB.disable()
+    }
+
+    /// A tab looked at on one Mac is in use: the other Mac's archive pass doesn't take it, also when that pass ran before
+    /// the other Mac's bundle arrived (at launch, after waking, iCloud still downloading). Its sidebar knew only the older
+    /// look, archived the tab, and the close went back to the first Mac, where it was gone and in neither Archive there.
+    @MainActor
+    private static func syncKeepsATabSeenOnTheOtherMac() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-seen-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        a.settings.autoArchiveEnabled = true
+        a.settings.autoArchive = .twelveHours
+        let shown = a.createTab(url: "https://example.com/shown", title: "Shown", select: true)
+        let seenAfterLook = a.createTab(url: "https://example.com/seen-after-look", title: "Seen, B looks first", select: false)
+        let seenBeforeLook = a.createTab(url: "https://example.com/seen-before-look", title: "Seen, B archives first", select: false)
+        let idle = a.createTab(url: "https://example.com/idle", title: "Idle on both", select: false)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+        b.selectTab(shown.id)
+
+        // Eleven hours on, both tabs are looked at on the first Mac, which writes.
+        clockA.advance(by: 11 * 3600); clockB.advance(by: 11 * 3600)
+        a.selectTab(seenAfterLook.id)
+        a.selectTab(seenBeforeLook.id)
+        a.selectTab(shown.id)
+        syncA.poll()
+
+        // Two hours later on the second Mac: one pass after its look, as every 30 minutes.
+        clockA.advance(by: 2 * 3600); clockB.advance(by: 2 * 3600)
+        syncB.poll()
+        b.runAutoArchive()
+        expect(b.item(seenAfterLook.id) != nil, "a pass after the look keeps a tab looked at on the other Mac")
+        expect(b.item(idle.id) == nil, "a tab idle on both Macs is archived")
+
+        // The race: a pass before the look, as at launch or waking, then the look and the other Mac's.
+        a.selectTab(seenBeforeLook.id)
+        a.selectTab(shown.id)
+        syncA.poll()
+        clockA.advance(by: 13 * 3600 - 60); clockB.advance(by: 13 * 3600 - 60)
+        a.selectTab(seenAfterLook.id); a.selectTab(shown.id)
+        syncA.poll()
+        clockB.advance(by: 60)
+        b.runAutoArchive()
+        syncB.poll()
+        clockA.advance(by: 60)
+        syncA.poll()
+        expect(b.item(seenAfterLook.id) != nil, "the second Mac's early pass is undone for a tab the other Mac had looked at")
+        expect(!b.archive.contains { $0.id == seenAfterLook.id }, "and it leaves the second Mac's Archive")
+        expect(a.item(seenAfterLook.id) != nil, "the first Mac keeps the tab it looked at")
+        expect(a.item(seenBeforeLook.id) == nil && b.item(seenBeforeLook.id) == nil, "a tab idle past the limit on both is archived")
+        syncA.disable(); syncB.disable()
+    }
+
+    /// The other way round: the second Mac's pass took the tab and its bundle went up before iCloud brought it the first
+    /// Mac's look. The bundle lists its auto-archives, and the first Mac, which had looked at the tab, keeps it; the second
+    /// Mac then gets it back, out of its Archive.
+    @MainActor
+    private static func syncKeepsATabSeenHereThatTheOtherMacArchivedFirst() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-seen-here-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        a.settings.autoArchiveEnabled = true
+        a.settings.autoArchive = .twelveHours
+        let shown = a.createTab(url: "https://example.com/shown-here", title: "Shown", select: true)
+        let seen = a.createTab(url: "https://example.com/seen-here", title: "Seen here", select: false)
+        let manual = a.createTab(url: "https://example.com/closed-there", title: "Closed there", select: false)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+        b.selectTab(shown.id)
+
+        let bundle = folder.appendingPathComponent(SettingsSync.folderName)
+        let names = [SettingsSync.manifestName] + SettingsSync.fileNames
+        let before = Dictionary(uniqueKeysWithValues: names.map { ($0, try? Data(contentsOf: bundle.appendingPathComponent($0))) })
+        // Thirteen hours on, the first Mac looks at the tab and writes; iCloud hasn't brought that to the second Mac.
+        clockA.advance(by: 13 * 3600); clockB.advance(by: 13 * 3600)
+        a.selectTab(seen.id); a.selectTab(manual.id); a.selectTab(shown.id)
+        syncA.poll()
+        for name in names { try? before[name]??.write(to: bundle.appendingPathComponent(name)) }
+        // Someone closes the other tab there by hand, the second Mac's pass takes this one, and it writes.
+        clockB.advance(by: 60)
+        b.archiveTab(manual.id, reason: .manual)
+        b.runAutoArchive()
+        syncB.poll()
+        expect(b.item(seen.id) == nil, "the second Mac archived it, knowing only the older look")
+
+        clockA.advance(by: 120)
+        syncA.poll()
+        expect(a.item(seen.id) != nil, "the first Mac keeps the tab it looked at")
+        expect(a.item(manual.id) == nil, "a tab closed by hand on the other Mac still closes")
+        clockB.advance(by: 120)
+        syncB.poll()
+        expect(b.item(seen.id) != nil, "the tab comes back on the second Mac")
+        expect(!b.archive.contains { $0.id == seen.id }, "and leaves its Archive")
         syncA.disable(); syncB.disable()
     }
 

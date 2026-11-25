@@ -2707,14 +2707,39 @@ final class SidebarStore {
     }
 
     /// Today tabs idle longer than their space's profile's timer are archived (Arc:
-    /// ArchiveState+AutoArchive, autoArchiveTimeThreshold; per profile, #693).
-    func runAutoArchive() {
+    /// ArchiveState+AutoArchive, autoArchiveTimeThreshold; per profile, #693). Returns how many went to the
+    /// Archive, for Arc's "Auto archived N tabs" toast (AutoArchiveNotice): an empty or incognito tab leaves no
+    /// entry there, so it isn't counted.
+    @discardableResult
+    func runAutoArchive() -> Int {
+        var count = 0
         for space in orderedSpaces {
             let selected = Set(prefs.windows.compactMap { $0.selectedTabPerSpace[space.id] })
             let today = tabs(under: space.todayContainerID).map { AutoArchive.Tab(id: $0.id, lastActive: $0.tab?.timeLastActiveAt ?? $0.createdAt) }
-            archiveTabs(AutoArchive.due(today, selected: selected, choice: settings.autoArchive(profileID: space.profileID), now: clock.now),
-                        reason: .auto)
+            let due = AutoArchive.due(today, selected: selected, choice: settings.autoArchive(profileID: space.profileID), now: clock.now)
+            if !isIncognito(space: space.id) { count += due.filter { items[$0]?.isEmptyTab == false }.count }
+            archiveTabs(due, reason: .auto)
         }
+        return count
+    }
+
+    /// A tab's "Archive tabs after", by its space's profile: a tab in the sidebar, or one in the Archive by the space it
+    /// came from (SyncAutoArchive).
+    func autoArchiveChoice(forTab id: UUID) -> AutoArchiveChoice {
+        let sid = spaceID(ofItem: id) ?? archive.first { $0.id == id }?.sourceSpaceID
+        return settings.autoArchive(profileID: sid.flatMap { spaces[$0]?.profileID })
+    }
+
+    /// The pass's archives, id → when, for the sync bundle (SyncAutoArchive.listed).
+    var autoArchivedTabs: [(id: UUID, at: Date)] {
+        archive.filter { $0.reason == .auto }.map { (id: $0.id, at: $0.archivedAt) }
+    }
+
+    /// Tabs the archive pass took that sync brought back to the sidebar leave the Archive (SyncAutoArchive).
+    func forgetAutoArchived(_ ids: Set<UUID>) {
+        guard !ids.isEmpty, archive.contains(where: { $0.reason == .auto && ids.contains($0.id) }) else { return }
+        archive.removeAll { $0.reason == .auto && ids.contains($0.id) }
+        touch()
     }
 
     // MARK: Spaces

@@ -3,7 +3,7 @@ import AppKit
 /// Library ▸ Easels as Arc 1.172.1 lays it out (Victor's Arc, 8 Nov 2026, 2x stills): the media
 /// grid's tiles, two to a row, each holding a light card (white 3 pt rim, 8 pt corners) with the
 /// easel drawn small on it and, at its bottom left, Arc's pink squiggle over the title in bold.
-/// No day headers. Click opens the easel; right-click: Delete.
+/// No day headers. Click opens the easel; right-click: Share Easel… (Cra's link, EaselShare), Delete.
 struct EaselEntry: Equatable {
     var id: UUID
     var title: String
@@ -13,6 +13,7 @@ struct EaselEntry: Equatable {
 final class EaselRowCell: NSView {
     private var tiles: [EaselTile] = []
     var open: (EaselEntry) -> Void = { _ in }
+    var share: (EaselEntry) -> Void = { _ in }
     var delete: (EaselEntry) -> Void = { _ in }
 
     override var isFlipped: Bool { true }
@@ -21,6 +22,7 @@ final class EaselRowCell: NSView {
         while tiles.count < 2 {
             let t = EaselTile()
             t.open = { [weak self] in self?.open($0) }
+            t.share = { [weak self] in self?.share($0) }
             t.delete = { [weak self] in self?.delete($0) }
             tiles.append(t)
             addSubview(t)
@@ -42,6 +44,7 @@ final class EaselRowCell: NSView {
 
 final class EaselTile: NSView {
     var open: (EaselEntry) -> Void = { _ in }
+    var share: (EaselEntry) -> Void = { _ in }
     var delete: (EaselEntry) -> Void = { _ in }
     private var entry: EaselEntry?
     private var ink: NSColor = .white
@@ -176,6 +179,8 @@ final class EaselTile: NSView {
         guard let entry else { return nil }
         let m = NSMenu()
         m.autoenablesItems = false
+        MenuItems.add(m, "Share Easel…") { [weak self] in self?.share(entry) }
+        m.addItem(.separator())
         MenuItems.add(m, "Delete") { [weak self] in self?.delete(entry) }
         return m
     }

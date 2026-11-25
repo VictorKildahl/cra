@@ -651,6 +651,11 @@ while IFS= read -r raw || [ -n "$raw" ]; do
 done < "$FILE"
 
 # Invariants.
+# A data file Cra can't read is set aside and Cra starts fresh, so a seed that doesn't decode runs the scenario on
+# a setup it never meant (#621's other-profile scenarios ran on Default only until 25 Nov 2026).
+if grep -q "unreadable, set aside as \.corrupt" "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null; then
+  problem "a data file didn't load: $(grep -ho '[A-Za-z.-]* unreadable, set aside' "$DATA"/cra*.log "$OUT/stdout.log" 2>/dev/null | head -1)"
+fi
 if alive; then
   send "cra://debug?checkStore=1"; sleep 1
   rss=$(ps -o rss= -p "$PID" | tr -d ' ')

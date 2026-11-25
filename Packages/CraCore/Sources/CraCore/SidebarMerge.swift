@@ -77,6 +77,14 @@ public enum SidebarMerge {
             if r == b { return l }
             var m = r
             m.children = mergeList(base: b.children, local: l.children, remote: r.children)
+            // Looked at on both Macs: the later look, or this Mac's would read as idle to the archive pass.
+            switch (m.data, l.data) {
+            case (.tab(var t), .tab(let lt)):
+                if let lt = lt.timeLastActiveAt, lt > (t.timeLastActiveAt ?? .distantPast) { t.timeLastActiveAt = lt; m.data = .tab(t) }
+            case (.split(var s), .split(let ls)):
+                if let lt = ls.timeLastActiveAt, lt > (s.timeLastActiveAt ?? .distantPast) { s.timeLastActiveAt = lt; m.data = .split(s) }
+            default: break
+            }
             return m
         }
     }
@@ -130,10 +138,14 @@ public struct SyncHistory: Codable, Equatable {
     public struct Entry: Codable, Equatable {
         public var id: UUID
         public var document: SidebarDocument
+        /// The bundle's settings, what SettingsMerge merges against. Nil in a history an older Cra wrote: that bundle's
+        /// settings replace this Mac's whole, as before.
+        public var settings: AppSettings?
 
-        public init(id: UUID, document: SidebarDocument) {
+        public init(id: UUID, document: SidebarDocument, settings: AppSettings? = nil) {
             self.id = id
             self.document = document
+            self.settings = settings
         }
     }
 
@@ -143,9 +155,9 @@ public struct SyncHistory: Codable, Equatable {
 
     public init() {}
 
-    public mutating func remember(_ id: UUID, _ document: SidebarDocument) {
+    public mutating func remember(_ id: UUID, _ document: SidebarDocument, settings: AppSettings? = nil) {
         entries.removeAll { $0.id == id }
-        entries.insert(Entry(id: id, document: document), at: 0)
+        entries.insert(Entry(id: id, document: document, settings: settings), at: 0)
         if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
     }
 
@@ -158,7 +170,16 @@ public struct SyncHistory: Codable, Equatable {
     /// newest first) that this Mac has too. Nil, so the bundle is applied whole, for a bundle from
     /// an older Cra or one written from bundles all gone from here.
     public func base(for manifest: SyncManifest) -> SidebarDocument? {
-        for id in manifest.parentIDs ?? [] { if let doc = document(for: id) { return doc } }
+        baseEntry(for: manifest)?.document
+    }
+
+    /// The settings of the same bundle `base(for:)` picks; nil when it has none (written by an older Cra).
+    public func baseSettings(for manifest: SyncManifest) -> AppSettings? {
+        baseEntry(for: manifest)?.settings
+    }
+
+    private func baseEntry(for manifest: SyncManifest) -> Entry? {
+        for id in manifest.parentIDs ?? [] { if let e = entries.first(where: { $0.id == id }) { return e } }
         return nil
     }
 

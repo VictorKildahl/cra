@@ -15,6 +15,7 @@ final class MobileSettingsStore {
             value = MobileSettings()
         }
         AnswerLanguage.setting = value.answerLanguage
+        BrowseForMe.userWantsThem = value.appleIntelligence
     }
 
     func update(_ change: (inout MobileSettings) -> Void) {
@@ -23,6 +24,7 @@ final class MobileSettingsStore {
         guard next != value else { return }
         value = next
         AnswerLanguage.setting = next.answerLanguage
+        BrowseForMe.userWantsThem = next.appleIntelligence
         if let data = try? JSONEncoder().encode(next) { try? data.write(to: fileURL, options: .atomic) }
     }
 }
