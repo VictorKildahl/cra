@@ -233,8 +233,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// named, matching the page's profile, or the one picked in this window's command bar (#316),
     /// else the window used last's.
     private var target: LittleWindowTarget
-    /// The link the window opened, or the address last typed in it, before redirects: what a profile
-    /// change loads again (CraCore LittleProfileChange). Nil for a popup host.
+    /// The link the window opened, or the address typed into its empty card, before redirects: what a
+    /// profile change loads again while the page is still on that entry (CraCore LittleProfileChange).
+    /// Nil for a popup host and for an address typed over a page, which goes on from its entry.
     private var openedURL: String?
     /// ⌥⌘N's card (GitHub #337, CraCore LittleCard): an empty Little Window is only its command bar,
     /// 490 × 329 pt at the top right of the screen, with no strip, traffic lights or page. A row that
@@ -1552,7 +1553,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         let empty = !hasPage && browser?.canGoBack == false
         expandCard()
         state.url = url
-        openedURL = url
+        openedURL = empty ? url : nil
         // An empty window's page is about:blank: loading over it left that entry behind the first
         // page, so Back and the swipe back went to a blank page instead of closing the window
         // (#495). A new page at the address starts its history there.
@@ -1729,7 +1730,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private func reload(inProfile id: UUID?) -> String? {
         guard browser != nil else { return nil }
         state.profileID = id
-        let address = LittleProfileChange.address(opened: openedURL, shown: currentURL)
+        let address = LittleProfileChange.address(opened: openedURL, shown: currentURL, wentOn: browser?.canGoBack == true)
         replacePage(at: address)
         return address
     }

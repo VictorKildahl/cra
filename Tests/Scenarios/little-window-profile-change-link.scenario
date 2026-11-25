@@ -1,3 +1,4 @@
+# promise: #763
 # A Little Window moved to another profile from its address pill opens the link it was opened on
 # again, not the page that link redirected to: the redirects answered the first profile's session (a
 # sign-in page whose challenge only it can finish). Personal is on Default, Random on the profile Hobbies.
@@ -13,3 +14,14 @@ expect-log little shown landed: windows=1 space=Personal profile=Default
 
 cra://debug?littleProfile=Hobbies
 expect-log little profile Hobbies: Hobbies at http://127\.0\.0\.1:[0-9]+/redirect\?to=
+wait 2
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"'hobbies at '+location.search"}
+expect-log Cra cdp Runtime.evaluate .*"value":"hobbies at \?n=landed"
+
+# A page gone on from its link (a link clicked in it, so with the user's gesture; a script's hop without
+# one is an entry Back skips, as a sign-in redirect is): moving it back to Default keeps that page.
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"location.href='/page.html?n=next'","userGesture":true}
+expect-log "GET /page.html\?n=next
+wait 1
+cra://debug?littleProfile=Default
+expect-log little profile Default: Default at http://127\.0\.0\.1:[0-9]+/page\.html\?n=next
