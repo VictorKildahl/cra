@@ -382,19 +382,30 @@ final class MeetingReminder {
     static let shared = MeetingReminder()
     private var panel: PreviewPanel?
     private var shown: String?
+    /// The tile the card hangs beside: only it changes or closes the card while it's on screen (#758).
+    private weak var owner: NSView?
+
+    /// In a visible window's current space: a Calendar favorite in another space's column isn't.
+    private static func isOnScreen(_ tile: NSView) -> Bool {
+        guard let window = tile.window, window.isVisible, !tile.isHiddenOrHasHiddenAncestor else { return false }
+        return !tile.visibleRect.isEmpty
+    }
 
     func update(tile: NSView, favorite: String?, events: [CalendarPreview.Event], timing: CalendarPreview.LinkTiming, join: @escaping (String) -> Void) {
         let meeting = favorite == nil ? nil : CalendarPreview.meetingToJoin(in: events, now: Date(), timing: timing,
                                                                             dismissed: LiveCalendarClient.shared.dismissed)
-        guard let meeting, let url = meeting.meetingURL, let window = tile.window, window.isVisible else {
-            if meeting == nil { close() }
-            return
+        let step = MeetingCardStep.next(shown: shown, ownerIsCaller: owner === tile, ownerOnScreen: owner.map(Self.isOnScreen) ?? false,
+                                        callerOnScreen: Self.isOnScreen(tile), meeting: meeting.map(CalendarPreview.key))
+        switch step {
+        case .leave: return
+        case .close: close(); return
+        case .update, .show: break
         }
-        let key = CalendarPreview.key(meeting)
+        guard let meeting, let url = meeting.meetingURL, let window = tile.window else { return }
         let view = AnyView(MeetingReminderView(event: meeting, now: Date(),
                                                join: { [weak self] in self?.close(); LiveCalendarClient.shared.dismiss(meeting); join(url) },
                                                dismiss: { [weak self] in self?.close(); LiveCalendarClient.shared.dismiss(meeting) }))
-        if let panel, shown == key { panel.replace(view); return }
+        if step == .update, let panel { panel.replace(view); return }
         close()
         let p = PreviewPanel(content: view)
         let t = window.convertToScreen(tile.convert(tile.bounds, to: nil))
@@ -402,7 +413,9 @@ final class MeetingReminder {
         window.addChildWindow(p, ordered: .above)
         p.open()
         panel = p
-        shown = key
+        shown = CalendarPreview.key(meeting)
+        owner = tile
+        opened += 1
         CraLog.note("meeting link shown: \(meeting.title)")
     }
 
@@ -410,7 +423,12 @@ final class MeetingReminder {
         panel?.close(animated: true)
         panel = nil
         shown = nil
+        owner = nil
     }
+
+    /// cra://debug?meetingCard (#758): "shown=<0|1> visible=<0|1> opened=<n>", n the cards put up so far.
+    var debugState: String { "shown=\(shown == nil ? 0 : 1) visible=\(panel?.isVisible == true ? 1 : 0) opened=\(opened)" }
+    private var opened = 0
 }
 
 private struct MeetingReminderView: View {
@@ -510,9 +528,11 @@ private final class PreviewPanel: NSPanel {
         setFrameTopLeftPoint(top)
     }
 
-    /// Arc's opening: from about 80 % about a point near the tile, fading in, some 4 frames.
+    /// Arc's opening: from about 80 % about a point near the tile, fading in, some 4 frames. A card that hangs
+    /// from a window goes right above it: ordered to the front, it took a browser window in the background over
+    /// the app in use with it (#758).
     func open() {
-        orderFront(nil)
+        if let parent { order(.above, relativeTo: parent.windowNumber) } else { orderFront(nil) }
         guard let layer = card.layer else { return }
         setAnchor(layer)
         let fade = CABasicAnimation(keyPath: "opacity")

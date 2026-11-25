@@ -50,6 +50,8 @@ final class SuggestionEngine {
     unowned let store: SidebarStore
     unowned let bindings: KeyBindingRegistry
     private let remote = SearchSuggestions()
+    /// The profile's whole Chromium history, beyond history.json's newest 5,000 pages (#730).
+    private let chromium = ChromiumHistory()
     /// Arc's command bar always lists five rows; search suggestions make up what the
     /// tabs, history and commands don't fill, so the bar keeps its height while you type.
     static let maxRows = 5
@@ -303,6 +305,7 @@ final class SuggestionEngine {
         indexGeneration &+= 1
         enginesRead = nil
         remote.reset()
+        chromium.reset()
     }
 
     // MARK: Search engines
@@ -340,6 +343,18 @@ final class SuggestionEngine {
         let query = rawQuery.trimmingCharacters(in: .whitespaces)
         guard store.settings.searchSuggestions, !query.isEmpty, !query.contains("://") else { return }
         remote.fetch(query, engine: searchEngine, done: done)
+    }
+
+    /// Asks the bar's profile's Chromium history about `rawQuery` (#730); `done` runs when its answer is in,
+    /// to list again. Not in an incognito window, which suggests nothing from the normal profile.
+    func fetchHistory(for rawQuery: String, spaceShown: UUID? = nil, done: @escaping @MainActor () -> Void) {
+        guard !incognito else { return }
+        let profile = profile(spaceShown: spaceShown)
+        chromium.fetch(rawQuery, profile: profile, profilePath: store.profilePath(profile: profile),
+                       known: { [weak self] in
+                           guard let self, self.barProfile == profile else { return [] }
+                           return Set(self.searchIndex.history.map { $0.0.url })
+                       }, done: done)
     }
 
     /// The engine's suggestions not already listed, as search rows (or site rows).
@@ -434,6 +449,16 @@ final class SuggestionEngine {
             score += min(Double(h.visitCount), 20) * 1.5 + recencyBoost(h.lastVisit) * 0.6
             // Its favicon key (an address parse) comes in `finished`, for the rows shown (#617).
             out.append(Suggestion(id: index.historyIDs[n], kind: .history, title: h.title.isEmpty ? Self.humanURL(h.url) : h.title,
+                                  subtitle: "", url: h.url, faviconKey: nil,
+                                  symbol: "clock", trailing: nil, score: score, loose: text < Self.looseBelow))
+        }
+        // The pages only the profile's Chromium history has (#730), ranked the same way.
+        for (h, key) in chromium.rows(for: q, profile: barProfile) where !openURLs.contains(h.url) {
+            let text = Self.score(q, key)
+            var score = text * 0.8
+            if score < 30 { continue }
+            score += min(Double(h.visitCount), 20) * 1.5 + recencyBoost(h.lastVisit) * 0.6
+            out.append(Suggestion(id: "hist:\(h.url)", kind: .history, title: h.title.isEmpty ? Self.humanURL(h.url) : h.title,
                                   subtitle: "", url: h.url, faviconKey: nil,
                                   symbol: "clock", trailing: nil, score: score, loose: text < Self.looseBelow))
         }

@@ -1,16 +1,38 @@
-# Picking Segments, the bundle's own icon, after another one puts Segments in the Dock. After 0.1.54 put a pick on
-# Cra.app (no longer, #724), the bundle's icon in the Dock's cache could be the icon picked before: the app left the
-# tile to the Dock for Segments, so Original stayed (Victor, 23 Nov 2026). The Dock is now given Segments' picture as it is
-# any other's (AppIconBundle.dockImage); the Dock tile plug-in, which draws it after Cra quits, does the same.
-# Original comes in through the argument domain and appIcon= picks without remembering, so the run never writes the
-# defaults the installed Cra reads.
+# Segments, the bundle's own icon, is left to the Dock, which draws it in the icon style picked in System Settings ▸
+# Appearance (Dark, Clear, Tinted) as it does every app's. 0.1.55 gave the Dock Segments' picture, which the Dock draws
+# as it is, so Cra's icon stayed light in a dark Dock (GitHub #739). A pick is given to the Dock (given=<id>), and
+# picking Segments after it hands the tile back (given=none). Only a launch that finds a Finder icon an earlier Cra put
+# on Cra.app (#724) gives Segments too, since the Dock's cache can still hold the pick that was on it (Victor, 23 Nov
+# 2026: Segments after Original kept Original); the launch after that leaves it to the Dock again. A launch with
+# Segments never sets applicationIconImage (sets=0): even set to nil it hands the Dock a picture of the bundle's icon,
+# which the Dock draws outside the icon style.
+# Segments comes in through the argument domain and appIcon= picks without remembering, so the run never writes the
+# defaults the installed Cra reads. A relaunch drops the argument, so Segments is picked again after each.
+# promise: #739
 home
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
 arg -appIcon
-arg original
+arg segments
+cra://debug?dockTile=launch
+expect-log dock tile launch: view=none .* sets=0 given=none$
+
+cra://debug?appIcon=original
 cra://debug?dockTile=original
 expect-log dock tile original: .* given=original$
 
 cra://debug?appIcon=segments
 cra://debug?dockTile=segments
-expect-log dock tile segments: .* given=segments$
+expect-log dock tile segments: .* given=none$
+
+# A Finder icon 0.1.54 or 0.1.55 left on the app: the launch that takes it off gives the Dock Segments' picture.
+cra://debug?bundleIconPut=original
+expect-log app icon: original put on the app for a test
+relaunch
+expect-log app icon: \S+ taken off the app
+cra://debug?appIcon=segments
+cra://debug?dockTile=stale
+expect-log dock tile stale: .* given=segments$
+relaunch
+cra://debug?appIcon=segments
+cra://debug?dockTile=clean
+expect-log dock tile clean: .* given=none$

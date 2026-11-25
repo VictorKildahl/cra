@@ -502,6 +502,9 @@ final class ImportFlowModel {
         failures = []
         finished = false
         go(.progress)
+        // From now on Cra may read this browser's folder for what follows from the import: its
+        // native messaging manifests (1Password, Bitwarden…) link at once, and at every launch (#757).
+        if let source { NativeMessagingHosts.recordImport(from: source, into: AppPaths.chromiumCache) }
 
         // A fresh install starts with one empty space; once real spaces arrive it only gets in the way.
         let emptyBefore = firstRun && !selection.spaces.isEmpty
@@ -604,11 +607,12 @@ final class ImportFlowModel {
     ]
 
     /// Most visited sites from the browser imported from (Dia's rankedTopSitesTask),
-    /// then the presets, twelve in all; the first four visited sites start ticked.
+    /// then the presets, twelve in all; the first four visited sites start ticked. Without an
+    /// import, only the presets: no other browser's history is read unasked (#757).
     func loadPinCandidates() {
         guard !pinsLoaded else { return }
         pinsLoaded = true
-        let source = self.source?.kind == .safari ? nil : (self.source ?? sources.first { $0.kind != .safari && !$0.needsFullDiskAccess })
+        let source = self.source?.kind == .safari || needsFullDiskAccess ? nil : self.source
         let fromExport = exportTopSites
         let existing = Set(store.tabs(under: store.focusedSpace.favoritesContainerID).compactMap { $0.tab.flatMap { FaviconKey.key(for: $0.url) } })
         pinCandidates = Self.presetPins

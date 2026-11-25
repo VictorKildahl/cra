@@ -1,0 +1,24 @@
+Cra: a profile's history isn't expired after 90 days (GitHub #730). Chrome's
+HistoryBackend deletes every visit older than kExpireDaysThreshold (90 days),
+starting 30 s after the History database opens. Arc keeps a profile's whole
+history (a user's Arc History: 301,818 visits back to June 2024) and its
+command bar searches all of it; Cra's Chromium History lost 265,073 visits a
+user had merged from Arc within a week. Deleting history on purpose (Clear
+Browsing Data, the History page) doesn't go through the expirer and still works.
+
+diff --git a/components/history/core/browser/history_backend.cc b/components/history/core/browser/history_backend.cc
+index 95349790f9..78b6de6158 100644
+--- a/components/history/core/browser/history_backend.cc
++++ b/components/history/core/browser/history_backend.cc
+@@ -1370,8 +1370,9 @@ void HistoryBackend::InitImpl(
+   // Open the long-running transaction.
+   BeginSingletonTransaction();
+ 
+-  // Start expiring old stuff.
+-  expirer_.StartExpiringOldStuff(base::Days(kExpireDaysThreshold));
++  // Cra: history isn't expired after 90 days. Arc keeps a profile's whole history and its command bar
++  // searches all of it (GitHub #730); Chrome deleted every visit older than kExpireDaysThreshold.
++  // Deleting history (Clear Browsing Data, the History page) still works.
+ }
+ 
+ void HistoryBackend::CloseAllDatabases() {

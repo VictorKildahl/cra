@@ -243,8 +243,34 @@ enum ExtensionStoreMigrationTests {
         check(names("Default", true) == ["ublock", "proton-pass"], "switching Allow in Incognito on lists it in incognito")
     }
 
+    // promise: #757
+    /// Arc's pinned extensions seed Cra's toolbar only once the person imported from Arc: before
+    /// that, Cra reads nothing in Arc's folder (macOS showed "Data Access Blocked" on first launch).
+    static func pinnedComeOnlyFromAnImportedBrowser() throws {
+        for imported in [false, true] {
+            try run("pinned-from-arc-\(imported)") { install in
+                try install.installStoreCopy()
+                try install.writeSettings(install.settings())
+                let arcProfile = ImportSource.arc.dataDir.appendingPathComponent("Default", isDirectory: true)
+                try FileManager.default.createDirectory(at: arcProfile, withIntermediateDirectories: true)
+                try JSONSerialization.data(withJSONObject: ["extensions": ["pinned_extensions": [install.id]]])
+                    .write(to: arcProfile.appendingPathComponent("Preferences"))
+                if imported { try Data(#"["arc"]"#.utf8).write(to: AppPaths.file("imported-browsers.json")) }
+                let pinned = ExtensionStore().pinnedIDs(inProfile: "Default")
+                if imported {
+                    check(pinned == [install.id], "after importing from Arc, Arc's pinned extensions seed the toolbar")
+                } else {
+                    check(pinned.isEmpty, "without an import from Arc, Cra must not read Arc's pinned extensions (#757)")
+                    check(!FileManager.default.fileExists(atPath: AppPaths.file("pinned-extensions.json").path),
+                          "nothing is taken over, so nothing is saved")
+                }
+            }
+        }
+    }
+
     static func main() throws {
         try removedCopiesStayRemoved()
+        try pinnedComeOnlyFromAnImportedBrowser()
 
         try run("live-reload") { install in
             try install.installStoreCopy()

@@ -373,8 +373,8 @@ private struct BrowserCard: View {
     let c: ImportColors
     @State private var hover = false
 
-    /// Checked as the card draws, so it clears once Full Disk Access is on.
-    private var blocked: Bool { model.source == source ? model.needsFullDiskAccess : source.needsFullDiskAccess }
+    /// The picked browser only: asking means reading inside its folder, which waits for the pick (#757).
+    private var blocked: Bool { model.source == source && model.needsFullDiskAccess }
 
     var body: some View {
         let selected = model.source == source

@@ -1,0 +1,36 @@
+# promise: #758
+# While a call with a Join link is on, Cra in the background stays behind the app in use, and its Join card stays up
+# (#758). Each Calendar favorite's tile reads its own profile's events at every 30 s tick, and there is one card: the
+# Work space's Calendar (another profile, nothing on), its column kept beside Home's, took down the card Home's had
+# just put up. So every tick put the card up and took it down again within 0.3 s, and Cra's browser window came over
+# the app in front (Zoom, during the call). Here the browser window sits under `cover`; the card comes up once and
+# stays through the ticks, and the browser window stays behind.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"profileID":"B0000000-0000-0000-0000-000000000001"}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Work"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":["E0000000-0000-0000-0000-000000000001"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":["E0000000-0000-0000-0000-000000000002"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"E0000000-0000-0000-0000-000000000001","parentID":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T09:00:00Z","data":{"tab":{"_0":{"url":"https://calendar.google.com/calendar/u/0/r","savedTitle":"Google Calendar"}}}},{"id":"E0000000-0000-0000-0000-000000000002","parentID":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T09:00:00Z","data":{"tab":{"_0":{"url":"https://calendar.google.com/calendar/u/0/r","savedTitle":"Google Calendar"}}}}]}
+pace 0.5
+
+cra://debug?mainFrame=0,0,900,700
+# Both profiles' reads fail offline, before the meeting is set.
+expect-log live calendar fetch complete
+wait 3
+cra://debug?activate=1
+wait 1
+cover
+cra://debug?yieldTo=${COVER}
+wait 1
+cra://debug?meetingCard=before
+expect-log meeting card before: shown=0 visible=0 opened=0 active=0 mainOver=[1-9]
+cra://debug?calendarMeeting=now
+wait 1
+cra://debug?meetingCard=first
+expect-log meeting card first: shown=1 visible=1 opened=1 active=0 mainOver=[1-9]
+cra://debug?calendarTick=1
+wait 1
+cra://debug?calendarTick=1
+wait 1
+cra://debug?meetingCard=ticks
+expect-log meeting card ticks: shown=1 visible=1 opened=1 active=0 mainOver=[1-9]
+reject-log fault:

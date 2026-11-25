@@ -1,0 +1,23 @@
+# promise: #752
+# An extension's toolbar button opens Chrome's own popup even when descriptors 3 and 4 were open before
+# Chromium started. Chrome's --remote-debugging-pipe (the trusted client Extensions.triggerAction needs) only
+# reads fd 3 and writes fd 4, and Cra gave the pipe up when either was in use: on a Mac where macOS's own
+# HIToolbox.rsrc and Localized.rsrc landed there first, every click opened the popup page in Cra's fallback
+# window instead, Bitwarden 48 pt wide. Cra now holds 3 and 4 from the first line of
+# main (taking over ones a launcher left open) and lets go of them just before Chromium starts.
+# Here the launcher leaks both (hold-fds). The popup must be Chrome's, in Cra's popup frame, and see the site as
+# its window's active tab; the fallback page window doesn't count.
+hold-fds
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+extension ${FIXTURES}/PopupContextExtension
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=site
+wait 2
+cra://debug?extensionAction=${POPUP_CONTEXT_EXTENSION_ID}
+expect-log GET /page\.html\?n=popup-context-current-site-last-site HTTP
+cra://debug?extensionPopup=held
+expect-log extension popup held: shown
+reject-log extension action [a-z]+ failed
+expect-log devtools pipe: descriptors 3 and 4 free for Chromium
+reject-log fault:
