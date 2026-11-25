@@ -1476,7 +1476,7 @@
 #656   Packages/CraCore/Tests/CraCoreTests/PageHistoryTests.swift::aSmallScrollOpensAtTheTop  2e646f0099a2
 #656   iOS/CraUITests/PageRestoreTests.swift::testAScrolledPageOpensWhereItWasAfterTheAppIsClosed  bc87e240b0d2
 #656   iOS/CraUITests/PageRestoreTests.swift::testASmallScrollComesBackAtTheTop  833299498bf1
-#657   Packages/CraCore/Tests/CraCoreTests/MobileStatusBandTests.swift::theBandTakesThePagesColour  53e8729415af
+#657   Packages/CraCore/Tests/CraCoreTests/MobileStatusBandTests.swift::theBandTakesThePagesColour  f19fd4a8d488
 #657   iOS/CraUITests/StatusBandTests.swift::testTheStatusBarSitsOnThePagesColour  a51edc261764
 #658   Packages/CraCore/Tests/CraCoreTests/EaselObjectsTests.swift::theColourPickerAppliesToTextToo  f107d7c5fd90
 #658   Packages/CraCore/Tests/CraCoreTests/EaselObjectsTests.swift::thePickerShowsOverTextOrShapesNotBoth  32e2f573da8c
