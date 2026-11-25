@@ -6,3 +6,4 @@
 ##.iklan-banner
 news.example##.ad
 @@||allowed.example^
+reader.example##aside:has(> div:not([id]) > div[data-ad-unit-id])

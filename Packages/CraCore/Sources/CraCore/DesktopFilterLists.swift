@@ -130,7 +130,7 @@ public extension AppSettings {
 }
 
 /// The Mac can apply declarative element hiding to the top document alongside its domain blocker.
-/// Only simple selectors are interpolated into stylesheets. Lists cannot supply CSS declarations.
+/// Only supported selector tokens are interpolated into stylesheets. Lists cannot supply CSS declarations.
 public struct DesktopHidingRules {
     private struct Rule {
         var selector: String
@@ -141,6 +141,31 @@ public struct DesktopHidingRules {
     // A type, class or id selector and optional attributes, e.g. div.ad or [id^="ad_"].
     private static let selector = try! NSRegularExpression(pattern:
         #"^(?:[a-zA-Z][a-zA-Z0-9-]*)?(?:(?:[.#][a-zA-Z_][a-zA-Z0-9_-]*)|(?:\[[a-zA-Z][a-zA-Z0-9_-]*(?:[~|^$*]?=(?:"[a-zA-Z0-9_ .:/?=&%-]*"|'[a-zA-Z0-9_ .:/?=&%-]*'|[a-zA-Z0-9_-]+))?\]))+$"#)
+    // Site-specific CSS may select a container by its descendants. Keep strings inside
+    // complete attribute selectors and admit only native selector functions.
+    private static let scopedToken = try! NSRegularExpression(pattern:
+        #"(?::(?:has|not|is|where)\(|\)|[ >+~,]|[.#]?[a-zA-Z_][a-zA-Z0-9_-]*|\*|\[[a-zA-Z][a-zA-Z0-9_-]*(?:[~|^$*]?=(?:"[a-zA-Z0-9_ .:/?=&%-]*"|'[a-zA-Z0-9_ .:/?=&%-]*'|[a-zA-Z0-9_-]+))?\])"#)
+
+    private static func supports(_ value: String, scoped: Bool) -> Bool {
+        var range = NSRange(value.startIndex..., in: value)
+        if selector.firstMatch(in: value, range: range) != nil { return true }
+        guard scoped, value.contains(":has(") else { return false }
+        let source = value as NSString
+        var depth = 0
+        while range.length > 0 {
+            guard let token = scopedToken.firstMatch(in: value, options: .anchored, range: range) else { return false }
+            switch source.character(at: token.range.location) {
+            case 58: depth += 1 // opening selector function
+            case 41: depth -= 1
+            default: break
+            }
+            guard depth >= 0, depth <= 16 else { return false }
+            range.location += token.range.length
+            range.length -= token.range.length
+        }
+        return depth == 0
+    }
+
     private var byHost: [String: [Rule]] = [:]
 
     private static func parse(_ line: String) -> (hosts: [String], rule: Rule)? {
@@ -148,7 +173,7 @@ public struct DesktopHidingRules {
               parts.marker == "##" || parts.marker == "#@#",
               parts.domains.isEmpty || !parts.domains.allSatisfy({ $0 == "," }),
               let scopes = FilterList.domains(parts.domains, separator: ","),
-              selector.firstMatch(in: parts.selector, range: NSRange(parts.selector.startIndex..., in: parts.selector)) != nil
+              supports(parts.selector, scoped: !scopes.only.isEmpty)
         else { return nil }
         return (scopes.only.isEmpty ? [""] : scopes.only,
                 Rule(selector: parts.selector, excluded: Set(scopes.unless), exception: parts.marker == "#@#"))

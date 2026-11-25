@@ -180,6 +180,20 @@ struct DesktopFilterListsTests {
         #expect(compiled.map(\.condition.urlFilter) == ["||cdn.example/ads/*"])
     }
 
+    @Test func subscriptionCanHideAnAdContainerByItsContents() {
+        let selector = #"section aside[class^="sc-"]:has(> div[class^="sc-"]:not([id]) > div[class^="sc-"]:not([id]) > div[data-ad-unit-id])"#
+        let rule = "20min.ch##" + selector
+        let list = DesktopHidingRules.read([rule, "reader.20min.ch#@#" + selector,
+            rule + "{color:red}", rule + ":style(color:red)", rule + "("].joined(separator: "\n"), address: "", fetched: .now)
+        #expect(list.hidingRules.count == 2)
+        let hiding = DesktopHidingRules(lines: list.hidingRules)
+        #expect(hiding.css(host: "www.20min.ch") == selector + "{display:none!important}")
+        #expect(hiding.css(host: "reader.20min.ch").isEmpty)
+        #expect(hiding.css(host: "other.ch").isEmpty)
+        let previous = list.text.replacingOccurrences(of: "# network-format: 2", with: "# network-format: 1")
+        #expect(CachedBlocklist(text: previous)?.hasNetworkSource == false)
+    }
+
     @Test func hidingAndExceptionsUseDomainBoundaries() {
         let list = DesktopHidingRules.read("""
         ||tracker.example^

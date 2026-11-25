@@ -1,20 +1,25 @@
 # A subscription added in Privacy hides an element in an ordinary Chromium document.
 # Switching the offline sources off preserves the subscription. Removing it restores the element.
 port 47134
+arg --host-resolver-rules=MAP reader.example 127.0.0.1
 pace 0.5
 budget rss=800 stalls50=30
-cra://open?url=${PAGE}?n=filter-list
-expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://open?url=http://reader.example:47134/page.html?n=filter-list
+expect-log loaded reader\.example \(HTTP 200\)
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const e=document.createElement('div');e.id='filter-list-fixture';e.className='iklan-banner';document.body.append(e);return 'before:'+getComputedStyle(e).display})()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"before:block"
 cra://debug?blockLists=http://127.0.0.1:47134/blocklist-abp.txt
 expect-log block lists: [0-9]+ domains, 1 added list
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'added:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
 expect-log Cra cdp Runtime.evaluate .*"value":"added:none"
-cra://debug?toggleSiteFilters=http://127.0.0.1:47134/page.html
+# A slot created after page load collapses when the ad unit appears. The
+# neighbouring story stays visible, and removing the unit restores the slot.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const slot=document.createElement('aside'),story=document.createElement('aside');slot.innerHTML='<div>Advertisement</div>';story.textContent='Story';document.body.append(slot,story);const visible=e=>getComputedStyle(e).display!=='none';const before=visible(slot);const unit=document.createElement('div');unit.dataset.adUnitId='banner';slot.firstChild.append(unit);const hidden=!visible(slot),storyVisible=visible(story);unit.remove();return [before,hidden,storyVisible,visible(slot)].join(',')})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"true,true,true,true"
+cra://debug?toggleSiteFilters=http://reader.example:47134/page.html
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'paused:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
 expect-log Cra cdp Runtime.evaluate .*"value":"paused:block"
-cra://debug?toggleSiteFilters=http://127.0.0.1:47134/page.html
+cra://debug?toggleSiteFilters=http://reader.example:47134/page.html
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'resumed:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
 expect-log Cra cdp Runtime.evaluate .*"value":"resumed:none"
 cra://debug?blockAds=off

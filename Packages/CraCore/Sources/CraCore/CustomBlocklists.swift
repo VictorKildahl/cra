@@ -319,7 +319,7 @@ public struct CachedBlocklist: Equatable {
         if let title { lines.append("# title: " + oneLine(title)) }
         lines.append("# fetched: " + Self.dateFormatter().string(from: fetched))
         lines.append("# skipped: \(skippedRules)")
-        if hasNetworkSource { lines.append("# network-format: 1") }
+        if hasNetworkSource { lines.append("# network-format: 2") }
         if let sourceHosts {
             lines.append("# separate-hosts: 1")
             lines.append(contentsOf: sourceHosts.map { "# host: " + $0 })
@@ -350,7 +350,7 @@ public struct CachedBlocklist: Equatable {
             else if value("separate-hosts") == "1" { sourceHosts = [] }
             else if let v = value("host"), let domain = ParsedBlocklist.domain(v[...]) { sourceHosts?.append(domain) }
             else if let v = value("net") { networkRules.append(v) }
-            else if value("network-format") == "1" { hasNetworkSource = true }
+            else if value("network-format") == "2" { hasNetworkSource = true }
             else if let v = value("url") { url = v }
             else if let v = value("title") { title = v }
             else if let v = value("fetched") { fetched = Self.dateFormatter().date(from: v) }
