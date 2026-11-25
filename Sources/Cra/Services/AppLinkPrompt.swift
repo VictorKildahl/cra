@@ -89,6 +89,17 @@ enum AppLinkPrompt {
             return true
         }
         let name = FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
+        // What the engine knows about the origin that started it, while it asks (#785): Chrome's dialog names that
+        // origin, and an origin the user always allowed opens the app without asking. An older engine says nothing.
+        let context = (CraCEFRuntime.self as AnyObject).responds(to: NSSelectorFromString("appLinkInitiatingOrigin"))
+        let origin = context ? CraCEFRuntime.appLinkInitiatingOrigin() : nil
+        let rememberable = context && CraCEFRuntime.appLinkOriginIsRememberable()
+        if kind == .asksFirst, context, CraCEFRuntime.appLinkAllowedWithoutAsking() {
+            CraLog.note("page \(page) opens \(name) for \(scheme): always allowed")
+            NSWorkspace.shared.open(target)
+            closeIfBlank(browser, scheme: scheme)
+            return true
+        }
         if kind == .opens {
             CraLog.note("page \(page) opens \(name) for \(scheme)")
             NSWorkspace.shared.open(target)
@@ -100,15 +111,19 @@ enum AppLinkPrompt {
             CraLog.note("page \(page) asks for \(name) again, already asking")
             return true
         }
-        CraLog.note("page \(page) asks to open \(name) for \(scheme)")
-        let alert = AppDialog(title: "Open \(name)?",
-                              message: "\(URL(string: browser.currentURL)?.host ?? "This site") wants to open this application.",
-                              actions: [DialogAction("Open \(name)"), .cancel])
+        let ask = AppLinks.ask(app: name, initiator: origin, rememberable: rememberable, pageHost: URL(string: browser.currentURL)?.host)
+        CraLog.note("page \(page) asks to open \(name) for \(scheme)" + (ask.alwaysAllow == nil ? "" : ", always allow offered for \(origin ?? "?")"))
+        let alert = AppDialog(title: ask.title, message: ask.message, actions: [DialogAction("Open \(name)"), .cancel],
+                              suppressionTitle: ask.alwaysAllow)
         alert.present(over: window) { response in
-            if response == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(target)
-                closeIfBlank(browser, scheme: scheme)
+            guard response == .alertFirstButtonReturn else { return }
+            // "Always allow": kept in the page's profile as Chrome keeps it, so this origin opens the app from now on.
+            if alert.isSuppressed, let origin, browser.responds(to: #selector(CraBrowser.allowAppLink(scheme:fromOrigin:))) {
+                browser.allowAppLink(scheme: String(scheme.dropLast()), fromOrigin: origin)
+                CraLog.note("page \(page) always allows \(scheme) for its origin")
             }
+            NSWorkspace.shared.open(target)
+            closeIfBlank(browser, scheme: scheme)
         }
         return true
     }

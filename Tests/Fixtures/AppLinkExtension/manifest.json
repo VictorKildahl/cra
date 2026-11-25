@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Cra App Link Fixture",
+  "version": "1.0",
+  "description": "Made up for scripts/scenario.sh: its popup sends the active tab to another app's address with chrome.tabs.update, as Obsidian Web Clipper sends it to obsidian:// (GitHub #785). macappstore: has an app on every Mac; the question it brings is never answered.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAst9UetuJhtP78QdV+BtYNQca8OA6pir6tpc5u1Zj/Err8Bkrud9L4fLOdcX9mYn6WmQm6YHwDhJIw2Mt3KMUfvpg7mxbrk+AsRTw0l6kyfAQZJzJgReS4/YPLq8QZswVslf0nhFNtnpvUL9z80JJ/qhfqn5Asv6LG0o6C3nwztnDUTg/t1z6hGxqYtyVKeINjOI5TtGtirmiqIE/UPC8BIvmur0jujdFnyLtU5ydSoyiML/vZKnj5JiSbUA4koa3Uc+bsZVRWWjLs8T5rIDqrqyOt2Sfi6NOAbshAgHUqDqnwROi5St8m7yIUPB1v6EuSmcfPGI888OpUrcDi5IoTQIDAQAB",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cra App Link Fixture"
+  }
+}

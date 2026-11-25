@@ -98,4 +98,24 @@ struct TypedAppLinksTests {
         #expect(AppLinks.typed("https://todoist.com", hasApp: true) == .load)
         #expect(AppLinks.typed("about:blank", hasApp: false) == .load)
     }
+
+    /// Obsidian Web Clipper sends the tab to obsidian:// through chrome.tabs.update, so its own origin asks, and
+    /// "Always allow" is offered for it as in Chrome: one tick and the clipper opens Obsidian from every page without
+    /// asking again. A page with no origin Chrome may remember (plain http) gets the question without the box.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/785"))
+    func anOriginChromeMayRememberIsOfferedAlwaysAllow() {
+        let clipper = AppLinks.ask(app: "Obsidian", initiator: "chrome-extension://cnjifjpddelmedmihgijeibhnjfabmlf",
+                                   rememberable: true, pageHost: "example.com")
+        #expect(clipper.title == "Open Obsidian?")
+        #expect(clipper.message == "chrome-extension://cnjifjpddelmedmihgijeibhnjfabmlf wants to open this application.")
+        #expect(clipper.alwaysAllow == "Always allow chrome-extension://cnjifjpddelmedmihgijeibhnjfabmlf to open links of this type in the associated app")
+        let site = AppLinks.ask(app: "Zoom", initiator: "https://zoom.us", rememberable: true, pageHost: "zoom.us")
+        #expect(site.message == "zoom.us wants to open this application.")
+        #expect(site.alwaysAllow == "Always allow zoom.us to open links of this type in the associated app")
+        let plain = AppLinks.ask(app: "Zoom", initiator: "http://intranet", rememberable: false, pageHost: "intranet")
+        #expect(plain.message == "http://intranet wants to open this application.")
+        #expect(plain.alwaysAllow == nil)
+        let typed = AppLinks.ask(app: "Spotify", initiator: nil, rememberable: false, pageHost: "open.spotify.com")
+        #expect(typed.message == "open.spotify.com wants to open this application." && typed.alwaysAllow == nil)
+    }
 }

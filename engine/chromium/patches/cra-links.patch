@@ -28,7 +28,7 @@ diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/ch
 +  // Cra: another app's address (or cra-boost:) from a page of Cra's: Cra asks about it (cra_engine_hooks.h).
 +  if (cra::g_external_protocol && is_primary_main_frame) {
 +    content::WebContents* contents = web_contents_getter.Run();
-+    if (contents && cra::g_external_protocol(contents, url, has_user_gesture)) {
++    if (contents && cra::g_external_protocol(contents, url, has_user_gesture, initiating_origin)) {
 +      return true;
 +    }
 +  }

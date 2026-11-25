@@ -439,6 +439,10 @@ CRA_EXPORT @interface CraBrowser : NSObject
 /// Removes the extension from this page's profile, as chrome://extensions' Remove does (no dialog: the app asks).
 /// NO when Chromium can't (a policy-installed extension) or it isn't installed there.
 - (BOOL)uninstallExtension:(NSString *)extensionID NS_SWIFT_NAME(uninstallExtension(_:));
+/// "Always allow `origin` to open links of this type in the associated app" for `scheme`, kept in this page's profile as
+/// Chrome's external protocol dialog keeps it: that origin then opens the app without asking (GitHub #785). Only an
+/// origin Chrome may remember (appLinkOriginIsRememberable). Engine only; the CEF bridge does nothing.
+- (void)allowAppLinkScheme:(NSString *)scheme fromOrigin:(NSString *)origin NS_SWIFT_NAME(allowAppLink(scheme:fromOrigin:));
 - (void)executeJavaScript:(NSString *)script;
 /// Asks the page for its background colour again (-browser:didReportBackgroundColor:);
 /// pages can switch themes without a load.
@@ -589,6 +593,14 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// returns YES when it took it (Cra's "Open <app>?"); then no tab opens (GitHub #207). On the
 /// main thread, before Peek and the delegate's popupHostForURL.
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser *browser, NSString *url, BOOL userGesture))handler;
+/// While the app-link handler runs (GitHub #785): the origin that started the address it is asked about, serialized
+/// ("https://zoom.us", "chrome-extension://<id>"; an extension's chrome.tabs.update is the extension's own), nil when
+/// there is none. Chrome's dialog names it and remembers "Always allow" for it.
++ (nullable NSString *)appLinkInitiatingOrigin;
+/// Whether Chrome may remember "Always allow" for that origin (a potentially trustworthy one).
++ (BOOL)appLinkOriginIsRememberable;
+/// Whether that origin was already allowed to open this kind of link: it opens the app without asking.
++ (BOOL)appLinkAllowedWithoutAsking;
 /// The page's right-click View Page Source and View Frame Source: the handler gets the page's browser
 /// and the address whose source to show, and opens it as Cra's View Source does (GitHub #348).
 + (void)setViewSourceHandler:(void (^)(CraBrowser *browser, NSString *url))handler;

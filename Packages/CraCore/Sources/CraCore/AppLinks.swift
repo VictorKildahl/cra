@@ -114,4 +114,30 @@ extension AppLinks {
         case .asksFirst, .opens: return hasApp ? .openApp : .search
         }
     }
+
+    /// "Open <app>?" as Chrome's ExternalProtocolDialog asks it (GitHub #785). The question names the origin that
+    /// started the navigation (an extension's chrome.tabs.update is the extension's own origin, tabs_api.cc), else the
+    /// page's host. `rememberable`: Chrome may keep an "always allow" for that origin
+    /// (ExternalProtocolHandler::MayRememberAllowDecisionsForThisOrigin: a potentially trustworthy origin, https or an
+    /// extension's); then the question offers "Always allow <origin> to open links of this type in the associated app",
+    /// and once ticked that origin opens the app without asking, as in Chrome and Arc.
+    public struct Ask: Equatable, Sendable {
+        public let title: String
+        public let message: String
+        /// The checkbox's words, nil when the question has none.
+        public let alwaysAllow: String?
+    }
+
+    public static func ask(app: String, initiator: String?, rememberable: Bool, pageHost: String?) -> Ask {
+        let who = initiator.map(displayOrigin) ?? pageHost ?? "This site"
+        let always = initiator.flatMap { rememberable ? "Always allow \(displayOrigin($0)) to open links of this type in the associated app" : nil }
+        return Ask(title: "Open \(app)?", message: "\(who) wants to open this application.", alwaysAllow: always)
+    }
+
+    /// An origin ("https://example.com", "chrome-extension://<id>") as Chrome shows it in that dialog
+    /// (url_formatter::FormatOriginForSecurityDisplay, OMIT_CRYPTOGRAPHIC): https without its scheme, others with it.
+    public static func displayOrigin(_ origin: String) -> String {
+        for scheme in ["https://", "wss://"] where origin.lowercased().hasPrefix(scheme) { return String(origin.dropFirst(scheme.count)) }
+        return origin
+    }
 }

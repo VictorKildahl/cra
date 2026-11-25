@@ -51,6 +51,7 @@
 #include "base/version_info/version_info.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
@@ -1813,6 +1814,35 @@ NSView* __weak g_last_press_view = nil;
 NSEventModifierFlags g_last_press_modifiers = 0;
 NSTimeInterval g_last_press_time = -1;
 BOOL (^g_app_link_handler)(CraBrowser*, NSString*, BOOL) = nil;
+// The app link the handler is asked about while it runs (GitHub #785): the origin that started it, whether Chrome may
+// remember "Always allow" for that origin, and whether it already did for this scheme
+// (protocol_handler.allowed_origin_protocol_pairs, as Chrome's ExternalProtocolDialog keeps it).
+std::optional<url::Origin>& AppLinkOrigin() {
+  static auto* origin = new std::optional<url::Origin>();
+  return *origin;
+}
+bool g_app_link_rememberable = false;
+bool g_app_link_allowed = false;
+
+// Asks Cra's app about `url` from `page`, with what Chrome knows about the origin that started it.
+bool AskAppLink(CraBrowser* page, content::WebContents* contents, const GURL& url, bool user_gesture,
+                const std::optional<url::Origin>& origin) {
+  if (!g_app_link_handler) {
+    return false;
+  }
+  const url::Origin* initiator = origin && !origin->opaque() ? &*origin : nullptr;
+  AppLinkOrigin() = initiator ? std::optional<url::Origin>(*initiator) : std::nullopt;
+  g_app_link_rememberable = ExternalProtocolHandler::MayRememberAllowDecisionsForThisOrigin(initiator);
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  g_app_link_allowed = g_app_link_rememberable && profile &&
+                       ExternalProtocolHandler::GetBlockState(url.GetScheme(), initiator, profile) ==
+                           ExternalProtocolHandler::DONT_BLOCK;
+  bool handled = g_app_link_handler(page, NS(url.spec()), user_gesture);
+  AppLinkOrigin().reset();
+  g_app_link_rememberable = false;
+  g_app_link_allowed = false;
+  return handled;
+}
 
 void NoteLastPress(NSEvent* event) {
   BOOL click = event.type == NSEventTypeLeftMouseUp;
@@ -1890,7 +1920,8 @@ bool LinkOpen(content::WebContents* source, const GURL& gurl, WindowOpenDisposit
     return false;
   }
   NSString* url = NS(gurl.spec());
-  if (g_app_link_handler && g_app_link_handler(page, url, user_gesture)) {
+  // A link or window.open: the page that asked is the origin that started it.
+  if (AskAppLink(page, source, gurl, user_gesture, source->GetPrimaryMainFrame()->GetLastCommittedOrigin())) {
     return true;
   }
   if (OpensLittleWindow(page, url, disposition, user_gesture) || OpensSplitPane(page, url, disposition, user_gesture)) {
@@ -1908,7 +1939,10 @@ bool LinkOpen(content::WebContents* source, const GURL& gurl, WindowOpenDisposit
 
 // Another app's address, or Cra's cra-boost:, from a page of Cra's: Cra's app asks about it (AppLinkPrompt). cra:
 // is Cra's own scripting scheme, which a page never drives.
-bool ExternalProtocol(content::WebContents* contents, const GURL& url, bool user_gesture) {
+bool ExternalProtocol(content::WebContents* contents,
+                      const GURL& url,
+                      bool user_gesture,
+                      const std::optional<url::Origin>& initiating_origin) {
   CraBrowser* page = BrowserFor(contents);
   if (!page) {
     return false;
@@ -1916,7 +1950,7 @@ bool ExternalProtocol(content::WebContents* contents, const GURL& url, bool user
   if (url.SchemeIs("cra")) {
     return true;
   }
-  return g_app_link_handler && g_app_link_handler(page, NS(url.spec()), user_gesture);
+  return AskAppLink(page, contents, url, user_gesture, initiating_origin);
 }
 
 // A page of Cra's own navigation, before its request goes out (the CEF bridge's OnBeforeBrowse): a clicked link
@@ -3526,6 +3560,16 @@ static extensions::MenuItem* CraFindMenuItem(const extensions::MenuItem::OwnedLi
   manager->ExecuteCommand(context, _contents, nullptr, content::ContextMenuParams(), item->id());
   return YES;
 }
+// "Always allow <origin> to open links of this type": kept in the page's profile as Chrome's external protocol dialog
+// keeps it (protocol_handler.allowed_origin_protocol_pairs), so that origin opens the app without asking (#785).
+- (void)allowAppLinkScheme:(NSString*)scheme fromOrigin:(NSString*)origin {
+  url::Origin allowed = url::Origin::Create(GURL(base::SysNSStringToUTF8(origin)));
+  if (!_contents || allowed.opaque() || !ExternalProtocolHandler::MayRememberAllowDecisionsForThisOrigin(&allowed)) {
+    return;
+  }
+  ExternalProtocolHandler::SetBlockState(base::SysNSStringToUTF8(scheme), allowed, ExternalProtocolHandler::DONT_BLOCK,
+                                         Profile::FromBrowserContext(_contents->GetBrowserContext()));
+}
 - (BOOL)uninstallExtension:(NSString*)extensionID {
   if (!_contents) {
     return NO;
@@ -4117,6 +4161,15 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
 }
 + (void)setAppLinkHandler:(BOOL (^)(CraBrowser*, NSString*, BOOL))handler {
   cra::g_app_link_handler = [handler copy];
+}
++ (NSString*)appLinkInitiatingOrigin {
+  return cra::AppLinkOrigin() ? NS(cra::AppLinkOrigin()->Serialize()) : nil;
+}
++ (BOOL)appLinkOriginIsRememberable {
+  return cra::g_app_link_rememberable;
+}
++ (BOOL)appLinkAllowedWithoutAsking {
+  return cra::g_app_link_allowed;
 }
 + (void)setViewSourceHandler:(void (^)(CraBrowser*, NSString*))handler {
   g_view_source_handler = [handler copy];

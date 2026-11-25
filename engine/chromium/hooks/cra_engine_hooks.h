@@ -160,8 +160,12 @@ inline LinkOpenHook g_link_open = nullptr;
 
 // An address no page loads (another app's, Cra's cra-boost:) from a page of Cra's: Cra asks about it over the
 // page instead of Chrome's external protocol dialog, which would hang off Chrome's never-shown window (true:
-// handled).
-using ExternalProtocolHook = bool (*)(content::WebContents* contents, const GURL& url, bool user_gesture);
+// handled). `initiating_origin`: the origin that started the navigation, which Chrome's dialog names and remembers
+// "Always allow" for (an extension's chrome.tabs.update is the extension's own, GitHub #785).
+using ExternalProtocolHook = bool (*)(content::WebContents* contents,
+                                      const GURL& url,
+                                      bool user_gesture,
+                                      const std::optional<url::Origin>& initiating_origin);
 inline ExternalProtocolHook g_external_protocol = nullptr;
 
 // Cra's navigation throttles, for its pages' own navigations: a link that opens in a Peek, a page Cra shows in

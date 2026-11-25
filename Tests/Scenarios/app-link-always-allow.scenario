@@ -1,0 +1,15 @@
+# promise: #785
+# An extension that sends a tab to another app's address (Obsidian Web Clipper's chrome.tabs.update to obsidian://)
+# is the origin that asks, as in Chrome, and "Open <app>?" offers "Always allow <origin> to open links of this type in
+# the associated app" for it; ticked, it opens the app from then on without asking. Cra asked every time, over the page,
+# with no box. A page's own link from a secure origin (127.0.0.1 is one) is offered the box too. Nothing is answered,
+# so no app opens.
+budget rss=900 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/AppLinkExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=app-link
+wait 3
+cra://debug?extensionAction=dbbikmjllkpgelcijgbjmobplmlblbfi
+expect-log page 127\.0\.0\.1 asks to open .* for macappstore:, always allow offered for chrome-extension://[a-p]{32}$

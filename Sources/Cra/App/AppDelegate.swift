@@ -3281,6 +3281,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 guard let dialog = AppDialog.presented, let index = dialog.actions.buttons.firstIndex(where: { $0.title == button }) else {
                     CraLog.note("dialog answer \(button): no dialog"); return
                 }
+                // tick=1: its checkbox ticked first ("Always allow", "Never show me this again", #785).
+                if dict["tick"] == "1" { dialog.isSuppressed = true }
                 let copied = MainWindowController.probeClipboard { dialog.select(index) }
                 CraLog.note("dialog \(dialog.title) answered \(button): \(copied)")
                 return
