@@ -29,8 +29,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     lazy var favorites = FavoritesStore(directory: LaunchOptions.dataDirectory)
 
     let backdrop = BackdropView()
-    /// The empty home screen: Cra's logo, which spins when flicked, and with Rippling Dots on (`MobileEmptyHome`)
-    /// dots a finger stirs under it and "Tap to search" over the pill.
+    /// The empty home screen: Cra's logo, which spins when flicked, with dots a finger stirs under it
+    /// (`MobileEmptyHome`) and "Tap to search" over the pill.
     let logo = FidgetLogoView(image: UIImage(named: "LaunchMark"))
     let dotField = DotFieldView()
     let searchHint = SearchHintView()
@@ -520,13 +520,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
         let pull = isSearching ? nil : searchPull
-        let emptyHome = MobileEmptyHome(dots: settings.value.homeDots, home: showsEmptyHome, searching: isSearching,
+        let emptyHome = MobileEmptyHome(home: showsEmptyHome, searching: isSearching,
                                         incognitoSearch: incognitoSearch, pulling: pull != nil)
-        backdrop.style = emptyHome.backdrop
         // With no tabs the bar is the empty tab row's: Spaces, the plus and Settings. The tab row sets its own
         // while it is up, and a page gets the tab stack and its menu back.
         if emptyHome.barShowsTabRow { bar.mode = .tabs } else if switcher == nil { bar.mode = .page }
-        // With the dots the bar has no slab: its buttons float on them.
+        // On the empty home the bar has no slab: its buttons float on the dots.
         bar.overBackdrop = emptyHome.barFloats
         searchHint.place(centerX: bounds.midX, pillTop: frames.pill.minY + barFrame.minY - frames.bar.minY)
         // Pulled out of the pill (#623), the sheet's top follows the finger and its field grows
@@ -634,7 +633,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// Puts the sheet away. With no page behind it that leaves the empty home screen: the
-    /// backdrop, the logo (over the dots and "Tap to search" with Rippling Dots on) and the bar.
+    /// backdrop, the logo over the dots, "Tap to search" and the bar.
     @objc func dismissSearch() {
         setSearching(false)
     }

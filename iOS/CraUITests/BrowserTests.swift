@@ -1782,7 +1782,9 @@ final class EmptyHomeTests: BrowserTestCase {
         let logo = app.images["logo"]
         XCTAssertTrue(logo.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["bar-search"].exists)
-        XCTAssertFalse(app.staticTexts["Tap to search"].exists, "the dots are off until App Settings turns them on")
+        // The dots are the home from the first launch, with no setting turned on (Victor, 25 Nov 2026).
+        XCTAssertTrue(app.staticTexts["Tap to search"].exists)
+        XCTAssertTrue(app.otherElements["dot-field"].exists)
         XCTAssertEqual(logo.value as? String, "0.0 turns")
         // A flick across its right-hand side, downwards: clockwise.
         let from = logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.2))
@@ -1814,11 +1816,13 @@ final class EmptyHomeTests: BrowserTestCase {
         sleep(1)
         keep("empty-home-tab-row")
         XCTAssertNotEqual(logo.value as? String, "0.0 turns")
-        // App Settings opens from the home's gear, and the home is still there behind it.
+        // App Settings opens from the home's gear, and the home is still there behind it. The dots are the home's
+        // only look, so there is no Rippling Dots switch (Victor, 25 Nov 2026).
         app.buttons["bar-settings"].tap()
-        let toggle = app.switches["setting-home-dots"]
+        let toggle = app.switches["setting-keyboard-on-launch"]
         scrollUntilHittable(toggle)
         XCTAssertTrue(toggle.isHittable)
+        XCTAssertFalse(app.switches["setting-home-dots"].exists)
         let done = app.buttons["Done"]
         scrollUntilHittable(done, scrollingDown: true)
         done.tap()
@@ -1826,10 +1830,10 @@ final class EmptyHomeTests: BrowserTestCase {
         XCTAssertFalse(app.buttons["bar-tabs"].exists)
     }
 
-    /// App Settings ▸ Rippling Dots (PR #708, Victor 23 Nov 2026: a setting, with the logo kept) lays a field of dots
-    /// under the logo that sends a ring out wherever it is tapped, with "Tap to search" over the pill; the pill still
-    /// brings the sheet back.
-    func testRipplingDotsAreASettingUnderTheLogo() {
+    /// The empty home is a field of dots under the logo (PR #708; a setting from 23 Nov 2026, the only look since
+    /// Victor's 25 Nov) that sends a ring out wherever it is tapped, with "Tap to search" over the pill; the pill
+    /// still brings the sheet back.
+    func testRipplingDotsAreTheEmptyHome() {
         rippleDots(appearance: "light")
     }
 
@@ -1839,19 +1843,10 @@ final class EmptyHomeTests: BrowserTestCase {
     }
 
     private func rippleDots(appearance: String) {
-        // One page, so App Settings opens from its tab row; closing that last tab leaves the empty home screen.
+        // One page; closing that last tab from the tab row leaves the empty home screen, with no setting changed.
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraAppearance", appearance])
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
-        app.buttons["bar-settings"].tap()
-        let toggle = app.switches["setting-home-dots"]
-        scrollUntilHittable(toggle)
-        XCTAssertEqual(toggle.value as? String, "0", "off by default")
-        toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "1")
-        let done = app.buttons["Done"]
-        scrollUntilHittable(done, scrollingDown: true)
-        done.tap()
         let card = app.buttons["tab-card-0"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         sleep(1)
