@@ -687,7 +687,8 @@ archive with source `littleArc`; `LittleBrowserWindow_size` keeps the last size.
 Window 1688×1010 (Victor's size), corners 10pt. One 46pt strip, no sidebar, page edge to
 edge below it. Colours are the default profile's dark palette even with the light "Victor"
 space focused (bar #0C091C = JYSK's toolbar colour, so the strip is theme-derived but not
-from the focused space; Cra uses the measured values as a fixed palette):
+from the focused space). That was a dark Mac: 1.174.3 draws a light strip on a light Mac (below, after
+1.172.1's measurements), and Cra paints the strip in the page's colour (`LittleChromeTones`):
 - traffic lights at x 17/39/61, 12pt muted grey discs (#565660) that colour only while the
   pointer is over them;
 - search pill x 83 → 10pt before the button, y 8…38 (30pt, radius 8), fill #252234, hover
@@ -723,8 +724,9 @@ from the focused space; Cra uses the measured values as a fixed palette):
 - [O] Arc 1.174.3 (25 Nov 2026, screenshots of the menu with three icon spaces, light and dark Mac): on a light Mac
   the menu is white and each tile a pale tint of the space colour carrying the icon in a dark shade of it; on a dark
   Mac the tile is the space colour and the icon white, which barely shows on a light green or a peach. Cra keeps its
-  navy menu and the space colour, and draws the icon white only where white reads on the tile (4.5:1), else the
-  tile's hue darkened until it does (`LittleMoveMenu.iconColor`).
+  menu (navy under a dark strip, Arc's light one under a light strip, below) and the space colour, and draws the
+  icon white only where white reads on the tile (4.5:1), else the tile's hue darkened until it does
+  (`LittleMoveMenu.iconColor`).
 - ⌘O ("Open in <space>") moves the page into that space; ⌥⌘N makes an empty Little Arc;
   Window ▸ Close Little Arc Windows exists;
 - opening: the window grows from a small rectangle under the pointer to its full frame in
@@ -751,6 +753,25 @@ Arc 1.172.1 (build 90370), re-measured on 10 Nov 2026 from 2x window captures
   and for a page that isn't served over https an open padlock (orange, strokes about #E93700) on a
   22 pt tile, 4 pt in from the pill's left and top, orange at about 10 %, replaces the magnifier;
   while a first response is awaited the magnifier is back. Cra: `LittleAddress` (CraCore).
+
+Arc 1.174.3, 25 Nov 2026, 2x window captures of a Little Arc over a white (#FFFFFF), a navy (#1E2A44) and a green
+(#2E7D32) test page, with macOS set to Light and then Dark:
+- [O] the strip follows macOS, not the page: the three pages give the same strip, and switching macOS changes it.
+  Light Mac: #EBECFE at the left running to #FEF5F5 at the right, the address #2F3033, the pill's icons #B3ADB0,
+  the "Open in" button #FDFDFF with a #E9E9EA border and divider, "Open in" #919191, the space's name in a dark
+  shade of its colour (a mint space as #0F7636), the ⌘O badge #EEEEF0 with #888889 text, the chevron #BFBEBF. Dark
+  Mac: about #333246 running to #443148, the button #040831, the name in a light tint (#DAF7E3), "Open in"
+  #9496A3, the badge #1E2141. So the strip is not dark on every Mac, as #549 and 1.172.1's notes above took it;
+- [O] the "Open in" menu on a light Mac: #FDFDFF with a #F6F6F8 highlight, names #313334, the magnifier #BFBFC0,
+  "Search Spaces..." #919192;
+- Cra paints the strip the page's colour, as a browser window's toolbar and Peek's bar (ToolbarColor, #629), and
+  draws its controls and the menu with the light-Mac set on a light strip and the dark set on a dark one (the
+  toolbar's own light-or-dark test); the address and icons are taken further from the strip where Arc's inks
+  don't read on a page's colour (a red, a mid grey), and the http padlock's orange where it doesn't reach 3:1 (on a
+  red page). Before the page has a colour, the strip is Arc's for the Mac's appearance; it takes the page's
+  background as soon as the engine reports it, about 40 ms before the corner's reading lands. The menu has Arc's
+  soft shadow drawn in its own transparent window: the window server's shadow drew a grey rim round the light menu.
+  Cra: `LittleChromeTones` and `LittleStripColor` (CraCore), `scripts/scenario.sh little-window-strip-site-colour`.
 
 ### Live re-fit against Victor's full-screen screenshots (24 Oct, 20:21)
 
@@ -3157,7 +3178,8 @@ Cra's runs switch tabs with `cra://debug?selectTab=` in a CRA_TEST_BACKGROUND co
 - [O] The colour it settles on was the page's background: `html{background:#203040}` with
   `<meta name="theme-color" content="#602040">` gave a #203040 bar (#1C2E3E captured). Cra's probe still prefers
   theme-color (one test page; not changed in #84).
-- [O] Little Arc's bar is the space's colour whatever the page (#1A0C20 in Victor's space on all four pages).
+- [O] Little Arc's bar is the space's colour whatever the page (#1A0C20 in Victor's space on all four pages). In
+  1.174.3 it still ignores the page but follows macOS (Little Arc, above); Cra's takes the page's colour.
 - Cra 0.1.25 retargeted the pane card before `browsers.show` created the tab's page, so a restored, slept or
   handed-over tab showed a white bar for 3–5 frames before its remembered colour (Arc: the remembered colour
   at once), on tab and space switches alike. Now the bar takes ToolbarColor (CraCore): the page's report,
