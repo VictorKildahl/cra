@@ -578,8 +578,8 @@ struct BlockingDemo: View {
                 .accessibilityIdentifier("onboarding-blocking")
             }
             .coordinateSpace(name: "blocking-screen")
-            .frame(width: mock.logicalSize.width)
-            .background(Color.white)
+            .frame(width: mock.shape == .phone ? nil : mock.logicalSize.width)
+            .background(mock.shape == .phone ? Color.clear : Color.white)
         }
         .environment(\.colorScheme, .light)
     }
