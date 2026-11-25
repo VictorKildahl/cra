@@ -178,7 +178,7 @@ final class BlockLists {
             }
             let sources = lists + [user]
             let lines = sources.flatMap(\.networkRules)
-            if !ChromiumFilterLists.available || lines.isEmpty || !Self.chromiumOwnsDomains {
+            if !ChromiumFilterLists.available || !enabled || lines.isEmpty || !Self.chromiumOwnsDomains {
                 Self.setNativeDomains(domains)
             }
             if ChromiumFilterLists.available {
@@ -189,7 +189,7 @@ final class BlockLists {
                     let revision = try ChromiumFilterLists.publish(rules)
                     DispatchQueue.main.async { [self] in
                         guard publishedKey == key else { return }
-                        confirm(revision, key: key, hasNetworkRules: !lines.isEmpty, enabled: enabled, fallback: domains)
+                        confirm(revision, key: key, hasNetworkRules: !rules.isEmpty, fallback: domains)
                     }
                 } catch {
                     ChromiumFilterLists.expectNetworkRules(false)
@@ -206,8 +206,18 @@ final class BlockLists {
 
     /// Keep native host protection during startup and compilation. An acknowledgement means
     /// Chromium has swapped rules atomically. A superseded acknowledgement cannot change the engine.
-    private func confirm(_ revision: String, key: [String], hasNetworkRules: Bool, enabled: Bool, fallback: [String]) {
+    private func confirm(_ revision: String, key: [String], hasNetworkRules: Bool, fallback: [String]) {
         networkFailure = nil
+        if !hasNetworkRules && CraCEFRuntime.responds(to: NSSelectorFromString("synchronizeBundledNetworkFilter")) {
+            CraCEFRuntime.synchronizeBundledNetworkFilter()
+            queue.async {
+                guard ChromiumFilterLists.isCurrent(revision) else { return }
+                Self.chromiumOwnsDomains = false
+                Self.setNativeDomains(fallback)
+                CraLog.note("native domain filters active: " + revision)
+            }
+            return
+        }
         Task { [weak self] in
             for _ in 0..<100 {
                 guard let self, publishedKey == key else { return }
@@ -215,10 +225,10 @@ final class BlockLists {
                 if (try? String(contentsOf: folder.appendingPathComponent("applied"), encoding: .utf8)) == revision {
                     queue.async {
                         guard ChromiumFilterLists.isCurrent(revision) else { return }
-                        if hasNetworkRules && enabled {
+                        if hasNetworkRules {
                             Self.setNativeDomains([])
                             Self.chromiumOwnsDomains = true
-                        } else if !hasNetworkRules {
+                        } else {
                             Self.chromiumOwnsDomains = false
                         }
                         CraLog.note("network filter revision active: " + revision)

@@ -73,8 +73,8 @@ enum ChromiumFilterLists {
         let revision = UUID().uuidString
         let encoder = JSONEncoder()
         try encoder.encode(Snapshot(revision: revision, rules: rules)).write(to: directory.appendingPathComponent("rules.json"), options: .atomic)
-        expectNetworkRules(!rules.isEmpty)
         try encoder.encode(["revision": revision]).write(to: directory.appendingPathComponent("revision.json"), options: .atomic)
+        expectNetworkRules(!rules.isEmpty)
         return revision
     }
 

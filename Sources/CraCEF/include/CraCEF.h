@@ -498,6 +498,8 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// the next request, any time, from any thread. Off until enabled.
 /// Chromium waits for the selected network rules in a newly loaded profile before navigating.
 + (void)setBundledNetworkRulesExpected:(BOOL)expected;
+/// Apply the most recent helper activation on the Chromium UI thread.
++ (void)synchronizeBundledNetworkFilter;
 + (void)setContentBlockingEnabled:(BOOL)enabled;
 + (BOOL)contentBlockingEnabled;
 /// Chrome's HTTPS-Only Mode ("Always use secure connections") in every profile:

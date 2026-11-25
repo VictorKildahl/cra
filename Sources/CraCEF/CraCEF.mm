@@ -3570,6 +3570,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 
 // CEF uses the native domain filter.
 + (void)setBundledNetworkRulesExpected:(BOOL)expected {}
++ (void)synchronizeBundledNetworkFilter {}
 + (void)setContentBlockingEnabled:(BOOL)enabled { cra_blocker::Enabled().store(enabled); }
 + (BOOL)contentBlockingEnabled { return cra_blocker::Enabled().load(); }
 

@@ -2869,6 +2869,7 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   if (!g_bundled_network_rules_expected.load() || !cra_blocker::Enabled().load()) {
     return NO;
   }
+  [CraCEFRuntime synchronizeBundledNetworkFilter];
   constexpr char id[] = "nddccjlgchhhajchaphmkffkclfmcemb";
   Profile* profile = Profile::FromBrowserContext(_contents->GetBrowserContext())->GetOriginalProfile();
   auto* registry = extensions::ExtensionRegistry::Get(profile);
@@ -4138,7 +4139,16 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   g_document_start_params = all;
 }
 + (void)setBundledNetworkRulesExpected:(BOOL)expected {
-  g_bundled_network_rules_expected.store(expected);
+  if (g_bundled_network_rules_expected.exchange(expected) != expected) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self synchronizeBundledNetworkFilter];
+    });
+  }
+}
+
++ (void)synchronizeBundledNetworkFilter {
+  extensions::UnpackedInstaller::SetBundledCraFilterActive(
+      g_bundled_network_rules_expected.load());
 }
 + (void)setContentBlockingEnabled:(BOOL)enabled {
   cra_blocker::Enabled().store(enabled);
