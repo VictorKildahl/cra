@@ -3579,6 +3579,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // window's (FileMenu.shows, #644).
             let rowHidden = !FileMenu.shows(action.id, tabSelected: self.store.selectedTabID != nil)
             if !rowHidden, NSApp.mainMenu?.performKeyEquivalent(with: event) == true { return nil }
+            // A dimmed row's key goes on to an extension that has it, as in Arc: Obsidian Web Clipper's ⌘⇧O in a
+            // browser window, where Show Little Window "Open In" Menu can't run (#744).
+            if ExtensionCommands.extensionTakes(craMenuRanIt: false, craRowHidden: rowHidden), self.runExtensionCommand(event) { return nil }
             self.perform(action.id)
             return nil
         }

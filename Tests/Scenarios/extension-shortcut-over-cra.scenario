@@ -1,0 +1,18 @@
+# promise: #744
+# An extension's shortcut that is also one of Cra's reaches the extension where Cra's command can't run, as in Arc,
+# whose menu row is dimmed there and lets the key through. Obsidian Web Clipper opens its popup with ⌘⇧O, which is
+# also Show Little Window "Open In" Menu (Arc's ⇧⌘O), a command only for a Little Window in front: in a browser window
+# Cra ran that command, which did nothing, and the key never reached the extension. The fixture has the clipper's
+# shortcut; the key goes through the app's event queue, as a typed one does, and the popup says it opened.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/ShortcutOverCraExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=shortcut
+wait 3
+cra://debug?chromePref=extensions.commands
+expect-log chrome pref extensions\.commands: .*"mac:Command\+Shift\+O":\{"command_name":"_execute_action"
+cra://debug?key=O,31,1179648
+expect-log extension command [a-p]{8}: opens its popup
+expect-log "GET /page\.html\?n=shortcut-over-cra-popup-opened HTTP

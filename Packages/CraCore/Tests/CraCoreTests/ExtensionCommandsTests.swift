@@ -41,4 +41,13 @@ struct ExtensionCommandsTests {
         #expect(ExtensionCommands.opensPopup("_execute_page_action"))
         #expect(!ExtensionCommands.opensPopup("lock"))
     }
+
+    /// Obsidian Web Clipper's ⌘⇧O is Cra's Show Little Window "Open In" Menu too, dimmed in a browser window: the key
+    /// goes to the extension there, as in Arc. Where Cra's row runs, or is hidden but its key still acts, Cra keeps it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/744"))
+    func anExtensionGetsAKeyWhoseCraRowIsDimmed() {
+        #expect(ExtensionCommands.extensionTakes(craMenuRanIt: false, craRowHidden: false))
+        #expect(!ExtensionCommands.extensionTakes(craMenuRanIt: true, craRowHidden: false))
+        #expect(!ExtensionCommands.extensionTakes(craMenuRanIt: false, craRowHidden: true))
+    }
 }
