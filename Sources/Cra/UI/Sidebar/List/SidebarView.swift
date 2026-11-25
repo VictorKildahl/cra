@@ -328,6 +328,7 @@ final class SidebarView: NSView {
         guard page != shownLibrary, ui.libraryReveal == nil else { return }
         let opening = shownLibrary == nil && page != nil
         shownLibrary = page
+        if opening { ScreenshotWatcher.shared.libraryOpened() }
         if let page {
             let host = libraryHost ?? makeLibraryHost(page)
             host.page = page

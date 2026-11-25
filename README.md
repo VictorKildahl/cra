@@ -68,7 +68,7 @@ layer built in, so sites and Chrome extensions work as they do in Chrome.
 | Split View | ✅ |
 | Picture in Picture | ✅ |
 | Developer Mode | ✅ |
-| Library | ✅ |
+| Library | ✅ Media, Downloads, Easels, Spaces, Boosts and Archive; screenshots you take show up by themselves in the Library button's downloads list, ready to drag onto a page |
 | Air Traffic Control | ✅ |
 | Live folders | ✅ |
 | Profiles | ✅ |
