@@ -313,6 +313,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         let audible = ui.audibleTabIDs
         let refreshing = LiveFolderManager.shared.refreshing
         let tidyEffects = TidyTitlesService.shared.effects
+        let incognito = store.isIncognito(space: spaceID)
         // What the models read, read here so a change still rebuilds the list: the models themselves are built
         // only for rows that get a view, outside this observation (#618).
         _ = favicons.images
@@ -415,6 +416,14 @@ final class SpaceListView: NSView, NSDraggingSource {
                 // An easel's row has an easel glyph, not a favicon (Arc's EaselCellView).
                 let (img, flip) = Easel.id(fromURL: tab.url) != nil && tab.customIconKey == nil
                     ? (NSImage(systemSymbolName: "pencil.and.scribble", accessibilityDescription: "Easel"), false) : icon(tab.iconKey)
+                if img == nil {
+                    // A tab that never loaded here: its site's icon, the rows on screen before those near it
+                    // and those of spaces paged out of view.
+                    let visible = self.placed(row).intersects(self.scrollView.contentView.bounds)
+                        && store.showsSpace(self.spaceID, in: self, window: window)
+                    SiteIconLoader.shared.want(.init(url: tab.url, iconKey: tab.iconKey, visible: visible, incognito: incognito),
+                                               into: self.favicons)
+                }
                 let (homeImg, homeFlip) = navigatedAway ? icon(tab.customIconKey ?? FaviconKey.key(for: tab.savedURL)) : (img, flip)
                 let developerMode = store.settings.isDeveloperMode(url: tab.url)
                 // Tidy Tab Titles' rename: "Double-click to rename" under the new name for a few seconds.
@@ -1620,4 +1629,12 @@ final class SpaceListDocument: NSView {
     override func draggingExited(_ sender: NSDraggingInfo?) { list?.dragExited() }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool { list?.performDrop(sender) ?? false }
     override func draggingEnded(_ sender: NSDraggingInfo) { list?.dragExited() }
+}
+
+extension SidebarStore {
+    /// Whether `view`, a sidebar view of `space`, is where the user can see it: in a window that shows that
+    /// space, not a page the pager keeps to one side. Rows on screen ask for site icons first.
+    func showsSpace(_ space: UUID, in view: NSView, window: UUID?) -> Bool {
+        view.window != nil && focusedSpaceID(window: window) == space
+    }
 }

@@ -27,6 +27,17 @@ struct Suggestion: Identifiable, Equatable {
     /// Matched only as scattered letters ("pota" in "grænselandsPOrTAl"): listed after the
     /// search engine's suggestions, which Arc shows instead of such matches.
     var loose = false
+    /// A search engine's suggestion that is an address (a `.history` row the user may never have visited).
+    var fromSearchEngine = false
+    /// A site the user may never have been to, whose icon is not asked for (SiteIconQueue): anything but
+    /// one of the user's tabs, archived tabs or visited pages.
+    var isPresetSite: Bool {
+        switch kind {
+        case .switchToTab, .archived: return false
+        case .history: return fromSearchEngine
+        default: return true
+        }
+    }
     var tabID: UUID? {
         if case .switchToTab(let id) = kind { return id }
         return nil
@@ -371,7 +382,7 @@ final class SuggestionEngine {
             }
             guard !urls.contains(url) else { return nil }
             return Suggestion(id: "sugg:\(url)", kind: .history, title: r.text, subtitle: "", url: url,
-                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 0)
+                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 0, fromSearchEngine: true)
         }
     }
 

@@ -281,7 +281,12 @@ final class CommandBarView: NSView {
             guard i < items.count else { r.isHidden = true; continue }
             r.isHidden = false
             let s = items[i]
-            r.show(s, icon: s.faviconKey.flatMap { favicons.image(forKey: $0) }, selected: i == c.selectedIndex, highlight: highlight,
+            let icon = s.faviconKey.flatMap { favicons.image(forKey: $0) }
+            if icon == nil, let url = s.url {
+                let incognito = c.store.window().isIncognito || s.tabID.map(c.store.isIncognito(item:)) == true
+                SiteIconLoader.shared.want(.init(url: url, iconKey: s.faviconKey, preset: s.isPresetSite, incognito: incognito), into: favicons)
+            }
+            r.show(s, icon: icon, selected: i == c.selectedIndex, highlight: highlight,
                    otherSpace: s.spaceID.flatMap { $0 != c.focusedSpaceID && s.tabID != nil ? c.spaceName($0) : nil },
                    dark: dark, compact: compact)
         }
