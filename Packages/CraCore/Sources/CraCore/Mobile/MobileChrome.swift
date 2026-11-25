@@ -220,7 +220,7 @@ public struct MobileBarCollapse: Equatable {
     private var lastTravelledClosed = false
 
     /// How far the finger goes before the bar starts back the way it came, or starts opening on
-    /// a new touch: 20 points, so a wobble or the start of a scroll up leaves the bar where it is.
+    /// a new touch, so a wobble or the start of a scroll up leaves the bar where it is.
     public static let deadZone: CGFloat = 32
     /// This bar's dead zone (`MobileBarCollapse.deadZone` unless set).
     public let deadZone: CGFloat
@@ -230,6 +230,8 @@ public struct MobileBarCollapse: Equatable {
     /// How far the finger has gone against `direction` (or, before it has one, towards opening)
     /// inside the dead zone.
     private var turn: CGFloat = 0
+    /// Whether the touch now on the page has moved the bar at all.
+    public private(set) var movedThisTouch = false
 
     /// How fast the finger must be going as it lets go, in points a second, for the flick to
     /// pick the bar's end by itself: a quick flick that never left the dead zone still sends the
@@ -258,6 +260,7 @@ public struct MobileBarCollapse: Equatable {
     public mutating func touchBegan() {
         direction = nil
         turn = 0
+        movedThisTouch = false
     }
 
     /// The finger moved `drag` points, positive with the page moving down: closing the bar. The
@@ -270,7 +273,11 @@ public struct MobileBarCollapse: Equatable {
     @discardableResult
     public mutating func dragged(by drag: CGFloat, collapses: Bool, scrolls: Bool) -> Bool {
         // A site with the switch off never moves its bar; nor does a page with nothing to scroll.
-        guard collapses, scrolls else { return reveal() }
+        guard collapses, scrolls else {
+            let moved = reveal()
+            if moved { movedThisTouch = true }
+            return moved
+        }
         guard drag != 0 else { return false }
         let closing = drag > 0
         var moved = drag
@@ -293,6 +300,7 @@ public struct MobileBarCollapse: Equatable {
         let place = min(1, max(0, progress + moved / Self.travel))
         guard place != progress else { return false }
         progress = place
+        movedThisTouch = true
         return true
     }
 
@@ -314,6 +322,21 @@ public struct MobileBarCollapse: Equatable {
         let closed = velocity > 0
         guard progress != (closed ? 1 : 0) else { return nil }
         return closed
+    }
+
+    /// The end the bar was last going towards (true: closed): where it settles when nothing
+    /// else picks one, such as a touch the system takes away mid-drag.
+    public var heading: Bool { lastTravelledClosed }
+
+    /// The finger let go at `velocity` points a second (positive closing), `following` saying
+    /// whether the bar was riding this touch. Says the end to walk the bar to, or nil to leave it
+    /// (and any settle already playing) alone: a quick flick picks its own end; a touch that
+    /// moved the bar settles the way it was going; one that rode the bar without moving it
+    /// settles by its heading rather than leave it between its ends.
+    public func ended(velocity: CGFloat, collapses: Bool, scrolls: Bool, following: Bool) -> Bool? {
+        if let end = flicked(velocity: velocity, collapses: collapses, scrolls: scrolls) { return end }
+        if movedThisTouch, let end = released() { return end }
+        return following ? heading : nil
     }
 
     /// The bar's place while a snap plays: the caller drives it frame by frame.

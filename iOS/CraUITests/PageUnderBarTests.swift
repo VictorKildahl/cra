@@ -14,8 +14,6 @@ final class PageUnderBarTests: BrowserTestCase {
         }
     }
 
-    private var base: String { ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765" }
-
     private func luminance(_ c: (r: Int, g: Int, b: Int)) -> Double {
         (0.2126 * Double(c.r) + 0.7152 * Double(c.g) + 0.0722 * Double(c.b)) / 255
     }
@@ -132,7 +130,7 @@ final class PageUnderBarTests: BrowserTestCase {
     /// The bar takes the colour under it, not the page's top: over a white page bottom with a
     /// black top band, the bar is light while the status band keeps the black.
     func testTheBarTakesTheColourBelowItNotThePagesTop() {
-        launch(["-CraOpenURL", base + "/two-tones", "-CraSearch", "NO", "-CraAppearance", "light"])
+        launch(["-CraOpenURL", fixtureBase + "/two-tones", "-CraSearch", "NO", "-CraAppearance", "light"])
         waitForPage("Two Tones")
         sleep(1)
         let bar = screenColour(x: 0.25, y: 0.94)

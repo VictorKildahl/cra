@@ -388,7 +388,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             lastDragTranslation = 0
             delegate?.webPageDidBeginDrag(self)
         case .changed:
-            let translation = pan.translation(in: webView.window ?? webView).y
+            let translation = dragTranslation(of: webView.scrollView)
             if let last = lastDragTranslation, last != translation {
                 // The finger moving up scrolls the page down and closes the bar: positive.
                 delegate?.webPage(self, didDragBy: last - translation)

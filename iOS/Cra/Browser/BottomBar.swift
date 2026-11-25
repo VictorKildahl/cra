@@ -28,7 +28,7 @@ final class BottomBar: UIView {
     /// the search sheet: coming back from those, it has to appear whole.
     private var wasFloating = false
     var ringsMenu = false {
-        didSet { applyMode() }
+        didSet { applyFade() }
     }
 
     /// 1 with every control showing; 0 while the search sheet is open and only the pill's place
@@ -51,7 +51,7 @@ final class BottomBar: UIView {
 
     /// 1 while the pill is the page's, 0 while the search sheet's field stands in for it.
     var pillVisibility: CGFloat = 1 {
-        didSet { applyMode() }
+        didSet { applyFade() }
     }
 
     override init(frame: CGRect) {
@@ -96,6 +96,8 @@ final class BottomBar: UIView {
         // Faded or away, the controls take no touches: the strip along the safe area is the way
         // back, not a half-faded button.
         let live = visible > 0.01 && collapseProgress < 0.01
+        // The slide sets this every frame; the controls only change at its ends.
+        guard live != pill.isUserInteractionEnabled else { return }
         [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach { $0.isUserInteractionEnabled = live }
     }
 
@@ -111,7 +113,7 @@ final class BottomBar: UIView {
         // its strip is all that is left of the bar when it is closed.
         let floats = tabs || overBackdrop
         let slabAlpha = floats ? 0 : visible
-        if floats != wasFloating, !floats {
+        if wasFloating, !floats {
             // The slab comes back with the page, whole: animating its opacity up from the row's
             // no-slab state leaves the material see-through for the length of the close.
             blur.layer.removeAnimation(forKey: "opacity")

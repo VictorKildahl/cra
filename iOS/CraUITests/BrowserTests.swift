@@ -19,6 +19,13 @@ class BrowserTestCase: XCTestCase {
 
     /// A slow drag on the page, `dy` points (negative is up, scrolling the page down and closing
     /// the bar), held a moment before it lifts so it ends without a flick.
+    /// The fixture server `scripts/ios.sh test` starts (`iOS/Tests/popup_server.py`); run by hand,
+    /// start it yourself on port 18765.
+    var fixtureBase: String { ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765" }
+
+    /// A page far longer than the screen, so a drag has plenty to scroll and the bar can go.
+    static let longPage = page("Tall") + "<div/style=height:5000px></div>"
+
     func dragThePage(_ web: XCUIElement, by dy: CGFloat) {
         let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: dy)),
@@ -141,6 +148,12 @@ class BrowserTestCase: XCTestCase {
 
     /// The bottom bar is back on screen once the keyboard is gone (GitHub #505: a keyboard that
     /// faded out was still counted, so the bar stayed below the screen).
+    /// Waits for the bottom bar to be put away: its pill out of reach.
+    func waitForBarAway(file: StaticString = #filePath, line: UInt = #line) {
+        let away = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: app.buttons["bar-search"])
+        XCTAssertEqual(XCTWaiter().wait(for: [away], timeout: 5), .completed, "the bar stayed", file: file, line: line)
+    }
+
     func waitForBarOnScreen(file: StaticString = #filePath, line: UInt = #line) {
         let pill = app.buttons["bar-search"]
         let onScreen = NSPredicate { _, _ in pill.exists && pill.frame.maxY <= self.app.frame.maxY && pill.isHittable }
@@ -1048,21 +1061,16 @@ final class CollapseBottomBarTests: BrowserTestCase {
     /// The bar rides with the finger: a drag that ends pointing down closes it however little the
     /// bar itself got, and a drag back up opens it again.
     func testTheBarFollowsTheDragAndSnapsOpenOrClosed() {
-        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        launch(["-CraOpenURL", Self.longPage, "-CraSearch", "NO"])
         waitForPage("Tall")
         let pill = app.buttons["bar-search"]
         XCTAssertTrue(pill.isHittable)
         let page = app.webViews.firstMatch
-        let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -200)),
-                    withVelocity: .slow, thenHoldForDuration: 0.3)
-        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
-        wait(for: [gone], timeout: 5)
+        dragThePage(page, by: -200)
+        waitForBarAway()
         keep("bar closed")
         // Back up the page: the bar comes with the finger and the direction it was let go in.
-        let back = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-        back.press(forDuration: 0.05, thenDragTo: back.withOffset(CGVector(dx: 0, dy: 60)),
-                   withVelocity: .slow, thenHoldForDuration: 0.3)
+        dragThePage(page, by: 60)
         let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
         wait(for: [shown], timeout: 5)
         keep("bar follows the drag")
@@ -1071,7 +1079,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
     /// Scrolling back up brings the bar only past the dead zone (`MobileBarCollapse.deadZone`,
     /// 20 pt): a short drag down the page leaves a closed bar closed, and a longer one opens it.
     func testAShortDragUpThePageLeavesTheBarAway() {
-        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        launch(["-CraOpenURL", Self.longPage, "-CraSearch", "NO"])
         waitForPage("Tall")
         let pill = app.buttons["bar-search"]
         let web = app.webViews.firstMatch
@@ -1093,7 +1101,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
     /// A quick flick back up the page brings the bar back even when it is shorter than the dead
     /// zone: the page carries on scrolling up, and the bar goes with it (`MobileBarCollapse.flickSpeed`).
     func testAQuickFlickUpThePageBringsTheBarBack() {
-        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        launch(["-CraOpenURL", Self.longPage, "-CraSearch", "NO"])
         waitForPage("Tall")
         let pill = app.buttons["bar-search"]
         let web = app.webViews.firstMatch
@@ -1141,14 +1149,13 @@ final class CollapseBottomBarTests: BrowserTestCase {
     /// A link from a page taller than the screen, its bar away, to one that fits its screen:
     /// the bar comes back, since there is nothing left behind it to hide.
     func testAPageThatFitsBringsTheBarBack() {
-        let base = ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765"
+        let base = fixtureBase
         launch(["-CraOpenURL", base + "/tall", "-CraSearch", "NO"])
         waitForPage("Tall Fixture")
         let pill = app.buttons["bar-search"]
         let web = app.webViews.firstMatch
         dragThePage(web, by: -80)
-        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
-        wait(for: [gone], timeout: 5)
+        waitForBarAway()
         let link = web.links["Short page"]
         XCTAssertTrue(link.waitForExistence(timeout: 5))
         link.tap()
@@ -1169,8 +1176,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
         let pill = app.buttons["bar-search"]
         let web = app.webViews.firstMatch
         dragThePage(web, by: -80)
-        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
-        wait(for: [gone], timeout: 5)
+        waitForBarAway()
         web.buttons["Shrink"].tap()
         let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
         wait(for: [shown], timeout: 5)
@@ -1197,8 +1203,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
         web.buttons["More"].tap()
         sleep(1)
         dragThePage(web, by: -120)
-        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
-        wait(for: [gone], timeout: 5)
+        waitForBarAway()
         // Back to one screen: the bar returns, and a drag leaves it in place.
         web.buttons["More"].tap()
         let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
@@ -1209,7 +1214,6 @@ final class CollapseBottomBarTests: BrowserTestCase {
         keep("grown and shrunk page")
     }
 
-    /// A slow drag from the middle of the page, by `dy` points, held a moment before it lets go.
     /// A page only 60 points longer than its screen keeps its bar: there is too little to scroll
     /// for hiding it to show anything.
     func testAPageOnlySlightlyLongerKeepsTheBar() {
@@ -1248,7 +1252,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
     /// Flicks that land while the bar is still settling from the last one, up and down in turn,
     /// leave it at one of its ends every time.
     func testFlicksLandingOnASettleLeaveTheBarAtAnEnd() {
-        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        launch(["-CraOpenURL", Self.longPage, "-CraSearch", "NO"])
         waitForPage("Tall")
         let web = app.webViews.firstMatch
         let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))

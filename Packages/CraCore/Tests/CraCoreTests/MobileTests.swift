@@ -1300,6 +1300,15 @@ struct MobileFavoritesTests {
 }
 
 struct MobileMotionTests {
+    /// The shared ease-out starts quick, ends soft and stays inside 0...1.
+    @Test func theEaseOutLeavesQuicklyAndSettlesSoftly() {
+        #expect(MobileMotion.easeOut(0) == 0 && MobileMotion.easeOut(1) == 1)
+        #expect(MobileMotion.easeOut(0.5) == 0.875)
+        #expect(MobileMotion.easeOut(-1) == 0 && MobileMotion.easeOut(2) == 1)
+        #expect(MobileMotion.easeOut(0.1) > 0.25, "a quick start")
+        #expect(MobileMotion.easeOut(0.9) > 0.99, "a soft end")
+    }
+
     /// Arc Search's tab row: each frame leaves about 0.54 of the distance of the frame before,
     /// once the motion is under way.
     @Test func theTabRowSettlesAtArcSearchsRate() {

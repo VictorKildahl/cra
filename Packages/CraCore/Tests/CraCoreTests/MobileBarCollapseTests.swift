@@ -173,6 +173,40 @@ struct MobileBarCollapseTests {
         #expect(MobileBarCollapse().flicked(velocity: 150, collapses: true, scrolls: true) == nil)
     }
 
+    /// Letting go: a flick picks its own end, a touch that moved the bar settles the way it was
+    /// going, one that rode the bar without moving it settles by its heading, and a touch that
+    /// had nothing to do with the bar leaves it (and a settle already playing) alone.
+    @Test func theEndOfATouchPicksWhereTheBarSettles() {
+        var bar = MobileBarCollapse()
+        bar.touchBegan()
+        #expect(!bar.movedThisTouch)
+        #expect(bar.ended(velocity: 0, collapses: true, scrolls: true, following: false) == nil,
+                "a touch that never moved the bar leaves it")
+        bar.dragged(by: 10, collapses: true, scrolls: true)
+        #expect(bar.movedThisTouch)
+        #expect(bar.ended(velocity: 0, collapses: true, scrolls: true, following: true) == true,
+                "a moved bar settles the way it was going")
+        #expect(bar.ended(velocity: -2000, collapses: true, scrolls: true, following: true) == false,
+                "a flick wins")
+
+        bar.settle(atClosed: true)
+        bar.touchBegan()
+        #expect(!bar.movedThisTouch, "each touch starts unmoved")
+        #expect(bar.heading)
+        #expect(bar.ended(velocity: 0, collapses: true, scrolls: true, following: true) == true,
+                "a ride that never moved it settles by its heading, even at that end")
+        #expect(bar.ended(velocity: 0, collapses: true, scrolls: true, following: false) == nil)
+    }
+
+    /// A drag on a site with the switch off that brings a hidden bar back counts as moving it.
+    @Test func aRevealByDragCountsAsMovingTheBar() {
+        var bar = MobileBarCollapse()
+        bar.settle(atClosed: true)
+        bar.touchBegan()
+        bar.dragged(by: 5, collapses: false, scrolls: true)
+        #expect(bar.isOpen && bar.movedThisTouch)
+    }
+
     /// Letting go picks the end the last travel pointed at, however far the bar got.
     @Test func lettingGoPicksTheEndTheFingerTravelledTowards() {
         var bar = MobileBarCollapse()

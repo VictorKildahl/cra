@@ -203,7 +203,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 fitOld(1)
             } else {
                 // Ease out: the drop off the page is quick to start and settles softly.
-                let raised = 1 - pow(1 - l, 3)
+                let raised = MobileMotion.easeOut(l)
                 let landed = frame(from: source, to: liftFrame, raised)
                 let settled = frame(from: landed, to: oldFrame, p)
                 oldCard.bounds = CGRect(origin: .zero, size: settled.size)
@@ -602,7 +602,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 swipeNeighbourCard = nil
                 swipeNeighbourStep = step
                 if let tab {
-                    let top = pageContentFrame.minY
+                    let top = view.safeAreaInsets.top
                     let background = pageBackground(for: tab.id)
                     let card = UIView(frame: view.bounds)
                     card.backgroundColor = background

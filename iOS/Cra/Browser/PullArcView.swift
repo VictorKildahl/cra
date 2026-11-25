@@ -230,13 +230,13 @@ final class PullArcView: UIView {
             stopPlaying()
             stopBump(hide: true)
         case .retract:
-            render(playFrom * (1 - Self.eased(t)))
+            render(playFrom * (1 - MobileMotion.easeOut(t)))
             guard t >= 1 else { return }
             stopPlaying()
             isLeaving = false
             progress = 0
         case .success:
-            let eased = Self.eased(t)
+            let eased = MobileMotion.easeOut(t)
             renderLoop(playFrom + MobilePullRing.successTurn * eased)
             alpha = 1 - eased
             guard t >= 1 else { return }
@@ -248,10 +248,6 @@ final class PullArcView: UIView {
         case nil:
             break
         }
-    }
-
-    private static func eased(_ t: CGFloat) -> CGFloat {
-        1 - pow(1 - t, 3)
     }
 
     private func stopPlaying() {
