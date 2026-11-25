@@ -12,7 +12,11 @@ final class FaviconStore {
     static let didChange = Notification.Name("CraFaviconStoreDidChange")
 
     init() {
-        directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Favicons", isDirectory: true)
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        // "Favicons" held icons picked touch icon first: app-icon squares that would never be
+        // fetched again. The site's own icon replaces each one as its page is next opened.
+        try? FileManager.default.removeItem(at: caches.appendingPathComponent("Favicons", isDirectory: true))
+        directory = caches.appendingPathComponent("SiteIcons", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieAcceptPolicy = .never
@@ -71,13 +75,14 @@ final class FaviconStore {
         return image
     }
 
-    /// Fetches the icon a page names (`candidates`, best first), falling back to /favicon.ico.
+    /// Fetches the icon a page names (`candidates`, best first), falling back to /favicon.ico
+    /// when they don't include it.
     /// Incognito pages are never asked: nothing about them is kept.
     func fetch(for address: String, candidates: [String]) {
         guard let key = key(address), memory[key] == nil, !inFlight.contains(key), let page = URL(string: address),
               page.scheme == "https" || page.scheme == "http" else { return }
         var urls = candidates.compactMap { URL(string: $0, relativeTo: page)?.absoluteURL }
-        if let fallback = URL(string: "/favicon.ico", relativeTo: page)?.absoluteURL { urls.append(fallback) }
+        if let fallback = URL(string: "/favicon.ico", relativeTo: page)?.absoluteURL, !urls.contains(fallback) { urls.append(fallback) }
         inFlight.insert(key)
         tryNext(urls[...], key: key)
     }
