@@ -2,41 +2,175 @@ import CoreGraphics
 import CraCore
 import Testing
 
-/// The bottom bar trails the finger that scrolls a page, and letting go picks the end the last
+/// The bottom bar moves with the finger that scrolls a page, and letting go picks the end the last
 /// travel pointed at. Site Settings ▸ Collapse Bottom Bar decides per site whether it moves at
 /// all.
 struct MobileBarCollapseTests {
-    /// The bar starts moving with the finger's first point and trails it at the drag's rate.
+    /// The bar starts moving with the finger's first point.
     @Test func theBarFollowsTheFingerFromItsFirstPoint() {
         var bar = MobileBarCollapse()
         var moved = bar.dragged(by: 1, collapses: true, scrolls: true)
         #expect(moved)
-        #expect(bar.progress == 1 / MobileBarCollapse.fingerTravel)
+        #expect(bar.progress == 1 / MobileBarCollapse.travel)
         moved = bar.dragged(by: 20, collapses: true, scrolls: true)
         #expect(moved)
-        #expect(bar.progress == 21 / MobileBarCollapse.fingerTravel)
+        #expect(bar.progress == 21 / MobileBarCollapse.travel)
         moved = bar.dragged(by: 0, collapses: true, scrolls: true)
         #expect(!moved)
     }
 
-    /// The bar moves a little slower than the finger: a drag as long as the bar's own height
-    /// leaves it part of the way, and closing it takes half again that much drag.
-    @Test func theDragGoesFurtherThanTheBarMoves() {
+    /// The bar moves exactly as far as the finger, both ways: a drag as long as the bar's own
+    /// height takes it the whole way, and every point of drag is a point of the bar.
+    @Test func theBarMovesAsFarAsTheFinger() {
         var bar = MobileBarCollapse()
-        bar.dragged(by: MobileBarCollapse.travel, collapses: true, scrolls: true)
-        #expect(bar.progress > 0 && bar.progress < 1, "the bar arrived before the finger")
-        bar.dragged(by: MobileBarCollapse.fingerTravel - MobileBarCollapse.travel, collapses: true, scrolls: true)
-        #expect(bar.isClosed)
+        for drag in [1, 7.5, 13] as [CGFloat] {
+            let before = bar.progress
+            bar.dragged(by: drag, collapses: true, scrolls: true)
+            #expect(abs((bar.progress - before) * MobileBarCollapse.travel - drag) < 0.001, "closing: \(drag) pt")
+        }
+        // A turn first crosses the dead zone; past it, every point back is a point of the bar.
+        bar.dragged(by: -(MobileBarCollapse.deadZone + 10), collapses: true, scrolls: true)
+        #expect(abs(bar.progress * MobileBarCollapse.travel - 11.5) < 0.001, "opening moves it as far back")
+        bar.reveal()
+        bar.dragged(by: MobileBarCollapse.travel - 0.5, collapses: true, scrolls: true)
+        #expect(!bar.isClosed, "just short of the bar's height leaves it just short")
+        bar.dragged(by: 0.5, collapses: true, scrolls: true)
+        #expect(bar.isClosed, "the bar's own height of drag closes it")
     }
 
-    /// A turn takes the bar back at once: the drag has no dead zone before it.
-    @Test func aTurnTakesTheBarBackAtOnce() {
+    /// Scrolling down hides the bar from the finger's first point; scrolling up brings it back
+    /// only once the finger has gone the dead zone (20 points here), and then point for point.
+    @Test func closingStartsAtOnceAndOpeningWaitsTheDeadZone() {
+        var moved = false
+        #expect(MobileBarCollapse.deadZone > 0, "the bar has a dead zone of its own")
+        var bar = MobileBarCollapse(deadZone: 20)
+        bar.touchBegan()
+        moved = bar.dragged(by: 1, collapses: true, scrolls: true)
+        #expect(moved, "closing starts at once")
+        bar.settle(atClosed: true)
+
+        bar.touchBegan()
+        moved = bar.dragged(by: -19, collapses: true, scrolls: true)
+        #expect(!moved, "inside the dead zone nothing moves")
+        moved = bar.dragged(by: -1, collapses: true, scrolls: true)
+        #expect(!moved, "its edge is still nothing")
+        #expect(bar.isClosed)
+        moved = bar.dragged(by: -4, collapses: true, scrolls: true)
+        #expect(moved)
+        #expect(abs((1 - bar.progress) * MobileBarCollapse.travel - 4) < 0.001, "past it, the bar follows the finger")
+    }
+
+    /// A turn in the middle of a drag waits the dead zone (20 points here) too, either way: a wobble back inside
+    /// it moves nothing, and carrying on the way the bar was going moves it at once again.
+    @Test func aTurnWaitsTheDeadZone() {
+        var moved = false
+        var bar = MobileBarCollapse(deadZone: 20)
+        bar.touchBegan()
+        bar.dragged(by: 30, collapses: true, scrolls: true)
+        let place = bar.progress
+        moved = bar.dragged(by: -15, collapses: true, scrolls: true)
+        #expect(!moved, "a turn inside the dead zone")
+        #expect(bar.progress == place)
+        moved = bar.dragged(by: 2, collapses: true, scrolls: true)
+        #expect(moved, "on the way it was going: at once")
+        #expect(abs(bar.progress - (place + 2 / MobileBarCollapse.travel)) < 0.0001)
+        let before = bar.progress
+        moved = bar.dragged(by: -20, collapses: true, scrolls: true)
+        #expect(!moved, "a fresh turn starts its dead zone again")
+        bar.dragged(by: -5, collapses: true, scrolls: true)
+        #expect(abs(bar.progress - (before - 5 / MobileBarCollapse.travel)) < 0.0001, "then the bar comes back")
+        // And turning to close again waits as long.
+        let opening = bar.progress
+        moved = bar.dragged(by: 20, collapses: true, scrolls: true)
+        #expect(!moved)
+        bar.dragged(by: 3, collapses: true, scrolls: true)
+        #expect(abs(bar.progress - (opening + 3 / MobileBarCollapse.travel)) < 0.0001)
+    }
+
+    /// A wobble inside the dead zone is not a turn: letting go still settles the way the bar was
+    /// going.
+    @Test func aWobbleDoesNotTurnTheRelease() {
         var bar = MobileBarCollapse()
+        bar.touchBegan()
+        bar.dragged(by: 20, collapses: true, scrolls: true)
+        bar.dragged(by: -12, collapses: true, scrolls: true)
+        #expect(bar.released() == true)
+    }
+
+    /// A new touch starts afresh: closing moves at once whichever way the last touch went, and
+    /// opening waits the dead zone even if the last touch was opening.
+    @Test func eachTouchStartsAfresh() {
+        var moved = false
+        var bar = MobileBarCollapse()
+        bar.touchBegan()
+        bar.dragged(by: 30, collapses: true, scrolls: true)
+        bar.dragged(by: -25, collapses: true, scrolls: true)
+        bar.touchBegan()
+        let place = bar.progress
+        moved = bar.dragged(by: 1, collapses: true, scrolls: true)
+        #expect(moved, "closing at once")
+        bar.touchBegan()
+        moved = bar.dragged(by: -10, collapses: true, scrolls: true)
+        #expect(!moved, "opening waits again")
+        #expect(bar.progress == place + 1 / MobileBarCollapse.travel)
+    }
+
+    /// The dead zone is the bar's own setting: with none, a turn takes the bar back at once.
+    @Test func theDeadZoneIsConfigurable() {
+        var moved = false
+        var bar = MobileBarCollapse(deadZone: 0)
+        bar.touchBegan()
         bar.dragged(by: 20, collapses: true, scrolls: true)
         let place = bar.progress
-        let moved = bar.dragged(by: -4, collapses: true, scrolls: true)
+        moved = bar.dragged(by: -4, collapses: true, scrolls: true)
         #expect(moved)
-        #expect(bar.progress == place - 4 / MobileBarCollapse.fingerTravel)
+        #expect(abs(bar.progress - (place - 4 / MobileBarCollapse.travel)) < 0.0001)
+        var wide = MobileBarCollapse(deadZone: 50)
+        wide.touchBegan()
+        wide.dragged(by: 30, collapses: true, scrolls: true)
+        moved = wide.dragged(by: -49, collapses: true, scrolls: true)
+        #expect(!moved)
+    }
+
+    /// A quick flick picks the end it points at even inside the dead zone: a 19 pt flick back up
+    /// the page, which carries on scrolling, brings the bar back. A slow release inside the dead
+    /// zone moves nothing, and a flick towards the end the bar is at changes nothing.
+    @Test func aFlickPicksItsEndInsideTheDeadZone() {
+        #expect(MobileBarCollapse.flickSpeed == 300)
+        var bar = MobileBarCollapse(deadZone: 20)
+        bar.settle(atClosed: true)
+        bar.touchBegan()
+        bar.dragged(by: -19, collapses: true, scrolls: true)
+        #expect(bar.isClosed, "the drag stayed inside the dead zone")
+        #expect(bar.flicked(velocity: -1200, collapses: true, scrolls: true) == false, "a quick flick up opens it")
+        #expect(bar.flicked(velocity: -299, collapses: true, scrolls: true) == nil, "a slow release is not a flick")
+        #expect(bar.flicked(velocity: 1200, collapses: true, scrolls: true) == nil, "it is already closed")
+
+        bar.settle(atClosed: false)
+        bar.touchBegan()
+        #expect(bar.flicked(velocity: 800, collapses: true, scrolls: true) == true, "a quick flick down closes it")
+        #expect(bar.flicked(velocity: -800, collapses: true, scrolls: true) == nil, "it is already open")
+    }
+
+    /// A flick mid-way, against the way the bar was going, wins: it is the finger's last word.
+    @Test func aFlickBackTurnsTheBar() {
+        var bar = MobileBarCollapse()
+        bar.touchBegan()
+        bar.dragged(by: 30, collapses: true, scrolls: true)
+        bar.dragged(by: -10, collapses: true, scrolls: true)
+        #expect(bar.released() == true, "a slow release keeps closing")
+        #expect(bar.flicked(velocity: -600, collapses: true, scrolls: true) == false, "a flick back opens it")
+    }
+
+    /// A flick never moves a bar that stays: a site with Collapse Bottom Bar off, or a page with
+    /// nothing to scroll. The speed it takes is the bar's own setting.
+    @Test func aFlickRespectsABarThatStays() {
+        let bar = MobileBarCollapse()
+        #expect(bar.flicked(velocity: 2000, collapses: false, scrolls: true) == nil)
+        #expect(bar.flicked(velocity: 2000, collapses: true, scrolls: false) == nil)
+        let eager = MobileBarCollapse(flickSpeed: 100)
+        #expect(eager.flicked(velocity: 150, collapses: true, scrolls: true) == true)
+        #expect(MobileBarCollapse().flicked(velocity: 150, collapses: true, scrolls: true) == nil)
     }
 
     /// Letting go picks the end the last travel pointed at, however far the bar got.
@@ -51,7 +185,7 @@ struct MobileBarCollapseTests {
 
         bar = MobileBarCollapse()
         bar.dragged(by: 30, collapses: true, scrolls: true)
-        bar.dragged(by: -10, collapses: true, scrolls: true)
+        bar.dragged(by: -(MobileBarCollapse.deadZone + 10), collapses: true, scrolls: true)
         let open = bar.released()
         #expect(open == false)
         bar.settle(atClosed: false)
@@ -61,13 +195,13 @@ struct MobileBarCollapseTests {
     /// Letting go of a bar that is already at an end leaves it there.
     @Test func lettingGoAtAnEndChangesNothing() {
         var bar = MobileBarCollapse()
-        bar.dragged(by: MobileBarCollapse.fingerTravel, collapses: true, scrolls: true)
+        bar.dragged(by: MobileBarCollapse.travel, collapses: true, scrolls: true)
         #expect(bar.isClosed)
         let target = bar.released()
         #expect(target == nil)
 
         bar = MobileBarCollapse()
-        bar.dragged(by: -MobileBarCollapse.fingerTravel, collapses: true, scrolls: true)
+        bar.dragged(by: -MobileBarCollapse.travel, collapses: true, scrolls: true)
         #expect(bar.isOpen)
         let open = bar.released()
         #expect(open == nil)
@@ -162,5 +296,48 @@ struct MobileBarCollapseTests {
         moved = bar.dragged(by: 1, collapses: true, scrolls: true)
         #expect(moved)
         #expect(!bar.isOpen)
+    }
+
+    /// The page's covered bottom is what lies between the bar's top and the safe area's edge,
+    /// following the bar from its whole height open to nothing closed, so a sticky bottom stays
+    /// on the bar's top all the way; it never leaves the range WebKit is given for `svh`/`lvh`.
+    @Test func thePagesCoveredBottomFollowsTheBar() {
+        let size = CGSize(width: 402, height: 874)
+        let safe: CGFloat = 34
+        let edge = size.height - safe
+        let range = MobileBarCollapse.viewportInsets
+        #expect(range.least == 0 && range.most == MobileBottomBar.height)
+        var bar = MobileBarCollapse()
+        var last = range.most
+        for _ in 0..<50 {
+            let top = MobileBottomBar.top(in: size, safeBottom: safe, progress: bar.progress, scale: 3)
+            let covered = MobileBottomBar.covered(in: size, safeBottom: safe, progress: bar.progress, scale: 3)
+            #expect(covered == edge - top, "the page's visible bottom is the bar's top")
+            #expect(covered <= last && covered >= range.least && covered <= range.most)
+            last = covered
+            bar.dragged(by: 1, collapses: true, scrolls: true)
+        }
+        #expect(bar.isClosed && MobileBottomBar.covered(in: size, safeBottom: safe, progress: bar.progress, scale: 3) == 0)
+        #expect(MobileBottomBar.covered(in: size, safeBottom: safe, progress: 0.5, scale: 3) == MobileBottomBar.height / 2)
+    }
+
+    /// The bar's top, and so the page's bottom, sits on the display's pixel grid as the bar
+    /// moves: WebKit is not asked to move the page's viewport by a fraction of a pixel, and a
+    /// step too small to show moves nothing.
+    @Test func theBarsTopKeepsToThePixelGrid() {
+        let size = CGSize(width: 402, height: 874)
+        for scale in [2, 3] as [CGFloat] {
+            for step in 0...100 {
+                let progress = CGFloat(step) / 100
+                let top = MobileBottomBar.top(in: size, safeBottom: 34, progress: progress, scale: scale)
+                #expect(abs((top * scale).rounded() - top * scale) < 0.0001, "\(top) at @\(scale)x")
+                let exact = MobileBottomBar.top(in: size, safeBottom: 34, progress: progress)
+                #expect(abs(top - exact) <= 0.5 / scale + 0.0001, "within half a pixel of the bar's place")
+            }
+        }
+        // A step of a tenth of a pixel leaves the bar where it was.
+        let here = MobileBottomBar.top(in: size, safeBottom: 34, progress: 0.5, scale: 3)
+        let nudged = MobileBottomBar.top(in: size, safeBottom: 34, progress: 0.5 + 0.1 / 3 / MobileBottomBar.height, scale: 3)
+        #expect(here == nudged)
     }
 }

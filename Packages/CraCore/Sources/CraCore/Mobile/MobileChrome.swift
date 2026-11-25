@@ -144,9 +144,20 @@ public enum MobileBottomBar {
     /// The bar's top edge with the bar `progress` of the way down its travel: at its open place,
     /// a bar above the safe area, at 0, and on the safe area's own line at 1, where only the
     /// strip along the home indicator is left on screen. Dragged, this is the page's bottom edge.
-    public static func top(in size: CGSize, safeBottom: CGFloat, progress: CGFloat) -> CGFloat {
+    /// With the display's `scale` it keeps to the pixel grid, so a step too small to show moves
+    /// neither the bar nor the page's viewport under it.
+    public static func top(in size: CGSize, safeBottom: CGFloat, progress: CGFloat, scale: CGFloat = 0) -> CGFloat {
         let open = frames(in: size, safeBottom: safeBottom).bar.minY
-        return open + min(1, max(0, progress)) * height
+        let top = open + min(1, max(0, progress)) * height
+        return scale > 0 ? (top * scale).rounded() / scale : top
+    }
+
+    /// How much of a page that runs on to the safe area's edge the bar covers with the bar
+    /// `progress` of the way down: from the bar's top to that edge, its whole height open and
+    /// nothing closed. The page is laid out clear of it frame by frame, so its visible bottom,
+    /// and a sticky or fixed `bottom: 0` on it, is always the bar's top.
+    public static func covered(in size: CGSize, safeBottom: CGFloat, progress: CGFloat, scale: CGFloat = 0) -> CGFloat {
+        max(0, size.height - safeBottom - top(in: size, safeBottom: safeBottom, progress: progress, scale: scale))
     }
 
     /// Where a drag up brings back the previous tab rather than opening the tab row (#537): the
@@ -176,20 +187,20 @@ public enum MobileBottomBar {
     }
 }
 
-/// The bottom bar's place between open and closed while a page is dragged. The bar trails the
-/// finger that scrolls the page from its first point, a little slower than the finger moves, so
-/// the page's own offset never moves it: a bounce at either end and the deceleration after the
-/// finger lifts move nothing. Let go, the direction the finger last travelled in picks the end.
+/// The bottom bar's place between open and closed while a page is dragged. The bar moves with
+/// the finger that scrolls the page, exactly as far as the finger, so the page's own offset never
+/// moves it: a bounce at either end and the deceleration after the finger lifts move nothing.
+/// Scrolling down hides it from the first point; scrolling up, or turning either way mid-drag,
+/// first crosses a dead zone (`deadZone`), so a wobble of the finger leaves the bar alone. Let go,
+/// the way the bar was last going picks the end.
 /// Site Settings ▸ Collapse Bottom Bar decides per site whether the bar may move at all: with it
 /// off the bar stays, however far the page scrolls. A page with nothing to scroll keeps its bar
 /// too: hiding the bar would reveal nothing the page could scroll to.
 public struct MobileBarCollapse: Equatable {
-    /// The bar's travel from open to closed: its own height above the safe area.
+    /// The bar's travel from open to closed: its own height above the safe area. The finger
+    /// travels as far to take it the whole way, so the bar moves exactly as far as the finger
+    /// and the page above it, both ways.
     public static let travel = MobileBottomBar.height
-    /// How far the finger travels to take the bar the whole way: half again the bar's own
-    /// height, so the bar trails the finger a little and a drag must go further than the bar
-    /// moves.
-    public static let fingerTravel = travel * 1.5
 
     /// The least a page must run past its screen before hiding the bar is worth it: a page with
     /// only a little to scroll keeps its bar.
@@ -204,29 +215,82 @@ public struct MobileBarCollapse: Equatable {
 
     /// 0 with the bar open, 1 with it closed away; between the two while the finger drags it.
     public private(set) var progress: CGFloat = 0
-    /// The direction of the last travel the finger made: true when it was closing. That is the
-    /// end a release picks.
+    /// The direction the bar last moved in: true when it was closing. That is the end a release
+    /// picks.
     private var lastTravelledClosed = false
 
-    public init() {}
+    /// How far the finger goes before the bar starts back the way it came, or starts opening on
+    /// a new touch: 20 points, so a wobble or the start of a scroll up leaves the bar where it is.
+    public static let deadZone: CGFloat = 32
+    /// This bar's dead zone (`MobileBarCollapse.deadZone` unless set).
+    public let deadZone: CGFloat
+    /// The way the bar is going under this touch (true: closing), or nil before it has gone
+    /// either way.
+    private var direction: Bool?
+    /// How far the finger has gone against `direction` (or, before it has one, towards opening)
+    /// inside the dead zone.
+    private var turn: CGFloat = 0
+
+    /// How fast the finger must be going as it lets go, in points a second, for the flick to
+    /// pick the bar's end by itself: a quick flick that never left the dead zone still sends the
+    /// page scrolling, and the bar goes the same way.
+    public static let flickSpeed: CGFloat = 300
+    /// This bar's flick speed (`MobileBarCollapse.flickSpeed` unless set).
+    public let flickSpeed: CGFloat
+
+    public init(deadZone: CGFloat = MobileBarCollapse.deadZone, flickSpeed: CGFloat = MobileBarCollapse.flickSpeed) {
+        self.deadZone = deadZone
+        self.flickSpeed = flickSpeed
+    }
 
     /// The bar is all there.
     public var isOpen: Bool { progress <= 0 }
     /// The bar is away, with only its strip along the safe area showing.
     public var isClosed: Bool { progress >= 1 }
 
+    /// The least and the most the bar ever covers (`MobileBottomBar.covered`), given to WebKit up front (its minimum and
+    /// maximum viewport insets): the page's `lvh` and `svh` hold still across the bar's travel,
+    /// and only its visible viewport follows the bar.
+    public static let viewportInsets: (least: CGFloat, most: CGFloat) = (0, travel)
+
+    /// A finger came down on the page: its drag starts afresh, so closing moves the bar at once
+    /// and opening waits the dead zone, whichever way the last touch went.
+    public mutating func touchBegan() {
+        direction = nil
+        turn = 0
+    }
+
     /// The finger moved `drag` points, positive with the page moving down: closing the bar. The
-    /// bar trails the finger, going the whole way over `fingerTravel` points of drag, from the
-    /// first one. `collapses` is the site's Collapse Bottom Bar switch; `scrolls` says the page
-    /// has more to scroll than its screen shows, so a page that fits keeps its bar. Says whether
-    /// the bar moved.
+    /// bar moves with the finger point for point, going the whole way over `travel` points of
+    /// drag. Closing starts at once on a new touch; opening, and a turn either way mid-drag,
+    /// waits until the finger has gone `deadZone` points that way, and only the travel beyond it
+    /// moves the bar. `collapses` is the site's Collapse Bottom Bar switch; `scrolls` says the
+    /// page has more to scroll than its screen shows, so a page that fits keeps its bar. Says
+    /// whether the bar moved.
     @discardableResult
     public mutating func dragged(by drag: CGFloat, collapses: Bool, scrolls: Bool) -> Bool {
         // A site with the switch off never moves its bar; nor does a page with nothing to scroll.
         guard collapses, scrolls else { return reveal() }
         guard drag != 0 else { return false }
-        lastTravelledClosed = drag > 0
-        let place = min(1, max(0, progress + drag / Self.fingerTravel))
+        let closing = drag > 0
+        var moved = drag
+        if direction == closing {
+            // On the way it was going: a turn that didn't cross the dead zone is forgotten.
+            turn = 0
+        } else if direction == nil, closing {
+            // Scrolling down hides the bar from the first point.
+            direction = true
+            turn = 0
+        } else {
+            // Opening on a new touch, or a turn: the dead zone first, then what lies beyond it.
+            turn += drag
+            guard abs(turn) > deadZone else { return false }
+            moved = turn - (closing ? deadZone : -deadZone)
+            direction = closing
+            turn = 0
+        }
+        lastTravelledClosed = closing
+        let place = min(1, max(0, progress + moved / Self.travel))
         guard place != progress else { return false }
         progress = place
         return true
@@ -237,6 +301,17 @@ public struct MobileBarCollapse: Equatable {
     /// caller animates the bar, and the page's bottom edge with it, all the way to that end.
     public func released() -> Bool? {
         let closed = lastTravelledClosed
+        guard progress != (closed ? 1 : 0) else { return nil }
+        return closed
+    }
+
+    /// The finger let go at `velocity` points a second, positive with the page moving down. Quick
+    /// enough (`flickSpeed`), the flick picks the end it points at, dead zone or not, and wins
+    /// over the way the bar was going. Says which end (true: closed), or nil for a slow release,
+    /// a bar already at that end, or one that stays: `collapses` and `scrolls` as for `dragged`.
+    public func flicked(velocity: CGFloat, collapses: Bool, scrolls: Bool) -> Bool? {
+        guard collapses, scrolls, abs(velocity) >= flickSpeed else { return nil }
+        let closed = velocity > 0
         guard progress != (closed ? 1 : 0) else { return nil }
         return closed
     }
@@ -257,6 +332,7 @@ public struct MobileBarCollapse: Equatable {
     @discardableResult
     public mutating func reveal() -> Bool {
         lastTravelledClosed = false
+        touchBegan()
         guard progress != 0 else { return false }
         progress = 0
         return true

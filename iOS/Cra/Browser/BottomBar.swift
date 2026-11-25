@@ -44,7 +44,8 @@ final class BottomBar: UIView {
     var collapseProgress: CGFloat = 0 {
         didSet {
             guard collapseProgress != oldValue else { return }
-            applyMode()
+            // Set on every frame of the bar's slide: only the fade changes.
+            applyFade()
         }
     }
 
@@ -78,9 +79,9 @@ final class BottomBar: UIView {
         applyMode()
     }
 
-    /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
-    /// inside an animation block.
-    private func applyMode() {
+    /// The controls' opacity, faded as the bar slides away, and whether they take touches. The
+    /// only part of the bar's look that its slide changes.
+    private func applyFade() {
         let visible = controlsVisibility
         let fade = 1 - collapseProgress
         let tabs = mode == .tabs
@@ -96,6 +97,14 @@ final class BottomBar: UIView {
         // back, not a half-faded button.
         let live = visible > 0.01 && collapseProgress < 0.01
         [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach { $0.isUserInteractionEnabled = live }
+    }
+
+    /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
+    /// inside an animation block.
+    private func applyMode() {
+        applyFade()
+        let visible = controlsVisibility
+        let tabs = mode == .tabs
         // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
         // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd). The
         // empty home screen's bar floats the same way. The blur goes with the bar, not the fade:

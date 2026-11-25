@@ -527,9 +527,10 @@ built release app with a test profile. Note anything that fails in the release's
   `testFlicksLandingOnASettleLeaveTheBarAtAnEnd` covers the flicks themselves.
 
 - **The page under the bar (iOS 26):** on a TestFlight build on a real iPhone, open a long page with
-  a sticky or fixed `bottom: 0` element and drag the bar: the element stays on the bar's top and
-  never goes under it, the page's content shows through the bar's frosted material, the last line
-  scrolls clear of the bar, and the page does not stutter as its layout viewport follows the bar.
+  a sticky or fixed `bottom: 0` element and drag the bar slowly both ways, then let it settle: the
+  element rides on the bar's top every frame, never under it and never apart from it, the page's
+  scroll stays even under the finger the whole way, the page's content shows through the bar's
+  frosted material, and the last line scrolls clear of the bar.
   `PageUnderBarTests` pins the geometry in the simulator; the blur and the frame rate are a phone's
   to judge.
 

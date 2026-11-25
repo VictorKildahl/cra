@@ -10,8 +10,9 @@ protocol WebPageDelegate: AnyObject {
     func webPageDidBeginDrag(_ page: WebPage)
     /// The page's content changed height: it may now fit its screen, or have more to scroll.
     func webPageDidResizeContent(_ page: WebPage)
-    /// The finger let go: the bottom bar settles by the direction it last travelled in.
-    func webPageDidEndDrag(_ page: WebPage)
+    /// The finger let go at `velocity` points a second, positive with the page moving down: a
+    /// quick flick picks the bottom bar's end, else it settles by the way it was last going.
+    func webPageDidEndDrag(_ page: WebPage, velocity: CGFloat)
     /// The page reached its top: the bottom bar is always there.
     func webPageDidReachTop(_ page: WebPage)
     /// Pull to refresh: how far the page is pulled below its top, for the band behind it.
@@ -395,7 +396,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             lastDragTranslation = translation
         case .ended, .cancelled:
             lastDragTranslation = nil
-            delegate?.webPageDidEndDrag(self)
+            // A finger moving up sends the page down: positive, as for the drag. A touch taken
+            // away was never a flick.
+            let velocity = pan.state == .ended ? -pan.velocity(in: webView.window ?? webView).y : 0
+            delegate?.webPageDidEndDrag(self, velocity: velocity)
         default:
             break
         }

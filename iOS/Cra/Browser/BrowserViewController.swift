@@ -57,6 +57,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// kept after the page springs back.
     let pullTraceView = UIView()
     private var pullTraceMax: CGFloat = 0
+    /// For UI tests (`-CraTraceViewport YES`): how many times the page's visible viewport has
+    /// moved with the bar, the most its bottom was ever apart from the bar's top, and the bar's
+    /// range WebKit was given.
+    let viewportTraceView = UIView()
+    private var viewportChanges = 0
+    private var viewportMismatch: CGFloat = 0
     var pagePushedBack = false
     /// The chrome's moves under way: the sheet is put away when the last ends (`MobileSearchSheet.Settling`).
     private var chromeMoves = MobileSearchSheet.Settling()
@@ -111,9 +117,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     /// The bar's top edge with the bar `progress` of the way down its travel: its open place, a
     /// bar above the safe area, at 0, and the safe area's own line at 1, where only the strip
-    /// along the home indicator is left on screen. Dragged, this is the page's bottom edge.
+    /// along the home indicator is left on screen. Dragged, this is the page's bottom edge. It
+    /// keeps to the display's pixel grid, so a step too small to show moves nothing.
     private func barTopEdge(progress: CGFloat) -> CGFloat {
-        MobileBottomBar.top(in: view.bounds.size, safeBottom: view.safeAreaInsets.bottom, progress: progress)
+        MobileBottomBar.top(in: view.bounds.size, safeBottom: view.safeAreaInsets.bottom, progress: progress,
+                            scale: view.traitCollection.displayScale)
     }
 
     /// The page's own frame with the bar `barProgress` of the way down: under the status band,
@@ -129,9 +137,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// so a tab comes in with the page's whole bottom and gains nothing on landing.
     var pageViewHeight: CGFloat { pageViewFrame(top: view.safeAreaInsets.top, barProgress: 1).height }
 
-    /// The page's view bottom with the bar open: the safe area's edge under the bar, the bar's
-    /// top before iOS 26.
-    var pageViewBottom: CGFloat { pageViewFrame(top: view.safeAreaInsets.top, barProgress: 0).maxY }
+    /// The page's view at rest with the bar open: from the status band down to the safe area's
+    /// edge under the bar, to the bar's top before iOS 26.
+    var restingPageViewFrame: CGRect { pageViewFrame(top: view.safeAreaInsets.top, barProgress: 0) }
+
+    /// The page's view bottom with the bar open (`restingPageViewFrame`).
+    var pageViewBottom: CGFloat { restingPageViewFrame.maxY }
 
     /// The page's frame as it is now.
     var pageContentFrame: CGRect { pageFrame(barProgress: barCollapse.progress) }
@@ -155,39 +166,52 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, bottom - safeTop))
     }
 
-    /// How much of the bar lies over the page's view at `progress`: its whole height with the bar
-    /// open, none with it closed, and following the finger in between.
-    private static func barOverlap(_ progress: CGFloat) -> CGFloat {
-        MobileBottomBar.height * (1 - min(1, max(0, progress)))
+    /// How much of the bar lies over the page's view at `progress`: from the bar's top
+    /// (`barTopEdge`, on the same pixel grid) to the safe area's edge, so the page's visible
+    /// bottom is exactly the bar's top.
+    private func barOverlap(_ progress: CGFloat) -> CGFloat {
+        MobileBottomBar.covered(in: view.bounds.size, safeBottom: view.safeAreaInsets.bottom, progress: progress,
+                                scale: view.traitCollection.displayScale)
     }
 
     /// The page's content insets: the notch's sides and, with the page under the bar, the bar's
     /// height as scroll room, so the page's last points can come above it.
     private func pageContentInsets(barProgress: CGFloat) -> UIEdgeInsets {
         let safe = view.safeAreaInsets
-        let bottom = Self.pageRunsUnderBar ? Self.barOverlap(barProgress) : 0
+        let bottom = Self.pageRunsUnderBar ? barOverlap(barProgress) : 0
         return UIEdgeInsets(top: 0, left: safe.left, bottom: bottom, right: safe.right)
     }
 
-    /// Lays the page out above the bar's top while the bar's own height of it shows under the
-    /// bar's material, following the finger. On iOS 26's obscured content insets, the page's `svh`
-    /// and its sticky or fixed bottom elements stay on the bar's top rather than under it.
-    private func updatePageObscuredInsets(barProgress: CGFloat) {
-        guard Self.pageRunsUnderBar, let page = shownPage else { return }
+    /// The page's insets with the bar `barProgress` of the way down. On iOS 26 WebKit lays the
+    /// page out above the bar's top while the bar's own height of it shows under the bar's
+    /// material, following the bar frame by frame, so sticky or fixed bottom elements stay on
+    /// the bar's top as it moves, never under it. It is told the bar's whole range first
+    /// (`MobileBarCollapse.viewportInsets`), so the page's `svh` and `lvh` hold still and only its
+    /// visible viewport follows the bar. The covered strip is scroll room too, and the notch's
+    /// sides keep the content clear of it in landscape.
+    private func updatePageInsets(barProgress: CGFloat) {
+        guard let page = shownPage else { return }
         if #available(iOS 26.0, *) {
-            let bottom = Self.barOverlap(barProgress)
+            let range = MobileBarCollapse.viewportInsets
+            let least = UIEdgeInsets(top: 0, left: 0, bottom: range.least, right: 0)
+            let most = UIEdgeInsets(top: 0, left: 0, bottom: range.most, right: 0)
+            if page.webView.minimumViewportInset != least || page.webView.maximumViewportInset != most {
+                page.webView.setMinimumViewportInset(least, maximumViewportInset: most)
+            }
+            let bottom = barOverlap(barProgress)
             var insets = page.webView.obscuredContentInsets
-            if abs(insets.bottom - bottom) > 0.01 {
+            if insets.bottom != bottom {
                 insets.bottom = bottom
                 page.webView.obscuredContentInsets = insets
+                viewportChanges += 1
             }
-            // The obscured area is scroll room too: without it the last of the page lines up
-            // with the safe area's edge, under the bar, and cannot be scrolled above it.
-            let scroll = page.webView.scrollView
-            let content = pageContentInsets(barProgress: barProgress)
-            if scroll.contentInset != content {
-                scroll.contentInset = content
-            }
+        }
+        // Without the covered strip as scroll room the last of the page lines up with the safe
+        // area's edge, under the bar, and cannot be scrolled above it.
+        let scroll = page.webView.scrollView
+        let content = pageContentInsets(barProgress: barProgress)
+        if scroll.contentInset != content {
+            scroll.contentInset = content
         }
     }
 
@@ -246,6 +270,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// scroll's own work alone.
     private var barLink: CADisplayLink?
     private var barMotion: BarMotion?
+    /// Where a follow last laid the bar out: a display frame with the finger still leaves it.
+    private var barLaidOutAt: CGFloat?
     /// Whether the touch now on the page has moved the bar at all.
     private var barDraggedThisTouch = false
     private static let barSnapDuration: CFTimeInterval = 0.25
@@ -315,6 +341,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             pullTraceView.accessibilityValue = "pull 0 band 0 page 0"
             pullTraceView.isUserInteractionEnabled = false
             view.addSubview(pullTraceView)
+        }
+        if LaunchOptions.value("CraTraceViewport") == "YES" {
+            viewportTraceView.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
+            viewportTraceView.isAccessibilityElement = true
+            viewportTraceView.accessibilityIdentifier = "viewport-trace"
+            viewportTraceView.accessibilityLabel = "Viewport"
+            viewportTraceView.accessibilityValue = "changes 0 apart 0 range 0"
+            viewportTraceView.isUserInteractionEnabled = false
+            view.addSubview(viewportTraceView)
         }
         PressHaptics.installCounter(in: view)
 
@@ -555,8 +590,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The page's view runs on under the bar on iOS 26 (its content laid out above it), and
         // ends at the bar's top before; in both, its visible bottom is the bar's top.
         if let page = shownPage, !pageClosing, !pageOpening, !flick.incoming {
-            page.webView.frame = pageViewFrame(top: webViewTop(), barProgress: barCollapse.progress)
-            updatePageObscuredInsets(barProgress: barCollapse.progress)
+            // On iOS 26 the frame holds still as the bar moves; setting it again anyway makes
+            // WebKit work out what it shows again, on every frame of the bar's travel.
+            let frame = pageViewFrame(top: webViewTop(), barProgress: barCollapse.progress)
+            if page.webView.frame != frame { page.webView.frame = frame }
+            updatePageInsets(barProgress: barCollapse.progress)
         }
         // The bar's top is the page's bottom: it rides between its open place and the safe
         // area's line, and the finger's drag decides where, not the page's scroll.
@@ -565,6 +603,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The keyboard covers the bar; it steps out of the way, and the page keeps its frame.
         if keyboardHeight > safeBottom, !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
+        traceViewport()
         // Its controls fade out as it slides away, and are live only while it is all there.
         bar.collapseProgress = barCollapse.progress
         barReveal.frame = MobileBottomBar.revealStrip(in: bounds.size, safeBottom: safeBottom)
@@ -572,6 +611,19 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The tip and the pill over the bar go with it too.
         placeBlockerNotices()
         layoutBrowseToggle(barTop: barFrame.minY)
+    }
+
+    /// Records, for a UI test, the most the page's visible bottom (its view's bottom less what the
+    /// bar covers) has ever been apart from the bar's top, frame by frame as the bar moves.
+    private func traceViewport() {
+        guard viewportTraceView.superview != nil, Self.pageRunsUnderBar, let page = shownPage,
+              !pageClosing, !pageOpening, !flick.incoming, keyboardHeight <= view.safeAreaInsets.bottom else { return }
+        if #available(iOS 26.0, *) {
+            let visibleBottom = page.webView.frame.maxY - page.webView.obscuredContentInsets.bottom
+            viewportMismatch = max(viewportMismatch, abs(visibleBottom - bar.frame.minY))
+            viewportTraceView.accessibilityValue = "changes \(viewportChanges) apart \(Int(viewportMismatch.rounded(.up)))"
+                + " range \(Int(page.webView.maximumViewportInset.bottom))"
+        }
     }
 
     /// Puts the bar and the sheet where the current state says. Called inside animation blocks.
@@ -685,18 +737,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         logo.alpha = emptyHome.showsLogo ? 1 : 0
         dotField.alpha = emptyHome.showsDots ? 1 : 0
         searchHint.alpha = emptyHome.showsSearchHint ? 1 : 0
-        if !isSearching, !pageClosing, !pageOpening, !flick.incoming, drawerProgress <= 0.001 { updatePageInsets() }
-    }
-
-    /// Lets the page's content sit clear of the notch in landscape and of the bar where its view
-    /// runs under it, so the page's last points can scroll above the bar.
-    func updatePageInsets() {
-        guard let scroll = shownPage?.webView.scrollView else { return }
-        let insets = pageContentInsets(barProgress: barCollapse.progress)
-        if scroll.contentInset != insets {
-            scroll.contentInset = insets
-        }
-        scroll.verticalScrollIndicatorInsets = .zero
     }
 
     /// Lays a page-coloured floor under a page that is sliding across, so the bar's material has
@@ -733,11 +773,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private func startBarLink() {
         guard barLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(barLinkTick(_:)))
+        // The page's scroll runs at ProMotion's rate; the bar and the page's bottom keep up.
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         barLink = link
     }
 
     private func stopBarLink() {
+        barLaidOutAt = nil
         barLink?.invalidate()
         barLink = nil
         barMotion = nil
@@ -769,7 +812,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                 return
             }
             // The finger moves the bar; this only puts the frames where it got to, and a frame
-            // where it stood still sets the same ones again.
+            // where it stood still lays nothing out.
+            guard barCollapse.progress != barLaidOutAt else { return }
+            barLaidOutAt = barCollapse.progress
             layoutBarAndPage()
         }
     }
@@ -1249,7 +1294,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The page's container starts at the status band's bottom; it never sits under the band,
         // and the page's view runs on under the bar where WebKit can lay it out clear of it.
         page.webView.frame = pageViewFrame(top: webViewTop(), barProgress: barCollapse.progress)
-        updatePageObscuredInsets(barProgress: barCollapse.progress)
+        updatePageInsets(barProgress: barCollapse.progress)
         pageContainer.insertSubview(page.webView, belowSubview: pageDim)
         page.restoresAtTop = false
         if page.webView.url == nil, !page.isBrowsing, !page.webKitOwnsInitialNavigation {
@@ -1335,9 +1380,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
     }
 
-    /// A tab's page background, for the floor under the bar while the tab row closes: the page's
-    /// own colour, or the app's when it has none.
-    private func pageBackground(for id: UUID) -> UIColor {
+    /// A tab's page background, for whatever stands in for its page under the bar (the floor
+    /// while the tab row closes, a neighbour's card in a swipe): the page's own colour, or the
+    /// app's when it has none.
+    func pageBackground(for id: UUID) -> UIColor {
         store.existingPage(id)?.webView.underPageBackgroundColor ?? .systemBackground
     }
 
@@ -1954,12 +2000,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         startBarLink()
     }
 
-    /// A finger on the page: the bar's travel is this touch's own. A settle already playing is
-    /// not stopped here, so a touch that never moves the bar cannot leave it half way; the first
-    /// travel (`webPage(_:didDragBy:)`) takes it over.
+    /// A finger on the page: the bar's travel is this touch's own, closing from its first point
+    /// and opening past the dead zone (`MobileBarCollapse.touchBegan`). A settle already playing
+    /// is not stopped here, so a touch that never moves the bar cannot leave it half way; the
+    /// first travel (`webPage(_:didDragBy:)`) takes it over.
     func webPageDidBeginDrag(_ page: WebPage) {
         guard page === shownPage else { return }
         barDraggedThisTouch = false
+        barCollapse.touchBegan()
     }
 
     /// The page's content changed height. A page that now fits its screen has nothing behind
@@ -1976,9 +2024,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if barCollapse.contentChanged(scrolls: scrolls(page)) { snapBar(toClosed: false) }
     }
 
-    /// The finger let go: the direction it last travelled picks the end, and the bar and the
-    /// page's bottom edge are walked there together.
-    func webPageDidEndDrag(_ page: WebPage) {
+    /// The finger let go: a quick flick picks the end it points at, even one that never left the
+    /// dead zone; otherwise the way the bar was last going does. The bar and the page's bottom
+    /// edge are walked there together.
+    func webPageDidEndDrag(_ page: WebPage, velocity: CGFloat) {
         guard page === shownPage, !isSearching else {
             stopBarLink()
             barDraggedThisTouch = false
@@ -1986,7 +2035,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         let dragged = barDraggedThisTouch
         barDraggedThisTouch = false
-        if dragged, let closed = barCollapse.released() {
+        let collapses = settings.value.options(for: page.webView.url?.host).collapseBottomBar
+        if let closed = barCollapse.flicked(velocity: velocity, collapses: collapses, scrolls: scrolls(page)) {
+            snapBar(toClosed: closed)
+        } else if dragged, let closed = barCollapse.released() {
             snapBar(toClosed: closed)
         } else if let motion = barMotion, case .following = motion {
             // The finger took a bar it never moved, or took it to an end: settle by the last

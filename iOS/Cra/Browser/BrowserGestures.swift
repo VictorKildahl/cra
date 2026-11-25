@@ -603,7 +603,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 swipeNeighbourStep = step
                 if let tab {
                     let top = pageContentFrame.minY
-                    let background = store.existingPage(tab.id)?.webView.underPageBackgroundColor ?? .systemBackground
+                    let background = pageBackground(for: tab.id)
                     let card = UIView(frame: view.bounds)
                     card.backgroundColor = background
                     card.clipsToBounds = true
@@ -613,8 +613,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                     content.clipsToBounds = true
                     // The page's content sits below its band and runs on under the bar, as the
                     // page it becomes will.
-                    content.frame = CGRect(x: 0, y: view.safeAreaInsets.top, width: view.bounds.width,
-                                           height: pageViewBottom - view.safeAreaInsets.top)
+                    content.frame = restingPageViewFrame
                     card.addSubview(content)
                     // The incoming tab already has its band at full height: only the tab row
                     // animates the band's size.

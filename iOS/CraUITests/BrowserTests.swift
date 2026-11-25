@@ -17,6 +17,14 @@ class BrowserTestCase: XCTestCase {
         app.launch()
     }
 
+    /// A slow drag on the page, `dy` points (negative is up, scrolling the page down and closing
+    /// the bar), held a moment before it lifts so it ends without a flick.
+    func dragThePage(_ web: XCUIElement, by dy: CGFloat) {
+        let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: dy)),
+                    withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+
     /// A page with `title` as its heading. No spaces in the address (typed text with a space is
     /// a search, not an address), so attributes are separated with slashes.
     static func page(_ title: String, color: String = "white") -> String {
@@ -1060,6 +1068,47 @@ final class CollapseBottomBarTests: BrowserTestCase {
         keep("bar follows the drag")
     }
 
+    /// Scrolling back up brings the bar only past the dead zone (`MobileBarCollapse.deadZone`,
+    /// 20 pt): a short drag down the page leaves a closed bar closed, and a longer one opens it.
+    func testAShortDragUpThePageLeavesTheBarAway() {
+        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        waitForPage("Tall")
+        let pill = app.buttons["bar-search"]
+        let web = app.webViews.firstMatch
+        dragThePage(web, by: -200)
+        XCTAssertTrue(app.buttons["bar-reveal"].waitForExistence(timeout: 5), "the drag down the page put the bar away")
+
+        dragThePage(web, by: 18)
+        sleep(1)
+        XCTAssertTrue(app.buttons["bar-reveal"].exists, "18 pt back up is inside the dead zone")
+        XCTAssertFalse(pill.isHittable)
+        keep("short drag, bar still away")
+
+        dragThePage(web, by: 80)
+        let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [shown], timeout: 5)
+        keep("past the dead zone, bar back")
+    }
+
+    /// A quick flick back up the page brings the bar back even when it is shorter than the dead
+    /// zone: the page carries on scrolling up, and the bar goes with it (`MobileBarCollapse.flickSpeed`).
+    func testAQuickFlickUpThePageBringsTheBarBack() {
+        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        waitForPage("Tall")
+        let pill = app.buttons["bar-search"]
+        let web = app.webViews.firstMatch
+        dragThePage(web, by: -200)
+        XCTAssertTrue(app.buttons["bar-reveal"].waitForExistence(timeout: 5), "the drag down the page put the bar away")
+
+        let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        // A real flick: XCUITest's own `.fast` lets go of so short a drag at under 300 pt/s.
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 25)),
+                    withVelocity: XCUIGestureVelocity(4000), thenHoldForDuration: 0)
+        let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [shown], timeout: 5)
+        keep("flicked back, bar back")
+    }
+
     /// Flinging to the very bottom of a page and letting its bounce run leaves the bar closed:
     /// the page's own offset used to count as scrolling up, so the bounce brought the bar back
     /// and the page jiggled as its inset changed under it.
@@ -1161,12 +1210,6 @@ final class CollapseBottomBarTests: BrowserTestCase {
     }
 
     /// A slow drag from the middle of the page, by `dy` points, held a moment before it lets go.
-    private func dragThePage(_ web: XCUIElement, by dy: CGFloat) {
-        let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: dy)),
-                    withVelocity: .slow, thenHoldForDuration: 0.3)
-    }
-
     /// A page only 60 points longer than its screen keeps its bar: there is too little to scroll
     /// for hiding it to show anything.
     func testAPageOnlySlightlyLongerKeepsTheBar() {

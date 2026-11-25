@@ -58,6 +58,44 @@ final class PageUnderBarTests: BrowserTestCase {
         keep("sticky footer")
     }
 
+    /// The page's visible bottom stays on the bar's top on every frame of the bar's travel, both
+    /// under a dragging finger and through the settle after it: a sticky `bottom: 0` rides the
+    /// bar rather than jump to it at the end. The trace keeps how often the page's covered bottom
+    /// moved, the most it was ever apart from the bar's top, and the range WebKit was given.
+    func testThePagesBottomStaysOnTheBarAsItMoves() {
+        launch(["-CraOpenURL", Self.stickyPage("Travel"), "-CraSearch", "NO", "-CraTraceViewport", "YES"])
+        waitForPage("Travel")
+        let trace = app.descendants(matching: .any)["viewport-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 5))
+        /// "changes N apart N range N" as the app wrote it.
+        func traced() -> [Int] { (trace.value as? String ?? "").split(separator: " ").compactMap { Int($0) } }
+        let web = app.webViews.firstMatch
+
+        let before = traced()
+        XCTAssertEqual(before.count, 3)
+        dragThePage(web, by: -300)
+        sleep(1)
+        XCTAssertTrue(app.buttons["bar-reveal"].waitForExistence(timeout: 3), "the slow drag up put the bar away")
+        let away = traced()
+        XCTAssertEqual(away.count, 3)
+        guard before.count == 3, away.count == 3 else { return }
+        XCTAssertGreaterThan(away[0] - before[0], 5, "the page's bottom followed the bar frame by frame (\(trace.value ?? "nil"))")
+        XCTAssertLessThanOrEqual(away[1], 1, "the page's bottom never left the bar's top (\(trace.value ?? "nil"))")
+        XCTAssertGreaterThan(away[2], 30, "WebKit knows the bar's whole range")
+
+        dragThePage(web, by: 250)
+        sleep(1)
+        XCTAssertTrue(app.buttons["bar-search"].waitForExistence(timeout: 3), "the slow drag down brought the bar back")
+        let back = traced()
+        XCTAssertEqual(back.count, 3)
+        guard back.count == 3 else { return }
+        XCTAssertGreaterThan(back[0] - away[0], 5, "on the way back too (\(trace.value ?? "nil"))")
+        XCTAssertLessThanOrEqual(back[1], 1, "the page's bottom never left the bar's top (\(trace.value ?? "nil"))")
+        let footer = app.webViews.buttons["Footer"]
+        XCTAssertEqual(footer.frame.maxY, barTop, accuracy: 4, "the sticky footer is on the bar's top")
+        keep("page bottom on the bar")
+    }
+
     /// The page's last line can still be brought above the bar: the covered area under it is
     /// scroll room, not content that is lost.
     func testTheLastOfAPageScrollsClearOfTheBar() {
