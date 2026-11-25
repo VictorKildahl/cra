@@ -5535,6 +5535,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             store.focusSpace(id, window: windowID)
         case .moveToSpace(let id):
             if let t = selectedTabID { store.moveTabAndFollow(t, toSpace: id, window: windowID) }
+        case .revealFolder(let id):
+            guard store.spaceID(ofItem: id) == focusedSpaceID else { return }
+            store.revealInSidebar(id)
+            store.setExpanded(id, true)
+            if sidebarUI.libraryPage != nil { closeLibrary() }
+            if !sidebarVisible { toggleSidebar() }
+            sidebarUI.keyboardFocusID = id
+            let ui = sidebarUI, space = focusedSpaceID
+            DispatchQueue.main.async { SpaceListView.jumpToFolder(id, for: ui, space: space) }
         case .moveToFolder(let id):
             if let t = selectedTabID { store.moveItem(t, to: id, index: nil) }
         }

@@ -877,6 +877,12 @@ final class SpaceListView: NSView, NSDraggingSource {
         if jumpPill.frame != frame { jumpPill.frame = frame }
     }
 
+    static func jumpToFolder(_ id: UUID, for ui: SidebarUIState, space: UUID) {
+        for list in all.allObjects where list.ui === ui && list.spaceID == space {
+            if let row = list.rows.first(where: { $0.key == .item(id) }) { list.scrollTo(row) }
+        }
+    }
+
     /// Testing: the jump pill's click on the focused space's list.
     static func jumpToSelected(for ui: SidebarUIState, space: UUID) {
         for l in all.allObjects where l.ui === ui && l.spaceID == space { l.scrollToSelected() }
@@ -942,6 +948,10 @@ final class SpaceListView: NSView, NSDraggingSource {
     /// Scrolls the selected tab to the middle of the list (as far as the list allows).
     private func scrollToSelected() {
         guard let (row, _) = selectedRow() else { return }
+        scrollTo(row)
+    }
+
+    private func scrollTo(_ row: Row) {
         let clip = scrollView.contentView
         let visible = clip.bounds
         let f = placed(row)

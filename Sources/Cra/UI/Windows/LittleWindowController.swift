@@ -1448,7 +1448,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             if isCard { openCommandBar() }
         case .moveToSpace(let id):
             promote(to: id)
-        case .moveToFolder:
+        case .moveToFolder, .revealFolder:
             break
         }
     }

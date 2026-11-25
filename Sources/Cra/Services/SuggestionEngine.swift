@@ -11,6 +11,7 @@ enum SuggestionKind: Equatable {
     case command(String)
     case switchSpace(UUID)
     case moveToSpace(UUID)
+    case revealFolder(UUID)
     case moveToFolder(UUID)
 }
 
@@ -77,7 +78,7 @@ final class SuggestionEngine {
 
     /// `spaceShown` is the space the bar's window shows, which "Switch to" leaves out: a Little
     /// Window's own target (#316); nil, the focused space.
-    func suggestions(for rawQuery: String, mode: CommandBarMode, currentTabID: UUID?, spaceShown: UUID? = nil) -> SuggestionResult {
+    func suggestions(for rawQuery: String, mode: CommandBarMode, currentTabID: UUID?, spaceShown: UUID? = nil, folderSpace: UUID? = nil) -> SuggestionResult {
         let query = rawQuery.trimmingCharacters(in: .whitespaces)
         let q = query.lowercased()
         var result = SuggestionResult(query: query)
@@ -117,7 +118,7 @@ final class SuggestionEngine {
 
         // Arc's order: the row that supplies the inline completion comes first,
         // then what you typed, then everything else.
-        let completion = incognito ? inlineCompletion(q, candidates: items)
+        var completion = incognito ? inlineCompletion(q, candidates: items)
             : typedCompletion(q, items: &items) ?? inlineCompletion(q, candidates: items)
         if let completion, let idx = items.firstIndex(where: { $0.id == completion.candidateID }) {
             let c = items.remove(at: idx)
@@ -129,6 +130,13 @@ final class SuggestionEngine {
             items.insert(typed, at: 1)
         } else {
             items.insert(typed, at: 0)
+        }
+        if case .newTab = mode, let folderSpace, let space = store.space(folderSpace) {
+            let matches = searchableFolders(in: space).filter { $0.title.lowercased().contains(q) }
+            let ranked = matches.filter { $0.title.lowercased() == q } + matches.filter { $0.title.lowercased() != q }
+            let exact = ranked.first?.title.lowercased() == q
+            items.insert(contentsOf: ranked, at: exact ? 0 : min(items.count, 2))
+            if exact { completion = nil }
         }
         if store.settings.searchSuggestions {
             let at = items.firstIndex(where: \.loose) ?? items.count
@@ -211,6 +219,25 @@ final class SuggestionEngine {
         /// The visited pages whose address was entered in the bar, for TypedCompletion (#667), with their entries.
         var typedPages: [TypedCompletion.Page] = []
         var typedEntries: [String: HistoryEntry] = [:]
+    }
+
+    private var folderRows: (space: UUID, rows: [Suggestion])?
+
+    private func searchableFolders(in space: Space) -> [Suggestion] {
+        if let folderRows, folderRows.space == space.id { return folderRows.rows }
+        var rows: [Suggestion] = []
+        func collect(in parent: UUID) {
+            for folder in store.children(of: parent) where folder.isFolder && !folder.isTabGroup {
+                rows.append(Suggestion(id: "reveal:\(folder.id)", kind: .revealFolder(folder.id),
+                                       title: folder.displayTitle, subtitle: "Folder", url: nil, symbol: "folder",
+                                       trailing: "Show in Sidebar", score: 0))
+                collect(in: folder.id)
+            }
+        }
+        collect(in: space.pinnedContainerID)
+        collect(in: space.todayContainerID)
+        folderRows = (space.id, rows)
+        return rows
     }
 
     private var index: SearchIndex?
@@ -321,12 +348,14 @@ final class SuggestionEngine {
     /// The window's space changed under the open bar (#721): the index holds the old space's tabs when the
     /// bar searches only the window's space, so the next listing reads them again.
     func spaceChanged() {
+        folderRows = nil
         index = nil
         indexGeneration &+= 1
     }
 
     /// The command bar opened or closed: what it searches may have changed since.
     func resetIndex() {
+        folderRows = nil
         index = nil
         indexGeneration &+= 1
         enginesRead = nil
