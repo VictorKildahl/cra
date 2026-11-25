@@ -5,6 +5,22 @@ import WebKit
 
 /// The whole browser: the page, the bar under it, and the search sheet that grows out of the
 /// bar's pill when the keyboard comes up.
+/// The canvas colour over a new tab from the search sheet while its page draws (`coverUntilDrawn`), with an opaque
+/// curtain of it right over the page. For a UI test (`-CraTraceCover YES`) it says whether that page and the band
+/// behind the status bar are out of sight under it.
+final class NewPageCover: UIView {
+    let curtain = UIView()
+    weak var band: UIView?
+
+    override var accessibilityValue: String? {
+        get {
+            let bandShows = band.map { !$0.isHidden } ?? false
+            return (curtain.superview != nil ? "page hidden" : "page showing") + (bandShows ? ", band showing" : ", band hidden")
+        }
+        set {}
+    }
+}
+
 final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPageDelegate, TabSwitcherDelegate, PageMenuDelegate {
     let store: TabStore
     let settings: MobileSettingsStore
@@ -38,6 +54,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// lays it out, so a layout pass in between cannot snap its top to the display's top.
     var pageClosing = false
     let dismissArea = UIControl()
+    /// Over a new tab opened from the search sheet until its page has drawn (`MobileSheetLeave.liftsCover`): the
+    /// page it covers, when the cover went up, and when the page said it had drawn.
+    let newPageCover = NewPageCover()
+    var coveredPage: (page: WebPage, since: CFTimeInterval, drawnAt: CFTimeInterval?)?
     /// For UI tests (`-CraTraceSheetDrag YES`): of the last drag down on the open sheet, how many frames had the sheet
     /// out of sight under the keyboard (#655).
     let sheetDragTraceView = UIView()
@@ -292,7 +312,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The band is the page's top: it shrinks from the status bar to nothing as the page is
         // pushed back, its bottom staying at the card's top edge.
         let shown = fill != nil && MobileStatusBand.shown(hasPage: page != nil, searching: false,
-                                                        switching: switcher != nil)
+                                                        switching: switcher != nil, covered: coveredPage != nil)
         let safeTop = view.safeAreaInsets.top
         let pageScale = MobilePageBehindSearch.transform(in: pageContainer.bounds.size, safeTop: safeTop,
                                                          progress: drawerProgress).scale
@@ -526,6 +546,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func setSearching(_ searching: Bool, incognito: Bool? = nil, keepingPull: CGFloat? = nil,
                       replacingMenuAt replacingTop: CGFloat? = nil, editingAddress: Bool = false) {
         guard searching != isSearching else { return }
+        if searching { liftCover() }
         // A sheet pulled out of the pill is already laid out under the finger: it goes on from there.
         let pulled = searchPull != nil
         let replacing = searching ? replacingTop : nil
@@ -612,6 +633,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.setStarters(MobileSuggestions.starterRows(favorites: favorites.value.sites.count,
                                                         hasSearched: settings.value.hasSearched, incognito: incognitoSearch))
         sheet.isHidden = false
+        // Faded out under its picture when a choice was made (leaveSheetRising).
+        sheet.alpha = 1
         bar.pill.alpha = 0
     }
 
@@ -710,11 +733,17 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     /// Where the sheet's choice loads: in the page on screen when its address is being edited
-    /// (`MobileAddressEdit`), otherwise in a new tab, as + does.
+    /// (`MobileAddressEdit`), otherwise in a new tab, as + does. The sheet rises and fades out as it goes.
     func go(_ address: String) {
+        leaveSheetRising()
         guard let page = shownPage, let tab = store.tabs.first(where: { $0.id == page.tabID }),
               MobileAddressEdit.target(editing: editsShownTab, tabIsIncognito: tab.isIncognito, sheetIsIncognito: incognitoSearch) == .currentTab
-        else { return open(address) }
+        else {
+            open(address)
+            // A new page has nothing to show until it draws. Browse for Me puts up its own loading at once.
+            if MobileBrowseForMe.query(fromTabAddress: address) == nil, let page = shownPage { coverUntilDrawn(page) }
+            return
+        }
         setSearching(false)
         if let query = MobileBrowseForMe.query(fromTabAddress: address) {
             store.update(page.tabID, url: address, title: query)
@@ -740,6 +769,89 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             showSuggestions(typed: text, completions: [], sites: incognitoSearch ? [] : knownSites())
         }
         DispatchQueue.main.async { [weak self] in self?.sheet.field.selectAll(nil) }
+    }
+
+    // MARK: Leaving the sheet for what was chosen (MobileSheetLeave)
+
+    /// The sheet rises and fades out from where it is, as Arc Search's does once something is chosen in it. A picture
+    /// of it does: the sheet itself, hidden, closes into the pill under it as the keyboard goes.
+    func leaveSheetRising() {
+        guard isSearching, let picture = sheet.snapshotView(afterScreenUpdates: false) else { return }
+        picture.frame = sheet.frame
+        picture.isUserInteractionEnabled = false
+        view.insertSubview(picture, aboveSubview: sheet)
+        sheet.alpha = 0
+        UIView.animate(withDuration: MobileSheetLeave.leaveDuration, delay: 0, options: [.curveEaseInOut]) {
+            picture.transform = CGAffineTransform(translationX: 0, y: -MobileSheetLeave.leaveRise)
+            picture.alpha = 0
+            self.bar.pill.alpha = 1
+        } completion: { _ in
+            picture.removeFromSuperview()
+        }
+    }
+
+    /// The screen goes to the canvas colour as the sheet leaves and stays so until `page` has drawn, so a dark site
+    /// doesn't show white first; at most `MobileSheetLeave.coverLongestHold`.
+    func coverUntilDrawn(_ page: WebPage) {
+        liftCover()
+        let cover = newPageCover
+        cover.backgroundColor = .systemBackground
+        cover.frame = view.bounds
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        cover.isUserInteractionEnabled = false
+        // For a UI test (`-CraTraceCover YES`): left out of what VoiceOver and other tests see otherwise.
+        cover.isAccessibilityElement = LaunchOptions.value("CraTraceCover") == "YES"
+        cover.accessibilityIdentifier = "new-page-cover"
+        cover.alpha = 0
+        // Over the page and the bar, under the sheet on its way out.
+        view.insertSubview(cover, belowSubview: sheet)
+        coveredPage = (page, CACurrentMediaTime(), nil)
+        // The page itself stays out of sight until the cover comes off, under an opaque curtain right over it, and the
+        // band behind the status bar with it: WebKit paints a new page white before its own colours come, which showed
+        // through the cover as it faded in. The page stays in view underneath, so it has drawn when the curtain goes.
+        cover.curtain.backgroundColor = .systemBackground
+        cover.curtain.frame = pageContainer.bounds
+        cover.curtain.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        cover.curtain.isUserInteractionEnabled = false
+        pageContainer.insertSubview(cover.curtain, aboveSubview: page.webView)
+        cover.band = statusBand
+        updateStatusBand()
+        page.onDrawn = { [weak self, weak page] in
+            guard let self, let page else { return }
+            self.pageDrew(page)
+        }
+        UIView.animate(withDuration: MobileSheetLeave.leaveDuration, delay: 0, options: [.curveEaseInOut]) { cover.alpha = 1 }
+        for delay in [MobileSheetLeave.leaveDuration, MobileSheetLeave.coverLongestHold] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay + 0.01) { [weak self] in self?.liftCoverIfDue() }
+        }
+    }
+
+    func pageDrew(_ page: WebPage) {
+        guard coveredPage?.page === page, coveredPage?.drawnAt == nil else { return }
+        coveredPage?.drawnAt = CACurrentMediaTime()
+        liftCoverIfDue()
+        // The paint reaches the screen a frame or two after the page says it has drawn (`MobileSheetLeave.drawnSettle`).
+        DispatchQueue.main.asyncAfter(deadline: .now() + MobileSheetLeave.drawnSettle + 0.01) { [weak self] in self?.liftCoverIfDue() }
+    }
+
+    func liftCoverIfDue() {
+        guard let covered = coveredPage else { return }
+        let now = CACurrentMediaTime()
+        let sinceDrawn = covered.drawnAt.map { now - $0 }
+        guard covered.page !== shownPage || MobileSheetLeave.liftsCover(elapsed: now - covered.since, sinceDrawn: sinceDrawn) else { return }
+        liftCover()
+    }
+
+    /// Takes the cover off at once, as Arc Search's page appears; also when search, the tab row or another page
+    /// comes up over it. The page shows again, and the band behind the status bar in the colour it has drawn.
+    func liftCover() {
+        guard let covered = coveredPage else { return }
+        covered.page.onDrawn = nil
+        coveredPage = nil
+        newPageCover.layer.removeAllAnimations()
+        newPageCover.removeFromSuperview()
+        newPageCover.curtain.removeFromSuperview()
+        updateStatusBand()
     }
 
     func searchSheet(_ sheet: SearchSheet, didMoveFavoriteFrom source: Int, to destination: Int) {
@@ -793,6 +905,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         shownPage?.webView.removeFromSuperview()
         shownPage?.delegate = nil
         shownPage = page
+        liftCoverIfDue()
         page.delegate = self
         page.webView.allowsBackForwardNavigationGestures = false
         page.webView.frame = pageContainer.bounds
@@ -880,6 +993,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// Puts the tab row up looking exactly like the page: the focused card fills the screen.
     /// From there it settles into the row (`settleSwitcher`) or follows a finger first.
     func prepareSwitcher() -> TabSwitcherView {
+        liftCover()
         let switcher = TabSwitcherView(frame: view.bounds)
         switcher.delegate = self
         let tabs = store.switcherTabs
@@ -1418,6 +1532,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func webPage(_ page: WebPage, didFinishLoading success: Bool) {
+        pageDrew(page)
         if success, store.tabs.first(where: { $0.id == page.tabID })?.isIncognito == false, let address = page.webView.url?.absoluteString {
             page.iconCandidates { [weak self] candidates in self?.favicons.fetch(for: address, candidates: candidates) }
         }
