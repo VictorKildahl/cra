@@ -92,6 +92,52 @@ struct MobileChromeTests {
     }
 }
 
+/// The search sheet coming up from the pill, matched to Arc Search at 60 fps.
+struct MobileSearchMotionTests {
+    /// The sheet sets off on the tap, eased out, and the keyboard takes it over; it no longer waits for the keyboard.
+    @Test func theSheetSetsOffBeforeTheKeyboardComes() {
+        #expect(MobileSearchMotion.leadDuration == 0.25)
+    }
+
+    /// The pill's plus keeps to the field's leading end as it grows, the placeholder to its right; it no longer
+    /// sits in the field's middle over the placeholder.
+    @Test func thePlusKeepsToTheLeadingEndAsThePillGrows() {
+        let pill: CGFloat = 76
+        #expect(MobileSearchMotion.plusCenter(closedWidth: pill, openness: 0) == 38)
+        #expect(MobileSearchMotion.plusCenter(closedWidth: pill, openness: 1) == 2)
+        #expect(MobileSearchMotion.plusCenter(closedWidth: pill, openness: 0.5) == 20)
+        // Open, the text starts where the field's always has; on the way, right of the plus.
+        #expect(MobileSearchMotion.textInset(closedWidth: pill, openness: 1) == 24.5)
+        for step in 0...10 {
+            let open = CGFloat(step) / 10
+            let gap = MobileSearchMotion.textInset(closedWidth: pill, openness: open)
+                - MobileSearchMotion.plusCenter(closedWidth: pill, openness: open)
+            #expect(abs(gap - 22.5) < 0.001)
+        }
+        #expect(MobileSearchMotion.plusCenter(closedWidth: pill, openness: 2) == 2)
+    }
+
+    /// The sheet is solid early, its field's buttons come late, under a finger and in an animated move.
+    @Test func theSurfaceIsSolidEarlyAndTheButtonsComeLate() {
+        let surface = MobileSearchMotion.surfaceSpan, buttons = MobileSearchMotion.accessorySpan
+        #expect(MobileSearchMotion.opacity(openness: 0, over: surface) == 0)
+        #expect(MobileSearchMotion.opacity(openness: 0.25, over: surface) == 1)
+        #expect(MobileSearchMotion.opacity(openness: 0.6, over: surface) == 1)
+        #expect(MobileSearchMotion.opacity(openness: 0.5, over: buttons) == 0)
+        #expect(MobileSearchMotion.opacity(openness: 0.75, over: buttons) == 0.5)
+        #expect(MobileSearchMotion.opacity(openness: 1, over: buttons) == 1)
+        // Opening: the surface in the first quarter of the move, the buttons in the second half.
+        #expect(MobileSearchMotion.fadeWindow(from: 0, to: 1, over: surface) == 0...0.25)
+        #expect(MobileSearchMotion.fadeWindow(from: 0, to: 1, over: buttons) == 0.5...1)
+        // Closing: the buttons go first, the surface stays solid until the last quarter.
+        #expect(MobileSearchMotion.fadeWindow(from: 1, to: 0, over: buttons) == 0...0.5)
+        #expect(MobileSearchMotion.fadeWindow(from: 1, to: 0, over: surface) == 0.75...1)
+        // From halfway open, the surface is already solid: nothing left to fade.
+        #expect(MobileSearchMotion.fadeWindow(from: 0.5, to: 1, over: surface) == 0...0)
+        #expect(MobileSearchMotion.fadeWindow(from: 1, to: 1, over: surface) == 0...0)
+    }
+}
+
 struct MobileSuggestionsTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/650")) func syncedSpaceSitesKeepTheirPlaceAndPhoneWins() {
         var a = SidebarDocument.fresh()

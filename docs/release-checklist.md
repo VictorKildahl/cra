@@ -485,6 +485,11 @@ built release app with a test profile. Note anything that fails in the release's
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
   lists Cra too. Needs a real iPhone and Apple's signing: the policy test only sees the file.
 
+- **Opening the search sheet (`MobileSearchMotion`):** on a real iPhone in dark mode beside Arc Search, over a
+  page: tap the pill. The sheet moves on the frame after the finger lifts, solid from the start, the plus at the
+  field's left with "Search..." to its right, and the mic and eyes come in over the second half. Needs a human eye:
+  the simulator's frame timing is not the phone's.
+
 - **#675:** on a TestFlight build on a real iPhone with System Haptics on, press the New Tab pill, the
   tab stack and the up arrow: one very subtle tick as the finger comes down and nothing as it lets go. In
   the page menu, tapping the address gives the same subtle tick; the tiles and rows a light one, Pin and

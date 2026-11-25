@@ -555,6 +555,14 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             && pageContainer.transform != .identity && switcher == nil
         dismissArea.isHidden = !searching
         keyboardDroveLayout = false
+        // Off on the tap's next frame, at its fastest, as Arc Search's (`MobileSearchMotion.leadDuration`): the move
+        // goes to the render server before the keyboard is asked for, which keeps the main thread busy for tens of
+        // milliseconds on a phone, and the keyboard's own animation takes it over when it comes.
+        let leads = searching && !pulled && replacing == nil
+        if leads {
+            animateChrome(duration: MobileSearchMotion.leadDuration, options: .curveEaseOut)
+            CATransaction.flush()
+        }
         if searching {
             if replacing != nil {
                 // Same drawer, new content: the field sits where the address capsule was.
@@ -578,7 +586,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                     self.pulledSheetHold = nil
                     self.animateChrome(duration: 0.35, options: .curveEaseInOut)
                 }
-            } else {
+            } else if !leads {
                 animateChrome(duration: 0.35, options: .curveEaseInOut)
             }
         }
