@@ -504,7 +504,8 @@ final class SettingsSyncService {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
-                                    id: UUID(), parentIDs: parentIDs)
+                                    id: UUID(), parentIDs: parentIDs,
+                                    autoArchived: SyncAutoArchive.listed(store.autoArchivedTabs, now: clock.now))
         try coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
         return manifest
     }
@@ -605,8 +606,20 @@ final class SettingsSyncService {
     private func apply(_ manifest: SyncManifest, _ bundle: Bundle, merge: Bool = true, remember: Bool = true) {
         var document = bundle.document
         var settings = bundle.settings
-        if merge, let base = history.base(for: manifest) {
+        if merge, var base = history.base(for: manifest) {
             let local = localBundle()
+            // An archive pass that ran before a look on the other Mac reached it is undone (SyncAutoArchive): the base
+            // forgets the tab, so the merge keeps the copy one Mac still has.
+            let localIDs = Set(local.document.items.map(\.id)), remoteIDs = Set(bundle.document.items.map(\.id))
+            let archivedHere = Dictionary(store.autoArchivedTabs.map { ($0.id, $0.at) }, uniquingKeysWith: max)
+                .filter { !localIDs.contains($0.key) && remoteIDs.contains($0.key) }
+            let archivedThere = manifest.autoArchivedTabs.filter { localIDs.contains($0.key) && !remoteIDs.contains($0.key) }
+            let back = SyncAutoArchive.undone(archived: archivedHere, seen: bundle.document.lastActive, limit: store.autoArchiveChoice(forTab:))
+                .union(SyncAutoArchive.undone(archived: archivedThere, seen: local.document.lastActive, limit: store.autoArchiveChoice(forTab:)))
+            if !back.isEmpty {
+                CraLog.note("sync: \(back.count) tabs archived before a look on the other Mac arrived stay in the sidebar")
+                base = base.removing(back)
+            }
             document = SidebarMerge.merge(base: base, local: local.document, remote: bundle.document)
             // A setting changed here since that bundle stays, as the sidebar's changes do; a history from an older Cra
             // has no settings to merge against, and the bundle's replace this Mac's as before.
@@ -616,6 +629,7 @@ final class SettingsSyncService {
             CraLog.note("sync: \(manifest.device)'s bundle merged with what changed here since the one it was written from")
         }
         store.replace(document: document)
+        store.forgetAutoArchived(Set(document.items.map(\.id)))
         store.settings = store.settings.applyingSynced(settings)
         try? bundle.keybindings.write(to: AppPaths.file(SettingsSync.keybindingsName), options: .atomic)
         keybindingsChanged()

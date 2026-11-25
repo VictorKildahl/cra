@@ -77,6 +77,14 @@ public enum SidebarMerge {
             if r == b { return l }
             var m = r
             m.children = mergeList(base: b.children, local: l.children, remote: r.children)
+            // Looked at on both Macs: the later look, or this Mac's would read as idle to the archive pass.
+            switch (m.data, l.data) {
+            case (.tab(var t), .tab(let lt)):
+                if let lt = lt.timeLastActiveAt, lt > (t.timeLastActiveAt ?? .distantPast) { t.timeLastActiveAt = lt; m.data = .tab(t) }
+            case (.split(var s), .split(let ls)):
+                if let lt = ls.timeLastActiveAt, lt > (s.timeLastActiveAt ?? .distantPast) { s.timeLastActiveAt = lt; m.data = .split(s) }
+            default: break
+            }
             return m
         }
     }

@@ -2723,6 +2723,25 @@ final class SidebarStore {
         return count
     }
 
+    /// A tab's "Archive tabs after", by its space's profile: a tab in the sidebar, or one in the Archive by the space it
+    /// came from (SyncAutoArchive).
+    func autoArchiveChoice(forTab id: UUID) -> AutoArchiveChoice {
+        let sid = spaceID(ofItem: id) ?? archive.first { $0.id == id }?.sourceSpaceID
+        return settings.autoArchive(profileID: sid.flatMap { spaces[$0]?.profileID })
+    }
+
+    /// The pass's archives, id → when, for the sync bundle (SyncAutoArchive.listed).
+    var autoArchivedTabs: [(id: UUID, at: Date)] {
+        archive.filter { $0.reason == .auto }.map { (id: $0.id, at: $0.archivedAt) }
+    }
+
+    /// Tabs the archive pass took that sync brought back to the sidebar leave the Archive (SyncAutoArchive).
+    func forgetAutoArchived(_ ids: Set<UUID>) {
+        guard !ids.isEmpty, archive.contains(where: { $0.reason == .auto && ids.contains($0.id) }) else { return }
+        archive.removeAll { $0.reason == .auto && ids.contains($0.id) }
+        touch()
+    }
+
     // MARK: Spaces
 
     @discardableResult
