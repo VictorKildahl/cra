@@ -262,6 +262,7 @@ final class SidebarActions {
     /// Arc's "Share this tab instead" on a row (TabSharing): the call shares that tab, which shows.
     var shareTabInstead: (UUID) -> Void = { _ in }
     var separatePinnedTab: (UUID) -> Void = { _ in }
+    var separateFavorite: (UUID) -> Void = { _ in }
     var editPinnedURL: (UUID) -> Void = { _ in }
     var openURL: (String) -> Void = { _ in }
     /// Cra's one toast (ShinyToast) in this window.

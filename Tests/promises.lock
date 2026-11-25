@@ -1771,7 +1771,8 @@
 #798   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::spaceIconStaysWhiteWhereWhiteReads  bec91484a81d
 #798   Tests/Scenarios/little-window-space-icons.scenario  f1ad53d6cb2e
 #800   Tests/Scenarios/empty-pane-no-window-drag.scenario  59cfd4919c8c
-#801   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::commandClickOpensInANewTab  e689c72a0780
+#801   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::commandClickSeparatesThePage  e702f8c617c7
+#801   Tests/Scenarios/favorite-command-click.scenario  e1777f26f2c1
 #803   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoritePlayingSoundLetsItsPageGo  e122cb183ce8
 #803   Tests/Scenarios/favorite-close-playing.scenario  8bbf7e9c41d3
 #804   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteAwayFromItsPageTakesItBack  24e2ad793049

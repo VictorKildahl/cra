@@ -1,0 +1,37 @@
+# promise: #801
+# A ⌘-click on a Favorite separates its page, as in Arc 1.174.2 (measured 25 Nov 2026): the page moves to a new
+# Today tab at the top, left in the background, and the Favorite stays shown, back on its pinned page if it was
+# away. At home too, the page gets a Today tab of its own. The clicks go through the event queue to the tile with ⌘
+# held (mods=1048576), as the pointer's would; the pages say where they are.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=home
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/favoriteTab
+wait 1
+cra://debug?cdp=Page.navigate&params={"url":"${PAGE}?n=away"}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'at=' + location.search"}
+expect-log "value":"at=\?n=away"
+
+# Away from its pinned page: the page goes to the top of Today, the Favorite goes home and stays shown.
+cra://debug?clickAt=40,105&mods=1048576
+expect-log favorite separated: page to a new Today tab at the top, favorite back on its pinned page
+wait 1.5
+cra://debug?todayOrder=away
+expect-log today order away: [^ |]*\?n=away( |$)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'shown=' + location.search"}
+expect-log "value":"shown=\?n=home"
+
+# At home: the page gets a new Today tab on top, the Favorite stays where it is. (A second for its page to settle.)
+wait 1
+cra://debug?clickAt=40,105&mods=1048576
+expect-log favorite separated: page to a new Today tab at the top, favorite kept
+wait 1.5
+cra://debug?todayOrder=home
+expect-log today order home: [^ |]*\?n=home \| [^ |]*\?n=away( |$)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'still=' + location.search"}
+expect-log "value":"still=\?n=home"
+reject-log favorite double-click
+cra://debug?checkStore=1

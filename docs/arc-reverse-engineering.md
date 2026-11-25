@@ -5552,3 +5552,19 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   away from its pinned page (`resetPinnedTab`, which loads the pinned page in the kept browser). Sound still closes it
   (#803), Close Tab in its menu still unloads it (#740). Scenario `favorite-close-away`.
 - **Open questions:** whether ⇧⌘T brings back the page the Favorite was on.
+
+## ⌘-click on a Favorite (25 Nov 2026, Arc 1.174.2, #801)
+
+- **Measured** in the offline copy, as for #804 (the same two pages posting their state every second), ⌘-click on the
+  first Favorite's tile with the Favorite open, then the saved StorableSidebar.json read after quitting:
+  - **Away** (`away.html`): `away.html` went hidden and kept running (same load id), and `pin.html` loaded afresh,
+    visible. Saved: a new Today tab with `away.html` at index 0 (top), `isUnread` false and no `timeLastActiveAt`;
+    the Favorite's `timeLastActiveAt` = the click's moment. The page moved out to a background Today tab; the Favorite
+    went home and stayed shown: the pinned tab icon's "Separate From Pinned Tab" (#139), on the whole tile.
+  - **At home** (`pin.html`): the same. The running `pin.html` went hidden into a new top Today tab (read, never
+    visited), and the Favorite showed a fresh `pin.html`.
+- **Cra:** `FavoriteClick.separateFromFavorite` (⌘ alone) → `separateFavorite`: a new Today tab at the top with the
+  page, saved read (`markDuplicateRead`), the Favorite back on its pinned page if away (`resetPinnedTab`) and kept
+  selected. Arc moves the live page and reloads the Favorite; Cra loads the page in the new tab and a Favorite at
+  home keeps its own. Scenario `favorite-command-click`.
+- **Open questions:** a ⌘-click on a Favorite that isn't open (not loaded), on a Favorite split's pane, and ⌘⇧/⌘⌥.
