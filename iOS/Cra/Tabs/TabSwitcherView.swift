@@ -20,6 +20,10 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var row = MobileTabRow(cards: [])
     private var views: [UUID: TabCardView] = [:]
     private var cards: [TabCardView] { row.cards.compactMap { views[$0] } }
+    /// The strip between the page's bottom and the screen's edge (the bar's own band), in the
+    /// page's own colour while a card fills the screen: the bar's material must not show the row's
+    /// backdrop there mid-transition.
+    private let bottomFill = UIView()
     private(set) var position: CGFloat = 0
     private var dragStart: CGFloat = 0
     private var draggedCard: TabCardView?
@@ -44,6 +48,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         background.startPoint = CGPoint(x: 0, y: 0)
         background.endPoint = CGPoint(x: 1, y: 1)
         layer.addSublayer(background)
+        bottomFill.isUserInteractionEnabled = false
+        bottomFill.alpha = 0
+        addSubview(bottomFill)
         applyColors()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TabSwitcherView, _) in view.applyColors() }
 
@@ -99,6 +106,15 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         background.frame = bounds
         CATransaction.commit()
         layoutCards()
+        let bottom = pageBottom ?? bounds.height
+        bottomFill.frame = CGRect(x: 0, y: bottom, width: bounds.width, height: max(0, bounds.height - bottom))
+    }
+
+    /// The strip below the page takes `colour` while a card fills the screen; hidden (`alpha` 0)
+    /// with the row, so the bar's own slab and this strip come and go together.
+    func setBottomFill(_ colour: UIColor?, alpha: CGFloat) {
+        bottomFill.backgroundColor = colour
+        bottomFill.alpha = alpha
     }
 
     private func layoutCards() {

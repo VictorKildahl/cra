@@ -1327,6 +1327,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
     }
 
+    /// A tab's page background, for the floor under the bar while the tab row closes: the page's
+    /// own colour, or the app's when it has none.
+    private func pageBackground(for id: UUID) -> UIColor {
+        store.existingPage(id)?.webView.underPageBackgroundColor ?? .systemBackground
+    }
+
     /// Puts the tab row up looking exactly like the page: the focused card fills the screen.
     /// From there it settles into the row (`settleSwitcher`) or follows a finger first.
     func prepareSwitcher() -> TabSwitcherView {
@@ -1354,6 +1360,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // An incognito page has no card to shrink into; the row just appears.
         switcher.expandedID = onRow ? selected : nil
         switcher.expansion = onRow ? 1 : 0
+        switcher.setBottomFill(selected.map(pageBackground(for:)) ?? .systemBackground, alpha: 1)
         view.insertSubview(switcher, aboveSubview: pageContainer)
         switcher.layoutIfNeeded()
         self.switcher = switcher
@@ -1369,6 +1376,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         offerSyncCard(in: switcher)
         UIView.animate(spring: MobileMotion.tabRowSettle) {
             switcher.expansion = 0
+            switcher.setBottomFill(nil, alpha: 0)
             switcher.layoutIfNeeded()
             self.bar.mode = .tabs
             self.layoutChrome()
@@ -1378,6 +1386,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     /// Back from a row that was only peeked at: the card grows into its page again.
     func cancelSwitcher(_ switcher: TabSwitcherView) {
+        if let selected = store.selected?.id {
+            switcher.setBottomFill(pageBackground(for: selected), alpha: 1)
+        }
         UIView.animate(spring: MobileMotion.tabOpen) {
             switcher.expansion = 1
             switcher.layoutIfNeeded()
@@ -1408,6 +1419,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private func closeSwitcher(_ switcher: TabSwitcherView, growing id: UUID) {
         switcher.expandedID = id
         switcher.isUserInteractionEnabled = false
+        // The bar's slab appears whole at the close's first frame: the strip below the page must
+        // already be the page's colour, not the row's backdrop.
+        switcher.setBottomFill(pageBackground(for: id), alpha: 1)
         UIView.animate(spring: MobileMotion.tabOpen) {
             switcher.expansion = 1
             switcher.layoutIfNeeded()
