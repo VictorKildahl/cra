@@ -2484,6 +2484,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         positionPageWindows(lastPaneFrames)
     }
 
+    /// The tab's DevTools take the keys while it shows (EmbeddedDevTools.giveKeys).
+    func browserManagerDevToolsTakeKeys(_ tabID: UUID) {
+        guard let window, browsers.visibleTabIDs.contains(tabID), let dev = browsers.devToolsViews[tabID]?.window else { return }
+        EmbeddedDevTools.giveKeys(to: dev, in: window)
+    }
+
     /// The engine's docked frontends in their panes' cards, under the pages, which go where each left room; a card
     /// whose tab has none docked (closed, undocked, another tab now) lets go of the one it had.
     private func syncEmbeddedDevTools() {

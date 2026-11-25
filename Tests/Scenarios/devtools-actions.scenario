@@ -1,0 +1,49 @@
+# The developer bar's DevTools commands (Arc 1.170's, #88) on the engine, as in Chrome: Network opens DevTools on the
+# Network panel, Console switches to the Console, Inspect opens them with the element picker on, and DevTools that
+# open or switch panel take the keys, in a tab and in a Little Window. Before, Network opened them on Elements, the
+# first Inspect opened them with the picker off (a second press turned it on), and the keys stayed with the page.
+# The frontend says whether its picker is on on its console, which Chromium logs: "cra picker true".
+# (Scripts here use no spaces or "=".)
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=dev
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# Network on closed DevTools.
+cra://action/networkPanel
+wait 6
+cra://debug?devToolsShown=network
+expect-log tab devtools network: windows=0 open=1 drawn=1 docked=1 .*focus=devtools .*panel=network$
+
+# Console on open DevTools switches to it.
+cra://action/jsConsole
+wait 2
+cra://debug?devToolsShown=console
+expect-log tab devtools console: windows=0 open=1 .*focus=devtools .*panel=console$
+
+cra://action/devTools
+wait 3
+cra://debug?devToolsShown=closed
+expect-log tab devtools closed: windows=0 open=0
+
+# Inspect on closed DevTools: on Elements, with the picker on.
+cra://action/inspectElement
+wait 6
+cra://debug?devToolsShown=inspect
+expect-log tab devtools inspect: windows=0 open=1 .*focus=devtools .*panel=elements$
+cra://debug?devtoolsjs=import('./ui/legacy/legacy.js').then(function(m){console.error('cra picker '+m.ActionRegistry.ActionRegistry.instance().getAction('elements.toggle-element-search').toggled())})
+wait 2
+expect-log "cra picker true"
+reject-log "cra picker false"
+
+# In a Little Window: Network on closed DevTools, then Console.
+cra://debug?externalURL=${PAGE}?n=little
+wait 3
+cra://action/networkPanel
+wait 6
+cra://debug?devToolsShown=little-network
+expect-log little devtools little-network: little0 peek=0 parked=0 open=1 docked=1 shown=1 .*focus=devtools panel=network$
+cra://action/jsConsole
+wait 2
+cra://debug?devToolsShown=little-console
+expect-log little devtools little-console: little0 peek=0 parked=0 open=1 .*focus=devtools panel=console$

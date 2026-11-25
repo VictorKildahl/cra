@@ -59,6 +59,8 @@ final class TabRuntime {
     var sleepHold: TabSleepPolicy.Hold?
     /// Whether this page's DevTools are open, closing or asked for (DevToolsToggle).
     var devTools = DevToolsToggle()
+    /// What its DevTools frontend is asked once it is up, and when it takes the keys (CraCore DevToolsFrontendCalls).
+    var devToolsCalls = DevToolsFrontendCalls()
     /// Loads of an extension's page Chromium blocked because the extension wasn't up yet
     /// (ExtensionPageRetry); back to 0 once a page loads.
     var extensionPageRetries = 0
@@ -112,6 +114,8 @@ protocol BrowserManagerDelegate: AnyObject {
     func browserManagerDevToolsHost(for tabID: UUID) -> NSView?
     /// A DevTools pane appeared or closed; the shell decides whether to show the dock.
     func browserManagerDevToolsChanged()
+    /// The tab's DevTools take the keys: they opened, or a command keeps them shown (DevToolsFrontendCalls).
+    func browserManagerDevToolsTakeKeys(_ tabID: UUID)
     /// A call's tab sharing changed on one of the pages (CraBrowser.isBeingShared, canShareInstead).
     func browserManagerTabSharingChanged()
     /// Chrome's docked frontend moved its page placeholder (streamed while its splitter is dragged).
@@ -2210,11 +2214,20 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     /// (DevToolsToggle.Command).
     func runDevTools(_ command: DevToolsToggle.Command) {
         guard let rt = visibleRuntime else { return }
+        let open = rt.devTools.state == .open
         let (effect, frontend) = rt.devTools.run(command)
         // A press made while DevTools close is done when they reopen (DevToolsToggle.didClose),
         // one made while they open once the frontend is up.
-        rt.browser.devToolsAction = frontend
+        let (engineAction, now) = rt.devToolsCalls.command(frontend, shows: effect == .show || effect == .frontend, frontendUp: open)
+        rt.browser.devToolsAction = engineAction
         perform(effect, on: rt)
+        take(now, on: rt)
+    }
+
+    /// Runs a DevToolsFrontendCalls step in the page's frontend.
+    private func take(_ step: DevToolsFrontendCalls.Step, on rt: TabRuntime) {
+        if let script = step.script { rt.browser.executeJavaScript(script, inDevTools: true) }
+        if step.takesKeys, let id = tabID(of: rt.browser) { delegate?.browserManagerDevToolsTakeKeys(id) }
     }
 
     private func perform(_ effect: DevToolsToggle.Effect, on rt: TabRuntime) {
@@ -2253,8 +2266,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     }
 
     func browser(_ browser: CraBrowser, devToolsShowsPanel panel: String) {
-        guard let id = tabID(of: browser) else { return }
-        runtimes[id]?.devTools.didShowPanel(panel)
+        guard let id = tabID(of: browser), let rt = runtimes[id] else { return }
+        let first = rt.devTools.panel == nil
+        rt.devTools.didShowPanel(panel)
+        // A closing frontend's report is dropped (DevToolsToggle.didShowPanel).
+        guard rt.devTools.state == .open || rt.devTools.state == .opening else { return }
+        take(rt.devToolsCalls.frontendShowsPanel(first: first), on: rt)
     }
 
     /// CEF's window for the visible tab's DevTools, if any.
