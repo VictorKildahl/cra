@@ -4667,6 +4667,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     func debugSiteControls() { showToolbarExtensionsMenu() }
 
+    /// cra://debug?commandBarIcon (#755): the open bar's n-th row's favicon.
+    func debugCommandBarIcon(_ i: Int) -> String { commandHost?.debugRowIcon(i) ?? "none" }
+
     /// `cra://debug?switcher` (`=all`: ⌃⌥Tab's, #467).
     func debugTabSwitcher(allSpaces: Bool = false, held: NSEvent.ModifierFlags = []) {
         let theme = focusedSpace.theme

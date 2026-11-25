@@ -1689,6 +1689,10 @@
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::logLineSaysWhetherChromiumGetsThePipe  0c763e07cfbc
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::takesOverDescriptorsALauncherLeftOpen  8e765f726695
 #752   Tests/Scenarios/extension-action-fds-held.scenario  121e1d606f04
+#755   Packages/CraCore/Tests/CraCoreTests/FaviconInkTests.swift::githubsWhiteOctocatIsALightMark  889f15ea2465
+#755   Packages/CraCore/Tests/CraCoreTests/FaviconInkTests.swift::halfSeeThroughPixelsCountByTheirColour  81a671c376e9
+#755   Packages/CraCore/Tests/CraCoreTests/FaviconInkTests.swift::iconsThatShowOnWhiteStayAsTheyAre  e16cfe1232c0
+#755   Tests/Scenarios/command-bar-light-favicon.scenario  9897dad1213f
 #756   Tests/FieldEditorSelectionTests.swift::longAddressShowsItsStart  f9dc277dacc7
 #756   Tests/FieldEditorSelectionTests.swift::startShownWhenFieldWasScrolledToTheEnd  b1b17fac4a60
 #757   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::importedBrowsersLoadAsRecorded  b7875048db3a

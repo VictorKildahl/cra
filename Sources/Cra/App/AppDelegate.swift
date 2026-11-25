@@ -2288,6 +2288,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.commandBar.commit(row)
                 return
             }
+            // commandBarIcon=<text> (#755): the open bar's row whose address holds <text> selected, then its favicon as
+            // drawn: on the white tile, and in the row's colour when it is a light mark.
+            if let text = dict["commandBarIcon"] {
+                let bar = main.commandBar
+                guard let i = bar.result.items.firstIndex(where: { $0.url?.contains(text) == true }) else {
+                    CraLog.note("command bar icon \(text): none in \(bar.result.items.count) rows"); return
+                }
+                bar.moveSelection(by: i - bar.selectedIndex)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self else { return }
+                    CraLog.note("command bar icon \(text): row=\(i) selected=\(self.main.commandBar.selectedIndex) \(self.main.debugCommandBarIcon(i))")
+                }
+                return
+            }
             // commandBarReturn=<label>: Return in the browser window's open bar, on the selected row (#667).
             if let label = dict["commandBarReturn"] {
                 CraLog.note("command bar return \(label): \(main.commandBar.isOpen ? "pressed" : "no bar")")

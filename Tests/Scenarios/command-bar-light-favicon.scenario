@@ -1,0 +1,22 @@
+# promise: #755
+# ⌘T's selected row puts its favicon on a white tile, and GitHub's favicon on a dark page is a white octocat:
+# the row showed a plain white square (#755). A light, colourless mark is drawn in the row's colour on the tile
+# instead, as Arc draws its arrow there; a coloured favicon stays as it is.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${ORIGIN}/white-mark.html
+expect-log loaded 127\.0\.0\.1
+cra://open?url=${ORIGIN}/blue-mark.html
+# ⌘T lists the other tabs, not the one on screen.
+cra://open?url=${PAGE}?n=last
+wait 3
+cra://commandbar?query=mark
+wait 1
+cra://debug?commandBarIcon=white-mark
+expect-log command bar icon white-mark: row=[1-9] selected=[1-9] tile=1 tinted=1
+# Selecting a row puts its address in the field: the same query again for the other.
+cra://commandbar?query=mark
+wait 1
+cra://debug?commandBarIcon=blue-mark
+expect-log command bar icon blue-mark: row=[1-9] selected=[1-9] tile=1 tinted=0
+reject-log fault:
