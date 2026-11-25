@@ -191,11 +191,15 @@ public struct MobileBarCollapse: Equatable {
     /// moves.
     public static let fingerTravel = travel * 1.5
 
+    /// The least a page must run past its screen before hiding the bar is worth it: a page with
+    /// only a little to scroll keeps its bar.
+    public static let minimumScrollable: CGFloat = 100
+
     /// Whether a page `contentHeight` tall has more to scroll than the `pageHeight` its screen
-    /// allows with the bar closed. A page that fits has nothing behind the bar to hide, so it
-    /// keeps the bar out.
+    /// allows, by more than `minimumScrollable`. A page that fits, or has only a little to
+    /// scroll, has nothing behind the bar worth hiding, so it keeps the bar out.
     public static func scrolls(contentHeight: CGFloat, pageHeight: CGFloat) -> Bool {
-        contentHeight > pageHeight + 0.5
+        contentHeight > pageHeight + minimumScrollable
     }
 
     /// 0 with the bar open, 1 with it closed away; between the two while the finger drags it.

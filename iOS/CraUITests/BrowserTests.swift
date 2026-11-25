@@ -1167,6 +1167,21 @@ final class CollapseBottomBarTests: BrowserTestCase {
                     withVelocity: .slow, thenHoldForDuration: 0.3)
     }
 
+    /// A page only 60 points longer than its screen keeps its bar: there is too little to scroll
+    /// for hiding it to show anything.
+    func testAPageOnlySlightlyLongerKeepsTheBar() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Barely</title>"
+                + "<body/style=margin:0><section/style=height:100svh>"
+                + "<h1/style=margin:0;padding:24px>Barely</h1></section><div/style=height:60px></div>", "-CraSearch", "NO"])
+        waitForPage("Barely")
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable)
+        dragThePage(app.webViews.firstMatch, by: -200)
+        sleep(1)
+        XCTAssertTrue(pill.isHittable, "the bar left a page with only 60 points to scroll")
+        keep("barely scrollable")
+    }
+
     /// Flicks that land while the bar is still settling from the last one, up and down in turn,
     /// leave it at one of its ends every time.
     func testFlicksLandingOnASettleLeaveTheBarAtAnEnd() {

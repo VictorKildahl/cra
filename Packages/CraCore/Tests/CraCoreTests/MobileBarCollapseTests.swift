@@ -84,11 +84,14 @@ struct MobileBarCollapseTests {
         #expect(moved && bar.isOpen, "a bar that was away comes back")
     }
 
-    /// A page is scrollable only when it is taller than its screen, with room to spare.
-    @Test func aPageOnlyScrollsWhenItIsTallerThanItsScreen() {
-        #expect(!MobileBarCollapse.scrolls(contentHeight: 700, pageHeight: 700))
+    /// A page is worth hiding the bar for only when it runs more than 100 points past its screen;
+    /// one with only a little to scroll keeps its bar.
+    @Test func aPageWithOnlyALittleToScrollKeepsTheBar() {
+        let threshold = MobileBarCollapse.minimumScrollable
         #expect(!MobileBarCollapse.scrolls(contentHeight: 699, pageHeight: 700))
-        #expect(MobileBarCollapse.scrolls(contentHeight: 701, pageHeight: 700))
+        #expect(!MobileBarCollapse.scrolls(contentHeight: 700, pageHeight: 700))
+        #expect(!MobileBarCollapse.scrolls(contentHeight: 700 + threshold, pageHeight: 700))
+        #expect(MobileBarCollapse.scrolls(contentHeight: 700 + threshold + 1, pageHeight: 700))
     }
 
     /// A page whose content shrinks until it fits brings a bar that was away back; one that
