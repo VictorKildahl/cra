@@ -3418,6 +3418,8 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
     private let empty = NSTextField.sidebarLabel(size: 13)
     private var rows: [NSView] = []
     private var list: [Space] = []
+    /// "<space>:<tile>/<icon>" for each row whose space has an icon, for the debug readout.
+    private var iconColors: [String] = []
     private var selected = 0 { didSet { refreshSelection(); revealSelected() } }
     private var revealOnLayout = true
 
@@ -3491,6 +3493,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         let spaces = LittleMoveMenu.order(store.orderedSpaces.map(\.id), target: state.targetSpaceID).compactMap(store.space)
         list = q.isEmpty ? spaces : spaces.filter { $0.title.lowercased().contains(q) }
         rows.forEach { $0.removeFromSuperview() }
+        iconColors = []
         let rh = LittleMoveMenu.rowHeight, ts = LittleMoveMenu.tileSize
         rows = list.map { s in
             let row = FlippedView()
@@ -3499,7 +3502,8 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             tile.wantsLayer = true
             tile.layer?.cornerRadius = LittleMoveMenu.tileRadius
             tile.layer?.cornerCurve = .continuous
-            tile.layer?.backgroundColor = NSColor(hex: s.theme.shown.accent ?? s.theme.shown.colors.first ?? "#888888").cgColor
+            let fill = s.theme.shown.accent ?? s.theme.shown.colors.first ?? "#888888"
+            tile.layer?.backgroundColor = NSColor(hex: fill).cgColor
             // Arc 1.172.1: a 12 pt emoji, centred (a 🍎 12.5 pt wide in the 26 pt tile).
             let emoji = NSTextField.sidebarLabel(size: 12)
             emoji.stringValue = s.emoji
@@ -3510,7 +3514,10 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
                 let glyph = NSImageView(frame: NSRect(x: 0, y: 0, width: ts, height: ts))
                 glyph.image = image
                 glyph.imageScaling = .scaleNone
-                glyph.contentTintColor = .white
+                let icon = LittleMoveMenu.iconColor(onTile: fill)
+                glyph.contentTintColor = NSColor(icon)
+                iconColors.append(String(format: "%@:%@/#%02X%02X%02X", s.title, fill, Int((icon.r * 255).rounded()),
+                                         Int((icon.g * 255).rounded()), Int((icon.b * 255).rounded())))
                 tile.addSubview(glyph)
             }
             row.addSubview(tile)
@@ -3571,8 +3578,8 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
 
     // MARK: Debug (cra://debug?littleMenu=…)
 
-    /// rows, the first row, the highlighted one, how far the list is scrolled and whether the
-    /// highlighted row is whole in view.
+    /// rows, the first row, the highlighted one, how far the list is scrolled, whether the
+    /// highlighted row is whole in view, and each space icon's tile and colour.
     var debugState: String {
         layoutSubtreeIfNeeded()
         let clip = scroll.contentView.bounds
@@ -3580,6 +3587,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         let name = { (i: Int) in self.list.indices.contains(i) ? self.list[i].title : "-" }
         return String(format: "rows=%d first=%@ selected=%@ scroll=%.0f inView=%d empty=%d", list.count, name(0), name(selected),
                       clip.minY, shown ? 1 : 0, empty.isHidden ? 0 : 1)
+            + (iconColors.isEmpty ? "" : " icons=" + iconColors.joined(separator: ","))
     }
 
     func debugMove(down n: Int) {

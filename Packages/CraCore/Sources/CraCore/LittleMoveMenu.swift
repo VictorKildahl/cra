@@ -41,6 +41,18 @@ public enum LittleMoveMenu {
         return CGRect(x: window.maxX - rightInset - width, y: window.maxY - topInset - h, width: width, height: h)
     }
 
+    /// A space icon's colour on its row's tile (`tile`, the space colour): white where white reads on it, else the
+    /// tile's own hue darkened until it does (4.5:1).
+    ///
+    /// Arc 1.174 draws the icon white on dark Macs whatever the tile, so a light space colour (a peach, a mint, a
+    /// bright green) left it barely visible; on light Macs its pale tiles carry a dark shade of the space colour.
+    public static func iconColor(onTile tile: String) -> RGB {
+        let fill = HexColor.components(tile) ?? (0.5, 0.5, 0.5)
+        if AskOnPageTone.contrast((1, 1, 1), fill) >= AskOnPageTone.minimumContrast { return .white }
+        let ink = AskOnPageTone.readable(fill, on: fill, lighter: false)
+        return RGB(ink.r, ink.g, ink.b)
+    }
+
     /// The ⌄ opens the menu only when there is another space to pick.
     public static func showsChevron(spaces: Int) -> Bool { spaces > 1 }
 
