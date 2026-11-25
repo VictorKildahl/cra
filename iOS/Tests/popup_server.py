@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
 (PasskeyTests), a block list and the script it stops (BlockingTests), a plain-http page and one to come back to from a refused address (PlainHTTPTests),
-links and a script redirect to other apps' addresses (ExternalLinkTests) and, given a certificate, the same pages over
+links and a script redirect to other apps' addresses (ExternalLinkTests), a page naming two icons (TabSwitcherIconTests) and, given a certificate, the same pages over
 HTTPS with that certificate, which the simulator can't verify (CertificateTests). No external
 requests."""
 import argparse
@@ -14,13 +14,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 
-def square_png(size=300, rgb=(255, 99, 71)):
-    """A solid size × size PNG, made here so the fixtures need no files (LinkMenuTests' Save to Photos, #713)."""
+def png(size, colour_type, rows):
+    """A size × size PNG of `rows` (RGB for colour type 2, RGBA for 6), made here so the fixtures need no files."""
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
-    row = b'\x00' + bytes(rgb) * size
-    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
-            + chunk(b'IDAT', zlib.compress(row * size)) + chunk(b'IEND', b''))
+    raw = b''.join(b'\x00' + row for row in rows)
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, colour_type, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+
+
+def square_png(size=300, rgb=(255, 99, 71)):
+    """A solid square (LinkMenuTests' Save to Photos, #713; an app-icon touch icon)."""
+    return png(size, 2, [bytes(rgb) * size] * size)
+
+
+def triangle_png(size=64, rgb=(230, 30, 30)):
+    """The top-left half in `rgb`, the rest see-through: an icon with a shape of its own."""
+    return png(size, 6, [b''.join(bytes(rgb) + b'\xff' if x + y < size else b'\x00' * 4 for x in range(size))
+                         for y in range(size)])
 
 
 class PopupHandler(BaseHTTPRequestHandler):
@@ -45,6 +56,13 @@ class PopupHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(encoded)
+
+    def image(self, data):
+        self.send_response(200)
+        self.send_header('Content-Type', 'image/png')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_GET(self):
         url = urlsplit(self.path)
@@ -100,12 +118,17 @@ function createPasskey() {
             self.page('<title>Picture</title><h1>Picture</h1>'
                       '<img alt="Square" src="/picture.png" style="width:240px;height:240px">')
         elif url.path == '/picture.png':
-            data = square_png()
-            self.send_response(200)
-            self.send_header('Content-Type', 'image/png')
-            self.send_header('Content-Length', str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self.image(square_png())
+        elif url.path == '/icon-shapes':
+            # Names an app-icon square first and largest, as most sites do, then the site's own
+            # icon, a red triangle on see-through (TabSwitcherIconTests).
+            self.page('<link rel="apple-touch-icon" sizes="180x180" href="/icon-shapes/touch.png">'
+                      '<link rel="icon" sizes="32x32" href="/icon-shapes/triangle.png">'
+                      '<title>Icon Shapes</title><h1>Icon Shapes</h1>')
+        elif url.path == '/icon-shapes/touch.png':
+            self.image(square_png(180, (20, 80, 230)))
+        elif url.path == '/icon-shapes/triangle.png':
+            self.image(triangle_png())
         elif url.path == '/plain':
             # A plain-http page (PlainHTTPTests), opened by a domain name: iOS's App Transport
             # Security lets IP addresses and plain `localhost` through, but not `cra.localhost`.

@@ -245,10 +245,12 @@ final class TabCardView: UIView {
         dimmer.backgroundColor = Palette.rgb(0x1a1a3a)
         dimmer.alpha = 0
         clip.addSubview(dimmer)
+        // The favicon keeps its own shape, round or see-through, unclipped; the corners round
+        // only the plain square that stands in while there is none.
         icon.layer.cornerRadius = 4
         icon.layer.cornerCurve = .continuous
-        icon.clipsToBounds = true
         icon.contentMode = .scaleAspectFit
+        icon.tintColor = Palette.primaryText
         addSubview(icon)
         title.font = .systemFont(ofSize: 13, weight: .medium)
         title.textColor = Palette.primaryText
@@ -270,7 +272,13 @@ final class TabCardView: UIView {
     func configure(title text: String, snapshot: UIImage?, favicon: UIImage?, incognito: Bool) {
         title.text = text
         picture.image = snapshot
-        icon.image = favicon
+        // A dark colourless mark (GitHub's octocat) would vanish on the dark row: it takes the
+        // title's colour instead (`MobileFavicons.drawsAsMark`), as in the Spaces sheet.
+        if let favicon, !favicon.isSymbolImage, FaviconStore.isMark(favicon) {
+            icon.image = favicon.withRenderingMode(.alwaysTemplate)
+        } else {
+            icon.image = favicon
+        }
         icon.backgroundColor = favicon == nil ? Palette.barControlFill : .clear
         accessibilityLabel = text
     }

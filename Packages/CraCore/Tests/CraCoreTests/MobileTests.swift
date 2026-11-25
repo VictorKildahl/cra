@@ -1971,6 +1971,28 @@ struct MobileFaviconLinkTests {
                           "https://cdn.example/touch.png"])
         #expect(MobileFavicons.iconLinks(inHTML: "<p>none</p>", page: URL(string: "https://x.example/")!) == ["https://x.example/favicon.ico"])
     }
+
+    /// The tab switcher showed every site's icon as a square: an open page's touch icon, listed
+    /// first and largest by most sites, came first. It is an app icon, an opaque square; the
+    /// site's own favicon, round or see-through, comes before it, and so does an unnamed
+    /// `/favicon.ico`. The touch icon is used only when the site has nothing else.
+    @Test func anOpenPagesOwnFaviconComesBeforeItsTouchIcon() {
+        let page = URL(string: "https://news.example/story")!
+        let touch = MobileFavicons.IconLink(rel: "apple-touch-icon", href: "https://news.example/touch-180.png", sizes: "180x180")
+        let links = [
+            touch,
+            MobileFavicons.IconLink(rel: "icon", href: "https://news.example/round-32.png", sizes: "32x32", type: "image/png"),
+            MobileFavicons.IconLink(rel: "stylesheet", href: "https://news.example/site.css"),
+            MobileFavicons.IconLink(rel: "icon", href: "https://news.example/mark.svg", sizes: "any", type: "image/svg+xml"),
+        ]
+        #expect(MobileFavicons.bestFirst(links, page: page)
+            == ["https://news.example/round-32.png", "https://news.example/favicon.ico", "https://news.example/touch-180.png"])
+        #expect(MobileFavicons.bestFirst([touch], page: page) == ["https://news.example/favicon.ico", "https://news.example/touch-180.png"])
+        // A page's HTML ranks the same way.
+        let html = #"<head><link rel="apple-touch-icon" href="/t.png" sizes="180x180"><link rel="icon" href="/i.png" sizes="16x16"></head>"#
+        #expect(MobileFavicons.iconLinks(inHTML: html, page: page)
+            == ["https://news.example/i.png", "https://news.example/favicon.ico", "https://news.example/t.png"])
+    }
 }
 
 /// The query capsule on a Browse for Me page edits the question.

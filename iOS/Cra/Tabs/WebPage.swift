@@ -217,16 +217,22 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         webView.takeSnapshot(with: configuration) { image, _ in done(image) }
     }
 
-    /// The icons the page names for itself, largest first.
+    /// The icons the page names for itself, best first (`MobileFavicons.bestFirst`): its own
+    /// favicon, in its own shape, before the touch icon, which is an app-icon square.
     func iconCandidates(_ done: @escaping ([String]) -> Void) {
+        guard let page = webView.url else { return done([]) }
         let script = """
-        (() => {
-          const links = [...document.querySelectorAll('link[rel~="apple-touch-icon"], link[rel~="apple-touch-icon-precomposed"], link[rel~="icon"]')];
-          const size = l => parseInt((l.getAttribute('sizes') || '0').split('x')[0]) || (l.rel.includes('apple') ? 180 : 16);
-          return links.filter(l => l.href && !l.href.endsWith('.svg')).sort((a, b) => size(b) - size(a)).slice(0, 3).map(l => l.href);
-        })()
+        [...document.querySelectorAll('head link[rel][href]')]
+          .map(l => ({rel: l.rel, href: l.href, sizes: l.getAttribute('sizes') || '', type: l.type || ''}))
         """
-        webView.evaluateJavaScript(script) { value, _ in done(value as? [String] ?? []) }
+        webView.evaluateJavaScript(script) { value, _ in
+            let links = (value as? [[String: String]] ?? []).compactMap { link in
+                link["rel"].flatMap { rel in
+                    link["href"].map { MobileFavicons.IconLink(rel: rel, href: $0, sizes: link["sizes"], type: link["type"]) }
+                }
+            }
+            done(MobileFavicons.bestFirst(links, page: page))
+        }
     }
 
     // MARK: Navigation
