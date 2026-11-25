@@ -338,6 +338,27 @@ final class MenuHapticsTests: BrowserTestCase {
     }
 }
 
+final class PillPressTests: BrowserTestCase {
+    /// Held down, the New Tab pill is pressed in to 94 %, as Arc Search's. The bar used to set the pill's frame while
+    /// it was scaled, which grew it back to full size under the finger and puffed it up past its size on a tap.
+    func testThePillStaysPressedInWhileHeld() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        waitForBarOnScreen()
+        let rest = app.buttons["bar-search"].frame
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraHoldPill", "YES"])
+        waitForPage("First")
+        waitForBarOnScreen()
+        sleep(1)
+        let held = app.buttons["bar-search"].frame
+        XCTAssertEqual(held.width, rest.width * 0.94, accuracy: 1, "held \(held), at rest \(rest)")
+        XCTAssertEqual(held.height, rest.height * 0.94, accuracy: 1, "held \(held), at rest \(rest)")
+        XCTAssertEqual(held.midX, rest.midX, accuracy: 1)
+        XCTAssertEqual(held.midY, rest.midY, accuracy: 1)
+    }
+}
+
 final class PageMenuTests: BrowserTestCase {
     // promise: #670
     func testShareFromThePageMenu() {

@@ -218,6 +218,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             if LaunchAction.pending != nil { return performLaunchAction() }
             let wantsSearch = (settings.value.opensKeyboardOnLaunch && !LaunchOptions.skipsSearch) || store.selected == nil
             if wantsSearch { setSearching(true, incognito: false) }
+            if LaunchOptions.holdsPill { bar.pill.isHighlighted = true }
             if LaunchOptions.showsVoiceOverlay {
                 let overlay = VoiceOverlayView(frame: view.bounds)
                 view.addSubview(overlay)
