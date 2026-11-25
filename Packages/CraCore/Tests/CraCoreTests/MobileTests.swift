@@ -1370,6 +1370,163 @@ struct MobileMotionTests {
 }
 
 struct MobileOnboardingTests {
+
+    @Test func longPhonesKeepThePhoneMock() {
+        // Apple's published portrait sizes and landscape safe areas (spec 17a, 17b).
+        for (window, left, right) in [(CGSize(width: 393, height: 852), CGFloat(0), CGFloat(0)),
+                                      (CGSize(width: 852, height: 393), 59, 59),
+                                      (CGSize(width: 375, height: 667), 0, 0),
+                                      (CGSize(width: 667, height: 375), 0, 0)] {
+            let mock = MobileOnboarding.mock(window: window, safeLeft: left, safeRight: right)
+            #expect(mock.shape == .phone)
+            #expect(mock.size == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.columnWidth == 330)
+            #expect(mock.keyHeight == 30)
+            #expect(mock.keyWidth == 26)
+        }
+    }
+
+    @Test func iPadsKeepThePhoneMock() {
+        // Apple's published 11-inch iPad sizes and side safe areas (spec 17c).
+        for window in [CGSize(width: 834, height: 1194), CGSize(width: 1194, height: 834)] {
+            let mock = MobileOnboarding.mock(window: window, safeLeft: 0, safeRight: 0)
+            #expect(mock.shape == .phone)
+            #expect(mock.size == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+            #expect(mock.columnWidth == 330)
+            #expect(mock.keyHeight == 30)
+            #expect(mock.keyWidth == 26)
+        }
+    }
+
+    @Test func closedMockMatchesTheWindow() {
+        // Job 010 verify.md: closed window 466x678, side insets 0 and 84 (spec 17d).
+        let mock = MobileOnboarding.mock(window: CGSize(width: 466, height: 678), safeLeft: 0, safeRight: 84)
+        #expect(mock.shape == .duoClosed)
+        #expect(mock.size.width == 330) // Spec's retained phone width.
+        #expect(abs(mock.size.width / mock.size.height / (466.0 / 678) - 1) < 0.005)
+        // Job 010 window, at the existing mock's 330 / Apple's 393 pt phone width.
+        #expect(abs(mock.logicalSize.width - 466 * 330 / 393.0) < 0.01)
+        #expect(abs(mock.logicalSize.height - 678 * 330 / 393.0) < 0.01)
+        #expect(abs((mock.size.width / mock.logicalSize.width) / (mock.size.height / mock.logicalSize.height) - 1) < 0.005)
+        #expect(mock.columnWidth == mock.logicalSize.width)
+        #expect(mock.keyWidth == (mock.logicalSize.width - 52) / 10) // Existing keyboard margins.
+        #expect(mock.keyHeight == 30) // Existing phone keyboard height.
+    }
+
+    @Test func openMockMatchesTheWindow() {
+        // Job 010 verify.md: open window 951x669, side insets 0 and 84 (spec 17e).
+        let mock = MobileOnboarding.mock(window: CGSize(width: 951, height: 669), safeLeft: 0, safeRight: 84)
+        #expect(mock.shape == .duoOpen)
+        #expect(mock.size.height == 450) // Spec's unfolded height above Next.
+        #expect(abs(mock.size.width / mock.size.height / (951.0 / 669) - 1) < 0.005)
+        // Job 010 window, at the existing mock's 330 / Apple's 393 pt phone width.
+        #expect(abs(mock.logicalSize.width - 951 * 330 / 393.0) < 0.01)
+        #expect(abs(mock.logicalSize.height - 669 * 330 / 393.0) < 0.01)
+        #expect(abs((mock.size.width / mock.logicalSize.width) / (mock.size.height / mock.logicalSize.height) - 1) < 0.005)
+        #expect(mock.columnWidth == 540) // SheetHost's wide content cap.
+        #expect(mock.keyWidth == (0.82 * mock.logicalSize.width - 36) / 10) // Research keyboard: 82% row, nine gaps.
+        #expect(mock.keyHeight == 36) // Research open keyboard, about 1.7:1 keys.
+    }
+
+    @Test func oneSidedInsetAloneDoesNotChooseAShortMock() {
+        // Apple's 852x393 landscape size; synthetic one-sided 59 pt inset (spec 17f).
+        let mock = MobileOnboarding.mock(window: CGSize(width: 852, height: 393), safeLeft: 0, safeRight: 59)
+        #expect(mock.shape == .phone)
+        #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+        #expect(mock.columnWidth == 330)
+        #expect(mock.keyWidth == 26)
+        #expect(mock.keyHeight == 30)
+    }
+
+    @Test func splitViewKeepsThePhoneMock() {
+        // Research's measured 469x669 Split View half; unmeasured insets supplied as 0 (spec 17g).
+        let mock = MobileOnboarding.mock(window: CGSize(width: 469, height: 669), safeLeft: 0, safeRight: 0)
+        #expect(mock.shape == .phone)
+        #expect(mock.logicalSize == CGSize(width: 330, height: 640)) // Existing phone design.
+        #expect(mock.columnWidth == 330)
+        #expect(mock.keyWidth == 26)
+        #expect(mock.keyHeight == 30)
+    }
+
+    @Test func postureMocksFitWithoutScaling() {
+        // Job 010 window/insets; spec's default headings 66 closed and 33 open (spec 17h).
+        for (window, available, heading) in [(CGSize(width: 466, height: 678), CGFloat(644), CGFloat(66)),
+                                            (CGSize(width: 951, height: 669), 635, 33)] {
+            let mock = MobileOnboarding.mock(window: window, safeLeft: 0, safeRight: 84)
+            #expect(MobileOnboarding.fitScale(available: available, topInset: 0, bottomInset: 34,
+                                             heading: heading, scalable: mock.size.height) == 1)
+        }
+    }
+    @Test func iPhone17KeepsItsOnboardingLayout() {
+        // Apple safe-area values for iPhone 17: 852 - 62 - 34 = 756; two-line heading from the spec, pending verifier measurement.
+        #expect(MobileOnboarding.fitScale(available: 756, topInset: 62, bottomInset: 34, heading: 66, scalable: 640) == 1)
+        // Spec: title 66, grid at 273 pt wide + 56 pt radios; reserve 18 + 50 + 16 for Next.
+        #expect(MobileOnboarding.fitScale(available: 756, topInset: 62, bottomInset: 34, heading: 66, scalable: 329,
+                                             topPadding: 50, spacing: 30, bottomReserved: 84) == 1)
+    }
+
+    @Test func closedScreenFitsTheDemo() {
+        // Cra Duo closed, build.md: safe height 644; heading 32 1/3 on base, 64 2/3 after fitting on head.
+        for heading: CGFloat in [32 + 1.0 / 3, 64 + 2.0 / 3] {
+            // Measured top inset 0 and bottom inset 34; design padding 40, gap 24, mock 640.
+            let fixed: CGFloat = 40 + heading + 24
+            let scale = MobileOnboarding.fitScale(available: 644, topInset: 0, bottomInset: 34, heading: heading, scalable: 640)
+            #expect(scale < 1)
+            #expect(fixed + 640 * scale <= 644)
+        }
+    }
+
+    @Test func openScreenFitsTheDemo() {
+        // Cra Duo open: 669 - 0 - 34 = 635, one-line heading 33 (spec; measurement left to verifier).
+        let fixed: CGFloat = 40 + 33 + 24
+        let scale = MobileOnboarding.fitScale(available: 635, topInset: 0, bottomInset: 34, heading: 33, scalable: 640)
+        #expect(scale < 1)
+        #expect(fixed + 640 * scale <= 635)
+    }
+
+    @Test func bottomInsetLimitsTheCentringAllowance() {
+        // Synthetic boundary: 100 + 640 - 671 = 69 pt overflow, between the 68 and 80 pt thresholds.
+        let fixed: CGFloat = 100, scalable: CGFloat = 640, available: CGFloat = 671
+        // Cra Duo closed insets measured in build.md: top 0, bottom 34; design top padding 40.
+        let top: CGFloat = 0, bottom: CGFloat = 34
+        let scale = MobileOnboarding.fitScale(available: available, topInset: top, bottomInset: bottom,
+                                             heading: fixed - 40 - 24, scalable: scalable)
+        #expect(scale < 1)
+        #expect(abs(fixed + scalable * scale - available) < 1e-9)
+    }
+
+    @Test func iconReservesTheNextBlockWithoutCentring() {
+        // Synthetic fit boundary: open screen's 635 pt safe height, two-line title 66, capped grid 360 + 56.
+        let scale = MobileOnboarding.fitScale(available: 635, topInset: 0, bottomInset: 34, heading: 66,
+                                             scalable: 416, topPadding: 50, spacing: 30, bottomReserved: 84)
+        #expect(scale < 1)
+        // Design Next block: 18 pt bottom spacer + 50 pt button + 16 pt gap.
+        #expect(abs(50 + 66 + 30 + 416 * scale + 84 - 635) < 1e-9)
+    }
+
+    @Test func otherIPhonesKeepTheirOnboardingLayout() {
+        // Apple safe-area values from the spec: 13 mini 812 - 50 - 34; 17 Pro Max 956 - 62 - 34.
+        for available: CGFloat in [728, 860] {
+            // Spec two-line heading 66 and 640 pt mock; narrowest grid 255 + 56, capped grid 360 + 56.
+            #expect(MobileOnboarding.fitScale(available: available, topInset: available == 728 ? 50 : 62, bottomInset: 34, heading: 66, scalable: 640) == 1)
+            #expect(MobileOnboarding.fitScale(available: available, topInset: available == 728 ? 50 : 62, bottomInset: 34, heading: 66,
+                                             scalable: available == 728 ? 311 : 416, topPadding: 50, spacing: 30, bottomReserved: 84) == 1)
+        }
+    }
+
+    @Test func fitScaleHonorsTheCentringBoundaryAndClamps() {
+        // Constructed boundary fixtures: fixed 100, scalable 640, allowance 34 as on the measured closed screen.
+        #expect(MobileOnboarding.fitScale(available: 740, topInset: 0, bottomInset: 34, heading: 36, scalable: 640) == 1)
+        #expect(MobileOnboarding.fitScale(available: 800, topInset: 0, bottomInset: 34, heading: 36, scalable: 640) == 1)
+        #expect(MobileOnboarding.fitScale(available: 672, topInset: 0, bottomInset: 34, heading: 36, scalable: 640) == 1)
+        let scale = MobileOnboarding.fitScale(available: 671, topInset: 0, bottomInset: 34, heading: 36, scalable: 640)
+        #expect(scale < 1)
+        #expect(abs(100 + 640 * scale - 671) < 1e-9)
+        #expect(MobileOnboarding.fitScale(available: 50, topInset: 0, bottomInset: 0, heading: 36, scalable: 640) == 0)
+    }
+
     @Test func theStepsFollowArcSearchsOrderAndSkipAIWhereThereIsNone() {
         #expect(MobileOnboarding.steps(canUseAI: true) == [.welcome, .meet, .browseForMe, .pinch, .icon, .blocking, .defaultBrowser])
         #expect(MobileOnboarding.steps(canUseAI: false) == [.welcome, .meet, .icon, .blocking, .defaultBrowser])

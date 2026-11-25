@@ -1464,6 +1464,144 @@ final class VoiceFromFieldTests: BrowserTestCase {
 }
 
 final class OnboardingTests: BrowserTestCase {
+
+    func testTheDemoPhoneMatchesTheScreen() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPads keep the phone mock")
+        launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
+        let next = app.buttons["onboarding-next"]
+        let check = app.descendants(matching: .any)["onboarding-check"]
+
+        func matches(_ step: String) {
+            let mock = app.descendants(matching: .any).matching(identifier: "onboarding-mock").firstMatch
+            XCTAssertTrue(mock.waitForExistence(timeout: 3), "\(step): mock appears")
+            let window = app.windows.firstMatch.frame
+            let isPhone = max(window.width, window.height) / min(window.width, window.height) >= 1.6
+            let shape = isPhone ? "phone" : window.height > window.width ? "duoClosed" : "duoOpen"
+            XCTAssertEqual(mock.value as? String, shape, "\(step): mock matches the screen shape")
+            let aspect = isPhone ? 330.0 / 640 : window.width / window.height
+            XCTAssertEqual(mock.frame.width / mock.frame.height / aspect, 1, accuracy: isPhone ? 0.01 : 0.02,
+                           "\(step): mock \(mock.frame) aspect matches window \(window)")
+        }
+
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "welcome: Next appears")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Meet your new favorite browser"].waitForExistence(timeout: 3), "meet: title appears")
+        next.tap()
+        XCTAssertTrue(app.buttons["onboarding-try"].waitForExistence(timeout: 3), "browse: Try appears")
+        matches("browse")
+        app.buttons["onboarding-try"].tap()
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "browse-done: check appears")
+        next.tap()
+        let page = app.descendants(matching: .any)["onboarding-pinch-page"]
+        XCTAssertTrue(page.waitForExistence(timeout: 3), "pinch: page appears")
+        matches("pinch")
+        page.pinch(withScale: 0.5, velocity: -1)
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "pinch-done: check appears")
+        next.tap()
+        XCTAssertTrue(app.buttons["icon-violet"].waitForExistence(timeout: 3), "icon: grid appears")
+        next.tap()
+        XCTAssertTrue(app.switches["onboarding-blocking"].waitForExistence(timeout: 3), "blocking: switch appears")
+        matches("blocking")
+        let mock = app.descendants(matching: .any).matching(identifier: "onboarding-mock").firstMatch
+        if mock.value as? String != "phone" {
+            XCTAssertLessThanOrEqual(next.frame.width, mock.frame.width + 1, "blocking: Next stays within the mock width")
+            let toggle = app.switches["onboarding-blocking"].frame
+            XCTAssertGreaterThanOrEqual(toggle.minX, mock.frame.minX + 1, "blocking: switch clears the left edge")
+            XCTAssertLessThanOrEqual(toggle.maxX, mock.frame.maxX - 1, "blocking: switch clears the right edge")
+            XCTAssertEqual((mock.frame.maxY - toggle.maxY) / mock.frame.height, 150.0 / 640, accuracy: 0.02,
+                           "blocking: switch keeps the phone's proportional bottom offset")
+            let article = app.descendants(matching: .any).matching(identifier: "onboarding-blocking-article").firstMatch
+            if mock.value as? String == "duoOpen" {
+                XCTAssertTrue(article.exists, "blocking: open page continues below the switch")
+                XCTAssertGreaterThanOrEqual(article.frame.minY, toggle.maxY + 1, "blocking: article clears the switch")
+                XCTAssertEqual(article.frame.maxY, mock.frame.maxY, accuracy: 1, "blocking: article reaches the clipped page edge")
+            } else {
+                XCTAssertFalse(article.exists, "blocking: closed page stays blank around Let's go")
+            }
+        }
+    }
+    func testEveryStepFitsTheScreen() {
+        launch(["-CraOnboarding", "YES", "-CraFakeModel", "YES"])
+        continueAfterFailure = true
+        let next = app.buttons["onboarding-next"]
+        let title = app.staticTexts["onboarding-title"]
+        let check = app.descendants(matching: .any)["onboarding-check"]
+
+        func fits(_ element: XCUIElement, step: String) {
+            XCTAssertTrue(element.exists, "\(step): \(element.identifier) exists")
+            let frame = element.frame
+            let window = app.windows.firstMatch.frame
+            XCTAssertGreaterThan(frame.width, 0, "\(step): \(element.identifier) has width")
+            XCTAssertGreaterThan(frame.height, 0, "\(step): \(element.identifier) has height")
+            XCTAssertGreaterThanOrEqual(frame.minX, window.minX - 0.5, "\(step): \(element.identifier) left \(frame)")
+            XCTAssertGreaterThanOrEqual(frame.minY, window.minY - 0.5, "\(step): \(element.identifier) top \(frame)")
+            XCTAssertLessThanOrEqual(frame.maxX, window.maxX + 0.5, "\(step): \(element.identifier) right \(frame)")
+            XCTAssertLessThanOrEqual(frame.maxY, window.maxY + 0.5, "\(step): \(element.identifier) bottom \(frame)")
+        }
+
+        func step(_ name: String, showsNext: Bool = true) {
+            sleep(1)
+            var frames = "\(name): window \(app.windows.firstMatch.frame)\n"
+            let identifiers = ["onboarding-title", "onboarding-check", "onboarding-next", "icon-segments", "icon-midnight",
+                               "icon-mono", "icon-violet", "onboarding-try", "onboarding-blocking", "onboarding-pinch-page",
+                               "onboarding-step-skip", "onboarding-skip", "onboarding-howto"]
+            for identifier in identifiers {
+                let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+                if element.exists { frames += "\(identifier): \(element.frame)\n" }
+            }
+            let attachment = XCTAttachment(string: frames)
+            attachment.name = "\(name).frames.txt"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            fits(title, step: name)
+            if check.exists { fits(check, step: name) }
+            if showsNext { fits(next, step: name) }
+        }
+
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "welcome: Next appears")
+        step("welcome")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["Meet your new favorite browser"].waitForExistence(timeout: 3), "meet: title appears")
+        step("meet")
+        next.tap()
+        XCTAssertTrue(app.buttons["onboarding-try"].waitForExistence(timeout: 3), "browse: Try appears")
+        step("browse", showsNext: false)
+        let tryButton = app.buttons["onboarding-try"]
+        XCTAssertLessThanOrEqual(tryButton.frame.maxY, next.frame.minY + 0.5, "browse: Try ends above Next")
+        tryButton.tap()
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "browse-done: check appears")
+        step("browse-done")
+        next.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding-pinch-page"].waitForExistence(timeout: 3), "pinch: page appears")
+        step("pinch", showsNext: false)
+        app.descendants(matching: .any)["onboarding-pinch-page"].pinch(withScale: 0.5, velocity: -1)
+        XCTAssertTrue(check.waitForExistence(timeout: 5), "pinch-done: check appears")
+        step("pinch-done")
+        next.tap()
+        XCTAssertTrue(app.buttons["icon-violet"].waitForExistence(timeout: 3), "icon: grid appears")
+        step("icon")
+        for icon in ["segments", "midnight", "mono", "violet"] {
+            let button = app.buttons["icon-\(icon)"]
+            fits(button, step: "icon")
+            XCTAssertLessThanOrEqual(button.frame.maxY, next.frame.minY + 0.5, "icon: \(icon) ends above Next")
+        }
+        next.tap()
+        let blocking = app.switches["onboarding-blocking"]
+        XCTAssertTrue(blocking.waitForExistence(timeout: 3), "blocking: switch appears")
+        step("blocking")
+        XCTAssertLessThanOrEqual(blocking.frame.maxY, next.frame.minY + 0.5, "blocking: switch ends above Next")
+        blocking.switches.firstMatch.tap()
+        next.tap()
+        XCTAssertTrue(app.buttons["onboarding-skip"].waitForExistence(timeout: 4), "default: Skip appears")
+        step("default")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["onboarding-howto"].waitForExistence(timeout: 3), "how-to: sheet appears")
+        step("how-to")
+        app.buttons["onboarding-later"].tap()
+        XCTAssertTrue(app.textFields["search-field"].waitForExistence(timeout: 5), "finished: search appears")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "finished: keyboard appears")
+    }
+
     /// First launch walks through Arc Search's steps; the blocking switch decides the global
     /// blockers, and afterwards the app is ready to type.
     func testOnboardingWalksThroughAndLeavesTheAppReadyToType() {
