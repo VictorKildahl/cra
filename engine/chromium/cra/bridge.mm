@@ -20,6 +20,7 @@
 #include "cra/CraContentBlocker.h"
 #include "cra/downloads.h"
 #include "cra/fetch.h"
+#include "cra/history.h"
 #include "cra/page_protocol.h"
 #include "cra/permission_prompt.h"
 #include "cra/profile_prefs.h"
@@ -4389,6 +4390,15 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
                                  }
                                  cra::Fetch(loaded, target, sent, restricted, done);
                                }));
+}
++ (void)searchHistory:(NSString*)text
+          profilePath:(NSString*)profilePath
+             maxCount:(NSInteger)maxCount
+           completion:(void (^)(NSArray<NSDictionary<NSString*, id>*>*))completion {
+  Profile* profile = (!g_ready || g_quitting)
+                         ? nullptr
+                         : g_browser_process->profile_manager()->GetProfileByPath(ProfileDir(profilePath));
+  cra::SearchHistory(profile, text, maxCount, completion);
 }
 + (NSInteger)loadStateOfProfile:(NSString*)profilePath {
   if (!g_ready || g_quitting) {

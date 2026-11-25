@@ -37,12 +37,29 @@ struct AppIconBundleTests {
         #expect(!AppIconBundle.hasCustomIcon(finderInfo: [0, 0, 0, 0, 0, 0, 0, 0, 0x04]))
     }
 
-    /// Segments, the bundle's own, is given to the Dock like any other pick. Left to the Dock, the bundle's icon came
-    /// from its cache: after 0.1.54 put a pick on Cra.app (056ae73b) that was the icon picked before, so picking
-    /// Segments after Original kept Original in the Dock (Victor, 23 Nov 2026).
-    @Test func theDockIsGivenSegmentsToo() {
-        #expect(AppIconBundle.dockImage(picked: "segments", defaultID: "segments") == "segments")
-        #expect(AppIconBundle.dockImage(picked: "original", defaultID: "segments") == "original")
-        #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments") == "custom")
+    /// GitHub #739: Segments, the bundle's own icon, is left to the Dock, which draws it in the icon style picked in
+    /// System Settings ▸ Appearance (Default, Dark, Clear, Tinted), as it does every app's. A picture the app hands
+    /// the Dock is drawn as it is, so from 0.1.55, which gave the Dock Segments' picture, Cra's icon stayed light in
+    /// a dark Dock. A pick is still given to the Dock: it isn't the bundle's icon, so only the app can show it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func segmentsIsLeftToTheDockSoItFollowsTheIconStyle() {
+        #expect(AppIconBundle.dockImage(picked: "segments", defaultID: "segments", bundleIconStale: false) == nil)
+        #expect(AppIconBundle.dockImage(picked: "original", defaultID: "segments", bundleIconStale: false) == "original")
+        #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments", bundleIconStale: false) == "custom")
+    }
+
+    /// The one case the Dock is given Segments' picture: this launch found a Finder icon an earlier Cra put on
+    /// Cra.app (0.1.54, 0.1.55; #724). The Dock's cache of the bundle's icon can then still be the icon picked
+    /// before, so Segments picked after Original kept Original (Victor, 23 Nov 2026), until the next launch.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func segmentsIsGivenToTheDockWhileItsCacheMayBeStale() {
+        #expect(AppIconBundle.dockImage(picked: "segments", defaultID: "segments", bundleIconStale: true) == "segments")
+        #expect(AppIconBundle.dockImage(picked: "original", defaultID: "segments", bundleIconStale: true) == "original")
+    }
+
+    /// Setting applicationIconImage, even to nil, hands the Dock a picture of the bundle's icon, drawn outside the
+    /// icon style: a launch with Segments never touches it, and picking Segments after a pick takes the pick back.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func aLaunchWithSegmentsLeavesTheApplicationIconAlone() {
+        #expect(!AppIconBundle.setsApplicationIcon(giving: false, gaveBefore: false))
+        #expect(AppIconBundle.setsApplicationIcon(giving: true, gaveBefore: false))
+        #expect(AppIconBundle.setsApplicationIcon(giving: false, gaveBefore: true))
     }
 }

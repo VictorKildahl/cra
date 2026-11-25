@@ -2466,6 +2466,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("activations \(label): active=\(NSApp.isActive ? 1 : 0) background=\(CraApplication.backgroundActivations)")
                 return
             }
+            // calendarMeeting=now (#758): the Calendar favorite reads a call that started a minute ago and has a Join
+            // link; calendarTick=1 is what the 30 s timer does (the countdown and the Join card move on); meetingCard=
+            // <label> says whether the Join card is up and how many other apps' windows are over the browser window.
+            if dict["calendarMeeting"] == "now" {
+                let now = Date()
+                LiveCalendarClient.shared.setDemo([CalendarPreview.Event(title: "Weekly sync", start: now.addingTimeInterval(-60),
+                                                                         end: now.addingTimeInterval(3600), meetingURL: "https://zoom.us/j/758")],
+                                                  favorite: "https://calendar.google.com/calendar/u/0/r", profilePath: nil)
+                return
+            }
+            if dict["calendarTick"] != nil { NotificationCenter.default.post(name: LiveCalendarClient.changed, object: nil); return }
+            if let label = dict["meetingCard"] {
+                let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+                let mainOver = main.window.map { String(LittleWindowRaise.othersOver($0.windowNumber, in: info)) } ?? "-"
+                CraLog.note("meeting card \(label): \(MeetingReminder.shared.debugState) active=\(NSApp.isActive ? 1 : 0) mainOver=\(mainOver)")
+                return
+            }
             // pageWindows=<label>: the page windows Chromium has shown, how many it showed away from every
             // Cra window on screen, and how many macOS animates in and out (#354).
             if let label = dict["pageWindows"] { CraLog.note("page windows \(label): \(CraCEFRuntime.pageWindowsReadout)"); return }

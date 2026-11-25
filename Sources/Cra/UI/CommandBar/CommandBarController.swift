@@ -147,6 +147,10 @@ final class CommandBarController {
             guard let self, self.isOpen, self.query == typed else { return }
             self.relist()
         }
+        engine.fetchHistory(for: typed, spaceShown: spaceShown) { [weak self] in
+            guard let self, self.isOpen, self.query == typed else { return }
+            self.relist()
+        }
         result = listed(engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown))
         if !allowCompletion { result.inlineCompletion = nil }
         selectedIndex = 0

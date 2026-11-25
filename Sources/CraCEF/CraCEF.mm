@@ -3834,6 +3834,11 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     }
     return YES;
 }
+// Searching the profile's Chromium history is the engine's (#730); CEF builds find nothing there.
++ (void)searchHistory:(NSString*)text profilePath:(NSString*)profilePath maxCount:(NSInteger)maxCount
+           completion:(void (^)(NSArray<NSDictionary<NSString*, id>*>*))completion {
+    completion(@[]);
+}
 + (NSInteger)loadStateOfProfile:(NSString*)profilePath {
     if (!profilePath.length) return g_contextInitialized ? 2 : 1;
     if ([g_readyProfiles containsObject:profilePath]) return 2;
