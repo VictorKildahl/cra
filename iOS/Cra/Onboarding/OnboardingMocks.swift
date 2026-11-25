@@ -100,8 +100,8 @@ struct PhoneMock<Screen: View>: View {
                     Image(systemName: "battery.100").font(.system(size: 12))
                 }
                 .foregroundStyle(dark ? .white : .black)
-                .padding(.top, 14)
-                .padding(.trailing, 14)
+                .padding(.top, 20)
+                .padding(.trailing, 26)
                 .accessibilityHidden(true)
             }
             .scaleEffect(mock.size.width / mock.logicalSize.width, anchor: .topLeading)
