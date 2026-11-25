@@ -720,6 +720,11 @@ from the focused space; Cra uses the measured values as a fixed palette):
   with none, "No results" 13 pt centred in 64 pt. ⇧⌘O opens the same menu. With one space the
   real ⌄ (the second `openInSpaceExpander`) isn't there: the button is "Open in Work ⌘O" alone.
   Cra: `LittleMoveMenu` (CraCore) and `LittleSpacesPopup`.
+- [O] Arc 1.174.3 (25 Nov 2026, screenshots of the menu with three icon spaces, light and dark Mac): on a light Mac
+  the menu is white and each tile a pale tint of the space colour carrying the icon in a dark shade of it; on a dark
+  Mac the tile is the space colour and the icon white, which barely shows on a light green or a peach. Cra keeps its
+  navy menu and the space colour, and draws the icon white only where white reads on the tile (4.5:1), else the
+  tile's hue darkened until it does (`LittleMoveMenu.iconColor`).
 - ⌘O ("Open in <space>") moves the page into that space; ⌥⌘N makes an empty Little Arc;
   Window ▸ Close Little Arc Windows exists;
 - opening: the window grows from a small rectangle under the pointer to its full frame in
