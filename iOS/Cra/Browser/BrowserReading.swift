@@ -43,7 +43,7 @@ extension BrowserViewController {
         guard let page = shownPage, summaryHost == nil else { return }
         let id = page.tabID
         let tab = store.tabs.first { $0.id == id }
-        page.takeSnapshot(visibleHeight: openPageHeight) { [weak self] image in
+        page.takeSnapshot(height: pageViewHeight) { [weak self] image in
             guard let self else { return }
             if let image { self.store.setSnapshot(image, for: id) }
             let model = SummaryModel(title: tab?.displayTitle ?? "", favicon: tab.flatMap { self.favicons.icon(for: $0.url) },

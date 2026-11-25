@@ -125,7 +125,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .began:
             guard let page = shownPage else { return }
             let id = page.tabID
-            page.takeSnapshot(visibleHeight: openPageHeight) { [weak self] image in
+            page.takeSnapshot(height: pageViewHeight) { [weak self] image in
                 guard let self, self.barSwipeOpensRow, self.switcher == nil else { return }
                 if let image { self.store.setSnapshot(image, for: id) }
                 _ = self.prepareSwitcher()
@@ -609,8 +609,10 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                     content.backgroundColor = .systemBackground
                     content.contentMode = .scaleAspectFill
                     content.clipsToBounds = true
-                    // The page's content sits below its band, not under it.
-                    content.frame = pageContentFrame
+                    // The page's content sits below its band and runs on under the bar, as the
+                    // page it becomes will.
+                    content.frame = CGRect(x: 0, y: view.safeAreaInsets.top, width: view.bounds.width,
+                                           height: pageViewBottom - view.safeAreaInsets.top)
                     card.addSubview(content)
                     // The incoming tab already has its band at full height: only the tab row
                     // animates the band's size.

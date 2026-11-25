@@ -121,9 +121,16 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, bottom - top))
     }
 
-    /// The page's visible height with the bar open: the shape a tab's picture is taken in, and
-    /// what the switcher's card grows back into.
-    var openPageHeight: CGFloat { tabArea.height }
+    /// The page's view height: the shape a tab's picture is taken in, and what a card that opens
+    /// becomes. With the page running under the bar it is the safe area's edge, not the bar's top,
+    /// so a tab comes in with the page's whole bottom and gains nothing on landing.
+    var pageViewHeight: CGFloat { pageViewFrame(top: view.safeAreaInsets.top, barProgress: 1).height }
+
+    /// The page's view bottom: the safe area's edge with the page under the bar, else the bar's
+    /// top on iOS before 26.
+    var pageViewBottom: CGFloat {
+        Self.pageRunsUnderBar ? view.bounds.height - view.safeAreaInsets.bottom : tabArea.maxY
+    }
 
     /// The page's frame as it is now.
     var pageContentFrame: CGRect { pageFrame(barProgress: barCollapse.progress) }
@@ -574,9 +581,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         switcher?.frame = bounds
         if let switcher {
             if switcher.bandHeight != safeTop { switcher.bandHeight = safeTop }
-            // The card that opens fills the page's area, not the bar's: the page it becomes has
-            // its bottom there.
-            if switcher.pageBottom != tabArea.maxY { switcher.pageBottom = tabArea.maxY }
+            // The card that opens fills the page's view, under the bar too: the page it becomes
+            // has its bottom there, from the first frame.
+            if switcher.pageBottom != pageViewBottom { switcher.pageBottom = pageViewBottom }
         }
         // The bar and the page it covers are one layout, shared with the drag's own frames.
         layoutBarAndPage()
@@ -1238,7 +1245,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func captureSnapshot() {
         guard let page = shownPage else { return }
         let id = page.tabID
-        page.takeSnapshot(visibleHeight: openPageHeight) { [weak self] image in self?.keepSnapshot(image, for: id) }
+        page.takeSnapshot(height: pageViewHeight) { [weak self] image in self?.keepSnapshot(image, for: id) }
     }
 
     /// The page as a picture now, for its tab's preview, taken from the screen and returned.
@@ -1282,7 +1289,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         dropBlockerNotices()
         guard let page = shownPage else { return settleSwitcher(prepareSwitcher()) }
         let id = page.tabID
-        page.takeSnapshot(visibleHeight: openPageHeight) { [weak self] image in
+        page.takeSnapshot(height: pageViewHeight) { [weak self] image in
             guard let self, self.switcher == nil else { return }
             if let image { self.store.setSnapshot(image, for: id) }
             self.settleSwitcher(self.prepareSwitcher())

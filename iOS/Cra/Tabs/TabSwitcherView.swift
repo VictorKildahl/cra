@@ -33,8 +33,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     var expandedID: UUID?
     /// The status band's height at full size: each card's own band is that, scaled with the card.
     var bandHeight: CGFloat = 0 { didSet { setNeedsLayout() } }
-    /// The page's bottom at full size, the bar's top: a card that fills the screen stops there,
-    /// so the page it becomes is exactly where the card was.
+    /// The page's view bottom at full size: the safe area's edge under the bar (the bar's top
+    /// before iOS 26). A card that fills the screen stops there, under the bar too, so the page it
+    /// becomes is exactly where the card was.
     var pageBottom: CGFloat? { didSet { setNeedsLayout() } }
 
     override init(frame: CGRect) {

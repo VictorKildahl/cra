@@ -232,10 +232,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         delegate?.webPageDidChange(self)
     }
 
-    /// The page as a picture, for the tab stack and the tab cards, `visibleHeight` tall: the page
-    /// with the bar open, so a picture taken with the bar away shows what a reader sees with it in
-    /// place, not the part under it.
-    func takeSnapshot(visibleHeight height: CGFloat, _ done: @escaping (UIImage?) -> Void) {
+    /// The page as a picture, for the tab stack and the tab cards, `height` tall: the whole page
+    /// view, the part under the bar too, so a tab that grows into the page has its bottom from the
+    /// first frame.
+    func takeSnapshot(height: CGFloat, _ done: @escaping (UIImage?) -> Void) {
         // A web view that is hidden, or under a hidden page, snapshots black. That black picture
         // would then be the tab's preview until the next capture, so keep the last good one.
         var view: UIView? = webView
