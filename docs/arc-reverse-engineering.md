@@ -4746,6 +4746,13 @@ Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and f
   at (637, 450) and (37, 570). Near an edge it stays inside: dropped at (350, 300), a 1000 × 760 window sat at
   (20, 53), 20 pt inside the visible frame on both sides. Drags that read as clicks: the press selected an unloaded
   tab; select it first, then drag (scratch tool: CGEvent drag with deltas at 60 Hz).
+- [O] Pinned tabs (Arc 1.174.2, 25 Nov 2026, offline copy of a real sidebar, real HID drags; #219 follow-up): a pinned tab
+  in a folder, dragged out and let go over another app, stays in its folder (the folder still held its four tabs in
+  StorableSidebar.json) and its page stays in the window it left; the new Blank Window (`standalone` sidebar) holds a
+  new tab of its own (new id) with the same address. A top-level pinned tab did the same (let go over an existing Blank
+  Window's page, it went in there as a copy). A press on the selected tab's row then a click starts a rename: drag
+  without clicking a selected row first. Cra: `TabTearOff.copiesTab(pinned:)`, `SidebarStore.copyToBlankWindow`,
+  scenario blank-window-pinned.
 - [O] A tab dropped on a Blank Window's sidebar moved there out of the global sidebar.
 - [Reported, #288, 9 Nov 2026, video] A tab dragged out of a space on another profile opens in a window that stays
   on that profile: the page stays signed in. Cra's tear-off Blank Window takes the tab's profile

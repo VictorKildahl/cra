@@ -1811,7 +1811,10 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         if item.isSplit, let m = model {
             return SidebarMenus.split(id, panes: m.cells.map { ($0.id, $0.title) }, open: m.selected, store: store, ui: ui, actions: actions,
                                       window: window) {
-                MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) { store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) } }
+                MenuItems.add($0, action: "favoriteTab", title: Self.removeTitle(id, store)) {
+                    // A shared split is deleted (⌘Z brings it back, #806); a space's own goes to Pinned.
+                    if store.profileList(ofItem: id) != nil { store.removeFavorite(id) } else { store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) } }
+                }
                 Self.moveToProfile($0, id, store)
                 $0.addItem(.separator())
             }
@@ -1880,14 +1883,8 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
             MenuItems.add(m, action: "closeTab", title: "Close Tab") { actions.closeTabFromItsMenu(id) }
         }
         // Arc deletes the favorite. A shared one goes as before; a space's own goes to the archive,
-        // where Library can bring it back.
-        MenuItems.add(m, "Remove Favorite") {
-            if store.profileList(ofItem: id) != nil {
-                store.withPinningWindow(ui.windowID) { store.removeFromFavorites(id) }
-            } else {
-                store.archiveTab(id, reason: .manual)
-            }
-        }
+        // where Library can bring it back. ⌘Z puts either back in its place (#806).
+        MenuItems.add(m, "Remove Favorite") { store.removeFavorite(id) }
         return m
     }
 

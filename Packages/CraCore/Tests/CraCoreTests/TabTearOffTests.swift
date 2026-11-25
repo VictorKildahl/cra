@@ -18,6 +18,14 @@ struct TabTearOffTests {
         #expect(!TabTearOff.tearsOff(isTab: true, incognito: true, dropAccepted: false, overAppWindow: false))
     }
 
+    /// A pinned tab, in a folder or not, stays where it is and the new window gets a copy of it; a Today tab moves
+    /// (Arc 1.174.2, 25 Nov 2026: MbpMelborp's follow-up on #219).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/219"))
+    func aPinnedTabStaysAndTheNewWindowGetsACopy() {
+        #expect(TabTearOff.copiesTab(pinned: true))
+        #expect(!TabTearOff.copiesTab(pinned: false))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/219"))
     func nearTheTopLeftTheWindowStopsTwentyPointsInside() {
         // Arc: a 1000 × 760 window's tab let go at (350, 300) from the top left opened at

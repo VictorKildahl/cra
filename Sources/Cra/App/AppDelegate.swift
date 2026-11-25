@@ -1039,8 +1039,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         target.showWindow(nil)
     }
 
-    /// A tab dragged out of every Cra window and let go (GitHub #219): as in Arc, it moves into
-    /// a new Blank Window placed where it was dropped, with its page as it was (no reload).
+    /// A tab dragged out of every Cra window and let go (GitHub #219): as in Arc, a Today tab moves into
+    /// a new Blank Window placed where it was dropped, with its page as it was (no reload); a pinned
+    /// one stays where it is and the window opens a copy (TabTearOff.copiesTab).
     /// `screenPoint` is where the pointer let go; the window takes the size of the one it came from.
     func tearOffTab(_ id: UUID, at screenPoint: NSPoint, from source: MainWindowController) {
         guard store.item(id)?.isTab == true, !store.isIncognito(item: id) else { return }
@@ -1048,6 +1049,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let screen = NSScreen.screens.first { NSMouseInRect(screenPoint, $0.frame, false) } ?? source.window?.screen ?? NSScreen.main
         let frame = TabTearOff.frame(size: size, droppedAt: screenPoint, visible: screen?.visibleFrame ?? .zero)
         let session = store.addBlankWindow(frame: NSStringFromRect(frame))
+        // A pinned tab stays in its place (its folder too) with its page, and the window opens a copy (Arc 1.174.2).
+        if TabTearOff.copiesTab(pinned: store.isPinned(id)) {
+            store.copyToBlankWindow(id, window: session.id)
+            _ = showNewWindow(session)
+            return
+        }
         store.moveToBlankWindow(id, window: session.id)
         let c = showNewWindow(session)
         // Handed over now, not left for whichever window is in use next to claim it.
@@ -1289,8 +1296,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
             }
         case "import":
-            // Headless import (scripting): cra://import?source=arc&archive=1&settings=1
-            let plan = try? (q("source") == "dia" ? DiaImporter.plan() : ArcImporter.plan(favicons: ArcImporter.userData))
+            // Headless import (scripting): cra://import?source=arc&archive=1&settings=1, source any
+            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, chrome, zen…).
+            let source = ImportSource.allCases.first { $0.id == (q("source") ?? "arc") }
+            let plan = try? source.flatMap { $0.needsExportedFile ? nil : try $0.plan() }
             if let plan {
                 let r = store.apply(plan, includeArchive: q("archive") != "0", includeSettings: q("settings") != "0")
                 favicons.reset()
@@ -3434,7 +3443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"], folder: true)
                 return
             }
-            // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387).
+            // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387); run=- reads the lists only.
             if let n = dict["favoriteMenu"].flatMap(Int.init) {
                 main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])
                 return
@@ -4046,15 +4055,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
-    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21), or undoes
-    /// the last Tidy, unless the keyboard is in something with text to undo: a text field, or an editable
-    /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none). On an Easel,
-    /// ⌘Z undoes canvas edits instead.
+    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21), undoes
+    /// the last Tidy, or puts back a favorite taken off with Remove Favorite (#806), unless the keyboard
+    /// is in something with text to undo: a text field, or an editable element in a page (Chromium's
+    /// page view reports its ui::TextInputType, 0 = none). On an Easel, ⌘Z undoes canvas edits instead.
     private func undoClosedTab(_ event: NSEvent) -> Bool {
         guard Shortcut("z", .command).matches(event), !textFieldHasKey(event), !easelHasKey(event) else { return false }
         // The last thing to undo may be a tidy (Arc's "Undo Tidy Tabs"); a tab closed since comes first.
-        if !store.undoTidy() { perform("reopenClosedTab") }
+        if store.undoTidy() || undoRemoveFavorite() { return true }
+        perform("reopenClosedTab")
         return true
+    }
+
+    /// ⌘Z's Remove Favorite undo in the front window, unless something closed since comes back first.
+    private func undoRemoveFavorite() -> Bool {
+        guard keyLittleWindow == nil, !main.isIncognito else { return false }
+        let peek = main.closedPeek.map { ReopenClosedTab.ClosedPeek(url: $0.url, tabID: $0.tabID, closedAt: $0.at) }
+        return store.undoRemoveFavorite(in: main.windowID, peek: peek)
     }
 
     private func easelHasKey(_ event: NSEvent) -> Bool { easelHasKey(in: event.window ?? NSApp.keyWindow) }

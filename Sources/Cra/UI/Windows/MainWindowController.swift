@@ -980,11 +980,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             CraLog.note("favorite menu \(label): no tile \(n)"); return
         }
         CraLog.note("favorite menu \(label): \(Self.menuReadout(menu))")
-        guard let run, let index = menu.items.firstIndex(where: { $0.title == run }) else { return }
-        menu.performActionForItem(at: index)
-        let id = tiles[n - 1].itemID
-        let page = app.runtime(for: id).map { $0.browser.isAudioMuted() ? "muted" : "unmuted" } ?? "not loaded"
-        CraLog.note("favorite menu \(label) ran \(run): saved=\(store.item(id)?.tab?.muted == true ? "muted" : "unmuted") page=\(page)")
+        guard let run else { return }
+        // A row the menu doesn't have (run=-) runs nothing: the lists below are read as they are (#806).
+        if let index = menu.items.firstIndex(where: { $0.title == run }) {
+            menu.performActionForItem(at: index)
+            let id = tiles[n - 1].itemID
+            let page = app.runtime(for: id).map { $0.browser.isAudioMuted() ? "muted" : "unmuted" } ?? "not loaded"
+            CraLog.note("favorite menu \(label) ran \(run): saved=\(store.item(id)?.tab?.muted == true ? "muted" : "unmuted") page=\(page)")
+        }
         // The space's favorites and Today after the row ran, a split as its panes' pages joined by +, and the open tab (#600).
         guard let space = store.space(focusedSpaceID) else { return }
         let query = { (id: UUID) in self.store.item(id)?.tab.flatMap { URL(string: $0.url)?.query } ?? "-" }
