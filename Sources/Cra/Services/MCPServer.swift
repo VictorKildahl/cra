@@ -380,6 +380,14 @@ final class MCPServer {
                 guard app.store.paneTabIDs(for: splitWithID).count < app.store.splitPaneLimit else {
                     completion(MCPProtocol.content("Cannot Add New Pane: the split has reached its pane limit.", failed: true)); return
                 }
+                let visible = app.mainWindows.contains { candidate in
+                    guard !candidate.isIncognito,
+                          let candidateSpace = app.store.spaceID(ofItem: splitWithID, window: candidate.windowID) else { return false }
+                    return app.store.visiblePaneTabIDs(in: candidateSpace, window: candidate.windowID).contains(splitWithID)
+                }
+                guard !visible || select else {
+                    completion(MCPProtocol.content("splitWith is visible; pass select=true to change its view.", failed: true)); return
+                }
                 space = anchorSpace
             }
             if let name = arguments["space"] as? String {
@@ -394,22 +402,23 @@ final class MCPServer {
                 space = requestedSpace
             }
             if let splitWithID {
-                let tab = app.store.createTab(url: url, in: space, select: false, window: window.windowID)
-                guard let split = app.store.createSplit(with: [splitWithID, tab.id], at: splitWithID),
-                      let paneID = app.store.paneID(for: tab.id, in: split) else {
-                    app.store.archiveTab(tab.id, reason: .manual)
+                let splitSpace = space ?? app.store.focusedSpaceID(window: window.windowID)
+                let previouslySelected = app.store.selectedTabID(in: splitSpace, window: window.windowID)
+                guard let pane = app.store.openLinkInSplit(url, from: splitWithID, window: window.windowID),
+                      let split = app.store.splitContaining(pane.id) else {
                     completion(MCPProtocol.content("Could not add the page to Split View.", failed: true)); return
                 }
-                ownedTabs[owner, default: []].insert(paneID)
-                if select { app.store.selectTab(paneID, window: window.windowID) }
-                _ = window.browsers.ensureRuntime(for: paneID)
+                ownedTabs[owner, default: []].insert(pane.id)
+                if !select { app.store.selectTab(previouslySelected, window: window.windowID) }
+                _ = window.browsers.ensureRuntime(for: pane.id)
                 if arguments["activate"] as? Bool == true {
                     window.window?.makeKeyAndOrderFront(nil)
                     NSApp.activate(ignoringOtherApps: true)
                 }
-                let panes = app.store.paneTabIDs(for: paneID).map(\.uuidString)
-                completion(try! MCPCDP.content(["tabId": paneID.uuidString, "status": "opened", "selected": select,
-                                                "splitId": split.id.uuidString, "paneTabIds": panes]))
+                let panes = app.store.paneTabIDs(for: pane.id).map(\.uuidString)
+                let result: [String: Any] = ["tabId": pane.id.uuidString, "status": "opened", "selected": select,
+                                             "splitId": split.id.uuidString, "paneTabIds": panes]
+                completion((try? MCPCDP.content(result)) ?? MCPProtocol.content("Could not describe Split View.", failed: true))
                 return
             }
             let tab = app.store.createTab(url: url, in: space, select: select, window: window.windowID)
@@ -449,14 +458,16 @@ final class MCPServer {
                 completion(MCPProtocol.content("Normal browser window unavailable.", failed: true)); return
             }
             if name == "tab_close" {
-                // Any today tab, like ⌘W (Reopen Closed Tab brings it back). Pinned tabs and
-                // favorites are the user's own layout and stay.
-                guard !app.store.isPinned(id), app.store.splitContaining(id) == nil else {
-                    completion(MCPProtocol.content("Pinned tabs, favorites and tabs in a split stay open; close only today tabs.", failed: true)); return
+                let inSplit = app.store.splitContaining(id) != nil
+                let isOwnedPane = inSplit && ownedTabs[owner]?.contains(id) == true
+                // Any today tab, like ⌘W (Reopen Closed Tab brings it back). An agent can close
+                // the pane it opened; pinned/favorite tabs and other split panes stay.
+                guard !app.store.isPinned(id), !inSplit || isOwnedPane else {
+                    completion(MCPProtocol.content("Pinned tabs, favorites and split panes this connection did not open stay open.", failed: true)); return
                 }
                 transfers.removeValue(forKey: id)?.close()
                 if let page = pages[id] { page.detach() }
-                window.closeTab(id)
+                if inSplit { window.closeSplitPane(id) } else { window.closeTab(id) }
                 ownedTabs[owner]?.remove(id); pages.removeValue(forKey: id); pointerPositions.removeValue(forKey: id)
             } else {
                 app.store.selectTab(id, window: window.windowID)

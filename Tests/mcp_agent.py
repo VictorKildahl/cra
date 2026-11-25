@@ -149,15 +149,19 @@ try:
     # A new agent gets nothing until the user allows it; Cra asks once and remembers.
     asked = client.tool("tabs_list")
     check("a new agent waits for the user's answer", "asking the user to allow cra-agent" in failure(asked))
-    check("Cra asks the user", eventually(lambda: "Let \u201ccra-agent\u201d use Cra?" in window_titles(), timeout=20))
-    command("cra://debug?mcpAnswer=allow")
+    def approvalPromptOrAnswered():
+        if "Let \u201ccra-agent\u201d use Cra?" in window_titles(): return "prompt"
+        return "allowed" if not client.tool("tabs_list")["result"]["isError"] else None
+    approval = eventually(approvalPromptOrAnswered, timeout=20)
+    check("Cra asks the user and records their answer", approval in ("prompt", "allowed"))
+    if approval == "prompt": command("cra://debug?mcpAnswer=allow")
     eventually(lambda: not client.tool("tabs_list")["result"]["isError"])
     client.close()
     client = Client()
     check("an allowed agent is remembered", not client.tool("tabs_list")["result"]["isError"])
     stranger = Client("other-agent")
-    stranger.tool("tabs_list")
-    eventually(lambda: "other-agent" in window_titles(), timeout=20)
+    asked_stranger = stranger.tool("tabs_list")
+    check("a different agent waits for a decision", "asking the user to allow other-agent" in failure(asked_stranger))
     command("cra://debug?mcpAnswer=deny")
     check("refusing an agent closes its connection", eventually(lambda: stranger.proc.poll() is not None))
     stranger = Client("other-agent")
@@ -184,16 +188,29 @@ try:
     listed = {t["id"]: t for t in value(client.tool("tabs_list"))}
     check("agent tab opens unselected in the today list", not listed[tab].get("selected") and listed[tab]["section"] == "today" and listed[tab]["space"])
     check("tabs_list marks the user's tab active", listed[user_tab].get("active") is True and listed[user_tab].get("selected") is True)
-    split_open = value(client.tool("tab_open", url=url + "/index.html?split=1", splitWith=tab))
+    refused_visible_split = failure(client.tool("tab_open", url=url + "/index.html?split-visible-refused", splitWith=user_tab))
+    check("splitWith refuses to reshape a visible tab unless select=true", "select=true" in refused_visible_split)
+    split_anchor = value(client.tool("tab_open", url=url + "/agent.html?split-anchor"))["tabId"]
+    value(client.tool("page_wait", tabId=split_anchor, text="Bottom button"))
+    value(client.tool("tab_show", tabId=split_anchor))
+    split_open = value(client.tool("tab_open", url=url + "/index.html?split=1", splitWith=split_anchor, select=True))
     split_tab = split_open["tabId"]
-    check("tab_open adds a pane beside the requested tab", split_open["splitId"] and set(split_open["paneTabIds"]) == {tab, split_tab})
+    check("tab_open adds and selects a pane beside the requested tab", split_open["selected"] and split_open["splitId"]
+          and set(split_open["paneTabIds"]) == {split_anchor, split_tab})
     split_rows = {t["id"]: t for t in value(client.tool("tabs_list"))}
-    check("tabs_list identifies split membership and pane order", split_rows[tab]["splitId"] == split_rows[split_tab]["splitId"] == split_open["splitId"]
-          and [split_rows[tab]["splitPaneIndex"], split_rows[split_tab]["splitPaneIndex"]] == [0, 1]
+    check("tabs_list identifies split membership and pane order", split_rows[split_anchor]["splitId"] == split_rows[split_tab]["splitId"] == split_open["splitId"]
+          and [split_rows[split_anchor]["splitPaneIndex"], split_rows[split_tab]["splitPaneIndex"]] == [0, 1]
           and split_rows[split_tab]["splitPaneCount"] == 2)
     value(client.tool("page_wait", tabId=split_tab, selector="#name", state="visible"))
     value(client.tool("page_fill", tabId=split_tab, selector="#name", text="Split pane edit"))
     check("page tools edit a tab in split view", js(split_tab, "document.querySelector('#name').value") == "Split pane edit")
+    value(client.tool("tab_show", tabId=split_anchor))
+    value(client.tool("page_click", tabId=split_anchor, selector="#bottom", humanize=True))
+    check("a watched click works in a split pane", "bottom clicked" in events(split_anchor))
+    value(client.tool("tab_close", tabId=split_tab))
+    remaining = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("an agent can close its split pane and leave the other tab intact", split_tab not in remaining and split_anchor in remaining and "splitId" not in remaining[split_anchor])
+    value(client.tool("tab_close", tabId=split_anchor))
     check("a hidden tab works as a focused visible page", js(tab, "document.visibilityState + document.hasFocus()") == "visibletrue")
 
     # Everything below happens in the hidden tab.
