@@ -1755,6 +1755,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("extension remove \(id.prefix(8)): in chromium=\(chromium ? 1 : 0) in cra=\(cra ? 1 : 0)")
                 return
             }
+            // currentSpace=<label>: the window's space and the profile its pages use, so a scenario set up with spaces on
+            // other profiles shows it really ran there (#621's scenarios ran on Default while their seed didn't load).
+            if let label = dict["currentSpace"] {
+                let space = main.focusedSpace
+                CraLog.note("current space \(label): \(space.title) profile=\(main.store.profileName(space.profileID))")
+                return
+            }
             // extensionMenu=<id>: the toolbar's right-click menu for that pinned extension (#695); press=<row> chooses one.
             if let id = dict["extensionMenu"], let bar = main.shell.paneCards.first?.toolbarHost as? PaneToolbarView {
                 CraLog.note("extension menu \(dict["label"] ?? id): " + bar.debugExtensionMenu(id, press: dict["press"]))
