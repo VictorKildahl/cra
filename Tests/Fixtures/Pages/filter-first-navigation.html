@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>First navigation in a private profile</title>
+<img src="http://assets.fixture.example:47136/icon-blue.png?privateimage" alt="Allowed image">
+<script>
+  // Start alongside the page load. A later test command could miss a startup race.
+  fetch("http://assets.fixture.example:47136/icon-blue.png?privatedeny", {mode: "no-cors"})
+    .then(() => { document.title = "Unexpected request"; })
+    .catch(() => { document.title = "Request blocked"; });
+</script>

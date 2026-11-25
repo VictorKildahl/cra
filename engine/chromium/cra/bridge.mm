@@ -152,6 +152,8 @@
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/browser/extension_registrar.h"
 #include "chrome/browser/extensions/menu_manager.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/browser/unpacked_installer.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -835,7 +837,7 @@ class PageHost : public TabStripModelObserver {
     // process; about:blank took one of its own for as long as Cra ran.
     std::unique_ptr<content::WebContents> blank =
         content::WebContents::Create(content::WebContents::CreateParams(browser->GetProfile()));
-    placeholder_ = blank.get();
+    placeholder_ = blank->GetWeakPtr();
     // Not a tab to extensions (chrome.tabs.query, chrome.windows.getAll), as a spare page isn't.
     placeholder_->SetUserData(content::CraSparePageKey(), std::make_unique<base::SupportsUserData::Data>());
     browser->GetTabStripModel()->AppendWebContents(std::move(blank), /*foreground=*/true);
@@ -880,7 +882,7 @@ class PageHost : public TabStripModelObserver {
   // marks it as its own and takes its view.
   void KeepPlaceholderActive() {
     TabStripModel* tabs = browser_->GetTabStripModel();
-    int index = tabs->GetIndexOfWebContents(placeholder_);
+    int index = tabs->GetIndexOfWebContents(placeholder_.get());
     if (index != TabStripModel::kNoTab && tabs->active_index() != index) {
       tabs->ActivateTabAt(index);
     }
@@ -894,7 +896,7 @@ class PageHost : public TabStripModelObserver {
     }
     for (const auto& inserted : change.GetInsert()->contents) {
       content::WebContents* page = inserted.contents;
-      if (page == placeholder_ || BrowserFor(page)) {
+      if (page == placeholder_.get() || BrowserFor(page)) {
         continue;
       }
       // The page that opened it: the frame for window.open, else the tab strip's opener (a link opened
@@ -924,7 +926,7 @@ class PageHost : public TabStripModelObserver {
              base::WeakPtr<content::WebContents> opener,
              base::WeakPtr<content::WebContents> before,
              bool background) {
-    if (!page) {
+    if (!page || !browser_) {
       return;
     }
     // Only a page that opened in front: a background one (an extension's tabs.create with active: false) leaves
@@ -981,7 +983,7 @@ class PageHost : public TabStripModelObserver {
   }
 
   raw_ptr<BrowserWindowInterface> browser_;
-  raw_ptr<content::WebContents> placeholder_ = nullptr;
+  base::WeakPtr<content::WebContents> placeholder_;
 };
 
 std::map<Profile*, PageHost*>& Hosts() {
@@ -1536,6 +1538,7 @@ bool IsHost(BrowserWindowInterface* browser) {
 class StrayWindows : public BrowserCollectionObserver, public TabStripModelObserver {
  public:
   void Start() { observation_.Observe(GlobalBrowserCollection::GetInstance()); }
+  void Stop() { observation_.Reset(); }
 
   void OnBrowserCreated(BrowserWindowInterface* browser) override {
     if (g_making_host || IsHost(browser)) {
@@ -2868,16 +2871,20 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
   constexpr char id[] = "nddccjlgchhhajchaphmkffkclfmcemb";
   Profile* profile = Profile::FromBrowserContext(_contents->GetBrowserContext())->GetOriginalProfile();
   auto* registry = extensions::ExtensionRegistry::Get(profile);
-  // An unavailable or policy-disabled helper uses the app’s domain fallback.
-  if (!registry->enabled_extensions().Contains(id)) {
-    return NO;
-  }
+  auto* client = extensions::ExtensionsBrowserClient::Get();
   if (_isIncognito) {
     bool allowed = false;
-    if (extensions::ExtensionsBrowserClient::Get()->IsolatedModeReplacesIncognito(profile) ||
+    if (client->IsolatedModeReplacesIncognito(profile) ||
         (extensions::ExtensionPrefs::Get(profile)->ReadPrefAsBoolean(id, "incognito", &allowed) && !allowed)) {
       return NO;
     }
+  }
+  if (!registry->enabled_extensions().Contains(id)) {
+    // A cold profile has no registry entry yet. Installation finishes asynchronously,
+    // so releasing its first navigation here would send it before filtering starts.
+    return !registry->GetInstalledExtension(id) &&
+           (!extensions::ExtensionSystem::Get(profile)->is_ready() ||
+            extensions::UnpackedInstaller::IsBundledCraFilterPending(profile));
   }
   namespace dnr = extensions::declarative_net_request;
   auto* service = dnr::RulesMonitorService::Get(profile);
@@ -4039,6 +4046,7 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
     return;
   }
   g_quitting = true;
+  Strays().Stop();
   cra::DropSparePages();
   cra::StopProfilePrefs();
   cra::DetachHostWindows();

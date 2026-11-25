@@ -23,14 +23,12 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixt
 expect-log Cra cdp Runtime.evaluate .*"value":"allowed"
 expect-log GET /icon-blue\.png\?allowed
 
-# The same ID-independent rule must apply in a named profile's first private window.
-cra://open?url=http://other.example:47136/page.html?named&space=A0000000-0000-0000-0000-000000000002
-expect-log GET /page\.html\?named
-cra://debug?incognitoWindow=http://other.example:47136/page.html?private
-expect-log GET /page\.html\?private
-cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?privatedeny',{mode:'no-cors'}).then(()=>'leak',e=>'private-blocked:'+e.name)","awaitPromise":true}
-expect-log Cra cdp Runtime.evaluate .*"value":"private-blocked:TypeError"
-reject-log GET /icon-blue\.png\?privatedeny
-cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const i=new Image();i.onload=()=>r('private-image:'+i.naturalWidth);i.onerror=()=>r('failed');i.src='http://assets.fixture.example:47136/icon-blue.png?privateimage'})","awaitPromise":true}
-expect-log Cra cdp Runtime.evaluate .*"value":"private-image:[1-9]
+# Select a fresh named profile without starting an HTTP page in it. The first
+# private document requests both an allowed image and a blocked fetch during load.
+cra://open?url=about:blank&space=A0000000-0000-0000-0000-000000000002
+cra://debug?incognitoWindow=http://other.example:47136/filter-first-navigation.html
+expect-log GET /filter-first-navigation\.html
 expect-log GET /icon-blue\.png\?privateimage
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.title"}
+expect-log Cra cdp Runtime.evaluate .*"value":"Request blocked"
+reject-log GET /icon-blue\.png\?privatedeny
