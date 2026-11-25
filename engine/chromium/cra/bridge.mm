@@ -728,9 +728,6 @@ void MakeHostWindow(NSWindow* window) {
   window.ignoresMouseEvents = YES;
   window.sharingType = NSWindowSharingNone;
   NeverFullScreen(window);
-  // Out of Mission Control and ⌘`: on screen, though never seen (a page's DevTools window Chrome shows each time
-  // they open showed in Mission Control as an empty window, one per page that had DevTools).
-  window.collectionBehavior |= NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle;
   NeverKeyOrMain(window);
 }
 
@@ -1558,6 +1555,10 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       // frontend takes focus (a click in it), and Cra's window, where the frontend is, lost the keys. Chromium then
       // dropped mouse moves (no splitter cursor, no hover) and the next click only made Cra's window key again.
       MakeHostWindow(window);
+      // Out of Mission Control and ⌘`: on screen, though never seen (Mission Control showed one empty window per page
+      // that had DevTools, GitHub #778). Only DevTools': a profile's page host is the parent of extension popups,
+      // which Cra finds by that chain, and keeps the collection behaviour it had.
+      window.collectionBehavior |= NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle;
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
       return;
     }
