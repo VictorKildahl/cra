@@ -21,6 +21,14 @@ public enum SidebarAddressEdit {
         return editInPlace ? .editInPlace : .commandBarEditURL
     }
 
+    /// A click on the toolbar's address. The same setting applies there: the address is edited
+    /// where it is drawn when the toolbar holds it (Discord #help, 25 Nov). Arc's developer bar
+    /// always edits in place (#42).
+    public static func toolbarClick(developer: Bool, editInPlace: Bool, hasTab: Bool) -> Click {
+        guard hasTab else { return .commandBarNewTab }
+        return click(editInPlace: editInPlace || developer, hasTab: true)
+    }
+
     /// Where Return sends what was typed.
     public enum Commit: Equatable, Sendable {
         /// Nothing typed: the field puts the address back and nothing loads.

@@ -1573,6 +1573,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // instantLinks=<label>: the Instant Links row and the last run, as one line (#407).
             if let v = dict["instantLinksSetting"] { store.settings.instantLinks = v == "on"; return }
+            // editAddressInPlace=on|off: Settings ▸ Tabs ▸ "Edit the address in place" switched (#344).
+            if let v = dict["editAddressInPlace"] { store.settings.editAddressInPlace = v == "on"; return }
             // pageMarginSetting=<points>: Settings ▸ Pages ▸ Margin moved to that value, as the slider does (Ideas #366).
             if let v = dict["pageMarginSetting"].flatMap(Double.init) { store.settings.pageMargin = v; return }
             // nowPlayingTint=arc|theme: Settings ▸ Tabs ▸ "Player in the space's colour" switched (Ideas #366).
@@ -3111,6 +3113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let name = dict["urlFieldPress"] { main.debugURLFieldPress(name); return }
             // The URL field edited in place (#344): a click on it, then typing and Return or Escape.
             if let step = dict["urlFieldEdit"] { main.debugURLFieldEdit(step); return }
+            // The toolbar's address edited in place (Settings ▸ Tabs, with the toolbar shown).
+            if let step = dict["toolbarAddressEdit"] { main.debugToolbarAddressEdit(step); return }
             // The sidebar header's address row (#648): "sidebar address <label>: url=… back=… forward=…",
             // and a press on its back, forward or reload.
             if let label = dict["sidebarAddress"] {

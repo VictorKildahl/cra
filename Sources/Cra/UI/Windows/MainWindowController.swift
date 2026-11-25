@@ -515,14 +515,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 }
                 return
             }
-            guard let tab = self.selectedTab, let id = self.selectedTabID else { return }
-            switch SidebarAddressEdit.commit(typed: typed, currentURL: tab.tab?.url ?? "", pinned: self.store.isPinned(id),
-                                             searchURL: self.commandBar.engine.searchURL) {
-            case .none: break
-            case .load(let url): self.loadInSelectedTab(url)
-            case .newTab(let url): self.store.createTab(url: url, window: self.windowID)
-            }
+            guard let id = self.selectedTabID else { return }
+            self.commitAddress(typed, in: id)
         }
+        sidebarActions.commitTabAddress = { [weak self] id, typed in self?.commitAddress(typed, in: id) }
         sidebarActions.openTyped = { [weak self] typed in
             guard let self else { return }
             let t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4980,6 +4976,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         return "panel compact w=\(Int(f.width.rounded())) h=\(Int(f.height.rounded())) " + (at ? "at field" : "away from field")
     }
 
+    /// Scenario hooks: the focused pane's toolbar address edited in place, as `debugURLFieldEdit`
+    /// drives the sidebar's: "click", "state", "type:<text>" (then Return) or "escape:<text>".
+    func debugToolbarAddressEdit(_ step: String) {
+        let bar = shell.focusedCard?.toolbarHost as? PaneToolbarView
+        let place = ", command bar " + (commandBar.isOpen ? "open" : "closed")
+        switch step {
+        case "click": CraLog.note("toolbar address click: " + (bar?.debugAddressClick() ?? "none") + place)
+        case "state": CraLog.note("toolbar address state: " + (bar?.debugAddressState ?? "none") + place)
+        default:
+            let commit = step.hasPrefix("type:")
+            let text = String(step.drop(while: { $0 != ":" }).dropFirst())
+            CraLog.note("toolbar address \(commit ? "return" : "escape"): " + (bar?.debugAddressType(text, commit: commit) == true ? "done" : "not editing"))
+        }
+    }
+
     func debugURLFieldPress(_ name: String) {
         let item: ToolbarComposition.Item = name == "copyURL" ? .copyURL : .extensions
         let pressed = (shell.sidebarHost as? SidebarView)?.debugURLFieldPress(item) == true
@@ -5787,6 +5798,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Navigate the focused tab (an empty split pane gets its first page here).
+    /// Return in an address edited in place (#344), for `id`: it loads there or, for another host
+    /// from a pinned tab, in a new tab (SidebarAddressEdit.commit). `id` is selected first, so a
+    /// split pane's bar loads in its own pane.
+    private func commitAddress(_ typed: String, in id: UUID) {
+        guard let item = store.item(id) else { return }
+        switch SidebarAddressEdit.commit(typed: typed, currentURL: item.tab?.url ?? "", pinned: store.isPinned(id),
+                                         searchURL: commandBar.engine.searchURL) {
+        case .none: break
+        case .load(let url):
+            if selectedTabID != id { store.selectTab(id, window: windowID) }
+            loadInSelectedTab(url)
+        case .newTab(let url): store.createTab(url: url, window: windowID)
+        }
+    }
+
     func loadInSelectedTab(_ url: String) {
         guard let id = selectedTabID else { return }
         // Typed over an incognito tab, Chrome's Settings or Extensions page opens in a new tab of the

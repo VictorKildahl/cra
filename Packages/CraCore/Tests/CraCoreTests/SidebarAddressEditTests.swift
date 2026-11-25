@@ -36,6 +36,16 @@ struct SidebarAddressEditTests {
         #expect(SidebarAddressEdit.commit(typed: "cra browser", currentURL: page, pinned: true, searchURL: search) == .newTab("https://search.test/?q=cra+browser"))
     }
 
+    /// Discord #help 25 Nov: with the toolbar on, the switch was greyed out. It now applies to the
+    /// toolbar's address too. The developer bar edits in place either way, as in Arc (#42).
+    @Test func theToolbarAddressEditsInPlaceWhenTurnedOn() {
+        #expect(SidebarAddressEdit.toolbarClick(developer: false, editInPlace: true, hasTab: true) == .editInPlace)
+        #expect(SidebarAddressEdit.toolbarClick(developer: false, editInPlace: false, hasTab: true) == .commandBarEditURL)
+        #expect(SidebarAddressEdit.toolbarClick(developer: true, editInPlace: false, hasTab: true) == .editInPlace)
+        #expect(SidebarAddressEdit.toolbarClick(developer: true, editInPlace: true, hasTab: true) == .editInPlace)
+        #expect(SidebarAddressEdit.toolbarClick(developer: false, editInPlace: true, hasTab: false) == .commandBarNewTab)
+    }
+
     /// Off in a settings.json written before #344, and it survives a save.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/344"))
     func settingDefaultsOffAndRoundTrips() throws {
