@@ -157,6 +157,12 @@ final class PageGestureTests: BrowserTestCase {
             return XCTFail("no frame mid-way: \(lines)")
         }
         XCTAssertEqual(mid[1], -(width - mid[0]) / 3, accuracy: 1, "the page underneath moves at a third of the speed")
+        // Arc Search's magnet: the page holds back at 0.28 of the finger's way until it has come 21 pt, the finger 75 pt
+        // in, and lets go there with a tick.
+        guard let held = moves.first(where: { $0[2] > 20 && $0[2] < 60 }) else { return XCTFail("no held frame: \(lines)") }
+        XCTAssertEqual(held[0], held[2] * 0.28, accuracy: 2, "held, the page moves 0.28 of the finger's way")
+        let letGo = lines.first { $0.hasPrefix("let go with the finger at ") }.map(numbers)?.first
+        XCTAssertEqual(letGo ?? 0, 75, accuracy: 15, "the magnet let go with the finger about 75 pt in: \(lines)")
         XCTAssertTrue(lines.contains("went back"))
         sleep(2)
         XCTAssertTrue(swipeTrace().contains { $0.hasPrefix("lifted after ") }, "the picture came off once the page drew")
@@ -175,20 +181,21 @@ final class PageGestureTests: BrowserTestCase {
         openTab(Self.page("Second"), title: "Second")
         sleep(1)
         let button = app.buttons["bar-tabs"].frame
-        drag(fromX: 0.3, toX: 0.8, y: 0.5, settle: true)
+        // Past where the magnet lets go of a closing tab, the finger 185 pt in.
+        drag(fromX: 0.15, toX: 0.85, y: 0.5, settle: true)
         waitForPage("First")
         let lines = swipeTrace()
         XCTAssertEqual(lines.first, "closingTab picture kept", "the tab before it came out as its picture: \(lines)")
-        let cards = lines.filter { $0.hasPrefix("drag ") }.map(numbers)
-        guard let first = cards.first, let last = cards.last, first.count == 5, last.count == 5 else {
+        let cards = lines.filter { $0.hasPrefix("page ") }.map(numbers)
+        guard let first = cards.first, let last = cards.last, first.count == 6, last.count == 6 else {
             return XCTFail("no card frames: \(lines)")
         }
-        // drag, x, y, width, height: small, on the tab button, at first...
+        // page, x, y, width, height, finger: small, on the tab button, at first...
         let center = CGPoint(x: first[1] + first[3] / 2, y: first[2] + first[4] / 2)
         XCTAssertTrue(button.insetBy(dx: -30, dy: -30).contains(center), "out of the tab button \(button): \(first)")
         XCTAssertLessThan(first[3], 120, "small at first: \(first)")
         // ...and by the end the page's card size, 20 pt in from the sides, with its right edge 20 pt left of the
-        // page's card, which follows the finger: that card's left edge is the finger's travel plus 20.
+        // page's card, whose left edge is the page's travel plus 20.
         let width = app.windows.firstMatch.frame.width
         XCTAssertEqual(last[3], width - 40, accuracy: 1.5, "the page's card size by the end: \(last)")
         XCTAssertEqual(last[1] + last[3], last[0], accuracy: 1.5, "beside the page's card: \(last)")
@@ -196,18 +203,20 @@ final class PageGestureTests: BrowserTestCase {
         XCTAssertEqual(rowTitles(), ["First"], "the swiped tab went to the archive")
     }
 
-    /// Let go short of the threshold, the page settles back and nothing of the swipe stays on screen.
+    /// Let go while the magnet still holds the page, it settles back, the tab stays and nothing of the swipe stays on
+    /// screen.
     func testASwipeLetGoEarlyPutsThePageBack() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
         waitForPage("First")
         openTab(Self.page("Second"), title: "Second")
         sleep(1)
-        // Under the 35 % that closes the tab, held still at its end so it lets go with no speed. (A drag of a sixth of
-        // the screen never started a swipe under XCUITest.)
-        drag(fromX: 0.3, toX: 0.6, y: 0.5, settle: true)
+        // From the edge, where a swipe always starts, held still well short of where the magnet lets go (the finger
+        // 160 pt in), so it lets go with no speed. (From mid-page, XCUITest's drags of a sixth of the screen never started a swipe.)
+        drag(fromX: 0.03, toX: 0.12, y: 0.5, settle: true)
         let lines = swipeTrace()
         XCTAssertEqual(lines.first, "closingTab picture kept")
         XCTAssertEqual(lines.last, "went nowhere", "\(lines)")
+        XCTAssertFalse(lines.contains { $0.hasPrefix("let go") }, "the magnet still held the page: \(lines)")
         XCTAssertTrue(app.webViews.staticTexts["Second"].isHittable, "the page is back in place")
         XCTAssertEqual(rowTitles(), ["First", "Second"])
     }

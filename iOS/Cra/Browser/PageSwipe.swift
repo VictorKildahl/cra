@@ -44,9 +44,15 @@ final class PageSwipeStage: NSObject {
     var emptiedButton = false
     /// The live page is hidden behind the closing tab's cards.
     var hidPage = false
-    /// The finger's last distance across, and the closing tab's cards' own clock.
+    /// The finger's last distance across, and the page's, which the magnet holds back at first
+    /// (`MobilePageSwipe.Magnet`); the tick it gives as it lets go.
     var translation: CGFloat = 0
-    var startedAt: CFTimeInterval = 0
+    var pageTranslation: CGFloat = 0
+    lazy var magnet = MobilePageSwipe.magnet(for: reveal)
+    var lastStep: CFTimeInterval = 0
+    let letGoTick = UIImpactFeedbackGenerator(style: .medium)
+    /// The closing tab's cards' own clock: from the moment the magnet lets go.
+    var cardsAt: CFTimeInterval?
     var progress: CGFloat = 0
     private var link: CADisplayLink?
     private var onFrame: (() -> Void)?
@@ -71,9 +77,11 @@ final class PageSwipeStage: NSObject {
         arriving.addSubview(picture)
     }
 
+    /// 1 when the swipe leads by dragging right (Back, a tab closing), -1 when it leads by dragging left (Forward).
+    var direction: CGFloat { MobilePageSwipe.arrivesOnTop(reveal) ? -1 : 1 }
+
     func startClock(_ frame: @escaping () -> Void) {
         stopClock()
-        startedAt = CACurrentMediaTime()
         onFrame = frame
         let link = CADisplayLink(target: self, selector: #selector(tick))
         link.add(to: .main, forMode: .common)
@@ -133,14 +141,18 @@ extension BrowserViewController {
             }
             let stage = pageSwipe.flatMap { $0.reveal == reveal ? $0 : nil } ?? startPageSwipe(reveal, on: page)
             stage.translation = x
+            stepPageSwipe(stage)
             placePageSwipe(stage)
         case .ended, .cancelled:
             let velocity = pan.velocity(in: view).x
-            let decided = pan.state == .ended ? outcome(x, velocity) : .none
-            guard let stage = pageSwipe, MobilePageSwipe.reveal(for: decided) == stage.reveal else {
-                return cancelPageSwipe(velocity: velocity)
-            }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            guard let stage = pageSwipe else { return cancelPageSwipe(velocity: velocity) }
+            // Once the magnet has let the page go, letting go goes there; held, only a flick does.
+            stepPageSwipe(stage)
+            let goes = pan.state == .ended
+                && MobilePageSwipe.commits(letGo: stage.magnet.letGo, velocity: velocity * stage.direction,
+                                           distance: x * stage.direction)
+            let decided = goes ? outcome(stage.direction * width, 0) : .none
+            guard MobilePageSwipe.reveal(for: decided) == stage.reveal else { return cancelPageSwipe(velocity: velocity) }
             commitPageSwipe(stage, decided, velocity: velocity)
         default: break
         }
@@ -191,11 +203,35 @@ extension BrowserViewController {
         }
         pageSwipe = stage
         tracePageSwipe("\(reveal) picture \(image == nil ? "none" : "kept")", restart: true)
+        // The magnet's own clock: the page catches up with a still finger too.
+        stage.letGoTick.prepare()
+        stage.lastStep = CACurrentMediaTime()
+        stage.startClock { [weak self, weak stage] in
+            guard let self, let stage, self.pageSwipe === stage else { return }
+            self.stepPageSwipe(stage)
+            self.placePageSwipe(stage)
+        }
         return stage
     }
 
-    /// The tab closing: the page on screen, as its picture down to the bar, shrinks into a card; the tab shown next
-    /// lifts off the tab button's front card and grows into one beside it. Both on their own clock from here.
+    /// Moves the magnet on to now: how far the page has come behind the finger. As it lets the page go it ticks, and
+    /// a closing tab's cards set off.
+    private func stepPageSwipe(_ stage: PageSwipeStage) {
+        let now = CACurrentMediaTime()
+        let step = stage.magnet.step(distance: stage.translation * stage.direction, dt: now - stage.lastStep)
+        stage.lastStep = now
+        stage.pageTranslation = step.page * stage.direction
+        if step.letGoNow {
+            stage.letGoTick.impactOccurred()
+            if stage.reveal == .closingTab, stage.cardsAt == nil { stage.cardsAt = now }
+            tracePageSwipe(String(format: "let go with the finger at %.0f", abs(stage.translation)))
+        }
+        if let at = stage.cardsAt { stage.progress = MobilePageSwipe.cardProgress(after: now - at) }
+    }
+
+    /// The tab closing: the page on screen, as its picture down to the bar, slides with the finger; once the magnet
+    /// lets it go it shrinks into a card while the tab shown next lifts off the tab button's front card and grows into
+    /// one beside it, both on their own clock (`stepPageSwipe`).
     private func startClosingTab(_ stage: PageSwipeStage, picture image: UIImage?) {
         let bounds = view.bounds, barTop = tabArea.maxY
         let leaving = UIView()
@@ -230,25 +266,20 @@ extension BrowserViewController {
             bar.tabsButton.setFrontEmpty(true)
             stage.emptiedButton = true
         }
-        stage.startClock { [weak self, weak stage] in
-            guard let self, let stage, self.pageSwipe === stage else { return }
-            stage.progress = MobilePageSwipe.cardProgress(after: CACurrentMediaTime() - stage.startedAt)
-            self.placePageSwipe(stage)
-            if stage.progress >= 0.999 { stage.stopClock() }
-        }
     }
 
     private func placePageSwipe(_ stage: PageSwipeStage) {
         let width = view.bounds.width
         if stage.reveal == .closingTab {
-            layOutClosingTab(stage, progress: stage.progress, translation: stage.translation)
+            layOutClosingTab(stage, progress: stage.progress, translation: stage.pageTranslation)
             let card = stage.arriving.frame
-            tracePageSwipe(String(format: "drag %.0f card %.0f %.0f %.0f %.0f", stage.translation, card.minX, card.minY,
-                                  card.width, card.height))
+            tracePageSwipe(String(format: "page %.0f card %.0f %.0f %.0f %.0f finger %.0f", stage.pageTranslation, card.minX,
+                                  card.minY, card.width, card.height, stage.translation))
         } else {
-            let edge = MobilePageSwipe.topEdge(translation: stage.translation, width: width, reveal: stage.reveal)
+            let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
             layOutPageSwipe(stage, edge: edge)
-            tracePageSwipe(String(format: "edge %.1f under %.1f", edge, MobilePageSwipe.underOffset(edge: edge, width: width)))
+            tracePageSwipe(String(format: "edge %.1f under %.1f finger %.1f", edge,
+                                  MobilePageSwipe.underOffset(edge: edge, width: width), stage.translation))
         }
     }
 
@@ -365,7 +396,7 @@ extension BrowserViewController {
             return
         }
         let width = view.bounds.width
-        let edge = MobilePageSwipe.topEdge(translation: stage.translation, width: width, reveal: stage.reveal)
+        let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
         let target: CGFloat = MobilePageSwipe.arrivesOnTop(stage.reveal) ? 0 : width
         let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: edge, to: target)
         animatePageSwipe(stage, spring: MobilePageSwipe.settle, velocity: speed, {
@@ -390,7 +421,7 @@ extension BrowserViewController {
         let goneX = MobilePageSwipe.leavingCardGoneX(width: width)
         let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: leaving.center.x, to: goneX)
         animatePageSwipe(stage, spring: MobilePageSwipe.cardLeave, velocity: speed, {
-            let scale = MobilePageSwipe.cardScale(width: width)
+            let scale = MobilePageSwipe.cardLeaveScale
             leaving.transform = CGAffineTransform(scaleX: scale, y: scale)
             leaving.center = CGPoint(x: goneX, y: card.midY)
         }, completion: { [weak stage] in
@@ -438,7 +469,7 @@ extension BrowserViewController {
             return
         }
         let width = view.bounds.width
-        let edge = MobilePageSwipe.topEdge(translation: stage.translation, width: width, reveal: stage.reveal)
+        let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
         let rest: CGFloat = MobilePageSwipe.arrivesOnTop(stage.reveal) ? width : 0
         let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: edge, to: rest)
         animatePageSwipe(stage, spring: MobilePageSwipe.settle, velocity: speed, {

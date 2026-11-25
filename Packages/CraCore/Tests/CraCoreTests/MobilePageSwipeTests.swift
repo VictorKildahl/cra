@@ -161,4 +161,87 @@ struct MobilePageSwipeTests {
         #expect(offset(300, content: 500) == -59)
         #expect(offset(-20) == -59)
     }
+
+    /// Arc Search's magnet going Back: the page holds back at 0.28 of the finger's way, lets go once (and only once)
+    /// when it has come 21 pt, the finger 75 pt in, catches up within a few frames, and follows the finger from there.
+    @Test func theMagnetHoldsThePageThenLetsGo() {
+        var magnet = MobilePageSwipe.magnet(for: .back)
+        #expect(abs(magnet.letGoFinger - 75) < 0.01)
+        let frame = 1.0 / 60
+        var lettings = 0
+        // A finger moving 3 pt a frame.
+        var finger: CGFloat = 0
+        var page: CGFloat = 0
+        while finger < 72 {
+            finger += 3
+            let step = magnet.step(distance: finger, dt: frame)
+            page = step.page
+            if step.letGoNow { lettings += 1 }
+        }
+        #expect(!magnet.letGo)
+        #expect(abs(page - finger * 0.28) < 0.01, "held at 0.28")
+        finger += 3
+        let snap = magnet.step(distance: finger, dt: frame)
+        #expect(snap.letGoNow)
+        #expect(magnet.letGo)
+        lettings += 1
+        // Catching up: most of the 54 pt it was behind made up within four frames, with the finger in a quarter of a
+        // second.
+        var frames = 0
+        while frames < 15 {
+            finger += 3
+            let step = magnet.step(distance: finger, dt: frame)
+            page = step.page
+            if step.letGoNow { lettings += 1 }
+            frames += 1
+            if frames == 3 { #expect(finger - page < 25, "most of the way made up in four frames") }
+        }
+        #expect(abs(finger - page) < 1, "with the finger after 16 frames")
+        #expect(lettings == 1, "one tick")
+    }
+
+    /// Closing a tab, the magnet holds much harder, as Arc Search's with the finger shown: still for the finger's first
+    /// 16 pt, then an eighth of its travel, letting go with the finger 185 pt in, and catching up to 30 pt behind it.
+    @Test func closingATabHoldsHarder() {
+        let closing = MobilePageSwipe.magnet(for: .closingTab)
+        let back = MobilePageSwipe.magnet(for: .back)
+        #expect(closing.held(16) == 0)
+        #expect(abs(closing.held(100.6) - 10.49) < 0.01, "Arc Search's page was at 10.1 with the finger 99 pt in")
+        #expect(abs(closing.letGoFinger - 185.4) < 0.1)
+        #expect(closing.letGoAt == back.letGoAt)
+        #expect(MobilePageSwipe.magnet(for: .reopeningTab) == closing)
+        #expect(MobilePageSwipe.magnet(for: .forward) == back)
+        var magnet = closing
+        #expect(!magnet.step(distance: 180, dt: 1).letGoNow)
+        #expect(magnet.step(distance: 190, dt: 1 / 60).letGoNow)
+        var page: CGFloat = 0
+        for _ in 0..<30 { page = magnet.step(distance: 200, dt: 1 / 60).page }
+        #expect(abs(page - 170) < 1, "settled 30 pt behind the finger")
+    }
+
+    /// Taken back under 60 % of the way, the magnet holds the page again; past the let-go distance again, it lets go
+    /// again. A finger dragged back past where it started holds the page at its place.
+    @Test func theMagnetHoldsAgainWhenTakenBack() {
+        var magnet = MobilePageSwipe.magnet(for: .back)
+        _ = magnet.step(distance: 100, dt: 1)
+        #expect(magnet.letGo)
+        _ = magnet.step(distance: 50, dt: 1)
+        #expect(magnet.letGo, "still let go at two thirds of the way")
+        let held = magnet.step(distance: 40, dt: 1)
+        #expect(!magnet.letGo)
+        #expect(abs(held.page - 40 * 0.28) < 0.01, "a second on, held again")
+        #expect(magnet.step(distance: 80, dt: 1).letGoNow)
+        var back = MobilePageSwipe.magnet(for: .back)
+        #expect(back.step(distance: -40, dt: 1 / 60).page == 0)
+    }
+
+    /// Let go once the magnet has let go, the swipe goes, unless flicked back; held, only a flick onwards takes it.
+    @Test func lettingGoGoesOnlyOnceTheMagnetHasLetGo() {
+        #expect(MobilePageSwipe.commits(letGo: true, velocity: 0, distance: 70))
+        #expect(MobilePageSwipe.commits(letGo: true, velocity: -300, distance: 70))
+        #expect(!MobilePageSwipe.commits(letGo: true, velocity: -900, distance: 70))
+        #expect(!MobilePageSwipe.commits(letGo: false, velocity: 0, distance: 50))
+        #expect(MobilePageSwipe.commits(letGo: false, velocity: 900, distance: 40))
+        #expect(!MobilePageSwipe.commits(letGo: false, velocity: 900, distance: 20))
+    }
 }

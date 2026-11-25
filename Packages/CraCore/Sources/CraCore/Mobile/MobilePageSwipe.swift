@@ -35,6 +35,102 @@ public enum MobilePageSwipe {
         reveal == .forward || reveal == .reopeningTab
     }
 
+    // MARK: The magnet
+
+    /// Arc Search holds the page as a swipe across it starts: past a dead zone the page moves at a share of the
+    /// finger's travel until it has come `letGoAt` points, then lets go with a tick and catches up with the finger on
+    /// a critically damped spring, a gap behind it, following it from there. Measured on six of its swipes and two
+    /// more with AssistiveTouch showing the finger: the page let go at 20–22 pt of its own travel whatever the
+    /// finger's speed. Closing a tab it holds hard: still for the finger's first 16 pt, then at 0.124 of its travel, so
+    /// the finger is 185 pt in as it lets go; it catches up in 0.26 s to 30 pt behind the finger. Going Back it holds
+    /// at 0.28 of the finger's travel and caught up in about 0.16 s (the finger not seen yet). Let go while held, the
+    /// swipe goes nowhere; once let go, it goes. Taken back under `holdAgainShare` of the finger's way to letting go,
+    /// the magnet holds the page again (Arc Search's was not seen).
+    public static let holdAgainShare: CGFloat = 0.6
+
+    /// The magnet's hold on the page through one swipe, stepped once a frame.
+    public struct Magnet: Equatable, Sendable {
+        /// How far the finger goes before the page moves at all, the page's share of the finger's travel from there
+        /// while held, how far the page comes before it lets go, the spring it catches up on, and how far behind the
+        /// finger it then stays.
+        public let deadZone: CGFloat
+        public let share: CGFloat
+        public let letGoAt: CGFloat
+        public let catchUp: MobileMotion.Spring
+        public let gap: CGFloat
+        /// Whether it has let the page go.
+        public private(set) var letGo = false
+        /// How far the page is behind the finger, and how fast that is changing while it springs to its new
+        /// distance after letting go or taking hold again.
+        public private(set) var lag: CGFloat = 0
+        private var lagSpeed: CGFloat = 0
+        private var springing = false
+
+        public init(deadZone: CGFloat = 0, share: CGFloat, letGoAt: CGFloat, catchUp: MobileMotion.Spring, gap: CGFloat = 0) {
+            self.deadZone = deadZone
+            self.share = share
+            self.letGoAt = letGoAt
+            self.catchUp = catchUp
+            self.gap = gap
+        }
+
+        /// How far the finger has come when the held page reaches `letGoAt`.
+        public var letGoFinger: CGFloat { deadZone + letGoAt / max(share, 0.01) }
+
+        /// Where the held page is with the finger `finger` along.
+        public func held(_ finger: CGFloat) -> CGFloat { max(0, finger - deadZone) * share }
+
+        /// `dt` seconds on, with the finger `distance` along the way the swipe leads (less than nothing is back past
+        /// where it started): how far the page has come, and whether the magnet let go on this step.
+        public mutating func step(distance: CGFloat, dt: Double) -> (page: CGFloat, letGoNow: Bool) {
+            let finger = max(0, distance)
+            var letGoNow = false
+            if !letGo, finger >= letGoFinger - 0.001 {
+                letGo = true
+                letGoNow = true
+                springing = true
+            } else if letGo, finger < letGoFinger * holdAgainShare {
+                letGo = false
+                springing = true
+            }
+            let target = letGo ? gap : finger - held(finger)
+            if springing {
+                // A critically damped spring of the lag towards where it belongs, worked out exactly for the step.
+                let omega = 2 * Double.pi / catchUp.response, t = max(0, dt)
+                let x0 = Double(lag - target), v0 = Double(lagSpeed)
+                let e = exp(-omega * t)
+                lag = target + CGFloat((x0 + (v0 + omega * x0) * t) * e)
+                lagSpeed = CGFloat((v0 - omega * (v0 + omega * x0) * t) * e)
+                if abs(lag - target) < 0.25, abs(lagSpeed) < 5 { springing = false }
+            }
+            if !springing {
+                lag = target
+                lagSpeed = 0
+            }
+            return (max(0, finger - lag), letGoNow)
+        }
+    }
+
+    /// The magnet for each swipe: Back and Forward as Arc Search's Back, a tab closing or coming back as its tab
+    /// closing.
+    public static func magnet(for reveal: Reveal) -> Magnet {
+        switch reveal {
+        case .back, .forward:
+            return Magnet(share: 0.28, letGoAt: 21, catchUp: MobileMotion.Spring(response: 0.16, dampingRatio: 1))
+        case .closingTab, .reopeningTab:
+            return Magnet(deadZone: 16, share: 0.124, letGoAt: 21, catchUp: MobileMotion.Spring(response: 0.26, dampingRatio: 1),
+                          gap: 30)
+        }
+    }
+
+    /// Whether letting go goes where the swipe leads, with the finger moving at `velocity` points a second towards
+    /// it: once the magnet has let the page go, unless the finger is flicking it back; while it still holds the
+    /// page, only a flick onwards.
+    public static func commits(letGo: Bool, velocity: CGFloat, distance: CGFloat) -> Bool {
+        if letGo { return velocity > -MobileSwipe.flickVelocity }
+        return distance > MobileSwipe.flickDistance && velocity > MobileSwipe.flickVelocity
+    }
+
     // MARK: Back and Forward
 
     /// The page underneath moves at a third of the top page's speed, from a third of the screen off to the left:
@@ -139,8 +235,9 @@ public enum MobilePageSwipe {
                     angle: tilt * (1 - p), cornerRadius: mix(buttonCorner, cardCornerRadius, p))
     }
 
-    /// Let go, the page's card springs off to the right, still a card, and the arriving card grows to fill the
-    /// screen: Arc Search's took 0.28 s and 0.24 s.
+    /// Let go, the page's card springs off to the right, shrinking a little further, and the arriving card grows to
+    /// fill the screen: Arc Search's took 0.28 s and 0.24 s, the page's card down to 0.888 within four frames.
+    public static let cardLeaveScale: CGFloat = 0.888
     public static let cardLeave = MobileMotion.Spring(response: 0.28, dampingRatio: 1)
     public static let cardArrive = MobileMotion.Spring(response: 0.24, dampingRatio: 1)
 
