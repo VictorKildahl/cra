@@ -128,6 +128,40 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// The page's frame as it is now.
     var pageContentFrame: CGRect { pageFrame(barProgress: barCollapse.progress) }
 
+    /// Whether the page's view can run on under the bar while WebKit lays its content out clear of
+    /// it: iOS 26's obscured content insets shrink the layout viewport without shrinking the view,
+    /// so the bar's material has the page behind it and a sticky bottom sits on the bar's top.
+    /// Before that the view itself ends at the bar's top.
+    private static var pageRunsUnderBar: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
+    /// The web view's frame, its bottom at the safe area's edge (the page under the bar) or at the
+    /// bar's top (before iOS 26). `top` carries a pull or the search sheet's push-back; the height
+    /// stays the resting one, so the view moves rather than reflows.
+    private func pageViewFrame(top: CGFloat, barProgress: CGFloat) -> CGRect {
+        let safeTop = view.safeAreaInsets.top
+        let bottom = Self.pageRunsUnderBar ? view.bounds.height - view.safeAreaInsets.bottom
+                                           : barTopEdge(progress: barProgress)
+        return CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, bottom - safeTop))
+    }
+
+    /// Lays the page out above the bar's top while the bar's own height of it shows under the
+    /// bar's material: zero with the bar closed, the bar's height with it open, and following the
+    /// finger in between. On iOS 26's obscured content insets, the page's `svh` and its sticky or
+    /// fixed bottom elements stay on the bar's top rather than under it.
+    private func updatePageObscuredInsets(barProgress: CGFloat) {
+        guard Self.pageRunsUnderBar, let page = shownPage else { return }
+        if #available(iOS 26.0, *) {
+            let bottom = MobileBottomBar.height * (1 - min(1, max(0, barProgress)))
+            var insets = page.webView.obscuredContentInsets
+            guard abs(insets.bottom - bottom) > 0.01 else { return }
+            insets.bottom = bottom
+            page.webView.obscuredContentInsets = insets
+        }
+    }
+
     /// Whether `page` has more to scroll than the tallest its screen lets it be, with the bar
     /// closed: a page that fits there can never need the bar out of the way.
     private func scrolls(_ page: WebPage) -> Bool {
@@ -480,12 +514,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private func layoutBarAndPage() {
         let bounds = view.bounds
         let safeBottom = view.safeAreaInsets.bottom
-        let safeTop = view.safeAreaInsets.top
         let barY = barTopEdge(progress: barCollapse.progress)
-        // The page's bottom is the bar's top, on every frame of its travel: the two move together.
+        // The page's view runs on under the bar on iOS 26 (its content laid out above it), and
+        // ends at the bar's top before; in both, its visible bottom is the bar's top.
         if let page = shownPage, !pageClosing, !pageOpening, !flick.incoming {
-            page.webView.frame = CGRect(x: 0, y: webViewTop(), width: bounds.width,
-                                        height: max(0, barY - safeTop))
+            page.webView.frame = pageViewFrame(top: webViewTop(), barProgress: barCollapse.progress)
+            updatePageObscuredInsets(barProgress: barCollapse.progress)
         }
         // The bar's top is the page's bottom: it rides between its open place and the safe
         // area's line, and the finger's drag decides where, not the page's scroll.
@@ -542,7 +576,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The bar and the page it covers are one layout, shared with the drag's own frames.
         layoutBarAndPage()
         // The page's own background fills the container around and under the web view, which now
-        // ends at the bar's top: the bar's blur and a page's picture keep the page's colour there.
+        // runs to the safe area's edge: the bar's blur and a page's picture keep the page's colour
+        // there.
         let pageBackground = shownPage?.webView.underPageBackgroundColor
         if pageContainer.backgroundColor != pageBackground {
             pageContainer.backgroundColor = pageBackground
@@ -1157,8 +1192,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         page.webView.allowsBackForwardNavigationGestures = false
         // Every tab shows with its bar: the page's frame is the open one.
         showBarAtOnce()
-        // The page's container starts at the status band's bottom; it never sits under the band.
-        page.webView.frame = pageContentFrame
+        // The page's container starts at the status band's bottom; it never sits under the band,
+        // and the page's view runs on under the bar where WebKit can lay it out clear of it.
+        page.webView.frame = pageViewFrame(top: webViewTop(), barProgress: barCollapse.progress)
+        updatePageObscuredInsets(barProgress: barCollapse.progress)
         pageContainer.insertSubview(page.webView, belowSubview: pageDim)
         page.restoresAtTop = false
         if page.webView.url == nil, !page.isBrowsing, !page.webKitOwnsInitialNavigation {

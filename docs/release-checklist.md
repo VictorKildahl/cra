@@ -526,6 +526,13 @@ built release app with a test profile. Note anything that fails in the release's
   between them. The simulator cannot stage a system gesture taking the page's pan;
   `testFlicksLandingOnASettleLeaveTheBarAtAnEnd` covers the flicks themselves.
 
+- **The page under the bar (iOS 26):** on a TestFlight build on a real iPhone, open a long page with
+  a sticky or fixed `bottom: 0` element and drag the bar: the element stays on the bar's top and
+  never goes under it, the page's content shows through the bar's frosted material, the last line
+  scrolls clear of the bar, and the page does not stutter as its layout viewport follows the bar.
+  `PageUnderBarTests` pins the geometry in the simulator; the blur and the frame rate are a phone's
+  to judge.
+
 - **Pull to refresh:** on a TestFlight build on a real iPhone with System Haptics on, pull a page down
   from its top: the page's whole view comes down with the pull (its content stays at the top inside it, so
   the page does not scroll) and the coloured band behind the status bar grows edge to edge to meet it, its
