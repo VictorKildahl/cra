@@ -201,6 +201,8 @@ struct MCPAgentSetupTests {
         // Codex has never run here: only Claude Code's file (in the home folder) is written.
         #expect(MCPAgentSetup.targets(for: t3, folderExists: { $0.isEmpty }).map(\.path) == [".claude.json"])
         #expect(MCPAgentSetup.targets(for: t3, folderExists: { _ in true }).count == 2)
+        #expect(t3.apps.contains("T3 Code (Beta)"))
+        #expect(t3.apps.contains("T3 Code (Nightly)"))
         // A single-file agent is written even before its folder exists.
         let cursor = try #require(MCPAgentSetup.agents.first { $0.id == "cursor" })
         #expect(MCPAgentSetup.targets(for: cursor, folderExists: { _ in false }).map(\.path) == [".cursor/mcp.json"])
