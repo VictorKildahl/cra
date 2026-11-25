@@ -6,6 +6,14 @@ struct MCPProtocolTests {
     @Test func toolArguments() {
         #expect(MCPProtocol.validate(name: "tabs_list", arguments: [:]))
         #expect(!MCPProtocol.validate(name: "tabs_list", arguments: ["extra": "x"]))
+        #expect(MCPProtocol.validate(name: "tabs_search", arguments: ["query": "example"]))
+        #expect(MCPProtocol.validate(name: "tabs_search", arguments: ["query": "example", "space": "Personal", "folder": "Research", "section": "today", "limit": 10]))
+        #expect(MCPProtocol.validate(name: "tabs_search", arguments: ["query": "example", "section": "TODAY"]))
+        #expect(MCPProtocol.problem(name: "tabs_search", arguments: ["query": "   "]) == "query must not be empty.")
+        #expect(MCPProtocol.problem(name: "tabs_search", arguments: ["query": String(repeating: "a", count: 257)]) == "query must be at most 256 characters.")
+        #expect(!MCPProtocol.validate(name: "tabs_search", arguments: ["query": "example", "section": "recent"]))
+        #expect(MCPProtocol.problem(name: "tabs_search", arguments: ["query": "example", "section": "recent"]) == "section must be one of favorites, pinned or today.")
+        #expect(!MCPProtocol.validate(name: "tabs_search", arguments: ["query": "example", "limit": 0]))
         #expect(!MCPProtocol.validate(name: "unknown", arguments: [:]))
         #expect(!MCPProtocol.validate(name: "page_read", arguments: [:]))
         #expect(!MCPProtocol.validate(name: "page_read", arguments: ["tabId": 42]))
@@ -53,7 +61,7 @@ struct MCPProtocolTests {
         #expect(MCPProtocol.problem(name: "nope", arguments: [:]) == "Unknown tool nope.")
     }
 
-    @Test func selectDialogConsoleAndSnapshotArguments() {
+    @Test func selectDialogConsoleAndSnapshotArguments() throws {
         #expect(MCPProtocol.validate(name: "page_select", arguments: ["tabId": "id", "selector": "s", "label": "Spain"]))
         #expect(MCPProtocol.problem(name: "page_select", arguments: ["tabId": "id", "selector": "s"]) == "page_select needs value or label (one of them).")
         #expect(!MCPProtocol.validate(name: "page_select", arguments: ["tabId": "id", "selector": "s", "label": "a", "value": "a"]))
@@ -65,8 +73,11 @@ struct MCPProtocolTests {
         #expect(MCPProtocol.validate(name: "page_snapshot", arguments: ["tabId": "id", "interactive": true, "query": "search"]))
         #expect(MCPProtocol.validate(name: "tab_open", arguments: ["url": "https://a.b", "space": "Work", "select": true, "activate": false]))
         #expect(MCPProtocol.validate(name: "tab_show", arguments: ["tabId": "id", "activate": true]))
-        #expect(MCPProtocol.readTools.contains("page_console") && !MCPProtocol.readTools.contains("page_dialog"))
-        #expect(MCPProtocol.tools.count == 33)
+        #expect(MCPProtocol.readTools.contains("page_console") && MCPProtocol.readTools.contains("tabs_search") && !MCPProtocol.readTools.contains("page_dialog"))
+        #expect(MCPProtocol.tools.count == 34)
+        let searchTool = try #require(MCPProtocol.tools.first { $0["name"] as? String == "tabs_search" })
+        let annotations = try #require(searchTool["annotations"] as? [String: Bool])
+        #expect(annotations["readOnlyHint"] == true && annotations["destructiveHint"] == false)
     }
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/459")) func fullServerReplySaysWhy() throws {

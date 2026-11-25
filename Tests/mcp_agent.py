@@ -164,12 +164,12 @@ try:
     check("a refused agent is refused again", "didn't allow other-agent" in failure(stranger.tool("tabs_list")))
     stranger.close()
 
-    check("32 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 32)
+    check("33 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 33)
     command("cra://debug?mcpScripts=off")
-    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 31)
+    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 32)
     check("page_evaluate is off unless the user turns it on", "page_evaluate is off" in failure(client.tool("page_evaluate", tabId="x", expression="1")))
     command("cra://debug?mcpScripts=on")
-    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 32)
+    eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 33)
     def js(tab, expression):
         return value(client.tool("page_evaluate", tabId=tab, expression=expression))["result"].get("value")
     def events(tab):
@@ -184,6 +184,12 @@ try:
     listed = {t["id"]: t for t in value(client.tool("tabs_list"))}
     check("agent tab opens unselected in the today list", not listed[tab].get("selected") and listed[tab]["section"] == "today" and listed[tab]["space"])
     check("tabs_list marks the user's tab active", listed[user_tab].get("active") is True and listed[user_tab].get("selected") is True)
+    search_tool = next(tool for tool in client.call("tools/list")["result"]["tools"] if tool["name"] == "tabs_search")
+    check("tabs_search is marked read-only", search_tool["annotations"]["readOnlyHint"] and not search_tool["annotations"]["destructiveHint"])
+    search = value(client.tool("tabs_search", query="agent cross", space=listed[tab]["space"].upper(), section="today"))
+    check("tabs_search matches all title and URL words with sidebar filters", search["count"] == 1 and search["tabs"][0]["id"] == tab)
+    limited = value(client.tool("tabs_search", query="127.0.0.1", limit=1))
+    check("tabs_search reports truncated matches", limited["count"] > 1 and limited["returned"] == 1 and limited["truncated"])
     check("a hidden tab works as a focused visible page", js(tab, "document.visibilityState + document.hasFocus()") == "visibletrue")
 
     # Everything below happens in the hidden tab.
@@ -386,6 +392,8 @@ try:
     check("tab_move pins a tab", row()["section"] == "pinned")
     value(client.tool("folder_create", name="Agent work", tabIds=[spare]))
     check("folder_create puts tabs in a new folder", row().get("folder") == "Agent work")
+    search = value(client.tool("tabs_search", query="spare", folder="Agent work"))
+    check("tabs_search filters by folder", search["count"] == 1 and search["tabs"][0]["id"] == spare)
     value(client.tool("tab_update", tabId=spare, title="Renamed by agent", muted=True))
     check("tab_update renames", row()["title"] == "Renamed by agent")
     value(client.tool("tab_update", tabId=spare, sleep=True))

@@ -303,40 +303,28 @@ final class MCPServer {
                          woke: Bool = false, completion: @escaping ([String: Any]) -> Void) {
         guard let app else { completion(MCPProtocol.content("Browser is unavailable", failed: true)); return }
         if name == "tabs_list" {
-            // Sidebar order: spaces left to right, then favorites, pinned and today, folders inline.
-            // `active` is the tab on screen in the window the user last used.
-            let activeWindow = app.store.activeWindowID
-            let activeTab = app.store.selectedTabID(window: activeWindow)
-            var seen: Set<UUID> = []
-            var tabs: [[String: Any]] = []
-            for sid in app.store.spaceOrder {
-                guard let space = app.store.space(sid) else { continue }
-                let selected = Set(app.mainWindows.filter { !$0.isIncognito }.compactMap { app.store.selectedTabID(in: sid, window: $0.windowID) })
-                for (section, container) in [("favorites", space.favoritesContainerID), ("pinned", space.pinnedContainerID), ("today", space.todayContainerID)] {
-                    for item in app.store.tabs(under: container) where app.store.mcpTab(item.id) != nil && seen.insert(item.id).inserted {
-                        var row: [String: Any] = ["id": item.id.uuidString, "title": item.displayTitle, "url": item.tab?.url ?? "",
-                                                  "space": space.title, "section": section,
-                                                  "owned": ownedTabs[owner]?.contains(item.id) == true,
-                                                  "loaded": app.runtime(for: item.id).map { !$0.discarded } ?? false]
-                        var folders: [String] = []
-                        var parent = item.parentID
-                        while let id = parent, let folder = app.store.item(id), folder.isFolder {
-                            folders.insert(folder.displayTitle, at: 0); parent = folder.parentID
-                        }
-                        if !folders.isEmpty { row["folder"] = folders.joined(separator: " / ") }
-                        if selected.contains(item.id) { row["selected"] = true }
-                        if item.id == activeTab { row["active"] = true }
-                        if let url = item.tab?.url, !url.isEmpty, !MCPProtocol.navigable(url) { row["webPage"] = false }
-                        if let runtime = app.runtime(for: item.id), let dialog = MCPPage.dialog(of: runtime.browser) { row["dialog"] = dialog }
-                        tabs.append(row)
-                    }
-                }
+            completion((try? MCPCDP.content(sidebarTabs(owner: owner, app: app))) ?? MCPProtocol.content("Could not list tabs", failed: true))
+            return
+        }
+        if name == "tabs_search" {
+            let allTabs = sidebarTabs(owner: owner, app: app)
+            let query = arguments["query"] as! String
+            let matches = allTabs.filter { tab in
+                MCPTabSearch.matches(query: query,
+                                     title: tab["title"] as? String ?? "",
+                                     url: tab["url"] as? String ?? "",
+                                     space: tab["space"] as? String,
+                                     folder: tab["folder"] as? String,
+                                     section: tab["section"] as? String,
+                                     spaceFilter: arguments["space"] as? String,
+                                     folderFilter: arguments["folder"] as? String,
+                                     sectionFilter: arguments["section"] as? String)
             }
-            tabs += agentTabs.filter { $0.value.owner == owner }.map { id, tab in
-                ["id": id.uuidString, "title": tab.browser.currentTitle, "url": tab.browser.currentURL,
-                 "owned": true, "loaded": tab.browser.isCreated && !tab.browser.isClosed, "closed": tab.browser.isClosed, "windowless": true]
-            }
-            completion((try? MCPCDP.content(tabs)) ?? MCPProtocol.content("Could not list tabs", failed: true))
+            let limit = arguments["limit"] as? Int ?? 50
+            let returned = Array(matches.prefix(limit))
+            let result: [String: Any] = ["tabs": returned, "count": matches.count,
+                                         "returned": returned.count, "truncated": matches.count > returned.count]
+            completion((try? MCPCDP.content(result)) ?? MCPProtocol.content("Could not search tabs", failed: true))
             return
         }
         if name == "tab_open" {
@@ -535,6 +523,43 @@ final class MCPServer {
                 completion(MCPProtocol.content(message, failed: true))
             }
         }
+    }
+
+    private func sidebarTabs(owner: UUID, app: AppDelegate) -> [[String: Any]] {
+        // Sidebar order: spaces left to right, then favorites, pinned and today, folders inline.
+        // `active` is the tab on screen in the window the user last used.
+        let activeWindow = app.store.activeWindowID
+        let activeTab = app.store.selectedTabID(window: activeWindow)
+        var seen: Set<UUID> = []
+        var tabs: [[String: Any]] = []
+        for sid in app.store.spaceOrder {
+            guard let space = app.store.space(sid) else { continue }
+            let selected = Set(app.mainWindows.filter { !$0.isIncognito }.compactMap { app.store.selectedTabID(in: sid, window: $0.windowID) })
+            for (section, container) in [("favorites", space.favoritesContainerID), ("pinned", space.pinnedContainerID), ("today", space.todayContainerID)] {
+                for item in app.store.tabs(under: container) where app.store.mcpTab(item.id) != nil && seen.insert(item.id).inserted {
+                    var row: [String: Any] = ["id": item.id.uuidString, "title": item.displayTitle, "url": item.tab?.url ?? "",
+                                              "space": space.title, "section": section,
+                                              "owned": ownedTabs[owner]?.contains(item.id) == true,
+                                              "loaded": app.runtime(for: item.id).map { !$0.discarded } ?? false]
+                    var folders: [String] = []
+                    var parent = item.parentID
+                    while let id = parent, let folder = app.store.item(id), folder.isFolder {
+                        folders.insert(folder.displayTitle, at: 0); parent = folder.parentID
+                    }
+                    if !folders.isEmpty { row["folder"] = folders.joined(separator: " / ") }
+                    if selected.contains(item.id) { row["selected"] = true }
+                    if item.id == activeTab { row["active"] = true }
+                    if let url = item.tab?.url, !url.isEmpty, !MCPProtocol.navigable(url) { row["webPage"] = false }
+                    if let runtime = app.runtime(for: item.id), let dialog = MCPPage.dialog(of: runtime.browser) { row["dialog"] = dialog }
+                    tabs.append(row)
+                }
+            }
+        }
+        tabs += agentTabs.filter { $0.value.owner == owner }.map { id, tab in
+            ["id": id.uuidString, "title": tab.browser.currentTitle, "url": tab.browser.currentURL,
+             "owned": true, "loaded": tab.browser.isCreated && !tab.browser.isClosed, "closed": tab.browser.isClosed, "windowless": true]
+        }
+        return tabs
     }
 
     private static func text(_ result: [String: Any]) -> String {

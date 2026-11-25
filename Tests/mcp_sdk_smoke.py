@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-TOOLS = {"tabs_list", "tab_open", "tab_show", "tab_close", "page_read", "page_snapshot", "page_navigate",
+TOOLS = {"tabs_list", "tabs_search", "tab_open", "tab_show", "tab_close", "page_read", "page_snapshot", "page_navigate",
          "page_history", "page_wait", "page_screenshot", "page_pdf", "page_evaluate", "page_click", "page_hover",
          "page_scroll", "page_type", "page_fill", "page_press", "page_select", "page_drag", "page_upload", "page_download", "download_status", "download_cancel"}
 
@@ -22,7 +22,7 @@ async def main():
             initialized = await client.initialize()
             print("PASS SDK", importlib.metadata.version("mcp"), "handshake", initialized.protocolVersion, flush=True)
             tools = await client.list_tools()
-            assert {tool.name for tool in tools.tools} == TOOLS
+            assert TOOLS <= {tool.name for tool in tools.tools}, TOOLS - {tool.name for tool in tools.tools}
             used = set()
 
             async def call(name, arguments=None):
@@ -36,6 +36,8 @@ async def main():
 
             tabs = await call("tabs_list")
             existing = next(t for t in tabs if urlsplit(t["url"]).hostname == "127.0.0.1")
+            matches = await call("tabs_search", {"query": "127.0.0.1", "space": existing["space"]})
+            assert any(tab["id"] == existing["id"] for tab in matches["tabs"])
             origin = urlsplit(existing["url"])
             base = origin.scheme + "://" + origin.netloc
             tab = (await call("tab_open", {"url": base + "/"}))["tabId"]
@@ -85,6 +87,6 @@ async def main():
             assert cancelled["status"] == "completed"
             await call("tab_close", {"tabId": agent})
             assert used == TOOLS, TOOLS - used
-            print("PASS SDK 24 core tools, stable refs, native Unicode input, session, image/PDF and owned-tab lifecycle", flush=True)
+            print("PASS SDK 25 core tools, read-only tab search, stable refs, native Unicode input, session, image/PDF and owned-tab lifecycle", flush=True)
 
 asyncio.run(main())

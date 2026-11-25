@@ -74,6 +74,9 @@ or minimised windows and with Cra in the background:
 - `tabs_list` lists your tabs in sidebar order with their space, section (favorites, pinned,
   today) and folder. `active` marks the tab on screen in the window you used last;
   `selected` marks each window's shown tab.
+- `tabs_search` finds open tabs when every query word appears in the title or URL. Optional `space`,
+  `folder`, and `section` filters match exactly, ignoring case. Results keep sidebar order, return
+  up to 50 by default (200 maximum), and report the match count and whether results were truncated.
 - `tab_close` closes today tabs, as ⌘W does (Reopen Closed Tab brings one back). Pinned tabs,
   favorites and tabs in a split stay.
 - `tab_move`, `tab_update` and `folder_create` organize the sidebar as a drag or a menu does:
@@ -90,6 +93,7 @@ extension's frame inside a page (a password manager's menu) are refused too.
 | Tool | What it does |
 | --- | --- |
 | `tabs_list` | Your tabs in sidebar order, plus this connection's windowless pages |
+| `tabs_search` | Search open tabs by title and URL; optionally filter by space, folder and section |
 | `tab_open` | Open an HTTP(S) page in the background (`space`, `select`, `activate`, `windowless`) |
 | `tab_show` | Select a tab in its window; `activate=true` also brings Cra forward |
 | `tab_close` | Close a today tab |

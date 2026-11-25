@@ -160,7 +160,7 @@ try:
     quit_browser()
     launch(True)
     client = Client()
-    check("32 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 32)
+    check("33 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 33)
     check("socket mode 0600", socket_path.stat().st_mode & 0o777 == 0o600)
     command("cra://open?url=" + quote(url + "/regression", safe=""))
     tab = eventually(lambda: next((t["id"] for t in tabs(client) if t["url"] == url + "/regression"), None))
@@ -303,6 +303,8 @@ try:
     listed = next(t for t in tabs(client) if t["id"] == agent_tab)
     check("opened tab stays in the background", not listed.get("selected") and not listed.get("active") and listed["section"] == "today")
     check("the user's tab stays on screen", next(t for t in tabs(client) if t["id"] == tab).get("active") is True)
+    search = value(client.tool("tabs_search", {"query": "agent 1", "space": listed["space"], "section": "today"}))
+    check("tabs_search finds a tab by URL with space and section filters", search["count"] == 1 and search["tabs"][0]["id"] == agent_tab)
     # Today tabs close from any connection, like ⌘W.
     foreign = Client()
     value(foreign.tool("tab_close", {"tabId": agent_tab}))
