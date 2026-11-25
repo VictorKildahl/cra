@@ -1756,6 +1756,11 @@
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::hoveredIsAnOrdinaryHoveredRow  2cb70b0a584a
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::theOpenBarStillMakesItTheSelectedRow  6bf41727ea47
 #788   Tests/Scenarios/new-tab-row-hover.scenario  334910194caa
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::onByDefaultAndKept  749d58c0b0d5
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::switchedOffNothingOffersThem  0f6711c3ed71
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::switchedOnThePhoneDecides  a5a7c92e9fa6
+#792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::theSwitchShowsWhereTheFeaturesCould  4a21fcc21e76
+#792   iOS/CraUITests/BrowserTests.swift::testSwitchingAppleIntelligenceOffTakesBrowseForMeAway  453574528caf
 #793   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::anOpenPagesOwnFaviconComesBeforeItsTouchIcon  f5c792bdd31b
 #796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::everyQueryWordCanMatchTitleOrURL  c3d5a243d397
 #796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::queryAndSidebarFiltersIgnoreCase  0cdd99cfbc19

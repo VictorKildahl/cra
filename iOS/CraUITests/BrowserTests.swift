@@ -1114,6 +1114,46 @@ final class BrowseForMeTests: BrowserTestCase {
     }
 }
 
+final class AppleIntelligenceSwitchTests: BrowserTestCase {
+    // promise: #792
+    /// App Settings ▸ Apple Intelligence off (#792, not in Arc Search): the search sheet no longer offers
+    /// Browse for Me, and the switch stays to turn it back on.
+    func testSwitchingAppleIntelligenceOffTakesBrowseForMeAway() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraFakeModel", "YES"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("pizza ovens")
+        XCTAssertTrue(app.buttons["browse-for-me"].firstMatch.waitForExistence(timeout: 5), "offered while on")
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 400)), withVelocity: .fast, thenHoldForDuration: 0)
+
+        XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
+        app.buttons["bar-tabs"].tap()
+        app.buttons["bar-settings"].tap()
+        let toggle = app.switches["setting-apple-intelligence"]
+        scrollUntilHittable(toggle)
+        XCTAssertEqual(toggle.value as? String, "1", "on by default")
+        toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        keep("apple-intelligence-off")
+        let done = app.buttons["Done"]
+        scrollUntilHittable(done, scrollingDown: true)
+        done.tap()
+
+        let card = app.buttons["tab-card-0"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        card.tap()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("pizza ovens")
+        sleep(2)
+        XCTAssertFalse(app.buttons["browse-for-me"].firstMatch.exists, "not offered once switched off")
+    }
+}
+
 final class BrowseFollowUpTests: BrowserTestCase {
     /// A follow-up chip at the end of a Browse for Me page asks it in a new Browse for Me.
     func testAFollowUpChipBrowsesForItsQuestion() {

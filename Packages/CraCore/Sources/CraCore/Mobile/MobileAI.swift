@@ -16,6 +16,14 @@ public enum MobileAIState: Equatable {
     /// The buttons show: everywhere but on a phone that can never run them.
     public var offersFeatures: Bool { self != .unsupported }
     public var canRun: Bool { self == .ready }
+
+    /// App Settings ▸ Apple Intelligence (#792, not in Arc Search, whose Browse for Me ran on Arc's servers): switched
+    /// off, the phone is treated as one that can't run Browse for Me and Summarize, so nothing offers them and
+    /// nothing asks to turn Apple Intelligence on. For a region where it can't be turned on.
+    public func shown(userWantsThem: Bool) -> MobileAIState { userWantsThem ? self : .unsupported }
+
+    /// The switch is there on a phone that can run Apple Intelligence; elsewhere there is nothing to switch.
+    public var offersSwitch: Bool { offersFeatures }
 }
 
 public enum MobileAI {

@@ -288,6 +288,15 @@ struct AppSettingsList: View {
                          options: [nil] + MobileLanguages.codes.map(Optional.some),
                          title: { code in code.map { Locale.current.localizedString(forLanguageCode: $0)?.capitalized ?? $0 } ?? "Same as iPhone" })
                     .accessibilityIdentifier("setting-languages")
+                // #792, not in Arc Search: where Apple Intelligence can't be turned on, Browse for Me and
+                // Summarize can go. Only on a phone that could run them.
+                if BrowseForMe.deviceState.offersSwitch {
+                    Toggle(isOn: model.binding(\.appleIntelligence)) {
+                        SettingLabel(title: "Apple Intelligence", symbol: "sparkles", color: .pink,
+                                     subtitle: "Browse for Me and Summarize")
+                    }
+                    .accessibilityIdentifier("setting-apple-intelligence")
+                }
             }
             .settingsRow()
             Section {

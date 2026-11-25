@@ -9,8 +9,14 @@ import FoundationModels
 /// Apple Intelligence model or not at all: the search and the pages are fetched by the phone, and
 /// nothing typed or read is sent to an AI service. `MobileBrowseForMe` has the rules.
 enum BrowseForMe {
-    /// Where the on-device model stands (`MobileAIState`).
-    static var state: MobileAIState {
+    /// App Settings ▸ Apple Intelligence (#792), mirrored from settings.json by MobileSettingsStore.
+    static var userWantsThem = true
+
+    /// Where the on-device model stands for Cra: the phone's own state, or none when the user switched them off.
+    static var state: MobileAIState { deviceState.shown(userWantsThem: userWantsThem) }
+
+    /// Where the phone's on-device model stands (`MobileAIState`), whatever the switch says.
+    static var deviceState: MobileAIState {
         if let forced = LaunchOptions.aiState { return forced }
         if LaunchOptions.fakeModel { return .ready }
         #if canImport(FoundationModels)
