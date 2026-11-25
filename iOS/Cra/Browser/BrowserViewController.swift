@@ -70,7 +70,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let bar = BottomBar()
     let sheet = SearchSheet()
 
-    var shownPage: WebPage?
+    /// The page on screen. The Browse for Me switch follows it, so a closed tab takes its switch with it.
+    var shownPage: WebPage? {
+        didSet { if shownPage !== oldValue { updateBrowseToggle() } }
+    }
     var switcher: TabSwitcherView?
     var menuHost: SheetHost?
     var menuView: PageMenuView?
