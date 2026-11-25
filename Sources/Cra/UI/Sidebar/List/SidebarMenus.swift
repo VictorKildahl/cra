@@ -56,7 +56,7 @@ enum SidebarMenus {
 
     /// Arc asks before it makes a share link (AppDialog.shareLink): Copy Link to Folder goes on,
     /// Cancel or Escape stops; ticking "Never show me this again." and going on skips it from then on.
-    private static func confirmShare(over window: NSWindow?, kind: String = "Folder", _ share: @escaping () -> Void) {
+    static func confirmShare(over window: NSWindow?, kind: String = "Folder", _ share: @escaping () -> Void) {
         guard !UserDefaults.standard.bool(forKey: skipsShareWarningKey), let window = window ?? AppDialog.parentWindow else { share(); return }
         let dialog = AppDialog.shareLink(kind: kind)
         dialog.present(over: window) { response in
@@ -94,6 +94,11 @@ enum SidebarMenus {
         add(menu, action: "copyURL", "Copy Link") { copy(CleanURL.withoutTrackers(tab.url)) }
         let web = URL(string: CleanURL.withoutTrackers(tab.url)).flatMap { $0.scheme?.hasPrefix("http") == true ? $0 : nil }
         if let web { SharePicker.addMenu(to: menu, url: web) }
+        // Arc's Share on an easel copied an arc.net link; Cra's carries the easel after its # (EaselShare).
+        if let easel = Easel.id(fromURL: tab.url) {
+            let toast = list.actions.showToast
+            add(menu, "Share Easel…") { EaselShare.share(easel, over: list.window, toast: toast) }
+        }
         menu.addItem(.separator())
         changeIconItems(menu, id, custom: tab.customIconKey, list: list)
         add(menu, action: "renameTab", "Rename…") { ui.renamingID = id }

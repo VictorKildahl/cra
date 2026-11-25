@@ -742,6 +742,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             BoostInstall.offer(url, over: main.window, from: "another app")
             return
         }
+        // An easel's Open in Cra (crabrowser.app/easel): asked about first, as a boost is.
+        if EaselShare.isEaselLink(url) {
+            main.showWindow(nil)
+            if !HitchMonitor.background { NSApp.activate(ignoringOtherApps: true) }
+            EaselShare.offer(url, over: main.window, from: "another app")
+            return
+        }
         if let u = URL(string: url), u.scheme?.lowercased() == "cra" {
             if Self.isUserFacing(u) || UserDefaults.standard.bool(forKey: "scriptingURLs") {
                 handleInternalURL(u)

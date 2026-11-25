@@ -111,6 +111,16 @@
 				<string>cra-boost</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>Cra Easel</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cra-easel</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
