@@ -1976,7 +1976,7 @@ struct MobileFaviconLinkTests {
     /// first and largest by most sites, came first. It is an app icon, an opaque square; the
     /// site's own favicon, round or see-through, comes before it, and so does an unnamed
     /// `/favicon.ico`. The touch icon is used only when the site has nothing else.
-    @Test func anOpenPagesOwnFaviconComesBeforeItsTouchIcon() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/793")) func anOpenPagesOwnFaviconComesBeforeItsTouchIcon() {
         let page = URL(string: "https://news.example/story")!
         let touch = MobileFavicons.IconLink(rel: "apple-touch-icon", href: "https://news.example/touch-180.png", sizes: "180x180")
         let links = [

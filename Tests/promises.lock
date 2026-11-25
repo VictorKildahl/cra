@@ -1753,6 +1753,7 @@
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::hoveredIsAnOrdinaryHoveredRow  2cb70b0a584a
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::theOpenBarStillMakesItTheSelectedRow  6bf41727ea47
 #788   Tests/Scenarios/new-tab-row-hover.scenario  334910194caa
+#793   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::anOpenPagesOwnFaviconComesBeforeItsTouchIcon  f5c792bdd31b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
