@@ -1757,8 +1757,14 @@
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::theOpenBarStillMakesItTheSelectedRow  6bf41727ea47
 #788   Tests/Scenarios/new-tab-row-hover.scenario  334910194caa
 #793   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::anOpenPagesOwnFaviconComesBeforeItsTouchIcon  f5c792bdd31b
+#796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::everyQueryWordCanMatchTitleOrURL  c3d5a243d397
+#796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::queryAndSidebarFiltersIgnoreCase  0cdd99cfbc19
 #797   Packages/CraCore/Tests/CraCoreTests/BackForwardMenuTests.swift::commandClickOpensTheNearestPageInANewTab  0c5ade47f014
 #797   Tests/Scenarios/back-cmd-click-new-tab.scenario  8afd3e2c3ff4
+#798   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::spaceIconOnALightTileIsTheSpaceColourDarkened  c8f874474b80
+#798   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::spaceIconReadsOnItsTile  18146ccc0c97
+#798   Packages/CraCore/Tests/CraCoreTests/LittleMoveMenuTests.swift::spaceIconStaysWhiteWhereWhiteReads  bec91484a81d
+#798   Tests/Scenarios/little-window-space-icons.scenario  f1ad53d6cb2e
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

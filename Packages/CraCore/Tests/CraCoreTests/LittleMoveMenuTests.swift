@@ -66,21 +66,21 @@ struct LittleMoveMenuTests {
 
     /// A space icon reads on its tile: white on a dark space colour, a dark shade of the space colour on a
     /// light one, where white was barely visible (a peach and a mint tile).
-    @Test(arguments: ["#FFE0D3", "#D9F2E8", "#226149", "#34C759", "#3634FF", "#FFFFFF", "#000000", "#888888"])
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/798"), arguments: ["#FFE0D3", "#D9F2E8", "#226149", "#34C759", "#3634FF", "#FFFFFF", "#000000", "#888888"])
     func spaceIconReadsOnItsTile(tile: String) throws {
         let fill = try #require(HexColor.components(tile))
         let icon = LittleMoveMenu.iconColor(onTile: tile)
         #expect(AskOnPageTone.contrast((icon.r, icon.g, icon.b), fill) >= 4.5, "icon on \(tile)")
     }
 
-    @Test
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/798"))
     func spaceIconStaysWhiteWhereWhiteReads() {
         #expect(LittleMoveMenu.iconColor(onTile: "#226149") == .white)
         #expect(LittleMoveMenu.iconColor(onTile: "#3634FF") == .white)
     }
 
     /// On a light tile the icon keeps the space's hue, as Arc's light-Mac tiles do.
-    @Test
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/798"))
     func spaceIconOnALightTileIsTheSpaceColourDarkened() throws {
         let icon = LittleMoveMenu.iconColor(onTile: "#FFE0D3")
         let peach = try #require(HexColor.components("#FFE0D3"))

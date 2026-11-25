@@ -1,3 +1,4 @@
+# promise: #798
 # The Little Window's "Open in" menu draws each space icon so it reads on its tile: white where white reads on the
 # space colour, else a dark shade of that colour. Arc 1.174 draws it white on any tile on a dark Mac, so on a light
 # space colour (a peach, a mint) it was barely visible; Cra did the same on every Mac.
