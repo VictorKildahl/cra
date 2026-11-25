@@ -3991,6 +3991,7 @@ enum StoreTests {
         syncLeavesAMixToItsWriterOnANewMac()
         syncKeepsAClosedTabClosed()
         syncKeepsAClosedTabClosedAfterTwoWritesThere()
+        syncKeepsASettingChangedBeforeTheOtherMacWrote()
     }
 
     /// A tab closed on one Mac came back (reported by a user, 13 Nov 2026). The other Mac still
@@ -4088,6 +4089,54 @@ enum StoreTests {
         clockB.advance(by: 60)
         syncB.poll()
         expect(b.item(doomed.id) == nil && b.item(opened.id) != nil, "the close reaches the second Mac and its tab stays")
+        syncA.disable(); syncB.disable()
+    }
+
+    /// A setting changed on one Mac was lost when the other Mac, before iCloud brought it the change, wrote its bundle
+    /// for a change of its own: the bundle's settings replaced this Mac's whole, while its sidebar was merged (X, Chris
+    /// Coyier, 25 Nov 2026: "Archive tabs after" Never on one Mac, 12 hours on the other). Settings are merged field by
+    /// field against the bundle both Macs had, as the sidebar is.
+    @MainActor
+    private static func syncKeepsASettingChangedBeforeTheOtherMacWrote() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-settings-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = SidebarStore(clock: clockA), b = SidebarStore(clock: clockB)
+        a.settings.autoArchiveEnabled = true
+        a.settings.autoArchive = .twelveHours
+        a.settings.warnBeforeQuitting = false
+        let tab = a.createTab(url: "https://example.com/kept", title: "Kept")
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "the first Mac writes its bundle")
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+        expect(b.settings.autoArchive(profileID: nil) == .after(.twelveHours), "both Macs start on 12 hours")
+
+        let bundle = folder.appendingPathComponent(SettingsSync.folderName)
+        let names = [SettingsSync.manifestName] + SettingsSync.fileNames
+        let before = Dictionary(uniqueKeysWithValues: names.map { ($0, try? Data(contentsOf: bundle.appendingPathComponent($0))) })
+        // The first Mac turns auto-archive off and writes; iCloud hasn't brought it to the second Mac yet.
+        clockA.advance(by: 10); clockB.advance(by: 10)
+        a.settings.setAutoArchive(.never, profileID: nil, otherProfiles: [])
+        syncA.poll()
+        for name in names { try? before[name]??.write(to: bundle.appendingPathComponent(name)) }
+        // Meanwhile the second Mac renames a tab and changes a setting of its own, and writes.
+        clockB.advance(by: 5)
+        b.updateTab(tab.id, title: "Kept, renamed")
+        b.settings.warnBeforeQuitting = true
+        syncB.poll()
+
+        clockA.advance(by: 60)
+        syncA.poll()
+        expect(a.settings.autoArchive(profileID: nil) == .never, "the first Mac keeps Never when the second Mac's bundle arrives")
+        expect(a.settings.warnBeforeQuitting, "and takes the setting the second Mac changed")
+        expect(a.item(tab.id)?.displayTitle == "Kept, renamed", "and its sidebar change")
+        clockB.advance(by: 60)
+        syncB.poll()
+        expect(b.settings.autoArchive(profileID: nil) == .never, "Never reaches the second Mac")
+        expect(b.settings.warnBeforeQuitting, "which keeps its own change")
         syncA.disable(); syncB.disable()
     }
 
