@@ -63,6 +63,7 @@ enum StoreTests {
         chromiumManifestV2Import()
         zenFaviconSize()
         autoArchive()
+        autoArchiveCounts()
         longAutoArchive()
         profileAutoArchive()
         tabSleepCadence()
@@ -1557,6 +1558,31 @@ enum StoreTests {
         let later = store.createTab(url: "https://example.com/later", select: false)
         clock.advance(by: 48 * 3600)
         expect(!archived(later.id), "with auto-archive off nothing is archived")
+    }
+
+    /// Each pass says how many tabs it sent to the Archive, for Arc's "Auto archived N tabs" toast (X, 25 Nov 2026:
+    /// tabs archived overnight looked lost). The launch's pass counts too: after a night away or an update restart it
+    /// is the one that archives. An empty tab leaves nothing in the Archive and isn't counted.
+    @MainActor
+    private static func autoArchiveCounts() {
+        let clock = ManualScheduler()
+        let composition = AppComposition(clock: clock)
+        let store = composition.store
+        store.settings.autoArchiveEnabled = true
+        store.settings.autoArchive = .twelveHours
+        _ = store.createTab(url: "https://example.com/night-one", select: false)
+        _ = store.createTab(url: "https://example.com/night-two", select: false)
+        _ = store.createTab(url: "", select: false)
+        _ = store.createTab(url: "https://example.com/shown", select: true)
+        // Away all night: the next launch's pass archives them.
+        clock.advance(by: 13 * 3600)
+        var passes: [Int] = []
+        composition.startPeriodicWork(autoArchived: { passes.append($0) }) {}
+        expect(passes == [2], "the launch's pass counts the two pages, not the empty tab or the selected one: \(passes)")
+        _ = store.createTab(url: "https://example.com/later", select: false)
+        clock.advance(by: 12 * 3600 + AppComposition.autoArchiveInterval + 1)
+        expect(passes.last == 1, "a later pass counts its own: \(passes)")
+        expect(passes.dropFirst().dropLast().allSatisfy { $0 == 0 }, "passes that archive nothing say 0: \(passes)")
     }
 
     // promise: #278

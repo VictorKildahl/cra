@@ -27,11 +27,15 @@ final class AppComposition {
     /// Arc's timeToFreezeTab: a page out of sight 30 minutes is voted to freeze.
     static let tabFreezeAfter: TimeInterval = 30 * 60
 
-    func startPeriodicWork(sleepTabs: @escaping @MainActor () -> Void) {
+    /// `autoArchived`: how many tabs each archive pass sent to the Archive, the launch's pass first.
+    func startPeriodicWork(autoArchived: @escaping @MainActor (Int) -> Void = { _ in }, sleepTabs: @escaping @MainActor () -> Void) {
         periodic.forEach { $0.cancel() }
-        store.runAutoArchive()
+        autoArchived(store.runAutoArchive())
         periodic = [
-            clock.every(Self.autoArchiveInterval) { [weak self] in self?.store.runAutoArchive() },
+            clock.every(Self.autoArchiveInterval) { [weak self] in
+                guard let self else { return }
+                autoArchived(store.runAutoArchive())
+            },
             clock.every(Self.tabSleepInterval) { sleepTabs() },
         ]
     }

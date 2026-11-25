@@ -161,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installCommandFileWatcher()
         handoff.start()
         MCPServer.shared.start(app: self)
-        composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
+        composition.startPeriodicWork(autoArchived: { [weak self] in self?.noteAutoArchived($0) }) { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
         composition.sync.start()
         SharingService.shared.start(store: store, clock: composition.clock)
@@ -355,6 +355,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    // MARK: "Auto archived N tabs"
+
+    private static let autoArchiveNoticeKey = "autoArchiveNoticePending"
+    /// Arc's toast after an archive pass, held until someone is at Cra (AutoArchiveNotice). Kept in the defaults, so
+    /// the count from before an update restart overnight is still said in the morning.
+    private var autoArchiveNotice = AutoArchiveNotice(pending: UserDefaults.standard.integer(forKey: AppDelegate.autoArchiveNoticeKey)) {
+        didSet { UserDefaults.standard.set(autoArchiveNotice.pending, forKey: Self.autoArchiveNoticeKey) }
+    }
+    /// While a count waits with Cra in front: the first key, click or scroll there means someone is back.
+    private var autoArchiveReturnMonitor: Any?
+
+    private func noteAutoArchived(_ count: Int) {
+        guard count > 0 else { return }
+        autoArchiveNotice.archived(count)
+        CraLog.note("auto archive: \(count) tabs, \(autoArchiveNotice.pending) waiting for the toast")
+        showAutoArchiveNotice(becameActive: false)
+    }
+
+    private func showAutoArchiveNotice(becameActive: Bool) {
+        guard autoArchiveNotice.pending > 0, !isOnboarding, !mainWindows.isEmpty else { return }
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        let present = becameActive || AutoArchiveNotice.userPresent(appActive: NSApp.isActive, idleSeconds: idle)
+        guard let text = autoArchiveNotice.take(userPresent: present) else {
+            watchForReturnToAutoArchiveNotice()
+            return
+        }
+        if let m = autoArchiveReturnMonitor { NSEvent.removeMonitor(m); autoArchiveReturnMonitor = nil }
+        CraLog.note("auto archive toast: \(text)")
+        // A click opens the Archive, where the tabs are.
+        let window = main
+        window?.showToast(text) { [weak window] in window?.showLibrary(.archive) }
+    }
+
+    private func watchForReturnToAutoArchiveNotice() {
+        guard autoArchiveReturnMonitor == nil else { return }
+        autoArchiveReturnMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .scrollWheel, .mouseMoved]) { [weak self] event in
+            // After the event, so a click that lands keeps its target and the toast comes up beside it.
+            DispatchQueue.main.async { self?.showAutoArchiveNotice(becameActive: false) }
+            return event
+        }
+    }
+
     /// Chromium's audio service as the Mac went to sleep: waking says whether it lived (#286).
     private var audioServiceBeforeSleep: pid_t?
 
@@ -514,6 +556,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("key on coming forward: in use \(inUse)")
             }
         }
+        // Someone brought Cra forward: they're here to read what was archived while they were away.
+        showAutoArchiveNotice(becameActive: true)
     }
 
     /// The window order and the browser window in use as Cra comes forward, before AppKit raises its key and main
