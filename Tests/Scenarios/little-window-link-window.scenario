@@ -1,3 +1,4 @@
+# promise: #764
 # A link from another app opens its Little Window in the space and profile of the browser window in use, also when
 # AppKit makes another browser window key as Cra comes forward for it (a full-screen one on another display).
 # That window became the one in use, so the Little Window took its space and profile. keyOnComingForward makes
@@ -13,6 +14,9 @@ cra://action/newWindow
 wait 2
 cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
 wait 2
+# The command bar the new window opened with, closed: its panel would take the keys back as Cra comes forward.
+cra://action/closeTab
+expect-log close tab: commandBar
 cra://debug?themeShown=inUse
 expect-log Cra theme shown inUse: space=Random
 
@@ -24,6 +28,7 @@ cra://debug?yieldTo=${COVER}
 wait 1
 cra://debug?keyOnComingForward=1&window=0
 cover link
+expect-log key on coming forward: in use Personal
 cra://debug?externalURL=${PAGE}?n=little
 wait 2
 cra://debug?littleShown=link

@@ -1723,6 +1723,8 @@
 #763   Packages/CraCore/Tests/CraCoreTests/LittleProfileChangeTests.swift::aPageGoneOnFromItsLinkKeepsThePageShown  cbc7dc847b20
 #763   Packages/CraCore/Tests/CraCoreTests/LittleProfileChangeTests.swift::theLinkOpensAgainNotWhereItsRedirectsEnded  09cceaae0d71
 #763   Tests/Scenarios/little-window-profile-change-link.scenario  a27c8c58b8ba
+#764   Packages/CraCore/Tests/CraCoreTests/BeforeComingForwardTests.swift::aLinkArrivingAsCraComesForwardKeepsTheWindowInUseBefore  6e21dcf96bc9
+#764   Tests/Scenarios/little-window-link-window.scenario  fdbdcbe82d72
 #768   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::littleWindowSiteProfilesLoadAsRecorded  8bf3aee8f0eb
 #768   Packages/CraCore/Tests/CraCoreTests/SiteProfilesTests.swift::thePickIsRememberedForTheSiteAndReplacedByTheNext  cf6cf1d6016f
 #768   Packages/CraCore/Tests/CraCoreTests/SiteProfilesTests.swift::theSiteOpensInTheFirstSpaceOnItsProfile  769f67a6959c

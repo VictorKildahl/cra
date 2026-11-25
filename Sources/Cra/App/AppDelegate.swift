@@ -504,6 +504,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func applicationDidBecomeActive(_ notification: Notification) {
         comingForward = false
         installURLEventHandler()
+        // keyOnComingForward's window=<n>: made key on the next turn, once AppKit has settled the keys on the window it
+        // picked, so that window becomes the one in use just before the link is handled, as in the report.
+        if let w = debugKeyOnComingForwardWindow {
+            debugKeyOnComingForwardWindow = nil
+            DispatchQueue.main.async { [self] in
+                w.makeKeyAndOrderFront(nil)
+                let inUse = mainWindows.first { $0.windowID == store.activeWindowID }?.focusedSpace.title ?? "-"
+                CraLog.note("key on coming forward: in use \(inUse)")
+            }
+        }
     }
 
     /// The window order and the browser window in use as Cra comes forward, before AppKit raises its key and main
@@ -517,15 +527,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// cra://debug?keyOnComingForward=1: the next time Cra comes forward, the browser window is made key on the
     /// way, as AppKit does by itself at times (#659).
     private var debugKeyOnComingForward = false
-    /// keyOnComingForward's window=<n>: the nth browser window (oldest first) instead of the one in use.
+    /// keyOnComingForward's window=<n>: the nth browser window (oldest first), made key as Cra has come forward
+    /// (applicationDidBecomeActive). Made key on the way instead, AppKit gave the keys back to the window in use.
     private weak var debugKeyOnComingForwardWindow: NSWindow?
     func applicationWillBecomeActive(_ notification: Notification) {
         beforeComingForward = BeforeComingForward(at: store.clock.now, stack: StackedWindow.onScreen(), window: store.lastNormalWindowID)
         comingForward = true
         if debugKeyOnComingForward {
             debugKeyOnComingForward = false
-            (debugKeyOnComingForwardWindow ?? main?.window)?.makeKey()
-            debugKeyOnComingForwardWindow = nil
+            if debugKeyOnComingForwardWindow == nil { main?.window?.makeKey() }
         }
     }
 

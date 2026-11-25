@@ -11,7 +11,7 @@ struct BeforeComingForwardTests {
     /// A link from Slack brought Cra forward and AppKit made the full-screen Personal window key on
     /// the way: the window in use is still the work one, so the Little Window opens in its space
     /// and profile, not in Default.
-    @Test func aLinkArrivingAsCraComesForwardKeepsTheWindowInUseBefore() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/764")) func aLinkArrivingAsCraComesForwardKeepsTheWindowInUseBefore() {
         let before = BeforeComingForward(at: Self.t0, stack: stack, window: work)
         #expect(before.forLink(at: Self.t0 + 0.02, craActive: true) == before)
         #expect(before.forLink(at: Self.t0 + FrontmostAppHistory.linkGrace, craActive: true)?.window == work)
