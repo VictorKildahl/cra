@@ -516,7 +516,7 @@
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::onlyAnUnpackedInstallFromElsewhereCounts  488a8fe49c8e
 #299   Packages/CraCore/Tests/CraCoreTests/UnpackedCopiesTests.swift::theCopyStopsLoadingInThatProfileOnly  7878314f97fd
 #299   Tests/ExtensionStoreMigrationTests.swift::unpackedCopiesStepAside  e9a30c4a0209
-#299   Tests/Scenarios/unpacked-extension-copy.scenario  59ab5b7e11a8
+#299   Tests/Scenarios/unpacked-extension-copy.scenario  efff14c35635
 #300   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::noColourIsArcsColourlessTheme  ee495dc0d003
 #300   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::padButtons  4e4cb24be35d
 #300   Tests/Scenarios/colourless-theme.scenario  44737220a5ce
@@ -1045,7 +1045,7 @@
 #507   Packages/CraCore/Tests/CraCoreTests/CustomBlocklistTests.swift::typedAddressBecomesAListURL  89765741fe5e
 #507   Packages/CraCore/Tests/CraCoreTests/CustomBlocklistTests.swift::withoutAddedListsOnlyCrasOwnAreWaitedFor  c487c3a9684a
 #507   Tests/Scenarios/custom-blocklist-kept.scenario  3644b826d945
-#507   Tests/Scenarios/custom-blocklist-live.scenario  53a4d6f489b3
+#507   Tests/Scenarios/custom-blocklist-live.scenario  d25c4d78a16e
 #507   Tests/Scenarios/custom-blocklist.scenario  d51bfd215d03
 #507   iOS/CraUITests/BrowserTests.swift::testAKeptBlockListStopsItsDomainsFromTheFirstPage  6d6603e6cef7
 #507   iOS/CraUITests/BrowserTests.swift::testAnAddedBlockListShowsItsFetchAndCanBeRemoved  1258559df75c
@@ -1873,7 +1873,7 @@ web-page-fullscreen-keyboard-lock Tests/Scenarios/page-fullscreen-keyboard-lock.
 web-page-hung Tests/Scenarios/page-hung.scenario  6898b10a3250
 web-page-payment Tests/Scenarios/page-payment.scenario  45bf03c08871
 web-page-permission-prompts Tests/Scenarios/page-permission-prompts.scenario  178769e3e2b2
-web-page-pointer-lock Tests/Scenarios/page-pointer-lock.scenario  8c86862961e2
+web-page-pointer-lock Tests/Scenarios/page-pointer-lock.scenario  fdf6e8a0b096
 web-page-popup-closes Tests/Scenarios/page-popup-closes.scenario  02d1ef71e3da
 web-page-pre-frame-canvas Tests/Scenarios/page-pre-frame-canvas.scenario  5ab409a44c04
 web-page-print-frame Tests/Scenarios/page-print-frame.scenario  63cf39432113
