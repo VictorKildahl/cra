@@ -53,7 +53,7 @@ final class ArcTooltipController {
         let mouse = NSEvent.mouseLocation
         hovered.removeAll { a in
             guard let v = a.view, v.hostWindow != nil else { return true }
-            return !Self.pointerArea(of: v).contains(mouse)
+            return !Self.ownsTip(v, at: mouse)
         }
         guard let target = hovered.compactMap(\.view).min(by: { $0.screenFrame.width * $0.screenFrame.height < $1.screenFrame.width * $1.screenFrame.height }),
               !target.text.isEmpty else {
@@ -77,7 +77,7 @@ final class ArcTooltipController {
             Task { @MainActor in
                 guard let self, let view, self.pendingFor === view, !self.paused else { return }
                 // Its control went from under a resting pointer without an exit: no tip by the pointer (#527).
-                guard Self.pointerArea(of: view).contains(NSEvent.mouseLocation) else { self.cancelPending(); return }
+                guard Self.ownsTip(view, at: NSEvent.mouseLocation) else { self.cancelPending(); return }
                 self.show(for: view)
             }
         }
@@ -90,6 +90,19 @@ final class ArcTooltipController {
     static func pointerArea(of view: any ArcTooltipTarget) -> NSRect {
         guard let v = view as? NSView, let w = v.window else { return view.screenFrame }
         return view.screenFrame.intersection(w.convertToScreen(v.convert(v.shownRect, to: nil)))
+    }
+
+    /// Whether the pointer is on `view`'s control and not on a view of its window drawn over it: Library's
+    /// downloads over the tab list showed the names of the tabs under them (#770). An anchor takes no clicks:
+    /// the control it fills is what the pointer is on.
+    static func isUncovered(_ view: any ArcTooltipTarget, at mouse: NSPoint) -> Bool {
+        guard let v = view as? NSView else { return true }
+        return ((v is ArcTooltipAnchorView ? v.superview : nil) ?? v).isUncovered(atScreenPoint: mouse)
+    }
+
+    /// A pointer at `mouse` is in `view`'s area and on it, not on something over it: its tip may show.
+    static func ownsTip(_ view: any ArcTooltipTarget, at mouse: NSPoint) -> Bool {
+        pointerArea(of: view).contains(mouse) && isUncovered(view, at: mouse)
     }
 
     func mouseExited(_ view: any ArcTooltipTarget) {

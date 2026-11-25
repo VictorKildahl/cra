@@ -1703,6 +1703,8 @@
 #758   Packages/CraCore/Tests/CraCoreTests/MeetingCardStepTests.swift::theOwnerClosesItsCardWhenTheCallIsOverOrDismissed  59ba37a250ff
 #758   Packages/CraCore/Tests/CraCoreTests/MeetingCardStepTests.swift::theOwnerKeepsItsCardThroughTheTicks  0bcc2da4839b
 #758   Tests/Scenarios/meeting-card-stays-behind.scenario  e1a57da8c929
+#770   Tests/Scenarios/downloads-tray-covers-tabs.scenario  0e79296ef349
+#770   Tests/TooltipCoverTests.swift::aListOverTheTabsHidesThemFromThePointer  ff612b388453
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

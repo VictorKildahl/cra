@@ -1801,14 +1801,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let label = dict["label"] ?? title
                 func all(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(all) }
                 let host = main.shell.sidebarHost
-                let found: (any ArcTooltipTarget & NSView)? = dict["tile"] == "1"
-                    ? all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
-                    : all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                // under=downloads (#770): the pointer on the open Library downloads' first row, and the tab row under it.
+                let underDownloads = dict["under"] == "downloads" ? (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.debugFirstRowInWindow : nil
+                let found: (any ArcTooltipTarget & NSView)? = if let at = underDownloads {
+                    all(host).compactMap { $0 as? TabRowView }.first { $0.window != nil && $0.convert($0.bounds, to: nil).contains(at) && !$0.isHiddenOrHasHiddenAncestor }
+                } else if dict["tile"] == "1" {
+                    all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
+                } else {
+                    all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                }
                 guard let row = found else {
-                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(title)")
+                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(dict["under"].map { "under \($0)" } ?? title)")
                     return
                 }
-                let p = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+                let p = underDownloads ?? row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
                 let inWindow = window.contentView.map { $0.bounds.contains($0.convert(p, from: nil)) } ?? false
                 let time = ProcessInfo.processInfo.systemUptime
                 for view in all(host) {
@@ -1835,7 +1841,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 case let t as FavoriteTileView: hovered = t.debugHovering ? t.text : "none"
                 default: hovered = "none"
                 }
-                let tip = ArcTooltipController.pointerArea(of: row).contains(window.convertPoint(toScreen: p))
+                let tip = ArcTooltipController.ownsTip(row, at: window.convertPoint(toScreen: p))
                 CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered) tip=\(tip ? 1 : 0)")
                 return
             }

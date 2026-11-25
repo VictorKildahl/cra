@@ -1048,8 +1048,10 @@ final class SpaceListView: NSView, NSDraggingSource {
     private func hoverAt(_ windowPoint: NSPoint?) {
         var target: SidebarRowView?
         var local = NSPoint.zero
-        // A swipe slides the strip under the pointer: no hover until it settles.
-        if let wp = windowPoint, ui.spaceSwipe == 0, ui.libraryPage == nil {
+        // A swipe slides the strip under the pointer: no hover until it settles. Nor under a list hung over the
+        // tabs (Library's downloads): its rows, not the tabs under them, are what the pointer is on (#770).
+        if let wp = windowPoint, ui.spaceSwipe == 0, ui.libraryPage == nil,
+           let window, isUncovered(atScreenPoint: window.convertPoint(toScreen: wp)) {
             let p = document.convert(wp, from: nil)
             if document.shownRect.contains(p), let row = rows.first(where: { placed($0).contains(p) }), let v = views[row.key] {
                 target = v

@@ -1,0 +1,25 @@
+# promise: #770
+# Library's recent downloads hang over the bottom of the tab list, and the pointer resting on a download brought up
+# the name of the tab under it, then of each tab under the list as it moved (GitHub #770): the tabs' hover still saw
+# a pointer the list was in front of. Now the tab list hovers only where nothing of the window is over it, and a tip
+# shows only for a control the pointer is on. The pointer goes on the first download; the tab under it is neither
+# hovered nor tipped. A tab above the list still is.
+home
+budget rss=900 stalls50=20
+cra://debug?windowSize=900x480
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished from a data: address
+repeat 10 cra://open?url=${PAGE}?n=row${i}
+wait 2
+cra://debug?downloads=1
+wait 1
+cra://debug?pointerOn=under-tray&under=downloads
+expect-log pointer on under-tray: in window=1 hovered=none tip=0
+cra://debug?downloads=0
+wait 1
+cra://debug?pointerOn=row10
+expect-log pointer on row10: in window=1 hovered=Fixture row10 tip=1
+reject-log fault:
