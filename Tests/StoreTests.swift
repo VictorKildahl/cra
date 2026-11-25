@@ -22,6 +22,7 @@ enum StoreTests {
         setenv("CRA_DIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Dia").path, 1)
         setenv("CRA_ARDIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Ardia").path, 1)
         setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
+        setenv("CRA_PHI_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Phi").path, 1)
 
         try arcImport()
         try arcKeepsAnyAddress()
@@ -30,6 +31,7 @@ enum StoreTests {
         try diaImport()
         try diaIconsFromItsDatabase()
         try ardiaImport()
+        try phiImport()
         try arcImportReport()
         try arcSpacesOnOneProfileCountTheirFavoritesOnce()
         try arcArchiveBeyondItsLimitIsListed()
@@ -1003,6 +1005,66 @@ enum StoreTests {
         expect(ids[0].profileID == nil && ids[1].profileID != nil && ids[1].profileID == ids[2].profileID
                && store.profile(ids[1].profileID)?.name == "Work", "Work and Side share one Cra profile, Personal stays on Default")
         expect(result.profiles.craFolder(forSource: "Profile p-work") != "Default", "Work's cookies go to that profile")
+        expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        for id in result.spaceIDs { store.deleteSpace(id) }
+    }
+
+    // promise: #802
+    /// Phi (#802): its SwiftData store (Tests/Fixtures/Phi/Phi/users/<account>/localDB, made with
+    /// Phi's own models, see make-store.swift.txt). Spaces come in Phi's order without its agent
+    /// spaces; a space's bookmark tree is its pinned section, folders nested and split bookmarks
+    /// a page each; pinned tabs are favorites, read in the store's Pinned Tab Scope (a space's own,
+    /// a profile's shared by its spaces, or one set for every space). A space on another Chromium
+    /// profile lands on a Cra profile, so its sign-ins follow.
+    @MainActor
+    private static func phiImport() throws {
+        expect(PhiImporter.isAvailable, "a LocalStore.sqlite under Phi/users counts as Phi data")
+        let plan = try PhiImporter.plan()
+        expect(plan.source == "Phi" && plan.spaces.map(\.title) == ["Home", "Work", "Reading"],
+               "Phi's spaces come over in its order; its agent spaces stay behind")
+        let home = plan.spaces[0], work = plan.spaces[1], reading = plan.spaces[2]
+        expect(home.favorites.compactMap(\.url) == ["https://mail.google.com/mail/u/0/", "https://www.youtube.com/"],
+               "a space's pinned tabs are its favorites, in Phi's order; other scopes' copies and open tabs stay out")
+        expect(home.pinned.map { $0.url ?? "folder " + $0.pageTitle } == ["folder Docs", "https://mail.google.com/", "https://calendar.google.com/",
+                                                                         "https://news.ycombinator.com/", "https://github.com/", "chrome://settings/"],
+               "the bookmark tree is the pinned section, in Phi's order; a split bookmark brings each page")
+        let docs = home.pinned[0].children
+        expect(docs.count == 2 && docs[0].url == "https://www.swift.org/" && docs[1].isFolder && docs[1].pageTitle == "Deep"
+               && docs[1].children.compactMap(\.url) == ["https://developer.apple.com/"], "folders nest")
+        expect(home.pinned[4].customTitle == "Code" && home.pinned[4].pageTitle == "GitHub · Where software is built"
+               && home.pinned[2].pageTitle == "Calendar", "a renamed bookmark keeps its name; a split's second page its own title")
+        expect(home.skipped == [cra("Cra Settings", "cra://settings")], "a cra: bookmark is listed")
+        expect(home.emoji == "🏠" && home.profile == nil && home.theme?.accent == "#3A6FF8",
+               "an emoji icon, the Default profile, the space's colour as its theme")
+        expect(work.favorites.compactMap(\.url) == ["https://app.slack.com/"] && work.skipped == [cra("Downloads", "cra://downloads", .favorites)]
+               && work.pinned.compactMap(\.url) == ["https://linear.app/"], "each space has its own favorites and pinned section")
+        expect(work.profile == ImportedProfile(folder: "Profile 1", name: "Work") && work.emoji == "" && work.symbol == nil,
+               "a space on \"Profile 1\" signs in there; a Phi artwork icon is a dot")
+        expect(reading.emoji == "9️⃣" && reading.pinned.isEmpty && reading.favorites.isEmpty && reading.profile == nil,
+               "an empty space still comes over; a many-code-point emoji is read whole")
+        expect(plan.favorites.isEmpty && home.today.isEmpty, "nothing is left without a space; Phi keeps open tabs in Chromium's session, not here")
+
+        let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Phi/scopes")
+        let byProfile = try PhiImporter.plan(store: fixtures.appendingPathComponent("profile.sqlite"))
+        expect(byProfile.spaces.map { $0.favorites.compactMap(\.url) } == [["https://profile.example/"], ["https://work-profile.example/"], ["https://profile.example/"]]
+               && byProfile.spaces.map(\.favoritesList) == ["profile Default", "profile Profile 1", "profile Default"],
+               "Pinned Tab Scope Profile: a profile's pinned tabs show in each of its spaces, counted once; a dormant one stays out")
+        let byApp = try PhiImporter.plan(store: fixtures.appendingPathComponent("app.sqlite"))
+        expect(byApp.spaces.allSatisfy { $0.favorites.compactMap(\.url) == ["https://app.example/"] && $0.favoritesList == "app" },
+               "Pinned Tab Scope App: the same pinned tabs in every space")
+
+        let phi = ImportSource.allCases.first { $0.id == "phi" }
+        expect(phi?.isAvailable == true && phi?.keychainService == "Phi Safe Storage" && phi?.keychainAccount == "Phi",
+               "Phi is listed from its folder, its passwords and cookies open with Phi's Keychain item")
+        expect(phi?.credentialProfiles.map(\.id) == ["Default", "Profile 1"], "Phi's Chromium profiles sit right in its folder")
+
+        let composition = AppComposition(clock: ManualScheduler())
+        let store = composition.store
+        let result = store.apply(plan, includeArchive: false, includeSettings: false)
+        expect(result.spaces == 3 && result.folders == 2, "applying adds the three spaces and the two folders")
+        let spaces = result.spaceIDs.compactMap { store.space($0) }
+        expect(spaces[0].profileID == nil && spaces[1].profileID != nil && spaces[2].profileID == nil,
+               "Work goes on a Cra profile of its own, Home and Reading stay on Default")
         expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
         for id in result.spaceIDs { store.deleteSpace(id) }
     }

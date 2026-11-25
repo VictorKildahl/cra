@@ -1,13 +1,15 @@
 import AppKit
 
 /// A browser the import can read: Dia's list (Arc, Brave, Chrome, Edge,
-/// Firefox, Opera, Opera GX, Safari) plus Dia itself, Vivaldi, Chromium, Helium, Yab, Ardia and Zen.
+/// Firefox, Opera, Opera GX, Safari) plus Dia itself, Vivaldi, Chromium, Helium, Yab, Ardia, Phi and Zen.
 struct ImportSource: Identifiable, Hashable {
     enum Kind: Hashable {
         /// Arc and Dia: their own sidebar stores, and a Chromium profile for passwords and cookies.
         case arc, dia
         /// Yab and Ardia: Arc-style spaces in their own files, Chromium profiles for passwords and cookies.
         case yab, ardia
+        /// Phi: spaces in its own SwiftData store, Chromium profiles right in its folder.
+        case phi
         case chromium, firefox
         /// Zen: Firefox underneath, with Arc-style spaces, Essentials and pinned tabs.
         case zen
@@ -62,6 +64,8 @@ struct ImportSource: Identifiable, Hashable {
                      keychainService: "Yab Safe Storage", keychainAccount: "Yab", ownFolder: YabImporter.supportDir),
         ImportSource(id: "ardia", name: "Ardia", bundleID: "com.ardia.browser", kind: .ardia, dataDir: ArdiaImporter.userData,
                      keychainService: "Ardia Safe Storage", keychainAccount: "Ardia", ownFolder: ArdiaImporter.supportDir),
+        ImportSource(id: "phi", name: "Phi", bundleID: "com.phibrowser.Mac", kind: .phi, dataDir: PhiImporter.userData,
+                     keychainService: "Phi Safe Storage", keychainAccount: "Phi"),
         ImportSource(id: "firefox", name: "Firefox", bundleID: "org.mozilla.firefox", kind: .firefox,
                      dataDir: support.appendingPathComponent("Firefox", isDirectory: true)),
         ImportSource(id: "zen", name: "Zen", bundleID: "app.zen-browser.zen", kind: .zen,
@@ -81,7 +85,7 @@ struct ImportSource: Identifiable, Hashable {
 
     /// This browser as OtherBrowserData sees it: its own folder and its native messaging manifests.
     var otherBrowser: OtherBrowserData.Browser {
-        let manifests = [.chromium, .arc, .dia].contains(kind) ? dataDir.appendingPathComponent("NativeMessagingHosts", isDirectory: true).path : nil
+        let manifests = [.chromium, .arc, .dia, .phi].contains(kind) ? dataDir.appendingPathComponent("NativeMessagingHosts", isDirectory: true).path : nil
         return OtherBrowserData.Browser(id: id, folder: (ownFolder ?? dataDir).path, nativeMessagingHosts: manifests,
                                         alwaysOffered: kind == .safari)
     }
@@ -114,6 +118,7 @@ struct ImportSource: Identifiable, Hashable {
         case .dia: return try DiaImporter.plan()
         case .yab: return try YabImporter.plan()
         case .ardia: return try ArdiaImporter.plan()
+        case .phi: return try PhiImporter.plan()
         case .chromium: return try ChromiumImporter.plan(browser: name, userData: dataDir)
         case .firefox: return try FirefoxImporter.plan(browser: name, root: dataDir)
         case .zen: return try ZenImporter.plan(root: dataDir)
@@ -138,7 +143,7 @@ struct ImportSource: Identifiable, Hashable {
 
     func topSites(limit: Int) -> [TopSite] {
         switch kind {
-        case .arc, .dia, .yab, .ardia, .chromium: return ChromiumImporter.topSites(userData: dataDir, limit: limit)
+        case .arc, .dia, .yab, .ardia, .phi, .chromium: return ChromiumImporter.topSites(userData: dataDir, limit: limit)
         case .firefox, .zen: return FirefoxImporter.topSites(root: dataDir, limit: limit)
         case .safari: return []
         }
@@ -151,7 +156,7 @@ struct ImportSource: Identifiable, Hashable {
 
     func extensions() -> [ImportableExtension] {
         switch kind {
-        case .arc, .dia, .yab, .ardia, .chromium: return ExtensionImporter.extensions(inUserData: dataDir)
+        case .arc, .dia, .yab, .ardia, .phi, .chromium: return ExtensionImporter.extensions(inUserData: dataDir)
         case .firefox, .zen, .safari: return []
         }
     }
@@ -176,7 +181,7 @@ extension ImportSource.Kind {
         case .yab:
             return ImportFavicons.Stores(own: YabImporter.ownIcons(supportDir: dataDir.deletingLastPathComponent()),
                                          databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
-        case .arc, .dia, .ardia, .chromium: return ImportFavicons.Stores(databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
+        case .arc, .dia, .ardia, .phi, .chromium: return ImportFavicons.Stores(databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
         case .firefox, .zen: return ImportFavicons.Stores(databases: { FirefoxImporter.favicons(root: dataDir, hosts: $0) })
         case .safari: return ImportFavicons.Stores()
         }
