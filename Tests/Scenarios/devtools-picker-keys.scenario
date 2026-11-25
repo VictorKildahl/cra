@@ -1,0 +1,30 @@
+# promise: #778
+# DevTools take the keys back when the element picker lets go, as in Chrome: after a pick the arrows walk the Elements
+# tree from the picked node. A pick clicks the page, which kept the keys until DevTools were clicked. Chrome gets them
+# back through the frontend's bringToFront, which shows a DevTools window Cra never shows; the bridge reports it and
+# the picker turning off. And Chrome's own DevTools window for the page, never seen, stays out of Mission Control
+# and the ⌘` cycle (chromeExposed=0); there was one empty window there per page with DevTools.
+# (Scripts here use no spaces or "=".)
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+cra://open?url=${PAGE}?n=dev
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+
+# Inspect on closed DevTools: on Elements, with the picker on, and Chrome's window out of Mission Control.
+cra://action/inspectElement
+wait 6
+cra://debug?devToolsShown=inspect
+expect-log tab devtools inspect: windows=0 open=1 .*focus=devtools .* chromeExposed=0 panel=elements$
+
+# The picker letting go gives DevTools the keys back from the page. (In this background copy a click can't reach the
+# page: another tab and back gives the page the keys, and the frontend turns the picker off as a pick does.)
+cra://open?url=${PAGE}?n=other
+wait 2
+cra://action/previousTab
+wait 2
+cra://debug?devToolsShown=back
+expect-log tab devtools back: windows=0 open=1 .*focus=page
+cra://debug?devtoolsjs=import('./ui/legacy/legacy.js').then(function(m){m.ActionRegistry.ActionRegistry.instance().getAction('elements.toggle-element-search').execute()})
+wait 2
+cra://debug?devToolsShown=picked
+expect-log tab devtools picked: windows=0 open=1 .*focus=devtools

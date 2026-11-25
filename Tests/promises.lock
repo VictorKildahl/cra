@@ -1741,6 +1741,8 @@
 #776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::toggleOpensWithTheKeysAndClosesWithNothing  89198a38c111
 #776   Tests/BrowserManagerLifecycleTests.swift::devToolsFrontendCase  2c126533561a
 #776   Tests/Scenarios/devtools-actions.scenario  24c1417d992a
+#778   Tests/BrowserManagerLifecycleTests.swift::devToolsPickerKeysCase  5bb8cb73470a
+#778   Tests/Scenarios/devtools-picker-keys.scenario  1be071503fb9
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anEntryWithoutProfilesGoes  ea0d30498e7c
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anotherProfileKeepsThePage  6b5988136529
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::deletingTakesThePageAndItsLearnedPicks  ffddad2e2cd3
