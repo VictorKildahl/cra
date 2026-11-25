@@ -1733,6 +1733,11 @@
 #768   Tests/StoreTests.swift::arcSiteProfiles  885ccfe0b076
 #770   Tests/Scenarios/downloads-tray-covers-tabs.scenario  0e79296ef349
 #770   Tests/TooltipCoverTests.swift::aListOverTheTabsHidesThemFromThePointer  ff612b388453
+#776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::inspectOnClosedDevToolsArmsThePickerOnceUp  7815e7dc488a
+#776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::networkOnClosedDevToolsSwitchesOnceTheFrontendIsUp  78eeea00f591
+#776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::toggleOpensWithTheKeysAndClosesWithNothing  89198a38c111
+#776   Tests/BrowserManagerLifecycleTests.swift::devToolsFrontendCase  2c126533561a
+#776   Tests/Scenarios/devtools-actions.scenario  24c1417d992a
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anEntryWithoutProfilesGoes  ea0d30498e7c
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anotherProfileKeepsThePage  6b5988136529
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::deletingTakesThePageAndItsLearnedPicks  ffddad2e2cd3

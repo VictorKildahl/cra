@@ -1761,6 +1761,7 @@ enum BrowserManagerLifecycleTests {
         manager.closeAll()
     }
 
+    // promise: #776
     /// The developer bar's Network and Inspect on closed DevTools (#88), and the keys: the engine opens them, the
     /// frontend switches to Network or arms the picker once it says its first panel, and DevTools take the keys
     /// then, and whenever a command keeps them shown (DevToolsFrontendCalls).

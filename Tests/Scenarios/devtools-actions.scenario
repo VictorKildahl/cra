@@ -1,3 +1,4 @@
+# promise: #776
 # The developer bar's DevTools commands (Arc 1.170's, #88) on the engine, as in Chrome: Network opens DevTools on the
 # Network panel, Console switches to the Console, Inspect opens them with the element picker on, and DevTools that
 # open or switch panel take the keys, in a tab and in a Little Window. Before, Network opened them on Elements, the

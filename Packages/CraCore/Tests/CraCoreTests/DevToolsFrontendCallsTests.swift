@@ -7,7 +7,7 @@ struct DevToolsFrontendCallsTests {
 
     /// Network on closed DevTools: Chrome has no Network panel to open them on, so the frontend is switched once
     /// it is up, and takes the keys then.
-    @Test func networkOnClosedDevToolsSwitchesOnceTheFrontendIsUp() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/776")) func networkOnClosedDevToolsSwitchesOnceTheFrontendIsUp() {
         var calls = DevToolsFrontendCalls()
         let (engine, now) = calls.command("network", shows: true, frontendUp: false)
         #expect(engine == "network")
@@ -27,7 +27,7 @@ struct DevToolsFrontendCallsTests {
 
     /// Inspect on closed DevTools: they open on Elements and the picker is armed once the frontend is up, without
     /// Chrome's Inspect, which left it off.
-    @Test func inspectOnClosedDevToolsArmsThePickerOnceUp() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/776")) func inspectOnClosedDevToolsArmsThePickerOnceUp() {
         var calls = DevToolsFrontendCalls()
         let (engine, now) = calls.command("inspect", shows: true, frontendUp: false)
         #expect(engine == "elements")
@@ -49,7 +49,7 @@ struct DevToolsFrontendCallsTests {
     }
 
     /// ⌥⌘I: DevTools open as they were and take the keys once up; closing asks nothing.
-    @Test func toggleOpensWithTheKeysAndClosesWithNothing() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/776")) func toggleOpensWithTheKeysAndClosesWithNothing() {
         var calls = DevToolsFrontendCalls()
         #expect(calls.command(nil, shows: true, frontendUp: false) == (nil, .init()))
         #expect(calls.frontendShowsPanel(first: true) == .init(takesKeys: true))
