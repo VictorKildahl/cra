@@ -1044,9 +1044,11 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         CraLog.note("site controls settings: \(settings.joined(separator: "|"))")
         // The arrow's fill (#723): the colour behind the popover's frame, which draws the arrow, against the body's.
         let view = root as? SiteControlCenterView
-        let hex = { (c: CGColor?) in c.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }.map {
-            String(format: "#%02X%02X%02X", Int(round($0.redComponent * 255)), Int(round($0.greenComponent * 255)), Int(round($0.blueComponent * 255)))
-        } ?? "none" }
+        let hex = { (c: CGColor?) -> String in
+            guard let rgb = c.flatMap({ NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }) else { return "none" }
+            let byte = { (v: CGFloat) -> Int in Int((v * 255).rounded()) }
+            return String(format: "#%02X%02X%02X", byte(rgb.redComponent), byte(rgb.greenComponent), byte(rgb.blueComponent))
+        }
         let frame = view?.arrowFill?.superview
         CraLog.note("site controls arrow \(label): fill=\(hex(view?.arrowFill?.layer?.backgroundColor)) body=\(hex(root.layer?.backgroundColor))"
                     + " behindFrame=\(frame != nil && frame === root.window?.contentView?.superview && frame?.subviews.first === view?.arrowFill ? 1 : 0)"
