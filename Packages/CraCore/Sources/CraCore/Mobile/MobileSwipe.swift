@@ -175,10 +175,16 @@ public enum MobileSwipe {
     }
 
     /// How far the page must be pulled down, and held there at release, to reload.
-    public static let pullToRefreshDistance: CGFloat = 96
+    public static let pullToRefreshDistance: CGFloat = 128
 
     /// Pull to refresh acts on release, so dragging back up before letting go cancels it.
     public static func refreshes(pullAtRelease: CGFloat) -> Bool {
         pullAtRelease >= pullToRefreshDistance
+    }
+
+    /// Whether pushing a pull back to the top hands the rest of the drag to the page's own
+    /// scrolling, rather than waiting for the finger to lift first.
+    public static func pullHandsOff(pull: CGFloat) -> Bool {
+        pull <= 0
     }
 }

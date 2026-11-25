@@ -51,6 +51,27 @@ public enum BackForwardMenu {
         }
     }
 
+    /// ⌘-click on Back or Forward (GitHub #797): Arc opens the nearest page that way in a new tab that
+    /// comes to the front, at the top of Today, and the tab clicked stays on its page (Arc 1.174.2,
+    /// offline, 25 Nov 2026: three pages, ⌘-click Back on the third opened the second above it,
+    /// selected). Only a click with ⌘ does: ⌘[ and the menu's Back keep going back in the tab.
+    public static func opensNewTab(commandHeld: Bool, byMouse: Bool) -> Bool { commandHeld && byMouse }
+
+    /// The page that new tab opens, from a `Page.getNavigationHistory` reply: the nearest one that way,
+    /// with its own title (empty when it had none); nil at the end of the history.
+    public static func newTabPage(history json: String, direction: Direction) -> Row? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let current = object["currentIndex"] as? Int,
+              let entries = object["entries"] as? [[String: Any]] else { return nil }
+        let list = entries.map { e in
+            Row(entryID: e["id"] as? Int ?? -1, title: e["title"] as? String ?? "", url: e["url"] as? String ?? "")
+        }
+        guard let nearest = rows(entries: list, currentIndex: current, direction: direction).first,
+              let own = list.first(where: { $0.entryID == nearest.entryID }) else { return nil }
+        return own
+    }
+
     /// An address as a row shows it: no scheme, no trailing slash.
     public static func displayURL(_ url: String) -> String {
         var s = url

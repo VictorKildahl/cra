@@ -1,0 +1,43 @@
+# ⌘-click Back or Forward (GitHub #797), as in Arc 1.174.2: the page that way opens in a new tab that
+# comes to the front, at the top of Today, and the tab clicked stays on its page. Back (⌘[, the Go
+# menu, a plain click) keeps going back in the tab, and on the new tab closes it back to the one it came from.
+# promise: #797
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=two'","userGesture":true}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=three'","userGesture":true}
+wait 1.5
+cra://debug?back=start
+expect-log back start: selected=\S+n=three back=1 today=1$
+
+# ⌘-click the sidebar's ←: n=two in a new tab above, in front; the first tab stays on n=three.
+cra://debug?clickAt=238,23&mods=1048576
+wait 2
+expect-log history new tab: back \S+n=two$
+cra://debug?back=opened
+expect-log back opened: selected=\S+n=two back=1 today=2$
+cra://debug?todayOrder=opened
+expect-log today order opened: \S+n=two \| \S+n=three$
+
+# Back on the new tab closes it back to n=three; Back there goes back in the tab, as before.
+cra://action/goBack
+wait 2
+cra://debug?back=returned
+expect-log back returned: selected=\S+n=three back=1 today=1$
+cra://action/goBack
+wait 2
+cra://debug?back=plain
+expect-log back plain: selected=\S+n=two back=1 today=1$
+
+# ⌘-click → from there: n=three in a new tab, in front.
+cra://debug?clickAt=272,23&mods=1048576
+wait 2
+expect-log history new tab: forward \S+n=three$
+cra://debug?back=ahead
+expect-log back ahead: selected=\S+n=three back=1 today=2$

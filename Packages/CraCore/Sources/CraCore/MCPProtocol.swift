@@ -6,7 +6,7 @@ public enum MCPProtocol {
     public static let messageLimit = 1_048_576
     public static let version = "2025-11-25"
     public static let inputTools: Set<String> = ["page_click", "page_type", "page_fill", "page_press", "page_hover", "page_scroll", "page_select", "page_drag", "page_upload"]
-    public static let readTools: Set<String> = ["tabs_list", "page_read", "page_snapshot", "page_wait", "page_screenshot", "download_status", "page_console", "page_network", "history_search"]
+    public static let readTools: Set<String> = ["tabs_list", "tabs_search", "page_read", "page_snapshot", "page_wait", "page_screenshot", "download_status", "page_console", "page_network", "history_search"]
     /// Input tools whose result says what the action changed (MCPChanges), unless changes=false.
     public static let changeTools: Set<String> = ["page_click", "page_type", "page_fill", "page_press", "page_select", "page_drag", "page_upload"]
     /// Input tools that may act on a point of the last screenshot (x, y) instead of an element.
@@ -16,6 +16,7 @@ public enum MCPProtocol {
     public static let untargetedTools: Set<String> = ["page_press", "page_type", "page_scroll"]
     public static let tools: [[String: Any]] = [
         tool("tabs_list", "List the user's tabs in sidebar order (space, section, folder) with stable IDs, plus this connection's windowless pages. active marks the tab on screen in the window the user last used; selected marks each window's shown tab; dialog shows an open alert/confirm/prompt.", [:], []),
+        tool("tabs_search", "Search open tabs by all query words across title and URL. Optional exact, case-insensitive space, folder and section filters. Results keep sidebar order; limit defaults to 50 and is capped at 200.", ["query": "string", "space": "string", "folder": "string", "section": "string", "limit": "integer"], ["query"]),
         tool("tab_open", "Open an HTTP(S) page in the sidebar of the current space, or of the space named by space (names in tabs_list), signed in like any tab. By default it opens like a ⌘-clicked link: loading in the background, not selected, without taking the user's screen. splitWith (a tabId from tabs_list) creates or extends a split beside that tab; the new pane inherits its space, and the returned tabId works with page tools. If the target is currently visible in a window, select=true is required before its view changes. select=true focuses the new tab or pane; activate=true brings Cra to the front. windowless=true instead makes a hidden 1280x800 page outside the sidebar (max eight) that closes on disconnect, has no extensions and is needed only for page_download; it cannot be combined with splitWith. Returns tabId; with splitWith, also splitId and paneTabIds.", ["url": "string", "space": "string", "splitWith": "string", "windowless": "boolean", "select": "boolean", "activate": "boolean"], ["url"]),
         tool("tab_show", "Select a tab in its window, waking it if it sleeps. activate=true also brings Cra to the front. Not needed for any other tool: they all work on hidden tabs.", ["tabId": "string", "activate": "boolean"], ["tabId"]),
         tool("tab_close", "Close a today tab or a split pane this connection opened. Pinned/favorite tabs and split panes this connection did not open stay. Reopen Closed Tab brings a closed tab back.", ["tabId": "string"], ["tabId"]),
@@ -67,11 +68,16 @@ public enum MCPProtocol {
             fields["paths"]?["items"] = ["type": "string", "maxLength": 4096]
             fields["paths"]?["minItems"] = 1; fields["paths"]?["maxItems"] = 8
         }
+        if name == "tabs_search" { fields["query"]?["maxLength"] = 256 }
         fields["targetSelector"]?["maxLength"] = 2048
         fields["state"]?["enum"] = ["visible", "hidden", "attached", "detached"]
         fields["button"]?["enum"] = ["left", "right", "middle"]
         fields["level"]?["enum"] = ["all", "warning", "error"]
-        fields["section"]?["enum"] = ["favorites", "pinned", "today"]
+        if name == "tabs_search" {
+            fields["section"]?["description"] = "Optional case-insensitive section filter: favorites, pinned or today."
+        } else {
+            fields["section"]?["enum"] = ["favorites", "pinned", "today"]
+        }
         fields["action"]?["enum"] = name == "page_dialog" ? ["accept", "dismiss"] : name == "site_notes" ? ["get", "set", "append", "delete", "list"] : ["back", "forward", "reload"]
         fields["days"]?["minimum"] = 1; fields["days"]?["maximum"] = 90
         fields["limit"]?["minimum"] = 1; fields["limit"]?["maximum"] = 200
@@ -158,6 +164,14 @@ public enum MCPProtocol {
         if let text = arguments["promptText"] as? String, text.utf8.count > 10_000 { return "promptText is too long." }
         if name == "site_notes", let text = arguments["text"] as? String, text.utf8.count > 8192 { return "Notes are at most 8 KB a site." }
         if name == "site_notes", ["set", "append"].contains(arguments["action"] as? String ?? ""), arguments["text"] == nil { return "site_notes \(arguments["action"] as! String) needs text." }
+        if name == "tabs_search", let query = arguments["query"] as? String {
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "query must not be empty." }
+            if query.count > 256 { return "query must be at most 256 characters." }
+        }
+        if name == "tabs_search", let section = arguments["section"] as? String,
+           !["favorites", "pinned", "today"].contains(where: { $0.caseInsensitiveCompare(section) == .orderedSame }) {
+            return "section must be one of favorites, pinned or today."
+        }
         if name == "tab_update", arguments.count == 1 { return "tab_update needs title, sleep or muted." }
         if name == "tab_move", arguments.count == 1 { return "tab_move needs space, section, folder or after." }
         return nil

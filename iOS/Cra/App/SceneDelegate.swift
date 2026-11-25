@@ -65,9 +65,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 /// sidebar syncs into (`demo` for a made-up sidebar with two Spaces), `-CraFakeVoice <text>` for
 /// what voice search hears instead of the microphone (`-CraShowVoice YES` holds the voice overlay
 /// up with it, for a screenshot), `-CraOnboarding YES` to show onboarding on a test's data folder,
-/// `-CraCountHaptics YES` for the bar's buttons and the page menu's controls to count their
-/// ticks in their accessibility value (PressHaptics), `-CraHoldPill YES` for the New Tab pill to stay
-/// pressed in, as under a finger.
+/// `-CraCountHaptics YES` to count every tick: the bar's buttons and the page menu's controls in
+/// their accessibility value, and pull to refresh's in the hidden total (PressHaptics). `-CraHoldPill YES`
+/// for the New Tab pill to stay pressed in, as under a finger.
 enum LaunchOptions {
     /// The argument after `-<name>` on the command line, exactly as given. (UserDefaults would
     /// read it as a property list and drop quotes from it.)

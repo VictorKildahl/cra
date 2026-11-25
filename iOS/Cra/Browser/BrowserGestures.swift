@@ -134,6 +134,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             guard let switcher, switcher.expandedID != nil else { return }
             switcher.expansion = 1 - MobileMotion.switcherProgress(dragUp: up)
             switcher.layoutIfNeeded()
+            layoutChrome()
         case .ended, .cancelled:
             barSwipeOpensRow = false
             let opens = pan.state == .ended && MobileMotion.opensSwitcher(dragUp: up, velocityUp: -pan.velocity(in: view).y)
@@ -242,15 +243,17 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                                       height: statusBar * size.width / max(full.width, 1))
             // Bounds and center, not frame: the card is rotated while dragging, and a frame set
             // through that rotation comes out smaller than the screen.
-            swipeNeighbour?.bounds = CGRect(origin: .zero, size: size)
-            swipeNeighbour?.center = center
-            swipeNeighbour?.layer.cornerRadius = 5 + 17 * p
+            flickCard?.bounds = CGRect(origin: .zero, size: size)
+            flickCard?.center = center
+            flickCard?.layer.cornerRadius = 5 + 17 * p
         }
         switch pan.state {
         case .began:
             // Anything left of an interrupted settle goes before this card does.
             flick.startGesture()
             dropFlickHandoff()
+            swipeNeighbourCard?.removeFromSuperview()
+            swipeNeighbourCard = nil
             // The tab on screen keeps its picture up to date, taken before the card covers it, and
             // the card shows that same picture. Right after a switch the page has not drawn: its
             // picture would be black, so the tab's stored one stands in.
@@ -298,14 +301,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             picture.accessibilityIdentifier = "previous-tab-card"
             // The page's coloured band under the status bar is the app's, not the site's, so the
             // card carries it too: the arriving tab looks as it will when it is on screen.
-            let arriving = page(for: target)
-            let fill = MobileStatusBand.fill(themeColor: Palette.hex(arriving.webView.themeColor, traits: traitCollection),
-                                             underPage: Palette.hex(arriving.webView.underPageBackgroundColor, traits: traitCollection))
-            // A page that has not loaded reports nothing, or black, for the colour over it: take
-            // the band from the tab's own picture instead.
-            let bandColour: UIColor? = arriving.webView.url == nil
-                ? arrivingImage?.topBandColor() ?? fill.flatMap(Palette.color(hex:))
-                : fill.flatMap(Palette.color(hex:)) ?? arrivingImage?.topBandColor()
+            let bandColour = bandColour(for: target)
             flick.arrivingFill = bandColour.flatMap { Palette.hex($0, traits: traitCollection) }
             let band = UIView()
             if let bandColour {
@@ -317,8 +313,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             flick.band = band
             // Above the bar: the card grows from the button itself, not out from behind it.
             view.addSubview(picture)
-            swipeNeighbour?.removeFromSuperview()
-            swipeNeighbour = picture
+            flickCard?.removeFromSuperview()
+            flickCard = picture
             place(0)
             // The page drops into a rounded card as soon as the drag starts, then follows the
             // hand into the corner.
@@ -350,7 +346,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .ended, .cancelled:
             barSwipeTarget = nil
             let generation = flick.generation
-            let picture = swipeNeighbour
+            let picture = flickCard
             let switches = pan.state == .ended && MobileSwipe.switchesToPreviousTab(dragUp: up, velocityUp: -pan.velocity(in: view).y)
             // Its lean's speed carries into the landing: read before the hand's clock stops.
             let spin = flick.swingRate
@@ -419,7 +415,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 } else {
                     picture?.removeFromSuperview()
                 }
-                if self.swipeNeighbour === picture { self.swipeNeighbour = nil }
+                if self.flickCard === picture { self.flickCard = nil }
                 self.flick.band = nil
                 self.flick.arrivingFill = nil
             }
@@ -516,7 +512,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
 
     /// The card hangs from the finger: straight until the hand pulls it sideways.
     private func applyFlickTilt() {
-        guard let card = swipeNeighbour else { return }
+        guard let card = flickCard else { return }
         card.transform = CGAffineTransform(rotationAngle: flick.swing)
         // A leaning card's corners reach above its own top, so its place gives way: no part of
         // it ever crosses the top of the screen.
@@ -597,27 +593,44 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         switch pan.state {
         case .began:
             captureSnapshot()
+            swipeNeighbourCard?.removeFromSuperview()
+            swipeNeighbourCard = nil
         case .changed:
-            if swipeNeighbourStep != step || swipeNeighbour == nil {
-                swipeNeighbour?.removeFromSuperview()
-                swipeNeighbour = nil
+            if swipeNeighbourStep != step || swipeNeighbourCard == nil {
+                swipeNeighbourCard?.removeFromSuperview()
+                swipeNeighbourCard = nil
                 swipeNeighbourStep = step
                 if let tab {
-                    let picture = UIImageView(image: store.snapshot(tab.id))
-                    picture.backgroundColor = .systemBackground
-                    picture.contentMode = .scaleAspectFill
-                    picture.clipsToBounds = true
-                    view.insertSubview(picture, aboveSubview: pageContainer)
-                    swipeNeighbour = picture
+                    let top = pageContentFrame.minY
+                    let card = UIView(frame: view.bounds)
+                    card.backgroundColor = .systemBackground
+                    card.clipsToBounds = true
+                    let content = UIImageView(image: store.snapshot(tab.id))
+                    content.backgroundColor = .systemBackground
+                    content.contentMode = .scaleAspectFill
+                    content.clipsToBounds = true
+                    // The page's content sits below its band, not under it.
+                    content.frame = pageContentFrame
+                    card.addSubview(content)
+                    // The incoming tab already has its band at full height: only the tab row
+                    // animates the band's size.
+                    if let colour = bandColour(for: tab) {
+                        let band = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: top))
+                        band.backgroundColor = colour
+                        band.autoresizingMask = [.flexibleWidth]
+                        card.addSubview(band)
+                    }
+                    view.insertSubview(card, aboveSubview: pageContainer)
+                    swipeNeighbourCard = card
                 }
             }
             pageContainer.transform = CGAffineTransform(translationX: x, y: 0)
-            swipeNeighbour?.frame = view.bounds.offsetBy(dx: x + CGFloat(step) * (width + gap), dy: 0)
+            swipeNeighbourCard?.frame = view.bounds.offsetBy(dx: x + CGFloat(step) * (width + gap), dy: 0)
         case .ended, .cancelled:
             let chosen = pan.state == .ended
                 ? MobileSwipe.tabStep(translation: pan.translation(in: view).x, velocity: pan.velocity(in: view).x, width: width,
                                       hasOlder: neighbour(-1) != nil, hasNewer: neighbour(1) != nil) : 0
-            let picture = swipeNeighbour
+            let picture = swipeNeighbourCard
             let target = chosen == 0 ? nil : neighbour(chosen)
             UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.92, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
                 if target != nil {
@@ -631,12 +644,13 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 if let target {
                     self.store.select(target.id)
                     self.show(target)
+                    self.layoutChrome()
                     self.refreshTabStack()
                     UISelectionFeedbackGenerator().selectionChanged()
                 }
                 self.pageContainer.transform = .identity
                 picture?.removeFromSuperview()
-                if self.swipeNeighbour === picture { self.swipeNeighbour = nil }
+                if self.swipeNeighbourCard === picture { self.swipeNeighbourCard = nil }
             }
         default: break
         }

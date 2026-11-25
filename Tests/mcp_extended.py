@@ -221,7 +221,7 @@ try:
     normal=eventually(lambda: next((t['id'] for t in tabs(client) if t['url']==url+'/normal'),None))
     ready(client,normal)
     baseline=live_count()
-    check('32 tools advertised (history off)',len(client.call('tools/list')['result']['tools'])==32)
+    check('33 tools advertised (history off)',len(client.call('tools/list')['result']['tools'])==33)
     agent=value(client.tool('tab_open',{'url':url+'/agent','windowless':True}))['tabId']
     ready(client,agent)
     eventually(lambda:live_count()==baseline+1)

@@ -6,6 +6,11 @@ protocol WebPageDelegate: AnyObject {
     func webPageDidChange(_ page: WebPage)
     func webPage(_ page: WebPage, didFinishLoading success: Bool)
     func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool)
+    /// Pull to refresh: how far the page is pulled below its top, for the band behind it.
+    func webPage(_ page: WebPage, didPull pull: CGFloat)
+    /// The pull's finger let go: the band goes back to the status bar. `full` says the pull
+    /// reached the refresh line, so the ring leaves with its own turn.
+    func webPageDidEndPull(_ page: WebPage, full: Bool)
     /// A link that asked for a new window.
     func webPage(_ page: WebPage, openInNewTab url: URL)
     /// "Open in Background Tab" on a link: a tab in the row, the page stays on screen (#572).
@@ -33,7 +38,15 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     weak var delegate: WebPageDelegate?
     private var observations: [NSKeyValueObservation] = []
     private var lastOffset: CGFloat = 0
-    private let pullIndicator = UIImageView(image: UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
+    private var pullHaptics = MobilePullHaptics()
+    /// How far the page has been pulled down below its top, from the drag's own translation.
+    private var pull: CGFloat = 0
+    /// Where the drag began, in the window's coordinates: the pull is measured from there, so
+    /// it follows the finger back up by the same amount it came down.
+    private var pullStartTranslation: CGFloat = 0
+    private var isPulling = false
+    /// Pinning the content offset calls this delegate again; this stops the recursion.
+    private var isPinningScroll = false
 
     /// Hosts whose unverifiable certificate the user chose to go on with, for this run of the app.
     static var certificateExceptions = MobileCertificateExceptions()
@@ -106,9 +119,6 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             webView.addGestureRecognizer(press)
         }
         webView.scrollView.delegate = self
-        pullIndicator.alpha = 0
-        pullIndicator.sizeToFit()
-        webView.scrollView.addSubview(pullIndicator)
         let controller = webView.configuration.userContentController
         controller.add(WeakScriptHandler(self), name: "craBlocked")
         controller.addUserScript(WKUserScript(source: Self.failedRequestScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
@@ -336,14 +346,49 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     // MARK: Scrolling
 
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        // Each pull starts from silence, and warming the generator keeps the first tick prompt.
+        pull = 0
+        isPulling = false
+        pullHaptics.reset()
+        PressHaptics.preparePull()
+    }
+
+    /// The drag's vertical translation in the window, which does not move when the page's frame
+    /// does: the pull reads the finger exactly, both down and back up.
+    private func dragTranslation(of scrollView: UIScrollView) -> CGFloat {
+        scrollView.panGestureRecognizer.translation(in: webView.window ?? webView).y
+    }
+
+    /// Puts the content back at its top, where the page's frame begins: a pull moves the frame,
+    /// not the content, so the scroll view is never left scrolled.
+    private func pinToTop(_ scrollView: UIScrollView) {
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
+                                    animated: false)
+    }
+
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard isPulling else { return }
+        // A slow pull's last scroll event can be short of where the finger actually let go.
+        pull = max(0, max(pull, dragTranslation(of: scrollView) - pullStartTranslation))
+        // Put the ring at the release's pull before it goes back, so a full one bumps.
+        delegate?.webPage(self, didPull: pull)
         // Pull to refresh acts on release: dragged back up first, nothing happens.
-        let pull = -(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
-        if MobileSwipe.refreshes(pullAtRelease: pull) {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        let full = MobileSwipe.refreshes(pullAtRelease: pull)
+        if full {
+            PressHaptics.pullRefresh()
             webView.reload()
         }
-        pullIndicator.alpha = 0
+        // The line's tick may not have played before a slow pull's finger lifted; play it last.
+        if let tick = pullHaptics.tickOnRelease(pull: pull) {
+            PressHaptics.pullDetent(tick)
+        }
+        // The page's content stays at its top; the page's frame is what moved, and it goes back.
+        pinToTop(scrollView)
+        pull = 0
+        isPulling = false
+        pullHaptics.reset()
+        delegate?.webPageDidEndPull(self, full: full)
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -351,19 +396,45 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         if restoresAtTop {
             restoresAtTop = false
             if offset > 0.5, offset < CGFloat(PageHistory.restoreAtTopBelow) {
-                scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
-                                            animated: false)
+                pinToTop(scrollView)
             }
             return
         }
-        if scrollView.isTracking, offset < 0 {
-            // The reload arrow turns as the page is pulled and is whole once letting go reloads.
-            let progress = min(1, -offset / MobileSwipe.pullToRefreshDistance)
-            pullIndicator.alpha = progress
-            pullIndicator.transform = CGAffineTransform(rotationAngle: progress * .pi * 1.5)
-            pullIndicator.tintColor = progress >= 1 ? .label : .secondaryLabel
-            // Halfway down the gap the pull opens above the page.
-            pullIndicator.center = CGPoint(x: scrollView.bounds.midX, y: offset / 2)
+        // A downward drag at the top moves the page's frame, not its content: the scroll view's
+        // own downward movement is gathered, and its content is pinned back at the top.
+        if scrollView.isTracking, isPulling || offset < -0.5 {
+            if !isPulling {
+                // The pull begins where the page reaches its top, so an earlier scroll up the
+                // page does not have to be retraced, and the overshoot that brought it there
+                // already counts as pull.
+                pullStartTranslation = dragTranslation(of: scrollView) + offset
+            }
+            isPulling = true
+            lastOffset = 0
+            guard !isPinningScroll else { return }
+            let translation = dragTranslation(of: scrollView)
+            let pull = max(0, translation - pullStartTranslation)
+            if MobileSwipe.pullHandsOff(pull: pull) {
+                // Pushing back up past the top hands the rest of the drag to the page's own
+                // scrolling, so it continues into a normal scroll without a second gesture.
+                isPulling = false
+                self.pull = 0
+                pullHaptics.reset()
+                pinToTop(scrollView)
+                delegate?.webPageDidEndPull(self, full: false)
+                return
+            }
+            self.pull = pull
+            if abs(offset) > 0.01 {
+                isPinningScroll = true
+                pinToTop(scrollView)
+                isPinningScroll = false
+            }
+            if let tick = pullHaptics.tick(pull: pull) {
+                PressHaptics.pullDetent(tick)
+            }
+            delegate?.webPage(self, didPull: pull)
+            return
         }
         let delta = offset - lastOffset
         lastOffset = offset

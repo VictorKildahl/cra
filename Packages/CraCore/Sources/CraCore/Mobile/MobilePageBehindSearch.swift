@@ -7,8 +7,8 @@ import Foundation
 public enum MobilePageBehindSearch {
     /// The card's distance from each side of the screen.
     public static let sideInset: CGFloat = 10
-    /// Nearly the device's own corner, less the card's inset from the screen's edges.
-    public static let cornerRadius: CGFloat = 44
+    /// The card's rounded top, half the device's own corner.
+    public static let cornerRadius: CGFloat = 22
     /// How dark the page gets: black at 0.2 over it, which turns a white page #cccccc as in the
     /// TidBITS screenshot.
     public static let dim: CGFloat = 0.2
