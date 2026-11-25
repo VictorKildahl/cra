@@ -1,0 +1,23 @@
+# promise: #807
+# A click outside the ⌘T bar right after it opens closes it, as in Arc. Cra took the keys back from anything
+# in the bar's first 0.6 s (meant for a page made behind it taking them), so a quick click was undone and the
+# bar stayed open (GitHub #807, joodaloop, 0.1.56; likely also #722's one-off). The click here is real, through
+# the window server, and the log says it came inside those 0.6 s.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=600 stalls50=10
+pace 0.05
+cra://open?url=${PAGE}?n=quick-click
+wait 2
+cra://debug?mainFrame=100,100,1000,700
+wait 1
+cra://debug?activate=1
+wait 1
+click page-top
+wait 1
+cra://commandbar
+click sidebar-empty
+expect-log command bar lost the keys 0\.[0-5][0-9] s after opening to a click
+wait 1
+cra://debug?commandBarRows=after
+expect-log Cra command bar rows after: open=0

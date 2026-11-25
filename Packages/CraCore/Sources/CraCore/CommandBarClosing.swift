@@ -22,6 +22,17 @@ public enum CommandBarClosing: Equatable, Sendable {
         holder != .none
     }
 
+    /// How long after opening the bar takes the keys back when they go: a page made behind it (⌘Return's
+    /// background tab, the page coming up as ⌘T opens) takes them on its own.
+    public static let keysGraceAfterOpening: Double = 0.6
+
+    /// Whether the bar's panel, having lost the keys `secondsOpen` after it opened, takes them back
+    /// instead of closing. Only while it is opening, and never from a click (GitHub #807): a click
+    /// outside the bar closes it whenever it comes, as in Arc.
+    public static func takesKeysBack(secondsOpen: Double, byClick: Bool) -> Bool {
+        !byClick && secondsOpen < keysGraceAfterOpening
+    }
+
     /// True when the bar's window takes the keys back and focuses its page. Never from another
     /// window that took them (GitHub #429): Arc leaves them where the click put them.
     public var barsWindowTakesKeys: Bool {

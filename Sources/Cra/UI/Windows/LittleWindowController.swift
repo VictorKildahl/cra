@@ -2130,7 +2130,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             }
             return
         }
-        if Date().timeIntervalSince(commandBarOpenedAt) < 0.6 {
+        // While opening it takes the keys back, not from a click (#807): a click closes it.
+        let click = NSApp.currentEvent.map { [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains($0.type) && $0.window !== commandPanel } ?? false
+        if CommandBarClosing.takesKeysBack(secondsOpen: Date().timeIntervalSince(commandBarOpenedAt), byClick: click) {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.commandBar.isOpen else { return }
                 self.commandPanel.makeKeyAndOrderFront(nil)

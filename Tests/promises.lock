@@ -1795,6 +1795,8 @@
 #806   Packages/CraCore/Tests/CraCoreTests/ReopenClosedTabTests.swift::undoReopensWhatClosedAfterTheRemovalFirst  65638b964046
 #806   Tests/Scenarios/favorite-remove-undo.scenario  704d6d22fa7c
 #806   Tests/StoreTests.swift::removedFavoriteComesBackOnUndo  c33625f266f6
+#807   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::aClickRightAfterOpeningClosesTheBar  d2c109866e10
+#807   Tests/Scenarios/command-bar-quick-click.scenario  a1ae474d93fd
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

@@ -6178,7 +6178,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             leaveIfCovered()
         }
         guard (notification.object as? NSWindow) === commandPanel, commandBar.isOpen else { return }
-        if Date().timeIntervalSince(commandBarOpenedAt) < 0.6 {
+        // A page made behind the bar takes the keys while it opens: it takes them back. A click took them
+        // (#807): that closes it, however soon after ⌘T.
+        let click = NSApp.currentEvent.map { [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains($0.type) && $0.window !== commandPanel } ?? false
+        let open = Date().timeIntervalSince(commandBarOpenedAt)
+        CraLog.note(String(format: "command bar lost the keys %.2f s after opening%@", open, click ? " to a click" : ""))
+        if CommandBarClosing.takesKeysBack(secondsOpen: open, byClick: click) {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.commandBar.isOpen else { return }
                 self.commandPanel.makeKeyAndOrderFront(nil)

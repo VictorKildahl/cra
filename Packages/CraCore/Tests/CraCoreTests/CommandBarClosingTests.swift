@@ -34,4 +34,16 @@ struct CommandBarClosingTests {
         #expect(CommandBarClosing.lostKeys(to: .barsWindow).barsWindowTakesKeys)
         #expect(CommandBarClosing.lostKeys(to: .none).barsWindowTakesKeys)
     }
+
+    /// GitHub #807: a click outside the bar in the first 0.6 s after ⌘T didn't close it. The bar took the
+    /// keys back from anything in that time, meant for the page a new tab makes taking them on its own.
+    /// A click is the person's: it closes the bar whenever it comes.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/807"))
+    func aClickRightAfterOpeningClosesTheBar() {
+        #expect(!CommandBarClosing.takesKeysBack(secondsOpen: 0.2, byClick: true))
+        #expect(!CommandBarClosing.takesKeysBack(secondsOpen: 0.59, byClick: true))
+        // The page taking them while the bar opens (no click): the bar takes them back, as before.
+        #expect(CommandBarClosing.takesKeysBack(secondsOpen: 0.2, byClick: false))
+        #expect(!CommandBarClosing.takesKeysBack(secondsOpen: 0.7, byClick: false))
+    }
 }
