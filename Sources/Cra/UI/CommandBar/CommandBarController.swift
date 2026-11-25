@@ -103,7 +103,7 @@ final class CommandBarController {
         selectedIndex = 0
         previewText = nil
         noticePressed = false
-        result = listed(engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown))
+        result = listed(engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown, folderSpace: window == .browser ? focusedSpaceID : nil))
         isOpen = true
         if onInstantLinks != nil { InstantLinksService.shared.prewarm(store) }
     }
@@ -151,7 +151,7 @@ final class CommandBarController {
             guard let self, self.isOpen, self.query == typed else { return }
             self.relist()
         }
-        result = listed(engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown))
+        result = listed(engine.suggestions(for: newQuery, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown, folderSpace: window == .browser ? focusedSpaceID : nil))
         if !allowCompletion { result.inlineCompletion = nil }
         selectedIndex = 0
         previewText = nil
@@ -161,7 +161,7 @@ final class CommandBarController {
     private func relist() {
         guard scope == nil else { return }
         let selectedID = result.items.indices.contains(selectedIndex) ? result.items[selectedIndex].id : nil
-        result = listed(engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown))
+        result = listed(engine.suggestions(for: query, mode: mode, currentTabID: store.selectedTabID, spaceShown: spaceShown, folderSpace: window == .browser ? focusedSpaceID : nil))
         if !allowCompletion { result.inlineCompletion = nil }
         if let i = result.items.firstIndex(where: { $0.id == selectedID }) {
             selectedIndex = i
@@ -188,7 +188,7 @@ final class CommandBarController {
     private func fillText(for s: Suggestion) -> String {
         if s.id == "typed" { return query }
         switch s.kind {
-        case .search, .command, .switchSpace, .moveToSpace, .moveToFolder:
+        case .search, .command, .switchSpace, .moveToSpace, .moveToFolder, .revealFolder:
             return s.title
         case .switchToTab, .archived, .history, .navigate, .topDomain:
             guard let url = s.url else { return s.title }
