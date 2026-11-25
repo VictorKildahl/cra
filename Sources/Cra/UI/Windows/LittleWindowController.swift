@@ -244,6 +244,8 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The page's DevTools, docked in the page area as the browser window docks them in a pane
     /// (#348). ⌥⌘I opens and closes them (DevToolsToggle).
     private var devTools = DevToolsToggle()
+    /// What the frontend is asked once it is up, and when it takes the keys (CraCore DevToolsFrontendCalls).
+    private var devToolsCalls = DevToolsFrontendCalls()
     /// Chromium's window for the DevTools frontend, while they are open.
     private var devToolsView: NSView?
     /// The frontend is docked, Chrome's default; false once "Undock into separate window" is picked.
@@ -889,7 +891,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                 + " shown=\(shown ? 1 : 0)"
                 + String(format: " size=%.0fx%.0f", frame.width, frame.height)
         }
+        // focus=devtools: the docked frontend is this window's first responder; panel=: the panel it last said it shows.
+        let responder = window.firstResponder as? NSView
+        let holder = EmbeddedDevTools.holder(of: browser?.devToolsWindow).flatMap { $0.window === window ? $0 : nil }
+        let focus = holder.flatMap { h in responder.map { $0.isDescendant(of: h) } } == true ? "devtools"
+            : browser.flatMap { b in responder.map { $0.isDescendant(of: b.containerView) } } == true ? "page" : "other"
         return out + " pageFills=\(same(page, area) ? 1 : 0)" + String(format: " area=%.0fx%.0f", area.width, area.height)
+            + " focus=\(focus) panel=\(devTools.panel ?? "-")"
     }
 
     /// cra://debug?littleCard=<step>: `go:<typed>` is Return on what was typed in the card's bar,
@@ -2330,11 +2338,20 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             b.showDevTools()
             return
         }
+        let open = devTools.state == .open
         let (effect, frontend) = devTools.run(command)
         // A press made while DevTools close is done when they reopen (DevToolsToggle.didClose),
         // one made while they open once the frontend is up.
-        b.devToolsAction = frontend
+        let (engineAction, now) = devToolsCalls.command(frontend, shows: effect == .show || effect == .frontend, frontendUp: open)
+        b.devToolsAction = engineAction
         perform(effect)
+        take(now)
+    }
+
+    /// Runs a DevToolsFrontendCalls step in the page's frontend.
+    private func take(_ step: DevToolsFrontendCalls.Step) {
+        if let script = step.script { browser?.executeJavaScript(script, inDevTools: true) }
+        if step.takesKeys, let window, let dev = devToolsView?.window { EmbeddedDevTools.giveKeys(to: dev, in: window) }
     }
 
     private func perform(_ effect: DevToolsToggle.Effect) {
@@ -2389,7 +2406,12 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     func browser(_ browser: CraBrowser, devToolsShowsPanel panel: String) {
-        if browser === self.browser { devTools.didShowPanel(panel) }
+        guard browser === self.browser else { return }
+        let first = devTools.panel == nil
+        devTools.didShowPanel(panel)
+        // A closing frontend's report is dropped (DevToolsToggle.didShowPanel).
+        guard devTools.state == .open || devTools.state == .opening else { return }
+        take(devToolsCalls.frontendShowsPanel(first: first))
     }
 
     /// Hangs the DevTools window on this one over the page area, under the page's own window, or,

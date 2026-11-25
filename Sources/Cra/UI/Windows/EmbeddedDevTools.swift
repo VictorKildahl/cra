@@ -81,6 +81,17 @@ enum EmbeddedDevTools {
     /// The holder in `area`, if a frontend is in it.
     static func holder(in area: NSView) -> Holder? { area.subviews.lazy.compactMap { $0 as? Holder }.first }
 
+    /// The keys to the frontend of DevTools window `w`, as Chrome gives them to DevTools it shows
+    /// (DevToolsFrontendCalls): docked in a card of `window`, it becomes that window's first responder; undocked into
+    /// a titled window of its own, that window becomes key.
+    static func giveKeys(to w: NSWindow, in window: NSWindow) {
+        if let holder = holder(of: w), holder.window === window {
+            if let render = EmbeddedPages.renderView(in: holder) { window.makeFirstResponder(render) }
+        } else if w.isVisible, w.styleMask.contains(.titled) {
+            w.makeKeyAndOrderFront(nil)
+        }
+    }
+
     /// For cra://debug?devToolsShown: whether the pointer reaches the docked frontend at its toolbar, its middle and its
     /// splitter (2 pt from the page), as Chromium decides it: a Chromium view takes a click or a mouse move only when the
     /// window's hit test at that point lands on that view (-[RenderWidgetHostViewCocoa shouldIgnoreMouseEvent:]). One

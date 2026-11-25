@@ -142,6 +142,11 @@ open class CraBrowser {
     /// Scripts run in the page's own world (a Boost's JavaScript), in order.
     public private(set) var scripts: [String] = []
     public func executeJavaScript(_ script: String) { scripts.append(script) }
+    /// Scripts run in the page's DevTools frontend, in order.
+    public private(set) var devToolsScripts: [String] = []
+    public func executeJavaScript(_ script: String, inDevTools: Bool) {
+        if inDevTools { devToolsScripts.append(script) } else { scripts.append(script) }
+    }
     public private(set) var lastIsolatedParams = ""
     /// Recorded as "<world>:Runtime.evaluate".
     public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {
