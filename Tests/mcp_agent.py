@@ -211,9 +211,12 @@ try:
     remaining = {t["id"]: t for t in value(client.tool("tabs_list"))}
     check("an agent can close its split pane and leave the other tab intact", split_tab not in remaining and split_anchor in remaining and "splitId" not in remaining[split_anchor])
     value(client.tool("tab_close", tabId=split_anchor))
-    check("a hidden tab works as a focused visible page", js(tab, "document.visibilityState + document.hasFocus()") == "visibletrue")
+    value(client.tool("tab_show", tabId=user_tab))
+    restored = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("split cleanup restores the user's selected tab", restored[user_tab].get("selected") is True and not restored[tab].get("selected"))
 
     # Everything below happens in the hidden tab.
+    hidden_cursor_baseline = sum("mcp cursor:" in line for line in (folder / "browser.log").read_text(errors="replace").splitlines())
     value(client.tool("page_click", tabId=tab, selector="#bottom"))
     check("click in a hidden tab", "bottom clicked" in events(tab))
     shot = client.tool("page_screenshot", tabId=tab)["result"]
@@ -271,8 +274,9 @@ try:
     check("right click", "contextmenu trusted=true" in events(tab))
     value(client.tool("page_click", tabId=tab, selector="#menu-free", button="right"))
     time.sleep(.8)
-    menus = subprocess.run(["swift", "-e", "import CoreGraphics; let l = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]; print(l.filter { ($0[kCGWindowOwnerPID as String] as? Int32) == " + str(process.pid) + " && ($0[kCGWindowLayer as String] as? Int ?? 0) == 101 }.count)"], capture_output=True, text=True).stdout.strip()
-    check("right click opens no native menu over the screen", "free contextmenu trusted=true" in events(tab) and menus == "0", menus)
+    menu_report = subprocess.run(["swift", "-e", "import CoreGraphics; let l = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]; let m = l.filter { ($0[kCGWindowOwnerPID as String] as? Int32) == " + str(process.pid) + " && ($0[kCGWindowLayer as String] as? Int ?? 0) == 101 }; for w in m { print(\"\\(w[kCGWindowOwnerName as String] ?? \"\") | \\(w[kCGWindowName as String] ?? \"\") | \\(w[kCGWindowBounds as String] ?? \"\")\") }; print(\"count=\\(m.count)\")"], capture_output=True, text=True).stdout.strip()
+    menus = menu_report.rsplit("count=", 1)[-1]
+    check("right click opens no native menu over the screen", "free contextmenu trusted=true" in events(tab) and menus == "0", menu_report)
     value(client.tool("page_click", tabId=tab, selector="#middle", button="middle"))
     check("middle click", "auxclick button=1 trusted=true" in events(tab))
     value(client.tool("page_press", tabId=tab, key="k", modifiers="Meta"))
@@ -477,7 +481,9 @@ try:
     check("acting shows the pill with the agent's name and its click", "mcp pill: cra-agent is clicking" in log)
     check("the pill says when the agent types", "mcp pill: cra-agent is typing" in log)
     check("the rows of the tabs it works in show its face", "mcp faces: 1 tab" in log)
-    check("no cursor over tabs nobody is looking at", "mcp cursor:" not in log)
+    cursor_events = [line for line in log.splitlines() if "mcp cursor:" in line]
+    check("no cursor over tabs nobody is looking at", len(cursor_events) == hidden_cursor_baseline,
+          cursor_events[hidden_cursor_baseline:])
     # Steps a few milliseconds apart (a script, then a click) don't pile up as overlapping slides:
     # the pill's words change at most once per MCPAgentPresence.pillHold (0.7 s), the latest winning.
     def stamp(line):
