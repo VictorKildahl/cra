@@ -26,6 +26,8 @@ enum ChromiumPageFocus {
         // Cra can focus a page while its Chromium host cannot become key, or before
         // AppKit delivers its activation. Extensions must see that page as current now.
         window.delegate?.windowDidBecomeKey?(Notification(name: NSWindow.didBecomeKeyNotification, object: window))
+        // Chrome orders that window's children now, and takes an extension popup's bubble back from Cra's frame (#786).
+        NotificationCenter.default.post(name: ExtensionPopupWindow.chromeFocusMayHaveChanged, object: window)
     }
 
     static func blur(_ window: NSWindow) {
@@ -34,5 +36,6 @@ enum ChromiumPageFocus {
         defer { changingFocus = false }
         focusedHost = nil
         window.delegate?.windowDidResignKey?(Notification(name: NSWindow.didResignKeyNotification, object: window))
+        NotificationCenter.default.post(name: ExtensionPopupWindow.chromeFocusMayHaveChanged, object: window)
     }
 }

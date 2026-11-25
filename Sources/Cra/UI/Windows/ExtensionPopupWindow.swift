@@ -25,6 +25,10 @@ final class ExtensionPopupWindow: NSWindow {
     private static let testFile = ProcessInfo.processInfo.environment["CRA_DATA_DIR"]
         .map { URL(fileURLWithPath: $0).appendingPathComponent("extension-popup-offset.txt") }
 
+    /// Posted when Cra told a Chrome window it gained or lost focus (ChromiumPageFocus): Chrome then orders that
+    /// window's children, and takes a popup's bubble back from its frame (#786).
+    static let chromeFocusMayHaveChanged = Notification.Name("craChromeFocusMayHaveChanged")
+
     private static var current: ExtensionPopupWindow?
     /// When the mouse-down that closed the last popup happened (event time), if one did.
     private static var closingClick: TimeInterval?
@@ -41,6 +45,8 @@ final class ExtensionPopupWindow: NSWindow {
     static var pointer: () -> NSPoint = { NSEvent.mouseLocation }
     static var leftButtonDown: () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }
     private var observers: [NSObjectProtocol] = []
+    /// The Space-change observer, on the workspace's own notification center.
+    private var workspaceObserver: NSObjectProtocol?
     private var clickMonitor: Any?
     private var placing = false
     /// A title-bar drag is under way (willMove is only posted for those, not when the main
@@ -130,8 +136,24 @@ final class ExtensionPopupWindow: NSWindow {
             MainActor.assumeIsolated { w?.mouseDown(elsewhere: event) }
             return event
         }
+        // Chrome takes its bubble back onto its own window whenever that window's focus, visibility or Space changes
+        // (NativeWidgetNSWindowBridge::OrderChildren re-adds every child whose parent isn't it), and the bubble then
+        // stops moving with the frame (#786). Take it back once Chrome is done.
+        let center = NotificationCenter.default
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+                     NSWindow.didChangeOcclusionStateNotification, Self.chromeFocusMayHaveChanged] {
+            w.observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak w] _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { w?.keepBubble() } }
+            })
+        }
+        w.workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
+                                                                             object: nil, queue: .main) { [weak w] _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { w?.keepBubble() } }
+        }
         w.observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willMoveNotification, object: w, queue: .main) { [weak w] _ in
             MainActor.assumeIsolated {
+                // Whatever moves the frame carries the bubble only while it is the frame's child.
+                w?.keepBubble()
                 // Only the user's drag of this frame's title bar (AppKit says willMove on its first
                 // leftMouseDragged) starts one: not a move of the frame for any other reason (#634).
                 guard let w, w.isUserGesture(NSApp.currentEvent, [.leftMouseDown, .leftMouseDragged]) else { return }
@@ -145,10 +167,28 @@ final class ExtensionPopupWindow: NSWindow {
         })
     }
 
+    /// Chrome's bubble back in this frame if Chrome took it onto its own window (#786): there it no longer moved
+    /// with the frame, so a drag left the page behind or let it trail, and a page outside its frame missed clicks.
+    private var bubbleTakenBack = 0
+    private func keepBubble() {
+        guard let bubble, Self.current === self, isVisible, bubble.parent !== self else { return }
+        bubble.parent?.removeChildWindow(bubble)
+        addChildWindow(bubble, ordered: .above)
+        bubbleTakenBack += 1
+        HitchMonitor.mark("extension popup: bubble taken back from Chrome's window (\(bubbleTakenBack))")
+    }
+
+    /// The press that may start a title-bar drag: AppKit carries the bubble along only while it is the frame's child.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown { keepBubble() }
+        super.sendEvent(event)
+    }
+
     /// Sizes the frame to the popup page and puts the bubble in it (Chrome re-anchors the
     /// bubble to its hidden toolbar whenever the page resizes).
     private func layout() {
         guard let bubble, !placing else { return }
+        keepBubble()
         // While the title bar is dragged AppKit carries the bubble along; afterwards the
         // frame stays where it was dropped.
         if dragging {
@@ -240,6 +280,8 @@ final class ExtensionPopupWindow: NSWindow {
         }
         if event?.type == .leftMouseUp || (!gesture && !held) { dragging = false }
         keepDrop()
+        // The drop: a bubble Chrome took during the drag stayed where it was; it goes back into the frame (#786).
+        if !dragging, bubble?.parent !== self { layout() }
     }
 
     /// The frame moved by as much as the pointer since the drag began.
@@ -357,6 +399,8 @@ final class ExtensionPopupWindow: NSWindow {
         if let e = NSApp.currentEvent, e.type == .leftMouseDown { Self.closingClick = e.timestamp }
         for o in observers { NotificationCenter.default.removeObserver(o) }
         observers = []
+        if let workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver) }
+        workspaceObserver = nil
         if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
         clickMonitor = nil
         if let bubble {
