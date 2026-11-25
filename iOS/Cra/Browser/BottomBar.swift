@@ -24,6 +24,9 @@ final class BottomBar: UIView {
     private let hairline = UIView()
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
+    /// Whether the slab was last hidden for the tab row or the home screen, rather than faded by
+    /// the search sheet: coming back from those, it has to appear whole.
+    private var wasFloating = false
     var ringsMenu = false {
         didSet { applyMode() }
     }
@@ -98,7 +101,19 @@ final class BottomBar: UIView {
         // empty home screen's bar floats the same way. The blur goes with the bar, not the fade:
         // its strip is all that is left of the bar when it is closed.
         let floats = tabs || overBackdrop
-        blur.alpha = floats ? 0 : visible
+        let slabAlpha = floats ? 0 : visible
+        if floats != wasFloating, !floats {
+            // The slab comes back with the page, whole: animating its opacity up from the row's
+            // no-slab state leaves the material see-through for the length of the close.
+            blur.layer.removeAnimation(forKey: "opacity")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            blur.layer.opacity = Float(slabAlpha)
+            CATransaction.commit()
+        } else {
+            blur.alpha = slabAlpha
+        }
+        wasFloating = floats
         pill.backgroundColor = tabs ? Palette.switcherPillFill : overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         menuButton.backgroundColor = overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         pill.setSymbol("plus", pointSize: tabs ? 20.5 : 16, weight: .semibold)

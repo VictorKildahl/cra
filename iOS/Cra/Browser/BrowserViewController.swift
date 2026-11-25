@@ -35,6 +35,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     let dotField = DotFieldView()
     let searchHint = SearchHintView()
     let pageContainer = PassthroughView()
+    /// A solid page-coloured floor under a page while it slides across: a gap or a fade must show
+    /// the page's own colour, not the app's backdrop, through the bar's material.
+    let swapBackdrop = UIView()
     /// Darkens the page while it sits pushed back behind the search sheet.
     let pageDim = UIView()
     /// The band behind the status bar over a page (updateStatusBand), and the colour it shows.
@@ -265,6 +268,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         view.addSubview(logo)
         view.addSubview(searchHint)
         view.addSubview(pageContainer)
+        swapBackdrop.isHidden = true
+        swapBackdrop.isUserInteractionEnabled = false
+        view.insertSubview(swapBackdrop, belowSubview: pageContainer)
         pageDim.backgroundColor = .black
         pageDim.alpha = 0
         pageDim.isUserInteractionEnabled = false
@@ -683,6 +689,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             scroll.contentInset = insets
         }
         scroll.verticalScrollIndicatorInsets = .zero
+    }
+
+    /// Lays a page-coloured floor under a page that is sliding across, so the bar's material has
+    /// the page behind it in the gap rather than the app's own backdrop.
+    func showSwapBackdrop(for page: WebPage?) {
+        swapBackdrop.frame = view.bounds
+        swapBackdrop.backgroundColor = page?.webView.underPageBackgroundColor ?? .systemBackground
+        swapBackdrop.isHidden = false
+    }
+
+    func hideSwapBackdrop() {
+        swapBackdrop.isHidden = true
     }
 
     /// Walks the bar to its closed or open end from wherever it is, moving the page's bottom edge
@@ -1215,6 +1233,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The tab brings its band with it: the status bar's text takes its colour the moment it
         // is picked, before its page has loaded and reported its own.
         shownBandFill = bandColour(for: tab).flatMap { Palette.hex($0, traits: traitCollection) }
+        // The page's own background goes behind the chrome at once, so a page that slides or
+        // fades in does not leave the bar looking through to the app's background.
+        pageContainer.backgroundColor = page.webView.underPageBackgroundColor
         // Every tab shows with its bar: the page's frame is the open one.
         showBarAtOnce()
         // The page's container starts at the status band's bottom; it never sits under the band,

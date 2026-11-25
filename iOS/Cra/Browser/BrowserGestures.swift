@@ -593,6 +593,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         switch pan.state {
         case .began:
             captureSnapshot()
+            showSwapBackdrop(for: shownPage)
             swipeNeighbourCard?.removeFromSuperview()
             swipeNeighbourCard = nil
         case .changed:
@@ -602,11 +603,12 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 swipeNeighbourStep = step
                 if let tab {
                     let top = pageContentFrame.minY
+                    let background = store.existingPage(tab.id)?.webView.underPageBackgroundColor ?? .systemBackground
                     let card = UIView(frame: view.bounds)
-                    card.backgroundColor = .systemBackground
+                    card.backgroundColor = background
                     card.clipsToBounds = true
                     let content = UIImageView(image: store.snapshot(tab.id))
-                    content.backgroundColor = .systemBackground
+                    content.backgroundColor = background
                     content.contentMode = .scaleAspectFill
                     content.clipsToBounds = true
                     // The page's content sits below its band and runs on under the bar, as the
@@ -653,6 +655,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 self.pageContainer.transform = .identity
                 picture?.removeFromSuperview()
                 if self.swipeNeighbourCard === picture { self.swipeNeighbourCard = nil }
+                self.hideSwapBackdrop()
             }
         default: break
         }
@@ -709,11 +712,14 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // Follows the finger where the swipe leads somewhere, and drags its feet where it doesn't.
             let leads = outcome(x > 0 ? width : -width, 0) != .none
             pageContainer.transform = CGAffineTransform(translationX: leads ? x : x / 4, y: 0)
+            if pageContainer.transform != .identity { showSwapBackdrop(for: page) }
         case .ended, .cancelled:
             let decided = pan.state == .ended ? outcome(x, pan.velocity(in: view).x) : .none
             guard decided != .none else {
                 UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: []) {
                     self.pageContainer.transform = .identity
+                } completion: { _ in
+                    self.hideSwapBackdrop()
                 }
                 return
             }
@@ -758,6 +764,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut]) {
             self.pageContainer.transform = .identity
             self.pageContainer.alpha = 1
+        } completion: { _ in
+            self.hideSwapBackdrop()
         }
     }
 
