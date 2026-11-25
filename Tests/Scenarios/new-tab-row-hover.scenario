@@ -1,0 +1,21 @@
+# promise: #788
+# The sidebar's "+ New Tab" row under the pointer: an ordinary hovered row, a shade darker with its muted ink,
+# as in Arc 1.174.1. Cra painted it white with the primary ink, the selected tab's look, which belongs to the row
+# only while ⌘T's bar is open (#47). Hovered as if the pointer were on it, then with the bar open.
+budget rss=600 stalls50=10
+cra://debug?windowSize=1280x800
+cra://import?source=arc&archive=0&settings=0
+wait 2
+cra://action/space2
+wait 2
+cra://debug?newTabRow=rest
+expect-log new tab row rest: fill=clear ink=secondary lifted=0 hovered=0
+cra://debug?hover=NewTabRowView
+wait 1
+cra://debug?newTabRow=hovered
+expect-log new tab row hovered: fill=hover ink=secondary lifted=0 hovered=1
+cra://commandbar
+wait 1
+cra://debug?newTabRow=bar
+expect-log new tab row bar: fill=selected ink=primary lifted=1
+cra://dismiss

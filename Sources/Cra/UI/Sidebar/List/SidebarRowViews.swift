@@ -2473,8 +2473,22 @@ final class NewTabRowView: SidebarRowView {
         refreshBackground()
     }
 
+    /// Hovered, an ordinary hovered row with its muted ink; the selected look only while ⌘T's bar is open
+    /// (CraCore NewTabRowLook, #788).
+    private var look: NewTabRowLook { NewTabRowLook(hovered: isHovered, barOpen: active) }
+
+    /// cra://debug?newTabRow (#788): the palette slots the row draws with now, "fill=<selected|hover|clear|other>
+    /// ink=<primary|secondary|other> lifted=<0|1> hovered=<0|1>".
+    var debugLook: String {
+        let fill = baseFill()
+        let f = fill == colors.selectedFill ? "selected" : fill == colors.hoverFill ? "hover" : fill == .clear ? "clear" : "other"
+        let ink = label.textColor
+        let i = ink == colors.textPrimary ? "primary" : ink == colors.textSecondary ? "secondary" : "other"
+        return "fill=\(f) ink=\(i) lifted=\(look.lifted ? 1 : 0) hovered=\(isHovered ? 1 : 0)"
+    }
+
     private func refreshColors() {
-        let c = isHovered || active ? colors.textPrimary : colors.textSecondary
+        let c = look.ink == .primary ? colors.textPrimary : colors.textSecondary
         plus.contentTintColor = c
         label.textColor = c
         preview.textColor = colors.textTertiary
@@ -2485,11 +2499,17 @@ final class NewTabRowView: SidebarRowView {
         refreshColors()
     }
 
-    override func baseFill() -> NSColor { isHovered || active ? colors.selectedFill : .clear }
+    override func baseFill() -> NSColor {
+        switch look.fill {
+        case .selected: return colors.selectedFill
+        case .hover: return colors.hoverFill
+        case .none: return .clear
+        }
+    }
 
     override func refreshBackground() {
         super.refreshBackground()
-        setLifted(active)
+        setLifted(look.lifted)
     }
 
     override func hoverChanged() {

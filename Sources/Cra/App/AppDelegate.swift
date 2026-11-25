@@ -1782,6 +1782,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             if let v = dict["fullscreen"], let w = main.window, (v == "1") != w.styleMask.contains(.fullScreen) { w.toggleFullScreen(nil); return }
             if let spec = dict["snapshot"], let out = dict["out"] { ViewSnapshot.write(spec, in: main.window, to: out); return }
+            // newTabRow=<label> (#788): "new tab row <label>: fill=… ink=… lifted=… hovered=…", how the sidebar's New Tab
+            // row draws now (NewTabRowView.debugLook).
+            if let label = dict["newTabRow"] {
+                let row = ViewSnapshot.find("NewTabRowView", in: main.window) as? NewTabRowView
+                CraLog.note("new tab row \(label): \(row?.debugLook ?? "none")")
+                return
+            }
             // hover=TabRowView,1: that sidebar row hovered as if the pointer were on it (snapshots of
             // hover-only controls, #243) until the pointer moves or the sidebar changes. The URL pill
             // and favorite tiles take it too (#293), and the space dock's cells (#252).
