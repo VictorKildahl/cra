@@ -8,9 +8,11 @@
 
 #include <string>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 
 namespace content {
@@ -18,7 +20,17 @@ class DevToolsAgentHost;
 class WebContents;
 }  // namespace content
 
+class Profile;
+
 namespace cra {
+
+// Installs a Chrome Web Store item in `profile` as the store's "Add to Chrome" does, as Cra.installFromWebStore
+// does for a page's profile (GitHub #203): `manifest` is the copy the person has, whose permissions the store's may
+// not exceed. `done` gets an empty error once it is installed, or was already.
+void InstallFromWebStore(Profile* profile,
+                         const std::string& id,
+                         const base::DictValue& manifest,
+                         base::OnceCallback<void(std::string error)> done);
 
 // Result JSON (the reply's "result" object) or error JSON (its "error" object), on the main queue.
 using ProtocolReply = void (^)(NSString* result, NSString* error);

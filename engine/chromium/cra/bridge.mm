@@ -21,6 +21,7 @@
 #include "cra/downloads.h"
 #include "cra/fetch.h"
 #include "cra/history.h"
+#include "cra/managed_extensions.h"
 #include "cra/page_protocol.h"
 #include "cra/permission_prompt.h"
 #include "cra/profile_prefs.h"
@@ -41,6 +42,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
@@ -4679,6 +4681,46 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
 }
 + (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
   return cra::PreferenceJSON([self loadedProfile:profilePath], @"extensions.settings");
+}
++ (void)setManagedExtensionIDs:(NSDictionary<NSString*, NSArray<NSString*>*>*)idsByProfile {
+  std::map<std::string, std::set<std::string>> ids;
+  for (NSString* profile in idsByProfile) {
+    std::set<std::string>& list = ids[base::SysNSStringToUTF8(profile)];
+    for (NSString* extensionID in idsByProfile[profile]) {
+      list.insert(base::SysNSStringToUTF8(extensionID));
+    }
+  }
+  cra::SetManagedExtensions(std::move(ids));
+}
++ (void)installWebStoreExtension:(NSString*)extensionID
+                        manifest:(NSString*)manifestJSON
+                     profilePath:(NSString*)profilePath
+                      completion:(void (^)(NSString*))completion {
+  void (^done)(NSString*) = [completion copy];
+  Profile* profile = [self loadedProfile:profilePath];
+  if (!profile) {
+    done(@"the profile isn't loaded");
+    return;
+  }
+  std::optional<base::DictValue> manifest =
+      base::JSONReader::ReadDict(base::SysNSStringToUTF8(manifestJSON), base::JSON_PARSE_RFC);
+  if (!manifest) {
+    done(@"needs the extension's manifest");
+    return;
+  }
+  cra::InstallFromWebStore(profile, base::SysNSStringToUTF8(extensionID), *manifest,
+                           base::BindOnce(^(std::string error) {
+                             done(error.empty() ? nil : base::SysUTF8ToNSString(error));
+                           }));
+}
++ (BOOL)uninstallExtension:(NSString*)extensionID profilePath:(NSString*)profilePath {
+  Profile* profile = [self loadedProfile:profilePath];
+  if (!profile) {
+    return NO;
+  }
+  std::u16string error;
+  return extensions::ExtensionRegistrar::Get(profile)->UninstallExtension(
+      base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
 }
 + (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
   return cra::PreferenceJSON([self loadedProfile:profilePath], name);
