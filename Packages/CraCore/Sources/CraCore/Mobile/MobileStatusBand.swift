@@ -10,12 +10,20 @@ public enum MobileStatusBand {
         themeColor ?? underPage
     }
 
-    /// Whether the band is there: over a page shown full size, not while the search sheet or the tab
-    /// row has pushed it back, nor over a new page still drawing under the canvas colour after a choice in
+    /// The band a tab brings to the tab row or a swipe, as hex: its page's own `fill` once that
+    /// page has loaded, else the top of the tab's picture (`pictureTop`). A page that has not
+    /// loaded reports nothing, or black, for the colour over it, so the picture comes first then.
+    public static func tabFill(pageFill: String?, pictureTop: String?, loaded: Bool) -> String? {
+        loaded ? pageFill ?? pictureTop : pictureTop ?? pageFill
+    }
+
+    /// Whether the band shows: over a page shown full size, not while the tab row is up, whose cards
+    /// carry their own bands, nor over a new page still drawing under the canvas colour after a choice in
     /// the sheet (`MobileSheetLeave.liftsCover`). That page has no colour of its own yet: the band took
-    /// WebKit's white, which showed under the Dynamic Island as the screen went black.
-    public static func shown(hasPage: Bool, searching: Bool, switching: Bool, covered: Bool = false) -> Bool {
-        hasPage && !searching && !switching && !covered
+    /// WebKit's white, which showed under the Dynamic Island as the screen went black. The search sheet
+    /// shrinks the band with the page instead of hiding it, so it does not come into this.
+    public static func shown(hasPage: Bool, switching: Bool, covered: Bool = false) -> Bool {
+        hasPage && !switching && !covered
     }
 
     /// White time and battery over a dark band, black over a light one.

@@ -42,6 +42,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// Darkens the status band with the page behind the search sheet's dim.
     let statusBandDim = UIView()
     private var statusBandFill: String?
+    /// How far the page is pulled below its top, so the status band can grow behind it; nil when
+    /// the page is not being pulled.
+    var pagePull: CGFloat?
+    /// The last pull sample and its speed, for the ring's bump at the line.
+    private var pullSample: (pull: CGFloat, at: CFTimeInterval)?
+    private var pullSpeed: CGFloat = 0
+    /// The pull's ring: an arc that fills as the page comes down, fixed in the status band.
+    let pullArc = PullArcView()
+    /// For UI tests (`-CraTracePull YES`): the last pull's distance, band height and page top,
+    /// kept after the page springs back.
+    let pullTraceView = UIView()
+    private var pullTraceMax: CGFloat = 0
     var pagePushedBack = false
     /// The chrome's moves under way: the sheet is put away when the last ends (`MobileSearchSheet.Settling`).
     private var chromeMoves = MobileSearchSheet.Settling()
@@ -85,11 +97,20 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// "Tap Browse for Me for a faster answer" over the sheet while the starter questions show.
     let coachMark = CoachMarkView()
     // Swipes (BrowserGestures.swift).
-    var swipeNeighbour: UIImageView?
+    /// The previous tab's card in the hand during a flick up from the tab button.
+    var flickCard: UIImageView?
+    /// The incoming tab's full page card during a bar swipe: its band on top, its content below.
+    var swipeNeighbourCard: UIView?
     var flick = FlickState()
     /// When the page on screen was last swapped in: its web view takes a moment to draw, and a
     /// picture taken before then is black.
     var pageShownAt: CFTimeInterval = 0
+
+    /// The page's own frame: under the status band, down to the screen's bottom.
+    var pageContentFrame: CGRect {
+        let top = view.safeAreaInsets.top
+        return CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, view.bounds.height - top))
+    }
 
     /// The tab's visible area: under the iOS status bar and above the app's bottom bar.
     var tabArea: CGRect {
@@ -168,6 +189,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         statusBandDim.alpha = 0
         statusBandDim.isUserInteractionEnabled = false
         pageContainer.addSubview(statusBandDim)
+        pageContainer.addSubview(pullArc)
         pageContainer.layer.cornerCurve = .continuous
         pageContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
 
@@ -181,6 +203,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             sheetDragTraceView.accessibilityIdentifier = "sheet-drag-trace"
             sheetDragTraceView.isUserInteractionEnabled = false
             view.addSubview(sheetDragTraceView)
+        }
+        if LaunchOptions.value("CraTracePull") == "YES" {
+            pullTraceView.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
+            pullTraceView.isAccessibilityElement = true
+            pullTraceView.accessibilityIdentifier = "pull-trace"
+            pullTraceView.accessibilityLabel = "Pull"
+            pullTraceView.accessibilityValue = "pull 0 band 0 page 0"
+            pullTraceView.isUserInteractionEnabled = false
+            view.addSubview(pullTraceView)
         }
         PressHaptics.installCounter(in: view)
 
@@ -292,20 +323,21 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        // While a tab is flying in, the bar over it is that tab's, not the page still behind; it
-        // keeps it until that page's own band is known, so the bar does not flash on landing.
-        if let fill = flick.statusFill {
-            return MobileStatusBand.lightContent(fill: fill) ? .lightContent : .darkContent
-        }
-        guard !statusBand.isHidden, let fill = statusBandFill else { return .default }
+        guard let fill = statusBarFill else { return .default }
         return MobileStatusBand.lightContent(fill: fill) ? .lightContent : .darkContent
+    }
+
+    /// The band the status bar's text sits on, as hex; nil when there is none showing. While a
+    /// tab is flying in, the bar over it is that tab's, not the page still behind; it keeps it
+    /// until that page's own band is known, so the bar does not flash on landing.
+    private var statusBarFill: String? {
+        flick.statusFill ?? (statusBand.isHidden ? nil : statusBandFill)
     }
 
     /// The solid band behind the status bar over a page, in the page's colour, as in Arc Search (#657).
     func updateStatusBand() {
         let page = shownPage
-        let fill = page.flatMap { MobileStatusBand.fill(themeColor: Palette.hex($0.webView.themeColor, traits: traitCollection),
-                                                        underPage: Palette.hex($0.webView.underPageBackgroundColor, traits: traitCollection)) }
+        let fill = page.flatMap(bandFill(for:))
         // The page the flick brought now knows its band: it takes the bar back from the estimate.
         if let id = flick.statusPage, page?.tabID == id, fill != nil {
             flick.statusPage = nil
@@ -314,29 +346,91 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         // The band is the page's top: it shrinks from the status bar to nothing as the page is
         // pushed back, its bottom staying at the card's top edge.
-        let shown = fill != nil && MobileStatusBand.shown(hasPage: page != nil, searching: false,
-                                                        switching: switcher != nil, covered: coveredPage != nil)
+        let shown = MobileStatusBand.shown(hasPage: fill != nil, switching: switcher != nil, covered: coveredPage != nil)
         let safeTop = view.safeAreaInsets.top
         let pageScale = MobilePageBehindSearch.transform(in: pageContainer.bounds.size, safeTop: safeTop,
                                                          progress: drawerProgress).scale
-        let bandHeight = shown ? safeTop * (1 - drawerProgress) / max(pageScale, 0.001) : 0
-        // Keep it in the hierarchy until its height is zero: hiding it when the target height
-        // reaches zero would make it vanish instead of shrinking with the animation.
-        let visible = shown
+        // A pull grows the band down with the page: its bottom stays on the page's visible top.
+        // Its height keeps following the page while the tab row is up, so this band comes back
+        // full when the row closes; only its visibility goes.
+        let pulled = pagePull ?? 0
+        let bandHeight = fill != nil ? safeTop * (1 - drawerProgress) / max(pageScale, 0.001) + pulled : 0
         statusBand.frame = CGRect(x: 0, y: 0, width: pageContainer.bounds.width, height: bandHeight)
         statusBandDim.frame = statusBand.frame
-        statusBandDim.alpha = visible ? MobilePageBehindSearch.dim * drawerProgress : 0
+        statusBandDim.alpha = shown ? MobilePageBehindSearch.dim * drawerProgress : 0
         if let color = fill.flatMap(Palette.color(hex:)) {
             statusBand.backgroundColor = color
         }
-        if statusBand.isHidden == visible || statusBandFill != fill {
-            statusBand.isHidden = !visible
+        if statusBand.isHidden == shown || statusBandFill != fill {
+            statusBand.isHidden = !shown
             statusBandFill = fill
             setNeedsStatusBarAppearanceUpdate()
         }
     }
 
+    /// The band's colour for a page, as hex: its theme-color, else its own background.
+    private func bandFill(for page: WebPage) -> String? {
+        MobileStatusBand.fill(themeColor: Palette.hex(page.webView.themeColor, traits: traitCollection),
+                              underPage: Palette.hex(page.webView.underPageBackgroundColor, traits: traitCollection))
+    }
+
+    /// The band's bottom edge stays on the page's visible top as the pull grows it; the ring sits
+    /// in the band and turns whole at the line.
+    func updatePagePull(_ pull: CGFloat) {
+        pullTraceMax = max(pullTraceMax, pull)
+        // Under half a point is the page still at its top: no band, no ring.
+        pagePull = pull > 0.5 ? pull : nil
+        // The page's frame moves down from the band's bottom; its content stays pinned inside it.
+        shownPage?.webView.frame.origin.y = webViewTop()
+        updateStatusBand()
+        updatePullArc()
+        tracePull()
+    }
+
+    /// Places the pull's ring in the middle of the status band, where it stays as the page comes
+    /// down, and fills it through the pull.
+    func updatePullArc() {
+        guard !pullArc.isLeaving else { return }
+        let safeTop = view.safeAreaInsets.top
+        // Below the Dynamic Island or notch and low enough that the whole ring shows: the page
+        // comes down under it, and the ring stays put as it fills.
+        let side = MobilePullRing.side(safeTop: safeTop)
+        let size = CGSize(width: side, height: side)
+        if pullArc.bounds.size != size {
+            pullArc.bounds = CGRect(origin: .zero, size: size)
+        }
+        pullArc.center = MobilePullRing.center(safeTop: safeTop, screenWidth: view.bounds.width)
+        let ink = MobilePullRing.ink(statusBarFill: statusBarFill, darkMode: traitCollection.userInterfaceStyle == .dark)
+        if let color = Palette.color(hex: ink) {
+            pullArc.color = color
+        }
+        pullArc.speed = pullSpeed
+        pullArc.progress = MobilePullRing.progress(pull: pagePull ?? 0)
+    }
+
+    /// Records the pull's last live numbers for a UI test, after layout put the frames there.
+    /// The page springs back afterwards, so the trace keeps how far it and the band went.
+    func tracePull() {
+        guard pullTraceView.superview != nil, let page = shownPage else { return }
+        // The page's visible top in the view's coordinates: its frame, less its scroll.
+        let top = page.webView.frame.minY - page.webView.scrollView.contentOffset.y
+        pullTraceView.accessibilityValue = "pull \(Int(pullTraceMax)) band \(Int(statusBand.frame.height)) page \(Int(top))"
+    }
+
     // MARK: Layout
+
+    /// The web view's top in the page: at the status band's bottom, raised inside the card as the
+    /// search sheet pushes the page back, and lowered by a pull to refresh.
+    private func webViewTop() -> CGFloat {
+        let safeTop = view.safeAreaInsets.top
+        var top = safeTop + (pagePull ?? 0)
+        if drawerProgress > 0.001 {
+            let scale = MobilePageBehindSearch.transform(in: view.bounds.size, safeTop: safeTop,
+                                                         progress: drawerProgress).scale
+            top += safeTop * ((1 - drawerProgress) / max(scale, 0.001) - 1)
+        }
+        return top
+    }
 
     /// Puts the bar and the sheet where the current state says. Called inside animation blocks.
     func layoutChrome() {
@@ -368,21 +462,21 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             pageContainer.center = CGPoint(x: bounds.midX, y: bounds.midY)
         }
         switcher?.frame = bounds
+        if let switcher, switcher.bandHeight != safeTop {
+            switcher.bandHeight = safeTop
+        }
         // The page's viewport stays the one it had before the push-back. The web view keeps its
         // size and slides up inside the page as the card comes down, so its content's top stays
         // at the card's top with no empty space, without changing the viewport.
         if let page = shownPage, !pageClosing, !pageOpening, !flick.incoming {
-            let scale = drawerProgress > 0.001
-                ? MobilePageBehindSearch.transform(in: bounds.size, safeTop: safeTop, progress: drawerProgress).scale
-                : 1
-            let webTop = drawerProgress > 0.001
-                ? safeTop * ((1 - drawerProgress) / max(scale, 0.001) - 1)
-                : 0
-            page.webView.frame = CGRect(x: 0, y: webTop, width: bounds.width, height: bounds.height)
+            // The page's own container starts at the band's bottom and never overlaps it.
+            page.webView.frame = CGRect(x: 0, y: webViewTop(), width: bounds.width,
+                                        height: max(0, bounds.height - safeTop))
         }
         pageDim.frame = pageContainer.bounds
         dotField.frame = bounds
         updateStatusBand()
+        updatePullArc()
         let logoSide: CGFloat = 132
         logo.bounds = CGRect(x: 0, y: 0, width: logoSide, height: logoSide)
         logo.center = CGPoint(x: bounds.midX, y: bounds.height * 0.505)
@@ -463,7 +557,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         guard let scroll = shownPage?.webView.scrollView else { return }
         let safe = view.safeAreaInsets
         let bar = (barHiddenByScroll && !isSearching) ? 0 : MobileBottomBar.height
-        let insets = UIEdgeInsets(top: safe.top, left: safe.left, bottom: bar + safe.bottom, right: safe.right)
+        // The web view starts below the status band, so its content needs no top inset.
+        let insets = UIEdgeInsets(top: 0, left: safe.left, bottom: bar + safe.bottom, right: safe.right)
         if scroll.contentInset != insets {
             scroll.contentInset = insets
         }
@@ -904,6 +999,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return page
     }
 
+    /// The band colour a tab brings with it: its page's theme-color or own background, or the top
+    /// of its picture before that page knows one. A tab with no page yet has only its picture, and
+    /// asking must not make the page: the tab row asks about every tab in it.
+    func bandColour(for tab: MobileTab) -> UIColor? {
+        let picture = store.snapshot(tab.id)
+        guard let page = store.existingPage(tab.id) else { return picture?.topBandColor() }
+        let fill = MobileStatusBand.tabFill(pageFill: bandFill(for: page),
+                                            pictureTop: Palette.hex(picture?.topBandColor(), traits: traitCollection),
+                                            loaded: page.webView.url != nil)
+        return fill.flatMap(Palette.color(hex:))
+    }
+
     func show(_ tab: MobileTab) {
         let page = self.page(for: tab)
         guard page !== shownPage else { return }
@@ -913,9 +1020,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         shownPage?.delegate = nil
         shownPage = page
         liftCoverIfDue()
+        pagePull = nil
         page.delegate = self
         page.webView.allowsBackForwardNavigationGestures = false
-        page.webView.frame = pageContainer.bounds
+        // The page's container starts at the status band's bottom; it never sits under the band.
+        page.webView.frame = pageContentFrame
         pageContainer.insertSubview(page.webView, belowSubview: pageDim)
         page.restoresAtTop = false
         if page.webView.url == nil, !page.isBrowsing, !page.webKitOwnsInitialNavigation {
@@ -1008,6 +1117,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         liftCover()
         let switcher = TabSwitcherView(frame: view.bounds)
         switcher.delegate = self
+        switcher.bandHeight = view.safeAreaInsets.top
         let tabs = store.switcherTabs
         let selected = store.selected?.id
         // The row opens focused on the card behind the page: the one to its left, which is the
@@ -1015,15 +1125,23 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let focus = store.switcherFocus?.id
         let onRow = store.selected.map { !$0.isIncognito } ?? false
         // On a private page the private tabs waiting unseen are cards too, marked with the eyes.
-        switcher.setTabs(tabs, focus: focus, snapshot: store.snapshot,
-                         favicon: { $0.isIncognito ? UIImage(systemName: "eyes")?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal) : self.favicons.icon(for: $0.url) })
+        switcher.setTabs(
+            tabs, focus: focus,
+            snapshot: store.snapshot,
+            favicon: { tab in
+                tab.isIncognito
+                    ? UIImage(systemName: "eyes")?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal)
+                    : self.favicons.icon(for: tab.url)
+            },
+            band: { self.bandColour(for: $0) })
         // An incognito page has no card to shrink into; the row just appears.
         switcher.expandedID = onRow ? selected : nil
         switcher.expansion = onRow ? 1 : 0
         view.insertSubview(switcher, aboveSubview: pageContainer)
         switcher.layoutIfNeeded()
         self.switcher = switcher
-        pageContainer.isHidden = true
+        // The page and its status band stay behind the row: the switcher starts at the band's
+        // bottom, so the row's cards never cover or move the band.
         barCollapse.reveal()
         return switcher
     }
@@ -1046,10 +1164,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         UIView.animate(spring: MobileMotion.tabOpen) {
             switcher.expansion = 1
             switcher.layoutIfNeeded()
+            self.layoutChrome()
         } completion: {
             self.pageContainer.isHidden = false
             switcher.removeFromSuperview()
             if self.switcher === switcher { self.switcher = nil }
+            self.updateStatusBand()
         }
     }
 
@@ -1081,6 +1201,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             self.pageContainer.isHidden = false
             switcher.removeFromSuperview()
             if self.switcher === switcher { self.switcher = nil }
+            self.updateStatusBand()
             self.refreshTabStack()
         }
     }
@@ -1578,6 +1699,37 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let collapses = settings.value.options(for: page.webView.url?.host).collapseBottomBar
         guard barCollapse.scrolled(by: delta, atTop: atTop, collapses: collapses) else { return }
         animateChrome(duration: 0.25, options: .curveEaseInOut)
+    }
+
+    /// The page below its top: the status band grows edge to edge down to its visible top.
+    func webPage(_ page: WebPage, didPull pull: CGFloat) {
+        guard page === shownPage, !isSearching else { return }
+        let now = CACurrentMediaTime()
+        if pagePull == nil {
+            // A new pull starts a new deepest point and a fresh speed for the line's bump.
+            pullTraceMax = 0
+            pullSpeed = 0
+            pullSample = nil
+        } else if let sample = pullSample, now > sample.at, pull > sample.pull {
+            pullSpeed = (pull - sample.pull) / (now - sample.at)
+        }
+        pullSample = (pull, now)
+        updatePagePull(pull)
+    }
+
+    /// The finger let go: the band goes back to the status bar, and the ring eases away. A pull
+    /// that reached the line lets the whole ring turn clockwise as it fades.
+    func webPageDidEndPull(_ page: WebPage, full: Bool) {
+        guard page === shownPage else { return }
+        pullSample = nil
+        pullSpeed = 0
+        if full { pullArc.fulfilled() } else { pullArc.dismiss() }
+        UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0,
+                       options: [.beginFromCurrentState, .allowUserInteraction]) {
+            self.pagePull = nil
+            self.shownPage?.webView.frame.origin.y = self.webViewTop()
+            self.updateStatusBand()
+        }
     }
 
     /// A tap on the strip under the page brings the bar back, as scrolling up does.

@@ -31,6 +31,8 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     var expansion: CGFloat = 0 { didSet { setNeedsLayout() } }
     /// The card that fills the screen at `expansion` 1.
     var expandedID: UUID?
+    /// The status band's height at full size: each card's own band is that, scaled with the card.
+    var bandHeight: CGFloat = 0 { didSet { setNeedsLayout() } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -67,12 +69,14 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     var isEmpty: Bool { cards.isEmpty }
 
     /// Shows `tabs`, oldest first, focused on `focus`.
-    func setTabs(_ tabs: [MobileTab], focus: UUID?, snapshot: (UUID) -> UIImage?, favicon: (MobileTab) -> UIImage?) {
+    func setTabs(_ tabs: [MobileTab], focus: UUID?, snapshot: (UUID) -> UIImage?, favicon: (MobileTab) -> UIImage?,
+                 band: (MobileTab) -> UIColor?) {
         views.values.forEach { $0.removeFromSuperview() }
         views = [:]
         for (index, tab) in tabs.enumerated() {
             let card = TabCardView(tabID: tab.id)
-            card.configure(title: tab.displayTitle, snapshot: snapshot(tab.id), favicon: favicon(tab), incognito: tab.isIncognito)
+            card.configure(title: tab.displayTitle, snapshot: snapshot(tab.id), favicon: favicon(tab),
+                           incognito: tab.isIncognito, band: band(tab))
             card.accessibilityIdentifier = "tab-card-\(index)"
             addSubview(card)
             views[tab.id] = card
@@ -116,8 +120,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
                     frame.origin.x += (index < expandedIndex ? -1 : 1) * expansion * screen.width * 0.7
                 }
             }
-            card.layout(frame: frame, screen: screen, fill: fill, dim: placement.dim * (1 - expansion),
-                        headerAlpha: 1 - min(1, expansion * 2), scale: placement.scale)
+            card.layout(frame: frame, screen: screen, bandHeight: bandHeight, fill: fill,
+                        dim: placement.dim * (1 - expansion), headerAlpha: 1 - min(1, expansion * 2),
+                        scale: placement.scale)
         }
     }
 
@@ -219,6 +224,7 @@ final class TabCardView: UIView {
     let tabID: UUID
     private let shadow = UIView()
     private let clip = UIView()
+    private let band = UIView()
     private let picture = UIImageView()
     private let dimmer = UIView()
     private let icon = UIImageView()
@@ -245,6 +251,8 @@ final class TabCardView: UIView {
         dimmer.backgroundColor = Palette.rgb(0x1a1a3a)
         dimmer.alpha = 0
         clip.addSubview(dimmer)
+        band.isHidden = true
+        clip.insertSubview(band, belowSubview: dimmer)
         // The favicon keeps its own shape, round or see-through, unclipped; the corners round
         // only the plain square that stands in while there is none.
         icon.layer.cornerRadius = 4
@@ -260,8 +268,8 @@ final class TabCardView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    // The view covers the screen so the card can grow to fill it; VoiceOver and the UI tests
-    // get the card's own frame.
+    // The view covers the page's content area so the card can grow to fill it; VoiceOver and the
+    // UI tests get the card's own frame.
     override var isAccessibilityElement: Bool { get { true } set {} }
     override var accessibilityTraits: UIAccessibilityTraits { get { .button } set {} }
     override var accessibilityFrame: CGRect {
@@ -269,7 +277,7 @@ final class TabCardView: UIView {
         set {}
     }
 
-    func configure(title text: String, snapshot: UIImage?, favicon: UIImage?, incognito: Bool) {
+    func configure(title text: String, snapshot: UIImage?, favicon: UIImage?, incognito: Bool, band colour: UIColor?) {
         title.text = text
         picture.image = snapshot
         // A dark colourless mark (GitHub's octocat) would vanish on the dark row: it takes the
@@ -280,25 +288,31 @@ final class TabCardView: UIView {
             icon.image = favicon
         }
         icon.backgroundColor = favicon == nil ? Palette.barControlFill : .clear
+        band.backgroundColor = colour
+        band.isHidden = colour == nil
         accessibilityLabel = text
     }
 
     /// Places the card. `frame` is its place in the row; `fill` (0…1) grows it to the whole
-    /// `screen`, where the picture shows from its very top instead of from under the status bar.
-    func layout(frame row: CGRect, screen: CGSize, fill: CGFloat, dim: CGFloat, headerAlpha: CGFloat, scale: CGFloat) {
+    /// `screen`, where its band takes the status bar's strip and its picture the rest.
+    func layout(frame row: CGRect, screen: CGSize, bandHeight: CGFloat, fill: CGFloat, dim: CGFloat,
+                headerAlpha: CGFloat, scale: CGFloat) {
         let full = CGRect(origin: .zero, size: screen)
         let frame = CGRect(x: row.minX + (full.minX - row.minX) * fill, y: row.minY + (full.minY - row.minY) * fill,
                            width: row.width + (full.width - row.width) * fill, height: row.height + (full.height - row.height) * fill)
         cardFrame = frame
         self.frame = full
         clip.frame = frame
-        // The card is cut from the bottom of the page picture: the strip under the status bar
-        // stays out of the row and slides in as the card grows.
-        let pictureHeight = frame.width * screen.height / max(1, screen.width)
-        picture.frame = CGRect(x: 0, y: frame.height - pictureHeight, width: frame.width, height: pictureHeight)
+        // The card is the page: its own band at the top, then the content. The band belongs to
+        // the page only, so it shrinks to nothing as the tab settles into the row; choosing a
+        // tab grows its band back with it.
+        let cardBand = bandHeight * frame.width / max(1, screen.width) * fill
+        band.frame = CGRect(x: 0, y: 0, width: frame.width, height: cardBand)
+        picture.frame = CGRect(x: 0, y: cardBand, width: frame.width, height: max(0, frame.height - cardBand))
         dimmer.frame = clip.bounds
         dimmer.alpha = dim
-        let radius = MobileTabCarousel.cornerRadius + (UIScreen.main.displayCornerRadius - MobileTabCarousel.cornerRadius) * fill
+        // Rounded in the row, square where it meets the page's content at the band's bottom.
+        let radius = MobileTabCarousel.cornerRadius * (1 - fill)
         clip.layer.cornerRadius = radius
         shadow.frame = frame
         shadow.layer.shadowPath = UIBezierPath(roundedRect: shadow.bounds, cornerRadius: radius).cgPath
@@ -311,14 +325,5 @@ final class TabCardView: UIView {
         title.frame = CGRect(x: icon.frame.maxX + 7.5, y: headerY - 1, width: max(0, frame.maxX - icon.frame.maxX - 16), height: side + 2)
         icon.alpha = headerAlpha
         title.alpha = headerAlpha
-    }
-}
-
-extension UIScreen {
-    /// The display's own corner radius, for a card that grows to fill it. There is no public
-    /// number for it; 47 pt is close to every phone with rounded corners, 0 fits the rest.
-    var displayCornerRadius: CGFloat {
-        let insets = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets }.first
-        return (insets?.bottom ?? 0) > 0 ? 47 : 0
     }
 }
