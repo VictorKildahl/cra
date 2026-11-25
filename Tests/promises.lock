@@ -1738,6 +1738,7 @@
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::theSelectionStaysOnItsLine  355481657bdd
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::theShortcutIsOptionCommandDelete  c07ecb28e8b7
 #779   Tests/Scenarios/command-bar-delete-suggestion.scenario  f8182b8185ac
+#784   Tests/Scenarios/tab-switcher-after-close.scenario  dd41e122a105
 #785   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::anOriginChromeMayRememberIsOfferedAlwaysAllow  d72c0542d1d2
 #785   Tests/Scenarios/app-link-always-allow.scenario  2d0f27a9d487
 #786   Tests/ExtensionPopupWindowTests.swift::takesItsBubbleBackFromChrome  35fac83b9542
