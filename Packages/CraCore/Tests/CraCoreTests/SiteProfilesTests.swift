@@ -20,7 +20,7 @@ struct SiteProfilesTests {
 
     /// A profile picked in a Little Window is the site's from then on, Default included, and a later
     /// pick replaces it.
-    @Test func thePickIsRememberedForTheSiteAndReplacedByTheNext() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/768")) func thePickIsRememberedForTheSiteAndReplacedByTheNext() {
         var sites = SiteProfiles()
         sites.remember(work, for: "https://gitlab.example.com/a?b=1")
         #expect(sites.profile(for: "https://gitlab.example.com/other") == RememberedProfile(id: work))
@@ -41,7 +41,7 @@ struct SiteProfilesTests {
 
     /// A Little Window on the site opens in the first space in the sidebar on its profile, whichever
     /// window was used last.
-    @Test func theSiteOpensInTheFirstSpaceOnItsProfile() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/768")) func theSiteOpensInTheFirstSpaceOnItsProfile() {
         var sites = SiteProfiles()
         let spaces = [space(1, profile: personal), space(2, profile: nil), space(3, profile: nil)]
         sites.remember(nil, for: "https://gitlab.example.com/")
@@ -52,7 +52,7 @@ struct SiteProfilesTests {
 
     /// The window used last decides when it is on the site's profile already, when the site has no
     /// profile, and when no space uses it any more (a profile deleted since).
-    @Test func theWindowUsedLastKeepsTheSiteWhenItCan() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/768")) func theWindowUsedLastKeepsTheSiteWhenItCan() {
         var sites = SiteProfiles()
         let spaces = [space(1, profile: personal), space(2, profile: nil), space(3, profile: nil)]
         sites.remember(nil, for: "https://gitlab.example.com/")

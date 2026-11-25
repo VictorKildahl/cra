@@ -182,7 +182,7 @@ struct ModelFixtureTests {
     /// The profile picked for each site in a Little Window outlives a relaunch, as Arc's
     /// domainToProfilePreferences does. Files from before it pick none, and an unreadable entry costs
     /// only the picks, not the windows.
-    @Test func littleWindowSiteProfilesLoadAsRecorded() throws {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/768")) func littleWindowSiteProfilesLoadAsRecorded() throws {
         let (loaded, recorded) = try Self.load("windows.json", as: WindowPrefs.self)
         let work = UUID(uuidString: "C0000000-0000-0000-0000-000000000001")!
         #expect(loaded.siteProfiles.profile(for: "https://www.youtube.com/watch") == RememberedProfile(id: work))

@@ -322,6 +322,7 @@ enum StoreTests {
         expect(store.settings.defaultLinkDestination == .littleWindowInUse, "Little Arc as the default stays in the space in use")
     }
 
+    // promise: #768
     /// Arc's domainToProfilePreferences: the profile picked for each site in a Little Arc comes over on the
     /// Cra profile its folder became.
     @MainActor

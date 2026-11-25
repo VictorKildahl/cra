@@ -1723,6 +1723,12 @@
 #763   Packages/CraCore/Tests/CraCoreTests/LittleProfileChangeTests.swift::aPageGoneOnFromItsLinkKeepsThePageShown  cbc7dc847b20
 #763   Packages/CraCore/Tests/CraCoreTests/LittleProfileChangeTests.swift::theLinkOpensAgainNotWhereItsRedirectsEnded  09cceaae0d71
 #763   Tests/Scenarios/little-window-profile-change-link.scenario  a27c8c58b8ba
+#768   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::littleWindowSiteProfilesLoadAsRecorded  8bf3aee8f0eb
+#768   Packages/CraCore/Tests/CraCoreTests/SiteProfilesTests.swift::thePickIsRememberedForTheSiteAndReplacedByTheNext  cf6cf1d6016f
+#768   Packages/CraCore/Tests/CraCoreTests/SiteProfilesTests.swift::theSiteOpensInTheFirstSpaceOnItsProfile  769f67a6959c
+#768   Packages/CraCore/Tests/CraCoreTests/SiteProfilesTests.swift::theWindowUsedLastKeepsTheSiteWhenItCan  c6b07dd493bb
+#768   Tests/Scenarios/little-window-site-profile.scenario  09c062f477a7
+#768   Tests/StoreTests.swift::arcSiteProfiles  885ccfe0b076
 #770   Tests/Scenarios/downloads-tray-covers-tabs.scenario  0e79296ef349
 #770   Tests/TooltipCoverTests.swift::aListOverTheTabsHidesThemFromThePointer  ff612b388453
 #779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anEntryWithoutProfilesGoes  ea0d30498e7c
