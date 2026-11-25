@@ -42,6 +42,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// The page's saved history is being restored and the saved scroll is small: put it at the
     /// top when the scroll view reports the restored position.
     var restoresAtTop = false
+    /// Called when the main frame's document has drawn (`drawnScript`): what a new tab from the search sheet waits
+    /// for under its cover (`MobileSheetLeave`).
+    var onDrawn: (() -> Void)?
     private(set) var isLoading = false
     private(set) var progress: Double = 0
     /// "Request Desktop Site": applied to every navigation of this tab while it is on.
@@ -109,6 +112,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         let controller = webView.configuration.userContentController
         controller.add(WeakScriptHandler(self), name: "craBlocked")
         controller.addUserScript(WKUserScript(source: Self.failedRequestScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        controller.add(WeakScriptHandler(self), name: "craDrawn")
+        controller.addUserScript(WKUserScript(source: Self.drawnScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         observations = [
             webView.observe(\.title) { [weak self] _, _ in self?.changed() },
             webView.observe(\.url) { [weak self] _, _ in self?.changed() },
@@ -169,7 +174,23 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     })();
     """
 
+    /// Tells the app once the document has been parsed and two frames have gone by, so its first paint is on screen:
+    /// before that a committed page shows its bare canvas, white for one that hasn't yet said it is dark.
+    private static let drawnScript = """
+    (() => {
+      const drawn = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+        try { window.webkit.messageHandlers.craDrawn.postMessage(location.href); } catch (e) {}
+      }));
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', drawn, { once: true });
+      else drawn();
+    })();
+    """
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "craDrawn" {
+            onDrawn?()
+            return
+        }
         guard unblockedSite == nil, let address = message.body as? String,
               ContentBlocker.shared.stops(url: address, onPage: webView.url?.host, with: siteOptions(webView.url?.host)),
               countedHosts.insert(address).inserted else { return }

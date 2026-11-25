@@ -1,0 +1,24 @@
+# promise: #730
+# ⌘T found only what history.json kept, the newest 5,000 pages Cra recorded itself, and Chrome deleted every
+# visit older than 90 days. Arc's bar asks the profile's Chromium history, which Arc keeps whole. The fixture's
+# Chromium History has two pages history.json doesn't have: one visited 10 days before the fixture was made,
+# one 400 days before. Both come up in ⌘T. Chrome's expirer started 30 s after History opened and would have
+# deleted the old visit, and its page with it; 40 s later ⌘T still finds it.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "searchSuggestions": false}
+profile ${FIXTURES}/HistoryProfile
+cra://open?url=${PAGE}?n=start
+expect-log loaded 127\.0\.0\.1
+wait 1
+cra://commandbar?query=haystack
+wait 2
+cra://debug?commandBarRows=first
+expect-log Cra command bar rows first: .*haystack-recent\.example\.com
+expect-log Cra command bar rows first: .*haystack-ancient\.example\.com
+cra://dismiss
+wait 40
+cra://commandbar?query=hayst
+wait 2
+cra://debug?commandBarRows=later
+expect-log Cra command bar rows later: .*haystack-ancient\.example\.com
+cra://dismiss

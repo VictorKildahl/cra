@@ -575,9 +575,11 @@ final class ExtensionStore {
 
     /// Before Cra has a list of its own, the browser it replaces supplies one: Arc keeps its
     /// pinned extensions in Chromium's `extensions.pinned_extensions` pref, as do Dia and Chrome.
+    /// Only a browser the person imported from: Cra reads no other browser's folder unasked (#757).
     private static func loadPinned() -> PinnedExtensions {
         if let data = try? Data(contentsOf: pinnedFile) { return (try? JSONDecoder().decode(PinnedExtensions.self, from: data)) ?? PinnedExtensions() }
-        for source in [ImportSource.arc, .dia] + ImportSource.allCases.filter({ $0.id == "chrome" }) {
+        let imported = NativeMessagingHosts.importedBrowsers()
+        for source in ([ImportSource.arc, .dia] + ImportSource.allCases.filter({ $0.id == "chrome" })) where imported.contains(source.id) {
             guard let ids = ExtensionImporter.pinnedIDs(inProfile: source.dataDir.appendingPathComponent("Default", isDirectory: true)),
                   !ids.isEmpty else { continue }
             return PinnedExtensions(shared: ids)

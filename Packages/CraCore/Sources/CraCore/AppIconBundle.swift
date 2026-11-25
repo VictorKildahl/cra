@@ -32,11 +32,22 @@ public enum AppIconBundle {
         finderInfo.count >= 10 && (UInt16(finderInfo[8]) << 8 | UInt16(finderInfo[9])) & 0x0400 != 0
     }
 
-    /// The picture the Dock tile is given for `picked` (the running app's applicationIconImage and the Dock tile
-    /// plug-in's view): always the picked one, Segments too (app-icons/segments.png, the bundle's icon on Apple's
-    /// grid). Left to the Dock, the bundle's own icon came from the Dock's cache, which after 0.1.54 put a pick on
-    /// Cra.app can be the icon picked before: Segments picked after Original kept Original (Victor, 23 Nov 2026).
-    public static func dockImage(picked: String, defaultID: String) -> String? {
-        picked
+    /// The picture the Dock tile is given for `picked` (the running app's applicationIconImage, Chromium's download
+    /// badge view and the Dock tile plug-in), nil to leave the tile to the Dock. A pick is always given: only the app
+    /// can show it. Segments, the bundle's own icon, is left to the Dock, which draws it in the icon style picked in
+    /// System Settings ▸ Appearance (Dark, Clear, Tinted) as it does every app's; a picture the app hands over is
+    /// drawn as it is, so 0.1.55's light Segments sat in a dark Dock (GitHub #739). Only when this launch found a
+    /// Finder icon an earlier Cra put on Cra.app (0.1.54, 0.1.55; #724) is Segments given too: the Dock's cache of
+    /// the bundle's icon can then still be the icon picked before, so Segments picked after Original kept Original
+    /// (Victor, 23 Nov 2026).
+    public static func dockImage(picked: String, defaultID: String, bundleIconStale: Bool) -> String? {
+        picked != defaultID || bundleIconStale ? picked : nil
+    }
+
+    /// Whether the app sets NSApp.applicationIconImage at all: only to give the Dock a picture, or to take back one
+    /// it gave. Setting it, even to nil, makes AppKit hand the Dock a picture of the bundle's icon, which the Dock
+    /// draws as it is, outside the system's icon style (GitHub #739); a launch with Segments leaves it alone.
+    public static func setsApplicationIcon(giving: Bool, gaveBefore: Bool) -> Bool {
+        giving || gaveBefore
     }
 }

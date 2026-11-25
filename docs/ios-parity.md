@@ -36,7 +36,8 @@ pushed back behind the search sheet, the certificate warning (UI tests `Certific
 5. iCloud entitlement for Spaces, then writing pins back to the Mac ("Pin to Space:"). Needs
    Victor's Apple ID; so does running on his iPhone, which has never been done.
 6. Share extension; Languages; custom search engines; iPad and landscape; dark mode against a reference.
-7. Motion still unmeasured: the pill growing into the search field, the summarize fold.
+7. Motion still unmeasured: the summarize fold. (The pill growing into the search field was matched to Arc Search
+   at 60 fps in Nov 2026: `MobileSearchMotion`.)
 
 **Pin to Space: a proposal, waiting for Victor.** Arc Search's "Pin to Space:" writes into the
 desktop's sidebar. The Mac's sync folder (`SettingsSync`) is a bundle each Mac writes whole, manifest

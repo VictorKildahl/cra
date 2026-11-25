@@ -357,3 +357,18 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   `CraPageDialogHost` (cra-page-dialogs.patch) is the page's own data, so it told its dialogs it was going only
   after the page's parts were gone, and the prompt's `LoginHandler::CancelAuth` used them. It lets them go in
   `WebContentsDestroyed` now (scenario `page-dialog-sign-in-tab-closed`). Both scenarios crash on -1.
+- 24 Nov 2026: **engine-159.0.8154.45-1**, Chrome 159.0.8154.45 (from engine-159.0.8154.13-21) for CVE-2026-134401
+  (critical, Chrome Variations: 159.0.8154.13 lacked "[M159] Disable VariationsService HTTP fallback by default", #750),
+  a patch release on the same branch: every patch applied unchanged. It also has #730's two engine parts. A profile's
+  history is no longer deleted after 90 days (`cra-history-no-expiry.patch`: Chrome's `HistoryBackend` started
+  `ExpireHistoryBackend` with `kExpireDaysThreshold`; Arc keeps the whole history), and `+searchHistory:` runs a text
+  search of a profile's history for ⌘T (`cra/history.mm`: a `HistoryDBTask` that reads only the matching `urls` rows,
+  since `QueryHistory` also reads every visit of every match, which takes seconds for one letter on a long history;
+  a search a newer keystroke overtook skips its scan). Scenario `command-bar-whole-history`.
+- 24 Nov 2026: **engine-159.0.8154.45-2**, the window a page sees (`cra-page-window-bounds.patch`). Chrome gave a page
+  Cra hosts its whole NSWindow as its window, so `outerWidth - innerWidth` was the sidebar (338–345 pt). Discord reads
+  more than 160 as DevTools being open and takes its sign-in token out of localStorage until its page goes, so every
+  other Discord tab opened signed out while one was open. `RenderWidgetHostViewMac::GetBoundsInScreen` now gives a
+  page without a parent `ui::Layer` (only Chrome's own windows set one) a window from the window's top to the page's
+  bottom, as wide as the page, and `OnBoundsInWindowChanged` sends the screen rects again when the page moves in its
+  window (⌘S). Scenario `page-window-size` (fails on engine-159.0.8154.13-21: first dx=338, second tab signed out).

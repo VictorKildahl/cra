@@ -149,6 +149,12 @@ final class DownloadsTrayView: NSView {
         ui.downloadsListOpen && DownloadsTrayHover.holds(p, list: listRect, buttonTop: bounds.height, open: true)
     }
 
+    /// For `cra://debug?pointerOn=…&under=downloads` (#770): the middle of the open list's first download, in the window.
+    var debugFirstRowInWindow: NSPoint? {
+        guard shownOpen, !isHidden, let r = rows.first(where: { !$0.isHidden }) else { return nil }
+        return r.convert(NSPoint(x: r.bounds.midX, y: r.bounds.midY), to: nil)
+    }
+
     /// For `cra://debug?downloadsTray`: where the list's hover reaches while it is open, and what a press
     /// on the way up from the Library button lands on, as the window's hit test finds it (#575).
     var hoverReadout: String {

@@ -70,6 +70,10 @@
 	     name over mDNS instead of handing the page this Mac's local IP address. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Video calls and other web sites can connect to devices on your network, like someone on the same Wi-Fi or your router's settings page.</string>
+	<!-- macOS can keep another browser's folder from other apps (#757). Cra reads one only after
+	     the browser is picked in the import, and with this text macOS asks instead of blocking. -->
+	<key>NSAppDataUsageDescription</key>
+	<string>Cra reads the browser you picked to import from: its spaces, tabs, bookmarks, passwords and sign-ins, and the desktop apps its extensions talk to, like 1Password. Nothing leaves your Mac.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>NSUserActivityTypeBrowsingWeb</string>

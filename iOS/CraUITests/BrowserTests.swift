@@ -157,6 +157,26 @@ final class SearchTests: BrowserTestCase {
         keep("page")
     }
 
+    /// A page opened from the sheet waits under the canvas colour until it has drawn, as in Arc Search, instead of
+    /// showing its bare canvas (white for a dark site) first. This one holds its first paint a second.
+    func testAPageOpenedFromTheSheetIsCoveredUntilItHasDrawn() {
+        launch(["-CraTraceCover", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let cover = app.otherElements["new-page-cover"]
+        XCTAssertFalse(cover.exists)
+        field.typeText("data:text/html,<title>Slow</title><script>for(e=Date.now()+1000;Date.now()<e;);</script>"
+            + "<body/style=background:%23111;color:white><h1>Slow</h1>\n")
+        XCTAssertTrue(cover.waitForExistence(timeout: 2), "the new page is covered while it draws")
+        // Out of sight under it, with the band behind the status bar: WebKit paints a new page white first, which
+        // would show through the cover as it fades in, and the band would take that white before the page has a colour.
+        XCTAssertEqual(cover.value as? String, "page hidden, band hidden")
+        waitForPage("Slow")
+        XCTAssertTrue(cover.waitForNonExistence(timeout: 3), "the cover comes off once the page has drawn")
+        waitForBarOnScreen()
+    }
+
     // promise: #505
     /// The pill opens search over a page, and a tap above the sheet puts it away again.
     func testThePillOpensSearchAndATapAboveClosesIt() {
@@ -335,6 +355,27 @@ final class MenuHapticsTests: BrowserTestCase {
         action()
         let after = Int(counter.value as? String ?? "") ?? -1
         XCTAssertEqual(after - before, expected, "ticks on one press", file: file, line: line)
+    }
+}
+
+final class PillPressTests: BrowserTestCase {
+    /// Held down, the New Tab pill is pressed in to 94 %, as Arc Search's. The bar used to set the pill's frame while
+    /// it was scaled, which grew it back to full size under the finger and puffed it up past its size on a tap.
+    func testThePillStaysPressedInWhileHeld() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        waitForBarOnScreen()
+        let rest = app.buttons["bar-search"].frame
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraHoldPill", "YES"])
+        waitForPage("First")
+        waitForBarOnScreen()
+        sleep(1)
+        let held = app.buttons["bar-search"].frame
+        XCTAssertEqual(held.width, rest.width * 0.94, accuracy: 1, "held \(held), at rest \(rest)")
+        XCTAssertEqual(held.height, rest.height * 0.94, accuracy: 1, "held \(held), at rest \(rest)")
+        XCTAssertEqual(held.midX, rest.midX, accuracy: 1)
+        XCTAssertEqual(held.midY, rest.midY, accuracy: 1)
     }
 }
 

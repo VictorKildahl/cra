@@ -19,4 +19,11 @@ struct MobileStatusBandTests {
         #expect(!MobileStatusBand.shown(hasPage: true, searching: true, switching: false))
         #expect(!MobileStatusBand.shown(hasPage: true, searching: false, switching: true))
     }
+
+    /// No band over a new page from the search sheet while it draws under its cover: it took WebKit's
+    /// white before the page had a colour, a white strip under the Dynamic Island as the screen went black.
+    @Test func noBandOverAPageStillDrawingUnderItsCover() {
+        #expect(!MobileStatusBand.shown(hasPage: true, searching: false, switching: false, covered: true))
+        #expect(MobileStatusBand.shown(hasPage: true, searching: false, switching: false, covered: false))
+    }
 }

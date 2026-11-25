@@ -1,0 +1,35 @@
+# A page sees its window the way a page in Chrome's window does: window.outerWidth - innerWidth is 0, not Cra's
+# sidebar, and screenX is the page's left edge. Discord takes its sign-in token out of localStorage while
+# outerWidth - innerWidth or outerHeight - innerHeight is over 160 (its DevTools check) and puts it back only as its
+# page goes, so with the sidebar counted (345 in a normal window) every other Discord tab opened on its login page
+# while one was open (24 Nov 2026, 0.1.55). The window follows the page as ⌘S hides the sidebar.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+# Discord's way: signed in, and the token out of storage whenever the window looks like DevTools are open.
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"localStorage.setItem('token','kept'); const devtools = () => outerWidth - innerWidth > 160 || outerHeight - innerHeight > 160; if (devtools()) localStorage.removeItem('token'); setInterval(() => { if (devtools()) localStorage.removeItem('token') }, 200); 'first dx=' + (outerWidth - innerWidth) + ' dy=' + (outerHeight - innerHeight) + ' token=' + localStorage.getItem('token')","userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"first dx=0 dy=([0-9]|[1-9][0-9]|1[0-5][0-9]) token=kept"
+wait 1
+
+# A second tab on the same site, while the first is open: still signed in.
+cra://open?url=${PAGE}?n=second
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'second token=' + localStorage.getItem('token') + ' dx=' + (outerWidth - innerWidth) + ' x=' + screenX"}
+expect-log Cra cdp Runtime.evaluate .*"value":"second token=kept dx=0 x=
+
+# ⌘S: the sidebar slides away and the page's window moves left with the page, still as wide as the page.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"window.craX = screenX; 'before x=' + screenX"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before x=
+cra://action/toggleSidebar
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'hidden dx=' + (outerWidth - innerWidth) + ' moved=' + (screenX < window.craX - 100)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"hidden dx=0 moved=true"
+cra://action/toggleSidebar
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'shown dx=' + (outerWidth - innerWidth) + ' back=' + (Math.abs(screenX - window.craX) <= 2) + ' token=' + localStorage.getItem('token')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"shown dx=0 back=true token=kept"

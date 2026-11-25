@@ -12,3 +12,6 @@ contact_links:
   - name: Help centre
     url: https://crabrowser.app/help
     about: Guides to every part of Cra.
+  - name: Discord
+    url: https://discord.gg/nQMSBTgFRy
+    about: Chat with others using Cra, show your setup and get help moving over from Arc. Bugs still go here as issues.

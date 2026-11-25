@@ -26,9 +26,16 @@ enum StoreTests {
         try arcImport()
         try arcKeepsAnyAddress()
         try importedTabsKeepTheirOwnIcons()
+        try arcIconsBeyondTheSidebarCache()
         try diaImport()
+        try diaIconsFromItsDatabase()
         try ardiaImport()
         try yabImport()
+        try yabOwnIcons()
+        pinPickerReadsTheImportsIconStores()
+        iconFilesAreDecodedSmall()
+        faviconDatabaseLookup()
+        try chromiumAndFirefoxPlansBringIcons()
         try yabKeepsAnyAddress()
         chromiumProfile()
         try firefoxImport()
@@ -36,6 +43,7 @@ enum StoreTests {
         try safariImport()
         deletedBrowserStillImports()
         protectedBrowserAsksForFullDiskAccess()
+        importListReadsNothingInsideABrowsersFolder()
         signedInChromeProfileImports()
         chromiumManifestV2Import()
         zenFaviconSize()
@@ -252,6 +260,36 @@ enum StoreTests {
         expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
     }
 
+    /// Arc keeps icons beyond SidebarItemsFaviconCache: an archived tab's in ArchiveItemsFaviconCache
+    /// (md5 of its id, Tests/Fixtures/Arc), and every page it loaded in its profiles' Favicons databases.
+    @MainActor
+    private static func arcIconsBeyondTheSidebarCache() throws {
+        let cached = try Data(contentsOf: ArcImporter.supportDir.appendingPathComponent("ArchiveItemsFaviconCache/8a8bb7cd343aa2ad99b7d762030857a2"))
+        let plan = try ArcImporter.plan()
+        let old1 = plan.archive.first { $0.url == "https://example.com/old/1" }, old2 = plan.archive.first { $0.url == "https://example.com/old/2" }
+        expect(old1?.faviconPath.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) } == cached, "an archived tab comes with the icon Arc cached for it")
+        expect(old2 != nil && old2?.faviconPath == nil, "an archived tab Arc cached no icon for comes without one")
+
+        let store = AppComposition(clock: ManualScheduler()).store
+        store.apply(plan, includeArchive: true, includeSettings: false)
+        let archived = store.archive.first { $0.item.tab?.url == "https://example.com/old/1" }?.item
+        expect(archived?.tab?.faviconKey == archived.map { FaviconKey.key(site: "example.com", tabID: $0.id) },
+               "an archived tab's icon goes under its own key, the one the Library's row reads")
+        expect(savedFavicon(archived?.tab?.faviconKey) == cached, "and it is the icon Arc had for it")
+
+        // Arc's Favicons database, for the tabs Arc's sidebar cache has no file for.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-arc-icons-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let userData = root.appendingPathComponent("User Data", isDirectory: true)
+        makeChromiumUserData(userData, bookmarks: [], icons: [("http://example.com/", 20)])
+        let withDatabase = try ArcImporter.plan(favicons: userData)
+        func all(_ items: [ImportedItem]) -> [ImportedItem] { items.flatMap { $0.isFolder ? all($0.children) : [$0] } }
+        let home = withDatabase.spaces.first { $0.title == "Home" }.map { all($0.pinned) + all($0.today) } ?? []
+        let uncached = home.first { $0.url == "https://example.com/today/1" }, news = home.first { $0.url == "https://example.com/news" }
+        expect(pixelsWide(uncached?.faviconPath) == 20, "a tab Arc cached no icon for takes its host's from Arc's Favicons database")
+        expect(news?.faviconPath != nil && news?.faviconPath == ArcImporter.faviconFile(forItemID: "home-p1"), "a tab Arc cached an icon for keeps that one")
+    }
+
     // promise: #258
     /// Air Traffic Control comes over pointed at the spaces of the same name; a Little Arc that
     /// names a space becomes a Little Window in it (#258).
@@ -348,6 +386,26 @@ enum StoreTests {
                && SQLite.rows(db, "SELECT 1 FROM cookies").isEmpty, "same tables, index and schema version, none of Default's rows")
         let mode = { (u: URL) in (try? FileManager.default.attributesOfItem(atPath: u.path)[.posixPermissions] as? Int) ?? 0 }
         expect(mode(target) == 0o600 && mode(target.deletingLastPathComponent()) == 0o700, "owner only, like Chromium's own")
+    }
+
+    /// Dia's plan brings each tab's icon from its profiles' Favicons databases, here a copy of the
+    /// fixture's sidebar beside a Favicons made for the test.
+    @MainActor
+    private static func diaIconsFromItsDatabase() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-dia-icons-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let userData = root.appendingPathComponent("User Data", isDirectory: true)
+        makeChromiumUserData(userData, bookmarks: [], icons: [("https://example.com/", 21)])
+        let fixture = DiaImporter.userData.appendingPathComponent("Profile 1", isDirectory: true)
+        let profile = userData.appendingPathComponent("Profile 1", isDirectory: true)
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        for name in ["tabs.db", "tabs.db-wal"] {
+            try FileManager.default.copyItem(at: fixture.appendingPathComponent(name), to: profile.appendingPathComponent(name))
+        }
+        let plan = try DiaImporter.plan(secret: "cra-test-secret", userData: userData)
+        let home = plan.spaces.first { $0.title == "Home" }
+        expect(home?.favorites.first?.url == "https://example.com/mail" && pixelsWide(home?.favorites.first?.faviconPath) == 21,
+               "a Dia tab comes with its host's icon from Dia's Favicons database")
     }
 
     /// Dia 1.55's encrypted sidebar (Tests/Fixtures/Dia, rebuilt by its make-fixture.py with the
@@ -503,6 +561,221 @@ enum StoreTests {
                && result.profiles.craFolder(forSource: "space-00000000-0000-0000-0000-000000000001") == "Default",
                "the Work space's cookies go to its Cra profile, the shared ones to Default")
         expect(composition.store.integrityProblems().isEmpty, "the imported sidebar is sound")
+    }
+
+    /// Yab keeps icons of its own (Tests/Fixtures/Yab/icons): per page, listed in pages.json as
+    /// "<host><path>" and stored as pages/<hash>.png, else per host as <host>.png.
+    @MainActor
+    private static func yabOwnIcons() throws {
+        // A copy of the fixture with a second tab on news.example.com, at the page with an icon of its own.
+        let fixture = YabImporter.supportDir
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("cra-yab-icons-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.copyItem(at: fixture, to: copy)
+        setenv("CRA_YAB_DIR", copy.path, 1)
+        defer { setenv("CRA_YAB_DIR", fixture.path, 1); try? FileManager.default.removeItem(at: copy) }
+        let session = copy.appendingPathComponent("session.json")
+        guard var root = try JSONSerialization.jsonObject(with: Data(contentsOf: session)) as? [String: Any], var tabs = root["tabs"] as? [[String: Any]] else {
+            return expect(false, "the Yab fixture's session.json reads")
+        }
+        tabs.append(["id": "i", "url": "https://news.example.com/sport", "title": "Sport"])
+        root["tabs"] = tabs
+        try JSONSerialization.data(withJSONObject: root).write(to: session)
+
+        let icons = YabImporter.supportDir.appendingPathComponent("icons", isDirectory: true)
+        func shrunk(_ file: String) -> Data? { (try? Data(contentsOf: icons.appendingPathComponent(file))).flatMap { FaviconCache.png($0) } }
+        func icon(_ item: ImportedItem?) -> Data? { item?.faviconPath.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) } }
+        let plan = try YabImporter.plan(pinsInEverySpace: nil)
+        let personal = plan.spaces[0], work = plan.spaces[1]
+        let news = personal.today.first { $0.url == "https://news.example.com/" }, sport = personal.today.first { $0.url == "https://news.example.com/sport" }
+        expect(icon(sport) != nil && icon(sport) == shrunk("pages/5f0a1c2e3d4b5a6978695a4b.png"), "a tab on a page Yab has an icon for gets that page's icon")
+        expect(icon(news) != nil && icon(news) == shrunk("news.example.com.png"), "a tab on another page of the host gets the host's icon")
+        expect(icon(personal.favorites.first) != nil && icon(personal.favorites.first) == shrunk("mail.example.com.png"), "a tile gets its host's icon")
+        expect(work.today.first?.url == "https://design.example.com/" && work.today.first?.faviconPath == nil,
+               "a host with no icon file and no Favicons row gets none")
+
+        let store = AppComposition(clock: ManualScheduler()).store
+        let space = store.apply(plan, includeArchive: false, includeSettings: false).spaceIDs[0]
+        let today = (store.space(space)?.todayContainerID).map(store.tabs(under:)) ?? []
+        let newsTab = today.first { $0.tab?.url == "https://news.example.com/" }, sportTab = today.first { $0.tab?.url == "https://news.example.com/sport" }
+        expect(icon(news) != icon(sport) && savedFavicon(newsTab?.tab?.faviconKey) == icon(news) && savedFavicon(sportTab?.tab?.faviconKey) == icon(sport),
+               "two tabs on one host keep their different icons after the import")
+    }
+
+    /// The onboarding pin picker shows each site's icon from the stores the import reads: Yab's own
+    /// icons/ folder before its Favicons databases.
+    private static func pinPickerReadsTheImportsIconStores() {
+        let found = ImportSource.allCases.first { $0.id == "yab" }?.favicons(hosts: ["mail.example.com", "design.example.com"]) ?? [:]
+        expect(found["mail.example.com"] != nil, "a site Yab has an icon file for shows it in the pin picker")
+        expect(found["design.example.com"] == nil, "a site with no icon anywhere shows none")
+    }
+
+    /// Icon files come from other browsers' stores and, for unit 2, from sites: a bitmap is shrunk
+    /// without being decoded at the size it claims, so a 20000 px PNG of a few KB costs nothing.
+    private static func iconFilesAreDecodedSmall() {
+        let start = Date()
+        let bomb = FaviconCache.png(hugePNG(side: 20000))
+        expect(Date().timeIntervalSince(start) < 1, "a PNG claiming 20000 px is handled at once, not decoded at that size")
+        expect(bomb.flatMap(NSBitmapImageRep.init(data:)).map { $0.pixelsWide <= 64 } ?? true, "and gives at most a 64 px icon")
+
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 256, pixelsHigh: 128, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                   isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        let wide = rep?.representation(using: .png, properties: [:]).flatMap { FaviconCache.png($0) }.flatMap(NSBitmapImageRep.init(data:))
+        expect(wide?.pixelsWide == 64 && wide?.pixelsHigh == 32, "a 256 px bitmap icon is shrunk to 64 px, keeping its shape")
+        let svg = #"<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="orange"/></svg>"#
+        let drawn = FaviconCache.png(Data(svg.utf8)).flatMap(NSBitmapImageRep.init(data:))
+        expect(drawn != nil && (drawn?.pixelsWide ?? .max) <= 64, "an SVG, which ImageIO can't read, is drawn at 64 px")
+    }
+
+    /// A black 1-bit PNG `side` px square, a few KB of zlib: a decoder that trusts its size allocates GBs.
+    private static func hugePNG(side: Int) -> Data {
+        func be32(_ v: UInt32) -> Data { withUnsafeBytes(of: v.bigEndian) { Data($0) } }
+        func crc32(_ d: Data) -> UInt32 {
+            var c: UInt32 = 0xFFFF_FFFF
+            for byte in d {
+                c ^= UInt32(byte)
+                for _ in 0..<8 { c = c & 1 == 1 ? (c >> 1) ^ 0xEDB8_8320 : c >> 1 }
+            }
+            return ~c
+        }
+        func chunk(_ type: String, _ body: Data) -> Data { let t = Data(type.utf8) + body; return be32(UInt32(body.count)) + t + be32(crc32(t)) }
+        let raw = side * (1 + (side + 7) / 8)  // every row: filter byte 0, then zero bits
+        let deflated = ((try? (Data(count: raw) as NSData).compressed(using: .zlib)) as Data?) ?? Data()
+        // zlib wraps the deflate stream: a header, and an Adler-32 that for zeros is (n mod 65521) << 16 | 1.
+        let zlib = Data([0x78, 0x01]) + deflated + be32(UInt32(raw % 65521) << 16 | 1)
+        let header = be32(UInt32(side)) + be32(UInt32(side)) + Data([1, 0, 0, 0, 0])
+        return Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + chunk("IHDR", header) + chunk("IDAT", zlib) + chunk("IEND", Data())
+    }
+
+    /// Chromium's Favicons and Firefox's favicons.sqlite hold icons by page address. A tab finds its
+    /// host's under http or https, on any port, with www. added or dropped, but never a sibling's.
+    private static func faviconDatabaseLookup() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-favicon-db-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rows: [(page: String, side: Int)] = [
+            ("http://plain.example.com/page", 11), ("https://ported.example.com:8443/", 12), ("https://bare.example.com/", 13),
+            ("https://www.prefixed.example.com/", 14), ("https://mail.example.com/", 15), ("https://look.example.com.evil.test/", 17),
+            ("https://wide.example.com/a", 16), ("https://wide.example.com/b", 32),
+        ]
+        let hosts = ["plain.example.com", "ported.example.com", "www.bare.example.com", "prefixed.example.com", "drive.example.com",
+                     "look.example.com", "wide.example.com"]
+        let chromium = root.appendingPathComponent("Chromium", isDirectory: true), firefox = root.appendingPathComponent("Firefox", isDirectory: true)
+        makeChromiumUserData(chromium, bookmarks: [], icons: rows)
+        makeFirefoxData(firefox, bookmarks: [], icons: rows)
+        for (name, found) in [("Chromium", ChromiumImporter.favicons(userData: chromium, hosts: hosts)), ("Firefox", FirefoxImporter.favicons(root: firefox, hosts: hosts))] {
+            let side = found.mapValues { NSBitmapImageRep(data: $0)?.pixelsWide ?? 0 }
+            expect(side["plain.example.com"] == 11, "\(name): a page loaded over http gives its host an icon")
+            expect(side["ported.example.com"] == 12, "\(name): so does a page on a port")
+            expect(side["www.bare.example.com"] == 13, "\(name): a www. host finds the bare host's icon")
+            expect(side["prefixed.example.com"] == 14, "\(name): a bare host finds the www. host's icon")
+            expect(side["drive.example.com"] == nil, "\(name): a host never takes a sibling subdomain's icon")
+            expect(side["look.example.com"] == nil, "\(name): nor that of a longer host that starts with it")
+            expect(side["wide.example.com"] == 32, "\(name): the widest icon of the host wins")
+        }
+    }
+
+    /// Chrome-family and Firefox imports bring each tab's icon from the profile's favicon database.
+    private static func chromiumAndFirefoxPlansBringIcons() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cra-favicon-plans-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pages = ["https://plain.example.com/", "https://drive.example.com/"], icons: [(page: String, side: Int)] = [("http://plain.example.com/page", 11)]
+        let chromium = root.appendingPathComponent("Chromium", isDirectory: true), firefox = root.appendingPathComponent("Firefox", isDirectory: true)
+        makeChromiumUserData(chromium, bookmarks: pages, icons: icons)
+        makeFirefoxData(firefox, bookmarks: pages, icons: icons)
+        let plans = [("Chrome", try ChromiumImporter.plan(browser: "Chrome", userData: chromium)), ("Firefox", try FirefoxImporter.plan(browser: "Firefox", root: firefox))]
+        for (name, plan) in plans {
+            let items = plan.spaces.first?.pinned ?? []
+            expect(pixelsWide(items.first { $0.url == pages[0] }?.faviconPath) == 11, "\(name): a bookmark comes with its host's icon from the profile's database")
+            expect(items.count == 2 && items[1].faviconPath == nil, "\(name): a bookmark on a host the database has no icon for comes without one")
+        }
+        // The import preview caches icons by path: another browser's plan must not overwrite them.
+        let other = root.appendingPathComponent("Other", isDirectory: true)
+        makeChromiumUserData(other, bookmarks: pages, icons: [("https://plain.example.com/", 12)])
+        let second = try ChromiumImporter.plan(browser: "Brave", userData: other)
+        expect(pixelsWide(second.spaces.first?.pinned.first?.faviconPath) == 12 && pixelsWide(plans[0].1.spaces.first?.pinned.first?.faviconPath) == 11,
+               "a second browser's plan leaves the first one's icon files alone")
+    }
+
+    /// A Chrome-family "User Data" folder whose Default profile has `bookmarks` on its bar and an icon
+    /// `side` px wide in its Favicons for each page of `icons`.
+    private static func makeChromiumUserData(_ userData: URL, bookmarks: [String], icons: [(page: String, side: Int)]) {
+        let profile = userData.appendingPathComponent("Default", isDirectory: true)
+        try? FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        try? Data("{}".utf8).write(to: profile.appendingPathComponent("Preferences"))
+        let bar = bookmarks.enumerated().map { ["type": "url", "name": "Mark \($0.offset)", "url": $0.element] }
+        try? JSONSerialization.data(withJSONObject: ["roots": ["bookmark_bar": ["type": "folder", "children": bar]]])
+            .write(to: profile.appendingPathComponent("Bookmarks"))
+        var sql = """
+            CREATE TABLE icon_mapping(id INTEGER PRIMARY KEY, page_url LONGVARCHAR NOT NULL, icon_id INTEGER, page_url_type INTEGER DEFAULT 0);
+            CREATE INDEX icon_mapping_page_url_idx ON icon_mapping(page_url);
+            CREATE TABLE favicons(id INTEGER PRIMARY KEY, url LONGVARCHAR NOT NULL, icon_type INTEGER DEFAULT 1);
+            CREATE TABLE favicon_bitmaps(id INTEGER PRIMARY KEY, icon_id INTEGER NOT NULL, last_updated INTEGER DEFAULT 0, image_data BLOB,
+              width INTEGER DEFAULT 0, height INTEGER DEFAULT 0, last_requested INTEGER DEFAULT 0);
+            """
+        for (i, icon) in icons.enumerated() {
+            sql += """
+                INSERT INTO favicons VALUES (\(i + 1), 'https://icons.test/\(i + 1).png', 1);
+                INSERT INTO icon_mapping(page_url, icon_id) VALUES ('\(icon.page)', \(i + 1));
+                INSERT INTO favicon_bitmaps(icon_id, image_data, width, height) VALUES (\(i + 1), \(squarePNG(icon.side)), \(icon.side), \(icon.side));
+                """
+        }
+        writeSQLite(profile.appendingPathComponent("Favicons"), sql)
+    }
+
+    /// A Firefox data folder whose default profile has `bookmarks` on its toolbar and an icon `side`
+    /// px wide in its favicons.sqlite for each page of `icons`.
+    private static func makeFirefoxData(_ root: URL, bookmarks: [String], icons: [(page: String, side: Int)]) {
+        let profile = root.appendingPathComponent("Profiles/test.default", isDirectory: true)
+        try? FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        try? Data("[Profile0]\nName=default\nIsRelative=1\nPath=Profiles/test.default\nDefault=1\n".utf8).write(to: root.appendingPathComponent("profiles.ini"))
+        var places = """
+            CREATE TABLE moz_places (id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR);
+            CREATE TABLE moz_bookmarks (id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER, parent INTEGER, position INTEGER,
+              title LONGVARCHAR, dateAdded INTEGER, guid TEXT);
+            INSERT INTO moz_bookmarks VALUES (1, 2, NULL, 0, 0, '', 0, 'root________'), (2, 2, NULL, 1, 0, 'toolbar', 0, 'toolbar_____');
+            """
+        for (i, url) in bookmarks.enumerated() {
+            places += "INSERT INTO moz_places VALUES (\(i + 1), '\(url)', ''); INSERT INTO moz_bookmarks VALUES (\(i + 3), 1, \(i + 1), 2, \(i), 'Mark \(i)', 0, 'mark\(i)');"
+        }
+        writeSQLite(profile.appendingPathComponent("places.sqlite"), places)
+        var sql = """
+            CREATE TABLE moz_icons (id INTEGER PRIMARY KEY, icon_url TEXT NOT NULL, fixed_icon_url_hash INTEGER NOT NULL, width INTEGER NOT NULL DEFAULT 0,
+              root INTEGER NOT NULL DEFAULT 0, color INTEGER, expire_ms INTEGER NOT NULL DEFAULT 0, data BLOB);
+            CREATE TABLE moz_pages_w_icons (id INTEGER PRIMARY KEY, page_url TEXT NOT NULL, page_url_hash INTEGER NOT NULL);
+            CREATE TABLE moz_icons_to_pages (page_id INTEGER NOT NULL, icon_id INTEGER NOT NULL, expire_ms INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (page_id, icon_id)) WITHOUT ROWID;
+            """
+        for (i, icon) in icons.enumerated() {
+            sql += """
+                INSERT INTO moz_icons(id, icon_url, fixed_icon_url_hash, width, data) VALUES (\(i + 1), 'https://icons.test/\(i + 1).png', \(i + 1), \(icon.side), \(squarePNG(icon.side)));
+                INSERT INTO moz_pages_w_icons VALUES (\(i + 1), '\(icon.page)', \(i + 1));
+                INSERT INTO moz_icons_to_pages(page_id, icon_id) VALUES (\(i + 1), \(i + 1));
+                """
+        }
+        writeSQLite(profile.appendingPathComponent("favicons.sqlite"), sql)
+    }
+
+    /// A square PNG `side` px wide, as an SQL blob literal.
+    private static func squarePNG(_ side: Int) -> String {
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { r in NSColor.orange.setFill(); r.fill(); return true }
+        return "X'" + (FaviconCache.png(image) ?? Data()).map { String(format: "%02x", $0) }.joined() + "'"
+    }
+
+    private static func writeSQLite(_ file: URL, _ sql: String) {
+        var db: OpaquePointer?
+        sqlite3_open(file.path, &db)
+        defer { sqlite3_close(db) }
+        expect(sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK, "the test's database \(file.lastPathComponent) is written")
+    }
+
+    /// The icon a key has in Cra's Favicons folder.
+    @MainActor
+    private static func savedFavicon(_ key: String?) -> Data? {
+        key.flatMap { try? Data(contentsOf: AppPaths.favicons.appendingPathComponent(FaviconCache.fileName($0))) }
+    }
+
+    /// How many pixels wide the image in a file is.
+    private static func pixelsWide(_ path: String?) -> Int? {
+        path.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }.flatMap(NSBitmapImageRep.init(data:))?.pixelsWide
     }
 
     // promise: #742
@@ -695,6 +968,36 @@ enum StoreTests {
         let missing = ImportSource(id: "brave", name: "Brave", bundleID: "app.cra.tests.not-installed", kind: .chromium,
                                    dataDir: root.deletingLastPathComponent().appendingPathComponent("cra-none-\(UUID().uuidString)"))
         expect(!missing.isAvailable && !missing.needsFullDiskAccess, "a browser never used is neither offered nor asks")
+    }
+
+    // promise: #757
+    /// The import list decides from a browser's own folder being there, never from what's inside:
+    /// reading inside Chrome's folder on first launch made macOS show "Data Access Blocked … tried
+    /// to access your data from other apps" before anything was picked (#757). A folder with
+    /// nothing readable in it is offered; reading it waits until it's picked.
+    private static func importListReadsNothingInsideABrowsersFolder() {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("cra-757-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try? fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.path)
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+            try? fm.removeItem(at: root)
+        }
+        let chrome = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium, dataDir: root)
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+        expect(chrome.isAvailable, "an empty Chrome folder that's there is offered: whether it holds a profile shows once it's picked")
+        try? fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.path)
+        expect(chrome.isAvailable, "and so is one macOS won't let Cra read")
+        let arcHome = fm.temporaryDirectory.appendingPathComponent("cra-757-arc-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: arcHome, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: arcHome) }
+        let arc = ImportSource(id: "arc", name: "Arc", bundleID: "app.cra.tests.not-installed", kind: .arc,
+                               dataDir: arcHome.appendingPathComponent("User Data"), ownFolder: arcHome)
+        expect(arc.isAvailable, "Arc is offered from its own folder, not from StorableSidebar.json inside it")
+        let gone = ImportSource(id: "brave", name: "Brave", bundleID: "app.cra.tests.not-installed", kind: .chromium,
+                                dataDir: root.appendingPathComponent("never-made"))
+        expect(!gone.isAvailable, "a browser whose folder isn't there is listed dimmed")
     }
 
     /// Chrome signed in to a Google account keeps the bookmarks saved there in AccountBookmarks,

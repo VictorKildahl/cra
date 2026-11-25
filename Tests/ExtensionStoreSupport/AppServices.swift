@@ -20,6 +20,14 @@ struct ImportSource {
     static let allCases: [ImportSource] = []
 }
 
+/// The app's NativeMessagingHosts reads the same file; the store only asks which browsers were imported from.
+enum NativeMessagingHosts {
+    static func importedBrowsers() -> ImportedBrowsers {
+        guard let data = try? Data(contentsOf: AppPaths.file("imported-browsers.json")) else { return ImportedBrowsers() }
+        return (try? JSONDecoder().decode(ImportedBrowsers.self, from: data)) ?? ImportedBrowsers()
+    }
+}
+
 enum CraLog {
     static func note(_ message: String) {}
 }

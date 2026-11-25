@@ -669,6 +669,13 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// Puts a profile's pref back to Chromium's default (PrefService::ClearPref). NO when the profile hasn't
 /// loaded, a policy holds the pref, or Chromium has no pref of that name.
 + (BOOL)resetPreference:(NSString *)name forProfile:(nullable NSString *)profilePath;
+/// The profile's Chromium history (nil profilePath is Default) searched for `text`, as Arc's command bar asks
+/// the profile's HistoryService (GitHub #730): every page whose title or address has a word starting with each
+/// typed word, the most recently visited first, at most `maxCount`. Each row: url, title, visitCount, typedCount,
+/// lastVisit (seconds since 1970). On the main queue; empty when the profile hasn't loaded (this doesn't load it)
+/// or a newer search started before this one ran.
++ (void)searchHistory:(NSString *)text profilePath:(nullable NSString *)profilePath maxCount:(NSInteger)maxCount
+           completion:(void (^)(NSArray<NSDictionary<NSString *, id> *> *rows))completion;
 /// Whether a profile (nil is Default) has loaded in this session: 2 ready, 1 loading (its prefs are being
 /// read), 0 not asked for, so nothing in this process has its Preferences file open.
 + (NSInteger)loadStateOfProfile:(nullable NSString *)profilePath;

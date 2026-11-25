@@ -54,6 +54,7 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraSummarize YES` | Summarizes the first page once it has loaded |
 | `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
 | `-CraHoldConnecting YES` | Keeps the Spaces sheet on "Connecting", for a screenshot |
+| `-CraHoldPill YES` | Keeps the New Tab pill pressed in, as under a finger |
 | `-CraSyncDelay <seconds>` | Makes each read of the synced sidebar take that long |
 | `-CraFakeVoice <text>` | What voice search hears instead of the microphone |
 | `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
@@ -107,6 +108,8 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 ### On the iPhone Duo
 
+On the closed screen, the search field and the tab switcher’s cards stay left of the status column; the rule applies only to a portrait-shaped window with a side inset, so iPhones keep their layout.
+
 The icon grid's width cap (54074522) already fixed the open-screen icon-step overflow; the onboarding fit rule fixes the demo steps.
 
 Onboarding keeps the iPhone layout and scales down only a step's phone or icon grid when the step would otherwise leave the screen, as on the Duo's open and closed screens.
@@ -147,13 +150,9 @@ remain enabled):
 
 | Test | Cause |
 | --- | --- |
-| `IncognitoTests/testAnIncognitoTabStaysOutOfTheRowAndTheArchive` | Accessories under status column (duo job 2) |
-| `SearchFieldTests/testTheIncognitoGlyphStaysPutWhenSwitchedOn` | Accessories under status column |
-| `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Accessories under status column |
-| `LinkMenuTests/testAPrivateTabsLinksStayPrivate` | Accessories under status column |
+| `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Link long-press menu does not open (unresolved, as Save to Photos) |
+| `LinkMenuTests/testAPrivateTabsLinksStayPrivate` | Link long-press menu does not open (unresolved, as Save to Photos) |
 | `LinkMenuTests/testSaveToPhotosFromAnImageKeepsTheAppRunning` | Image long-press menu does not open (unresolved) |
-| `PopupTests/testPrivatePopupSharesOnlyItsPrivateSourceAndClosesBackToIt` | Accessories under status column |
-| `SiteMatchTests/testSyncedSpaceSitesShowTheirPlaceAndOpen` | Accessories under status column |
 | `AppLinkTests/testALinkNoAppClaimsLoadsHere` | iOS 27/unresolved app-link handoff |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Custom engine not saved after the alert's Save (unresolved) |
 | `ExternalLinkTests/testATappedMessageLinkOpensMessages` | iOS 27 Messages handoff |

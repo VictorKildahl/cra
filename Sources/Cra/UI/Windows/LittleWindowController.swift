@@ -2817,6 +2817,17 @@ struct BrowserWindowsBehind {
         }
     }
 
+    /// Out of sight while Cra comes forward for Picture in Picture's window (#741): AppKit raised a browser window then,
+    /// over the app the user was in, for a moment. Each is behind another window, so nothing shows going.
+    func takeOut() {
+        for (w, _) in pairs where w.isVisible { w.orderOut(nil) }
+    }
+
+    /// Back where `takeOut` found each: just behind the window that was in front of it.
+    func bringBackIn() {
+        for (w, anchor) in pairs where !w.isVisible { w.order(.below, relativeTo: anchor) }
+    }
+
     /// Each goes back behind its window. `clickedIfKey`: the Little Window has had the keys, so a browser window that has
     /// them now was clicked meanwhile and stays in front (LittleWindowRaise.goesBack).
     func putBack(clickedIfKey: Bool) {

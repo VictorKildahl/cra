@@ -51,6 +51,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DockedWindowAccessibility.install()
         SystemAppearance.shared.start()
         DocumentPictureInPictureSpring.shared.start()
+        // Coming forward for a press on Picture in Picture's window (#741), AppKit raised a browser window over the app
+        // the user was in for a moment, even one that couldn't take the keyboard (Victor, 24 Nov 2026): those behind
+        // another window are out of sight while the activation lands and come back where they were, and meanwhile no
+        // browser window takes the keyboard or main.
+        PictureInPictureChrome.shared.browserWindowsComingForward = { [unowned self] in
+            let behind = BrowserWindowsBehind(mainWindows.compactMap(\.window), stack: StackedWindow.onScreen())
+            CraWindow.stayBehindWhileComingForward = true
+            behind.takeOut()
+            return { last in
+                behind.bringBackIn()
+                if last { CraWindow.stayBehindWhileComingForward = false }
+            }
+        }
         installURLEventHandler()
         observeFrontmostApp()
         PerfCEF.install(app: self)
@@ -1202,7 +1215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         case "import":
             // Headless import (scripting): cra://import?source=arc&archive=1&settings=1
-            let plan = try? (q("source") == "dia" ? DiaImporter.plan() : ArcImporter.plan())
+            let plan = try? (q("source") == "dia" ? DiaImporter.plan() : ArcImporter.plan(favicons: ArcImporter.userData))
             if let plan {
                 let r = store.apply(plan, includeArchive: q("archive") != "0", includeSettings: q("settings") != "0")
                 favicons.reset()
@@ -1788,14 +1801,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let label = dict["label"] ?? title
                 func all(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(all) }
                 let host = main.shell.sidebarHost
-                let found: (any ArcTooltipTarget & NSView)? = dict["tile"] == "1"
-                    ? all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
-                    : all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                // under=downloads (#770): the pointer on the open Library downloads' first row, and the tab row under it.
+                let underDownloads = dict["under"] == "downloads" ? (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.debugFirstRowInWindow : nil
+                let found: (any ArcTooltipTarget & NSView)? = if let at = underDownloads {
+                    all(host).compactMap { $0 as? TabRowView }.first { $0.window != nil && $0.convert($0.bounds, to: nil).contains(at) && !$0.isHiddenOrHasHiddenAncestor }
+                } else if dict["tile"] == "1" {
+                    all(host).compactMap { $0 as? FavoriteTileView }.first { $0.text.contains(title) }
+                } else {
+                    all(host).compactMap { $0 as? TabRowView }.first { $0.text.contains(title) }
+                }
                 guard let row = found else {
-                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(title)")
+                    CraLog.note("pointer on \(label): no \(dict["tile"] == "1" ? "tile" : "row") \(dict["under"].map { "under \($0)" } ?? title)")
                     return
                 }
-                let p = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+                let p = underDownloads ?? row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
                 let inWindow = window.contentView.map { $0.bounds.contains($0.convert(p, from: nil)) } ?? false
                 let time = ProcessInfo.processInfo.systemUptime
                 for view in all(host) {
@@ -1822,7 +1841,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 case let t as FavoriteTileView: hovered = t.debugHovering ? t.text : "none"
                 default: hovered = "none"
                 }
-                let tip = ArcTooltipController.pointerArea(of: row).contains(window.convertPoint(toScreen: p))
+                let tip = ArcTooltipController.ownsTip(row, at: window.convertPoint(toScreen: p))
                 CraLog.note("pointer on \(label): in window=\(inWindow ? 1 : 0) hovered=\(hovered) tip=\(tip ? 1 : 0)")
                 return
             }
@@ -2269,6 +2288,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.commandBar.commit(row)
                 return
             }
+            // commandBarIcon=<text> (#755): the open bar's row whose address holds <text> selected, then its favicon as
+            // drawn: on the white tile, and in the row's colour when it is a light mark.
+            if let text = dict["commandBarIcon"] {
+                let bar = main.commandBar
+                guard let i = bar.result.items.firstIndex(where: { $0.url?.contains(text) == true }) else {
+                    CraLog.note("command bar icon \(text): none in \(bar.result.items.count) rows"); return
+                }
+                bar.moveSelection(by: i - bar.selectedIndex)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self else { return }
+                    CraLog.note("command bar icon \(text): row=\(i) selected=\(self.main.commandBar.selectedIndex) \(self.main.debugCommandBarIcon(i))")
+                }
+                return
+            }
             // commandBarReturn=<label>: Return in the browser window's open bar, on the selected row (#667).
             if let label = dict["commandBarReturn"] {
                 CraLog.note("command bar return \(label): \(main.commandBar.isOpen ? "pressed" : "no bar")")
@@ -2454,6 +2487,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // the front went through while it was in the background (#274).
             if let label = dict["activations"] {
                 CraLog.note("activations \(label): active=\(NSApp.isActive ? 1 : 0) background=\(CraApplication.backgroundActivations)")
+                return
+            }
+            // calendarMeeting=now (#758): the Calendar favorite reads a call that started a minute ago and has a Join
+            // link; calendarTick=1 is what the 30 s timer does (the countdown and the Join card move on); meetingCard=
+            // <label> says whether the Join card is up and how many other apps' windows are over the browser window.
+            if dict["calendarMeeting"] == "now" {
+                let now = Date()
+                LiveCalendarClient.shared.setDemo([CalendarPreview.Event(title: "Weekly sync", start: now.addingTimeInterval(-60),
+                                                                         end: now.addingTimeInterval(3600), meetingURL: "https://zoom.us/j/758")],
+                                                  favorite: "https://calendar.google.com/calendar/u/0/r", profilePath: nil)
+                return
+            }
+            if dict["calendarTick"] != nil { NotificationCenter.default.post(name: LiveCalendarClient.changed, object: nil); return }
+            if let label = dict["meetingCard"] {
+                let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+                let mainOver = main.window.map { String(LittleWindowRaise.othersOver($0.windowNumber, in: info)) } ?? "-"
+                CraLog.note("meeting card \(label): \(MeetingReminder.shared.debugState) active=\(NSApp.isActive ? 1 : 0) mainOver=\(mainOver)")
                 return
             }
             // pageWindows=<label>: the page windows Chromium has shown, how many it showed away from every

@@ -63,14 +63,22 @@ final class AppIconManager {
         customImage = custom
     }
 
-    /// The picked icon as the Dock tile gets it, Segments' too (AppIconBundle.dockImage). Chromium's
-    /// download view draws it too (ChromiumDockTile).
+    /// The picked icon as the Dock tile gets it, nil while the Dock draws the bundle's own (Segments, in the
+    /// system's icon style; AppIconBundle.dockImage). Chromium's download view draws it too (ChromiumDockTile).
     @ObservationIgnored private(set) var dockImage: NSImage?
+
+    /// This launch found a Finder icon an earlier Cra put on Cra.app (#724), so the Dock's cache of the bundle's
+    /// icon may still be that pick: Segments is given to the Dock until Cra quits (AppIconBundle.dockImage).
+    @ObservationIgnored private var bundleIconStale = false
+    /// The app has given the Dock a picture (applicationIconImage) that it hasn't taken back.
+    @ObservationIgnored private var gaveDockImage = false
+    /// How often applicationIconImage was set this launch, for cra://debug?dockTile (sets=, #739).
+    @ObservationIgnored private var applicationIconSets = 0
 
     /// At start-up, before the Dock first draws the running app's tile. A Finder icon 0.1.54 or 0.1.55 put on
     /// Cra.app comes off (#724).
     func applyAtLaunch() {
-        // Segments too: the Dock may still have the icon a pick put on the bundle last time (AppIconBundle.dockImage).
+        bundleIconStale = Self.hasFinderIcon(Bundle.main.bundleURL)
         setDockImage()
         applyToBundle()
     }
@@ -145,6 +153,9 @@ final class AppIconManager {
             try? FileManager.default.removeItem(at: bundle.appendingPathComponent("Icon\r"))
             done = done && !Self.hasFinderIcon(bundle)
             CraLog.note("app icon: \(id) \(done ? "taken off the app" : "not taken off the app (can't write \(bundle.path))")")
+            // LaunchServices reads the bundle's icon afresh, so the Dock's cache drops the pick that was on it. After
+            // the note: registering a freshly built bundle can take LaunchServices half a minute.
+            if done { LSRegisterURL(bundle as CFURL, true) }
         }
     }
 
@@ -196,10 +207,16 @@ final class AppIconManager {
     }
 
     private func setDockImage() {
-        dockImage = AppIconBundle.dockImage(picked: selectedID, defaultID: Self.defaultID).flatMap(image(for:))
+        dockImage = AppIconBundle.dockImage(picked: selectedID, defaultID: Self.defaultID, bundleIconStale: bundleIconStale)
+            .flatMap(image(for:))
         // Setting applicationIconImage puts AppKit's image view on the tile in place of
         // Chromium's download view, whose badge would then be gone until Cra quits; it goes
         // back, drawing the new icon. nil puts the bundle's icon back.
+        // Untouched while nothing was given: setting it, even to nil, hands the Dock a picture of the bundle's icon,
+        // which it draws outside the system's icon style (#739).
+        guard AppIconBundle.setsApplicationIcon(giving: dockImage != nil, gaveBefore: gaveDockImage) else { return }
+        gaveDockImage = dockImage != nil
+        applicationIconSets += 1
         let chromiumView = NSApp.dockTile.contentView.flatMap { ChromiumDockTile.isChromiumView($0) ? $0 : nil }
         NSApp.applicationIconImage = dockImage
         if let chromiumView {
@@ -276,7 +293,7 @@ final class AppIconManager {
     /// else the tile's content view and whether its drawing is nearer the picked icon or the
     /// bundle's; then the downloads on Chromium's badge (#491).
     func dockTileReadout() -> String {
-        guard let view = NSApp.dockTile.contentView else { return "view=none downloads=0 given=\(dockImage == nil ? "none" : selectedID)" }
+        guard let view = NSApp.dockTile.contentView else { return "view=none downloads=0 sets=\(applicationIconSets) given=\(dockImage == nil ? "none" : selectedID)" }
         let px = 32
         let drawn = Self.pixels(px) { rect in
             guard view.bounds.width > 0, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
@@ -293,8 +310,9 @@ final class AppIconManager {
         // downloads: the count on Chromium's badge, 0 while its view isn't on the tile. A Web Store
         // install's CRX download, which no list shows, must not be one (#491).
         let downloads = ChromiumDockTile.isChromiumView(view) ? (view.value(forKey: "downloads") as? Int ?? 0) : 0
-        // given: the picture the app gave the Dock, none when it left the tile to the Dock's cache.
-        return "view=\(type(of: view)) draws=\(toPicked < toBundle ? "picked" : "bundle") (\(toPicked) vs \(toBundle)) downloads=\(downloads) given=\(dockImage == nil ? "none" : selectedID)"
+        // given: the picture the app gave the Dock, none when it left the tile to the Dock. sets: how often it set
+        // applicationIconImage, which hands the Dock a picture even when set to nil (#739).
+        return "view=\(type(of: view)) draws=\(toPicked < toBundle ? "picked" : "bundle") (\(toPicked) vs \(toBundle)) downloads=\(downloads) sets=\(applicationIconSets) given=\(dockImage == nil ? "none" : selectedID)"
     }
 
     private static func pixels(_ px: Int, _ draw: (NSRect) -> Void) -> [UInt8] {
