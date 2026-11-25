@@ -22,6 +22,7 @@ enum SiteIconLoaderTests {
         ("redirect", aLocalSitesRedirectIsFollowed),
         ("bomb", anIconClaimingAHugeSizeIsSkipped),
         ("pdf", aPDFIsNoIcon),
+        ("resolve", aNameIsJudgedByTheAddressesItResolvesTo),
     ]
 
     static func main() async {
@@ -181,6 +182,17 @@ enum SiteIconLoaderTests {
     }
 
     /// Lets the main queue run what was queued on it (the loader's pump) and returns after.
+    /// A name is checked by where it resolves as well as by how it reads (SiteIcon.mayConnect): "localhost"
+    /// stands in for a public-looking name that points into the Mac or its network.
+    @MainActor private static func aNameIsJudgedByTheAddressesItResolvesTo() async {
+        expect(SiteIconLoader.addresses(of: "127.0.0.1") == ["127.0.0.1"], "a numeric address is itself")
+        let here = SiteIconLoader.addresses(of: "localhost")
+        expect(!here.isEmpty && here.allSatisfy { SiteIcon.isLocal(host: $0) }, "localhost resolves to the Mac: \(here)")
+        let local = URL(string: "http://localhost/favicon.ico")!
+        expect(!SiteIconLoader.mayConnect(local, for: URL(string: "https://example.com/")!), "a public site never connects to the Mac")
+        expect(SiteIconLoader.mayConnect(local, for: URL(string: "http://127.0.0.1:3000/")!), "a local site may")
+    }
+
     @MainActor private static func nextTurn() async {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in DispatchQueue.main.async { DispatchQueue.main.async { c.resume() } } }
     }

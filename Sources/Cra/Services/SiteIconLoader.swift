@@ -74,7 +74,8 @@ final class SiteIconLoader {
     /// The first of the home page's best icons that is `isIcon` and FaviconCache.png reads, which refuses one
     /// claiming too many pixels before decoding it. A page that answers with an error still has
     /// /favicon.ico; a site that can't be reached is not asked again. Every request and redirect
-    /// passes SiteIcon.mayFetch, so a public page's icons never reach the local network.
+    /// passes SiteIcon.mayFetch by name and mayConnect by address, so a public page's icons don't reach
+    /// the local network.
     private nonisolated static func firstIcon(at origin: URL, session: URLSession) async -> Data? {
         let page: (data: Data, url: URL)?
         do { page = try await get(origin, for: origin, limit: pageLimit, session: session) } catch { return nil }
@@ -102,12 +103,40 @@ final class SiteIconLoader {
     /// reached or `url` may not be fetched.
     private nonisolated static func get(_ url: URL, for origin: URL, limit: Int, session: URLSession) async throws -> (data: Data, url: URL)? {
         guard SiteIcon.mayFetch(url, for: origin) else { throw URLError(.cancelled) }
+        let reachable = await withCheckedContinuation { done in
+            DispatchQueue.global(qos: .utility).async { done.resume(returning: mayConnect(url, for: origin)) }
+        }
+        guard reachable else { throw URLError(.cancelled) }
         let body = Body(origin: origin, limit: limit)
         let task = session.dataTask(with: url)
         task.delegate = body
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { body.start(task, $0) }
         } onCancel: { task.cancel() }
+    }
+
+    /// Whether `url`'s host resolves only to addresses `origin`'s site may reach (SiteIcon.mayConnect), so a
+    /// public-looking name that points into the local network is never asked. URLSession resolves the name
+    /// again as it connects: a name that changes its answer in between still gets through, as it would for
+    /// any request outside the engine. A name that doesn't resolve is left to URLSession to fail. Blocks on
+    /// the resolver, so it runs off the main thread and off Swift's cooperative pool.
+    nonisolated static func mayConnect(_ url: URL, for origin: URL) -> Bool {
+        guard let host = url.host else { return false }
+        return SiteIcon.mayConnect(to: addresses(of: host), for: origin)
+    }
+
+    /// The numeric addresses `host` resolves to ("192.168.1.1", "fe80::1%en0").
+    nonisolated static func addresses(of host: String) -> [String] {
+        var hints = addrinfo()
+        hints.ai_socktype = SOCK_STREAM
+        var list: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &list) == 0, let first = list else { return [] }
+        defer { freeaddrinfo(first) }
+        return sequence(first: first) { $0.pointee.ai_next }.compactMap { a in
+            var name = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(a.pointee.ai_addr, a.pointee.ai_addrlen, &name, socklen_t(name.count), nil, 0, NI_NUMERICHOST) == 0 else { return nil }
+            return String(cString: name)
+        }
     }
 
     /// A response's body, collected in the chunks URLSession delivers; the download stops past `limit` bytes,
@@ -133,7 +162,9 @@ final class SiteIconLoader {
         func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                         newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
             // Refused, the redirect itself is the response, and it is no 2xx.
-            completionHandler(request.url.map { SiteIcon.mayFetch($0, for: origin) } == true ? request : nil)
+            guard let to = request.url, SiteIcon.mayFetch(to, for: origin) else { completionHandler(nil); return }
+            let origin = origin
+            DispatchQueue.global(qos: .utility).async { completionHandler(SiteIconLoader.mayConnect(to, for: origin) ? request : nil) }
         }
 
         func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {

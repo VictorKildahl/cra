@@ -33,7 +33,7 @@ struct SiteIconFetchTests {
     @Test func localHostsAreThoseOfTheMacAndItsNetwork() {
         for host in ["localhost", "LOCALHOST.", "dev.localhost", "router", "printer.local", "127.0.0.1", "127.1", "2130706433", "0x7f000001",
                      "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "100.64.0.1", "100.127.255.255", "169.254.169.254", "0.0.0.0",
-                     "::1", "[::1]", "::", "fc00::1", "fd12:3456::1", "fe80::1", "::ffff:192.168.1.1", "::ffff:7f00:1"] {
+                     "::1", "[::1]", "::", "fc00::1", "fd12:3456::1", "fe80::1", "fe80::1%en0", "::ffff:192.168.1.1", "::ffff:7f00:1"] {
             #expect(SiteIcon.isLocal(host: host), "\(host)")
         }
         for host in ["example.com", "github.com", "172.32.0.1", "172.15.0.1", "100.128.0.1", "192.169.0.1", "8.8.8.8", "11.0.0.1",
@@ -51,6 +51,16 @@ struct SiteIconFetchTests {
                     "http://169.254.169.254/latest/meta-data/", "http://intranet/", "file:///etc/passwd", "ftp://example.com/i.png"] {
             #expect(!SiteIcon.mayFetch(URL(string: url)!, for: origin), "\(url)")
         }
+    }
+
+    @Test func aPublicNameThatResolvesIntoTheNetworkIsRefused() {
+        let origin = URL(string: "https://example.com/")!
+        #expect(SiteIcon.mayConnect(to: ["93.184.215.14", "2606:2800:21f:cb07:6820:80da:af6b:8b2c"], for: origin))
+        #expect(SiteIcon.mayConnect(to: [], for: origin))
+        for addresses in [["192.168.1.1"], ["93.184.215.14", "10.0.0.1"], ["127.0.0.1"], ["::1"], ["fe80::1%en0"], ["169.254.169.254"]] {
+            #expect(!SiteIcon.mayConnect(to: addresses, for: origin), "\(addresses)")
+        }
+        #expect(SiteIcon.mayConnect(to: ["127.0.0.1", "::1"], for: URL(string: "http://localhost:3000/")!))
     }
 
     @Test func aLocalSiteMayFetchLocallyAndPublicly() {

@@ -70,6 +70,13 @@ public enum SiteIcon {
         return false
     }
 
+    /// Whether a request for the site at `origin` may go to a server at `addresses`, the numeric
+    /// addresses its name resolved to: by name a host may look public (mayFetch) and still point into the
+    /// Mac or its network, an intranet name or one a page aims at a router. Only a local site's may.
+    public static func mayConnect(to addresses: [String], for origin: URL) -> Bool {
+        isLocal(host: origin.host ?? "") || !addresses.contains { isLocal(host: $0) }
+    }
+
     /// Whether `host` names the Mac itself or a machine on its network: localhost, an unqualified or
     /// `.local` name, and loopback, private, shared (100.64/10), link-local and unique-local addresses.
     public static func isLocal(host: String) -> Bool {
@@ -77,6 +84,8 @@ public enum SiteIcon {
         if name.hasPrefix("["), name.hasSuffix("]") { name = String(name.dropFirst().dropLast()) }
         while name.hasSuffix(".") { name.removeLast() }
         if name.contains(":") {
+            // A resolved link-local address names its interface: fe80::1%en0.
+            if let zone = name.firstIndex(of: "%") { name = String(name[..<zone]) }
             var v6 = in6_addr()
             guard inet_pton(AF_INET6, name, &v6) == 1 else { return false }
             let b = withUnsafeBytes(of: v6) { Array($0) }

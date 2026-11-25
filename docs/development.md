@@ -128,6 +128,9 @@ to Markdown or `docs/` alone runs nothing.
   few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in
   for CraCEF and the rest of the app). When the manager calls something new from the app, add
   a stub to `AppServices.swift`.
+- `scripts/test-site-icons.sh`: `SiteIconLoader` and `FaviconCache` against an HTTP server on
+  127.0.0.1: a site that never answers, a dropped connection, redirects, the candidate limit, an
+  icon that claims 20000 px, and a PDF served as an icon.
 - `scripts/test-store.sh`: the real `SidebarStore`, `AppComposition` and importers on a
   `ManualScheduler`, against the made-up Arc and Chromium profiles in `Tests/Fixtures`.
 - `scripts/test-tidy-downloads.sh`: `TidyDownloadsService` and `TidyDownloadFiles` on real files
