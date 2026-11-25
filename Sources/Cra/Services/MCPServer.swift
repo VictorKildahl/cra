@@ -1,5 +1,4 @@
 import AppKit
-import CraCore
 import CraCEF
 import Darwin
 import Observation
@@ -386,14 +385,13 @@ final class MCPServer {
                 space = requestedSpace
             }
             if let splitWithID {
-                let splitSpace = space ?? app.store.focusedSpaceID(window: window.windowID)
-                let previouslySelected = app.store.selectedTabID(in: splitSpace, window: window.windowID)
-                guard let pane = app.store.openLinkInSplit(url, from: splitWithID, window: window.windowID),
+                // Without select=true nothing is picked: the window stays on what the user looks at, in
+                // whatever space, and the split shows when they next pick it.
+                guard let pane = app.store.openLinkInSplit(url, from: splitWithID, window: window.windowID, select: select),
                       let split = app.store.splitContaining(pane.id) else {
                     completion(MCPProtocol.content("Could not add the page to Split View.", failed: true)); return
                 }
                 ownedTabs[owner, default: []].insert(pane.id)
-                if !select { app.store.selectTab(previouslySelected, window: window.windowID) }
                 _ = window.browsers.ensureRuntime(for: pane.id)
                 if arguments["activate"] as? Bool == true {
                     window.window?.makeKeyAndOrderFront(nil)

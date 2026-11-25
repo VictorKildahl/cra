@@ -149,12 +149,8 @@ try:
     # A new agent gets nothing until the user allows it; Cra asks once and remembers.
     asked = client.tool("tabs_list")
     check("a new agent waits for the user's answer", "asking the user to allow cra-agent" in failure(asked))
-    def approvalPromptOrAnswered():
-        if "Let \u201ccra-agent\u201d use Cra?" in window_titles(): return "prompt"
-        return "allowed" if not client.tool("tabs_list")["result"]["isError"] else None
-    approval = eventually(approvalPromptOrAnswered, timeout=20)
-    check("Cra asks the user and records their answer", approval in ("prompt", "allowed"))
-    if approval == "prompt": command("cra://debug?mcpAnswer=allow")
+    check("Cra asks the user", eventually(lambda: "Let \u201ccra-agent\u201d use Cra?" in window_titles(), timeout=20))
+    command("cra://debug?mcpAnswer=allow")
     eventually(lambda: not client.tool("tabs_list")["result"]["isError"])
     client.close()
     client = Client()
@@ -162,6 +158,7 @@ try:
     stranger = Client("other-agent")
     asked_stranger = stranger.tool("tabs_list")
     check("a different agent waits for a decision", "asking the user to allow other-agent" in failure(asked_stranger))
+    eventually(lambda: "other-agent" in window_titles(), timeout=20)
     command("cra://debug?mcpAnswer=deny")
     check("refusing an agent closes its connection", eventually(lambda: stranger.proc.poll() is not None))
     stranger = Client("other-agent")
@@ -195,6 +192,7 @@ try:
     check("tabs_search matches all title and URL words with sidebar filters", search["count"] == 1 and search["tabs"][0]["id"] == tab)
     limited = value(client.tool("tabs_search", query="127.0.0.1", limit=1))
     check("tabs_search reports truncated matches", limited["count"] > 1 and limited["returned"] == 1 and limited["truncated"])
+    check("a hidden tab works as a focused visible page", js(tab, "document.visibilityState + document.hasFocus()") == "visibletrue")
     refused_visible_split = failure(client.tool("tab_open", url=url + "/index.html?split-visible-refused", splitWith=user_tab))
     check("splitWith refuses to reshape a visible tab unless select=true", "select=true" in refused_visible_split)
     split_anchor = value(client.tool("tab_open", url=url + "/agent.html?split-anchor"))["tabId"]
@@ -221,6 +219,26 @@ try:
     value(client.tool("tab_show", tabId=user_tab))
     restored = {t["id"]: t for t in value(client.tool("tabs_list"))}
     check("split cleanup restores the user's selected tab", restored[user_tab].get("selected") is True and not restored[tab].get("selected"))
+    # A split beside a tab in another space, without select=true, leaves the user's window where it is (#799):
+    # no space switch, nothing picked; the split shows when the user next picks it.
+    command("cra://action/newSpace")
+    time.sleep(1)
+    command("cra://debug?spaceCreation=type:Agent%20Split")
+    command("cra://debug?spaceCreation=create")
+    eventually(lambda: any(t["space"] == "Agent Split" for t in value(client.tool("tabs_list"))) or
+               "Agent Split" in failure(client.tool("tab_open", url=url + "/index.html?probe", space="Nowhere")), timeout=10)
+    far = value(client.tool("tab_open", url=url + "/index.html?far-anchor", space="Agent Split"))["tabId"]
+    value(client.tool("tab_show", tabId=user_tab))
+    before_far = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    far_split = value(client.tool("tab_open", url=url + "/index.html?far-pane", splitWith=far))
+    after_far = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("splitWith in another space without select leaves the user's window as it was",
+          before_far[user_tab].get("active") and after_far[user_tab].get("active") and after_far[user_tab].get("selected")
+          and not after_far[far_split["tabId"]].get("selected") and not after_far[far].get("selected")
+          and after_far[far].get("splitId") == far_split["splitId"],
+          {k: {f: after_far[k].get(f) for f in ("space", "selected", "active", "splitId")} for k in (user_tab, far, far_split["tabId"])})
+    value(client.tool("tab_close", tabId=far_split["tabId"]))
+    value(client.tool("tab_close", tabId=far))
 
     # Everything below happens in the hidden tab.
     hidden_cursor_baseline = sum("mcp cursor:" in line for line in (folder / "browser.log").read_text(errors="replace").splitlines())
