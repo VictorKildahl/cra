@@ -12,14 +12,7 @@ final class StatusBandTests: BrowserTestCase {
 
     /// The screen's colour a few points from the top, left of the clock: the band, not the page.
     private func topColour() -> (r: Int, g: Int, b: Int) {
-        let shot = XCUIScreen.main.screenshot().image
-        guard let cg = shot.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
-        let x = Int(Double(cg.width) * 0.08), y = Int(Double(cg.height) * 0.006)
-        let i = y * cg.bytesPerRow + x * (cg.bitsPerPixel / 8)
-        // Simulator screenshots are BGRA.
-        let first = Int(bytes[i]), third = Int(bytes[i + 2])
-        let bgra = cg.bitmapInfo.contains(.byteOrder32Little)
-        return (bgra ? third : first, Int(bytes[i + 1]), bgra ? first : third)
+        screenColour(x: 0.08, y: 0.006)
     }
 
     private func near(_ c: (r: Int, g: Int, b: Int), _ hex: Int, _ what: String) {

@@ -50,6 +50,17 @@ final class BottomBar: UIView {
         didSet { applyMode() }
     }
 
+    /// The page's top when one is under the bar: a dark page keeps the dark material and
+    /// controls, a light one gets the light ones, the way the status bar's text follows the page.
+    /// nil with no page of the bar's own (a new tab, the tab row, the address bar): the bar keeps
+    /// the app's appearance.
+    var pageIsDark: Bool? {
+        didSet {
+            guard pageIsDark != oldValue else { return }
+            overrideUserInterfaceStyle = pageIsDark.map { $0 ? .dark : .light } ?? .unspecified
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(blur)

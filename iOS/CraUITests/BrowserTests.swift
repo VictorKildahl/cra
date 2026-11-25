@@ -61,6 +61,19 @@ class BrowserTestCase: XCTestCase {
         add(attachment)
     }
 
+    /// The screen's colour at a fraction of its width and height, as the screenshot records it.
+    func screenColour(x: CGFloat, y: CGFloat) -> (r: Int, g: Int, b: Int) {
+        let shot = XCUIScreen.main.screenshot().image
+        guard let cg = shot.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
+        let column = min(cg.width - 1, max(0, Int(Double(cg.width) * x)))
+        let row = min(cg.height - 1, max(0, Int(Double(cg.height) * y)))
+        let i = row * cg.bytesPerRow + column * (cg.bitsPerPixel / 8)
+        // Simulator screenshots are BGRA.
+        let first = Int(bytes[i]), third = Int(bytes[i + 2])
+        let bgra = cg.bitmapInfo.contains(.byteOrder32Little)
+        return (bgra ? third : first, Int(bytes[i + 1]), bgra ? first : third)
+    }
+
     func waitForPage(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.webViews.staticTexts[title].waitForExistence(timeout: 20), "page \(title) never showed", file: file, line: line)
     }

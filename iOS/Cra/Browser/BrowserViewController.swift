@@ -385,6 +385,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The band is the page's top: it shrinks from the status bar to nothing as the page is
         // pushed back, its bottom staying at the card's top edge.
         let shown = MobileStatusBand.shown(hasPage: fill != nil, switching: switcher != nil, covered: coveredPage != nil)
+        // The bar follows the page's top the way the status bar's text does: dark over a dark
+        // page, light over a light one. With the app's own surfaces — a new tab, the tab row, the
+        // address bar — it keeps the app's appearance instead.
+        bar.pageIsDark = shown && !isSearching ? fill.map(MobileStatusBand.lightContent(fill:)) : nil
         let safeTop = view.safeAreaInsets.top
         let pageScale = MobilePageBehindSearch.transform(in: pageContainer.bounds.size, safeTop: safeTop,
                                                          progress: drawerProgress).scale
