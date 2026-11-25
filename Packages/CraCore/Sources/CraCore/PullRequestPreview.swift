@@ -38,14 +38,30 @@ public struct PullRequestChecksCache {
 }
 
 public enum PullRequestPreview {
+    public struct Label: Equatable {
+        public var name: String
+        public var color: RGB?
+    }
+    public struct Checks: Equatable {
+        public enum State { case passed, failed, pending }
+        public var state: State
+        public var passed: Int
+        public var total: Int
+    }
     public struct Card: Equatable {
-        public var header: String
+        public var repo: String
+        public var number: String
         public var title: String
-        public var checks: String?
+        public var author: String?
+        public var draft: Bool
+        public var age: String?
+        public var checks: Checks?
         public var failing: [String]
-        public var labels: String?
-        public var activity: String?
-        public var updated: String?
+        public var extraFailing: Int
+        public var commentCount: Int?
+        public var tasks: LiveFolderPluginItem.Details.Tasks?
+        public var labels: [Label]
+        public var extraLabels: Int
     }
 
     public static func identity(for url: String) -> String? {
@@ -58,34 +74,43 @@ public enum PullRequestPreview {
     }
 
     public static func card(item: LiveFolderPluginItem, checks: PullRequestChecks?, now: Date) -> Card {
-        var card = Card(header: identity(for: item.url) ?? "", title: item.title, failing: [])
-        if item.details?.draft == true { card.header += " · Draft" }
+        let identity = identity(for: item.url)?.components(separatedBy: " #") ?? []
+        let labels = item.details?.labels ?? []
+        var card = Card(repo: identity.first ?? "", number: identity.last ?? "", title: item.title,
+                        author: item.subtitle.flatMap { $0.isEmpty ? nil : $0 }, draft: item.details?.draft == true,
+                        age: item.updatedAt.map { age(seconds: max(0, now.timeIntervalSince($0))) },
+                        failing: [], extraFailing: 0,
+                        commentCount: item.details?.commentCount.flatMap { $0 > 0 ? $0 : nil }, tasks: item.details?.tasks,
+                        labels: labels.prefix(3).map { Label(name: $0.name, color: rgb($0.color)) },
+                        extraLabels: max(0, labels.count - 3))
         if let checks {
             let total = checks.passed + checks.failed + checks.pending
+            if total > 0 {
+                card.checks = Checks(state: checks.failed > 0 ? .failed : checks.pending > 0 ? .pending : .passed,
+                                     passed: checks.passed, total: total)
+            }
             if checks.failed > 0 {
-                card.checks = "\(checks.failed) failing check\(checks.failed == 1 ? "" : "s")"
                 card.failing = Array(checks.failing.prefix(3))
-            } else if checks.pending > 0 {
-                card.checks = "\(checks.pending) pending check\(checks.pending == 1 ? "" : "s")"
-            } else if checks.passed > 0 { card.checks = "All checks passed" }
-            if card.checks != nil { card.checks! += " · \(checks.passed)/\(total) passed" }
-        }
-        if let labels = item.details?.labels, !labels.isEmpty {
-            card.labels = labels.prefix(3).map(\.name).joined(separator: ", ") + (labels.count > 3 ? " +\(labels.count - 3)" : "")
-        }
-        var activity: [String] = []
-        if let count = item.details?.commentCount, count > 0 { activity.append("\(count) comment\(count == 1 ? "" : "s")") }
-        if let tasks = item.details?.tasks { activity.append("\(tasks.done) of \(tasks.total) tasks") }
-        if !activity.isEmpty { card.activity = activity.joined(separator: " · ") }
-        if let updated = item.updatedAt {
-            let seconds = max(0, now.timeIntervalSince(updated))
-            let age: String
-            if seconds < 60 { age = "just now" }
-            else if seconds < 3600 { age = "\(Int(seconds / 60)) min ago" }
-            else if seconds < 86400 { age = "\(Int(seconds / 3600)) h ago" }
-            else { age = "\(Int(seconds / 86400)) d ago" }
-            card.updated = "Updated " + age
+                card.extraFailing = max(0, checks.failed - card.failing.count)
+            }
         }
         return card
+    }
+
+    private static func rgb(_ hex: String?) -> RGB? {
+        guard let hex else { return nil }
+        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard digits.allSatisfy(\.isHexDigit), let color = HexColor.components(digits) else { return nil }
+        return RGB(color.r, color.g, color.b)
+    }
+
+    private static func age(seconds: TimeInterval) -> String {
+        if seconds < 60 { return "just now" }
+        if seconds >= 86400 && seconds < 172800 { return "yesterday" }
+        let units: [(TimeInterval, String)] = [(31536000, "year"), (2592000, "month"), (604800, "week"),
+                                              (86400, "day"), (3600, "hour"), (60, "minute")]
+        let (duration, unit) = units.first { seconds >= $0.0 }!
+        let count = Int(seconds / duration)
+        return "\(count) \(unit)\(count == 1 ? "" : "s") ago"
     }
 }

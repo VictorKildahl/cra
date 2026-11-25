@@ -1005,16 +1005,70 @@ private struct PullRequestPreviewView: View {
     let open: () -> Void
     @State private var hovered = false
 
+    private let green = Color(red: 63 / 255, green: 185 / 255, blue: 80 / 255)
+    private let red = Color(red: 248 / 255, green: 81 / 255, blue: 73 / 255)
+    private let amber = Color(red: 210 / 255, green: 153 / 255, blue: 34 / 255)
+
+    private var meta: String {
+        (["\(card.repo)#\(card.number)"] + [card.author, card.age.map { "Updated " + $0 }].compactMap { $0 }).joined(separator: " · ")
+    }
+
     var body: some View {
         CardStyle.card(
-            VStack(alignment: .leading, spacing: 7) {
-                Text(card.header).font(.system(size: 12, weight: .semibold)).foregroundStyle(CardStyle.secondary)
-                Text(card.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(CardStyle.text)
-                if let checks = card.checks { line(checks) }
-                ForEach(Array(card.failing.enumerated()), id: \.offset) { _, name in line(name) }
-                if let labels = card.labels { line(labels) }
-                if let activity = card.activity { line(activity) }
-                if let updated = card.updated { line(updated) }
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: 14)).foregroundStyle(card.draft ? CardStyle.secondary : green)
+                    .frame(width: 16, height: 16)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(card.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(CardStyle.text)
+                        .lineLimit(3).truncationMode(.tail)
+                    Text(meta).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if card.draft || card.checks != nil || card.commentCount != nil || card.tasks != nil {
+                        FlowRow(spacing: 14) {
+                            if card.draft { status("circle.fill", "Draft", dot: true) }
+                            // Keep the snapshot's status items in place when checks arrive.
+                            ZStack(alignment: .leading) {
+                                status("checkmark", "00/00").hidden()
+                                if let checks = card.checks {
+                                    status(checks.state == .passed ? "checkmark" : checks.state == .failed ? "xmark" : "circle.fill",
+                                           "\(checks.passed)/\(checks.total)",
+                                           color: checks.state == .passed ? green : checks.state == .failed ? red : amber,
+                                           dot: checks.state == .pending)
+                                }
+                            }
+                            if let count = card.commentCount { status("bubble.left", "\(count)") }
+                            if let tasks = card.tasks { status("checklist", "\(tasks.done)/\(tasks.total)") }
+                        }
+                    }
+                    ForEach(Array(card.failing.enumerated()), id: \.offset) { _, name in
+                        HStack(spacing: 5) {
+                            Image(systemName: "xmark").font(.system(size: 9)).foregroundStyle(red)
+                            Text(name).lineLimit(1).truncationMode(.tail)
+                        }
+                        .font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+                    }
+                    if card.extraFailing > 0 {
+                        Text("and \(card.extraFailing) more").font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+                    }
+                    if !card.labels.isEmpty {
+                        FlowRow(spacing: 5) {
+                            ForEach(Array(card.labels.enumerated()), id: \.offset) { _, label in
+                                let color = label.color.map { Color(red: $0.r, green: $0.g, blue: $0.b) } ?? CardStyle.secondary
+                                Text(label.name).font(.system(size: 11, weight: .medium)).foregroundStyle(color)
+                                    .lineLimit(1).truncationMode(.tail)
+                                    .padding(.horizontal, 7).padding(.vertical, 2)
+                                    .frame(maxWidth: FavoritePreviewMetrics.width - 2 * FavoritePreviewMetrics.inset - 24)
+                                    .background(Capsule().fill(color.opacity(0.18)))
+                                    .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: 1))
+                            }
+                            if card.extraLabels > 0 {
+                                Text("+\(card.extraLabels)").font(.system(size: 11)).foregroundStyle(CardStyle.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(FavoritePreviewMetrics.inset)
             .frame(width: FavoritePreviewMetrics.width, alignment: .leading)
@@ -1026,7 +1080,11 @@ private struct PullRequestPreviewView: View {
             .accessibilityAddTraits(.isButton))
     }
 
-    private func line(_ text: String) -> some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+    private func status(_ icon: String, _ text: String, color: Color = CardStyle.secondary, dot: Bool = false) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: dot ? 7 : 12)).foregroundStyle(color)
+            Text(text).foregroundStyle(CardStyle.text)
+        }
+        .font(.system(size: 12))
     }
 }

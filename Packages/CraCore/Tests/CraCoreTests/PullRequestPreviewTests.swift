@@ -70,36 +70,48 @@ struct PullRequestPreviewTests {
         #expect({ cache.begin(.init(item)) }())
     }
 
-    @Test func cardLinesAndOmissions() {
+    @Test func structuredCardAndOmissions() {
         var item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "A title")
         var card = PullRequestPreview.card(item: item, checks: nil, now: now)
-        #expect(card.header == "a/b #3" && card.title == "A title")
-        #expect(card.checks == nil && card.failing.isEmpty && card.labels == nil && card.activity == nil && card.updated == nil)
-        item.details = .init(draft: true, commentCount: 1, labels: ["one", "two", "three", "four", "five"].map { .init(name: $0) }, tasks: .init(done: 2, total: 4))
-        item.updatedAt = now
-        card = PullRequestPreview.card(item: item, checks: .init(passed: 2, failed: 1, pending: 1, skipped: 9, failing: ["Build"]), now: now)
-        #expect(card.header == "a/b #3 · Draft")
-        #expect(card.checks == "1 failing check · 2/4 passed" && card.failing == ["Build"])
-        #expect(card.labels == "one, two, three +2")
-        #expect(card.activity == "1 comment · 2 of 4 tasks" && card.updated == "Updated just now")
-        card = PullRequestPreview.card(item: item, checks: .init(failed: 4, failing: ["a", "b", "c", "d"]), now: now)
-        #expect(card.checks == "4 failing checks · 0/4 passed" && card.failing == ["a", "b", "c"])
-        for (checks, line) in [(PullRequestChecks(passed: 2, pending: 1), "1 pending check · 2/3 passed"),
-                               (.init(pending: 2), "2 pending checks · 0/2 passed"), (.init(passed: 3, skipped: 2), "All checks passed · 3/3 passed")] {
-            #expect(PullRequestPreview.card(item: item, checks: checks, now: now).checks == line)
+        #expect(card.repo == "a/b" && card.number == "3" && card.title == "A title")
+        #expect(card.author == nil && !card.draft && card.age == nil)
+        #expect(card.checks == nil && card.failing.isEmpty && card.extraFailing == 0)
+        #expect(card.labels.isEmpty && card.extraLabels == 0 && card.commentCount == nil && card.tasks == nil)
+        item.subtitle = "author"
+        item.details = .init(draft: true, commentCount: 2, labels: [
+            .init(name: "one", color: "3FB950"), .init(name: "two", color: "#aAbBcC"),
+            .init(name: "three", color: "bad"), .init(name: "four"), .init(name: "five")
+        ], tasks: .init(done: 2, total: 5))
+        card = PullRequestPreview.card(item: item, checks: .init(passed: 8, failed: 5, pending: 1, skipped: 9, failing: ["a", "b", "c", "d", "e"]), now: now)
+        #expect(card.author == "author" && card.draft && card.commentCount == 2 && card.tasks == .init(done: 2, total: 5))
+        #expect(card.checks?.state == .failed && card.checks?.passed == 8 && card.checks?.total == 14)
+        #expect(card.failing == ["a", "b", "c"] && card.extraFailing == 2)
+        #expect(card.labels.map(\.name) == ["one", "two", "three"] && card.extraLabels == 2)
+        #expect(card.labels[0].color == RGB(63.0 / 255, 185.0 / 255, 80.0 / 255))
+        #expect(card.labels[1].color == RGB(170.0 / 255, 187.0 / 255, 204.0 / 255))
+        #expect(card.labels[2].color == nil)
+        for (checks, state) in [(PullRequestChecks(passed: 8, pending: 3, skipped: 6), PullRequestPreview.Checks.State.pending),
+                                (.init(passed: 12, skipped: 6), .passed)] {
+            card = PullRequestPreview.card(item: item, checks: checks, now: now)
+            #expect(card.checks?.state == state && card.checks?.total == checks.passed + checks.pending)
+            #expect(card.failing.isEmpty && card.extraFailing == 0)
         }
         #expect(PullRequestPreview.card(item: item, checks: .init(skipped: 2), now: now).checks == nil)
-        for (seconds, text) in [(300.0, "5 min"), (10800, "3 h"), (172800, "2 d")] {
-            item.updatedAt = now.addingTimeInterval(-seconds)
-            #expect(PullRequestPreview.card(item: item, checks: nil, now: now).updated == "Updated \(text) ago")
+        item.subtitle = ""
+        item.details = .init(commentCount: 0, labels: [.init(name: "no color"), .init(name: "invalid", color: "GG0000"), .init(name: "signed", color: "+12345")])
+        card = PullRequestPreview.card(item: item, checks: nil, now: now)
+        #expect(card.author == nil && card.commentCount == nil && card.extraLabels == 0)
+        #expect(card.labels.allSatisfy { $0.color == nil })
+    }
+
+    @Test func githubAgeBoundaries() {
+        for (seconds, age) in [(59.0, "just now"), (60, "1 minute ago"), (120, "2 minutes ago"),
+                               (3600, "1 hour ago"), (82800, "23 hours ago"), (86400, "yesterday"),
+                               (518400, "6 days ago"), (604800, "1 week ago"), (1209600, "2 weeks ago"),
+                               (2592000, "1 month ago"), (5184000, "2 months ago"),
+                               (31536000, "1 year ago"), (63072000, "2 years ago"), (-1, "just now")] {
+            let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR", updatedAt: now.addingTimeInterval(-seconds))
+            #expect(PullRequestPreview.card(item: item, checks: nil, now: now).age == age)
         }
-        item.details = .init(draft: false, commentCount: 2, labels: [.init(name: "one")])
-        card = PullRequestPreview.card(item: item, checks: nil, now: now)
-        #expect(card.header == "a/b #3" && card.labels == "one" && card.activity == "2 comments")
-        item.details = .init(commentCount: 0, labels: [], tasks: .init(done: 0, total: 1))
-        #expect(PullRequestPreview.card(item: item, checks: nil, now: now).activity == "0 of 1 tasks")
-        item.details = .init(commentCount: 0, labels: [])
-        card = PullRequestPreview.card(item: item, checks: nil, now: now)
-        #expect(card.activity == nil && card.labels == nil)
     }
 }
