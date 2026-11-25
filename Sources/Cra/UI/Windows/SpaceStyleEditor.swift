@@ -107,6 +107,11 @@ struct SpaceStyleEditor: View {
             }
             if note.userInfo?["add"] != nil { (pad.key, pad.wheel) = SpaceColorWheel.adding(to: pad.key, wheel: pad.wheel); pressed = true }
             if note.userInfo?["remove"] != nil { pad.key = SpaceColorWheel.removing(from: pad.key, wheel: pad.wheel); pressed = true }
+            // …or presses the pad that many points right of its centre, as ColorPad's press does (#754).
+            if let d = note.userInfo?["press"] as? Double, d >= 0 {
+                pad.key = SpaceColorWheel.placed(pad.key, handle: 0, hue: 0, saturation: SpaceColorWheel.padSaturation(distance: d), wheel: pad.wheel)
+                pressed = true
+            }
             if pressed {
                 SpaceStyleTick.padPresses += 1
                 CraLog.note("theme editor pad \(SpaceStyleTick.padPresses): wheel=\(pad.wheel.rawValue) key=\(pad.key.joined(separator: ","))")
@@ -163,7 +168,8 @@ struct PadState: Equatable {
 }
 
 /// The dotted pad, a colour wheel: a handle's angle (clockwise from three o'clock) is its Display P3
-/// hue and its distance from the centre its P3 saturation (full at 153 pt), as Arc's; a drag keeps
+/// hue, and its P3 saturation is full at the centre and falls to none at the 178 pt rim, which the
+/// handle doesn't pass, as Arc's (SpaceColorWheel.padSaturation, #754); a drag keeps
 /// the colour's brightness (0.95 on an empty pad). A second and third colour sit where the pad's
 /// wheel puts them, 40° either side or across the wheel (SpaceColorWheel, #632); dragging any handle
 /// turns the set. + is off on a grey, as Arc's is (#455).
@@ -173,7 +179,6 @@ private struct ColorPad: View {
     @State private var hoveredKnob: Int?
     @State private var draggingKnob: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private static let reach: CGFloat = 153
 
     var body: some View {
         GeometryReader { geo in
@@ -189,9 +194,6 @@ private struct ColorPad: View {
                     ctx.fill(p, with: .color(ink.opacity(0.12)))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .contentShape(Rectangle())
-                // Arc: pressing anywhere on the pad brings the main colour there, and it follows the drag.
-                .gesture(DragGesture(minimumDistance: 0).onChanged { g in place(handle: 0, at: g.location, centre: centre) })
                 if pad.key.isEmpty {
                     Text("Tap to pick a color for this space")
                         .font(.system(size: 13, weight: .semibold))
@@ -216,14 +218,6 @@ private struct ColorPad: View {
                         // Arc: an open hand over a knob, a closed one while dragging it.
                         .editorPointer(draggingKnob == i ? .grabbing : .grab)
                         .position(Self.point(for: hex, centre: centre))
-                        .gesture(DragGesture(minimumDistance: 0)
-                            .onChanged { g in
-                                // SwiftUI re-reads pointer styles on moves, not drags: hold the closed hand.
-                                if #available(macOS 15, *) { NSCursor.closedHand.set() }
-                                draggingKnob = i
-                                place(handle: i, at: g.location, centre: centre)
-                            }
-                            .onEnded { _ in draggingKnob = nil })
                 }
                 VStack {
                     AppearanceToggles(appearance: $pad.appearance).padding(.top, 24)
@@ -238,7 +232,26 @@ private struct ColorPad: View {
                     .padding(.bottom, 20)
                 }
             }
+            .contentShape(Rectangle())
+            // One drag for the whole pad (#754): a press takes the knob under it, else the main colour
+            // comes to the press, as Arc's does, and that knob follows the drag. Each knob had a drag of
+            // its own over the pad's, and a knob just placed often didn't move.
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { g in
+                    let i = draggingKnob ?? grabbed(at: g.startLocation, centre: centre)
+                    // SwiftUI re-reads pointer styles on moves, not drags: hold the closed hand.
+                    if #available(macOS 15, *) { NSCursor.closedHand.set() }
+                    draggingKnob = i
+                    place(handle: i, at: g.location, centre: centre)
+                }
+                .onEnded { _ in draggingKnob = nil })
         }
+    }
+
+    /// The knob a press at `p` takes: SpaceColorWheel.grabbedKnob over the knobs as drawn, main 44 pt, others 27 pt.
+    private func grabbed(at p: CGPoint, centre: CGPoint) -> Int {
+        let knobs = pad.key.prefix(3).enumerated().map { i, hex in (centre: Self.point(for: hex, centre: centre), radius: CGFloat(i == 0 ? 22 : 13.5)) }
+        return SpaceColorWheel.grabbedKnob(at: p, knobs: Array(knobs))
     }
 
     private func padButton(_ symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -256,7 +269,7 @@ private struct ColorPad: View {
     private func place(handle i: Int, at p: CGPoint, centre c: CGPoint) {
         let dx = p.x - c.x, dy = p.y - c.y
         let angle = Double(atan2(dy, dx) * 180 / .pi)
-        let sat = Double(min(1, hypot(dx, dy) / Self.reach))
+        let sat = SpaceColorWheel.padSaturation(distance: Double(hypot(dx, dy)))
         pad.key = SpaceColorWheel.placed(pad.key, handle: i, hue: angle, saturation: sat, wheel: pad.wheel)
     }
 
@@ -268,8 +281,8 @@ private struct ColorPad: View {
     }
 
     static func point(for hex: String, centre c: CGPoint) -> CGPoint {
-        let (h, s) = wheel(hex)
-        let a = h * .pi / 180, r = s * reach
+        let (h, _) = wheel(hex)
+        let a = h * .pi / 180, r = CGFloat(SpaceColorWheel.padDistance(hex))
         return CGPoint(x: c.x + r * cos(a), y: c.y + r * sin(a))
     }
 }

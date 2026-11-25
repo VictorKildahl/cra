@@ -3895,6 +3895,23 @@ properties {URL:…}`) on a local server that answers after 40 s; window capture
   `theme-editor-wheel` scenario. Not measured: what an empty pad's first tap starts on (it can't matter: + on
   one colour is always complimentary).
 
+## The theme pad's saturation and black (Arc 1.174.2, 25 Nov 2026, issue #754, offline Arc)
+- [O live] Offline Arc on a fake home (network denied), Spaces ▸ Edit Theme… over AX, View ▸ Appearance ▸ Dark;
+  presses and drags with the real pointer (cliclick), knob colours read off 2x window captures. The pad's centre is
+  195, 195 pt into the editor's 382 × 534 window (from three analogous knobs on one circle).
+- [O] Presses 40, 80, 120 and 160 pt right of the centre gave P3 saturation 0.78, 0.54, 0.32 and 0.12 at an even
+  brightness (0.92–0.98, from a 0.95 swatch): full at the centre, falling about 1/178 per point. A page-1 swatch at
+  0.55 sat 79 pt out. Dragged past the pad's corner the knob stopped 175 pt out at 0.10 and kept its hue.
+- [O] The black swatch (page 5, last) sits at the centre. Black on Dark at the default intensity reads 49/49/47 over a
+  black backdrop and 137 over white: the 31 Oct one-colour fit (`SpaceTheme.solidAlpha`, about 46 and 139 at
+  intensity 0.2) holds, so Arc's black isn't pure black either (about 17/255 at full intensity).
+- [U] Dragging from black (the reopened editor held another theme), and why the brightness creeps up toward the rim.
+- Cra (#754): `SpaceColorWheel.padSaturation(distance:)` (1 − d/178, never below 0.1) and `padDistance` place
+  presses and knobs; it had them the other way round (white at the centre, full at 153 pt, a number from the first
+  pad, #40). One drag for the whole pad picks the knob under the press (`grabbedKnob`); each knob's own drag over the
+  pad's often left a knob that had just been placed unmovable. Pinned by `padIsFullAtTheCentreAndPaleAtTheRim`,
+  `aPressTakesTheKnobUnderIt` and the `theme-editor-pad-press` scenario.
+
 ## The space's primary palette (Arc 1.172.2, 17 Nov 2026, issue #490, offline Arc)
 - [O live] Offline Arc on a fake home (network denied), Spaces ▸ Edit Theme… over AX, one swatch pressed, Escape,
   then StorableSidebar.json read once Arc had written it (the write lags the Escape by a few seconds; read too

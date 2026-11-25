@@ -240,6 +240,53 @@ struct SpaceColorPresetsTests {
         #expect(!SpaceColorWheel.canAdd([]) && !SpaceColorWheel.canAdd(["#F25E6B", "#EAAF5A", "#A6729D"]))
     }
 
+    /// Arc's pad (1.174.2, measured offline 25 Nov 2026): a press near the centre gives the full colour,
+    /// one further out a paler one, none at the 178 pt rim. Cra's pad had it the other way round, white
+    /// at the centre and full at 153 pt (#754).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/754"))
+    func padIsFullAtTheCentreAndPaleAtTheRim() {
+        // Arc's presses 40, 80, 120 and 160 pt right of the centre, as read off its knob.
+        for (distance, arc) in [(40.0, 0.775), (80, 0.543), (120, 0.321), (160, 0.118)] {
+            #expect(abs(SpaceColorWheel.padSaturation(distance: distance) - arc) < 0.03, "\(distance) pt")
+        }
+        #expect(SpaceColorWheel.padSaturation(distance: 0) == 1)
+        // Arc's knob dragged past the corner stopped 175 pt out at 0.10: the rim keeps the hue.
+        #expect(abs(SpaceColorWheel.padSaturation(distance: 175) - 0.10) < 0.02)
+        #expect(SpaceColorWheel.padSaturation(distance: 400) == SpaceColorWheel.padPalest)
+        let rim = SpaceColorWheel.placed(["#F25E6B"], handle: 0, hue: 225, saturation: SpaceColorWheel.padSaturation(distance: 400), wheel: .complimentary)[0]
+        #expect(!SpaceColorWheel.isGreyscale(rim) && SpaceColorWheel.padDistance(rim) > 150)
+        // Arc's page-1 yellow (P3 saturation 0.55) sat 79 pt out.
+        #expect(abs(SpaceColorWheel.padDistance("#F8D558") - 79) < 4)
+        // A knob sits where a press would give its colour, and never past the rim.
+        for hex in SpaceColorPresets.brand + SpaceColorPresets.pastel + SpaceColorPresets.drab where !SpaceColorWheel.isGreyscale(hex) {
+            let d = SpaceColorWheel.padDistance(hex)
+            #expect(d >= 0 && d <= SpaceColorWheel.padFade)
+            let s = SpaceColorWheel.padHSB(hex).saturation
+            #expect(abs(SpaceColorWheel.padSaturation(distance: d) - max(s, SpaceColorWheel.padPalest)) < 0.001)
+        }
+        // A press further out is paler at the same brightness.
+        let near = SpaceColorWheel.placed(["#F25E6B"], handle: 0, hue: 0, saturation: SpaceColorWheel.padSaturation(distance: 40), wheel: .complimentary)[0]
+        let far = SpaceColorWheel.placed(["#F25E6B"], handle: 0, hue: 0, saturation: SpaceColorWheel.padSaturation(distance: 160), wheel: .complimentary)[0]
+        #expect(SpaceColorWheel.padHSB(near).saturation > SpaceColorWheel.padHSB(far).saturation + 0.5)
+        // Black sits at the centre, as Arc shows its swatch.
+        #expect(SpaceColorWheel.padDistance("#000000") == 0)
+    }
+
+    /// A press on the pad takes the topmost knob under it, else the main one, which comes to the
+    /// press. Each knob had its own drag over the pad's, and a knob just placed often wouldn't move
+    /// (#754, seen with the real pointer: pressed 40 pt out, then dragged, it stayed).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/754"))
+    func aPressTakesTheKnobUnderIt() {
+        let knobs: [(centre: CGPoint, radius: CGFloat)] = [
+            (CGPoint(x: 235, y: 195), 22), (CGPoint(x: 250, y: 180), 13.5), (CGPoint(x: 100, y: 100), 13.5),
+        ]
+        #expect(SpaceColorWheel.grabbedKnob(at: CGPoint(x: 235, y: 195), knobs: knobs) == 0)
+        #expect(SpaceColorWheel.grabbedKnob(at: CGPoint(x: 248, y: 182), knobs: knobs) == 1, "the smaller knob is on top")
+        #expect(SpaceColorWheel.grabbedKnob(at: CGPoint(x: 105, y: 96), knobs: knobs) == 2)
+        #expect(SpaceColorWheel.grabbedKnob(at: CGPoint(x: 20, y: 300), knobs: knobs) == 0, "off every knob: the main one comes")
+        #expect(SpaceColorWheel.grabbedKnob(at: CGPoint(x: 20, y: 300), knobs: []) == 0)
+    }
+
     /// hsb and hex are inverse to the byte, and so are the pad's P3 padHSB and padHex.
     @Test(arguments: SpaceColorPresets.brand + SpaceColorPresets.pastel + SpaceColorPresets.drab + SpaceColorPresets.greyscale)
     func wheelRoundTrips(hex: String) {

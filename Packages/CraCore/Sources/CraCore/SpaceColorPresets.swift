@@ -123,6 +123,36 @@ public enum SpaceColorWheel {
     /// rather than staying black wherever it goes (Cra's choice; Arc's drag from black isn't measured).
     static let darkestDrag = 0.2
 
+    /// How far from the pad's centre the saturation would run out, in points (#754).
+    public static let padFade = 178.0
+
+    /// The palest a press goes: Arc's knob dragged past the pad's corner stopped 175 pt out at 0.10,
+    /// so a colour keeps its hue at the rim instead of turning grey (#754).
+    public static let padPalest = 0.1
+
+    /// The P3 saturation of a press `distance` points from the pad's centre, as Arc's pad gives it
+    /// (Arc 1.174.2, offline, 25 Nov 2026, #754): full at the centre, falling evenly towards the rim,
+    /// never below `padPalest`. Presses 40, 80, 120 and 160 pt right of the centre read 0.78, 0.54,
+    /// 0.32 and 0.12 at an even brightness, and a page-1 swatch at 0.55 sat 79 pt out. Cra had it the
+    /// other way round, white at the centre and full at 153 pt, so a drag outward deepened the colour
+    /// where Arc's pales it.
+    public static func padSaturation(distance: Double) -> Double { max(padPalest, min(1, 1 - distance / padFade)) }
+
+    /// How far from the pad's centre a colour's knob sits: where a press gives its saturation. A grey
+    /// has no hue to place it by and sits at the centre, where Arc shows its black swatch.
+    public static func padDistance(_ hex: String) -> Double {
+        isGreyscale(hex) ? 0 : (1 - min(1, padHSB(hex).saturation)) * padFade
+    }
+
+    /// The knob a press on the pad takes (#754): the topmost one under the pointer (`knobs` bottom to
+    /// top: centre and radius), else the main one (0), which then comes to the press, as Arc's pad does.
+    /// Each knob had a drag of its own over the pad's, and a knob just placed often wouldn't move.
+    public static func grabbedKnob(at point: CGPoint, knobs: [(centre: CGPoint, radius: CGFloat)]) -> Int {
+        knobs.indices.reversed().first { i in
+            hypot(point.x - knobs[i].centre.x, point.y - knobs[i].centre.y) <= knobs[i].radius
+        } ?? 0
+    }
+
     /// `count` pad colours on `wheel` from a first colour at P3 `hue`, `saturation` and `brightness`.
     static func set(hue: Double, saturation: Double, brightness: Double, count: Int, wheel: Wheel) -> [String] {
         offsets(wheel, count: max(1, count)).map { padHex(hue: hue + $0, saturation: saturation, brightness: brightness) }

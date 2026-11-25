@@ -1,0 +1,15 @@
+# promise: #754
+# Arc's theme pad (1.174.2, measured offline 25 Nov 2026): a press near the centre gives the full
+# colour, one further out a paler one, white-ish at the 178 pt rim. Cra's pad had it the other way
+# round (white at the centre, full at 153 pt), so dragging a colour outward deepened it.
+budget rss=700 stalls50=10
+cra://debug?windowSize=1280x900
+wait 1
+cra://debug?themeEditor=1
+wait 1
+cra://debug?themeEditor=swatch:03
+cra://debug?themeEditor=press:40
+expect-log theme editor pad 2: wheel=complimentary key=#F50825$
+cra://debug?themeEditor=press:160
+expect-log theme editor pad 3: wheel=complimentary key=#E6C9CA$
+cra://dismiss
