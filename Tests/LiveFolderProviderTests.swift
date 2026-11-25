@@ -110,6 +110,20 @@ enum LiveFolderProviderTests {
         let passed = try read(fixture("github-checks-passed.json"))["checks"] as? [String: Any]
         check(passed?["passed"] as? Int == 2 && passed?["failed"] as? Int == 0 && passed?["pending"] as? Int == 0 && passed?["skipped"] as? Int == 0,
               "job and standalone check successes, suites excluded")
+        let reruns = try read(fixture("github-checks-reruns.json"))["checks"] as? [String: Any]
+        check(reruns?["passed"] as? Int == 2 && reruns?["failed"] as? Int == 1 && reruns?["pending"] as? Int == 0 && reruns?["skipped"] as? Int == 0,
+              "only the newest run of each check name counts, including standalone checks")
+        check(reruns?["failing"] as? [String] == ["Regressed"], "newest failed run supplies the failing name")
+        for invalidURL in ["https://github.com/example/widget/pull/3/files", "https://github.com/example/widget/pull/3/../../../x",
+                           "https://github.com/example/widget/pull/3?x=1", "https://github.com/example/widget/pull/3#x",
+                           "http://github.com/example/widget/pull/3", "https://other.example/example/widget/pull/3"] {
+            var requests = 0
+            let result = try invoke(github, "checks", input: ["url": invalidURL], origins: origins, executable: executable) { request in
+                requests += 1
+                return LiveFolderPluginResponse(status: 200, url: request.url, body: dashboard)
+            }
+            check(json(result).isEmpty && requests == 0, "noncanonical PR URL returns no checks without fetching: \(invalidURL)")
+        }
         let failing = try read(fixture("github-checks-failing.json"))["checks"] as? [String: Any]
         check(failing?["passed"] as? Int == 0 && failing?["failed"] as? Int == 2 && failing?["pending"] as? Int == 1 && failing?["skipped"] as? Int == 1,
               "failed, queued and skipped jobs")

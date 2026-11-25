@@ -244,6 +244,7 @@ function parseChecks(html) {
         "This job is queued": "pending", "This job is in progress": "pending", "This check is in progress": "pending",
         "This job was skipped": "skipped", "This check was skipped": "skipped"
     };
+    const jobs = new Map();
     for (let i = 0; i < starts.length; i++) {
         const chunk = html.slice(starts[i].index + starts[i][0].length, starts[i + 1]?.index ?? html.length);
         // details and summary are suite headings, never jobs.
@@ -252,19 +253,25 @@ function parseChecks(html) {
             .find(m => (attribute("class", m[1]) ?? "").split(/\s+/).includes("SideNav-subItem"));
         const icons = matches(/<svg\b[^>]*>/g, chunk).map(m => attribute("aria-label", m[0])).filter(v => v != null);
         if (!link || icons.length !== 1 || !Object.prototype.hasOwnProperty.call(states, icons[0])) return {};
-        const state = states[icons[0]];
-        checks[state]++;
-        if (state === "failed" && checks.failing.length < 3) {
-            const name = /<span\b[^>]*>([\s\S]*?)<\/span>/.exec(link[2]);
-            if (!name || !plain(name[1])) return {};
-            checks.failing.push(plain(name[1]));
+        const name = /<span\b[^>]*>([\s\S]*?)<\/span>/.exec(link[2]);
+        if (!name || !plain(name[1])) return {};
+        const title = plain(name[1]);
+        const run = /\/actions\/runs\/(\d+)\//.exec(attribute("href", link[1]) ?? "");
+        const runID = run ? BigInt(run[1]) : 0n;
+        if (!jobs.has(title) || runID > jobs.get(title).runID) {
+            jobs.set(title, {state: states[icons[0]], runID, index: i});
         }
+    }
+    for (const [name, job] of [...jobs].sort((a, b) => a[1].index - b[1].index)) {
+        checks[job.state]++;
+        if (job.state === "failed" && checks.failing.length < 3) checks.failing.push(name);
     }
     return checks.passed + checks.failed + checks.pending + checks.skipped ? {checks} : {};
 }
 function checks(input) {
+    if (typeof input.url !== "string" || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(input.url)) return {};
     try {
-        const response = cra.session.fetch(input.url.replace(/\/$/, "") + "/checks", {headers: {
+        const response = cra.session.fetch(input.url + "/checks", {headers: {
             Accept: "application/json", "X-Requested-With": "XMLHttpRequest", "GitHub-Verified-Fetch": "true"
         }});
         if (response.status < 200 || response.status >= 300 ||

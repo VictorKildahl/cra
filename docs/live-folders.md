@@ -187,15 +187,21 @@ not a fixture; the dashboard fixture uses made-up data and these keys only.
 
 Checks on hover use `GET https://github.com/<owner>/<repo>/pull/<number>/checks` with
 `Accept: application/json`, `X-Requested-With: XMLHttpRequest`, `GitHub-Verified-Fetch: true`.
-It wraps HTML in `payload["pullRequestsChecksRoute.Main"].value`. The supplied read-only public
-capture showed `checks-list-item` jobs nested inside suite `details`/`summary` containers,
-SVG `aria-label` values `This job succeeded`, `This check passed`, `This job was skipped`,
-and names in the span inside `a.SideNav-subItem`. Hand-written fixtures preserve that structure
-with made-up job names. Failed/pending labels are recognised conservatively; any unknown
-job icon drops the entire checks result rather than giving an incorrect count.
+Runtime verification on public `cli/cli` PRs 15108, 13788 and 14927 confirmed JSON
+wrapping HTML in `payload["pullRequestsChecksRoute.Main"].value`. The HTML contains
+`checks-list-item` jobs nested inside suite `details`/`summary` containers, SVG
+`aria-label` status icons, and job names in the span inside `a.SideNav-subItem`.
+The recorded parse matched 15108's 12 passing jobs and 6 skipped jobs, and 13788's
+8 passing and 3 failing jobs, including the failing names. Success and skipped labels
+include `This job succeeded`, `This check passed` and `This job was skipped`.
+Hand-written fixtures preserve that structure with made-up job names. Failed/pending
+labels are recognised conservatively; any unknown job icon drops the entire checks
+result rather than giving an incorrect count.
 
-**Unconfirmed until runtime verification:** the app's real `/checks` parse and its counts,
-including failed/pending states and skipped totals. The verifier must compare a real PR card
-with GitHub, record the observed markup here, and fail verification if checks are present on
-GitHub but absent from the card. A seeded snapshot alone does not prove the checks integration.
+PR 14927 also confirmed that the page lists repeated workflow runs for the head commit.
+Count each check name once, keeping the entry with the highest `/actions/runs/<id>/`
+number in its link, regardless of page order; a check without a run ID keeps its single
+entry. This matters for failures as well as skipped totals: an older failed run must not
+override a passing rerun. The original parse counted 13 skipped entries on 14927 where
+`gh pr checks` reported 8, motivating this deduplication rule.
 There is no review state, row glyph, prefetch, polling, POST, token or API-host request.
