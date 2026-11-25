@@ -1736,11 +1736,22 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         let cells = model?.cells ?? []
         let i = cellIndex(at: convert(p.locationInWindow, from: nil))
         let id = cells.indices.contains(i) ? cells[i].id : itemID
-        grid.store.selectTab(id, window: grid.ui.windowID)
-        // A double-click on a favorite away from its pinned page goes back there (#264); in a
-        // split, the pressed pane.
+        // A double-click on a favorite away from its pinned page goes back there (#264); a ⌘-click
+        // opens its page in a new Today tab while keeping the original favorite (#801). In a split,
+        // both act on the pressed pane.
         let away = grid.store.item(id)?.tab.map { $0.url != $0.savedURL } ?? false
-        if FavoriteClick.action(clickCount: event.clickCount, navigatedAway: away) == .backToPinnedPage {
+        switch FavoriteClick.action(clickCount: event.clickCount, navigatedAway: away, modifiers: event.modifierFlags.rawValue) {
+        case .openInNewTab:
+            CraLog.note("favorite ⌘-click: open in new tab")
+            if let copy = grid.store.duplicateTab(id, window: grid.ui.windowID, select: true) {
+                grid.ui.clearPicks(anchor: copy.id)
+            } else {
+                grid.store.selectTab(id, window: grid.ui.windowID)
+            }
+        case .select:
+            grid.store.selectTab(id, window: grid.ui.windowID)
+        case .backToPinnedPage:
+            grid.store.selectTab(id, window: grid.ui.windowID)
             CraLog.note("favorite double-click: back to pinned page")
             grid.actions.resetPinnedTab(id)
         }
