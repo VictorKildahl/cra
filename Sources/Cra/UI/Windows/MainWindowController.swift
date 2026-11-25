@@ -431,13 +431,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         // The sidebar's ← → ↻ act on the Peek its address field shows (#648), else on the tab.
         // The click made this window key: the keys go back to the Peek, so ⌘[ and ⌘R carry on there.
+        // ⌘-click opens the page that way in a new tab instead (#797).
         sidebarActions.goBack = { [weak self] in
-            guard let peek = self?.sidebarPeek else { self?.goBack(); return }
+            guard let self else { return }
+            guard let peek = self.sidebarPeek else { self.commandClicked ? self.openHistoryInNewTab(.back) : self.goBack(); return }
             peek.goBack()
             peek.focusPage()
         }
         sidebarActions.goForward = { [weak self] in
-            guard let peek = self?.sidebarPeek else { self?.currentBrowser?.goForward(); return }
+            guard let self else { return }
+            guard let peek = self.sidebarPeek else {
+                if self.commandClicked { self.openHistoryInNewTab(.forward) } else { self.currentBrowser?.goForward() }
+                return
+            }
             peek.browser?.goForward()
             peek.focusPage()
         }
@@ -534,8 +540,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if self.selectedTabID != id { self.store.selectTab(id, window: windowID) }
             guard let b = self.browsers.runtime(for: id)?.browser else { return }
             switch what {
-            case "goBack": self.goBack(id)
-            case "goForward": b.goForward()
+            case "goBack": self.commandClicked ? self.openHistoryInNewTab(.back, from: id) : self.goBack(id)
+            case "goForward": self.commandClicked ? self.openHistoryInNewTab(.forward, from: id) : b.goForward()
             case "reload": b.isLoading ? b.stopLoading() : b.reload()
             default: break
             }
@@ -3087,6 +3093,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             store.closeToReferrer(id, referrer: referrer, window: windowID)
         case .none:
             break
+        }
+    }
+
+    /// Whether the Back or Forward being pressed now was ⌘-clicked (#797): a click, not ⌘[.
+    private var commandClicked: Bool {
+        guard let e = NSApp.currentEvent else { return false }
+        return BackForwardMenu.opensNewTab(commandHeld: e.modifierFlags.contains(.command),
+                                           byMouse: e.type == .leftMouseUp || e.type == .leftMouseDown)
+    }
+
+    /// ⌘-click on Back or Forward (#797): the nearest page that way in tab `tab`'s history (the tab in
+    /// front by default) opens in a new tab that comes to the front, where new tabs go, opened from
+    /// `tab`; `tab` stays on its page, as in Arc. Logs "history new tab: <direction> <address>".
+    func openHistoryInNewTab(_ direction: BackForwardMenu.Direction, from tab: UUID? = nil) {
+        guard let id = tab ?? browsers.visibleTabID, let b = browsers.runtime(for: id)?.browser else { return }
+        b.sendDevToolsMethod("Page.getNavigationHistory", params: "{}") { [weak self] result, _ in
+            MainActor.assumeIsolated {
+                guard let self, let result, let page = BackForwardMenu.newTabPage(history: result, direction: direction) else { return }
+                self.store.createTab(url: page.url, title: page.title, in: self.store.spaceID(ofItem: id), select: true,
+                                     window: self.windowID, referrer: id)
+                CraLog.note("history new tab: \(direction == .back ? "back" : "forward") \(page.url)")
+            }
         }
     }
 

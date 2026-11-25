@@ -104,4 +104,19 @@ struct BackForwardMenuTests {
         let low = L.placement(button: CGRect(x: 600, y: 30, width: 32, height: 32), screen: screen, rows: 12)
         #expect(low.frame.minY + L.margin == 4, "a long menu near the bottom stays on the screen")
     }
+
+    /// ⌘-click on Back or Forward (#797): Arc opens the nearest page that way in a new tab, with its own
+    /// title (b.com has none, so none, not the menu's address), and nothing at the end of the history.
+    /// Only a ⌘-click does it; ⌘[ (a key, ⌘ held too) keeps going back in the tab.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/797"))
+    func commandClickOpensTheNearestPageInANewTab() {
+        #expect(BackForwardMenu.newTabPage(history: Self.history, direction: .back) == .init(entryID: 12, title: "", url: "https://b.com/page"))
+        #expect(BackForwardMenu.newTabPage(history: Self.history, direction: .forward)?.url == "https://d.com/")
+        let first = Self.history.replacingOccurrences(of: "\"currentIndex\":2", with: "\"currentIndex\":0")
+        #expect(BackForwardMenu.newTabPage(history: first, direction: .back) == nil)
+        #expect(BackForwardMenu.newTabPage(history: "not json", direction: .back) == nil)
+        #expect(BackForwardMenu.opensNewTab(commandHeld: true, byMouse: true))
+        #expect(!BackForwardMenu.opensNewTab(commandHeld: true, byMouse: false), "⌘[ goes back in the tab")
+        #expect(!BackForwardMenu.opensNewTab(commandHeld: false, byMouse: true))
+    }
 }
