@@ -324,6 +324,11 @@ final class MCPServer {
                             folders.insert(folder.displayTitle, at: 0); parent = folder.parentID
                         }
                         if !folders.isEmpty { row["folder"] = folders.joined(separator: " / ") }
+                        if let split = app.store.splitContaining(item.id), let index = split.children.firstIndex(of: item.id) {
+                            row["splitId"] = split.id.uuidString
+                            row["splitPaneIndex"] = index
+                            row["splitPaneCount"] = split.children.count
+                        }
                         if selected.contains(item.id) { row["selected"] = true }
                         if item.id == activeTab { row["active"] = true }
                         if let url = item.tab?.url, !url.isEmpty, !MCPProtocol.navigable(url) { row["webPage"] = false }
@@ -340,11 +345,18 @@ final class MCPServer {
             return
         }
         if name == "tab_open" {
+            let splitWithID = (arguments["splitWith"] as? String).flatMap(UUID.init(uuidString:))
+            let splitWindow = splitWithID.flatMap { id in
+                app.mainWindows.first { !$0.isIncognito && $0.browsers.runtime(for: id) != nil }
+            }
             guard canContinue(), let url = arguments["url"] as? String, MCPProtocol.navigable(url),
-                  let window = app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
+                  let window = splitWindow ?? app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
                 completion(MCPProtocol.content("Opening a tab requires an HTTP(S) URL and a normal browser window.", failed: true)); return
             }
             if arguments["windowless"] as? Bool == true {
+                guard splitWithID == nil else {
+                    completion(MCPProtocol.content("splitWith cannot be combined with windowless=true.", failed: true)); return
+                }
                 guard agentTabs.count < 8 else { completion(MCPProtocol.content("Eight agent tabs are retained. Use tabs_list and tab_close to release open or timed-out tabs.", failed: true)); return }
                 let id = UUID()
                 let profile = app.store.profilePath(space: app.store.focusedSpaceID(window: window.windowID))
@@ -357,12 +369,48 @@ final class MCPServer {
             // selected, so the agent works next to the user without taking their screen.
             let select = arguments["select"] as? Bool == true
             var space: UUID?
+            if arguments["splitWith"] != nil, splitWithID == nil {
+                completion(MCPProtocol.content("splitWith must be a tab ID from tabs_list.", failed: true)); return
+            }
+            if let splitWithID {
+                guard let anchor = app.store.mcpTab(splitWithID), let anchorURL = anchor.tab?.url,
+                      MCPProtocol.navigable(anchorURL), let anchorSpace = app.store.spaceID(ofItem: splitWithID, window: window.windowID) else {
+                    completion(MCPProtocol.content("splitWith must be an open web tab from tabs_list.", failed: true)); return
+                }
+                guard app.store.paneTabIDs(for: splitWithID).count < app.store.splitPaneLimit else {
+                    completion(MCPProtocol.content("Cannot Add New Pane: the split has reached its pane limit.", failed: true)); return
+                }
+                space = anchorSpace
+            }
             if let name = arguments["space"] as? String {
-                space = app.store.spaceOrder.first { app.store.space($0)?.title.localizedCaseInsensitiveCompare(name) == .orderedSame }
-                guard space != nil else {
+                let requestedSpace = app.store.spaceOrder.first { app.store.space($0)?.title.localizedCaseInsensitiveCompare(name) == .orderedSame }
+                guard let requestedSpace else {
                     let names = app.store.spaceOrder.compactMap { app.store.space($0)?.title }
                     completion(MCPProtocol.content("No space is called \(name). Spaces: " + names.joined(separator: ", ") + ".", failed: true)); return
                 }
+                if let splitWithID, !app.store.isInSpace(splitWithID, requestedSpace) {
+                    completion(MCPProtocol.content("space must match the space of splitWith.", failed: true)); return
+                }
+                space = requestedSpace
+            }
+            if let splitWithID {
+                let tab = app.store.createTab(url: url, in: space, select: false, window: window.windowID)
+                guard let split = app.store.createSplit(with: [splitWithID, tab.id], at: splitWithID),
+                      let paneID = app.store.paneID(for: tab.id, in: split) else {
+                    app.store.archiveTab(tab.id, reason: .manual)
+                    completion(MCPProtocol.content("Could not add the page to Split View.", failed: true)); return
+                }
+                ownedTabs[owner, default: []].insert(paneID)
+                if select { app.store.selectTab(paneID, window: window.windowID) }
+                _ = window.browsers.ensureRuntime(for: paneID)
+                if arguments["activate"] as? Bool == true {
+                    window.window?.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                let panes = app.store.paneTabIDs(for: paneID).map(\.uuidString)
+                completion(try! MCPCDP.content(["tabId": paneID.uuidString, "status": "opened", "selected": select,
+                                                "splitId": split.id.uuidString, "paneTabIds": panes]))
+                return
             }
             let tab = app.store.createTab(url: url, in: space, select: select, window: window.windowID)
             ownedTabs[owner, default: []].insert(tab.id)

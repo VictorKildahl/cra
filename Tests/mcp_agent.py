@@ -184,6 +184,16 @@ try:
     listed = {t["id"]: t for t in value(client.tool("tabs_list"))}
     check("agent tab opens unselected in the today list", not listed[tab].get("selected") and listed[tab]["section"] == "today" and listed[tab]["space"])
     check("tabs_list marks the user's tab active", listed[user_tab].get("active") is True and listed[user_tab].get("selected") is True)
+    split_open = value(client.tool("tab_open", url=url + "/index.html?split=1", splitWith=tab))
+    split_tab = split_open["tabId"]
+    check("tab_open adds a pane beside the requested tab", split_open["splitId"] and set(split_open["paneTabIds"]) == {tab, split_tab})
+    split_rows = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("tabs_list identifies split membership and pane order", split_rows[tab]["splitId"] == split_rows[split_tab]["splitId"] == split_open["splitId"]
+          and [split_rows[tab]["splitPaneIndex"], split_rows[split_tab]["splitPaneIndex"]] == [0, 1]
+          and split_rows[split_tab]["splitPaneCount"] == 2)
+    value(client.tool("page_wait", tabId=split_tab, selector="#name", state="visible"))
+    value(client.tool("page_fill", tabId=split_tab, selector="#name", text="Split pane edit"))
+    check("page tools edit a tab in split view", js(split_tab, "document.querySelector('#name').value") == "Split pane edit")
     check("a hidden tab works as a focused visible page", js(tab, "document.visibilityState + document.hasFocus()") == "visibletrue")
 
     # Everything below happens in the hidden tab.
