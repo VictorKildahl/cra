@@ -1905,6 +1905,33 @@ final class BrowseToggleTests: BrowserTestCase {
         XCTAssertTrue(browse.isSelected)
     }
 
+    /// Closing the tab took its page away but left the switch over the empty home.
+    func testClosingTheTabTakesItsSwitchAway() {
+        launch(["-CraFakeModel", "YES"])
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        XCTAssertTrue(app.webViews.staticTexts["About pizza ovens"].waitForExistence(timeout: 15))
+        let browse = app.buttons["toggle-browse"]
+        XCTAssertTrue(browse.waitForExistence(timeout: 5))
+        app.buttons["bar-tabs"].tap()
+        let card = app.buttons["tab-card-0"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        sleep(1)
+        card.swipeUp(velocity: .fast)
+        // The last tab gone, the sheet comes up; put away, it leaves the empty home, without the switch.
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 200)), withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(app.images["logo"].waitForExistence(timeout: 5))
+        sleep(1)
+        keep("browse-toggle-tab-closed")
+        XCTAssertFalse(browse.exists, "the closed tab's switch went with it")
+    }
+
     /// "Browse for Me" picked as the search engine: Go makes a Browse for Me page instead of
     /// opening the engine's results.
     func testBrowseForMeCanBeTheSearchEngine() {
