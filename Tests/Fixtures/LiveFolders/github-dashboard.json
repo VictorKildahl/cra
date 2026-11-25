@@ -1,0 +1,83 @@
+{
+  "payload": {
+    "pullsDashboardSurfaceContentRoute": {
+      "results": [
+        {
+          "itemType": "pull_request",
+          "id": "PR_3",
+          "number": 3,
+          "permalink": "https://github.com/example/widget/pull/3",
+          "repoNameWithOwner": "example/widget",
+          "title": "Improve previews",
+          "titleHtml": "Improve previews",
+          "author": {
+            "displayLogin": "example-author"
+          },
+          "authoredByAgent": false,
+          "assignees": [],
+          "state": "OPEN",
+          "displayState": "DRAFT",
+          "isDraft": true,
+          "isReadByCurrentUser": true,
+          "commentCount": 2,
+          "labels": [
+            {
+              "color": "D97757",
+              "description": "",
+              "globalId": "L_ui",
+              "id": 0,
+              "name": "ui",
+              "nameHtml": "ui"
+            },
+            {
+              "color": "00AA00",
+              "description": "",
+              "globalId": "L_tests",
+              "id": 1,
+              "name": "tests",
+              "nameHtml": "tests"
+            }
+          ],
+          "taskListItemCount": 4,
+          "completeTaskListItemCount": 2,
+          "headSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "commitHeadShaChannel": "example-channel",
+          "mergeQueueUrl": null,
+          "closedAt": null,
+          "mergedAt": null,
+          "createdAt": "2026-11-20T10:00:00+00:00",
+          "updatedAt": "2026-11-24T09:00:00+00:00"
+        },
+        {
+          "itemType": "pull_request",
+          "id": "PR_4",
+          "number": 4,
+          "permalink": "https://github.com/example/widget/pull/4",
+          "repoNameWithOwner": "example/widget",
+          "title": "Fix layout",
+          "titleHtml": "Fix layout",
+          "author": {
+            "displayLogin": "example-author"
+          },
+          "authoredByAgent": false,
+          "assignees": [],
+          "state": "OPEN",
+          "displayState": "OPEN",
+          "isDraft": false,
+          "isReadByCurrentUser": true,
+          "commentCount": 0,
+          "labels": [],
+          "taskListItemCount": 0,
+          "completeTaskListItemCount": 0,
+          "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "commitHeadShaChannel": "example-channel",
+          "mergeQueueUrl": null,
+          "closedAt": null,
+          "mergedAt": null,
+          "createdAt": "2026-11-20T10:00:00+00:00",
+          "updatedAt": "2026-11-24T09:00:00+00:00"
+        }
+      ]
+    }
+  }
+}

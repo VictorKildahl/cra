@@ -27,6 +27,10 @@ final class FavoritePreviewCard {
         /// The site's recent pages, read when the card shows (the history is in hand).
         var recentPages: () -> [RecentPagesPreview.Page] = { [] }
         var favicon: (String) -> NSImage? = { _ in nil }
+        var pullRequest: () -> LiveFolderPluginItem? = { nil }
+        var checks: (LiveFolderPluginItem) -> PullRequestChecks? = { _ in nil }
+        var fetchChecks: (LiveFolderPluginItem) -> Void = { _ in }
+
         /// A pinned tab's row: the card goes right of this view (the sidebar's list), level with
         /// the row's top, instead of under a favorite's tile.
         weak var beside: NSView?
@@ -42,7 +46,7 @@ final class FavoritePreviewCard {
     private var observers: [NSObjectProtocol] = []
 
     private init() {
-        observers = [LiveCalendarClient.changed, OutlookClient.changed].map {
+        observers = [LiveCalendarClient.changed, OutlookClient.changed, LiveFolderManager.checksChanged].map {
             NotificationCenter.default.addObserver(forName: $0, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { FavoritePreviewCard.shared.contentChanged() }
             }
@@ -64,6 +68,8 @@ final class FavoritePreviewCard {
         case .calendar, .notionCalendar:
             LiveCalendarClient.shared.refresh(favorite: Self.googleCalendar(target), profilePath: target.profilePath, ifOlderThan: 60)
         case .outlookMail, .outlookCalendar: OutlookClient.shared.refresh(favorite: target.favorite, profilePath: target.profilePath, ifOlderThan: 60)
+        case .pullRequest:
+            if let item = target.pullRequest() { target.fetchChecks(item) }
         case .recentPages, nil: break
         }
         let work = DispatchWorkItem { [weak self, weak tile] in
@@ -135,6 +141,8 @@ final class FavoritePreviewCard {
         guard let target else { return }
         switch SidebarTabPreview.card(for: target.favorite) {
         case .calendar, .notionCalendar, .outlookMail, .outlookCalendar: break
+        case .pullRequest:
+            guard target.pullRequest() != nil else { dismiss(animated: false); return }
         default: return
         }
         if panel != nil { refreshPanel() } else { showIfReady() }
@@ -182,6 +190,10 @@ final class FavoritePreviewCard {
             guard let state = calendarState(target) else { return nil }
             let service = SidebarTabPreview.card(for: target.favorite) == .outlookCalendar ? "Outlook" : "Google Calendar"
             return AnyView(CalendarPreviewView(state: state, now: Date(), service: service, actions: calendarActions(target)))
+        case .pullRequest:
+            guard let item = target.pullRequest() else { return nil }
+            return AnyView(PullRequestPreviewView(card: PullRequestPreview.card(item: item, checks: target.checks(item), now: Date()),
+                                                  open: { [weak self] in self?.open(item.url) }))
         case .outlookMail:
             guard let state = OutlookClient.shared.state(for: target.favorite, profilePath: target.profilePath) else { return nil }
             if state.signedOut || state.inbox == nil {
@@ -268,6 +280,8 @@ final class FavoritePreviewCard {
     }
 
     // MARK: Testing
+
+    var isShown: Bool { panel != nil }
 
     /// cra://debug?gmailPreview=<unread>: the card for a sample inbox where Arc's 264 pt sidebar
     /// has its fourth favorite tile.
@@ -365,6 +379,11 @@ extension FavoritePreviewCard.Target {
         t.favicon = { [weak favicons] page in
             guard let favicons else { return nil }
             return favicons.image(for: page) ?? FaviconKey.key(for: page).flatMap { favicons.image(forKey: FaviconKey.siteKey(of: $0)) }
+        }
+        if beside != nil {
+            t.pullRequest = { LiveFolderManager.shared.pullRequestItem(for: id) }
+            t.checks = { LiveFolderManager.shared.checks(for: $0, tab: id) }
+            t.fetchChecks = { LiveFolderManager.shared.fetchChecks(for: $0, tab: id) }
         }
         t.beside = beside
         return t
@@ -977,5 +996,37 @@ private struct EventBlock: View {
         .onHover { hovered = $0 }
         .onTapGesture { event.link.map(open) }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Snapshot first, checks when available, in the existing Previews chrome.
+private struct PullRequestPreviewView: View {
+    let card: PullRequestPreview.Card
+    let open: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        CardStyle.card(
+            VStack(alignment: .leading, spacing: 7) {
+                Text(card.header).font(.system(size: 12, weight: .semibold)).foregroundStyle(CardStyle.secondary)
+                Text(card.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(CardStyle.text)
+                if let checks = card.checks { line(checks) }
+                ForEach(Array(card.failing.enumerated()), id: \.offset) { _, name in line(name) }
+                if let labels = card.labels { line(labels) }
+                if let activity = card.activity { line(activity) }
+                if let updated = card.updated { line(updated) }
+            }
+            .padding(FavoritePreviewMetrics.inset)
+            .frame(width: FavoritePreviewMetrics.width, alignment: .leading)
+            .background(hovered ? CardStyle.hover : .clear)
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+            .onTapGesture(perform: open)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton))
+    }
+
+    private func line(_ text: String) -> some View {
+        Text(text).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
     }
 }

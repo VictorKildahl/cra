@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "Checks"
+  },
+  "payload": {
+    "pullRequestsChecksRoute.Main": {
+      "value": "<details class=\"checks-list-item Details-element details-reset\"><summary class=\"checks-list-item summary-reset\"><a><span>Example suite</span></a></summary><div class=\"border-bottom\"></div></details>"
+    }
+  }
+}

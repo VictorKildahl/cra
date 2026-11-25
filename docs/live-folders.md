@@ -171,3 +171,31 @@ GitLab as the source: the same folder row, menus, dialogs, refresh schedule and 
   an answer to a request made for the old profile, server or filters is dropped.
 - Left out of #223 as not Arc: category subfolders ("Separate by Category"), "Restore Hidden", a minimum
   450 ms refresh spinner and manual refreshes without Arc's 10 s gap.
+
+## GitHub dashboard and hover checks (24 Nov 2026)
+
+The signed-in `/pulls/search` JSON has `payload.pullsDashboardSurfaceContentRoute.results[]`.
+Confirmed item keys: `itemType`, `id`, `number`, `permalink`, `repoNameWithOwner`, `title`,
+`titleHtml`, `author {displayLogin}`, `authoredByAgent`, `assignees`, `state`, `displayState`,
+`isDraft`, `isReadByCurrentUser`, `commentCount`, `labels [{color, description, globalId, id,
+name, nameHtml}]`, `taskListItemCount`, `completeTaskListItemCount`, `headSha`,
+`commitHeadShaChannel`, `mergeQueueUrl`, `closedAt`, `mergedAt`, `createdAt`, `updatedAt`.
+Dates are ISO 8601 with an offset. No checks or review keys exist in this payload.
+The plugin keeps the draft, comments, up to ten labels, nonzero task totals, updated date and
+40-hex head SHA; the first known details win when filters overlap. The private capture is
+not a fixture; the dashboard fixture uses made-up data and these keys only.
+
+Checks on hover use `GET https://github.com/<owner>/<repo>/pull/<number>/checks` with
+`Accept: application/json`, `X-Requested-With: XMLHttpRequest`, `GitHub-Verified-Fetch: true`.
+It wraps HTML in `payload["pullRequestsChecksRoute.Main"].value`. The supplied read-only public
+capture showed `checks-list-item` jobs nested inside suite `details`/`summary` containers,
+SVG `aria-label` values `This job succeeded`, `This check passed`, `This job was skipped`,
+and names in the span inside `a.SideNav-subItem`. Hand-written fixtures preserve that structure
+with made-up job names. Failed/pending labels are recognised conservatively; any unknown
+job icon drops the entire checks result rather than giving an incorrect count.
+
+**Unconfirmed until runtime verification:** the app's real `/checks` parse and its counts,
+including failed/pending states and skipped totals. The verifier must compare a real PR card
+with GitHub, record the observed markup here, and fail verification if checks are present on
+GitHub but absent from the card. A seeded snapshot alone does not prove the checks integration.
+There is no review state, row glyph, prefetch, polling, POST, token or API-host request.

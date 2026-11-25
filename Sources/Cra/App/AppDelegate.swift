@@ -1650,6 +1650,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let site = dict["recentPages"].flatMap(RecentPagesPreview.Site.init(rawValue:)), let w = main.window {
                 FavoritePreviewCard.shared.demoRecentPages(site, count: dict["pages"].flatMap(Int.init) ?? 6, in: w); return
             }
+            // PR scenario: persist the checkbox across relaunch, and read the real panel.
+            if let value = dict["pullRequestPreviews"] { store.settings.pullRequestPreviews = value == "1"; return }
+            if let label = dict["previewShown"] {
+                CraLog.note("preview card \(label): \(FavoritePreviewCard.shared.isShown ? "shown" : "none")"); return
+            }
             // previewDismiss=1: the card goes, as when the pointer leaves it.
             if dict["previewDismiss"] != nil { FavoritePreviewCard.shared.dismiss(animated: false); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.

@@ -1663,7 +1663,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         // Not while the Library covers the sidebar (the tile is still under the pointer's path there).
         guard let store = grid?.store, grid?.ui.libraryPage == nil, grid?.ui.libraryReveal == nil, !isHiddenOrHasHiddenAncestor,
               model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url,
-              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return nil }
+              let kind = SidebarTabPreview.kind(for: url, settings: store.settings), kind != .pullRequest else { return nil }
         return url
     }
 
