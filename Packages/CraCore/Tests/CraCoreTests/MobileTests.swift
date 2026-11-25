@@ -526,6 +526,75 @@ struct MobileTabCarouselTests {
     }
 }
 
+/// The row's cards as they are thrown out of it, faster than each one flies off.
+struct MobileTabRowTests {
+    static let ids = (0..<4).map { _ in UUID() }
+
+    /// Closing tabs quickly crashed the iPhone app (Pri's screen recording, 25 Nov 2026). A card
+    /// flies off for 0.28 s before it leaves the row, and the next flick can come before that.
+    /// Each throw removed the card by the place it had when its flight began, so the second one
+    /// to land took its neighbour or a place past the end of the row.
+    @Test(.bug(id: "crash-tab-row-quick-throws"))
+    func aCardLeavesTheRowByItsIDWhateverLandedBeforeIt() {
+        let a = Self.ids[0], b = Self.ids[1], c = Self.ids[2]
+        // The focused card, then the newer one on its right while the first still flies.
+        var row = MobileTabRow(cards: [a, b, c])
+        let threwB = row.startThrow(b), threwC = row.startThrow(c)
+        #expect(threwB && threwC)
+        let afterB = row.finishThrow(b, position: 1)
+        #expect(afterB == .init(position: 1, settle: 1))
+        let afterC = row.finishThrow(c, position: 1)
+        #expect(afterC == .init(position: 1, settle: 0))
+        #expect(row.cards == [a])
+        // Oldest first: the second card's old place now holds its right-hand neighbour.
+        row = MobileTabRow(cards: [a, b, c])
+        row.startThrow(a)
+        row.startThrow(b)
+        let afterA = row.finishThrow(a, position: 2)
+        #expect(afterA == .init(position: 1, settle: 1))
+        let thenB = row.finishThrow(b, position: 1)
+        #expect(thenB == .init(position: 0, settle: 0))
+        #expect(row.cards == [c])
+    }
+
+    /// A flying card is out of reach: a finger can't take it again, and it leaves only once.
+    @Test(.bug(id: "crash-tab-row-quick-throws"))
+    func aFlyingCardCantBeThrownTwice() {
+        let a = Self.ids[0], b = Self.ids[1]
+        var row = MobileTabRow(cards: [a, b])
+        #expect(row.canTake(b))
+        let first = row.startThrow(b)
+        #expect(first)
+        #expect(!row.canTake(b))
+        let second = row.startThrow(b)
+        #expect(!second)
+        #expect(row.canTake(a))
+        let landed = row.finishThrow(b, position: 1)
+        #expect(landed != nil)
+        let again = row.finishThrow(b, position: 0)
+        #expect(again == nil)
+        #expect(row.cards == [a])
+        #expect(!row.canTake(b))
+    }
+
+    /// The row closes the gap. A card gone from behind the focus leaves the focus on its card
+    /// (the row shifts one place at once); the focused card hands it to the one after it, or to
+    /// the one before when it was the newest.
+    @Test func theRowClosesTheGapAroundTheFocus() {
+        let ids = Self.ids
+        func close(_ index: Int, at position: CGFloat) -> MobileTabRow.Gap? {
+            var row = MobileTabRow(cards: ids)
+            row.startThrow(ids[index])
+            return row.finishThrow(ids[index], position: position)
+        }
+        #expect(close(0, at: 2) == .init(position: 1, settle: 1))
+        #expect(close(1, at: 1) == .init(position: 1, settle: 1))
+        #expect(close(3, at: 3) == .init(position: 3, settle: 2))
+        #expect(close(3, at: 1) == .init(position: 1, settle: 1))
+        #expect(!MobileTabRow(cards: []).canTake(ids[0]))
+    }
+}
+
 struct MobilePageMenuTests {
     /// Victor's recording of Arc Search 1.49 on an iPhone 16 Pro Max (440 × 956 pt): the closed
     /// menu's sheet starts at 508 pt with the recording's 85.6 × 88.7 tiles. Square tiles with

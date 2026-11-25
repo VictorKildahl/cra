@@ -73,3 +73,56 @@ public enum MobileTabCarousel {
         translation < -120 || (translation < -30 && velocity < -700)
     }
 }
+
+/// The tab row's cards, oldest first, as cards are thrown out of it. A thrown card flies off
+/// for a moment before the row closes its gap, and the next flick can come before it has gone.
+/// So a flying card keeps its place in the row but no finger can take it again, and it leaves
+/// by its id: a card thrown before it may land first and move it.
+public struct MobileTabRow: Equatable, Sendable {
+    /// Where the row goes once a card has left it.
+    public struct Gap: Equatable, Sendable {
+        /// The row's position straight away: a card gone from before it moves every later card
+        /// one place, so it moves with them.
+        public var position: CGFloat
+        /// The card the row then settles on.
+        public var settle: Int
+
+        public init(position: CGFloat, settle: Int) {
+            self.position = position
+            self.settle = settle
+        }
+    }
+
+    public private(set) var cards: [UUID]
+    private var thrown: Set<UUID> = []
+
+    public init(cards: [UUID]) { self.cards = cards }
+
+    public func isThrown(_ id: UUID) -> Bool { thrown.contains(id) }
+
+    /// Whether a finger can take the card: one in the row that isn't flying off.
+    public func canTake(_ id: UUID) -> Bool { cards.contains(id) && !thrown.contains(id) }
+
+    /// Throws the card out. False when a finger can't take it, so no card is thrown twice.
+    @discardableResult
+    public mutating func startThrow(_ id: UUID) -> Bool {
+        guard canTake(id) else { return false }
+        thrown.insert(id)
+        return true
+    }
+
+    /// The thrown card has flown off and leaves the row, which is at `position`. A card gone
+    /// from behind the focus leaves the focus on its card; the focused card hands it to the one
+    /// after it, or to the one before when it was the newest. Nil for a card not thrown.
+    public mutating func finishThrow(_ id: UUID, position: CGFloat) -> Gap? {
+        guard thrown.remove(id) != nil, let index = cards.firstIndex(of: id) else { return nil }
+        cards.remove(at: index)
+        var position = position
+        var target = position.rounded()
+        if CGFloat(index) < target {
+            target -= 1
+            position -= 1
+        }
+        return Gap(position: position, settle: Int(min(max(0, target), CGFloat(max(0, cards.count - 1)))))
+    }
+}
