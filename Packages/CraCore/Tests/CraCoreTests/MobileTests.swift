@@ -1239,6 +1239,27 @@ struct MobileMotionTests {
 
 struct MobileOnboardingTests {
 
+    @Test func foldedStatusClusterClearsTheCorner() throws {
+        // Rework 7: inspect the authored overlay, whose accessibility is hidden in the UI.
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        let source = try String(contentsOf: root.appendingPathComponent("iOS/Cra/Onboarding/OnboardingMocks.swift"), encoding: .utf8)
+        let folded = try #require(source.components(separatedBy: "private var foldedScreen: some View {").last)
+            .components(separatedBy: ".scaleEffect(")[0]
+        let pattern = #"\.padding\(\.(top|trailing), (\d+)\)"#
+        let expression = try NSRegularExpression(pattern: pattern)
+        let text = folded as NSString
+        var insets: [String: Double] = [:]
+        for match in expression.matches(in: folded, range: NSRange(location: 0, length: text.length)) {
+            insets[text.substring(with: match.range(at: 1))] = Double(text.substring(with: match.range(at: 2)))
+        }
+        let top = try #require(insets["top"])
+        let trailing = try #require(insets["trailing"])
+        // Match the phone's 26 pt side inset and leave 20 pt above the time, inside the miniature.
+        #expect(trailing >= 26)
+        #expect(top >= 20)
+    }
+
     @Test func longPhonesKeepThePhoneMock() {
         // Apple's published portrait sizes and landscape safe areas (spec 17a, 17b).
         for (window, left, right) in [(CGSize(width: 393, height: 852), CGFloat(0), CGFloat(0)),
