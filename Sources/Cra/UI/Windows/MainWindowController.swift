@@ -3202,18 +3202,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// Today tabs are archived. Pinned tabs and favorites stay; they unload
     /// and return to their pinned page (Arc's close-on-pinned behaviour). A Favorite is only deselected, unless
-    /// `fromItsMenu` (its right-click menu's Close Tab), as in Arc (#740).
+    /// `fromItsMenu` (its right-click menu's Close Tab) or its page is making sound, as in Arc (#740, #803).
     func closeTab(_ id: UUID, fromItsMenu: Bool = false) {
         guard let item = store.item(id), item.isTab else { return }
         if store.isPinned(id) {
             let panes = store.paneTabIDs(for: id)
             let wasSelected = selectedTabID.map(panes.contains) ?? false
-            // A Favorite is only deselected: its page keeps running, and a click on it shows it as it was (#740).
-            if CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id), fromItsMenu: fromItsMenu) == .deselectKeepingPage {
+            let audible = panes.contains { app.runtime(for: $0)?.browser.isAudible == true }
+            // A silent Favorite is only deselected: its page keeps running, and a click on it shows it as it was (#740).
+            // One playing sound unloads like a pinned tab, so a video in it stops (#803).
+            if CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id), fromItsMenu: fromItsMenu,
+                                          audible: audible) == .deselectKeepingPage {
                 if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
                 CraLog.note("close tab: favorite deselected, its page kept")
                 return
             }
+            if audible, store.isFavorite(id) { CraLog.note("close tab: favorite playing sound unloaded") }
             // A pinned split closes as one: every pane unloads and goes back to its page.
             for p in store.closePinnedTab(id, wasOpen: wasSelected) {
                 for w in app.mainWindows { w.browsers.unload(p); w.dropPeeks(from: p) }

@@ -5525,3 +5525,18 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
 - **Cra:** `CloseSuccessor.pinnedClose(isFavorite:fromItsMenu:)`. The menu's Close Tab unloads the Favorite back to its
   pinned page, whether it is shown or loaded behind another tab; ⌘W and every other close still only deselect it.
 - **Open questions:** Arc's Favorite split menu, and whether ⇧⌘T brings a Favorite closed this way back.
+
+## ⌘W on a Favorite playing sound (25 Nov 2026, Arc 1.174.2, #803)
+
+- **Measured** in an offline copy of Arc (fake home, localhost only), on a local page made the first Favorite. The page
+  posts its state every second (load id, `currentTime`, `paused`, `visibilityState`, Picture in Picture):
+  - A video **with sound**: ⌘W fired `pagehide` at once and nothing more came. A click on the Favorite loaded it
+    afresh (new load id, video at 0 s). No Picture in Picture; the window showed no page.
+  - A page **without media**: ⌘W only hid it (`visibilitychange` hidden, ticks went on), and a click showed the same
+    load again, as #740 measured in 1.173.1.
+  - A **muted** video: like the page without media. Chromium paused it while hidden (its rule for muted autoplay)
+    and it played on from the same second when shown again.
+- **Cra:** `CloseSuccessor.pinnedClose(isFavorite:fromItsMenu:audible:)`, with Chromium's `isAudible` (2 s hold) for
+  `audible`. A Favorite making sound unloads back to its pinned page on ⌘W; a silent one is only deselected. Scenario
+  `favorite-close-playing`.
+- **Open questions:** whether a page the user muted (tab Mute) counts as making sound in Arc.

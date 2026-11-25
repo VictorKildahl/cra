@@ -25,7 +25,7 @@ public enum CloseSuccessor {
 
     /// What closing a pinned tab or Favorite does: ⌘W, or Close Tab in its own right-click menu.
     public enum PinnedClose: Equatable, Sendable {
-        /// Deselected, its page left running: a Favorite (Arc 1.173.1, #740: a page's load time and counter carried
+        /// Deselected, its page left running: a silent Favorite (Arc 1.173.1, #740: a page's load time and counter carried
         /// on after ⌘W and a click back, and its server saw no second load). Arc's WindowDeselectItemsConfiguration.
         case deselectKeepingPage
         /// Unloaded back to its pinned page: a pinned tab in the list, as in Arc.
@@ -35,8 +35,10 @@ public enum CloseSuccessor {
     /// `fromItsMenu`: Close Tab in the Favorite's right-click menu, which closes it in Arc 1.173.1: its page is let go and
     /// a click on the Favorite loads it again. Only ⌘W keeps it running (#740). The menu offers Close Tab only while
     /// the Favorite is shown or loaded, so it is the one way to let a Favorite's page go by hand.
-    public static func pinnedClose(isFavorite: Bool, fromItsMenu: Bool = false) -> PinnedClose {
-        isFavorite && !fromItsMenu ? .deselectKeepingPage : .unloadToPinnedPage
+    /// `audible`: the page is making sound. Arc 1.174.2 lets such a Favorite go on ⌘W too, so a video in it stops: the
+    /// page got `pagehide` at once and a click loaded it afresh, where a page without sound ran on (#803, 25 Nov 2026).
+    public static func pinnedClose(isFavorite: Bool, fromItsMenu: Bool = false, audible: Bool = false) -> PinnedClose {
+        isFavorite && !fromItsMenu && !audible ? .deselectKeepingPage : .unloadToPinnedPage
     }
 
     /// A pinned tab or favorite closing (it unloads): back to the previous tab while it has a

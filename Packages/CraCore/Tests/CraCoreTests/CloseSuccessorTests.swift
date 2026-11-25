@@ -67,4 +67,15 @@ struct CloseSuccessorTests {
         #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: false) == .deselectKeepingPage, "⌘W still keeps it (#740)")
         #expect(CloseSuccessor.pinnedClose(isFavorite: false, fromItsMenu: true) == .unloadToPinnedPage)
     }
+
+    /// ⌘W on a Favorite playing sound closes it, as in Arc 1.174.2: a test video's page got `pagehide` on ⌘W and a click
+    /// on the Favorite loaded it afresh, while a page without sound ran on (#740). 0.1.56 kept every Favorite's page, so a
+    /// YouTube video played on after ⌘W (#803).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/803"))
+    func closingAFavoritePlayingSoundLetsItsPageGo() {
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, audible: true) == .unloadToPinnedPage, "a video stops")
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, audible: false) == .deselectKeepingPage, "a silent page runs on (#740)")
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: true, audible: true) == .unloadToPinnedPage)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: false, audible: true) == .unloadToPinnedPage)
+    }
 }
