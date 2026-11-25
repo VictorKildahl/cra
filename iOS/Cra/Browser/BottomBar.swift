@@ -20,12 +20,14 @@ final class BottomBar: UIView {
     var overBackdrop = false {
         didSet { if overBackdrop != oldValue { applyMode() } }
     }
-    /// The bar's slab: its frosted material and hairline. Two materials, one light and one dark,
-    /// crossfade when the page's appearance changes, so the colour eases rather than switching.
+    /// The bar's slab: its frosted material and hairline. The material itself cuts to its light or
+    /// dark variant; `pageIsDark` fades the bar's old look out over it.
     private let slab = UIView()
-    private let lightSlab = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
-    private let darkSlab = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+    private let blur = UIVisualEffectView()
     private let hairline = UIView()
+    /// The bar's old appearance fading out over its new one.
+    private var appearanceFade: UIImageView?
+    private static let appearanceFadeDuration: TimeInterval = 0.12
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
     var ringsMenu = false {
@@ -61,21 +63,54 @@ final class BottomBar: UIView {
     var pageIsDark: Bool? {
         didSet {
             guard pageIsDark != oldValue else { return }
-            overrideUserInterfaceStyle = pageIsDark.map { $0 ? .dark : .light } ?? .unspecified
+            let style: UIUserInterfaceStyle = pageIsDark.map { $0 ? .dark : .light } ?? .unspecified
+            let willBeDark = pageIsDark ?? ((window?.traitCollection.userInterfaceStyle ?? .light) == .dark)
+            let wasDark = traitCollection.userInterfaceStyle == .dark
+            guard willBeDark != wasDark, slab.alpha > 0.99 else {
+                overrideUserInterfaceStyle = style
+                return
+            }
+            // The bar as it looks now, from the window: a snapshot of the effect view alone would
+            // not contain the blur. It fades out over the bar in its new appearance, whole, so the
+            // change neither cuts nor goes see-through.
+            let before = barSnapshot()
+            overrideUserInterfaceStyle = style
+            crossfadeIn(before)
+        }
+    }
+
+    /// The bar as the window renders it now, for the appearance change to fade out of.
+    private func barSnapshot() -> UIImage? {
+        guard let window, bounds.width > 0, bounds.height > 0 else { return nil }
+        let rect = convert(bounds, to: window)
+        return UIGraphicsImageRenderer(bounds: rect).image { _ in
+            window.drawHierarchy(in: rect, afterScreenUpdates: false)
+        }
+    }
+
+    /// The bar in its old appearance, fading over the new one.
+    private func crossfadeIn(_ image: UIImage?) {
+        appearanceFade?.removeFromSuperview()
+        guard let image else { return }
+        let fade = UIImageView(image: image)
+        fade.frame = bounds
+        fade.isUserInteractionEnabled = false
+        addSubview(fade)
+        appearanceFade = fade
+        UIView.animate(withDuration: Self.appearanceFadeDuration, delay: 0,
+                       options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
+            fade.alpha = 0
+        } completion: { _ in
+            fade.removeFromSuperview()
+            if self.appearanceFade === fade { self.appearanceFade = nil }
         }
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        // Each material keeps its own appearance whatever the app's, so a light page's bar stays
-        // light on a dark phone.
-        lightSlab.overrideUserInterfaceStyle = .light
-        darkSlab.overrideUserInterfaceStyle = .dark
-        [lightSlab, darkSlab].forEach {
-            $0.isUserInteractionEnabled = false
-            slab.addSubview($0)
-        }
+        blur.isUserInteractionEnabled = false
         slab.isUserInteractionEnabled = false
+        slab.addSubview(blur)
         slab.addSubview(hairline)
         addSubview(slab)
         tabsButton.accessibilityIdentifier = "bar-tabs"
@@ -95,37 +130,19 @@ final class BottomBar: UIView {
         menuRing.alpha = 0
         menuRing.accessibilityIdentifier = "bar-menu-ring"
         addSubview(menuRing)
-        fadeSlab(animated: false)
+        applySlab()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: BottomBar, _) in
-            view.fadeSlab(animated: true)
+            view.applySlab()
         }
         applyMode()
     }
 
     /// The slab takes the bar's appearance: the light material or the dark one, and the hairline
-    /// with it. A change crossfades, so a page that turns its own colour does not flash the bar;
-    /// the material it left only stops rendering once the fade is done.
-    private func fadeSlab(animated: Bool) {
+    /// with it. The change itself is a cut; `pageIsDark` fades the old look out over the new.
+    private func applySlab() {
         let dark = traitCollection.userInterfaceStyle == .dark
-        lightSlab.isHidden = false
-        darkSlab.isHidden = false
-        let changes = {
-            self.lightSlab.alpha = dark ? 0 : 1
-            self.darkSlab.alpha = dark ? 1 : 0
-            self.hairline.backgroundColor = dark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 0, alpha: 0.10)
-        }
-        let settle = {
-            let nowDark = self.traitCollection.userInterfaceStyle == .dark
-            self.lightSlab.isHidden = nowDark
-            self.darkSlab.isHidden = !nowDark
-        }
-        guard animated else {
-            changes()
-            settle()
-            return
-        }
-        UIView.animate(withDuration: 0.3, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut],
-                       animations: changes) { _ in settle() }
+        blur.effect = UIBlurEffect(style: dark ? .systemThinMaterialDark : .systemThinMaterialLight)
+        hairline.backgroundColor = dark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 0, alpha: 0.10)
     }
 
     /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
@@ -175,8 +192,7 @@ final class BottomBar: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         slab.frame = bounds
-        lightSlab.frame = slab.bounds
-        darkSlab.frame = slab.bounds
+        blur.frame = slab.bounds
         hairline.frame = CGRect(x: 0, y: 0, width: slab.bounds.width, height: 1 / UIScreen.main.scale)
         // The bar's frames are worked out for a view that ends at the screen's bottom edge.
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height)

@@ -403,15 +403,24 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// tab is flying in, the bar over it is that tab's, not the page still behind; it keeps it
     /// until that page's own band is known, so the bar does not flash on landing.
     private var statusBarFill: String? {
-        flick.statusFill ?? (statusBand.isHidden ? nil : statusBandFill)
+        flick.statusFill ?? shownBandFill ?? (statusBand.isHidden ? nil : statusBandFill)
     }
+
+    /// The band the tab being shown brings with it, as hex, until its page reports its own: the
+    /// top of its picture for a page that has not loaded. The bar and the status bar's text take
+    /// it the moment the tab is picked, not when its page loads.
+    private var shownBandFill: String?
 
     /// The solid band behind the status bar over a page, in the page's colour, as in Arc Search (#657).
     func updateStatusBand() {
         let page = shownPage
-        let fill = page.flatMap(bandFill(for:))
+        let pageFill = page.flatMap(bandFill(for:))
+        // The page that was picked now knows its own band: it takes over from the tab's picture.
+        // With no page (the home screen) there is no tab to carry a band.
+        if page == nil || pageFill != nil { shownBandFill = nil }
+        let fill = pageFill ?? shownBandFill
         // The page the flick brought now knows its band: it takes the bar back from the estimate.
-        if let id = flick.statusPage, page?.tabID == id, fill != nil {
+        if let id = flick.statusPage, page?.tabID == id, pageFill != nil {
             flick.statusPage = nil
             flick.statusFill = nil
             setNeedsStatusBarAppearanceUpdate()
@@ -420,9 +429,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // pushed back, its bottom staying at the card's top edge.
         let shown = MobileStatusBand.shown(hasPage: fill != nil, switching: switcher != nil, covered: coveredPage != nil)
         // The bar follows the page's top the way the status bar's text does: dark over a dark
-        // page, light over a light one. With the app's own surfaces — a new tab, the tab row, the
-        // address bar — it keeps the app's appearance instead.
-        bar.pageIsDark = shown && !isSearching ? fill.map(MobileStatusBand.lightContent(fill:)) : nil
+        // page, light over a light one. It takes the picked tab's colour from the moment its card
+        // starts opening (the bar is back in page mode), while the open row's own controls keep
+        // the app's appearance; with the app's own surfaces — a new tab, the address bar — it
+        // keeps that too.
+        bar.pageIsDark = page != nil && !isSearching && bar.mode == .page
+            ? fill.map(MobileStatusBand.lightContent(fill:)) : nil
         let safeTop = view.safeAreaInsets.top
         let pageScale = MobilePageBehindSearch.transform(in: pageContainer.bounds.size, safeTop: safeTop,
                                                          progress: drawerProgress).scale
@@ -1190,6 +1202,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         pagePull = nil
         page.delegate = self
         page.webView.allowsBackForwardNavigationGestures = false
+        // The tab brings its band with it: the bar and the status bar's text take its colour the
+        // moment it is picked, before its page has loaded and reported its own.
+        shownBandFill = bandColour(for: tab).flatMap { Palette.hex($0, traits: traitCollection) }
         // Every tab shows with its bar: the page's frame is the open one.
         showBarAtOnce()
         // The page's container starts at the status band's bottom; it never sits under the band,

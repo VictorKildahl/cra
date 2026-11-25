@@ -36,4 +36,32 @@ final class BarColourTests: BrowserTestCase {
         XCTAssertGreaterThan(luminance(barColour()), 0.65, "the bar over a light page is light: \(barColour())")
         keep("light page, dark app")
     }
+
+    /// Picking a tab takes the bar to that tab's colour while its card is still growing back, not
+    /// once the row is gone: the tab's picture gives the colour before its page loads.
+    func testPickingATabTakesTheBarItsColourAtOnce() {
+        launch(["-CraOpenURL", base + "/plain", "-CraSearch", "NO", "-CraAppearance", "dark"])
+        waitForPage("Plain HTTP Fixture")
+        XCTAssertGreaterThan(luminance(barColour()), 0.65, "the light page's bar is light")
+
+        // A second tab, dark.
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(base + "/dark-page\n")
+        waitForPage("Dark Page")
+        sleep(1)
+        XCTAssertLessThan(luminance(barColour()), 0.35, "the dark page's bar is dark")
+
+        // Back to the light tab: the bar takes its colour as the card grows out of the row.
+        app.buttons["bar-tabs"].tap()
+        let lightCard = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plain HTTP Fixture'")).firstMatch
+        XCTAssertTrue(lightCard.waitForExistence(timeout: 5))
+        lightCard.tap()
+        Thread.sleep(forTimeInterval: 0.1)
+        XCTAssertGreaterThan(luminance(barColour()), 0.65,
+                             "the bar took the light tab's colour while the row closed")
+        keep("tab picked")
+        waitForPage("Plain HTTP Fixture")
+    }
 }
