@@ -888,6 +888,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
                 app.openPeek(url: Easel(id: e.id).url, over: main)
                 CraLog.note("easel opens in Peek")
             }
+            v.share = { [weak self, actions] e in EaselShare.share(e.id, over: self?.window, toast: actions.showToast) }
             v.delete = { [weak self] e in self?.deleteEasel(e) }
             v.show(entries, ink: colors.isDark ? .white : .black)
             return v

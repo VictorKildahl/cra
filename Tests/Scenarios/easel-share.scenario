@@ -1,0 +1,40 @@
+# Share Easel… and an easel's Open in Cra (crabrowser.app/easel). The easel travels in the link
+# itself, pictures in it (EaselShareLink); Open in Cra is a cra-easel: address with the same payload.
+# Cra asks before adding anything, keeps only web links and real pictures (the javascript: link in
+# this one is dropped), opens the new easel, and a page can't offer one without a click. Its sidebar
+# row then has Share Easel…, which asks first (Arc's warning) and copies a crabrowser.app/easel# link,
+# here to the test copy's own pasteboard. Dialogs stall ~280 ms on each show and close (AppDialog).
+budget rss=700 stalls50=12
+pace 0.5
+env CRA_TEST_PASTEBOARD=cra.scenario.easel-share
+# Pinned for the test copy: a ticked "Never show me this again." on this Mac would skip the warning.
+arg -skipsShareLinkWarning
+arg NO
+
+# From another app (macOS hands the address over): asked, then added and opened.
+cra://debug?externalURL=cra-easel:nVRNk6JIEP0rHZx2o43lo9FGb1VFiYKggIAwMQcE5FNBRFEn-r9vgXbPzGH2sBWRFJn18hX5Kosf1IWasAOqoSaUGUQHv07LF1j6dUgNqIoEL-m29g8N8VJq8u0HlZNYE127wI4EmAEz4Bhm8MZ8H1CnjiTx6yh82dXl_sV_KdJDTpB3asLxH4NHdh0FP7NHzIDlmIHQpydktUjjpJHqKDpQnwlVGjTnOnrmsHyfJTyT9tSE-QQ-d3swswTED8eDN44nsDNZTpqmOk1oOrr6-6qI_gnKPU3gDSmMwo8Y9SAkxQZElk_ewK9--QBeeJB3ZbND5g_kZR1_kS_rmPqPLyU0A_ZJk_kX_xTUadVM_CKqm7_Yv6mPR5nfKHqc0TwAupl7shEDCHQATADnAIg0r0PV2CSVFwOwthigkBkA8nDDCnRAQPBkSH2cjFHnq884BkAB6FccUoD4m98nifS7DnhLSi6hNL770ridi-qZsPB6Xmjwge_Gw0fWw4OiNXPvXtaiG1zuAfKy0yuWX2mB7KzHHfcctDglkwF01QA7GgNIFgGeAh3D3n4OCGIVQ92dIZAriCbYhUU2nkPQqggCdQp1HXe4nY4RaAHGumXO11MIE81w9SANDP0We1KCkIZOAbatZtbKopYG5VxGibuRYO7LpntQUH7URIvT7vFwmWvYsLyZiQvFYg3bLkLXsavMk-y9xyWVf9CYcOO9RbNiFPPmNCmjeeoezXxo2kUVuXvvmJYjs6iOUXn0j7fTu8k2dcSftzVqhfX0etrNb0FtMuO1zTY7lwvrhD-v8mG0PYyWh6OwW9zHqw03prPh66XXpzs_-KVPX_If9TF6fWICavXZQx-MwrbHGhBYiaq7pm7jmbvB63mmQAQNlPvStdXzTGUX7dSRb4xeOrK4TuQdfmhEFFPMktWygF-uK9HAtmQwiWwWmmXb3saZFr7LGYW3D0vfqe7hzObCt2QYlYqYzB0p4VM5rZR1ITtOMUy9_VHJKsXZV6O0OtbKvVk4XPOeDs-nhXhVN9JVyORbs1iz2sZhx5nHnRfZcLnZD1-zanT5TZ8twKQr4znqre3MEkl_TGFskf6wJARcCcYumcsnKFZQXD6tVTuwCPilGBNrhdWX0T037FJ64VtiV7BA-unnSfxfW9Fhf-d2tA9AK5JXhLv7IArgdTFSFIUuVPpNWNG01_2Qbbg0WkaR4rI7ds20Emx9Xnty3ojcKtINi615CLoAzgus2wZ_kFb8XUBg6uDNbKubAGX0Spie37Vx0jcQLqbr3Dzre4So7x__Ag
+expect-log easel link from another app offers 5 items
+cra://debug?answerDialog=Add Easel
+expect-log dialog Add the “Scenario Board” Easel\? answered Add Easel
+expect-log easel added: 5 items
+
+# Its row's menu has Share Easel…; Cancel on the warning copies nothing, Copy Link to Easel copies the link.
+wait 1
+cra://debug?tabMenu=1&label=easel&run=Share Easel…
+expect-log tab menu easel: .*Share Easel…
+cra://debug?answerDialog=Cancel
+expect-log dialog Send this Easel to anyone, on any browser\. answered Cancel: -$
+cra://debug?tabMenu=1&label=easel-again&run=Share Easel…
+cra://debug?answerDialog=Copy Link to Easel
+expect-log easel share: 5 items, [0-9]+ characters, pictures full, https://crabrowser\.app/easel#
+
+# A page's script can't offer one without a click.
+cra://open?url=${PAGE}?n=easellink
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?pageJS=location.href='cra-easel:nVRNk6JIEP0rHZx2o43lo9FGb1VFiYKggIAwMQcE5FNBRFEn-r9vgXbPzGH2sBWRFJn18hX5Kosf1IWasAOqoSaUGUQHv07LF1j6dUgNqIoEL-m29g8N8VJq8u0HlZNYE127wI4EmAEz4Bhm8MZ8H1CnjiTx6yh82dXl_sV_KdJDTpB3asLxH4NHdh0FP7NHzIDlmIHQpydktUjjpJHqKDpQnwlVGjTnOnrmsHyfJTyT9tSE-QQ-d3swswTED8eDN44nsDNZTpqmOk1oOrr6-6qI_gnKPU3gDSmMwo8Y9SAkxQZElk_ewK9--QBeeJB3ZbND5g_kZR1_kS_rmPqPLyU0A_ZJk_kX_xTUadVM_CKqm7_Yv6mPR5nfKHqc0TwAupl7shEDCHQATADnAIg0r0PV2CSVFwOwthigkBkA8nDDCnRAQPBkSH2cjFHnq884BkAB6FccUoD4m98nifS7DnhLSi6hNL770ridi-qZsPB6Xmjwge_Gw0fWw4OiNXPvXtaiG1zuAfKy0yuWX2mB7KzHHfcctDglkwF01QA7GgNIFgGeAh3D3n4OCGIVQ92dIZAriCbYhUU2nkPQqggCdQp1HXe4nY4RaAHGumXO11MIE81w9SANDP0We1KCkIZOAbatZtbKopYG5VxGibuRYO7LpntQUH7URIvT7vFwmWvYsLyZiQvFYg3bLkLXsavMk-y9xyWVf9CYcOO9RbNiFPPmNCmjeeoezXxo2kUVuXvvmJYjs6iOUXn0j7fTu8k2dcSftzVqhfX0etrNb0FtMuO1zTY7lwvrhD-v8mG0PYyWh6OwW9zHqw03prPh66XXpzs_-KVPX_If9TF6fWICavXZQx-MwrbHGhBYiaq7pm7jmbvB63mmQAQNlPvStdXzTGUX7dSRb4xeOrK4TuQdfmhEFFPMktWygF-uK9HAtmQwiWwWmmXb3saZFr7LGYW3D0vfqe7hzObCt2QYlYqYzB0p4VM5rZR1ITtOMUy9_VHJKsXZV6O0OtbKvVk4XPOeDs-nhXhVN9JVyORbs1iz2sZhx5nHnRfZcLnZD1-zanT5TZ8twKQr4znqre3MEkl_TGFskf6wJARcCcYumcsnKFZQXD6tVTuwCPilGBNrhdWX0T037FJ64VtiV7BA-unnSfxfW9Fhf-d2tA9AK5JXhLv7IArgdTFSFIUuVPpNWNG01_2Qbbg0WkaR4rI7ds20Emx9Xnty3ojcKtINi615CLoAzgus2wZ_kFb8XUBg6uDNbKubAGX0Spie37Vx0jcQLqbr3Dzre4So7x__Ag'
+expect-log page 127\.0\.0\.1 can't offer an easel \(no click\)
+
+# A link cut short says so.
+cra://debug?externalURL=cra-easel:nVRNk6JIEP0rHZx2o43lo9FGb1VFiYKggIAwMQcE5FNBRFEn-r9vgXbPzGH2sBWRFJn18hX5Kosf1IWasAOqoSaUGUQHv07LF1j6dUgNqIoEL-m29g8N8VJq8u0HlZNYE127wI4EmAEz4Bhm8MZ8H1CnjiTx6yh82dXl_sV_KdJDTpB3asLxH4NHdh0FP7NHzIDlmIHQ
+expect-log easel link from another app doesn't read
+cra://debug?answerDialog=OK

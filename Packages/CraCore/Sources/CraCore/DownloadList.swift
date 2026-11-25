@@ -115,9 +115,11 @@ public enum DownloadList {
     }
 
     /// The tray: the newest `limit` downloads, oldest first: files still on disk, and running,
-    /// failed or cancelled ones.
-    public static func tray(entries: [Entry], live: [Live], limit: Int, fileExists: (String) -> Bool) -> [Listed] {
-        let finished = entries.filter { fileExists($0.path) }.map(Listed.finished)
+    /// failed or cancelled ones. Screenshots taken lately (`ScreenshotFeed`) take their place among
+    /// them by date, as finished files, as Arc's Library button listed them.
+    public static func tray(entries: [Entry], live: [Live], screenshots: [Entry] = [], limit: Int,
+                            fileExists: (String) -> Bool) -> [Listed] {
+        let finished = (entries + screenshots).filter { fileExists($0.path) }.map(Listed.finished)
         return Array((finished + live.map(Listed.live)).sorted { $0.date < $1.date }.suffix(limit))
     }
 

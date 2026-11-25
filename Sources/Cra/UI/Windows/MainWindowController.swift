@@ -3209,13 +3209,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             let panes = store.paneTabIDs(for: id)
             let wasSelected = selectedTabID.map(panes.contains) ?? false
             let audible = panes.contains { app.runtime(for: $0)?.browser.isAudible == true }
+            let away = panes.filter { p in store.item(p)?.tab.map { !$0.savedURL.isEmpty && $0.url != $0.savedURL } ?? false }
             // A silent Favorite is only deselected: its page keeps running, and a click on it shows it as it was (#740).
+            // Away from its pinned page, it goes back there in the background and stays loaded (#804).
             // One playing sound unloads like a pinned tab, so a video in it stops (#803).
-            if CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id), fromItsMenu: fromItsMenu,
-                                          audible: audible) == .deselectKeepingPage {
+            switch CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id), fromItsMenu: fromItsMenu,
+                                              audible: audible, awayFromPinnedPage: !away.isEmpty) {
+            case .deselectKeepingPage:
                 if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
                 CraLog.note("close tab: favorite deselected, its page kept")
                 return
+            case .deselectGoingHome:
+                if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+                for p in away { resetPinnedTab(p) }
+                CraLog.note("close tab: favorite deselected, back to its pinned page")
+                return
+            case .unloadToPinnedPage:
+                break
             }
             if audible, store.isFavorite(id) { CraLog.note("close tab: favorite playing sound unloaded") }
             // A pinned split closes as one: every pane unloads and goes back to its page.

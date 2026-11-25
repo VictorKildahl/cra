@@ -48,7 +48,7 @@ enum AppLinkPrompt {
     /// Only another app's address or mail spends the page's one go (#684); a refused scheme doesn't, and a
     /// boost still needs a click.
     private static func mayAskWithoutClick(_ url: String, from browser: CraBrowser) -> Bool {
-        guard AppLinks.mayGoWithoutClick(url), !BoostInstall.isBoostLink(url) else { return false }
+        guard AppLinks.mayGoWithoutClick(url), !BoostInstall.isBoostLink(url), !EaselShare.isEaselLink(url) else { return false }
         return redirectGuard(for: browser).value.mayAsk(userGesture: false)
     }
 
@@ -72,6 +72,13 @@ enum AppLinkPrompt {
             let page = browser.isIncognito ? "(incognito)" : CraLog.host(browser.currentURL)
             if userGesture { BoostInstall.offer(url, over: browser.containerView.window, from: page) }
             else { CraLog.note("page \(page) can't offer a boost (no click)") }
+            return true
+        }
+        // An easel's Open in Cra, the same way: only on a click, asked about first.
+        if EaselShare.isEaselLink(url) {
+            let page = browser.isIncognito ? "(incognito)" : CraLog.host(browser.currentURL)
+            if userGesture { EaselShare.offer(url, over: browser.containerView.window, from: page) }
+            else { CraLog.note("page \(page) can't offer an easel (no click)") }
             return true
         }
         let kind = AppLinks.kind(of: url)

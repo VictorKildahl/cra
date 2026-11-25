@@ -1774,6 +1774,8 @@
 #801   Packages/CraCore/Tests/CraCoreTests/FavoriteClickTests.swift::commandClickOpensInANewTab  e689c72a0780
 #803   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoritePlayingSoundLetsItsPageGo  e122cb183ce8
 #803   Tests/Scenarios/favorite-close-playing.scenario  8bbf7e9c41d3
+#804   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closingAFavoriteAwayFromItsPageTakesItBack  24e2ad793049
+#804   Tests/Scenarios/favorite-close-away.scenario  963e4b2355f1
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

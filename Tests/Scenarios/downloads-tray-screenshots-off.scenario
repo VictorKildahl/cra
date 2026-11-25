@@ -1,0 +1,12 @@
+# Unticking Screenshots in the Library button's "Show media" menu keeps screenshots out of the
+# downloads list (Arc's source preference for its Library button).
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "mediaFolders": ["desktop", "downloads"]}
+budget rss=600 stalls50=5
+cra://debug?fakeScreenshot=Cra%20scenario%20screenshot%20off.png
+expect-log fake screenshot: Cra scenario screenshot off.png
+pace 1
+repeat 45 cra://debug?downloadsList=unticked
+pace 0.2
+expect-log downloads list unticked:
+reject-log downloads list unticked: .*screenshot:
+cra://debug?fakeScreenshot=-Cra%20scenario%20screenshot%20off.png
