@@ -1,0 +1,9 @@
+# promise: #749
+# An Arc sidebar file with an older spaces container ahead of the real one (one untitled space,
+# an empty Today): the import brings the two real spaces, not one empty "Space".
+env CRA_ARC_DIR=${FIXTURES}/ArcStubContainer
+fresh
+wait 3
+cra://import?source=arc
+expect-log imported 2 spaces, [1-9][0-9]* tabs
+reject-log imported 1 spaces

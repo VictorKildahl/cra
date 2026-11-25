@@ -1692,6 +1692,8 @@
 #745   Packages/CraCore/Tests/CraCoreTests/HandoffPageTests.swift::aWebPageIsOfferedToOtherDevices  0c1c6af09627
 #745   Packages/CraCore/Tests/CraCoreTests/HandoffPageTests.swift::pagesAnIPhoneCantOpenAndIncognitoOnesStayOnTheMac  04041f5221b0
 #745   Tests/Scenarios/handoff-offers-page.scenario  a95b9040427f
+#749   Tests/Scenarios/arc-import-stub-container.scenario  90b3fde2d3fe
+#749   Tests/StoreTests.swift::arcStubContainerBeforeTheSpaces  bd333dcabb79
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::holdsFreeDescriptorsUntilReleased  a61f6e043252
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::leavesAFileOfMacOSsOwnOpenAtLaunch  6dd77a599e1c
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::leavesAFileSomethingElsePutThere  0621aafae1ca

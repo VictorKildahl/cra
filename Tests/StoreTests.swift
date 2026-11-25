@@ -110,6 +110,7 @@ enum StoreTests {
         try arcLiveFolderImportsLive()
         try arcSpaceWithoutAnIconImportsAsADot()
         try arcSpaceIconTabGlyphImports()
+        try arcStubContainerBeforeTheSpaces()
         littleWindowProfile()
         tidyTabs()
         tidyExistingGroupIdentity()
@@ -2465,6 +2466,37 @@ enum StoreTests {
         let icons = ids.map { store.space($0)?.icon }
         expect(icons == [.symbol("star.fill"), .emoji("🗂️")], "Arc's Icon-tab star imports as Cra's star, an unknown glyph as 🗂️ (\(icons))")
         for id in ids { store.deleteSpace(id) }
+    }
+
+    // promise: #749
+    /// A StorableSidebar.json can hold a second, older spaces container ahead of the real one: one
+    /// untitled space whose only container is an empty Today (the reporter's file, with a
+    /// `littleBrowser` container first). The import takes the container that holds the spaces' items,
+    /// not the first with a `spaces` key, which brought over one empty "Space" and none of the
+    /// real spaces (#749).
+    @MainActor
+    private static func arcStubContainerBeforeTheSpaces() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Arc/StorableSidebar.json")
+        var root = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as! [String: Any]
+        var sidebar = root["sidebar"] as! [String: Any]
+        var containers = sidebar["containers"] as! [[String: Any]]
+        let stub: [String: Any] = [
+            "spaces": ["STUB-SPACE", ["id": "STUB-SPACE", "profile": ["default": [:]], "customInfo": [:],
+                                      "containerIDs": ["unpinned", "STUB-TODAY"],
+                                      "newContainerIDs": [["unpinned": ["_0": ["shared": [:]]]], "STUB-TODAY"]] as [String: Any]],
+            "items": ["STUB-TODAY", ["id": "STUB-TODAY", "title": NSNull(), "parentID": NSNull(), "childrenIds": [],
+                                     "data": ["itemContainer": ["containerType": ["spaceItems": ["_0": "STUB-SPACE"]]]]] as [String: Any]],
+            "topAppsContainerIDs": [],
+        ]
+        let main = containers.firstIndex { $0["spaces"] != nil }!
+        containers.insert(stub, at: main)
+        containers.insert(["littleBrowser": [:]], at: 0)
+        sidebar["containers"] = containers
+        root["sidebar"] = sidebar
+        let plan = try ArcImporter.plan(sidebar: JSONSerialization.data(withJSONObject: root))
+        let titles = plan.spaces.map(\.title)
+        expect(titles == ["Home", "Work"], "the spaces come from the container holding them, not the stub ahead of it (#749: \(titles))")
+        expect(plan.spaces.contains { !$0.pinned.isEmpty }, "the real spaces bring their pinned tabs (#749)")
     }
 
     // promise: #30

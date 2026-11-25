@@ -213,7 +213,10 @@ enum ArcImporter {
               let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [[String: Any]] else { throw ImportError.unreadable("Arc's sidebar") }
         var plan = ImportPlan(source: "Arc")
-        guard let main = containers.first(where: { $0["spaces"] != nil }) else { return plan }
+        // A file can hold an older spaces container ahead of the real one, one untitled space with an
+        // empty Today (#749): take the one holding the most items, the first of equals.
+        guard let main = containers.filter({ $0["spaces"] != nil })
+            .max(by: { pairs($0["items"]).count < pairs($1["items"]).count }) else { return plan }
         // A damaged file can list an id twice: the later entry wins, as when Arc decodes it.
         let items = Dictionary(pairs(main["items"]), uniquingKeysWith: { _, later in later })
         var spaceTitleByID: [String: String] = [:]
