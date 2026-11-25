@@ -20,6 +20,7 @@
 #include "components/history/core/browser/url_row.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/query_parser/query_parser.h"
+#include "url/gurl.h"
 
 namespace cra {
 namespace {
@@ -93,6 +94,17 @@ void SearchHistory(Profile* profile, NSString* text, NSInteger max_count, Histor
   service->ScheduleDBTask(FROM_HERE,
                           std::make_unique<SearchTask>(std::move(query), static_cast<size_t>(max_count), search, answer),
                           &Tracker());
+}
+
+bool DeleteHistoryURL(Profile* profile, NSString* url) {
+  history::HistoryService* service =
+      profile ? HistoryServiceFactory::GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS) : nullptr;
+  GURL page(base::SysNSStringToUTF8(url ?: @""));
+  if (!service || !page.is_valid()) {
+    return false;
+  }
+  service->DeleteURLs({page});
+  return true;
 }
 
 }  // namespace cra

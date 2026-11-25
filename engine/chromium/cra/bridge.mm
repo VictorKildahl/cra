@@ -4314,6 +4314,12 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
                          : g_browser_process->profile_manager()->GetProfileByPath(ProfileDir(profilePath));
   cra::SearchHistory(profile, text, maxCount, completion);
 }
++ (BOOL)deleteHistoryURL:(NSString*)url profilePath:(NSString*)profilePath {
+  Profile* profile = (!g_ready || g_quitting)
+                         ? nullptr
+                         : g_browser_process->profile_manager()->GetProfileByPath(ProfileDir(profilePath));
+  return cra::DeleteHistoryURL(profile, url);
+}
 + (NSInteger)loadStateOfProfile:(NSString*)profilePath {
   if (!g_ready || g_quitting) {
     return 0;

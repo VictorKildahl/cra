@@ -3837,6 +3837,9 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
            completion:(void (^)(NSArray<NSDictionary<NSString*, id>*>*))completion {
     completion(@[]);
 }
++ (BOOL)deleteHistoryURL:(NSString*)url profilePath:(NSString*)profilePath {
+    return NO;
+}
 + (NSInteger)loadStateOfProfile:(NSString*)profilePath {
     if (!profilePath.length) return g_contextInitialized ? 2 : 1;
     if ([g_readyProfiles containsObject:profilePath]) return 2;

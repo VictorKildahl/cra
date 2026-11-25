@@ -676,6 +676,10 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// or a newer search started before this one ran.
 + (void)searchHistory:(NSString *)text profilePath:(nullable NSString *)profilePath maxCount:(NSInteger)maxCount
            completion:(void (^)(NSArray<NSDictionary<NSString *, id> *> *rows))completion;
+/// Deletes the page at `url` from the profile's Chromium history (nil profilePath is Default), every visit, as
+/// Arc's command bar Delete Suggestion does (GitHub #779). NO when the profile hasn't loaded or `url` isn't an
+/// address; this doesn't load the profile.
++ (BOOL)deleteHistoryURL:(NSString *)url profilePath:(nullable NSString *)profilePath;
 /// Whether a profile (nil is Default) has loaded in this session: 2 ready, 1 loading (its prefs are being
 /// read), 0 not asked for, so nothing in this process has its Preferences file open.
 + (NSInteger)loadStateOfProfile:(nullable NSString *)profilePath;

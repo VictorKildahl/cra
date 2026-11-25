@@ -1723,6 +1723,13 @@
 #763   Tests/Scenarios/little-window-profile-change-link.scenario  a27c8c58b8ba
 #770   Tests/Scenarios/downloads-tray-covers-tabs.scenario  0e79296ef349
 #770   Tests/TooltipCoverTests.swift::aListOverTheTabsHidesThemFromThePointer  ff612b388453
+#779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anEntryWithoutProfilesGoes  ea0d30498e7c
+#779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::anotherProfileKeepsThePage  6b5988136529
+#779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::deletingTakesThePageAndItsLearnedPicks  ffddad2e2cd3
+#779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::onlyVisitedPagesAreDeleted  5d7b167025c7
+#779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::theSelectionStaysOnItsLine  355481657bdd
+#779   Packages/CraCore/Tests/CraCoreTests/SuggestionDeletionTests.swift::theShortcutIsOptionCommandDelete  c07ecb28e8b7
+#779   Tests/Scenarios/command-bar-delete-suggestion.scenario  f8182b8185ac
 #786   Tests/ExtensionPopupWindowTests.swift::takesItsBubbleBackFromChrome  35fac83b9542
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b

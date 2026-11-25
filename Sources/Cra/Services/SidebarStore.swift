@@ -3094,6 +3094,15 @@ final class SidebarStore {
         CraLog.note("history cleared (\(range == .allTime ? "all time" : "a time range"))")
     }
 
+    /// Arc's Delete Suggestion in the command bar (#779): the page leaves `profile`'s history.json entry and the
+    /// picks learned for it (CraCore SuggestionDeletion). The bar deletes it from the profile's Chromium history too.
+    func deleteHistoryPage(_ url: String, profile: UUID?) {
+        (history, ranking) = SuggestionDeletion.deleting(url, profile: profile, history: history, ranking: ranking)
+        historyFile.saveNow(Array(history.values))
+        rankingFile.saveNow(ranking)
+        touch()
+    }
+
     func recordCommandUse(_ id: String) {
         ranking.commandUsage[id, default: 0] += 1
         rankingFile.save(ranking)

@@ -48,6 +48,13 @@ final class ChromiumHistory {
         }
     }
 
+    /// A page deleted from the bar (#779): it leaves the answers already in, so the rows don't bring it back
+    /// before the next search. That search runs after the delete on the history thread, so it doesn't find it.
+    func forget(_ url: String) {
+        answers = answers.mapValues { $0.filter { $0.entry.url != url } }
+        if let last { self.last = (last.profile, last.rows.filter { $0.entry.url != url }) }
+    }
+
     /// The command bar opened or closed: history may have grown since.
     func reset() {
         answers = [:]

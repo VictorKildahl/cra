@@ -68,6 +68,8 @@
 #   click sidebar-empty         a real click the same way on the docked sidebar's empty space, under its rows (#722)
 #   click row <id> [move]       a real click the same way on the middle of the sidebar row for that item; with `move`
 #                               the pointer only moves there, as a hand rests it on the row (#743)
+#   click bar-delete <text>     a real click the same way on the ✕ of the open command bar's row whose address holds
+#                               <text>, after selecting that row (#779)
 #   bare-helper <suffix>        runs the engine's "Cra Helper (<suffix>)" with no arguments, as macOS launches the
 #                               Alerts helper for a notification click after it quit; fails unless it exits 0 in 10 s
 #   replace-app [chrome]        Cra.app replaced while Cra runs, as `brew upgrade --greedy` does: a scenario with this
@@ -593,6 +595,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         page-top) ask="pageTop=point"; mark="page top point:" ;;
         sidebar-empty) ask="sidebarEmpty=point"; mark="sidebar empty point:" ;;
         row) ask="rowPoint=${3:-}"; mark="row point:" ;;
+        bar-delete) ask="commandBarDelete=${3:-}"; mark="command bar delete point:" ;;
         *) problem "click: unknown target ${2:-}"; continue ;;
       esac
       count=1; [ "${3:-}" = "double" ] && count=2

@@ -2309,6 +2309,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // commandBarDeleteKey=1 (#779): ⌥⌘⌫ pressed in the open bar, through the app as a key press goes (the menus'
+            // key equivalents first). A debug readout, so the browser window isn't raised over the bar first.
+            if dict["commandBarDeleteKey"] != nil {
+                main.debugCommandBarKey(characters: "\u{7f}", keyCode: 51, modifiers: [.command, .option])
+                return
+            }
+            // commandBarDelete=<text> (#779): the open bar's row whose address holds <text> selected, then "command bar
+            // delete point: <x> <y>", its ✕ in top-left screen points for scenario.sh's `click bar-delete <text>`, or "none".
+            if let text = dict["commandBarDelete"] {
+                let bar = main.commandBar
+                guard let i = bar.result.items.firstIndex(where: { $0.url?.contains(text) == true }) else {
+                    CraLog.note("command bar delete point: none"); return
+                }
+                bar.moveSelection(by: i - bar.selectedIndex)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self, let p = self.main.debugCommandBarDeletePoint(i), let top = NSScreen.screens.first?.frame.maxY else {
+                        CraLog.note("command bar delete point: none"); return
+                    }
+                    CraLog.note("command bar delete point: \(Int(p.x)) \(Int(top - p.y))")
+                }
+                return
+            }
             // commandBarReturn=<label>: Return in the browser window's open bar, on the selected row (#667).
             if let label = dict["commandBarReturn"] {
                 CraLog.note("command bar return \(label): \(main.commandBar.isOpen ? "pressed" : "no bar")")

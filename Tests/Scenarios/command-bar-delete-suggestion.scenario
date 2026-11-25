@@ -1,0 +1,55 @@
+# promise: #779
+# Arc's Delete Suggestion: a visited page's row in ⌘T shows a ✕ at its end, and a click on it (or ⌥⌘⌫ on the
+# selected row) deletes the page from the profile's history. The fixture's Chromium History has two pages
+# history.json doesn't have. The ✕ deletes one with a real click (through the window server), ⌥⌘⌫ typed in the
+# bar the other; the bar lists neither again, not after it closes and opens, and not after Cra restarts, so
+# Chromium's History lost them too.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=10
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "searchSuggestions": false}
+profile ${FIXTURES}/HistoryProfile
+cra://open?url=${PAGE}?n=start
+expect-log loaded 127\.0\.0\.1
+wait 2
+cra://debug?mainFrame=100,100,1000,700
+wait 1
+cra://debug?activate=1
+wait 1
+# A real click on the page makes Cra the active app, so the bar's panel takes the keys and sits in front.
+click page-top
+wait 1
+cra://commandbar?query=haystack
+wait 2
+cra://debug?commandBarRows=before
+expect-log Cra command bar rows before: .*history:https?://haystack-recent\.example\.com
+expect-log Cra command bar rows before: .*history:https?://haystack-ancient\.example\.com
+click bar-delete haystack-recent
+wait 1
+cra://debug?commandBarRows=clicked
+expect-log Cra command bar rows clicked: open=1 .*haystack-ancient\.example\.com
+reject-log Cra command bar rows clicked: .*haystack-recent
+cra://debug?commandBarDelete=haystack-ancient
+expect-log command bar delete point: [0-9]
+cra://debug?commandBarDeleteKey=1
+wait 1
+cra://debug?commandBarRows=keyed
+expect-log Cra command bar rows keyed: open=1
+reject-log Cra command bar rows keyed: .*haystack-
+cra://dismiss
+cra://commandbar?query=haystack
+wait 2
+cra://debug?commandBarRows=reopened
+expect-log Cra command bar rows reopened: open=1
+reject-log Cra command bar rows reopened: .*haystack-
+cra://dismiss
+relaunch
+cra://open?url=${PAGE}?n=again
+wait 2
+cra://commandbar?query=haystack
+wait 2
+# The relaunched Cra's own log: the bar is open with rows, none of them a deleted page.
+cra://debug?commandBarIcon=haystack-
+expect-log command bar icon haystack-: none in [1-9]
+cra://dismiss

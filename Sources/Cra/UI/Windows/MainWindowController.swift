@@ -4673,6 +4673,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// cra://debug?commandBarIcon (#755): the open bar's n-th row's favicon.
     func debugCommandBarIcon(_ i: Int) -> String { commandHost?.debugRowIcon(i) ?? "none" }
+    /// cra://debug?commandBarDelete (#779): the open bar's n-th row's ✕, in screen points; nil when it shows none.
+    func debugCommandBarDeletePoint(_ i: Int) -> NSPoint? { commandPanel.isVisible ? commandHost?.debugDeletePoint(i) : nil }
+    /// cra://debug?commandBarDeleteKey (#779): a key typed in the open bar's field, through the app as a key press goes
+    /// (the menus' key equivalents first), only while the bar holds the keys.
+    func debugCommandBarKey(characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+        guard commandPanel.isVisible, commandPanel.isKeyWindow else {
+            CraLog.note("command bar key: the bar doesn't hold the keys"); return
+        }
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            guard let ev = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                                            windowNumber: commandPanel.windowNumber, context: nil, characters: characters,
+                                            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { continue }
+            NSApp.sendEvent(ev)
+        }
+        CraLog.note("command bar key: sent")
+    }
 
     /// `cra://debug?switcher` (`=all`: ⌃⌥Tab's, #467).
     func debugTabSwitcher(allSpaces: Bool = false, held: NSEvent.ModifierFlags = []) {

@@ -1,3 +1,4 @@
+import CraCEF
 import Foundation
 
 enum SuggestionKind: Equatable {
@@ -301,6 +302,20 @@ final class SuggestionEngine {
         let i = Self.index(rows, keys: Self.rowKeys((text: rows.text, ids: rows.rowIDs)))
         index = i
         return i
+    }
+
+    /// Arc's Delete Suggestion (#779): a visited page's row leaves the bar's profile's history, Cra's and Chromium's.
+    /// false for a row that isn't a visited page's (CraCore SuggestionDeletion).
+    @discardableResult
+    func delete(_ s: Suggestion) -> Bool {
+        guard !incognito, let url = SuggestionDeletion.page(rowID: s.id) else { return false }
+        store.deleteHistoryPage(url, profile: barProfile)
+        let deleted = CraCEFRuntime.deleteHistoryURL(url, profilePath: store.profilePath(profile: barProfile))
+        CraLog.note("command bar deleted a visited page\(deleted ? "" : " (Chromium's history not loaded)")")
+        chromium.forget(url)
+        index = nil
+        indexGeneration &+= 1
+        return true
     }
 
     /// The window's space changed under the open bar (#721): the index holds the old space's tabs when the

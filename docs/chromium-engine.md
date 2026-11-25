@@ -372,3 +372,7 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   page without a parent `ui::Layer` (only Chrome's own windows set one) a window from the window's top to the page's
   bottom, as wide as the page, and `OnBoundsInWindowChanged` sends the screen rects again when the page moves in its
   window (⌘S). Scenario `page-window-size` (fails on engine-159.0.8154.13-21: first dx=338, second tab signed out).
+- 25 Nov 2026: **engine-159.0.8154.45-3**, Delete Suggestion in ⌘T (#779). `+deleteHistoryURL:profilePath:` deletes a
+  page from a profile's history, every visit (`cra/history.mm`: `HistoryService::DeleteURLs`, as Chrome's omnibox does
+  for a deleted history row). It runs on the history thread before any later `+searchHistory:`, so the bar's next
+  search doesn't find the page. Scenario `command-bar-delete-suggestion`.

@@ -16,6 +16,11 @@ namespace cra {
 using HistorySearchDone = void (^)(NSArray<NSDictionary<NSString*, id>*>* rows);
 void SearchHistory(Profile* profile, NSString* text, NSInteger max_count, HistorySearchDone done);
 
+// Deletes the page at `url` from `profile`'s history, all its visits, as Arc's command bar does for Delete
+// Suggestion (GitHub #779) and Chrome's omnibox for a deleted history row (HistoryService::DeleteURLs). NO when
+// the profile has no history service or `url` isn't a valid address.
+bool DeleteHistoryURL(Profile* profile, NSString* url);
+
 }  // namespace cra
 
 #endif  // CRA_HISTORY_H_
