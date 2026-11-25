@@ -20,14 +20,8 @@ final class BottomBar: UIView {
     var overBackdrop = false {
         didSet { if overBackdrop != oldValue { applyMode() } }
     }
-    /// The bar's slab: its frosted material and hairline. The material itself cuts to its light or
-    /// dark variant; `pageIsDark` fades the bar's old look out over it.
-    private let slab = UIView()
-    private let blur = UIVisualEffectView()
+    private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
     private let hairline = UIView()
-    /// The bar's old appearance fading out over its new one.
-    private var appearanceFade: UIImageView?
-    private static let appearanceFadeDuration: TimeInterval = 0.12
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
     var ringsMenu = false {
@@ -56,63 +50,11 @@ final class BottomBar: UIView {
         didSet { applyMode() }
     }
 
-    /// The page's top when one is under the bar: a dark page keeps the dark material and
-    /// controls, a light one gets the light ones, the way the status bar's text follows the page.
-    /// nil with no page of the bar's own (a new tab, the tab row, the address bar): the bar keeps
-    /// the app's appearance.
-    var pageIsDark: Bool? {
-        didSet {
-            guard pageIsDark != oldValue else { return }
-            let style: UIUserInterfaceStyle = pageIsDark.map { $0 ? .dark : .light } ?? .unspecified
-            let willBeDark = pageIsDark ?? ((window?.traitCollection.userInterfaceStyle ?? .light) == .dark)
-            let wasDark = traitCollection.userInterfaceStyle == .dark
-            guard willBeDark != wasDark, slab.alpha > 0.99 else {
-                overrideUserInterfaceStyle = style
-                return
-            }
-            // The bar as it looks now, from the window: a snapshot of the effect view alone would
-            // not contain the blur. It fades out over the bar in its new appearance, whole, so the
-            // change neither cuts nor goes see-through.
-            let before = barSnapshot()
-            overrideUserInterfaceStyle = style
-            crossfadeIn(before)
-        }
-    }
-
-    /// The bar as the window renders it now, for the appearance change to fade out of.
-    private func barSnapshot() -> UIImage? {
-        guard let window, bounds.width > 0, bounds.height > 0 else { return nil }
-        let rect = convert(bounds, to: window)
-        return UIGraphicsImageRenderer(bounds: rect).image { _ in
-            window.drawHierarchy(in: rect, afterScreenUpdates: false)
-        }
-    }
-
-    /// The bar in its old appearance, fading over the new one.
-    private func crossfadeIn(_ image: UIImage?) {
-        appearanceFade?.removeFromSuperview()
-        guard let image else { return }
-        let fade = UIImageView(image: image)
-        fade.frame = bounds
-        fade.isUserInteractionEnabled = false
-        addSubview(fade)
-        appearanceFade = fade
-        UIView.animate(withDuration: Self.appearanceFadeDuration, delay: 0,
-                       options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
-            fade.alpha = 0
-        } completion: { _ in
-            fade.removeFromSuperview()
-            if self.appearanceFade === fade { self.appearanceFade = nil }
-        }
-    }
-
     override init(frame: CGRect) {
         super.init(frame: frame)
-        blur.isUserInteractionEnabled = false
-        slab.isUserInteractionEnabled = false
-        slab.addSubview(blur)
-        slab.addSubview(hairline)
-        addSubview(slab)
+        addSubview(blur)
+        hairline.backgroundColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.12))
+        blur.contentView.addSubview(hairline)
         tabsButton.accessibilityIdentifier = "bar-tabs"
         tabsButton.accessibilityLabel = "Tabs"
         pill.accessibilityIdentifier = "bar-search"
@@ -130,19 +72,7 @@ final class BottomBar: UIView {
         menuRing.alpha = 0
         menuRing.accessibilityIdentifier = "bar-menu-ring"
         addSubview(menuRing)
-        applySlab()
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: BottomBar, _) in
-            view.applySlab()
-        }
         applyMode()
-    }
-
-    /// The slab takes the bar's appearance: the light material or the dark one, and the hairline
-    /// with it. The change itself is a cut; `pageIsDark` fades the old look out over the new.
-    private func applySlab() {
-        let dark = traitCollection.userInterfaceStyle == .dark
-        blur.effect = UIBlurEffect(style: dark ? .systemThinMaterialDark : .systemThinMaterialLight)
-        hairline.backgroundColor = dark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 0, alpha: 0.10)
     }
 
     /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
@@ -168,7 +98,7 @@ final class BottomBar: UIView {
         // empty home screen's bar floats the same way. The blur goes with the bar, not the fade:
         // its strip is all that is left of the bar when it is closed.
         let floats = tabs || overBackdrop
-        slab.alpha = floats ? 0 : visible
+        blur.alpha = floats ? 0 : visible
         pill.backgroundColor = tabs ? Palette.switcherPillFill : overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         menuButton.backgroundColor = overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         pill.setSymbol("plus", pointSize: tabs ? 20.5 : 16, weight: .semibold)
@@ -191,9 +121,8 @@ final class BottomBar: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        slab.frame = bounds
-        blur.frame = slab.bounds
-        hairline.frame = CGRect(x: 0, y: 0, width: slab.bounds.width, height: 1 / UIScreen.main.scale)
+        blur.frame = bounds
+        hairline.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / UIScreen.main.scale)
         // The bar's frames are worked out for a view that ends at the screen's bottom edge.
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height)
         let transforms = [tabsButton, menuButton, spacesButton, settingsButton].map(\.transform)

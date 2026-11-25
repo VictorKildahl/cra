@@ -145,6 +145,14 @@ function createPasskey() {
             # A page with a theme-color, long enough to scroll under the status bar (StatusBandTests, #657).
             self.page('<meta name="theme-color" content="#7F6BAB"><title>Themed</title><h1>Themed</h1>'
                       '<p style="height:3000px">Long</p>')
+        elif url.path == '/two-tones':
+            # A black top band over a white page bottom: the bar follows the bottom behind it,
+            # the status band the top (PageUnderBarTests).
+            self.page('<meta name="theme-color" content="#000000"><title>Two Tones</title>'
+                      '<style>html,body{margin:0;padding:0}</style>'
+                      '<div style="height:100vh;background:black">'
+                      '<h1 style="color:white;padding:24px">Two Tones</h1></div>'
+                      '<div style="height:100vh;background:white"></div>')
         elif url.path == '/dark-page':
             # No theme-color, a dark background of its own (StatusBandTests, #657).
             self.page('<title>Dark Page</title><style>html,body{background:#123456;color:white}</style>'

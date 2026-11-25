@@ -14,6 +14,12 @@ final class PageUnderBarTests: BrowserTestCase {
         }
     }
 
+    private var base: String { ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765" }
+
+    private func luminance(_ c: (r: Int, g: Int, b: Int)) -> Double {
+        (0.2126 * Double(c.r) + 0.7152 * Double(c.g) + 0.0722 * Double(c.b)) / 255
+    }
+
     /// The bar's top edge, from the pill's frame (the controls' centre is 31.5 pt below the bar's
     /// top and the pill is 39 pt tall) or, with the bar closed, from the strip that brings it back.
     private var barTop: CGFloat {
@@ -83,6 +89,19 @@ final class PageUnderBarTests: BrowserTestCase {
         let blue = screenColour(x: 0.25, y: 0.94)
         XCTAssertGreaterThan(blue.b, blue.r + 15, "the bar over a blue page is blue: \(blue)")
         keep("blue through the glass")
+    }
+
+    /// The bar takes the colour under it, not the page's top: over a white page bottom with a
+    /// black top band, the bar is light while the status band keeps the black.
+    func testTheBarTakesTheColourBelowItNotThePagesTop() {
+        launch(["-CraOpenURL", base + "/two-tones", "-CraSearch", "NO", "-CraAppearance", "light"])
+        waitForPage("Two Tones")
+        sleep(1)
+        let bar = screenColour(x: 0.25, y: 0.94)
+        XCTAssertGreaterThan(luminance(bar), 0.6, "the bar is light over the white page below it: \(bar)")
+        let band = screenColour(x: 0.08, y: 0.006)
+        XCTAssertLessThan(luminance(band), 0.1, "the status band keeps the page's black top: \(band)")
+        keep("bottom colour, not top")
     }
 
     private static func colouredPage(_ title: String, _ colour: String) -> String {
