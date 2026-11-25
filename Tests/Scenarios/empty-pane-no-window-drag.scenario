@@ -1,0 +1,31 @@
+# promise: #800
+# With no tab selected the window's empty card is no window background: a press there may not move
+# the window, as in Arc, where the window moves from the sidebar and the bar. The window drag
+# itself is the window server's, so the scenario reads what a press there lands on and whether it
+# may move the window (mouseDownCanMoveWindow, "+" or "-"), as sidebar-empty-window-drag does.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# Closing the last tab leaves the empty card.
+cra://action/closeTab
+wait 1
+cra://debug?selectedTab=docked
+expect-log selected tab docked: none
+
+# The middle of the empty card and its lower left: no window drag from either.
+cra://debug?hitAt=800,450&move=1
+expect-log hit at 800,450: [A-Za-z]+- <
+cra://debug?hitAt=420,760&move=1
+expect-log hit at 420,760: [A-Za-z]+- <
+
+# The sidebar's empty space still moves the window (#547).
+cra://debug?hitAt=120,520&move=1
+expect-log hit at 120,520: SpaceListDocument- <
+
+# The empty card's bar is still the window's title bar stand-in: a drag there moves the window.
+cra://debug?dragAt=800,22&by=40,30
+expect-log window drag from

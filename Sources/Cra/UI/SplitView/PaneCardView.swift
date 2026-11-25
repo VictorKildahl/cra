@@ -11,7 +11,7 @@ final class PaneCardView: NSView {
     /// The pane's toolbar (PaneToolbarView); it follows the card's tab itself.
     let toolbarHost: NSView
     /// Where the Chromium view lives (or where the page window is positioned).
-    let webArea = NSView()
+    let webArea = PagePlace()
     let pageTopGrabber = WindowContentGrabber()
     /// Chrome's bars over the page, which Cra draws for the Chromium engine (PageInfoBar): above the page, which
     /// gets the rest of the web area.
@@ -24,7 +24,7 @@ final class PaneCardView: NSView {
     /// The page's stand-in fill under the page window, inset from the card's rounded edges: the
     /// page window's corners are anti-aliased, so a fill reaching the card's edge showed through
     /// them as a light rim in every rounded corner.
-    private let pageBackground = NSView()
+    private let pageBackground = PagePlace()
     var showToolbar = true { didSet { needsLayout = true } }
     /// Settings ▸ Tabs ▸ "Hide the toolbar until the pointer reaches the top of the page"
     /// (ToolbarAutoHide): the bar takes no room above the page. It floats over the page's top
@@ -112,7 +112,7 @@ final class PaneCardView: NSView {
         }
     }
     var showsElsewhere = false { didSet { elsewhereView.isHidden = !showsElsewhere } }
-    private let elsewhereView = NSView()
+    private let elsewhereView = PagePlace()
     /// Arc's ring around the focused split pane (its focusBorderLayer, GitHub #178): 2 pt in the
     /// space's shadedDark, along the card's rounded edge, over the bar and the page. nil = none.
     var focusRing: NSColor? {
@@ -330,6 +330,14 @@ final class PaneCardView: NSView {
               let result = CIContext().createCGImage(output, from: input.extent) else { return nil }
         return result
     }
+}
+
+/// The card's page area and what stands in for its page. A press there is never a window drag, as in Arc,
+/// where a card with no tab ("Search or Enter URL…") moves nothing and the window moves from the sidebar
+/// and the bar (#800). A plain view says it may move the window, and the window is movable by its
+/// background (#547), so the empty card dragged the window.
+final class PagePlace: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
 }
 
 /// A stroke along its bounds' rounded edge (the layer's border), drawn over the card's other
