@@ -30,10 +30,11 @@ public enum MobileTabCarousel {
 
     /// Where a card sits when it is `relative` cards right of the one in focus (negative: left of
     /// it; fractions while the row is being dragged).
-    public static func placement(relative: CGFloat, in screen: CGSize) -> Placement {
-        let size = cardSize(in: screen)
-        let focusLeft = screen.width * 0.2112
-        let step = relative >= 0 ? pitch(in: screen) : screen.width * 0.1858
+    public static func placement(relative: CGFloat, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> Placement {
+        let width = screen.width - sideInsets.left - sideInsets.right
+        let size = cardSize(in: CGSize(width: width, height: screen.height))
+        let focusLeft = sideInsets.left + width * 0.2112
+        let step = relative >= 0 ? pitch(in: screen, sideInsets: sideInsets) : width * 0.1858
         let left = focusLeft + relative * step
         let top = screen.height * 0.5147 - size.height / 2
         let scale = relative >= 0 ? min(1.02, 1 + 0.0096 * relative) : max(0.9, 1 + 0.023 * relative)
@@ -42,14 +43,14 @@ public enum MobileTabCarousel {
     }
 
     /// How far a drag moves the row by one card: the distance to the next card's place.
-    public static func pitch(in screen: CGSize) -> CGFloat {
-        screen.width * 0.5626
+    public static func pitch(in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> CGFloat {
+        (screen.width - sideInsets.left - sideInsets.right) * 0.5626
     }
 
     /// The row's position while a finger drags it `translation` points from `start`: past either
     /// end it follows at a third of the speed.
-    public static func position(start: CGFloat, translation: CGFloat, count: Int, in screen: CGSize) -> CGFloat {
-        let raw = start - translation / pitch(in: screen)
+    public static func position(start: CGFloat, translation: CGFloat, count: Int, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> CGFloat {
+        let raw = start - translation / pitch(in: screen, sideInsets: sideInsets)
         let last = CGFloat(max(0, count - 1))
         if raw < 0 { return raw / 3 }
         if raw > last { return last + (raw - last) / 3 }
@@ -58,11 +59,11 @@ public enum MobileTabCarousel {
 
     /// The card the row settles on when let go at `position` moving `velocity` points a second
     /// (negative: towards newer tabs). A flick goes one card further than where it was let go.
-    public static func restingIndex(position: CGFloat, velocity: CGFloat, count: Int, in screen: CGSize) -> Int {
+    public static func restingIndex(position: CGFloat, velocity: CGFloat, count: Int, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> Int {
         guard count > 0 else { return 0 }
         var target = position.rounded()
         if abs(velocity) > 300 {
-            let projected = position - velocity * 0.18 / pitch(in: screen)
+            let projected = position - velocity * 0.18 / pitch(in: screen, sideInsets: sideInsets)
             target = velocity < 0 ? max(target, projected.rounded(.up)) : min(target, projected.rounded(.down))
         }
         return Int(min(CGFloat(count - 1), max(0, target)))

@@ -338,6 +338,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// Puts the bar and the sheet where the current state says. Called inside animation blocks.
     func layoutChrome() {
         let bounds = view.bounds
+        let sides = MobileSideInsets.applied(size: bounds.size, safeLeft: view.safeAreaInsets.left, safeRight: view.safeAreaInsets.right)
+        sheet.sideInsets = sides
         let safeBottom = view.safeAreaInsets.bottom
         let safeTop = view.safeAreaInsets.top
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: safeBottom)

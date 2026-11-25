@@ -25,6 +25,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var draggedCard: TabCardView?
     private var draggedOffset: CGFloat = 0
 
+    private var sideInsets: (left: CGFloat, right: CGFloat) {
+        MobileSideInsets.applied(size: bounds.size, safeLeft: safeAreaInsets.left, safeRight: safeAreaInsets.right)
+    }
     var expansion: CGFloat = 0 { didSet { setNeedsLayout() } }
     /// The card that fills the screen at `expansion` 1.
     var expandedID: UUID?
@@ -96,7 +99,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         let expandedIndex = cards.firstIndex { $0.tabID == expandedID }
         for (index, card) in cards.enumerated() {
             let relative = CGFloat(index) - position
-            let placement = MobileTabCarousel.placement(relative: relative, in: screen)
+            let placement = MobileTabCarousel.placement(relative: relative, in: screen, sideInsets: sideInsets)
             var frame = placement.frame
             frame = frame.insetBy(dx: frame.width * (1 - placement.scale) / 2, dy: frame.height * (1 - placement.scale) / 2)
             if row.isThrown(card.tabID) {
@@ -167,10 +170,10 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         case .began:
             dragStart = position
         case .changed:
-            position = MobileTabCarousel.position(start: dragStart, translation: translation.x, count: cards.count, in: bounds.size)
+            position = MobileTabCarousel.position(start: dragStart, translation: translation.x, count: cards.count, in: bounds.size, sideInsets: sideInsets)
             layoutCards()
         case .ended, .cancelled:
-            let target = MobileTabCarousel.restingIndex(position: position, velocity: velocity.x, count: cards.count, in: bounds.size)
+            let target = MobileTabCarousel.restingIndex(position: position, velocity: velocity.x, count: cards.count, in: bounds.size, sideInsets: sideInsets)
             UIView.animate(spring: MobileMotion.tabRowSettle) {
                 self.position = CGFloat(target)
                 self.layoutCards()

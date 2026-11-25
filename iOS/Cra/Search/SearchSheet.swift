@@ -47,6 +47,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         didSet { if rowsInView != oldValue { setNeedsLayout() } }
     }
 
+    var sideInsets: (left: CGFloat, right: CGFloat) = (0, 0) { didSet { setNeedsLayout() } }
     /// The pill's frame in this view's coordinates, for the closed end of the morph.
     var collapsedFieldFrame: CGRect = .zero
     /// 0 when closed into the bar, 1 when open. Set inside an animation block, then lay out.
@@ -421,8 +422,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                                    width: bounds.width * 0.8, height: MobileSearchSheet.height * 0.75)
         CATransaction.commit()
 
-        let open = CGRect(x: MobileSearchSheet.fieldSideInset, y: MobileSearchSheet.topInset,
-                          width: bounds.width - 2 * MobileSearchSheet.fieldSideInset, height: MobileSearchSheet.fieldHeight)
+        let open = MobileSearchSheet.openFieldFrame(width: bounds.width, sideInsets: sideInsets)
         let closed = collapsedFieldFrame.isEmpty ? open : collapsedFieldFrame
         let frame = CGRect(x: closed.minX + (open.minX - closed.minX) * t, y: closed.minY + (open.minY - closed.minY) * t,
                            width: closed.width + (open.width - closed.width) * t,

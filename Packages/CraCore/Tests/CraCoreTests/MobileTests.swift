@@ -2169,3 +2169,78 @@ struct MobileFlickLandingTests {
         #expect(MobileMotion.flickLaunch(velocity: CGPoint(x: 9000, y: -9000)) == CGPoint(x: 4000 * gain, y: -4000))
     }
 }
+
+struct MobileSideInsetsTests {
+    // Measured in BrowserViewController.layoutChrome on Cra Duo, closed, iOS 27.1:
+    // bounds 466 × 678, safeAreaInsets (top: 0, left: 0, bottom: 34, right: 84).
+    @Test func closedDuoKeepsTheFieldAndFocusedCardLeftOfTheStatusColumn() {
+        let size = CGSize(width: 466, height: 678)
+        let sides = MobileSideInsets.applied(size: size, safeLeft: 0, safeRight: 84)
+        #expect(sides.left == 0 && sides.right == 84)
+        let field = MobileSearchSheet.openFieldFrame(width: size.width, sideInsets: sides)
+        #expect(field == CGRect(x: 16, y: 16, width: 350, height: 48))
+        #expect(field.maxX <= 382)
+        #expect(MobileSearchSheet.accessoryFrame(field: field).maxX <= 382)
+        #expect(MobileSearchSheet.incognitoToggleFrame(field: field).maxX <= 382)
+        #expect(MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: 130).maxX <= 382)
+        let usable = CGSize(width: 382, height: size.height)
+        #expect(MobileTabCarousel.placement(relative: 0, in: size, sideInsets: sides).frame.maxX <= 382)
+        for relative: CGFloat in [-1, 0, 1] {
+            #expect(MobileTabCarousel.placement(relative: relative, in: size, sideInsets: sides)
+                == MobileTabCarousel.placement(relative: relative, in: usable))
+        }
+        #expect(MobileTabCarousel.pitch(in: size, sideInsets: sides) == MobileTabCarousel.pitch(in: usable))
+        #expect(MobileTabCarousel.position(start: 1, translation: -100, count: 4, in: size, sideInsets: sides)
+            == MobileTabCarousel.position(start: 1, translation: -100, count: 4, in: usable))
+        #expect(MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: size, sideInsets: sides)
+            == MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: usable))
+        // The same usable width with a left column shifts every card right by that inset.
+        let left = MobileSideInsets.applied(size: size, safeLeft: 84, safeRight: 0)
+        #expect(MobileTabCarousel.placement(relative: 0, in: size, sideInsets: left).frame
+            == MobileTabCarousel.placement(relative: 0, in: usable).frame.offsetBy(dx: 84, dy: 0))
+    }
+
+    @Test func portraitIPhoneKeepsItsFieldAndCarousel() {
+        let size = CGSize(width: 393, height: 852)
+        let sides = MobileSideInsets.applied(size: size, safeLeft: 0, safeRight: 0)
+        #expect(sides.left == 0 && sides.right == 0)
+        #expect(MobileSearchSheet.openFieldFrame(width: size.width, sideInsets: sides)
+            == CGRect(x: 16, y: 16, width: 361, height: 48))
+        expectUnchangedCarousel(size: size, sides: sides)
+    }
+
+    @Test func landscapeIPhoneIgnoresItsSideSafeAreas() {
+        // The spec's iPhone landscape fixture: 852 × 393 with 59 pt side insets.
+        let size = CGSize(width: 852, height: 393)
+        let sides = MobileSideInsets.applied(size: size, safeLeft: 59, safeRight: 59)
+        #expect(sides.left == 0 && sides.right == 0)
+        #expect(MobileSearchSheet.openFieldFrame(width: size.width, sideInsets: sides)
+            == CGRect(x: 16, y: 16, width: 820, height: 48))
+        expectUnchangedCarousel(size: size, sides: sides)
+    }
+
+    @Test func openDuoIgnoresAnySideSafeAreas() {
+        // 951 × 669 is the research's open-screen size. Insets here are synthetic:
+        // this builder keeps Cra Duo closed; open-posture measurement belongs to verification.
+        let size = CGSize(width: 951, height: 669)
+        for inset: CGFloat in [0, 59, 84] {
+            let sides = MobileSideInsets.applied(size: size, safeLeft: inset, safeRight: inset)
+            #expect(sides.left == 0 && sides.right == 0)
+            #expect(MobileSearchSheet.openFieldFrame(width: size.width, sideInsets: sides)
+                == CGRect(x: 16, y: 16, width: 919, height: 48))
+            expectUnchangedCarousel(size: size, sides: sides)
+        }
+    }
+
+    private func expectUnchangedCarousel(size: CGSize, sides: (left: CGFloat, right: CGFloat)) {
+        for relative: CGFloat in [-1, 0, 1] {
+            #expect(MobileTabCarousel.placement(relative: relative, in: size, sideInsets: sides)
+                == MobileTabCarousel.placement(relative: relative, in: size))
+        }
+        #expect(MobileTabCarousel.pitch(in: size, sideInsets: sides) == MobileTabCarousel.pitch(in: size))
+        #expect(MobileTabCarousel.position(start: 1, translation: -100, count: 4, in: size, sideInsets: sides)
+            == MobileTabCarousel.position(start: 1, translation: -100, count: 4, in: size))
+        #expect(MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: size, sideInsets: sides)
+            == MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: size))
+    }
+}
