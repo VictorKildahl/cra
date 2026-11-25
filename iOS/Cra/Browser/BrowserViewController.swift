@@ -248,6 +248,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     var swipeNeighbourStep = 0
     var tabArchivedBySwipe: UUID?
+    /// The page of the tab a swipe put in the archive, as it was when the swipe started: what the opposite swipe
+    /// brings back in.
+    var tabArchivedBySwipePicture: UIImage?
+    /// The swipe across the page under way, or its picture still over the page it went to (PageSwipe.swift).
+    var pageSwipe: PageSwipeStage?
+    /// The page as the last swipe across it started.
+    var pageSwipeStartPicture: UIImage?
+    /// For UI tests (`-CraTracePageSwipe YES`): what the last swipe across the page showed.
+    let pageSwipeTraceView = UIView()
     /// What the finger was on when the swipe across the page started (#627).
     weak var pageSwipeTouchView: UIView?
     /// Where the bar swipe's finger came down, in the bar's coordinates (#537): the pan begins
@@ -361,6 +370,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                      label: "New Tab Drawer")
         installTrace(newTabDrawerDragTraceView, flag: "CraTraceNewTabDrawer", id: "new-tab-drawer-drag-trace",
                      label: "New Tab Drawer Drag")
+        installTrace(pageSwipeTraceView, flag: "CraTracePageSwipe", id: "page-swipe-trace")
         PressHaptics.installCounter(in: view)
 
         bar.tabsButton.addTarget(self, action: #selector(showTabs), for: .touchUpInside)
@@ -1044,8 +1054,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if drawer.growsFromBar, searching || !deferDrawerMaterial {
             setDrawerMaterial(searching)
         }
-        // The sheet grows out of the pill, so the bar is all there when a search starts.
-        if searching { liftCover(); showBarAtOnce() }
+        // The sheet grows out of the pill, so the bar is all there when a search starts. Whatever a page swipe
+        // still has over the page goes with the cover: the sheet comes over both.
+        if searching {
+            liftCover()
+            showBarAtOnce()
+            endPageSwipe()
+        }
         // A sheet pulled out of the pill is already laid out under the finger: it goes on from there.
         let pulled = searchPull != nil
         if searching { drawer.opensFromPull = pulled }
@@ -1323,6 +1338,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// doesn't show white first; at most `MobileSheetLeave.coverLongestHold`.
     func coverUntilDrawn(_ page: WebPage) {
         liftCover()
+        endPageSwipe()
         let cover = newPageCover
         cover.backgroundColor = .systemBackground
         cover.frame = view.bounds
@@ -1564,7 +1580,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// Puts the tab row up looking exactly like the page: the focused card fills the screen.
     /// From there it settles into the row (`settleSwitcher`) or follows a finger first.
     func prepareSwitcher() -> TabSwitcherView {
+        // The row goes in right over the page: a page swipe's picture still over the page would cover it.
         liftCover()
+        endPageSwipe()
         let switcher = TabSwitcherView(frame: view.bounds)
         switcher.delegate = self
         switcher.bandHeight = view.safeAreaInsets.top

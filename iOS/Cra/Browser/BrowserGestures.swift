@@ -569,6 +569,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // is the one read and nothing of it is left frozen over the page.
             flick.end?()
             flick.end = nil
+            // And a page swipe's picture still over the page: the page is in hand again.
+            endPageSwipe()
             let at = pan.location(in: bar), moved = pan.translation(in: bar)
             let startedAt = barSwipeStart ?? CGPoint(x: at.x - moved.x, y: at.y - moved.y)
             barSwipeStart = nil
@@ -698,85 +700,6 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 animateChrome(duration: MobileSearchMotion.settleDuration, options: .curveEaseInOut)
             }
         default: break
-        }
-    }
-
-    // MARK: Across the page: back, forward, and the tab itself
-
-    private var canReopenSwipedTab: Bool {
-        tabArchivedBySwipe.map { id in store.archived.contains { $0.id == id } } ?? false
-    }
-
-    @objc func pageSwiped(_ pan: UIPanGestureRecognizer) {
-        guard let page = shownPage else { return }
-        let width = view.bounds.width
-        let x = pan.translation(in: view).x
-        func outcome(_ translation: CGFloat, _ velocity: CGFloat) -> MobileSwipe.Navigation {
-            MobileSwipe.navigation(translation: translation, velocity: velocity, width: width, canGoBack: page.webView.canGoBack,
-                                   canGoForward: page.webView.canGoForward, hasOtherTab: store.tabs.count > 1,
-                                   canReopenTab: canReopenSwipedTab)
-        }
-        switch pan.state {
-        case .changed:
-            // Follows the finger where the swipe leads somewhere, and drags its feet where it doesn't.
-            let leads = outcome(x > 0 ? width : -width, 0) != .none
-            pageContainer.transform = CGAffineTransform(translationX: leads ? x : x / 4, y: 0)
-            if pageContainer.transform != .identity { showSwapBackdrop(for: page) }
-        case .ended, .cancelled:
-            let decided = pan.state == .ended ? outcome(x, pan.velocity(in: view).x) : .none
-            guard decided != .none else {
-                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: []) {
-                    self.pageContainer.transform = .identity
-                } completion: { _ in
-                    self.hideSwapBackdrop()
-                }
-                return
-            }
-            let away: CGFloat = x > 0 ? width : -width
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut]) {
-                self.pageContainer.transform = CGAffineTransform(translationX: away, y: 0)
-            } completion: { _ in
-                self.finishPageSwipe(decided, from: away)
-            }
-        default: break
-        }
-    }
-
-    private func finishPageSwipe(_ navigation: MobileSwipe.Navigation, from away: CGFloat) {
-        guard let page = shownPage else { return }
-        switch navigation {
-        case .back: page.webView.goBack()
-        case .forward: page.webView.goForward()
-        case .archiveTab:
-            let id = page.tabID
-            page.webView.removeFromSuperview()
-            page.delegate = nil
-            shownPage = nil
-            store.archive(id)
-            tabArchivedBySwipe = id
-            if let tab = store.selected { show(tab) }
-            refreshTabStack()
-        case .reopenTab:
-            if let id = tabArchivedBySwipe {
-                captureSnapshot()
-                store.restore(id)
-                tabArchivedBySwipe = nil
-                if let tab = store.selected { show(tab) }
-                refreshTabStack()
-            }
-        case .none: break
-        }
-        // What comes next arrives from the side the old page left to. The floor under it takes
-        // the arriving page's colour, if it is another tab.
-        showSwapBackdrop(for: shownPage)
-        pageContainer.transform = CGAffineTransform(translationX: -away * 0.3, y: 0)
-        pageContainer.alpha = 0
-        UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut]) {
-            self.pageContainer.transform = .identity
-            self.pageContainer.alpha = 1
-        } completion: { _ in
-            self.hideSwapBackdrop()
         }
     }
 

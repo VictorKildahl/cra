@@ -207,6 +207,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     /// Tells the app once the document has been parsed and two frames have gone by, so its first paint is on screen:
     /// before that a committed page shows its bare canvas, white for one that hasn't yet said it is dark.
+    /// A page Back or Forward restores from WebKit's back-forward cache is drawn again without being parsed again,
+    /// so its `pageshow` tells the app as well, and the page swipe's picture comes off it then.
     private static let drawnScript = """
     (() => {
       const drawn = () => requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -214,6 +216,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
       }));
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', drawn, { once: true });
       else drawn();
+      // A page brought back from the back-forward cache runs no script again, only this.
+      addEventListener('pageshow', e => { if (e.persisted) drawn(); });
     })();
     """
 
@@ -263,6 +267,65 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
                 image.draw(at: .zero)
             })
         }
+    }
+
+    /// The picture kept of a history item, for the page swipe to show under the page and over the
+    /// web view until the page it goes to has drawn (`HistoryPictures`).
+    func historyPicture(for item: WKBackForwardListItem) -> UIImage? {
+        HistoryPictures.shared.picture(for: item)?.picture
+    }
+
+    /// How far down its document the page was scrolled when its picture was kept.
+    func historyScrollTop(for item: WKBackForwardListItem) -> CGFloat? {
+        HistoryPictures.shared.picture(for: item)?.scrollTop
+    }
+
+    /// Keeps the page as it is on screen as the picture of the current history item. It draws what
+    /// is already on screen, at 2× at most, without asking for a redraw, so it costs next to nothing
+    /// as the page is left. It draws the page's container, the band the app puts behind the status
+    /// bar included, as the page looks when it comes back; only while the page is at rest there, not
+    /// pushed back behind the search sheet or carried by a swipe, where the picture would be of
+    /// something else. A web view that isn't on screen draws black or nothing, and that capture is
+    /// dropped rather than shown as the page.
+    func keepPictureOfCurrentItem() {
+        var view: UIView? = webView
+        while let current = view {
+            if current.isHidden || current.alpha < 0.01 { return }
+            view = current.superview
+        }
+        let page: UIView = webView.superview ?? webView
+        let bounds = page.bounds
+        guard webView.window != nil, bounds.width >= 1, bounds.height >= 1, page.transform == .identity,
+              webView.frame.origin == .zero else { return }
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = min(format.scale, 2)
+        format.opaque = true
+        let picture = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
+            page.drawHierarchy(in: bounds, afterScreenUpdates: false)
+        }
+        keepPicture(picture)
+    }
+
+    /// Keeps `picture`, the page as it is on screen now, for the current history item, with how far down its
+    /// document it is scrolled.
+    func keepPicture(_ picture: UIImage) {
+        guard let item = webView.backForwardList.currentItem, !picture.looksBlank else { return }
+        let scroll = webView.scrollView
+        HistoryPictures.shared.keep(picture, scrollTop: scroll.contentOffset.y + scroll.contentInset.top, for: item)
+    }
+
+    /// Lets a main-frame navigation go ahead, then keeps the picture of the page it leaves: that
+    /// page stays on screen until the new one commits, and deciding first keeps the navigation from
+    /// waiting on the capture. A jump to a fragment of the same page leaves nothing behind.
+    private func allowMainFrame(_ navigationAction: WKNavigationAction, preferences: WKWebpagePreferences,
+                                decisionHandler: (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        decisionHandler(.allow, preferences)
+        // Back and Forward are left out: WebKit may already count the page gone to as the current item, which would
+        // file this page's picture under it, and the swipe keeps the page's picture as it starts anyway.
+        guard navigationAction.targetFrame?.isMainFrame == true, navigationAction.navigationType != .backForward,
+              let target = navigationAction.request.url,
+              !MobileHistoryPictures.isFragmentJump(from: webView.url?.absoluteString, to: target.absoluteString) else { return }
+        keepPictureOfCurrentItem()
     }
 
     /// The icons the page names for itself, best first (`MobileFavicons.bestFirst`): its own
@@ -343,13 +406,14 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             let answer: (Bool) -> Void = { opened in
                 guard !answered else { return }
                 answered = true
-                decisionHandler(opened ? .cancel : .allow, preferences)
+                if opened { return decisionHandler(.cancel, preferences) }
+                self.allowMainFrame(navigationAction, preferences: preferences, decisionHandler: decisionHandler)
             }
             UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in answer(opened) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { answer(false) }
             return
         }
-        decisionHandler(.allow, preferences)
+        allowMainFrame(navigationAction, preferences: preferences, decisionHandler: decisionHandler)
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {

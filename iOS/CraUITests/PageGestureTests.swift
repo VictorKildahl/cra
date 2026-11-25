@@ -117,4 +117,98 @@ final class PageGestureTests: BrowserTestCase {
         for _ in 0..<5 { drag(fromX: 0.2, toX: 0.9, y: 0.5) }
         XCTAssertEqual(rowTitles(), ["First"], "past the page's left end, the drag went Back")
     }
+
+    // MARK: What the swipe shows while it goes
+
+    private var base: String { ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765" }
+
+    /// The lines of the last swipe's trace (`-CraTracePageSwipe YES`).
+    private func swipeTrace() -> [String] {
+        let trace = app.descendants(matching: .any)["page-swipe-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 2))
+        return (trace.value as? String ?? "").split(separator: "\n").map(String.init)
+    }
+
+    /// The numbers on a trace line, after its words.
+    private func numbers(_ line: String) -> [CGFloat] {
+        line.split(separator: " ").compactMap { Double($0) }.map { CGFloat($0) }
+    }
+
+    /// Arc Search shows the page Back goes to underneath while the finger drags the page away, moving at a third of
+    /// its speed from a third of the screen off to the left. Before, nothing was under the page, and the page it went
+    /// to faded in afterwards.
+    func testSwipingBackShowsThePageItGoesBackToUnderneath() {
+        launch(["-CraOpenURL", base + "/swipe-first", "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("Swipe First")
+        sleep(1)
+        let heading = app.webViews.staticTexts["Swipe First"].frame.minY
+        app.webViews.links["Next page"].tap()
+        waitForPage("Swipe Second")
+        sleep(1)
+        drag(fromX: 0.3, toX: 0.8, y: 0.5, settle: true)
+        waitForPage("Swipe First")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "back picture kept", "the page it went back to was underneath as a picture: \(lines)")
+        let width = app.windows.firstMatch.frame.width
+        let moves = lines.filter { $0.hasPrefix("edge ") }.map(numbers)
+        XCTAssertGreaterThan(moves.count, 5, "the pages followed the finger: \(lines)")
+        // Mid-way, the page underneath is a third of the page's way still to go off to the left.
+        guard let mid = moves.first(where: { $0[0] > width * 0.3 && $0[0] < width * 0.6 }) else {
+            return XCTFail("no frame mid-way: \(lines)")
+        }
+        XCTAssertEqual(mid[1], -(width - mid[0]) / 3, accuracy: 1, "the page underneath moves at a third of the speed")
+        XCTAssertTrue(lines.contains("went back"))
+        sleep(2)
+        XCTAssertTrue(swipeTrace().contains { $0.hasPrefix("lifted after ") }, "the picture came off once the page drew")
+        // The page is back where it was, as its picture showed it: WebKit put it back a status bar higher, under the
+        // band, since the app sets the page's insets itself.
+        XCTAssertEqual(app.webViews.staticTexts["Swipe First"].frame.minY, heading, accuracy: 2,
+                       "the page came back where it was left")
+        keep("back")
+    }
+
+    /// Arc Search's Back on a tab's first page: the page shrinks into a card and the tab before it comes out of the
+    /// tab button's front card into one beside it, 20 pt to its left; let go, the tab closes into the archive.
+    func testSwipingBackOnAFirstPageBringsTheTabBeforeItOutOfTheTabButton() {
+        launch(["-CraOpenURL", Self.page("First", color: "gold"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("First")
+        openTab(Self.page("Second"), title: "Second")
+        sleep(1)
+        let button = app.buttons["bar-tabs"].frame
+        drag(fromX: 0.3, toX: 0.8, y: 0.5, settle: true)
+        waitForPage("First")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "closingTab picture kept", "the tab before it came out as its picture: \(lines)")
+        let cards = lines.filter { $0.hasPrefix("drag ") }.map(numbers)
+        guard let first = cards.first, let last = cards.last, first.count == 5, last.count == 5 else {
+            return XCTFail("no card frames: \(lines)")
+        }
+        // drag, x, y, width, height: small, on the tab button, at first...
+        let center = CGPoint(x: first[1] + first[3] / 2, y: first[2] + first[4] / 2)
+        XCTAssertTrue(button.insetBy(dx: -30, dy: -30).contains(center), "out of the tab button \(button): \(first)")
+        XCTAssertLessThan(first[3], 120, "small at first: \(first)")
+        // ...and by the end the page's card size, 20 pt in from the sides, with its right edge 20 pt left of the
+        // page's card, which follows the finger: that card's left edge is the finger's travel plus 20.
+        let width = app.windows.firstMatch.frame.width
+        XCTAssertEqual(last[3], width - 40, accuracy: 1.5, "the page's card size by the end: \(last)")
+        XCTAssertEqual(last[1] + last[3], last[0], accuracy: 1.5, "beside the page's card: \(last)")
+        XCTAssertTrue(lines.contains("went closingTab"))
+        XCTAssertEqual(rowTitles(), ["First"], "the swiped tab went to the archive")
+    }
+
+    /// Let go short of the threshold, the page settles back and nothing of the swipe stays on screen.
+    func testASwipeLetGoEarlyPutsThePageBack() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("First")
+        openTab(Self.page("Second"), title: "Second")
+        sleep(1)
+        // Under the 35 % that closes the tab, held still at its end so it lets go with no speed. (A drag of a sixth of
+        // the screen never started a swipe under XCUITest.)
+        drag(fromX: 0.3, toX: 0.6, y: 0.5, settle: true)
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "closingTab picture kept")
+        XCTAssertEqual(lines.last, "went nowhere", "\(lines)")
+        XCTAssertTrue(app.webViews.staticTexts["Second"].isHittable, "the page is back in place")
+        XCTAssertEqual(rowTitles(), ["First", "Second"])
+    }
 }
