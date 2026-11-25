@@ -124,12 +124,15 @@ struct WidevineFailureTests {
           MediaKeySession.prototype.update = function (licence) { return licence === 'good' ? Promise.resolve() : Promise.reject(new Error('refused')); };
           function MediaKeys() {}
           MediaKeys.prototype.createSession = function () { return new MediaKeySession(); };
-          function MediaKeySystemAccess() {}
+          function MediaKeySystemAccess(keySystem) { this.keySystem = keySystem; }
           MediaKeySystemAccess.prototype.createMediaKeys = function () { return Promise.resolve(new MediaKeys()); };
           function HTMLMediaElement() {}
           HTMLMediaElement.prototype.setMediaKeys = function (keys) { this.mediaKeys = keys; return Promise.resolve(); };
-          function Navigator() {}
-          Navigator.prototype.requestMediaKeySystemAccess = function (keySystem, configs) { return Promise.resolve(new MediaKeySystemAccess()); };
+          function Navigator() {
+            // Shaka Player 4 finds its key system here, never through requestMediaKeySystemAccess.
+            this.mediaCapabilities = { decodingInfo: c => Promise.resolve({ supported: true, keySystemAccess: new MediaKeySystemAccess(c.keySystemConfiguration.keySystem) }) };
+          }
+          Navigator.prototype.requestMediaKeySystemAccess = function (keySystem, configs) { return Promise.resolve(new MediaKeySystemAccess(keySystem)); };
           Object.assign(w, { MediaKeySession, MediaKeys, MediaKeySystemAccess, HTMLMediaElement, Navigator, navigator: new Navigator() });
           new Function('window', 'addEventListener', 'location', 'CustomEvent', 'const cra = window.__cra = {};' + \(isolated))(w, w.addEventListener, w.location, CustomEvent);
           new Function('window', 'dispatchEvent', 'CustomEvent', 'setTimeout', \(pageWorld))(w, w.dispatchEvent, CustomEvent, setTimeout);
@@ -140,9 +143,12 @@ struct WidevineFailureTests {
         var failures = [];
         var wait = () => { top.__cra.drmFailNext().then(v => failures.push(v)); };
         var sessions = [];
-        // A player: key system, keys on a <video> (unless attach is false), a session that asks for a licence.
-        function play(w, { keySystem = 'com.widevine.alpha', attach = true } = {}) {
-          w.navigator.requestMediaKeySystemAccess(keySystem, [{}])
+        // A player: key system (asked for, or through Media Capabilities as Shaka Player 4 does), keys on
+        // a <video> (unless attach is false), a session that asks for a licence.
+        function play(w, { keySystem = 'com.widevine.alpha', attach = true, capabilities = false } = {}) {
+          (capabilities
+            ? w.navigator.mediaCapabilities.decodingInfo({ type: 'media-source', keySystemConfiguration: { keySystem } }).then(r => r.keySystemAccess)
+            : w.navigator.requestMediaKeySystemAccess(keySystem, [{}]))
             .then(a => a.createMediaKeys())
             .then(keys => (attach ? new w.HTMLMediaElement().setMediaKeys(keys) : Promise.resolve()).then(() => keys))
             .then(keys => { const s = keys.createSession(); sessions.push(s); return s.generateRequest('cenc', new ArrayBuffer(8)); });
@@ -181,6 +187,22 @@ struct WidevineFailureTests {
         p.evaluateScript("wait(); play(top)")
         p.evaluateScript("sessions[1].close()")
         p.evaluateScript("tick()")
+        #expect(text("failures.length") == "1")
+    }
+
+    /// Shaka Player 4 (and players built on it) gets its MediaKeySystemAccess from
+    /// navigator.mediaCapabilities.decodingInfo, so the watch knows the keys by the access's own
+    /// keySystem, not by the request that made it. Seen on a real Widevine licence Shaka's CDM refused.
+    @Test func aPlayerThatFindsWidevineThroughMediaCapabilitiesCanFail() throws {
+        let p = try page()
+        func text(_ js: String) -> String { p.evaluateScript(js).toString() }
+        p.evaluateScript("wait(); play(top, { capabilities: true })")
+        #expect(text("sessions.length") == "1")
+        p.evaluateScript("answer(sessions[0], 'refused')")
+        #expect(text("failures.join()") == "https://watch.example.tv/film/42")
+        // Another key system found the same way is still nothing.
+        p.evaluateScript("wait(); play(top, { capabilities: true, keySystem: 'com.apple.fps.1_0' })")
+        p.evaluateScript("answer(sessions[1], 'refused'); tick()")
         #expect(text("failures.length") == "1")
     }
 

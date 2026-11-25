@@ -243,7 +243,7 @@ public enum WidevineSignal {
           const proto = window.Navigator?.prototype, request = proto?.requestMediaKeySystemAccess;
           if (!request) return;
           const watched = \(systems), watches = k => watched.some(p => String(k).startsWith(p));
-          const accesses = new WeakSet(), keysWatched = new WeakSet(), attached = new WeakSet();
+          const keysWatched = new WeakSet(), attached = new WeakSet();
           const keysOf = new WeakMap(), asked = new WeakMap(), failed = new WeakSet();
           const wrap = (o, name, f) => {
             const old = o?.[name];
@@ -255,9 +255,7 @@ public enum WidevineSignal {
           const then = (r, f) => { if (r && typeof r.then === 'function') r.then(f, () => {}); };
           wrap(proto, 'requestMediaKeySystemAccess', function (old, [keySystem, configs]) {
             if (String(keySystem).startsWith('com.widevine')) dispatchEvent(new CustomEvent('\(channel)d'));
-            const r = old.call(this, keySystem, configs);
-            if (watches(keySystem)) then(r, a => { if (a && typeof a === 'object') accesses.add(a); });
-            return r;
+            return old.call(this, keySystem, configs);
           });
           const fail = session => {
             const keys = keysOf.get(session);
@@ -265,9 +263,13 @@ public enum WidevineSignal {
             failed.add(session);
             dispatchEvent(new CustomEvent('\(channel)x'));
           };
+          // Known by its own keySystem: Shaka Player 4 gets the access from
+          // navigator.mediaCapabilities.decodingInfo, never from requestMediaKeySystemAccess.
           wrap(window.MediaKeySystemAccess?.prototype, 'createMediaKeys', function (old, a) {
             const r = old.apply(this, a);
-            if (accesses.has(this)) then(r, k => { if (k && typeof k === 'object') keysWatched.add(k); });
+            let keySystem = '';
+            try { keySystem = this.keySystem; } catch {}
+            if (watches(keySystem)) then(r, k => { if (k && typeof k === 'object') keysWatched.add(k); });
             return r;
           });
           wrap(window.HTMLMediaElement?.prototype, 'setMediaKeys', function (old, a) {
