@@ -1691,6 +1691,8 @@
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::logLineSaysWhetherChromiumGetsThePipe  0c763e07cfbc
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::takesOverDescriptorsALauncherLeftOpen  8e765f726695
 #752   Tests/Scenarios/extension-action-fds-held.scenario  121e1d606f04
+#753   Packages/CraCore/Tests/CraCoreTests/DialogCornerTests.swift::onMacOS15TheCardRoundsNoMoreThanItsSheet  ca19abd5ef26
+#753   Packages/CraCore/Tests/CraCoreTests/DialogCornerTests.swift::onMacOS26TheCardKeepsArcsCorners  3523ab84e392
 #755   Packages/CraCore/Tests/CraCoreTests/FaviconInkTests.swift::githubsWhiteOctocatIsALightMark  889f15ea2465
 #755   Packages/CraCore/Tests/CraCoreTests/FaviconInkTests.swift::halfSeeThroughPixelsCountByTheirColour  81a671c376e9
 #755   Packages/CraCore/Tests/CraCoreTests/FaviconInkTests.swift::iconsThatShowOnWhiteStayAsTheyAre  e16cfe1232c0
