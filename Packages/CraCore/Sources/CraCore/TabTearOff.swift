@@ -18,6 +18,11 @@ public enum TabTearOff {
         isTab && !incognito && !dropAccepted && !overAppWindow
     }
 
+    /// Whether the new window gets a copy of the tab instead of the tab itself. Arc 1.174.2 (25 Nov 2026, offline
+    /// copy, real drags): a pinned tab, at the top of Pinned or in a folder there, stays where it was and keeps its
+    /// page in the window it left, and the Blank Window opens the same address as a tab of its own; a Today tab moves.
+    public static func copiesTab(pinned: Bool) -> Bool { pinned }
+
     /// The new window's frame (AppKit screen coordinates, origin bottom left): `size`, centred on
     /// where the pointer let go, moved inside `visible` (the screen's visible frame) less the inset.
     /// A window larger than that room shrinks to fit it.

@@ -1,0 +1,23 @@
+# promise: #219
+# A pinned tab in a folder, dragged out of every window and let go (MbpMelborp's follow-up on #219), stays in its
+# folder, and the new Blank Window opens a copy of it as a tab of its own, as in Arc 1.174.2 (25 Nov 2026, offline
+# copy, real drags; a pinned tab outside a folder does the same). A Today tab still moves (blank-window).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":["F0000000-0000-0000-0000-000000000001"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"F0000000-0000-0000-0000-000000000001","parentID":"C0000000-0000-0000-0000-000000000012","title":"Work","children":["F0000000-0000-0000-0000-000000000101"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"folder":{}}},{"id":"F0000000-0000-0000-0000-000000000101","parentID":"F0000000-0000-0000-0000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"data:text/html,n=pinnedtab","savedURL":"data:text/html,n=pinnedtab","title":"Pinned"}}}}]}
+cra://debug?windowSize=1000x700
+wait 3
+cra://debug?browserWindows=before
+expect-log Cra browser windows before: kind=normal .*tabs=\[data:text/html,n=pinnedtab\] .*openFolders=\d/1
+cra://debug?dragEnd=n=pinnedtab
+expect-log dragEnd: let go at
+wait 3
+cra://debug?browserWindows=after
+expect-log Cra browser windows after: kind=blank space=This Window listed=0 tabs=\[data:text/html,n=pinnedtab\] open=data:text/html,n=pinnedtab page=1
+expect-log Cra browser windows after: kind=normal .*tabs=\[data:text/html,n=pinnedtab\] .*openFolders=\d/1
+relaunch
+wait 4
+cra://debug?browserWindows=relaunched
+# The relaunched Cra's lines reach cra.log only, which names no pages: kinds and counts. The pinned tab is still there.
+expect-log browser windows relaunched: kind=normal listed=1 tabs=1
+expect-log browser windows relaunched: kind=blank listed=0 tabs=1

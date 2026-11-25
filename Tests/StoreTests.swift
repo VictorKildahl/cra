@@ -22,6 +22,7 @@ enum StoreTests {
         setenv("CRA_DIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Dia").path, 1)
         setenv("CRA_ARDIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Ardia").path, 1)
         setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
+        setenv("CRA_PHI_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Phi").path, 1)
 
         try arcImport()
         try arcKeepsAnyAddress()
@@ -30,6 +31,7 @@ enum StoreTests {
         try diaImport()
         try diaIconsFromItsDatabase()
         try ardiaImport()
+        try phiImport()
         try arcImportReport()
         try arcSpacesOnOneProfileCountTheirFavoritesOnce()
         try arcArchiveBeyondItsLimitIsListed()
@@ -103,6 +105,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        removedFavoriteComesBackOnUndo()
         profileTabsSpaceBySpace()
         newDocumentApps()
         themePreview()
@@ -1002,6 +1005,66 @@ enum StoreTests {
         expect(ids[0].profileID == nil && ids[1].profileID != nil && ids[1].profileID == ids[2].profileID
                && store.profile(ids[1].profileID)?.name == "Work", "Work and Side share one Cra profile, Personal stays on Default")
         expect(result.profiles.craFolder(forSource: "Profile p-work") != "Default", "Work's cookies go to that profile")
+        expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        for id in result.spaceIDs { store.deleteSpace(id) }
+    }
+
+    // promise: #802
+    /// Phi (#802): its SwiftData store (Tests/Fixtures/Phi/Phi/users/<account>/localDB, made with
+    /// Phi's own models, see make-store.swift.txt). Spaces come in Phi's order without its agent
+    /// spaces; a space's bookmark tree is its pinned section, folders nested and split bookmarks
+    /// a page each; pinned tabs are favorites, read in the store's Pinned Tab Scope (a space's own,
+    /// a profile's shared by its spaces, or one set for every space). A space on another Chromium
+    /// profile lands on a Cra profile, so its sign-ins follow.
+    @MainActor
+    private static func phiImport() throws {
+        expect(PhiImporter.isAvailable, "a LocalStore.sqlite under Phi/users counts as Phi data")
+        let plan = try PhiImporter.plan()
+        expect(plan.source == "Phi" && plan.spaces.map(\.title) == ["Home", "Work", "Reading"],
+               "Phi's spaces come over in its order; its agent spaces stay behind")
+        let home = plan.spaces[0], work = plan.spaces[1], reading = plan.spaces[2]
+        expect(home.favorites.compactMap(\.url) == ["https://mail.google.com/mail/u/0/", "https://www.youtube.com/"],
+               "a space's pinned tabs are its favorites, in Phi's order; other scopes' copies and open tabs stay out")
+        expect(home.pinned.map { $0.url ?? "folder " + $0.pageTitle } == ["folder Docs", "https://mail.google.com/", "https://calendar.google.com/",
+                                                                         "https://news.ycombinator.com/", "https://github.com/", "chrome://settings/"],
+               "the bookmark tree is the pinned section, in Phi's order; a split bookmark brings each page")
+        let docs = home.pinned[0].children
+        expect(docs.count == 2 && docs[0].url == "https://www.swift.org/" && docs[1].isFolder && docs[1].pageTitle == "Deep"
+               && docs[1].children.compactMap(\.url) == ["https://developer.apple.com/"], "folders nest")
+        expect(home.pinned[4].customTitle == "Code" && home.pinned[4].pageTitle == "GitHub · Where software is built"
+               && home.pinned[2].pageTitle == "Calendar", "a renamed bookmark keeps its name; a split's second page its own title")
+        expect(home.skipped == [cra("Cra Settings", "cra://settings")], "a cra: bookmark is listed")
+        expect(home.emoji == "🏠" && home.profile == nil && home.theme?.accent == "#3A6FF8",
+               "an emoji icon, the Default profile, the space's colour as its theme")
+        expect(work.favorites.compactMap(\.url) == ["https://app.slack.com/"] && work.skipped == [cra("Downloads", "cra://downloads", .favorites)]
+               && work.pinned.compactMap(\.url) == ["https://linear.app/"], "each space has its own favorites and pinned section")
+        expect(work.profile == ImportedProfile(folder: "Profile 1", name: "Work") && work.emoji == "" && work.symbol == nil,
+               "a space on \"Profile 1\" signs in there; a Phi artwork icon is a dot")
+        expect(reading.emoji == "9️⃣" && reading.pinned.isEmpty && reading.favorites.isEmpty && reading.profile == nil,
+               "an empty space still comes over; a many-code-point emoji is read whole")
+        expect(plan.favorites.isEmpty && home.today.isEmpty, "nothing is left without a space; Phi keeps open tabs in Chromium's session, not here")
+
+        let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Phi/scopes")
+        let byProfile = try PhiImporter.plan(store: fixtures.appendingPathComponent("profile.sqlite"))
+        expect(byProfile.spaces.map { $0.favorites.compactMap(\.url) } == [["https://profile.example/"], ["https://work-profile.example/"], ["https://profile.example/"]]
+               && byProfile.spaces.map(\.favoritesList) == ["profile Default", "profile Profile 1", "profile Default"],
+               "Pinned Tab Scope Profile: a profile's pinned tabs show in each of its spaces, counted once; a dormant one stays out")
+        let byApp = try PhiImporter.plan(store: fixtures.appendingPathComponent("app.sqlite"))
+        expect(byApp.spaces.allSatisfy { $0.favorites.compactMap(\.url) == ["https://app.example/"] && $0.favoritesList == "app" },
+               "Pinned Tab Scope App: the same pinned tabs in every space")
+
+        let phi = ImportSource.allCases.first { $0.id == "phi" }
+        expect(phi?.isAvailable == true && phi?.keychainService == "Phi Safe Storage" && phi?.keychainAccount == "Phi",
+               "Phi is listed from its folder, its passwords and cookies open with Phi's Keychain item")
+        expect(phi?.credentialProfiles.map(\.id) == ["Default", "Profile 1"], "Phi's Chromium profiles sit right in its folder")
+
+        let composition = AppComposition(clock: ManualScheduler())
+        let store = composition.store
+        let result = store.apply(plan, includeArchive: false, includeSettings: false)
+        expect(result.spaces == 3 && result.folders == 2, "applying adds the three spaces and the two folders")
+        let spaces = result.spaceIDs.compactMap { store.space($0) }
+        expect(spaces[0].profileID == nil && spaces[1].profileID != nil && spaces[2].profileID == nil,
+               "Work goes on a Cra profile of its own, Home and Reading stay on Default")
         expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
         for id in result.spaceIDs { store.deleteSpace(id) }
     }
@@ -2775,6 +2838,78 @@ enum StoreTests {
         store.setFavoritesShared(true)
         expect(Set(now()) == asBefore() && now().count == Set(now()).count, "favorites shared by spaces are listed once")
         store.setFavoritesShared(false)
+    }
+
+    // promise: #806
+    /// ⌘Z after Remove Favorite (#806, asked for on X): the favorite goes back where it was in the
+    /// favorites, shared or a space's own, unless something closed since comes back first.
+    @MainActor
+    private static func removedFavoriteComesBackOnUndo() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let sid = store.createSpace(title: "Undo Favorites", emoji: "↩️").id
+        let list = store.space(sid)!.favoritesContainerID
+        func favorites() -> [UUID] { store.children(of: list).map(\.id) }
+        func favorite(_ url: String) -> UUID {
+            let t = store.createTab(url: url, in: sid, select: false)
+            store.addToFavorites(t.id, in: sid)
+            return t.id
+        }
+        let a = favorite("https://example.com/undo-a"), b = favorite("https://example.com/undo-b"), c = favorite("https://example.com/undo-c")
+        let order = favorites()
+        store.setTileColor("#FF0000", for: [b])
+        store.selectTab(b)
+        let w = store.window(nil).id
+
+        store.removeFavorite(b)
+        expect(store.item(b) == nil && store.archive.first?.id == b && store.selectedTabID(window: w) != b,
+               "Remove Favorite on a space's own favorite archives it")
+        expect(store.undoRemoveFavorite(in: w), "⌘Z undoes it")
+        expect(favorites() == order && store.item(b)?.tab?.tileColor == "#FF0000" && !store.archive.contains { $0.id == b }
+               && store.selectedTabID(window: w) == b && store.integrityProblems().isEmpty,
+               "the favorite is back in its place, with its colour, out of the archive, shown again")
+        expect(!store.undoRemoveFavorite(in: w), "once")
+
+        // Arc's undo is a stack: a tab closed after the removal comes back first, then the favorite.
+        store.removeFavorite(a)
+        clock.advance(by: 1)
+        let today = store.createTab(url: "https://example.com/undo-today", in: sid, select: false)
+        store.archiveTab(today.id, reason: .manual)
+        expect(!store.undoRemoveFavorite(in: w), "a tab closed since comes first")
+        expect(store.reopenLastClosed(in: w) == .archived(today.id), "⇧⌘T's reopen takes it")
+        expect(store.undoRemoveFavorite(in: w) && favorites() == order, "then ⌘Z brings the favorite back")
+
+        // The Library brought it back first: nothing left to undo.
+        store.removeFavorite(c)
+        _ = store.restoreArchived(c)
+        expect(!store.undoRemoveFavorite(in: w), "a favorite the Library restored isn't put back twice")
+        store.removeFromArchive(c)
+        store.moveItem(c, to: list, index: nil)
+
+        // Share Favorites: Remove Favorite deletes it, and ⌘Z still brings it back.
+        store.setFavoritesShared(true)
+        let shared = store.space(sid)!.favoritesContainerID
+        let sharedOrder = store.children(of: shared).map(\.id)
+        let x = sharedOrder.first!
+        store.removeFavorite(x)
+        expect(store.item(x) == nil && !store.archive.contains { $0.id == x }, "a shared favorite is deleted, unarchived (Arc)")
+        expect(store.undoRemoveFavorite(in: w) && store.children(of: shared).map(\.id) == sharedOrder && store.integrityProblems().isEmpty,
+               "⌘Z puts a shared favorite back in its place")
+
+        // A split favorite comes back whole.
+        if let split = store.createSplit(with: [sharedOrder[1], sharedOrder[2]], inPlace: true) {
+            let splitOrder = store.children(of: shared).map(\.id)
+            let panes = store.children(of: split.id).map(\.id)
+            store.removeFavorite(panes[0])
+            expect(store.item(split.id) == nil && panes.allSatisfy { store.item($0) == nil }, "Remove Favorite on a shared split deletes it")
+            expect(store.undoRemoveFavorite(in: w) && store.children(of: shared).map(\.id) == splitOrder
+                   && store.children(of: split.id).map(\.id) == panes && store.integrityProblems().isEmpty,
+                   "⌘Z puts the split back with its panes")
+        } else {
+            expect(false, "two favorites make a split")
+        }
+        store.setFavoritesShared(false)
+        store.deleteSpace(sid)
     }
 
     // promise: #154

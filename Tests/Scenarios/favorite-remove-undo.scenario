@@ -1,0 +1,44 @@
+# promise: #806
+# ⌘Z after Remove Favorite puts the favorite back where it was, as in Arc (asked for on X, GitHub #806). With
+# Share Favorites off, Remove Favorite archives the tab; ⌘Z reopened it as a closed tab, at the end of Pinned
+# and opened, instead of back in the favorites. The open favorite removed opens again; one that wasn't stays
+# closed. A posted ⌘Z reaches the window's key monitor in a background copy (no screen needed).
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://action/favoriteTab
+cra://open?url=${PAGE}?n=two
+wait 1
+cra://action/favoriteTab
+cra://open?url=${PAGE}?n=three
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://debug?favoriteMenu=1&label=start&run=-
+expect-log favorite menu start favorites: n=one n=two n=three today: *open: n=three$
+
+# A favorite that isn't open: back in its place, still closed.
+cra://debug?favoriteMenu=2&label=removed&run=Remove Favorite
+expect-log favorite menu removed favorites: n=one n=three today: *open: n=three$
+cra://debug?key=z,6,1048576
+wait 1
+cra://debug?favoriteMenu=1&label=undone&run=-
+expect-log favorite menu undone favorites: n=one n=two n=three today: *open: n=three$
+
+# The open favorite: back in its place and open again.
+cra://debug?favoriteMenu=3&label=removed-open&run=Remove Favorite
+expect-log favorite menu removed-open favorites: n=one n=two today: *open: -$
+cra://debug?key=z,6,1048576
+wait 1
+cra://debug?favoriteMenu=1&label=undone-open&run=-
+expect-log favorite menu undone-open favorites: n=one n=two n=three today: *open: n=three$
+
+# Once: a second ⌘Z reopens nothing more from the favorites.
+cra://debug?key=z,6,1048576
+wait 1
+cra://debug?favoriteMenu=1&label=again&run=-
+expect-log favorite menu again favorites: n=one n=two n=three
+cra://debug?checkStore=1

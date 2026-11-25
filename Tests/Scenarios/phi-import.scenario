@@ -1,0 +1,9 @@
+# promise: #802
+# Phi's store (Tests/Fixtures/Phi, made with Phi's own models) through the app's import: its three
+# spaces come over without its agent spaces, with their pinned pages, folders and favorites.
+home
+env CRA_PHI_DIR=${FIXTURES}/Phi
+fresh
+wait 3
+cra://import?source=phi&archive=0&settings=0
+expect-log imported 3 spaces, 11 tabs, 2 folders, 0 archived, 8 of 9 tabs copied

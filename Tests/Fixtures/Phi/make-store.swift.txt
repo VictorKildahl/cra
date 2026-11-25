@@ -1,0 +1,79 @@
+// How LocalStore.sqlite and scopes/*.sqlite were made: compiled with Phi's own models,
+// Sources/LocalStorage/TabDataModel/TabDataModelSchemaV14.swift from github.com/phibrowser/phibrowser-mac
+// (8a4fcd2, 19 Nov 2026), so the tables are the ones Phi writes:
+//   swiftc -o phigen TabDataModelSchemaV14.swift make-store.swift && ./phigen <out>/LocalStore.sqlite space|profile|app
+// then: sqlite3 <file> "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE; VACUUM;"
+
+import Foundation
+import SwiftData
+
+typealias TabDataModel = TabDataModelSchemaV14.TabDataModel
+typealias ProfileModel = TabDataModelSchemaV14.ProfileModel
+typealias SpaceModel = TabDataModelSchemaV14.SpaceModel
+typealias BrowserDataSettingsModel = TabDataModelSchemaV14.BrowserDataSettingsModel
+
+let out = URL(fileURLWithPath: CommandLine.arguments[1])
+let scope = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "space"
+try? FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
+let schema = Schema(versionedSchema: TabDataModelSchemaV14.self)
+let config = ModelConfiguration(schema: schema, url: out)
+let container = try ModelContainer(for: schema, configurations: [config])
+let ctx = ModelContext(container)
+let t0 = Date(timeIntervalSince1970: 1_790_000_000)
+
+func row(_ title: String, _ url: String, _ type: Int, _ index: Int, space: String? = nil, profile: String? = nil) -> TabDataModel {
+    let r = TabDataModel(title: title, guid: UUID().uuidString, index: index, url: URL(string: url)!, favicon: nil, createdDate: t0, updatedDate: t0)
+    r.type = type; r.spaceId = space; r.profileId = profile
+    ctx.insert(r); return r
+}
+func root(_ space: String, _ profile: String) -> TabDataModel { row("", "phi://bookmarks-root", 3, 0, space: space, profile: profile) }
+
+let pDefault = ProfileModel(profileId: "Default", displayName: "Personal"); ctx.insert(pDefault)
+let pWork = ProfileModel(profileId: "Profile 1", displayName: "Work"); ctx.insert(pWork)
+ctx.insert(BrowserDataSettingsModel(pinnedTabScopeRawValue: scope))
+
+// Spaces, inserted out of order: sortOrder decides.
+let home = SpaceModel(spaceId: "S-HOME", profileId: "Default", name: "Home", colorHex: "#3A6FF8", iconName: "emoji:1F3E0", sortOrder: 0)
+let work = SpaceModel(spaceId: "S-WORK", profileId: "Profile 1", name: "Work", colorHex: "#E3AC38", iconName: "phi:phi-icon-view-grid-add", sortOrder: 1)
+let reading = SpaceModel(spaceId: "S-READ", profileId: "Default", name: "Reading", colorHex: "#3EB489", iconName: "emoji:0039-FE0F-20E3", sortOrder: 2)
+let agent = SpaceModel(spaceId: "S-AGENT", profileId: "Default", name: "R1", colorHex: "#8E8E93", iconName: "emoji:1F916", sortOrder: 3)
+let agentKept = SpaceModel(spaceId: "S-AGENT2", profileId: "Default", name: "task-42", colorHex: "#5856D6", iconName: "emoji:1F916", sortOrder: 4)
+for s in [work, agent, reading, agentKept, home] { ctx.insert(s) }
+
+// Home's pinned section: a page, a folder with a nested folder, a split bookmark, a renamed page.
+let hr = root("S-HOME", "Default"); home.bookmarkRoot = hr
+let b2 = row("Hacker News", "https://news.ycombinator.com/", 2, 2, space: "S-HOME", profile: "Default")
+let f1 = row("Docs", "phi://folder", 3, 0, space: "S-HOME", profile: "Default")
+let b1 = row("Swift", "https://www.swift.org/", 2, 0, space: "S-HOME", profile: "Default")
+let f2 = row("Deep", "phi://folder", 3, 1, space: "S-HOME", profile: "Default")
+let b3 = row("Apple Developer", "https://developer.apple.com/", 2, 0, space: "S-HOME", profile: "Default")
+let split = row("Mail", "https://mail.google.com/", 2, 1, space: "S-HOME", profile: "Default")
+split.secondaryUrl = URL(string: "https://calendar.google.com/"); split.secondaryTitle = "Calendar"
+let renamed = row("GitHub · Where software is built", "https://github.com/", 2, 3, space: "S-HOME", profile: "Default")
+renamed.overrideTitle = "Code"
+let local = row("Settings", "chrome://settings/", 2, 4, space: "S-HOME", profile: "Default")
+let craRow = row("Cra Settings", "cra://settings", 2, 5, space: "S-HOME", profile: "Default")
+hr.children = [b2, f1, split, renamed, local, craRow]; for c in hr.children { c.parent = hr }
+f1.children = [b1, f2]; b1.parent = f1; f2.parent = f1
+f2.children = [b3]; b3.parent = f2
+
+// Work's pinned section: one page. Reading: empty root.
+let wr = root("S-WORK", "Profile 1"); work.bookmarkRoot = wr
+let w1 = row("Linear", "https://linear.app/", 2, 0, space: "S-WORK", profile: "Profile 1"); wr.children = [w1]; w1.parent = wr
+reading.bookmarkRoot = root("S-READ", "Default")
+let ar = root("S-AGENT", "Default"); agent.bookmarkRoot = ar
+let a1 = row("Agent page", "https://example.com/agent", 2, 0, space: "S-AGENT", profile: "Default"); ar.children = [a1]; a1.parent = ar
+
+// Favorites (pinned tabs) in every scope; only the store's scope counts.
+_ = row("YouTube", "https://www.youtube.com/", 1, 1, space: "S-HOME", profile: "Default")
+_ = row("Gmail", "https://mail.google.com/mail/u/0/", 1, 0, space: "S-HOME", profile: "Default")
+_ = row("Slack", "https://app.slack.com/", 1, 0, space: "S-WORK", profile: "Profile 1")
+_ = row("Downloads", "cra://downloads", 1, 1, space: "S-WORK", profile: "Profile 1")
+_ = row("Profile fav", "https://profile.example/", 1, 0, profile: "Default")
+_ = row("Work profile fav", "https://work-profile.example/", 1, 0, profile: "Profile 1")
+_ = row("App fav", "https://app.example/", 1, 0)
+let dormant = row("Dormant", "https://dormant.example/", 1, 1, profile: "Default"); dormant.isPinnedTabDormant = true
+// An open tab row (Phi keeps normal tabs in Chromium's session, not here).
+_ = row("Open tab", "https://open.example/", 0, 0, space: "S-HOME", profile: "Default")
+try ctx.save()
+print("ok", out.path)
