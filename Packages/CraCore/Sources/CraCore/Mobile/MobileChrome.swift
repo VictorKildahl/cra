@@ -73,6 +73,24 @@ public enum MobileSearchSheet {
         let width = labelledWidth ?? accessory.width
         return CGRect(x: field.maxX - 18.5 - width, y: accessory.minY, width: width, height: accessory.height)
     }
+
+    /// The chrome's moves under way (the sheet, the bar, the page behind). The sheet is put away into the pill only
+    /// once the last of them has ended. Closing, the keyboard sends two notices and each starts a move; the second
+    /// moves nothing, so it ended at once and put the sheet away on the close's first frame, leaving the keyboard to
+    /// go down on its own. Arc Search's field rides down on the keyboard into the + pill.
+    public struct Settling: Equatable, Sendable {
+        public private(set) var running = 0
+
+        public init() {}
+
+        public mutating func began() { running += 1 }
+
+        /// One has ended: whether it was the last.
+        public mutating func ended() -> Bool {
+            running = max(0, running - 1)
+            return running == 0
+        }
+    }
 }
 
 /// The bar at the bottom of a page: tabs, the pill that opens search, and the menu.
