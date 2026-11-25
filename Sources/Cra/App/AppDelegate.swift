@@ -1039,8 +1039,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         target.showWindow(nil)
     }
 
-    /// A tab dragged out of every Cra window and let go (GitHub #219): as in Arc, it moves into
-    /// a new Blank Window placed where it was dropped, with its page as it was (no reload).
+    /// A tab dragged out of every Cra window and let go (GitHub #219): as in Arc, a Today tab moves into
+    /// a new Blank Window placed where it was dropped, with its page as it was (no reload); a pinned
+    /// one stays where it is and the window opens a copy (TabTearOff.copiesTab).
     /// `screenPoint` is where the pointer let go; the window takes the size of the one it came from.
     func tearOffTab(_ id: UUID, at screenPoint: NSPoint, from source: MainWindowController) {
         guard store.item(id)?.isTab == true, !store.isIncognito(item: id) else { return }
@@ -1048,6 +1049,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let screen = NSScreen.screens.first { NSMouseInRect(screenPoint, $0.frame, false) } ?? source.window?.screen ?? NSScreen.main
         let frame = TabTearOff.frame(size: size, droppedAt: screenPoint, visible: screen?.visibleFrame ?? .zero)
         let session = store.addBlankWindow(frame: NSStringFromRect(frame))
+        // A pinned tab stays in its place (its folder too) with its page, and the window opens a copy (Arc 1.174.2).
+        if TabTearOff.copiesTab(pinned: store.isPinned(id)) {
+            store.copyToBlankWindow(id, window: session.id)
+            _ = showNewWindow(session)
+            return
+        }
         store.moveToBlankWindow(id, window: session.id)
         let c = showNewWindow(session)
         // Handed over now, not left for whichever window is in use next to claim it.

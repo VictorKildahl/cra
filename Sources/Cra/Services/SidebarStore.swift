@@ -393,6 +393,18 @@ final class SidebarStore {
         tookTab(id, into: window, open: true)
     }
 
+    /// A torn-off pinned tab (#219) stays where it is, in its folder too, and the Blank Window opens the same
+    /// address as a tab of its own (TabTearOff.copiesTab, Arc 1.174.2). The window takes the tab's profile (#288).
+    func copyToBlankWindow(_ id: UUID, window: UUID) {
+        let sid = focusedSpaceID(window: window)
+        guard isBlank(space: sid), let space = spaces[sid], let tab = items[id]?.tab else { return }
+        if children(of: space.todayContainerID).isEmpty {
+            let profile = profileID(item: id)
+            spaces[sid]?.profileID = profile
+        }
+        createTab(url: tab.url, title: tab.savedTitle, in: sid, parent: space.todayContainerID, index: 0, window: window)
+    }
+
     /// A tab that came into a window's list from another window (a tear-off, or a drop on its
     /// sidebar): windows that had it open in another space let it go, and it opens here if it
     /// was open there (Arc showed a dropped tab in the window it was dropped on) or `open` says

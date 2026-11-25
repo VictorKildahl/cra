@@ -343,11 +343,13 @@
 #214   Tests/BrowserManagerLifecycleTests.swift::sleepCountsCase  ea4c379bd476
 #215   Tests/StoreTests.swift::arcLiveFolderImportsLive  a5c462b3a9c7
 #218   Tests/Scenarios/extension-popup-download.scenario  ffb6285b0eee
+#219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::aPinnedTabStaysAndTheNewWindowGetsACopy  ce86669537e7
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::aWindowLargerThanTheScreenShrinksToFit  bb6acd6907ac
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::arcsDropsInTheOpenCentreOnThePointer  f1d51bb5e991
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::inTheOpenTheWindowCentresOnThePointer  e47f49e23b09
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::nearTheTopLeftTheWindowStopsTwentyPointsInside  8d9c09f68118
 #219   Packages/CraCore/Tests/CraCoreTests/TabTearOffTests.swift::onlyATabLetGoOutsideEveryWindowTearsOff  9ce1b7ae29d3
+#219   Tests/Scenarios/blank-window-pinned.scenario  8d0f16e20e4c
 #219   Tests/Scenarios/blank-window.scenario  cac94fd094a6
 #219   Tests/StoreTests.swift::tornOffTabMovesToABlankWindow  75f5e92c4e8a
 #220   Packages/CraCore/Tests/CraCoreTests/BlankWindowTests.swift::aBlankSpaceWithoutItsWindowGoes  9471ebe5290e
