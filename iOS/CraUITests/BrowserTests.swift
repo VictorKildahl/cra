@@ -1182,6 +1182,26 @@ final class CollapseBottomBarTests: BrowserTestCase {
         keep("barely scrollable")
     }
 
+    /// A page that keeps its bar but runs past it can still scroll its bottom clear: the last
+    /// 44 points are not trapped under the bar.
+    func testALockedPagesBottomScrollsClear() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Barely</title>"
+                + "<body/style=margin:0><section/style=height:100svh>"
+                + "<h1/style=margin:0;padding:24px>Barely</h1></section>"
+                + "<button/style=display:block;width:100vw;height:44px;font-size:20px>Bottom</button>", "-CraSearch", "NO"])
+        waitForPage("Barely")
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable)
+        let bottom = app.webViews.buttons["Bottom"]
+        XCTAssertTrue(bottom.waitForExistence(timeout: 5))
+        app.webViews.firstMatch.swipeUp()
+        sleep(1)
+        XCTAssertTrue(pill.isHittable, "the bar stays on a page only 44 points longer")
+        XCTAssertTrue(bottom.isHittable, "the bottom scrolls clear of the bar: \(bottom.frame)")
+        XCTAssertLessThanOrEqual(bottom.frame.maxY, pill.frame.minY - 12 + 4,
+                                 "the bottom sits above the bar: \(bottom.frame)")
+    }
+
     /// Flicks that land while the bar is still settling from the last one, up and down in turn,
     /// leave it at one of its ends every time.
     func testFlicksLandingOnASettleLeaveTheBarAtAnEnd() {

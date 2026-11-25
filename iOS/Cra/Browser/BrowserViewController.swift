@@ -163,9 +163,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if #available(iOS 26.0, *) {
             let bottom = MobileBottomBar.height * (1 - min(1, max(0, barProgress)))
             var insets = page.webView.obscuredContentInsets
-            guard abs(insets.bottom - bottom) > 0.01 else { return }
-            insets.bottom = bottom
-            page.webView.obscuredContentInsets = insets
+            if abs(insets.bottom - bottom) > 0.01 {
+                insets.bottom = bottom
+                page.webView.obscuredContentInsets = insets
+            }
+            // The obscured area is scroll room too: without it the last of the page lines up
+            // with the safe area's edge, under the bar, and cannot be scrolled above it.
+            let scroll = page.webView.scrollView
+            let safe = view.safeAreaInsets
+            let content = UIEdgeInsets(top: 0, left: safe.left, bottom: bottom, right: safe.right)
+            if scroll.contentInset != content {
+                scroll.contentInset = content
+            }
         }
     }
 
@@ -663,12 +672,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if !isSearching, !pageClosing, !pageOpening, !flick.incoming, drawerProgress <= 0.001 { updatePageInsets() }
     }
 
-    /// Lets the page's content sit clear of the notch in landscape, and nothing else: the bar's
-    /// room is outside the page's frame now, and the status band's is above it.
+    /// Lets the page's content sit clear of the notch in landscape and of the bar where its view
+    /// runs under it, so the page's last points can scroll above the bar.
     func updatePageInsets() {
         guard let scroll = shownPage?.webView.scrollView else { return }
         let safe = view.safeAreaInsets
-        let insets = UIEdgeInsets(top: 0, left: safe.left, bottom: 0, right: safe.right)
+        let bottom = Self.pageRunsUnderBar ? MobileBottomBar.height * (1 - barCollapse.progress) : 0
+        let insets = UIEdgeInsets(top: 0, left: safe.left, bottom: bottom, right: safe.right)
         if scroll.contentInset != insets {
             scroll.contentInset = insets
         }
@@ -1303,7 +1313,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let switcher = TabSwitcherView(frame: view.bounds)
         switcher.delegate = self
         switcher.bandHeight = view.safeAreaInsets.top
-        switcher.pageBottom = tabArea.maxY
+        switcher.pageBottom = pageViewBottom
         let tabs = store.switcherTabs
         let selected = store.selected?.id
         // The row opens focused on the card behind the page: the one to its left, which is the
