@@ -103,7 +103,11 @@ final class BottomBar: UIView {
         let transforms = [tabsButton, menuButton, spacesButton, settingsButton].map(\.transform)
         [tabsButton, menuButton, spacesButton, settingsButton].forEach { $0.transform = .identity }
         tabsButton.frame = frames.tabs.insetBy(dx: -6, dy: -6)
-        pill.frame = frames.pill
+        // By bounds and centre, which its scale leaves alone: the bar is laid out again during a press, and a frame set
+        // while the pill was pressed in (BarButton) grew its bounds to make up for the scale, so it swelled back under
+        // the finger and puffed up past its size on a tap.
+        pill.bounds = CGRect(origin: .zero, size: frames.pill.size)
+        pill.center = CGPoint(x: frames.pill.midX, y: frames.pill.midY)
         menuButton.frame = frames.menu
         // The switcher's round buttons are 33.5 pt (IMG_1896), a little smaller than the page's
         // menu button.

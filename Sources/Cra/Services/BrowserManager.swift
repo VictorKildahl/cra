@@ -64,6 +64,8 @@ final class TabRuntime {
     var extensionPageRetries = 0
     /// Which ask of the page for its next Widevine request is the live one (BrowserManager.watchProtectedVideo).
     var protectedVideoWatch: UInt = 0
+    /// Which ask of the page for its next Widevine failure is the live one (BrowserManager.watchWidevineFailure).
+    var widevineFailureWatch: UInt = 0
     /// The page is on its way to WebKit for a protected video (its sign-in is being copied).
     var movingToWebKit = false
     /// The next of those loads (LiveScheduler runs work only while its handle is kept).
@@ -1675,6 +1677,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         log(id, "loaded \(site(url, id, browser)) (HTTP \(statusCode))")
         if statusCode != 0 { runtimes[id]?.extensionPageRetries = 0 }
         watchProtectedVideo(id, browser)
+        watchWidevineFailure(id, browser)
         guard !browser.isIncognito else { return }
         // The profile's extensions are up: imported Web Store copies become store installs (#203).
         ExtensionStore.shared.installFromWebStore(using: browser, profile: store.profileDirectoryName(item: id))
@@ -1958,6 +1961,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         PageEngines.videoPages.navigated(tab: id, to: url, sites: PageEngines.sites)
         delegate?.browserManagerProtectedVideoPromptChanged(id)
         watchProtectedVideo(id, browser)
+        watchWidevineFailure(id, browser)
     }
 
     /// Asks a mixed site's Chromium page to answer when it next asks for Widevine
@@ -2066,15 +2070,80 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     /// An incognito page's go to the incognito session's throwaway store and nowhere else. Which
     /// cookies: ProtectedVideoHandoff.cookies. A copy that fails moves the page all the same.
     private func copySignIn(of mixed: MixedMediaSite, from browser: CraBrowser, tab id: UUID, then: @escaping () -> Void) {
+        copyCookies(named: mixed.host, from: browser, tab: id, then: then) { ProtectedVideoHandoff.cookies(fromProtocolAnswer: $0, for: mixed) }
+    }
+
+    /// The cookies `select` takes from the page's Chromium profile go to the same profile's WebKit
+    /// store (an incognito page's to the incognito session's throwaway store), then `then`.
+    private func copyCookies(named name: String, from browser: CraBrowser, tab id: UUID, then: @escaping () -> Void,
+                             select: @escaping (String) -> [HTTPCookie]) {
         let incognito = browser.isIncognito
         let profilePath = incognito ? nil : store.profilePath(item: id)
         browser.sendDevToolsMethod("Network.getAllCookies", params: "{}") { [weak self] result, error in
             DispatchQueue.main.async {
-                let cookies = ProtectedVideoHandoff.cookies(fromProtocolAnswer: result ?? "", for: mixed)
-                self?.log(id, "copies \(cookies.count) cookies of \(incognito ? "(incognito)" : mixed.host) to WebKit\(error.map { " (\($0))" } ?? "")")
+                let cookies = select(result ?? "")
+                self?.log(id, "copies \(cookies.count) cookies of \(incognito ? "(incognito)" : name) to WebKit\(error.map { " (\($0))" } ?? "")")
                 WebKitStores.add(cookies, profilePath: profilePath, incognito: incognito, done: then)
             }
         }
+    }
+
+    // MARK: Widevine that fails (docs/protected-media.md)
+
+    /// Asks a Chromium page whose site may move (ProtectedMediaSites.movesWhenWidevineFails) to
+    /// answer when Widevine fails there (PageScript.widevineFailure): an answer left waiting in the
+    /// page, so nothing polls. Asked again whenever the page's address changes or it finishes
+    /// loading; a newer ask takes an older one's place, and a page that navigates away ends its own.
+    private func watchWidevineFailure(_ id: UUID, _ browser: CraBrowser) {
+        guard let rt = runtimes[id], rt.browser === browser, !(browser is NativePage), PageEngines.engine(of: browser) == .chromium,
+              PageEngines.sites.movesWhenWidevineFails(at: browser.currentURL, choices: PageEngines.choices, incognito: browser.isIncognito)
+        else { return }
+        rt.widevineFailureWatch &+= 1
+        let watch = rt.widevineFailureWatch
+        let params = Self.jsonObjectString(["expression": PageScript.widevineFailure, "returnByValue": true, "awaitPromise": true])
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak self, weak browser] result, _ in
+            let failedAt = Self.stringResult(result) ?? ""
+            DispatchQueue.main.async {
+                guard let self, let browser, let rt = self.runtimes[id], rt.browser === browser, rt.widevineFailureWatch == watch,
+                      !failedAt.isEmpty else { return }
+                self.widevineFailed(id, browser, at: failedAt)
+            }
+        }
+    }
+
+    /// Widevine failed on the page while it was at `failedAt`: the site plays in Safari's engine
+    /// from now on, and the page moves there. The "plays with Safari's engine" toast tells the
+    /// user when it shows; the Site Control Center's switch takes the site back for good.
+    private func widevineFailed(_ id: UUID, _ browser: CraBrowser, at failedAt: String) {
+        let url = browser.currentURL
+        // It went to another site since, or the site was chosen meanwhile.
+        guard URL(string: failedAt)?.host?.lowercased() == URL(string: url)?.host?.lowercased(),
+              PageEngines.sites.movesWhenWidevineFails(at: url, choices: PageEngines.choices, incognito: browser.isIncognito) else { return }
+        log(id, "Widevine failed on \(site(url, id, browser)): moves the site to Safari's engine")
+        moveSiteToSafariEngine(id, url: url)
+    }
+
+    /// The Site Control Center's switch turned on, or Widevine that failed: `url`'s site plays in
+    /// WebKit from now on (PageEngines.choose), and the tab's page opens there at its address,
+    /// signed in. The cookies the page sends go to the profile's WebKit store first
+    /// (ProtectedVideoHandoff.cookies(forPageAt:)); a copy that fails or takes over 2 seconds
+    /// moves the page all the same.
+    func moveSiteToSafariEngine(_ id: UUID, url: String) {
+        PageEngines.choose(.webKit, for: url)
+        guard let rt = runtimes[id], !rt.movingToWebKit, PageEngines.engine(of: rt.browser) == .chromium,
+              PageEngines.engine(for: rt.browser.currentURL, tab: id) == .webKit else { return reopenInItsEngine(id) }
+        let browser = rt.browser
+        rt.movingToWebKit = true
+        var moved = false
+        let move = { [weak self, weak rt] in
+            guard !moved else { return }
+            moved = true
+            rt?.movingToWebKit = false
+            guard let self, self.runtimes[id]?.browser === browser else { return }
+            self.reopenInItsEngine(id)
+        }
+        copyCookies(named: site(url, id, browser), from: browser, tab: id, then: move) { ProtectedVideoHandoff.cookies(fromProtocolAnswer: $0, forPageAt: url) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: move)
     }
 
     /// The tab's page closes and opens again at `url`, in the engine the address gets, on screen

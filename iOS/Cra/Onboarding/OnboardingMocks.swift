@@ -61,27 +61,72 @@ struct PaleBackdrop: View {
     }
 }
 
+enum OnboardingMock {
+    static let height: CGFloat = 640
+}
+
 /// A phone in the steps: a white frame with round corners, its screen clipped inside. It runs
 /// past the bottom of the step, under the button.
 struct PhoneMock<Screen: View>: View {
+    let mock: MobileOnboarding.Mock
+    let dark: Bool
     let screen: Screen
 
-    init(@ViewBuilder screen: () -> Screen) { self.screen = screen() }
+    init(mock: MobileOnboarding.Mock, dark: Bool = false, @ViewBuilder screen: () -> Screen) {
+        self.mock = mock
+        self.dark = dark
+        self.screen = screen()
+    }
 
     var body: some View {
+        if mock.shape == .phone {
+            screen
+                .frame(width: 330, height: OnboardingMock.height, alignment: .top)
+                .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 40, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 6))
+                .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+        } else {
+            foldedScreen
+        }
+    }
+
+    private var foldedScreen: some View {
         screen
-            .frame(width: 330, height: 640, alignment: .top)
-            .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 40, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 6))
+            .frame(width: mock.logicalSize.width, height: mock.logicalSize.height, alignment: .top)
+            .overlay(alignment: .topTrailing) {
+                VStack(spacing: 4) {
+                    Text("9:41").font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "wifi").font(.system(size: 10))
+                    Image(systemName: "battery.100").font(.system(size: 12))
+                }
+                .foregroundStyle(dark ? .white : .black)
+                .padding(.top, 20)
+                .padding(.trailing, 26)
+                .accessibilityHidden(true)
+            }
+            .scaleEffect(mock.size.width / mock.logicalSize.width, anchor: .topLeading)
+            .frame(width: mock.size.width, height: mock.size.height, alignment: .topLeading)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 6))
             .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
     }
 }
 
 /// The status bar of a phone in the steps.
 private struct MockStatusBar: View {
+    let mock: MobileOnboarding.Mock
     var dark = false
+    var overlay = false
 
     var body: some View {
+        if mock.shape == .phone {
+            bar
+        } else if !overlay {
+            Color.clear.frame(height: 14)
+        }
+    }
+
+    private var bar: some View {
         HStack {
             Text("9:41").font(.system(size: 12, weight: .semibold))
             Spacer()
@@ -150,10 +195,11 @@ struct OnboardingTitle: View {
 /// The Browse for Me step's phone: "Try it!" with an arrow onto the first question's chip over
 /// a search sheet and its keyboard; a tap runs the question and the phone shows its page.
 struct BrowseDemo: View {
+    let mock: MobileOnboarding.Mock
     @Binding var progress: MockProgress
 
     var body: some View {
-        PhoneMock {
+        PhoneMock(mock: mock, dark: progress != .done) {
             ZStack(alignment: .top) {
                 if progress == .done {
                     result.transition(.opacity)
@@ -170,7 +216,7 @@ struct BrowseDemo: View {
             LinearGradient(colors: [Color(red: 0.25, green: 0.08, blue: 0.45), OnboardingColors.red.opacity(0.8), OnboardingColors.blue],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
             VStack(spacing: 0) {
-                MockStatusBar(dark: true)
+                MockStatusBar(mock: mock, dark: true)
                 Spacer().frame(height: 30)
                 Text(MobileOnboarding.browseTryIt).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
                 Spacer()
@@ -184,6 +230,7 @@ struct BrowseDemo: View {
                     .background(Color.black.opacity(0.06), in: Capsule())
                     .padding(.horizontal, 10)
                     .padding(.top, 10)
+                    .frame(width: mock.columnWidth)
                     ForEach(Array(MobileOnboarding.sampleQueries.enumerated()), id: \.offset) { index, query in
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass").font(.system(size: 10, weight: .medium))
@@ -208,12 +255,13 @@ struct BrowseDemo: View {
                         .foregroundStyle(.black)
                         .padding(.horizontal, 14)
                         .frame(height: 34)
+                        .frame(width: mock.columnWidth)
                     }
-                    MockKeyboard().padding(.top, 6)
+                    MockKeyboard(keyWidth: mock.keyWidth, keyHeight: mock.keyHeight).padding(.top, 6)
                 }
                 .background(Color.white, in: UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18))
             }
-            TryItArrow().allowsHitTesting(false)
+            TryItArrow(mock: mock).allowsHitTesting(false)
         }
         .environment(\.colorScheme, .light)
     }
@@ -221,7 +269,7 @@ struct BrowseDemo: View {
     /// What Browse for Me made of "things to do in paris", as the recording shows it.
     private var result: some View {
         VStack(alignment: .leading, spacing: 10) {
-            MockStatusBar()
+            MockStatusBar(mock: mock)
             HStack {
                 Image(systemName: "magnifyingglass").font(.system(size: 10))
                 Text(MobileOnboarding.sampleQueries[0]).font(.system(size: 11))
@@ -245,6 +293,9 @@ struct BrowseDemo: View {
             }
             Spacer()
         }
+        .frame(width: mock.columnWidth)
+        .frame(width: mock.logicalSize.width)
+        .padding(.top, mock.shape == .phone ? 0 : 56)
         .background(Color.white)
         .environment(\.colorScheme, .light)
         .accessibilityElement(children: .contain)
@@ -262,10 +313,15 @@ struct BrowseDemo: View {
 
 /// The purple-to-pink line from "Try it!" onto the first chip, in the phone's own points.
 private struct TryItArrow: View {
+    let mock: MobileOnboarding.Mock
     var body: some View {
         Canvas { context, size in
-            let start = CGPoint(x: size.width / 2, y: 84)
-            let chip = CGPoint(x: size.width - 48, y: 256)
+            // Sheet: search field + rows + keyboard (four 30 pt rows, gaps, padding).
+            let keyboardHeight: CGFloat = 4 * mock.keyHeight + 3 * 6 + 16 + 40
+            let sheetHeight: CGFloat = 40 + CGFloat(MobileOnboarding.sampleQueries.count) * 34 + 6 + keyboardHeight
+            let start = CGPoint(x: size.width / 2, y: mock.shape == .phone ? 84 : 14 + 30 + 18)
+            // The shared path stops 6 pt before this point; put its tip 3 pt above the chip.
+            let chip = CGPoint(x: (size.width + mock.columnWidth) / 2 - 48, y: mock.shape == .phone ? 256 : mock.logicalSize.height - sheetHeight + 40 + 7 + 3)
             let corners = MobileCoachMark.path(from: start, toChipTop: chip)
             var path = Path()
             path.move(to: corners.start)
@@ -284,6 +340,8 @@ private struct TryItArrow: View {
 
 /// A light keyboard, drawn small.
 private struct MockKeyboard: View {
+    let keyWidth: CGFloat
+    let keyHeight: CGFloat
     private let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 
     var body: some View {
@@ -292,13 +350,13 @@ private struct MockKeyboard: View {
                 HStack(spacing: 4) {
                     ForEach(Array(row), id: \.self) { key in
                         Text(String(key)).font(.system(size: 12))
-                            .frame(width: 26, height: 30)
+                            .frame(width: keyWidth, height: keyHeight)
                             .background(.white, in: RoundedRectangle(cornerRadius: 4))
                             .shadow(color: .black.opacity(0.25), radius: 0, y: 1)
                     }
                 }
             }
-            RoundedRectangle(cornerRadius: 4).fill(.white).frame(width: 150, height: 30).shadow(color: .black.opacity(0.25), radius: 0, y: 1)
+            RoundedRectangle(cornerRadius: 4).fill(.white).frame(width: 150 * keyWidth / 26, height: keyHeight).shadow(color: .black.opacity(0.25), radius: 0, y: 1)
         }
         .foregroundStyle(.black)
         .frame(maxWidth: .infinity)
@@ -314,12 +372,13 @@ private struct MockKeyboard: View {
 /// The Pinch step's phone: President Kennedy's Moon speech, which a pinch folds into its
 /// summary (the recording, 0:31). Two dots pinch on it until someone does.
 struct PinchDemo: View {
+    let mock: MobileOnboarding.Mock
     @Binding var progress: MockProgress
     @State private var scale: CGFloat = 1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        PhoneMock {
+        PhoneMock(mock: mock, dark: progress != .done) {
             ZStack(alignment: .top) {
                 if progress == .done {
                     summary.transition(.opacity)
@@ -373,15 +432,28 @@ struct PinchDemo: View {
 
     private var page: some View {
         VStack(alignment: .leading, spacing: 8) {
-            moon.frame(height: 200).clipped().overlay(alignment: .top) { MockStatusBar(dark: true) }
+            moon.frame(width: mock.logicalSize.width, height: 200).clipped().overlay(alignment: .top) { MockStatusBar(mock: mock, dark: true, overlay: true) }
             Text("Address at Rice University on the Nation's Space Effort").font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
                 .padding(.horizontal, 14)
+                .frame(width: mock.columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             Text("Delivered at Rice University on September 12, 1962").font(.system(size: 9)).foregroundStyle(.gray).padding(.horizontal, 14)
+                .frame(width: mock.columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             Text("We meet at a college noted for knowledge, in a city noted for progress, in a state noted for strength, and we stand in need of all three, for we meet in an hour of change and challenge, in a decade of hope and fear, in an age of both knowledge and ignorance. The greater our knowledge increases, the greater our ignorance unfolds.\n\nDespite the striking fact that most of the scientists that the world has ever known are alive and working today, despite the fact that this Nation's own scientific manpower is doubling every 12 years in a rate of growth more than three times that of our population as a whole, despite that, the vast stretches of the unknown and the unanswered and the unfinished still far outstrip our collective comprehension.")
                 .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8)).padding(.horizontal, 14)
+                .frame(width: mock.columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            if mock.shape != .phone {
+                Text("No man can fully grasp how far and how fast we have come, but condense, if you will, the 50,000 years of man's recorded history in a time span of but a half-century. Stated in these terms, we know very little about the first 40 years, except at the end of them advanced man had learned to use the skins of animals to cover them. Then about 10 years ago, under this standard, man emerged from his caves to construct other kinds of shelter. Only five years ago man learned to write and use a cart with wheels. Christianity began less than two years ago. The printing press came this year, and then less than two months ago, during this whole 50-year span of human history, the steam engine provided a new source of power.\n\nNewton explored the meaning of gravity. Last month electric lights and telephones and automobiles and airplanes became available. Only last week did we develop penicillin and television and nuclear power, and now if America's new spacecraft succeeds in reaching Venus, we will have literally reached the stars before midnight tonight.\n\nThis is a breathtaking pace, and such a pace cannot help but create new ills as it dispels old, new ignorance, new problems, new dangers. Surely the opening vistas of space promise high costs and hardships, as well as high reward.\n\nSo it is not surprising that some would have us stay where we are a little longer to rest, to wait. But this city of Houston, this State of Texas, this country of the United States was not built by those who waited and rested and wished to look behind them. This country was conquered by those who moved forward—and so will space.\n\nWilliam Bradford, speaking in 1630 of the founding of the Plymouth Bay Colony, said that all great and honorable actions are accompanied with great difficulties, and both must be enterprised and overcome with answerable courage.\n\nIf this capsule history of our progress teaches us anything, it is that man, in his quest for knowledge and progress, is determined and cannot be deterred. The exploration of space will go ahead, whether we join in it or not, and it is one of the great adventures of all time, and no nation which expects to be the leader of other nations can expect to stay behind in the race for space.")
+                    .font(.system(size: 10)).foregroundStyle(.black.opacity(0.8)).padding(.horizontal, 14)
+                    .frame(width: mock.columnWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+            }
             Spacer(minLength: 0)
         }
-        .frame(width: 330)
+        .frame(width: mock.logicalSize.width)
+        .fixedSize(horizontal: false, vertical: mock.shape != .phone)
     }
 
     private var hint: some View {
@@ -390,9 +462,11 @@ struct PinchDemo: View {
             let pinch = CGFloat(min(1, max(0, (t - 0.4) / 1.0)))
             ZStack {
                 Circle().fill(Color(red: 0.35, green: 0.36, blue: 0.96).opacity(0.9)).frame(width: 30, height: 30)
-                    .position(x: 210 - 40 * pinch, y: 330 + 30 * pinch)
+                    .position(x: mock.logicalSize.width * 210 / 330 - mock.logicalSize.width * 40 / 330 * pinch,
+                              y: mock.logicalSize.height * 330 / 640 + mock.logicalSize.height * 30 / 640 * pinch)
                 Circle().fill(Color(red: 1, green: 0.24, blue: 0.42).opacity(0.9)).frame(width: 30, height: 30)
-                    .position(x: 120 + 40 * pinch, y: 420 - 30 * pinch)
+                    .position(x: mock.logicalSize.width * 120 / 330 + mock.logicalSize.width * 40 / 330 * pinch,
+                              y: mock.logicalSize.height * 420 / 640 - mock.logicalSize.height * 30 / 640 * pinch)
             }
         }
         .allowsHitTesting(false)
@@ -400,7 +474,7 @@ struct PinchDemo: View {
 
     private var summary: some View {
         VStack(alignment: .leading, spacing: 10) {
-            MockStatusBar()
+            MockStatusBar(mock: mock)
             HStack {
                 Spacer()
                 VStack(alignment: .leading, spacing: 4) {
@@ -424,6 +498,9 @@ struct PinchDemo: View {
             }
             Spacer(minLength: 0)
         }
+        .frame(width: mock.columnWidth)
+        .frame(width: mock.logicalSize.width)
+        .padding(.top, mock.shape == .phone ? 0 : 56)
         .accessibilityIdentifier("onboarding-pinch-summary")
     }
 
@@ -439,13 +516,14 @@ struct PinchDemo: View {
 /// The blocking step's phone: a travel magazine's page that the switch clears of its ads
 /// (the recording, 0:55; Arc Search's page is "Out West", this one is made up for Cra).
 struct BlockingDemo: View {
+    let mock: MobileOnboarding.Mock
     @Binding var blocks: Bool
 
     var body: some View {
-        PhoneMock {
+        PhoneMock(mock: mock) {
             ZStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 0) {
-                    MockStatusBar()
+                    MockStatusBar(mock: mock)
                     if !blocks { topAd.transition(.move(edge: .top).combined(with: .opacity)) }
                     masthead
                     VStack(alignment: .leading, spacing: 6) {
@@ -464,9 +542,28 @@ struct BlockingDemo: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
-                    Spacer(minLength: 0)
+                    if mock.shape == .duoOpen {
+                        GeometryReader { proxy in
+                            let articleTop = proxy.frame(in: .named("blocking-screen")).minY
+                            let switchBottom = mock.logicalSize.height - 150 * mock.logicalSize.height / 640
+                            Canvas { context, size in
+                                let text = Text("The coast rewards those who take the long way. Follow the trail above the water and the road soon disappears behind the hills. Around the next bend, a sheltered cove opens beneath the cliffs, with a narrow path winding down to the shore.\n\nStart early while the air is cool and the light is soft. The first stretch climbs gently through low brush before reaching an open ridge. From here, the route follows the headland, with views of the sea on one side and rolling hills on the other. Take your time at the overlooks: each turn reveals another stretch of coastline.\n\nFarther along, the trail drops into a quiet valley where the wind gives way to birdsong. A small footbridge crosses the stream before the path climbs again. This is a good place to pause, drink some water, and enjoy the shade before returning to the exposed ridge.\n\nBring water, a light layer, and sturdy shoes. Coastal weather can change quickly, and even a sunny morning can turn cool when fog rolls in from the water. Stay on the marked trail, give wildlife plenty of space, and leave the coves and hillsides as you found them.\n\nFor a shorter walk, turn back at the first overlook. If you have the afternoon, continue toward the far headland, where the trail opens onto a broad sweep of ocean. Find a spot out of the wind and watch the waves trace the shore below. The return follows the same path, but the changing light makes the landscape feel new.\n\nAs evening approaches, the hills soften into silhouettes and the sea takes on the colors of the sky. Walk back slowly, stopping once more at the ridge to look along the coast. There is always another bend in the trail, and another reason to return.")
+                                    .font(.system(size: 10)).foregroundColor(.black.opacity(0.8))
+                                context.draw(text, in: CGRect(x: 16, y: 0, width: size.width - 32, height: mock.logicalSize.height))
+                            }
+                            .clipped()
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Trail article")
+                            .accessibilityIdentifier("onboarding-blocking-article")
+                            .padding(.top, max(12, switchBottom + 12 - articleTop))
+                        }
+                    } else {
+                        Spacer(minLength: 0)
+                    }
                 }
-                .frame(width: 330)
+                .frame(width: mock.columnWidth)
+                .padding(.top, mock.shape == .phone ? 0 : 56)
+                .frame(height: mock.shape == .phone ? nil : mock.logicalSize.height, alignment: .top)
                 .background(Color.white)
                 Toggle(isOn: $blocks.animation(.easeInOut(duration: 0.35))) {
                     Text(MobileOnboarding.blockingSwitch).font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
@@ -476,9 +573,13 @@ struct BlockingDemo: View {
                 .frame(height: 46)
                 .background(Color(white: 0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .padding(.horizontal, 10)
-                .padding(.bottom, 150)
+                .frame(width: mock.columnWidth)
+                .padding(.bottom, 150 * mock.logicalSize.height / 640)
                 .accessibilityIdentifier("onboarding-blocking")
             }
+            .coordinateSpace(name: "blocking-screen")
+            .frame(width: mock.shape == .phone ? nil : mock.logicalSize.width)
+            .background(mock.shape == .phone ? Color.clear : Color.white)
         }
         .environment(\.colorScheme, .light)
     }
@@ -514,7 +615,7 @@ struct BlockingDemo: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 150)
+            .frame(height: 150 * mock.logicalSize.height / 640)
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
