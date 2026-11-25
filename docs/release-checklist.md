@@ -456,6 +456,12 @@ built release app with a test profile. Note anything that fails in the release's
   Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
   Keep browsing keeps it going. Once it finishes, a check replaces the arrow, and its row's menu
   reads Open / Copy <kind>, Show in Finder, Hide from Cra and Move to Trash.
+- **Screenshots in the downloads list:** on a Mac whose screenshots go to the Desktop (the default)
+  and where Cra hasn't been allowed the Desktop yet: launching asks nothing. Open the Library once:
+  macOS asks for Desktop access; allow it. Press ⇧⌘4 and take a screenshot: within a few seconds it is
+  the newest row when you hover the Library button, with its picture, and drags onto a page's upload
+  field. Unticking Screenshots in the Media button's "Show media" menu takes it out.
+  (`downloads-tray-screenshots` covers a screenshot in ~/Pictures; macOS's question needs a person.)
 - **PR #254:** with the release app as the default browser, open a page in Safari on an iPhone
   signed in to the same Apple Account and click the Handoff icon in the Dock. The page opens in
   Cra, in the space Air Traffic Control picks, and not in Safari.

@@ -91,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         store.tidyTabsChanged = { [unowned self] enabled in if !enabled { TidyTabsService.shared.cancelAll(store: self.store) } }
         store.tidyTabsSpaceRemoved = { [unowned self] in TidyTabsService.shared.cancel($0, store: self.store) }
         LinkSummaryPreviewController.shared.bindEligibility(to: store)
+        // Screenshots the system takes show up in the downloads list by themselves (Arc's Library button).
+        ScreenshotWatcher.shared.start(store: store)
         store.tidyTabTitlesChanged = { enabled in if !enabled { TidyTitlesService.shared.cancelAll() } }
         TidyTabsService.shared.titlesUnavailable = { TidyTitlesService.shared.cancelAll() }
         // A tip takes the tones of the space its browser window is in (the sidebar may be a
@@ -2911,6 +2913,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // bundleIconPut=<id>: that icon on Cra.app as 0.1.54 put it, for a launch to take off (#724).
             if let id = dict["bundleIconPut"] { AppIconManager.shared.putBundleIconForTest(id); return }
             // How far the open downloads list's hover reaches below its rows, and what a press there hits (#575).
+            // fakeScreenshot=<name>: a small picture in ~/Pictures carrying macOS's screen-capture mark, as
+            // ⇧⌘4 leaves one, for Spotlight to find; fakeScreenshot=-<name> deletes it again.
+            if let name = dict["fakeScreenshot"] {
+                ScreenshotWatcher.writeFakeScreenshot(named: name)
+                return
+            }
+            // downloadsList=<label>: the hover list's rows, oldest first, screenshots marked (Arc's Library button).
+            if let label = dict["downloadsList"] {
+                let rows = DownloadHistory.shared.recent.map { row -> String in
+                    if case .finished(let e) = row, DownloadHistory.shared.isScreenshot(e) { return "screenshot:" + row.name }
+                    return row.name
+                }
+                CraLog.note("downloads list \(label): \(rows.joined(separator: " | "))")
+                return
+            }
             if let label = dict["downloadsTray"] {
                 let tray = (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.hoverReadout ?? "none"
                 CraLog.note("downloads tray \(label): open=\(main.sidebarUI.downloadsListOpen) \(tray)")

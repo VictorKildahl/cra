@@ -32,13 +32,19 @@ final class DownloadHistory {
     }
 
     private(set) var live: [Live] = []
+    /// Screenshots the system took lately, listed with the downloads in the hover list (ScreenshotWatcher).
+    var screenshots: [Entry] = []
+    /// Hide from Cra on a screenshot: it stays off the list and Library ▸ Media.
+    @ObservationIgnored var hideScreenshot: (String) -> Void = { _ in }
     /// When a download last stopped running (finished, failed or cancelled), for the bin.
     @ObservationIgnored private(set) var lastEnded: Date?
 
     /// The hover list: newest downloads, oldest first: files still on disk, and running, failed
     /// or cancelled ones.
     var recent: [Listed] {
-        DownloadList.tray(entries: entries, live: live, limit: Self.listLimit) { FileManager.default.fileExists(atPath: $0) }
+        DownloadList.tray(entries: entries, live: live, screenshots: screenshots, limit: Self.listLimit) {
+            FileManager.default.fileExists(atPath: $0)
+        }
     }
 
     /// Library ▸ Downloads: every download, newest first, running ones included (#245).
@@ -100,6 +106,9 @@ final class DownloadHistory {
     /// Arc's Hide from Arc: the row leaves both lists, the file stays where it is.
     func hide(_ row: Listed) {
         switch row {
+        case .finished(let e) where isScreenshot(e):
+            screenshots.removeAll { $0.id == e.id }
+            hideScreenshot(e.path)
         case .finished(let e):
             entries.removeAll { $0.id == e.id }
             file.save(entries)
@@ -112,9 +121,17 @@ final class DownloadHistory {
     func moveToTrash(_ e: Entry) {
         NSWorkspace.shared.recycle([URL(fileURLWithPath: e.path)]) { [weak self] _, error in
             guard error == nil else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.hide(.finished(e)) } }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if self.isScreenshot(e) { self.screenshots.removeAll { $0.id == e.id } } else { self.hide(.finished(e)) }
+                }
+            }
         }
     }
+
+    /// A row the screenshot feed put there, not a download.
+    func isScreenshot(_ e: Entry) -> Bool { screenshots.contains { $0.id == e.id } }
 
     @discardableResult
     func add(path: String, profile: String? = nil) -> Entry {

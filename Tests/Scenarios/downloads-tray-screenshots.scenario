@@ -1,0 +1,22 @@
+# A screenshot the system takes shows up by itself in the list that hovering the Library button
+# opens, next to the downloads, as Arc's Library button had it (byearc's "Screenshots in Library").
+# Spotlight finds it by macOS's screen-capture mark, so Library ▸ Media's Show Media (off here, as in
+# a new data folder) doesn't hold it back, and no folder is read to list it. The picture goes in the
+# real ~/Pictures (Spotlight doesn't index a throwaway home) and is deleted at the end.
+budget rss=600 stalls50=5
+cra://debug?fakeScreenshot=Cra%20scenario%20screenshot.png
+expect-log fake screenshot: Cra scenario screenshot.png
+# Spotlight's live update can take half a minute: ask once a second for up to a minute.
+pace 1
+repeat 60 cra://debug?downloadsList=shown
+pace 0.2
+expect-log downloads list shown: .*screenshot:Cra scenario screenshot.png
+cra://debug?downloads=1
+wait 1
+cra://debug?downloadsTray=open
+expect-log downloads tray open: open=true
+cra://debug?downloads=0
+cra://debug?fakeScreenshot=-Cra%20scenario%20screenshot.png
+wait 1
+cra://debug?downloadsList=deleted
+reject-log downloads list deleted: .*screenshot:Cra scenario screenshot.png
