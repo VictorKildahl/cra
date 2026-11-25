@@ -276,6 +276,17 @@ struct ModelFixtureTests {
         #expect(!loaded.isRefused(folder: "aeblfdkhhhdcdjpifhhbdiojplfjncoa", inProfile: "Profile 9"))
     }
 
+    /// imported-browsers.json (#757): the browsers imported from, whose own folders Cra may read
+    /// at launch; a browser listed twice loads once, and it saves as a plain array.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/757"))
+    func importedBrowsersLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("imported-browsers.json", as: ImportedBrowsers.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        #expect(try Self.encoder.encode(loaded) == Self.data("recorded", "imported-browsers.json").dropLast())
+        #expect(loaded.contains("chrome") && !loaded.contains("brave"))
+    }
+
     // MARK: What the old shapes turn into
 
     @Test func legacySidebarGetsWhatTheStoreRepairsFrom() throws {

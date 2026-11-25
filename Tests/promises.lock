@@ -1687,6 +1687,12 @@
 #752   Tests/Scenarios/extension-action-fds-held.scenario  121e1d606f04
 #756   Tests/FieldEditorSelectionTests.swift::longAddressShowsItsStart  f9dc277dacc7
 #756   Tests/FieldEditorSelectionTests.swift::startShownWhenFieldWasScrolledToTheEnd  b1b17fac4a60
+#757   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::importedBrowsersLoadAsRecorded  b7875048db3a
+#757   Packages/CraCore/Tests/CraCoreTests/OtherBrowserDataTests.swift::connectorsComeOnlyFromSystemFoldersAndImportedBrowsers  ee41b8746277
+#757   Packages/CraCore/Tests/CraCoreTests/OtherBrowserDataTests.swift::crasFromBeforeTheFixKeepTheirConnectors  8c3347259d0a
+#757   Packages/CraCore/Tests/CraCoreTests/OtherBrowserDataTests.swift::importListLooksOnlyAtEachBrowsersOwnFolder  b66df131ce14
+#757   Tests/ExtensionStoreMigrationTests.swift::pinnedComeOnlyFromAnImportedBrowser  b7f8251749e1
+#757   Tests/StoreTests.swift::importListReadsNothingInsideABrowsersFolder  38da5e1c72aa
 #758   Packages/CraCore/Tests/CraCoreTests/MeetingCardStepTests.swift::aCardWhoseTileLeftTheScreenGoes  a1143e7ac460
 #758   Packages/CraCore/Tests/CraCoreTests/MeetingCardStepTests.swift::aTileWithNoCallLeavesAnotherTilesCard  ccecdef775a7
 #758   Packages/CraCore/Tests/CraCoreTests/MeetingCardStepTests.swift::onlyATileOnScreenPutsTheCardUp  622ade989d5e

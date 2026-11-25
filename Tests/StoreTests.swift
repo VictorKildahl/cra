@@ -43,6 +43,7 @@ enum StoreTests {
         try safariImport()
         deletedBrowserStillImports()
         protectedBrowserAsksForFullDiskAccess()
+        importListReadsNothingInsideABrowsersFolder()
         signedInChromeProfileImports()
         chromiumManifestV2Import()
         zenFaviconSize()
@@ -967,6 +968,36 @@ enum StoreTests {
         let missing = ImportSource(id: "brave", name: "Brave", bundleID: "app.cra.tests.not-installed", kind: .chromium,
                                    dataDir: root.deletingLastPathComponent().appendingPathComponent("cra-none-\(UUID().uuidString)"))
         expect(!missing.isAvailable && !missing.needsFullDiskAccess, "a browser never used is neither offered nor asks")
+    }
+
+    // promise: #757
+    /// The import list decides from a browser's own folder being there, never from what's inside:
+    /// reading inside Chrome's folder on first launch made macOS show "Data Access Blocked … tried
+    /// to access your data from other apps" before anything was picked (#757). A folder with
+    /// nothing readable in it is offered; reading it waits until it's picked.
+    private static func importListReadsNothingInsideABrowsersFolder() {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("cra-757-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try? fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.path)
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+            try? fm.removeItem(at: root)
+        }
+        let chrome = ImportSource(id: "chrome", name: "Chrome", bundleID: "app.cra.tests.not-installed", kind: .chromium, dataDir: root)
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+        expect(chrome.isAvailable, "an empty Chrome folder that's there is offered: whether it holds a profile shows once it's picked")
+        try? fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.path)
+        expect(chrome.isAvailable, "and so is one macOS won't let Cra read")
+        let arcHome = fm.temporaryDirectory.appendingPathComponent("cra-757-arc-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: arcHome, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: arcHome) }
+        let arc = ImportSource(id: "arc", name: "Arc", bundleID: "app.cra.tests.not-installed", kind: .arc,
+                               dataDir: arcHome.appendingPathComponent("User Data"), ownFolder: arcHome)
+        expect(arc.isAvailable, "Arc is offered from its own folder, not from StorableSidebar.json inside it")
+        let gone = ImportSource(id: "brave", name: "Brave", bundleID: "app.cra.tests.not-installed", kind: .chromium,
+                                dataDir: root.appendingPathComponent("never-made"))
+        expect(!gone.isAvailable, "a browser whose folder isn't there is listed dimmed")
     }
 
     /// Chrome signed in to a Google account keeps the bookmarks saved there in AccountBookmarks,
