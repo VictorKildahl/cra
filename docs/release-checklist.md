@@ -462,6 +462,10 @@ built release app with a test profile. Note anything that fails in the release's
 - **#753, dialog corners on macOS 15:** on a Mac with macOS 15, press ⌘Q (with Ask before quitting on) and open
   New Profile. No white shows in the dialog's corners: the dark card rounds with the sheet. On macOS 26 they
   keep Arc's rounder corners. `DialogCornerTests` pins the radius; only macOS 15's own sheet shows the fit.
+- **#745, Handoff to the iPhone:** with the release app in front on a web page, swipe up to the app
+  switcher on an iPhone signed in to the same Apple Account. A Handoff suggestion at the bottom opens
+  that page in the iPhone's default browser. Another tab's page replaces it; an incognito window or a
+  chrome:// page offers none. `handoff-offers-page` pins what Cra offers; only a phone shows it arrives.
 - **#261, #195:** with Stage Manager on, use Cra full screen with 20 or more visited tabs for ten
   minutes. No grey pane flashes and Stage Manager shows no window coming and going. After a
   minute pass, the GPU helper's footprint (`footprint -p <pid>`) still drops as the hidden tabs

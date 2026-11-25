@@ -1,0 +1,34 @@
+# promise: #745
+# Handoff from the Mac: the front window's page is offered to the user's iPhone, whose app switcher shows it to open
+# in its browser, as it does Safari's, Chrome's and Firefox's. Cra offered nothing: Chrome's own sender follows
+# Chrome's browser windows, which Cra never shows. The offer follows the tab's address, and a page an iPhone can't
+# open (chrome://) or an incognito window offers nothing. The iPhone's side needs a real one: release checklist.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://open?url=${PAGE}?n=handoff-one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?handoff=page
+expect-log handoff page: http://127\.0\.0\.1:[0-9]+/page\.html\?n=handoff-one$
+
+# The tab goes on to another page: that one is offered.
+cra://navigate?url=${PAGE}?n=handoff-two
+wait 2
+cra://debug?handoff=navigated
+expect-log handoff navigated: http://127\.0\.0\.1:[0-9]+/page\.html\?n=handoff-two$
+
+# A page an iPhone can't open offers nothing.
+cra://navigate?url=chrome://version
+wait 2
+cra://debug?handoff=chrome
+expect-log handoff chrome: none$
+
+# Back on a web page, then an incognito window in front: nothing, as in Chrome.
+cra://navigate?url=${PAGE}?n=handoff-three
+wait 2
+cra://debug?handoff=again
+expect-log handoff again: http://127\.0\.0\.1:[0-9]+/page\.html\?n=handoff-three$
+cra://debug?incognitoWindow=${PAGE}?n=handoff-secret
+wait 3
+cra://debug?handoff=incognito
+expect-log handoff incognito: none$

@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     private var bootstrapped = false
     private var extensionCommandMonitor: Any?
+    /// The front window's page offered to the user's iPhone through Handoff (#745).
+    private lazy var handoff = HandoffPublisher { [weak self] in self?.handoffPage() }
     private var pendingURLs: [String] = []
     private var settingsWindow: NSWindow?
     private var settingsController: SettingsWindowController?
@@ -157,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         installKeyFallbackMonitor()
         installSideButtonKeyMonitor()
         installCommandFileWatcher()
+        handoff.start()
         MCPServer.shared.start(app: self)
         composition.startPeriodicWork { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
@@ -2780,6 +2783,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // What the Dock tile and the ⌘-Tab switcher show for Cra (#319).
             // What the last look at the sync folder found, and whether a mix is being waited out (#378).
             if let label = dict["sync"] { CraLog.note("sync \(label): \(composition.sync.readout())"); return }
+            // handoff=<label>: the page Handoff offers the user's iPhone now (#745).
+            if let label = dict["handoff"] { CraLog.note("handoff \(label): \(handoff.offered?.absoluteString ?? "none")"); return }
             if let label = dict["dockTile"] { CraLog.note("dock tile \(label): \(AppIconManager.shared.dockTileReadout())"); return }
             // appIcon=<id>: picks an icon without remembering it; bundleIcon=<label>: Finder's icon on the app.
             if let id = dict["appIcon"] { AppIconManager.shared.select(id, remember: false); return }
@@ -3739,6 +3744,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         CraLog.note("extension command \(binding.extensionID.prefix(8)): opens its popup")
         main.runExtensionAction(binding.extensionID)
         return true
+    }
+
+    /// The page Handoff offers: a Little Window's or Peek's while it is in front, else the active window's selected tab.
+    private func handoffPage() -> HandoffPublisher.Page? {
+        if let little = keyLittleWindow {
+            return .init(address: little.state.url, offTheRecord: little.browser?.isIncognito ?? false)
+        }
+        guard let main else { return nil }
+        return .init(address: main.selectedTab?.tab?.url ?? "", offTheRecord: main.isIncognito)
     }
 
     func handleReservedKey(_ event: NSEvent) -> Bool {

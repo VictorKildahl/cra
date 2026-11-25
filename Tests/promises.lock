@@ -1685,6 +1685,9 @@
 #743   Tests/Scenarios/folder-preview-adjacent.scenario  c80a395285c5
 #744   Packages/CraCore/Tests/CraCoreTests/ExtensionCommandsTests.swift::anExtensionGetsAKeyWhoseCraRowIsDimmed  b6fadb5161fa
 #744   Tests/Scenarios/extension-shortcut-over-cra.scenario  6045cd38b6be
+#745   Packages/CraCore/Tests/CraCoreTests/HandoffPageTests.swift::aWebPageIsOfferedToOtherDevices  0c1c6af09627
+#745   Packages/CraCore/Tests/CraCoreTests/HandoffPageTests.swift::pagesAnIPhoneCantOpenAndIncognitoOnesStayOnTheMac  04041f5221b0
+#745   Tests/Scenarios/handoff-offers-page.scenario  a95b9040427f
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::holdsFreeDescriptorsUntilReleased  a61f6e043252
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::leavesAFileOfMacOSsOwnOpenAtLaunch  6dd77a599e1c
 #752   Packages/CraCore/Tests/CraCoreTests/DevToolsPipeDescriptorsTests.swift::leavesAFileSomethingElsePutThere  0621aafae1ca
