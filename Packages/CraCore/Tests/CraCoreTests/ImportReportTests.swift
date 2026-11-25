@@ -25,7 +25,7 @@ struct ImportReportTests {
         #expect(ImportReport(.favorites, copied: 1).summary == "1 of 1 favorite")
     }
 
-    /// Each tile counts its own kind (Andrei, 24 Nov 2026); the archive's are tabs, as its tile
+    /// Each tile counts its own kind, so no number mixes favorites with tabs; the archive's are tabs, as its tile
     /// says before the import.
     @Test(arguments: [
         (ImportKind.tabs, "42 of 42 tabs"),
@@ -44,7 +44,7 @@ struct ImportReportTests {
     }
 
     /// A tile too narrow for "1500 of 1501 tabs ›" drops the noun, at the same font size as its
-    /// neighbours (Andrei, 24 Nov 2026); with nothing read it keeps its words.
+    /// neighbours; with nothing read it keeps its words.
     @Test func theShortWordingDropsTheNoun() {
         #expect(ImportReport(.archive, copied: 1500, skipped: [Self.page("https://example.com/old", .archive)]).shortSummary == "1500 of 1501")
         #expect(ImportReport(.favorites, copied: 1).shortSummary == "1 of 1")
@@ -91,7 +91,7 @@ struct ImportReportTests {
         #expect(reports[.favorites].summary == "2 of 3 favorites")
     }
 
-    /// Two spaces that each own the same favorite bring two (Andrei, 24 Nov 2026): the source holds
+    /// Two spaces that each own the same favorite bring two: the source holds
     /// two, whatever profile they sign in on.
     @Test func theSameFavoriteInTwoListsCountsTwice() {
         let left = Self.page("about:blank", .favorites)
@@ -131,7 +131,7 @@ struct ImportReportTests {
     }
 
     /// Why an import leaves an address behind (#742): every address with something behind it is
-    /// listed; a blank or new tab page was never a tab and isn't (Andrei, 24 Nov 2026).
+    /// listed; a blank or new tab page was never a tab and isn't, so an empty tab doesn't read as a loss.
     @Test(arguments: [
         ("https://example.com/", nil), ("file:///Users/me/notes.html", nil), ("javascript:void(0)", nil), ("chrome://settings/", nil),
         ("about:blank", nil), ("about:newtab", nil), ("about:home", nil), ("chrome://newtab/", nil), ("", nil),

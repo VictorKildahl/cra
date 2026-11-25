@@ -472,7 +472,7 @@ enum StoreTests {
     // MARK: Import reports
 
     /// After an import the tabs, favorites and archive tiles each read "N of M" of their own kind,
-    /// on the base each showed before the import (Andrei, 24 Nov 2026). Arc's profile leaves
+    /// on the base each showed before the import, so the numbers match. Arc's profile leaves
     /// nothing out, and a second import of it counts what Cra already has as copied, not as skipped.
     @MainActor
     private static func arcImportReport() throws {
@@ -645,7 +645,7 @@ enum StoreTests {
         expect(plan.spaces.allSatisfy(\.skipped.isEmpty), "Yab's blank page is not listed")
     }
 
-    /// The favorites tile counts favorites as the source holds them (Andrei, 24 Nov 2026): two Yab
+    /// The favorites tile counts favorites as the source holds them: two Yab
     /// spaces that each own a github.com tile bring two, the shared tiles every space shows bring
     /// theirs once. Both spaces here sign in on one Chromium profile.
     private static func yabFavoritesCountAsYabHoldsThem() throws {
