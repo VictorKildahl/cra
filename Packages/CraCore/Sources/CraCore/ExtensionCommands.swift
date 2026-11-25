@@ -64,6 +64,17 @@ public enum ExtensionCommands {
         !craMenuRanIt && !craRowHidden
     }
 
+    /// Whether a key a page is about to get goes to an extension's shortcut first (GitHub #744). In Chrome and Arc an
+    /// extension's shortcuts come before the page. Cra hands ⌘ keys to the page that has the keyboard before anything
+    /// else sees them (Chrome's rule for pages), so they reach Cra again only here, before the page and after it. A key
+    /// Cra has no command for is the extension's; one Cra has follows `extensionTakes`, where a row that can run
+    /// keeps it. `craRowCanRun`: whether Cra's command on the key can run where the key went (its menu row is enabled;
+    /// true for a command with no row), nil when Cra has none.
+    public static func extensionTakesBeforePage(craRowCanRun: Bool?, craRowHidden: Bool) -> Bool {
+        guard let craRowCanRun else { return true }
+        return extensionTakes(craMenuRanIt: craRowCanRun, craRowHidden: craRowHidden)
+    }
+
     /// The commands that are a click on the extension's toolbar button.
     public static func opensPopup(_ command: String) -> Bool {
         ["_execute_action", "_execute_browser_action", "_execute_page_action"].contains(command)

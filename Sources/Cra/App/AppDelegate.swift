@@ -3722,9 +3722,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return true
     }
 
+    /// A key a page in a browser window is about to get (the engine's key hook, before the page): an extension's shortcut
+    /// comes first, as in Chrome and Arc. Cra hands ⌘ keys to the page that has the keyboard before the app-wide watch
+    /// that runs extensions' shortcuts sees them (CraApplication.sendEvent), so the clipper's ⌘⇧O, and any ⌘ key set for
+    /// "Activate the extension", reached only the page and then Cra's own command (#744). A key whose Cra row can run
+    /// here stays Cra's.
+    func runExtensionCommandBeforePage(_ event: NSEvent) -> Bool {
+        // Typing: an extension's shortcut always holds ⌘, ⌥ or ⌃.
+        guard !event.modifierFlags.isDisjoint(with: [.command, .option, .control]) else { return false }
+        let action = bindings.action(for: event)
+        let hidden = action.map { !FileMenu.shows($0.id, tabSelected: store.selectedTabID != nil) } ?? false
+        let canRun = action.map { a in menuRow(a.id).map { validateMenuItem($0) } ?? true }
+        guard ExtensionCommands.extensionTakesBeforePage(craRowCanRun: canRun, craRowHidden: hidden) else { return false }
+        return runExtensionCommand(event)
+    }
+
+    /// The menu bar's row for one of Cra's commands, if it has one.
+    private func menuRow(_ id: String) -> NSMenuItem? {
+        func find(_ menu: NSMenu) -> NSMenuItem? {
+            for item in menu.items {
+                if item.representedObject as? String == id, item.target === self { return item }
+                if let sub = item.submenu, let found = find(sub) { return found }
+            }
+            return nil
+        }
+        return NSApp.mainMenu.flatMap(find)
+    }
+
+    /// The key press an extension's shortcut last ran for: the app-wide watch and the page's key hook can both see one.
+    private var extensionCommandPress: TimeInterval?
+
     private func runExtensionCommand(_ event: NSEvent) -> Bool {
         let held = event.modifierFlags.intersection([.command, .option, .control])
         guard !held.isEmpty, !event.isARepeat, let main, event.window === main.window || event.window?.parent === main.window else { return false }
+        if extensionCommandPress == event.timestamp { return true }
         // chrome://extensions/shortcuts records a key by its press: Chrome holds its shortcuts back there.
         if main.selectedTab?.tab?.url.hasPrefix("chrome://extensions") == true { return false }
         let path = store.profilePath(profile: main.focusedSpace.profileID)
@@ -3733,6 +3764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard !bindings.isEmpty,
               let binding = ExtensionCommands.binding(in: bindings, characters: event.charactersIgnoringModifiers ?? "",
                                                       keyCode: event.keyCode, modifiers: event.modifierFlags.rawValue) else { return false }
+        extensionCommandPress = event.timestamp
         guard ExtensionCommands.opensPopup(binding.command) else {
             // Its own command: the engine delivers it to the extension with this page as the active tab (engine -19).
             let page = main.currentBrowser

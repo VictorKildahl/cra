@@ -2640,6 +2640,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 return false
             }
         }
+        // An extension's shortcut comes before the page, as in Chrome and Arc: ⌘ keys reach Cra only here (#744).
+        if app.runExtensionCommandBeforePage(event) { return true }
         return app.handleReservedKey(event)
     }
     func browserManagerHandleUnhandledKey(_ event: NSEvent) -> Bool { app.handleUnhandledKey(event) }
