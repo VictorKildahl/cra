@@ -125,7 +125,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .began:
             guard let page = shownPage else { return }
             let id = page.tabID
-            page.takeSnapshot { [weak self] image in
+            page.takeSnapshot(visibleHeight: openPageHeight) { [weak self] image in
                 guard let self, self.barSwipeOpensRow, self.switcher == nil else { return }
                 if let image { self.store.setSnapshot(image, for: id) }
                 _ = self.prepareSwitcher()

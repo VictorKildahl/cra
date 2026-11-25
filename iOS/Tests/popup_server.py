@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
 (PasskeyTests), a block list and the script it stops (BlockingTests), a plain-http page and one to come back to from a refused address (PlainHTTPTests),
-links and a script redirect to other apps' addresses (ExternalLinkTests), a page naming two icons (TabSwitcherIconTests) and, given a certificate, the same pages over
+links and a script redirect to other apps' addresses (ExternalLinkTests), a page naming two icons
+(TabSwitcherIconTests), a long page with a link to a short one (CollapseBottomBarTests) and, given
+a certificate, the same pages over
 HTTPS with that certificate, which the simulator can't verify (CertificateTests). No external
 requests."""
 import argparse
@@ -117,6 +119,12 @@ function createPasskey() {
             # A picture to long-press for WebKit's image menu (LinkMenuTests, Save to Photos, #713).
             self.page('<title>Picture</title><h1>Picture</h1>'
                       '<img alt="Square" src="/picture.png" style="width:240px;height:240px">')
+        elif url.path == '/tall':
+            # Longer than the screen, with a link to one that fits: the bottom bar a scroll puts
+            # away comes back on the shorter page (CollapseBottomBarTests).
+            self.page('<title>Tall Fixture</title><h1>Tall Fixture</h1>'
+                      '<p><a href="/plain" style="font-size:32px">Short page</a></p>'
+                      '<div style="height:4000px"></div>')
         elif url.path == '/picture.png':
             self.image(square_png())
         elif url.path == '/icon-shapes':

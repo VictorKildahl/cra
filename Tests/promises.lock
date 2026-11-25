@@ -1018,8 +1018,8 @@
 #502   Tests/Scenarios/command-bar-see-through.scenario  ef7a0d58034f
 #503   Tests/Scenarios/extension-window-focus.scenario  93c9f59c585d
 #504   Tests/PolicyTests.swift::iPhoneDefaultBrowser  aaeea0777637
-#505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::aSiteWithTheSwitchOffShowsTheBarItArrivesWithout  f83a1077e558
-#505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::withTheSwitchOffTheBarNeverCollapses  64abe6c45e72
+#505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::aSiteWithTheSwitchOffShowsTheBarItArrivesWithout  9cd098d59cb1
+#505   Packages/CraCore/Tests/CraCoreTests/MobileBarCollapseTests.swift::withTheSwitchOffTheBarNeverCollapses  168907094e97
 #505   Packages/CraCore/Tests/CraCoreTests/MobileKeyboardTests.swift::aKeyboardThatFadesOutWhereItIsCoversNothing  81efb1858ad7
 #505   iOS/CraUITests/BrowserTests.swift::testThePillOpensSearchAndATapAboveClosesIt  d33d503d7991
 #505   iOS/CraUITests/BrowserTests.swift::testTypingAnAddressAndGoOpensThePage  5cc32d9e2a78

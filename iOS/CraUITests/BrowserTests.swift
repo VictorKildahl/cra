@@ -1023,6 +1023,164 @@ final class CollapseBottomBarTests: BrowserTestCase {
         waitForBarOnScreen()
         keep("collapse-off")
     }
+
+    /// The bar rides with the finger: a drag that ends pointing down closes it however little the
+    /// bar itself got, and a drag back up opens it again.
+    func testTheBarFollowsTheDragAndSnapsOpenOrClosed() {
+        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        waitForPage("Tall")
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable)
+        let page = app.webViews.firstMatch
+        let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -200)),
+                    withVelocity: .slow, thenHoldForDuration: 0.3)
+        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
+        wait(for: [gone], timeout: 5)
+        keep("bar closed")
+        // Back up the page: the bar comes with the finger and the direction it was let go in.
+        let back = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        back.press(forDuration: 0.05, thenDragTo: back.withOffset(CGVector(dx: 0, dy: 60)),
+                   withVelocity: .slow, thenHoldForDuration: 0.3)
+        let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [shown], timeout: 5)
+        keep("bar follows the drag")
+    }
+
+    /// Flinging to the very bottom of a page and letting its bounce run leaves the bar closed:
+    /// the page's own offset used to count as scrolling up, so the bounce brought the bar back
+    /// and the page jiggled as its inset changed under it.
+    func testABounceAtTheBottomDoesNotBringTheBarBack() {
+        launch(["-CraOpenURL", Self.page("End") + "<div/style=height:2400px></div>", "-CraSearch", "NO"])
+        waitForPage("End")
+        let pill = app.buttons["bar-search"]
+        let page = app.webViews.firstMatch
+        for _ in 0..<3 {
+            page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                .press(forDuration: 0.05,
+                       thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)),
+                       withVelocity: .fast, thenHoldForDuration: 0)
+        }
+        sleep(2)
+        XCTAssertFalse(pill.isHittable, "the bar came back from the bounce at the bottom")
+        keep("bottom of the page")
+    }
+
+    /// A page exactly one screen tall (100svh) has no scroll of its own, so its bar cannot be
+    /// put away: hiding it would reveal nothing the page could scroll to.
+    func testAFullHeightPageKeepsTheBar() {
+        let (pill, web) = openFullHeightPage()
+        dragThePage(web, by: -200)
+        sleep(1)
+        XCTAssertTrue(pill.isHittable, "the bar left a page with nothing to scroll")
+        keep("full height page keeps its bar")
+    }
+
+    /// A link from a page taller than the screen, its bar away, to one that fits its screen:
+    /// the bar comes back, since there is nothing left behind it to hide.
+    func testAPageThatFitsBringsTheBarBack() {
+        let base = ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765"
+        launch(["-CraOpenURL", base + "/tall", "-CraSearch", "NO"])
+        waitForPage("Tall Fixture")
+        let pill = app.buttons["bar-search"]
+        let web = app.webViews.firstMatch
+        dragThePage(web, by: -80)
+        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
+        wait(for: [gone], timeout: 5)
+        let link = web.links["Short page"]
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        link.tap()
+        waitForPage("Plain HTTP Fixture")
+        let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [shown], timeout: 5)
+        keep("short page brings the bar back")
+    }
+
+    /// A page whose own content shrinks until it fits, under a bar that was away, brings it
+    /// back: the same rule, without a new address.
+    func testAPageThatShrinksToFitBringsTheBarBack() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Shrinking</title>"
+                + "<h1>Shrinking</h1>"
+                + "<details/open><summary/style=font-size:32px>Shrink</summary>"
+                + "<div/style=height:4000px></div></details>", "-CraSearch", "NO"])
+        waitForPage("Shrinking")
+        let pill = app.buttons["bar-search"]
+        let web = app.webViews.firstMatch
+        dragThePage(web, by: -80)
+        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
+        wait(for: [gone], timeout: 5)
+        web.buttons["Shrink"].tap()
+        let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [shown], timeout: 5)
+        keep("shrinking page brings the bar back")
+    }
+
+    /// A page that starts one screen tall keeps its bar; grown taller it scrolls and the bar
+    /// can go with it; shrunk back to one screen, the bar returns and stays. Its summary is
+    /// fixed, so it adds no height while the page is closed and stays reachable once scrolled.
+    func testAGrowingPageLetsTheBarHideAndFitsAgainToLockIt() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Grow</title>"
+                + "<body/style=margin:0>"
+                + "<section/style=height:100svh><h1>Grow</h1></section>"
+                + "<details><summary/style=position:fixed;top:80px;right:24px;font-size:32px>More</summary>"
+                + "<div/style=height:2000px></div></details>", "-CraSearch", "NO"])
+        waitForPage("Grow")
+        let pill = app.buttons["bar-search"]
+        let web = app.webViews.firstMatch
+        // One screen tall: nothing to scroll, so the bar stays.
+        dragThePage(web, by: -200)
+        sleep(1)
+        XCTAssertTrue(pill.isHittable, "the bar left a page with nothing to scroll")
+        // Grown taller than the screen: the page scrolls again and the bar goes with the drag.
+        web.buttons["More"].tap()
+        sleep(1)
+        dragThePage(web, by: -120)
+        let gone = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: pill)
+        wait(for: [gone], timeout: 5)
+        // Back to one screen: the bar returns, and a drag leaves it in place.
+        web.buttons["More"].tap()
+        let shown = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pill)
+        wait(for: [shown], timeout: 5)
+        dragThePage(web, by: -200)
+        sleep(1)
+        XCTAssertTrue(pill.isHittable, "the bar left a page that fits again")
+        keep("grown and shrunk page")
+    }
+
+    /// A slow drag from the middle of the page, by `dy` points, held a moment before it lets go.
+    private func dragThePage(_ web: XCUIElement, by dy: CGFloat) {
+        let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: dy)),
+                    withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+
+    /// Flicks that land while the bar is still settling from the last one, up and down in turn,
+    /// leave it at one of its ends every time.
+    func testFlicksLandingOnASettleLeaveTheBarAtAnEnd() {
+        launch(["-CraOpenURL", Self.page("Tall") + "<div/style=height:5000px></div>", "-CraSearch", "NO"])
+        waitForPage("Tall")
+        let web = app.webViews.firstMatch
+        let start = web.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        for _ in 0..<6 {
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -20)),
+                        withVelocity: .fast, thenHoldForDuration: 0)
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 20)),
+                        withVelocity: .fast, thenHoldForDuration: 0)
+        }
+        sleep(1)
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable || app.buttons["bar-reveal"].exists, "the bar was left between its ends")
+    }
+
+    /// A page exactly one screen tall (100svh), opened, its bar in place.
+    private func openFullHeightPage() -> (pill: XCUIElement, web: XCUIElement) {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Full</title>"
+                + "<body/style=margin:0><section/style=height:100svh;background:%23eef><h1>Full</h1></section>", "-CraSearch", "NO"])
+        waitForPage("Full")
+        let pill = app.buttons["bar-search"]
+        XCTAssertTrue(pill.isHittable)
+        return (pill, app.webViews.firstMatch)
+    }
 }
 
 final class ReadingTests: BrowserTestCase {

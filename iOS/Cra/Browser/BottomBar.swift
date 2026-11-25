@@ -25,7 +25,7 @@ final class BottomBar: UIView {
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
     var ringsMenu = false {
-        didSet { menuRing.alpha = ringsMenu ? 1 : 0 }
+        didSet { applyMode() }
     }
 
     /// 1 with every control showing; 0 while the search sheet is open and only the pill's place
@@ -34,6 +34,20 @@ final class BottomBar: UIView {
         didSet {
             applyMode()
         }
+    }
+
+    /// 0 with the bar open, 1 with it closed away along the safe area. Its controls fade out with
+    /// it and stop taking touches, so the strip it leaves is only the way back.
+    var collapseProgress: CGFloat = 0 {
+        didSet {
+            guard collapseProgress != oldValue else { return }
+            applyMode()
+        }
+    }
+
+    /// 1 while the pill is the page's, 0 while the search sheet's field stands in for it.
+    var pillVisibility: CGFloat = 1 {
+        didSet { applyMode() }
     }
 
     override init(frame: CGRect) {
@@ -61,17 +75,28 @@ final class BottomBar: UIView {
         applyMode()
     }
 
-    /// Shows the page's controls or the tab switcher's. Animates inside an animation block.
+    /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
+    /// inside an animation block.
     private func applyMode() {
         let visible = controlsVisibility
+        let fade = 1 - collapseProgress
         let tabs = mode == .tabs
-        tabsButton.alpha = tabs ? 0 : visible
-        menuButton.alpha = tabs ? 0 : visible
-        spacesButton.alpha = tabs ? visible : 0
-        settingsButton.alpha = tabs ? visible : 0
+        tabsButton.alpha = (tabs ? 0 : visible) * fade
+        menuButton.alpha = (tabs ? 0 : visible) * fade
+        spacesButton.alpha = (tabs ? visible : 0) * fade
+        settingsButton.alpha = (tabs ? visible : 0) * fade
+        // The pill has its own visibility: it is the search field's starting point, and the field
+        // stands in for it while the sheet is open.
+        pill.alpha = pillVisibility * fade
+        menuRing.alpha = (ringsMenu ? 1 : 0) * fade
+        // Faded or away, the controls take no touches: the strip along the safe area is the way
+        // back, not a half-faded button.
+        let live = visible > 0.01 && collapseProgress < 0.01
+        [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach { $0.isUserInteractionEnabled = live }
         // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
         // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd). The
-        // empty home screen's bar floats the same way.
+        // empty home screen's bar floats the same way. The blur goes with the bar, not the fade:
+        // its strip is all that is left of the bar when it is closed.
         let floats = tabs || overBackdrop
         blur.alpha = floats ? 0 : visible
         pill.backgroundColor = tabs ? Palette.switcherPillFill : overBackdrop ? Palette.homeButtonFill : Palette.barControlFill

@@ -5,7 +5,15 @@ import WebKit
 protocol WebPageDelegate: AnyObject {
     func webPageDidChange(_ page: WebPage)
     func webPage(_ page: WebPage, didFinishLoading success: Bool)
-    func webPage(_ page: WebPage, didScrollBy delta: CGFloat, atTop: Bool)
+    func webPage(_ page: WebPage, didDragBy drag: CGFloat)
+    /// A finger came down on the page: the bottom bar's next travel is this drag's own.
+    func webPageDidBeginDrag(_ page: WebPage)
+    /// The page's content changed height: it may now fit its screen, or have more to scroll.
+    func webPageDidResizeContent(_ page: WebPage)
+    /// The finger let go: the bottom bar settles by the direction it last travelled in.
+    func webPageDidEndDrag(_ page: WebPage)
+    /// The page reached its top: the bottom bar is always there.
+    func webPageDidReachTop(_ page: WebPage)
     /// Pull to refresh: how far the page is pulled below its top, for the band behind it.
     func webPage(_ page: WebPage, didPull pull: CGFloat)
     /// The pull's finger let go: the band goes back to the status bar. `full` says the pull
@@ -37,7 +45,9 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     let webKitOwnsInitialNavigation: Bool
     weak var delegate: WebPageDelegate?
     private var observations: [NSKeyValueObservation] = []
-    private var lastOffset: CGFloat = 0
+    /// Where the finger was on the last drag event, to read how far it has moved since: the bar's
+    /// travel comes from the finger, so a bounce or a deceleration moves nothing.
+    private var lastDragTranslation: CGFloat?
     private var pullHaptics = MobilePullHaptics()
     /// How far the page has been pulled down below its top, from the drag's own translation.
     private var pull: CGFloat = 0
@@ -119,6 +129,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             webView.addGestureRecognizer(press)
         }
         webView.scrollView.delegate = self
+        // The bar rides the finger itself, not the scroll view's own events: a page with nothing
+        // to scroll (one exactly as tall as the screen) still drags it away, and a resize of the
+        // page while it moves cannot interrupt the bar's travel.
+        webView.scrollView.panGestureRecognizer.addTarget(self, action: #selector(panChanged(_:)))
         let controller = webView.configuration.userContentController
         controller.add(WeakScriptHandler(self), name: "craBlocked")
         controller.addUserScript(WKUserScript(source: Self.failedRequestScript, injectionTime: .atDocumentStart, forMainFrameOnly: false))
@@ -138,6 +152,12 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             // The band behind the status bar takes these colours (MobileStatusBand, #657).
             webView.observe(\.themeColor) { [weak self] _, _ in self?.changed() },
             webView.observe(\.underPageBackgroundColor) { [weak self] _, _ in self?.changed() },
+            // A page whose content shrinks until it fits its screen has nothing behind the bar
+            // to hide, so its bar comes back (`MobileBarCollapse.contentChanged`).
+            webView.scrollView.observe(\.contentSize) { [weak self] _, _ in
+                guard let self else { return }
+                self.delegate?.webPageDidResizeContent(self)
+            },
         ]
         applyBlocking(for: URL(string: tab.url))
     }
@@ -212,8 +232,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         delegate?.webPageDidChange(self)
     }
 
-    /// The page as a picture, for the tab stack and the tab cards.
-    func takeSnapshot(_ done: @escaping (UIImage?) -> Void) {
+    /// The page as a picture, for the tab stack and the tab cards, `visibleHeight` tall: the page
+    /// with the bar open, so a picture taken with the bar away shows what a reader sees with it in
+    /// place, not the part under it.
+    func takeSnapshot(visibleHeight height: CGFloat, _ done: @escaping (UIImage?) -> Void) {
         // A web view that is hidden, or under a hidden page, snapshots black. That black picture
         // would then be the tab's preview until the next capture, so keep the last good one.
         var view: UIView? = webView
@@ -224,6 +246,8 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         guard webView.window != nil, webView.bounds.width > 0 else { return done(nil) }
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: Double(webView.bounds.width))
+        configuration.rect = CGRect(x: 0, y: 0, width: webView.bounds.width,
+                                    height: min(max(0, height), webView.bounds.height))
         webView.takeSnapshot(with: configuration) { image, _ in done(image) }
     }
 
@@ -352,6 +376,29 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         isPulling = false
         pullHaptics.reset()
         PressHaptics.preparePull()
+        // A finger on the page ends any wait for a place being put back.
+        restoresAtTop = false
+    }
+
+    /// The finger on the page: the bar's travel comes from here, a point for a point.
+    @objc private func panChanged(_ pan: UIPanGestureRecognizer) {
+        switch pan.state {
+        case .began:
+            lastDragTranslation = 0
+            delegate?.webPageDidBeginDrag(self)
+        case .changed:
+            let translation = pan.translation(in: webView.window ?? webView).y
+            if let last = lastDragTranslation, last != translation {
+                // The finger moving up scrolls the page down and closes the bar: positive.
+                delegate?.webPage(self, didDragBy: last - translation)
+            }
+            lastDragTranslation = translation
+        case .ended, .cancelled:
+            lastDragTranslation = nil
+            delegate?.webPageDidEndDrag(self)
+        default:
+            break
+        }
     }
 
     /// The drag's vertical translation in the window, which does not move when the page's frame
@@ -393,12 +440,20 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
-        if restoresAtTop {
+        // A page being put back reports places that are not its saved one on the way (the empty
+        // page's own bounce, the load's jumps). The saved place is a small positive scroll, and
+        // that is the one to put back at the top; a finger on the page ends the wait
+        // (`scrollViewWillBeginDragging`), so a later scroll is never mistaken for it.
+        if restoresAtTop, offset > 0.5, offset < CGFloat(PageHistory.restoreAtTopBelow) {
             restoresAtTop = false
-            if offset > 0.5, offset < CGFloat(PageHistory.restoreAtTopBelow) {
-                pinToTop(scrollView)
-            }
+            pinToTop(scrollView)
             return
+        }
+        // The top of a page always has its bar, however the page got there — but not while a
+        // finger is on the page, which moves the bar itself. A page that fits has nothing to
+        // scroll, so its bar cannot be away in the first place.
+        if !scrollView.isDragging, offset <= 0 {
+            delegate?.webPageDidReachTop(self)
         }
         // A downward drag at the top moves the page's frame, not its content: the scroll view's
         // own downward movement is gathered, and its content is pinned back at the top.
@@ -410,7 +465,6 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
                 pullStartTranslation = dragTranslation(of: scrollView) + offset
             }
             isPulling = true
-            lastOffset = 0
             guard !isPinningScroll else { return }
             let translation = dragTranslation(of: scrollView)
             let pull = max(0, translation - pullStartTranslation)
@@ -436,10 +490,6 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
             delegate?.webPage(self, didPull: pull)
             return
         }
-        let delta = offset - lastOffset
-        lastOffset = offset
-        guard scrollView.isTracking || scrollView.isDecelerating else { return }
-        delegate?.webPage(self, didScrollBy: delta, atTop: offset <= 0)
     }
 }
 

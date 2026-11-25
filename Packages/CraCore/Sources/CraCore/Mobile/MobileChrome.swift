@@ -141,6 +141,14 @@ public enum MobileBottomBar {
                       menu: circle(size.width - sideButtonCenterInset))
     }
 
+    /// The bar's top edge with the bar `progress` of the way down its travel: at its open place,
+    /// a bar above the safe area, at 0, and on the safe area's own line at 1, where only the
+    /// strip along the home indicator is left on screen. Dragged, this is the page's bottom edge.
+    public static func top(in size: CGSize, safeBottom: CGFloat, progress: CGFloat) -> CGFloat {
+        let open = frames(in: size, safeBottom: safeBottom).bar.minY
+        return open + min(1, max(0, progress)) * height
+    }
+
     /// Where a drag up brings back the previous tab rather than opening the tab row (#537): the
     /// tab button and the bar round it, from the screen's edge to halfway to the pill, the bar's
     /// whole height. The button's own 47 pt circle let a thumb that came down beside it open
@@ -168,44 +176,99 @@ public enum MobileBottomBar {
     }
 }
 
-/// Whether scrolling has put the bottom bar away. Site Settings ▸ Collapse Bottom Bar decides
-/// per site whether it ever does: with it off the bar stays, however far the page scrolls.
+/// The bottom bar's place between open and closed while a page is dragged. The bar trails the
+/// finger that scrolls the page from its first point, a little slower than the finger moves, so
+/// the page's own offset never moves it: a bounce at either end and the deceleration after the
+/// finger lifts move nothing. Let go, the direction the finger last travelled in picks the end.
+/// Site Settings ▸ Collapse Bottom Bar decides per site whether the bar may move at all: with it
+/// off the bar stays, however far the page scrolls. A page with nothing to scroll keeps its bar
+/// too: hiding the bar would reveal nothing the page could scroll to.
 public struct MobileBarCollapse: Equatable {
-    /// The bar leaves after this much scrolling down and returns after as much back up.
-    public static let travel: CGFloat = 24
+    /// The bar's travel from open to closed: its own height above the safe area.
+    public static let travel = MobileBottomBar.height
+    /// How far the finger travels to take the bar the whole way: half again the bar's own
+    /// height, so the bar trails the finger a little and a drag must go further than the bar
+    /// moves.
+    public static let fingerTravel = travel * 1.5
 
-    public private(set) var isHidden = false
-    /// Scrolled since the direction last changed: down is positive.
-    private var travelled: CGFloat = 0
+    /// Whether a page `contentHeight` tall has more to scroll than the `pageHeight` its screen
+    /// allows with the bar closed. A page that fits has nothing behind the bar to hide, so it
+    /// keeps the bar out.
+    public static func scrolls(contentHeight: CGFloat, pageHeight: CGFloat) -> Bool {
+        contentHeight > pageHeight + 0.5
+    }
+
+    /// 0 with the bar open, 1 with it closed away; between the two while the finger drags it.
+    public private(set) var progress: CGFloat = 0
+    /// The direction of the last travel the finger made: true when it was closing. That is the
+    /// end a release picks.
+    private var lastTravelledClosed = false
 
     public init() {}
 
-    /// The page scrolled by `delta` points (down is positive) on a site whose Collapse Bottom
-    /// Bar is `collapses`. Says whether the bar moves.
+    /// The bar is all there.
+    public var isOpen: Bool { progress <= 0 }
+    /// The bar is away, with only its strip along the safe area showing.
+    public var isClosed: Bool { progress >= 1 }
+
+    /// The finger moved `drag` points, positive with the page moving down: closing the bar. The
+    /// bar trails the finger, going the whole way over `fingerTravel` points of drag, from the
+    /// first one. `collapses` is the site's Collapse Bottom Bar switch; `scrolls` says the page
+    /// has more to scroll than its screen shows, so a page that fits keeps its bar. Says whether
+    /// the bar moved.
     @discardableResult
-    public mutating func scrolled(by delta: CGFloat, atTop: Bool, collapses: Bool) -> Bool {
-        travelled = delta * travelled < 0 ? delta : travelled + delta
-        let hide: Bool
-        if atTop || !collapses { hide = false } else if travelled > Self.travel { hide = true } else if travelled < -Self.travel { hide = false } else { return false }
-        guard hide != isHidden else { return false }
-        isHidden = hide
+    public mutating func dragged(by drag: CGFloat, collapses: Bool, scrolls: Bool) -> Bool {
+        // A site with the switch off never moves its bar; nor does a page with nothing to scroll.
+        guard collapses, scrolls else { return reveal() }
+        guard drag != 0 else { return false }
+        lastTravelledClosed = drag > 0
+        let place = min(1, max(0, progress + drag / Self.fingerTravel))
+        guard place != progress else { return false }
+        progress = place
         return true
     }
 
-    /// The bar is back: a tap under the page, another tab, the tab row. Says whether it moves.
+    /// The finger let go after taking the bar somewhere: the direction it travelled in picks the
+    /// end. Says which end it wants (true: closed), or nil when the bar is already there. The
+    /// caller animates the bar, and the page's bottom edge with it, all the way to that end.
+    public func released() -> Bool? {
+        let closed = lastTravelledClosed
+        guard progress != (closed ? 1 : 0) else { return nil }
+        return closed
+    }
+
+    /// The bar's place while a snap plays: the caller drives it frame by frame.
+    public mutating func setProgress(_ place: CGFloat) {
+        progress = min(1, max(0, place))
+    }
+
+    /// A snap arrived: the bar sits at the end, and a release from there would pick it.
+    public mutating func settle(atClosed closed: Bool) {
+        progress = closed ? 1 : 0
+        lastTravelledClosed = closed
+    }
+
+    /// The bar comes back at once: another tab, the tab row, the search sheet. Says whether it
+    /// moved.
     @discardableResult
     public mutating func reveal() -> Bool {
-        travelled = 0
-        guard isHidden else { return false }
-        isHidden = false
+        lastTravelledClosed = false
+        guard progress != 0 else { return false }
+        progress = 0
         return true
     }
 
     /// The page went to another address, on a site whose Collapse Bottom Bar is `collapses`.
-    /// Says whether the bar moves.
-    @discardableResult
-    public mutating func pageChanged(collapses: Bool) -> Bool {
-        guard !collapses else { return false }
-        return reveal()
+    /// Says whether the bar comes back: with the switch off a bar that was away comes back; on a
+    /// site that collapses it stays as it was.
+    public func pageChanged(collapses: Bool) -> Bool {
+        !collapses && !isOpen
+    }
+
+    /// The page's content settled: `scrolls` says it has more to scroll than its screen shows.
+    /// A page that fits has nothing behind the bar to hide, so a bar that was away comes back.
+    /// Says whether it comes back; the caller animates it.
+    public func contentChanged(scrolls: Bool) -> Bool {
+        !scrolls && !isOpen
     }
 }

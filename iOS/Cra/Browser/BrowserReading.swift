@@ -43,7 +43,7 @@ extension BrowserViewController {
         guard let page = shownPage, summaryHost == nil else { return }
         let id = page.tabID
         let tab = store.tabs.first { $0.id == id }
-        page.takeSnapshot { [weak self] image in
+        page.takeSnapshot(visibleHeight: openPageHeight) { [weak self] image in
             guard let self else { return }
             if let image { self.store.setSnapshot(image, for: id) }
             let model = SummaryModel(title: tab?.displayTitle ?? "", favicon: tab.flatMap { self.favicons.icon(for: $0.url) },
@@ -166,11 +166,13 @@ extension BrowserViewController {
     /// on screen with its bar.
     func layoutBrowseToggle(barTop: CGFloat) {
         browseToggle.frame = MobileBrowseToggle.frame(screenWidth: view.bounds.width, barTop: barTop)
-        let visible = browseToggleState != nil && BrowseForMe.isAvailable && !isSearching && switcher == nil
-            && !barHiddenByScroll && !(shownPage?.isBrowsing ?? false) && readerView == nil
-        browseToggle.alpha = visible ? 1 : 0
-        browseToggle.isUserInteractionEnabled = visible
-        browseToggle.accessibilityElementsHidden = !visible
+        let shown = browseToggleState != nil && BrowseForMe.isAvailable && !isSearching && switcher == nil
+            && !(shownPage?.isBrowsing ?? false) && readerView == nil
+        // It rides above the bar and goes with it, out of reach once the bar is not all there.
+        browseToggle.alpha = shown ? 1 - barCollapse.progress : 0
+        let live = shown && barCollapse.progress < 0.01
+        browseToggle.isUserInteractionEnabled = live
+        browseToggle.accessibilityElementsHidden = !live
     }
 
     func browseTogglePicked(_ side: MobileBrowseToggle.Side) {

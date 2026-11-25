@@ -520,6 +520,12 @@ built release app with a test profile. Note anything that fails in the release's
   growing past its size (it puffed up to 106 %). `PillPressTests` covers a held press; a quick tap's way
   back needs an eye.
 
+- **The bar's settle:** on a TestFlight build on a real iPhone, flick the page up and down quickly,
+  each flick landing while the bar is still moving, and flick from near the bottom where the
+  home-indicator swipe can take the touch: the bar always comes to rest fully open or closed, never
+  between them. The simulator cannot stage a system gesture taking the page's pan;
+  `testFlicksLandingOnASettleLeaveTheBarAtAnEnd` covers the flicks themselves.
+
 - **Pull to refresh:** on a TestFlight build on a real iPhone with System Haptics on, pull a page down
   from its top: the page's whole view comes down with the pull (its content stays at the top inside it, so
   the page does not scroll) and the coloured band behind the status bar grows edge to edge to meet it, its
