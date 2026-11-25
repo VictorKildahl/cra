@@ -1150,7 +1150,6 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 observations = []
                 if observesPlayingAudio { web.removeObserver(self, forKeyPath: "_isPlayingAudio") }
                 observesPlayingAudio = false
-                web.closeAllMediaPresentations {}
                 web.pauseAllMediaPlayback()
                 web.stopLoading()
                 web.navigationDelegate = nil
@@ -1158,11 +1157,57 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 web.configuration.userContentController.removeAllScriptMessageHandlers()
                 web.configuration.userContentController.removeAllUserScripts()
                 web.owner = nil
-                web.removeFromSuperview()
+                takeDown(web)
             }
             webView = nil
             // Like CEF, -browserDidClose: comes once the page is gone, a turn later.
             DispatchQueue.main.async { [self] in delegate?.browserDidClose(self) }
+        }
+    }
+
+    /// Closed pages whose view waits for WebKit's full screen to finish (WebKitFullscreenClose): each holds its
+    /// view and the observation that takes it down.
+    private static var settling: [ObjectIdentifier: NSKeyValueObservation] = [:]
+
+    /// The page's view goes now, or once WebKit is out of the page's own full screen. Taken down while WebKit
+    /// was still entering, its full-screen controller went with the entry pending and WebKit trapped
+    /// (crash-webkit-tab-closed-entering-fullscreen).
+    @MainActor
+    private func takeDown(_ web: WKWebView) {
+        let key = ObjectIdentifier(web)
+        let container = self.container
+        var askedToLeave = false
+        let step: @MainActor (Bool) -> Void = { giveUp in
+            let action = giveUp ? .removeNow : WebKitFullscreenClose(Self.fullscreenState(web))
+            switch action {
+            case .removeNow:
+                Self.settling.removeValue(forKey: key)?.invalidate()
+                web.closeAllMediaPresentations {}
+                web.removeFromSuperview()
+                container.removeFromSuperview()
+            case .leave:
+                if !askedToLeave { askedToLeave = true; web.closeAllMediaPresentations {} }
+            case .wait:
+                break
+            }
+        }
+        guard WebKitFullscreenClose(Self.fullscreenState(web)) != .removeNow else { return step(false) }
+        CraLog.note("WebKit page closed in its own full screen (\(Self.fullscreenState(web))): its view waits for WebKit")
+        Self.settling[key] = web.observe(\.fullscreenState, options: [.new]) { _, _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { if Self.settling[key] != nil { step(false) } } }
+        }
+        step(false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + WebKitFullscreenClose.longestWait) {
+            MainActor.assumeIsolated { if Self.settling[key] != nil { step(true) } }
+        }
+    }
+
+    private static func fullscreenState(_ web: WKWebView) -> WebKitFullscreenClose.State {
+        switch web.fullscreenState {
+        case .enteringFullscreen: .entering
+        case .inFullscreen: .inFullscreen
+        case .exitingFullscreen: .exiting
+        default: .out
         }
     }
 

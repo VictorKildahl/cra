@@ -387,7 +387,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             host.parent?.removeChildWindow(host)
             host.orderOut(nil)
         }
-        rt.browser.containerView.removeFromSuperview()
+        // A WebKit page in (or on its way into) its own full screen keeps its view where it is: taken out of the
+        // window then, WebKit's full-screen controller went with an entry pending and WebKit trapped. Closing,
+        // WebKitBrowser takes it down once WebKit is out; moving, the new window's add() takes it.
+        if PageEngines.isInOwnFullscreen(rt.browser) {
+            rt.browser.containerView.isHidden = true
+        } else {
+            rt.browser.containerView.removeFromSuperview()
+        }
         delegate?.browserManagerDevToolsChanged()
         return rt
     }

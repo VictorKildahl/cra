@@ -1749,6 +1749,8 @@ crash-tab-row-quick-throws Packages/CraCore/Tests/CraCoreTests/MobileTests.swift
 crash-tab-row-quick-throws Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aFlyingCardCantBeThrownTwice  550985764a2d
 crash-tooltip-over-sheet Tests/Scenarios/tooltip-over-sheet.scenario  c4535ba50b5b
 crash-web-store-install-after-tab-closes Tests/Scenarios/web-store-install-after-tab-closes.scenario  a5324abc50b7
+crash-webkit-tab-closed-entering-fullscreen Packages/CraCore/Tests/CraCoreTests/WebKitFullscreenCloseTests.swift::aTabClosedOnItsWayIntoFullScreenWaitsForWebKit  c1628003eb84
+crash-webkit-tab-closed-entering-fullscreen Tests/Scenarios/webkit-tab-closed-entering-fullscreen.scenario  73cc1d6fe93b
 crash-webstore-install-double-report Tests/Scenarios/web-store-install-copy-reloads.scenario  bb32e7100ecc
 crash-zen-favicon-size Tests/StoreTests.swift::zenFaviconSize  ede0eb368f2a
 web-extension-open-popup Tests/Scenarios/extension-open-popup.scenario  423bc87e4291
