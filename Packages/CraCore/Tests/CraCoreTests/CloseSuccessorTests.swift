@@ -78,4 +78,16 @@ struct CloseSuccessorTests {
         #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: true, audible: true) == .unloadToPinnedPage)
         #expect(CloseSuccessor.pinnedClose(isFavorite: false, audible: true) == .unloadToPinnedPage)
     }
+
+    /// ⌘W on a silent Favorite away from its pinned page takes it back there, as in Arc 1.174.2: the pinned page loaded in
+    /// the background at the moment of ⌘W, and a click on the Favorite showed that same load. 0.1.56 left it on the page
+    /// it had moved to, so CRM tools pinned as Favorites no longer went back to their pinned page (#804).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/804"))
+    func closingAFavoriteAwayFromItsPageTakesItBack() {
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, awayFromPinnedPage: true) == .deselectGoingHome)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, awayFromPinnedPage: false) == .deselectKeepingPage, "on its page it runs on (#740)")
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, audible: true, awayFromPinnedPage: true) == .unloadToPinnedPage, "sound still closes it (#803)")
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: true, awayFromPinnedPage: true) == .unloadToPinnedPage)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: false, awayFromPinnedPage: true) == .unloadToPinnedPage)
+    }
 }
