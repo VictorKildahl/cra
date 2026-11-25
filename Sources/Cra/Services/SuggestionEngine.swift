@@ -132,9 +132,15 @@ final class SuggestionEngine {
             items.insert(typed, at: 0)
         }
         if case .newTab = mode, let folderSpace, let space = store.space(folderSpace) {
-            let matches = searchableFolders(in: space).filter { $0.title.lowercased().contains(q) }
-            let ranked = matches.filter { $0.title.lowercased() == q } + matches.filter { $0.title.lowercased() != q }
-            let exact = ranked.first?.title.lowercased() == q
+            // The bar shows `maxRows` rows: a folder named as typed comes first, and otherwise at most one
+            // whose name has a word starting with the query, so a letter or two never pushes the tabs out.
+            let folders = searchableFolders(in: space)
+            let named = folders.filter { $0.title.lowercased() == q }
+            let begins = folders.filter { f in
+                f.title.lowercased() != q && f.title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains { $0.hasPrefix(q) }
+            }
+            let ranked = named + begins.prefix(1)
+            let exact = !named.isEmpty
             items.insert(contentsOf: ranked, at: exact ? 0 : min(items.count, 2))
             if exact { completion = nil }
         }

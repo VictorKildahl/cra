@@ -8,3 +8,14 @@ cra://debug?commandBarReturn=folder
 wait 1
 cra://debug?rowPoint=F0000000-0000-0000-0000-000000000102
 expect-log row point: [0-9]+ [0-9]+
+# A letter inside folder names ("e" in Reading and Meego) lists no folder, so a short query never
+# pushes the tabs out of the bar's five rows; a word's start ("rea") lists one.
+cra://commandbar?query=e
+wait 1
+cra://debug?commandBarRows=letter
+expect-log Cra command bar rows letter: open=1
+reject-log Cra command bar rows letter: .*other:(Reading|Meego)
+cra://commandbar?query=rea
+wait 1
+cra://debug?commandBarRows=word
+expect-log Cra command bar rows word: open=1 .*other:Reading
