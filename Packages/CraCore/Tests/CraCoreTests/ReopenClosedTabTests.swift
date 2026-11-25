@@ -220,4 +220,36 @@ struct ReopenClosedTabTests {
         on.reopenClosedTabCurrentSpaceOnly = true
         #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(on)).reopenClosedTabCurrentSpaceOnly)
     }
+    // #806: ⌘Z right after Remove Favorite puts the favorite back. A space's own favorite is archived
+    // in the same moment, so the tie goes to the favorite, not to the archive (which reopens in Pinned).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/806")) func undoBringsBackTheFavoriteRemovedLast() {
+        let fav = UUID(), older = UUID()
+        let at = Date(timeIntervalSince1970: 200)
+        let decision = ReopenClosedTab.next(
+            closedPinned: [],
+            closedPeek: nil,
+            archived: [ReopenClosedTab.ArchivedTab(id: fav, archivedAt: at), ReopenClosedTab.ArchivedTab(id: older, archivedAt: Date(timeIntervalSince1970: 100))],
+            removedFavorite: ReopenClosedTab.RemovedFavorite(id: fav, removedAt: at)
+        )
+        #expect(decision?.restoration == .favorite(fav))
+        #expect(ReopenClosedTab.next(closedPinned: [], closedPeek: nil, archived: [],
+                                     removedFavorite: .init(id: fav, removedAt: at))?.restoration == .favorite(fav),
+                "a shared favorite leaves nothing in the archive and still comes back")
+    }
+
+    // #806: Arc's undo is a stack: what was closed after the removal comes back first, then the favorite.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/806")) func undoReopensWhatClosedAfterTheRemovalFirst() {
+        let fav = UUID(), tab = UUID(), pinned = UUID()
+        let removal = ReopenClosedTab.RemovedFavorite(id: fav, removedAt: Date(timeIntervalSince1970: 100))
+        let later = Date(timeIntervalSince1970: 200)
+        #expect(ReopenClosedTab.next(closedPinned: [], closedPeek: nil, archived: [.init(id: tab, archivedAt: later)],
+                                     removedFavorite: removal)?.restoration == .archived(tab))
+        #expect(ReopenClosedTab.next(closedPinned: [.init(id: pinned, closedAt: later)], closedPeek: nil, archived: [],
+                                     removedFavorite: removal)?.restoration == .pinned(id: pinned, url: nil, title: nil, paneStates: []))
+        #expect(ReopenClosedTab.next(closedPinned: [], closedPeek: .init(url: "https://a.example", tabID: nil, closedAt: later), archived: [],
+                                     removedFavorite: removal)?.restoration == .peek(url: "https://a.example", tabID: nil))
+        #expect(ReopenClosedTab.next(closedPinned: [], closedPeek: nil, archived: [.init(id: tab, archivedAt: Date(timeIntervalSince1970: 50))],
+                                     removedFavorite: removal)?.restoration == .favorite(fav), "an older close waits")
+    }
+
 }

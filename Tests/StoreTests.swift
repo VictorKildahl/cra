@@ -103,6 +103,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        removedFavoriteComesBackOnUndo()
         profileTabsSpaceBySpace()
         newDocumentApps()
         themePreview()
@@ -2775,6 +2776,78 @@ enum StoreTests {
         store.setFavoritesShared(true)
         expect(Set(now()) == asBefore() && now().count == Set(now()).count, "favorites shared by spaces are listed once")
         store.setFavoritesShared(false)
+    }
+
+    // promise: #806
+    /// ⌘Z after Remove Favorite (#806, asked for on X): the favorite goes back where it was in the
+    /// favorites, shared or a space's own, unless something closed since comes back first.
+    @MainActor
+    private static func removedFavoriteComesBackOnUndo() {
+        let clock = ManualScheduler()
+        let store = AppComposition(clock: clock).store
+        let sid = store.createSpace(title: "Undo Favorites", emoji: "↩️").id
+        let list = store.space(sid)!.favoritesContainerID
+        func favorites() -> [UUID] { store.children(of: list).map(\.id) }
+        func favorite(_ url: String) -> UUID {
+            let t = store.createTab(url: url, in: sid, select: false)
+            store.addToFavorites(t.id, in: sid)
+            return t.id
+        }
+        let a = favorite("https://example.com/undo-a"), b = favorite("https://example.com/undo-b"), c = favorite("https://example.com/undo-c")
+        let order = favorites()
+        store.setTileColor("#FF0000", for: [b])
+        store.selectTab(b)
+        let w = store.window(nil).id
+
+        store.removeFavorite(b)
+        expect(store.item(b) == nil && store.archive.first?.id == b && store.selectedTabID(window: w) != b,
+               "Remove Favorite on a space's own favorite archives it")
+        expect(store.undoRemoveFavorite(in: w), "⌘Z undoes it")
+        expect(favorites() == order && store.item(b)?.tab?.tileColor == "#FF0000" && !store.archive.contains { $0.id == b }
+               && store.selectedTabID(window: w) == b && store.integrityProblems().isEmpty,
+               "the favorite is back in its place, with its colour, out of the archive, shown again")
+        expect(!store.undoRemoveFavorite(in: w), "once")
+
+        // Arc's undo is a stack: a tab closed after the removal comes back first, then the favorite.
+        store.removeFavorite(a)
+        clock.advance(by: 1)
+        let today = store.createTab(url: "https://example.com/undo-today", in: sid, select: false)
+        store.archiveTab(today.id, reason: .manual)
+        expect(!store.undoRemoveFavorite(in: w), "a tab closed since comes first")
+        expect(store.reopenLastClosed(in: w) == .archived(today.id), "⇧⌘T's reopen takes it")
+        expect(store.undoRemoveFavorite(in: w) && favorites() == order, "then ⌘Z brings the favorite back")
+
+        // The Library brought it back first: nothing left to undo.
+        store.removeFavorite(c)
+        _ = store.restoreArchived(c)
+        expect(!store.undoRemoveFavorite(in: w), "a favorite the Library restored isn't put back twice")
+        store.removeFromArchive(c)
+        store.moveItem(c, to: list, index: nil)
+
+        // Share Favorites: Remove Favorite deletes it, and ⌘Z still brings it back.
+        store.setFavoritesShared(true)
+        let shared = store.space(sid)!.favoritesContainerID
+        let sharedOrder = store.children(of: shared).map(\.id)
+        let x = sharedOrder.first!
+        store.removeFavorite(x)
+        expect(store.item(x) == nil && !store.archive.contains { $0.id == x }, "a shared favorite is deleted, unarchived (Arc)")
+        expect(store.undoRemoveFavorite(in: w) && store.children(of: shared).map(\.id) == sharedOrder && store.integrityProblems().isEmpty,
+               "⌘Z puts a shared favorite back in its place")
+
+        // A split favorite comes back whole.
+        if let split = store.createSplit(with: [sharedOrder[1], sharedOrder[2]], inPlace: true) {
+            let splitOrder = store.children(of: shared).map(\.id)
+            let panes = store.children(of: split.id).map(\.id)
+            store.removeFavorite(panes[0])
+            expect(store.item(split.id) == nil && panes.allSatisfy { store.item($0) == nil }, "Remove Favorite on a shared split deletes it")
+            expect(store.undoRemoveFavorite(in: w) && store.children(of: shared).map(\.id) == splitOrder
+                   && store.children(of: split.id).map(\.id) == panes && store.integrityProblems().isEmpty,
+                   "⌘Z puts the split back with its panes")
+        } else {
+            expect(false, "two favorites make a split")
+        }
+        store.setFavoritesShared(false)
+        store.deleteSpace(sid)
     }
 
     // promise: #154

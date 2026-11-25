@@ -7,6 +7,8 @@ import Foundation
 /// - A closed open pinned tab is restored to the URL and title it had when closed, and re-selected.
 /// - An archived Today tab (or a pinned tab archived via ✕) is restored from the archive.
 /// - A closed Peek window is reopened over its source tab.
+/// - ⌘Z only: a favorite taken off with Remove Favorite goes back into the favorites where it was
+///   (Arc's undo; asked for on X, 25 Nov 2026). ⇧⌘T leaves it out.
 public enum ReopenClosedTab {
     public struct PaneState: Equatable, Sendable {
         public var id: UUID
@@ -58,16 +60,29 @@ public enum ReopenClosedTab {
         }
     }
 
+    /// A favorite (a tab or a split) taken off with Remove Favorite, `id` its sidebar item.
+    public struct RemovedFavorite: Equatable, Sendable {
+        public var id: UUID
+        public var removedAt: Date
+
+        public init(id: UUID, removedAt: Date) {
+            self.id = id
+            self.removedAt = removedAt
+        }
+    }
+
     public enum Restoration: Equatable, Sendable {
         case pinned(id: UUID, url: String?, title: String?, paneStates: [PaneState])
         case peek(url: String, tabID: UUID?)
         case archived(UUID)
+        case favorite(UUID)
 
         public var tabID: UUID? {
             switch self {
             case .pinned(let id, _, _, _): return id
             case .peek(_, let tabID): return tabID
             case .archived(let id): return id
+            case .favorite(let id): return id
             }
         }
     }
@@ -96,13 +111,17 @@ public enum ReopenClosedTab {
     ///     whether a tab ID belongs to the window's space. Given, only this space's closed tabs come
     ///     back; the others stay for their own space, and with none here nothing is reopened. Nil is
     ///     Arc's: the tab closed last in any space, switching to it.
+    ///   - removedFavorite: the favorite removed last, given by ⌘Z only. It comes back when nothing
+    ///     was closed after it; a space's own favorite is archived at the same moment, and the
+    ///     removal wins that tie, so it goes back into the favorites and not into Pinned.
     public static func next(
         closedPinned: [ClosedPinnedTab],
         closedPeek: ClosedPeek?,
         archived: [ArchivedTab],
         isPinnedTabAvailable: (UUID) -> Bool = { _ in true },
         isTabSelected: (UUID) -> Bool = { _ in false },
-        isInCurrentSpace: ((UUID) -> Bool)? = nil
+        isInCurrentSpace: ((UUID) -> Bool)? = nil,
+        removedFavorite: RemovedFavorite? = nil
     ) -> Decision? {
         let inSpace = isInCurrentSpace ?? { _ in true }
         var pinned = closedPinned
@@ -126,7 +145,7 @@ public enum ReopenClosedTab {
         let peekCandidate = closedPeek.flatMap { peek in isInCurrentSpace == nil || peek.tabID.map(inSpace) == true ? peek : nil }
         let archivedCandidate = archived.first { inSpace($0.id) }
 
-        guard pinnedCandidate != nil || peekCandidate != nil || archivedCandidate != nil else {
+        guard pinnedCandidate != nil || peekCandidate != nil || archivedCandidate != nil || removedFavorite != nil else {
             return nil
         }
 
@@ -134,6 +153,9 @@ public enum ReopenClosedTab {
         let peekDate = peekCandidate?.closedAt ?? .distantPast
         let archivedDate = archivedCandidate?.archivedAt ?? .distantPast
 
+        if let fav = removedFavorite, fav.removedAt >= max(pinnedDate, peekDate, archivedDate) {
+            return Decision(restoration: .favorite(fav.id), remainingPinned: pinned, remainingPeek: closedPeek)
+        }
         if let pinnedIndex, pinnedDate >= peekDate && pinnedDate >= archivedDate {
             let chosen = pinned.remove(at: pinnedIndex)
             return Decision(

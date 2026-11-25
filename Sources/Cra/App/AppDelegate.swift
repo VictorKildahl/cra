@@ -3434,7 +3434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testTabMenu(n, label: dict["label"] ?? "\(n)", run: dict["run"], folder: true)
                 return
             }
-            // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387).
+            // favoriteMenu=<n>[&label=][&run=<row>]: the n-th favorite tile's menu, see testFavoriteMenu (#387); run=- reads the lists only.
             if let n = dict["favoriteMenu"].flatMap(Int.init) {
                 main.testFavoriteMenu(tile: n, label: dict["label"] ?? "\(n)", run: dict["run"])
                 return
@@ -4046,15 +4046,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
-    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21), or undoes
-    /// the last Tidy, unless the keyboard is in something with text to undo: a text field, or an editable
-    /// element in a page (Chromium's page view reports its ui::TextInputType, 0 = none). On an Easel,
-    /// ⌘Z undoes canvas edits instead.
+    /// Arc: ⌘Z brings back the tab you closed last (closing registers an undo, GitHub #21), undoes
+    /// the last Tidy, or puts back a favorite taken off with Remove Favorite (#806), unless the keyboard
+    /// is in something with text to undo: a text field, or an editable element in a page (Chromium's
+    /// page view reports its ui::TextInputType, 0 = none). On an Easel, ⌘Z undoes canvas edits instead.
     private func undoClosedTab(_ event: NSEvent) -> Bool {
         guard Shortcut("z", .command).matches(event), !textFieldHasKey(event), !easelHasKey(event) else { return false }
         // The last thing to undo may be a tidy (Arc's "Undo Tidy Tabs"); a tab closed since comes first.
-        if !store.undoTidy() { perform("reopenClosedTab") }
+        if store.undoTidy() || undoRemoveFavorite() { return true }
+        perform("reopenClosedTab")
         return true
+    }
+
+    /// ⌘Z's Remove Favorite undo in the front window, unless something closed since comes back first.
+    private func undoRemoveFavorite() -> Bool {
+        guard keyLittleWindow == nil, !main.isIncognito else { return false }
+        let peek = main.closedPeek.map { ReopenClosedTab.ClosedPeek(url: $0.url, tabID: $0.tabID, closedAt: $0.at) }
+        return store.undoRemoveFavorite(in: main.windowID, peek: peek)
     }
 
     private func easelHasKey(_ event: NSEvent) -> Bool { easelHasKey(in: event.window ?? NSApp.keyWindow) }
