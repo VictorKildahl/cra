@@ -215,6 +215,21 @@ struct MobileEmptyHomeTests {
         #expect(dots.backdrop == .dots && dots.showsLogo && dots.showsDots && dots.showsSearchHint && dots.barFloats)
     }
 
+    /// With no tabs open the home showed the tab stack and the page menu, and the tab button put a blank row over
+    /// the logo. The home is the empty tab row instead: the logo (and the dots) with Spaces, the plus and Settings.
+    @Test func noTabsOpenIsTheEmptyTabRow() {
+        #expect(MobileEmptyHome.isHome(tabOnScreen: false, rowTabs: 0))
+        #expect(!MobileEmptyHome.isHome(tabOnScreen: false, rowTabs: 2), "tabs to show in the row")
+        #expect(!MobileEmptyHome.isHome(tabOnScreen: true, rowTabs: 0), "a private page, which has no card")
+        #expect(!MobileEmptyHome.isHome(tabOnScreen: true, rowTabs: 1))
+        for dots in [false, true] {
+            let home = MobileEmptyHome(dots: dots, home: true, searching: false, incognitoSearch: false, pulling: false)
+            #expect(home.showsLogo && home.barShowsTabRow)
+            let page = MobileEmptyHome(dots: dots, home: false, searching: false, incognitoSearch: false, pulling: false)
+            #expect(!page.barShowsTabRow, "a page has the tab stack and its menu")
+        }
+    }
+
     @Test func theSheetAndPagesCoverIt() {
         let searching = MobileEmptyHome(dots: true, home: true, searching: true, incognitoSearch: false, pulling: false)
         #expect(!searching.showsLogo && searching.showsDots && !searching.showsSearchHint, "the dots stay behind the sheet")

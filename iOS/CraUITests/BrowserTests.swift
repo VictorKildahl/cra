@@ -1754,6 +1754,38 @@ final class EmptyHomeTests: BrowserTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
     }
 
+    /// With no tabs open the home showed the tab stack and the page menu, and the tab button put a blank row over the
+    /// logo. The home is the empty tab row instead: the logo, which still spins, with Spaces, the plus and Settings.
+    func testWithNoTabsTheHomeIsTheEmptyTabRow() {
+        launch()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 200)), withVelocity: .fast, thenHoldForDuration: 0)
+        let logo = app.images["logo"]
+        XCTAssertTrue(logo.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["bar-settings"].exists)
+        XCTAssertTrue(app.buttons["bar-search"].exists)
+        XCTAssertFalse(app.buttons["bar-tabs"].exists, "no tab stack with no tabs")
+        XCTAssertFalse(app.buttons["bar-menu"].exists, "no page menu with no page")
+        let from = logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.2))
+        from.press(forDuration: 0.05, thenDragTo: logo.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)), withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+        keep("empty-home-tab-row")
+        XCTAssertNotEqual(logo.value as? String, "0.0 turns")
+        // App Settings opens from the home's gear, and the home is still there behind it.
+        app.buttons["bar-settings"].tap()
+        let toggle = app.switches["setting-home-dots"]
+        scrollUntilHittable(toggle)
+        XCTAssertTrue(toggle.isHittable)
+        let done = app.buttons["Done"]
+        scrollUntilHittable(done, scrollingDown: true)
+        done.tap()
+        XCTAssertTrue(logo.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["bar-tabs"].exists)
+    }
+
     /// App Settings ▸ Rippling Dots (PR #708, Victor 23 Nov 2026: a setting, with the logo kept) lays a field of dots
     /// under the logo that sends a ring out wherever it is tapped, with "Tap to search" over the pill; the pill still
     /// brings the sheet back.
@@ -1801,6 +1833,9 @@ final class EmptyHomeTests: BrowserTestCase {
         XCTAssertEqual(dots.value as? String, "2 rings")
         keep("empty-home-dots-\(appearance)")
         XCTAssertFalse(app.keyboards.firstMatch.exists, "tapping the dots doesn't open the search")
+        // No tabs open: the bar is the empty tab row's, Spaces and Settings, not the tab stack and the menu.
+        XCTAssertTrue(app.buttons["bar-spaces"].exists && app.buttons["bar-settings"].exists)
+        XCTAssertFalse(app.buttons["bar-tabs"].exists || app.buttons["bar-menu"].exists)
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
     }

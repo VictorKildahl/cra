@@ -422,11 +422,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         let keyboardUpForPage = keyboardHeight > safeBottom && !isSearching
         if (barHiddenByScroll || keyboardUpForPage) && !isSearching { barFrame.origin.y = bounds.height }
         bar.frame = barFrame
-        let home = store.selected == nil && switcher == nil
         let pull = isSearching ? nil : searchPull
-        let emptyHome = MobileEmptyHome(dots: settings.value.homeDots, home: home, searching: isSearching,
+        let emptyHome = MobileEmptyHome(dots: settings.value.homeDots, home: showsEmptyHome, searching: isSearching,
                                         incognitoSearch: incognitoSearch, pulling: pull != nil)
         backdrop.style = emptyHome.backdrop
+        // With no tabs the bar is the empty tab row's: Spaces, the plus and Settings. The tab row sets its own
+        // while it is up, and a page gets the tab stack and its menu back.
+        if emptyHome.barShowsTabRow { bar.mode = .tabs } else if switcher == nil { bar.mode = .page }
         // With the dots the bar has no slab: its buttons float on them.
         bar.overBackdrop = emptyHome.barFloats
         searchHint.place(centerX: bounds.midX, pillTop: frames.pill.minY + barFrame.minY - frames.bar.minY)
@@ -980,8 +982,13 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
 
     // MARK: Tab switcher
 
+    /// No tab is open: the empty home, which is the tab row with no cards, so the tab button has no row to open.
+    var showsEmptyHome: Bool {
+        MobileEmptyHome.isHome(tabOnScreen: store.selected != nil, rowTabs: store.switcherTabs.count)
+    }
+
     @objc func showTabs() {
-        guard switcher == nil, !isSearching else { return }
+        guard switcher == nil, !isSearching, !showsEmptyHome else { return }
         dropBlockerNotices()
         guard let page = shownPage else { return settleSwitcher(prepareSwitcher()) }
         let id = page.tabID
