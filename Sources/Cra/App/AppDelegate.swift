@@ -166,6 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         MCPServer.shared.start(app: self)
         composition.startPeriodicWork(autoArchived: { [weak self] in self?.noteAutoArchived($0) }) { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
+        composition.sync.changeOpenEasel = { EaselFiles.changeOpen($0, $1) }
+        composition.sync.easelsChanged = { [weak self] removed in
+            EaselFiles.synced()
+            guard let self else { return }
+            for id in removed {
+                EaselFiles.closeTabs(of: id, in: self.store) { self.main?.closeTab($0) }
+                // A Peek or Little Window has no sidebar row.
+                for w in self.littleWindows where w.currentURL == Easel(id: id).url { w.closeWindow() }
+            }
+        }
         composition.sync.start()
         SharingService.shared.start(store: store, clock: composition.clock)
         observeSystemWake()
@@ -4302,7 +4312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "newBoost": main.openBoostEditor()
         case "newEasel":
             guard !main.isIncognito else { break }
-            let easel = Easel()
+            let easel = EaselFiles.create()
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: main.windowID)
         case NewDocumentApp.commandID:
             // The profile's "New documents" app, in a new tab of the current space (#375).

@@ -47,5 +47,106 @@ enum EaselBrowserTests {
         precondition(sent.items[1].frame.y == made.items[0].frame.y + made.items[0].frame.height + 40 && sent.items[1].frame.width == 640,
                      "it lands under what the easel holds, at most 640 pt across")
         print("Easel browser: saved drawing, Peek and expanded page colours passed")
+
+        await syncedEasels()
+        print("Easel browser: synced easels on open canvases, their tabs and Library passed")
+    }
+
+    /// What sync does to easels here: an open canvas takes the merged easel, a deleted one's tabs close.
+    @MainActor
+    static func syncedEasels() async {
+        let open = Easel(title: "Before Sync", items: [.init(kind: .rectangle, frame: .init(x: 100, y: 180, width: 120, height: 80))])
+        EaselFiles.store(open.id).saveNow(open)
+        let browser = EaselBrowser(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: open.url, delegate: nil)
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        let canvas = browser.canvasView
+        var reported: String?
+        canvas.onTitle = { reported = $0 }
+        canvas.sheetView.insert(.init(kind: .ellipse, frame: .init(x: 300, y: 180, width: 80, height: 80)))
+        var synced = open
+        synced.title = "From the Other Mac"
+        synced.items.append(.init(kind: .rectangle, frame: .init(x: 400, y: 400, width: 60, height: 60)))
+
+        canvas.replace(with: synced)
+        precondition(canvas.sheetView.document == synced, "a synced easel shows on its canvas")
+        precondition(EaselFiles.load(open.id) == synced, "a synced easel on a canvas is saved")
+        precondition(reported == "From the Other Mac", "a synced easel's title goes to its tab")
+        precondition(!canvas.sheetView.history.canUndo, "⌘Z can't take back a synced change")
+
+        var called = false
+        precondition(!EaselFiles.changeOpen(UUID()) { _ in called = true; return nil }, "an easel no tab shows is not on a canvas")
+        precondition(!called, "an easel no tab shows is left to the sync service")
+
+        var merged = synced
+        merged.title = "Merged"
+        var given: Easel?
+        precondition(EaselFiles.changeOpen(open.id) { given = $0; return merged }, "an easel a tab shows changes on its canvas")
+        precondition(given == synced, "the merge starts from what the canvas shows")
+        precondition(canvas.sheetView.document == merged, "the merged easel shows on its canvas")
+
+        precondition(EaselFiles.changeOpen(open.id) { _ in nil }, "an easel deleted on the other Mac is handled on its canvas")
+        precondition(EaselFiles.deleted.contains(open.id), "an easel deleted on the other Mac is deleted here")
+        // Its canvas saves nothing now (a Favorite's or a Peek's stays loaded): Import's copy goes to the file.
+        precondition(!EaselFiles.changeOpen(open.id) { $0 }, "an easel deleted here is left to the sync service, though a canvas shows it")
+        browser.close()
+
+        // Library ▸ Easels ▸ Delete, and an easel deleted on the other Mac: every tab showing it closes.
+        let gone = UUID(), other = UUID()
+        let store = SidebarStore()
+        store.tabs = [SidebarItem(tab: TabData(url: Easel(id: gone).url)), SidebarItem(tab: TabData(url: Easel(id: other).url)),
+                      SidebarItem(tab: TabData(url: Easel(id: gone).url))]
+        var closed: [UUID] = []
+        EaselFiles.closeTabs(of: gone, in: store) { closed.append($0) }
+        precondition(closed == [store.tabs[0].id, store.tabs[2].id], "every tab showing a deleted easel closes, and no other")
+        precondition(EaselFiles.deleted.contains(gone), "a closing tab of a deleted easel writes nothing back")
+
+        // Import of a bundle that still holds an easel deleted here: it saves again.
+        let back = Easel(title: "Imported Again")
+        EaselFiles.deleted.insert(back.id)
+        EaselFiles.store(back.id).saveNow(back)
+        let before = EaselFiles.Changes.shared.count
+        EaselFiles.synced()
+        precondition(!EaselFiles.deleted.contains(back.id), "an easel a bundle brought back saves again")
+        precondition(EaselFiles.deleted.contains(gone), "an easel still deleted stays deleted")
+        precondition(EaselFiles.Changes.shared.count == before + 1, "Library ▸ Easels lists the synced easels again")
+
+        // A row with no file (an archived Little Window after a relaunch, a pinned row): an empty canvas that
+        // writes nothing until the user draws, so an easel deleted on the other Mac can't come back blank.
+        let rowOnly = UUID()
+        let unsaved = EaselBrowser(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: Easel(id: rowOnly).url, delegate: nil)
+        precondition(!FileManager.default.fileExists(atPath: EaselFiles.store(rowOnly).url.path), "an easel with no file opens without writing one")
+        unsaved.close()
+        precondition(!FileManager.default.fileExists(atPath: EaselFiles.store(rowOnly).url.path), "an untouched easel with no file writes none on close")
+
+        // File ▸ New Easel: on disk before its tab opens, so Library ▸ Easels lists it.
+        let listed = EaselFiles.Changes.shared.count
+        let made = EaselFiles.create()
+        precondition(FileManager.default.fileExists(atPath: EaselFiles.store(made.id).url.path), "New Easel writes its file")
+        precondition(EaselFiles.Changes.shared.count == listed + 1, "New Easel is listed in Library ▸ Easels")
+
+        // A deleted easel reopened (⇧⌘T on its Peek): its close writes nothing back.
+        let reopened = EaselBrowser(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: Easel(id: gone).url, delegate: nil)
+        precondition(!FileManager.default.fileExists(atPath: EaselFiles.store(gone).url.path), "a deleted easel reopened writes no blank")
+        reopened.close()
+        precondition(!FileManager.default.fileExists(atPath: EaselFiles.store(gone).url.path), "a deleted easel's closing canvas writes nothing")
+
+        // Drawn on, it is made again.
+        let redrawn = EaselBrowser(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: Easel(id: gone).url, delegate: nil)
+        redrawn.canvasView.sheetView.insert(.init(kind: .ellipse, frame: .init(x: 300, y: 180, width: 80, height: 80)))
+        precondition(!EaselFiles.deleted.contains(gone), "drawing on a deleted easel makes it again")
+        precondition(EaselFiles.load(gone).items.count == 1, "drawing on a deleted easel saves it")
+        redrawn.close()
+
+        // A Favorite keeps its canvas after Delete; Import then brings the easel back.
+        let kept = Easel(title: "Before Delete")
+        EaselFiles.store(kept.id).saveNow(kept)
+        let favorite = EaselBrowser(frame: NSRect(x: 0, y: 0, width: 800, height: 600), url: kept.url, delegate: nil)
+        EaselFiles.delete(kept.id)
+        let imported = Easel(id: kept.id, title: "From Import")
+        EaselFiles.store(kept.id).saveNow(imported)
+        EaselFiles.synced()
+        precondition(favorite.canvasView.document == imported, "a canvas still loaded shows the easel Import brought back")
+        favorite.close()
+        precondition(EaselFiles.load(kept.id) == imported, "a canvas still loaded never writes the deleted easel over Import's")
     }
 }

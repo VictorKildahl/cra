@@ -29,4 +29,14 @@ final class JSONStore<T: Codable> {
 
 extension EaselFiles {
     static var deleted: Set<UUID> = []
+    static func delete(_ id: UUID) { deleted.insert(id) }
+}
+
+struct TabData { var url: String }
+struct SidebarItem { var id = UUID(); var tab: TabData? }
+
+@MainActor
+final class SidebarStore {
+    var tabs: [SidebarItem] = []
+    func allTabs() -> [SidebarItem] { tabs }
 }

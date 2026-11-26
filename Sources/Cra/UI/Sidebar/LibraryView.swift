@@ -927,9 +927,7 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         let dialog = AppDialog.easelDeletion()
         dialog.present(over: window) { [weak self] response in
             guard response == .alertFirstButtonReturn, let self else { return }
-            let url = Easel(id: e.id).url
-            EaselFiles.deleted.insert(e.id)
-            for tab in self.store.allTabs() where tab.tab?.url == url { self.actions.closeTab(tab.id) }
+            EaselFiles.closeTabs(of: e.id, in: self.store, close: self.actions.closeTab)
             EaselFiles.delete(e.id)
             CraLog.note("easel deleted")
             self.reload()

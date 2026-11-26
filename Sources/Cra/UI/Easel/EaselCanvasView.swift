@@ -57,13 +57,9 @@ final class EaselCanvasView: NSView {
     init(document: Easel) {
         self.document = document
         store = EaselFiles.store(document.id)
-        // A new easel is on disk from the start, so Library ▸ Easels lists it.
-        let isNew = !FileManager.default.fileExists(atPath: store.url.path)
-        if isNew { store.saveNow(document) }
         sheet = EaselSheetView(document: document)
         super.init(frame: .zero)
         EaselFiles.opened(self)
-        if isNew { EaselFiles.listChanged() }
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor
         scroll.drawsBackground = false
@@ -108,7 +104,13 @@ final class EaselCanvasView: NSView {
         let renamed = doc.title != document.title
         document = doc
         settle()
-        guard !EaselFiles.deleted.contains(doc.id) else { return }
+        if EaselFiles.deleted.contains(doc.id) {
+            // Drawn on after its file went (a reopened tab or Peek): the user is making it again.
+            guard !FileManager.default.fileExists(atPath: store.url.path) else { return }
+            EaselFiles.deleted.remove(doc.id)
+            EaselFiles.listChanged()
+        }
+        edited = true
         store.save(doc)
         if renamed {
             onTitle(doc.title)
@@ -116,8 +118,11 @@ final class EaselCanvasView: NSView {
         }
     }
 
-    /// A deleted easel's tab, closing, writes nothing back.
-    func saveNow() { if !EaselFiles.deleted.contains(document.id) { store.saveNow(document) } }
+    /// Changed since it opened: an easel with no file (a row whose easel was deleted) is written only then.
+    private var edited = false
+
+    /// Closing: what is not on disk yet. A deleted easel's tab writes nothing back.
+    func saveNow() { if edited, !EaselFiles.deleted.contains(document.id) { store.saveNow(document) } }
 
     func focus() { window?.makeFirstResponder(sheet) }
 
@@ -128,6 +133,9 @@ final class EaselCanvasView: NSView {
     }
 
     func closeLives() { sheet.closeLives() }
+
+    /// A change made elsewhere (sync's merge): shown as Undo shows a step, saved, and not undoable.
+    func replace(with easel: Easel) { sheet.replace(with: easel) }
 
     var sheetView: EaselSheetView { sheet }
 
@@ -373,6 +381,13 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         needsDisplay = true
         onChange(document)
         syncLives()
+    }
+
+    /// The easel as changed elsewhere: nothing before it can be undone, so ⌘Z never takes the change back.
+    func replace(with easel: Easel) {
+        history = EaselHistory()
+        dragBefore = nil
+        show(easel)
     }
 
     @objc func undo(_ sender: Any?) {
@@ -1144,7 +1159,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         selected = item.id
         let easel = document.id
         EaselHooks.fetchLink?(url) { [weak self] meta, picture, icon in
-            guard let self, self.document.id == easel, let i = self.document.items.firstIndex(where: { $0.id == item.id }),
+            // Deleted meanwhile: filling the card in would make the easel again.
+            guard let self, self.document.id == easel, !EaselFiles.deleted.contains(easel),
+                  let i = self.document.items.firstIndex(where: { $0.id == item.id }),
                   case .link(var link) = self.document.items[i].kind else { return }
             link.title = meta?.title ?? link.title
             link.summary = meta?.summary

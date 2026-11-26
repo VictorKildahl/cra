@@ -147,7 +147,7 @@ enum EaselFiles {
     // MARK: Easels open in tabs
 
     /// A canvas holds what its easel is now; its file follows 0.4 s after an edit (JSONStore.save)
-    /// and is written over when the tab closes. So whatever reads or changes an easel that is open
+    /// and, after an edit, is written again when the tab closes. So whatever reads or changes an easel that is open
     /// goes through its canvas.
     private final class Open { weak var canvas: EaselCanvasView? }
     private static var open: [UUID: Open] = [:]
@@ -176,6 +176,34 @@ enum EaselFiles {
 
     static func listChanged() { Changes.shared.count += 1 }
 
+    /// Sync's change to an easel open in a tab, made on its canvas: `change` gets what the canvas
+    /// shows and returns the easel to show, nil to delete it. False when no tab has it open, or it
+    /// was deleted here: that canvas saves nothing, so the service writes the file.
+    static func changeOpen(_ id: UUID, _ change: (Easel) -> Easel?) -> Bool {
+        guard !deleted.contains(id), let canvas = canvas(for: id) else { return false }
+        // Deleted, the closing canvas writes nothing back; its tabs close with `closeTabs`.
+        guard let new = change(canvas.document) else { delete(id); return true }
+        if new != canvas.document { canvas.replace(with: new) }
+        return true
+    }
+
+    /// After sync changed the easels: Library lists them again, and one deleted here that a bundle
+    /// brought back (Import) saves again, its canvas still loaded (a Favorite) showing Import's copy.
+    static func synced() {
+        let back = deleted.filter { FileManager.default.fileExists(atPath: store($0).url.path) }
+        deleted.subtract(back)
+        for id in back { canvas(for: id)?.replace(with: load(id)) }
+        listChanged()
+    }
+
+    /// An easel going (Library ▸ Easels ▸ Delete, or deleted on another Mac): every tab showing it
+    /// closes through `close`, and none writes it back.
+    static func closeTabs(of id: UUID, in store: SidebarStore, close: (UUID) -> Void) {
+        deleted.insert(id)
+        let url = Easel(id: id).url
+        for tab in store.allTabs() where tab.tab?.url == url { close(tab.id) }
+    }
+
     /// Arc's capture menu ▸ Send To…: the capture added below what the easel holds. With `source`
     /// (the page it came from) it is a capture that can go live, else a plain picture.
     static func add(picture png: Data, to id: UUID, source: Easel.Capture? = nil) -> Bool {
@@ -192,6 +220,14 @@ enum EaselFiles {
         easel.items.append(item)
         store(id).saveNow(easel)
         return true
+    }
+
+    /// File ▸ New Easel: an empty easel, on disk before its tab opens (a canvas writes none), so Library ▸ Easels lists it.
+    static func create() -> Easel {
+        let easel = Easel()
+        store(easel.id).saveNow(easel)
+        listChanged()
+        return easel
     }
 
     /// Arc's capture menu ▸ New Easel: an easel with the capture on it, under the title.
