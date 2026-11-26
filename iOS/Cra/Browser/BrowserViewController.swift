@@ -1140,6 +1140,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func prepareSearchSheet(incognito: Bool? = nil) {
         dropBlockerNotices()
         editsShownTab = false
+        sheet.forgetAccessories()
         if let incognito { incognitoSearch = incognito }
         sheet.isIncognito = incognitoSearch
         // The bar carries the drawer's colour, so it turns incognito's dark with the sheet.

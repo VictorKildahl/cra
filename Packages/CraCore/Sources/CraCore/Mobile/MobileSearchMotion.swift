@@ -37,6 +37,13 @@ public enum MobileSearchMotion {
     /// The stretch over which the field's buttons at its right end (mic, incognito, clear) come in: the second half,
     /// as Arc Search's mic shows once the field is most of the way across. From the start, they sat in the pill.
     public static let accessorySpan: ClosedRange<CGFloat> = 0.5...1
+    /// The new tab drawer's field brings its buttons in with itself, over the whole of its opening,
+    /// rather than once it is most of the way across.
+    public static let drawerAccessorySpan: ClosedRange<CGFloat> = 0...1
+
+    public static func accessorySpan(growsFromBar: Bool) -> ClosedRange<CGFloat> {
+        growsFromBar ? drawerAccessorySpan : accessorySpan
+    }
 
     /// The incognito mask's blink: the lids drop over the eyes when it is turned on, and lift away
     /// when it is off.

@@ -272,6 +272,11 @@ struct MobileSearchMotionTests {
         // Closing: the buttons go first, the surface stays solid until the last quarter.
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 0, over: buttons) == 0...0.5)
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 0, over: surface) == 0.75...1)
+        // The new tab drawer's buttons come in with its field, from the start of its opening.
+        let drawer = MobileSearchMotion.accessorySpan(growsFromBar: true)
+        #expect(MobileSearchMotion.fadeWindow(from: 0, to: 1, over: drawer) == 0...1)
+        #expect(MobileSearchMotion.opacity(openness: 0.5, over: drawer) == 0.5)
+        #expect(MobileSearchMotion.accessorySpan(growsFromBar: false) == buttons, "the page menu's sheet keeps Arc Search's")
         // From halfway open, the surface is already solid: nothing left to fade.
         #expect(MobileSearchMotion.fadeWindow(from: 0.5, to: 1, over: surface) == 0...0)
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 1, over: surface) == 0...0)

@@ -469,6 +469,12 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         showRows()
     }
 
+    /// A sheet about to open starts from nothing: its buttons are set without a swap and come in
+    /// only with the field's own fade, rather than springing in for whatever it showed last.
+    func forgetAccessories() {
+        accessories = nil
+    }
+
     private func slot(for kind: MobileSearchSheet.Accessories) -> UIView {
         switch kind {
         case .mic: micSlot
@@ -768,7 +774,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                                         y: incognitoLabelClip.bounds.midY)
         place(micSlot, MobileSearchSheet.micFrame(field: frame))
         // The incognito word comes and goes with the mask beside it, not ahead of the field.
-        fade([clearButton, incognitoButton, incognitoLabelClip, micButton], over: MobileSearchMotion.accessorySpan,
+        // The new tab drawer (which draws no surface of its own) brings them in with its field.
+        fade([clearButton, incognitoButton, incognitoLabelClip, micButton],
+             over: MobileSearchMotion.accessorySpan(growsFromBar: !drawsSurface),
              from: fieldStart, to: morph)
         // Arc Search's note sits 187 pt below the sheet's top edge.
         incognitoNote.frame = CGRect(x: 0, y: 187 - 12, width: bounds.width, height: 24)
@@ -859,13 +867,17 @@ final class SearchField: UITextField {
 final class FieldBackgroundView: UIView {
     /// The drawer's field is frosted like the drawer, its white lift over the material.
     private let material = UIVisualEffectView(effect: nil)
-    private let gradient = CAGradientLayer()
+    /// The lift (or the sheet's own grey) in a view of its own, so its frame and fade move with
+    /// the field's animation. As a bare sublayer it took Core Animation's own quarter second and
+    /// lagged behind the growing field, its square ends showing inside the rounded edge.
+    private let lift = GradientView()
+    private var gradient: CAGradientLayer { lift.gradient }
     private let pill = UIView()
     private let plus = UIImageView(image: UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)))
 
     var openness: CGFloat = 1 {
         didSet {
-            gradient.opacity = Float(openness)
+            lift.alpha = openness
             material.alpha = openness
             pill.alpha = 1 - openness
             plus.alpha = 1 - openness
@@ -911,10 +923,10 @@ final class FieldBackgroundView: UIView {
         layer.borderWidth = 0.5
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
-        layer.addSublayer(gradient)
-        // Under the lift: a view's layer goes in at the bottom.
         material.isUserInteractionEnabled = false
-        insertSubview(material, at: 0)
+        lift.isUserInteractionEnabled = false
+        addSubview(material)
+        addSubview(lift)
         pill.backgroundColor = Palette.barControlFill
         pill.layer.borderWidth = 0.5
         pill.layer.cornerCurve = .continuous
@@ -930,7 +942,7 @@ final class FieldBackgroundView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        gradient.frame = bounds
+        lift.frame = bounds
         material.frame = bounds
         pill.frame = bounds
         pill.layer.cornerRadius = layer.cornerRadius
@@ -974,6 +986,12 @@ final class FieldBackgroundView: UIView {
         layer.borderColor = Palette.raisedHairline
             .withAlphaComponent(Palette.raisedHairlineOpacity * alpha).cgColor
     }
+}
+
+/// A view whose own layer is a gradient, so the gradient animates with the view.
+private final class GradientView: UIView {
+    override class var layerClass: AnyClass { CAGradientLayer.self }
+    var gradient: CAGradientLayer { layer as! CAGradientLayer }
 }
 
 /// The suggestions' scroll view: a drag that starts on a row scrolls instead of picking it
