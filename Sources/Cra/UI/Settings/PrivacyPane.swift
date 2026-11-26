@@ -39,7 +39,8 @@ struct PrivacyPane: View {
                                   isOn: $store.settings.fingerprintingProtection)
                 SettingsCardDivider()
                 SettingsPlainRow("Block lists",
-                                   detail: "Pick lists one by one, add a list by its address or write your own filters.",
+                                   detail: "Pick lists one by one, add a list by its address or write your own filters."
+                                       + (BlockLists.shared.inUse.map { " " + BlockListCount.inUse(rules: $0.rules, lists: $0.lists) } ?? ""),
                                    trailing: { Button("Advanced…") { showsBlockLists = true } })
             }
 
@@ -132,9 +133,13 @@ private struct BlockListRows: View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsHeader("Built-in lists")
             SettingsFeatureCard {
-                SettingsToggleRow("AdAway", detail: "Built in. Blocks third-party ad and tracker domains, including in-app advertising networks.", isOn: $store.settings.adAwayEnabled)
+                SettingsToggleRow("AdAway", detail: "Built in. Blocks third-party ad and tracker domains, including in-app advertising networks.", isOn: $store.settings.adAwayEnabled) {
+                    RuleCountLine(count: lists.builtInCounts["adaway"])
+                }
                 SettingsCardDivider()
-                SettingsToggleRow("Anudeep’s Blacklist", detail: "Built in. Blocks third-party connections to known advertising and tracking servers.", isOn: $store.settings.anudeepEnabled)
+                SettingsToggleRow("Anudeep’s Blacklist", detail: "Built in. Blocks third-party connections to known advertising and tracking servers.", isOn: $store.settings.anudeepEnabled) {
+                    RuleCountLine(count: lists.builtInCounts["anudeep"])
+                }
             }
             SettingsHeader("Filter lists").padding(.top, 14)
             ForEach(DesktopFilterList.Category.allCases, id: \.self) { category in
@@ -169,6 +174,7 @@ private struct BlockListRows: View {
                     Button("Edit…") { draft = store.settings.personalBlockFilters ?? ""; editingRules = true }
                         .disabled(editingRules)
                 }) {
+                    RuleCountLine(count: lists.personalCount(store.settings.personalBlockFilters))
                     if editingRules {
                         TextEditor(text: $draft)
                             .font(.system(.body, design: .monospaced))
@@ -254,6 +260,7 @@ private struct BlockListRows: View {
             .help(address)
         }) {
             if let failure = lists.failures[address] { Text(failure).font(.caption).foregroundStyle(.red) }
+            if store.settings.customBlocklists.contains(address) { RuleCountLine(count: lists.count(address)) }
         }
     }
 
@@ -296,6 +303,18 @@ private struct BlockListRows: View {
         adding = false
     }
 
+}
+
+/// A block list's rules under its row: "48,210 rules · 3,102 Cra can’t use" (BlockListCount).
+private struct RuleCountLine: View {
+    let count: BlockListCount?
+
+    var body: some View {
+        if let summary = count?.summary, !summary.isEmpty {
+            Text(summary).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                .accessibilityIdentifier("ruleCount")
+        }
+    }
 }
 
 /// Chromium's secure DNS setting (chrome://settings/security) as a menu, under "Always use

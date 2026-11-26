@@ -292,6 +292,20 @@ struct ModelFixtureTests {
         #expect(!loaded.isRefused(folder: "aeblfdkhhhdcdjpifhhbdiojplfjncoa", inProfile: "Profile 9"))
     }
 
+    /// shared-extensions.json (discussion #595): the shared extensions, the profiles each was taken out of, and the
+    /// uninstalls a profile still owes.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/595"))
+    func sharedExtensionsLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("shared-extensions.json", as: SharedExtensions.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        let all = ["Default", "Profile B0000000-0000-0000-0000-000000000001", "Profile B0000000-0000-0000-0000-000000000002"]
+        #expect(loaded.profiles(of: "cjpalhdlnbpafiamejdnhcphjbkeiagm", allProfiles: all) == Array(all.prefix(2)))
+        #expect(loaded.profiles(of: "nngceckbapebfimnlniiiahkandclblb", allProfiles: all) == all)
+        #expect(loaded.plan(profile: all[2], installed: ["cjpalhdlnbpafiamejdnhcphjbkeiagm", "nngceckbapebfimnlniiiahkandclblb"])
+                == .init(uninstall: ["cjpalhdlnbpafiamejdnhcphjbkeiagm"]))
+    }
+
     /// imported-browsers.json (#757): the browsers imported from, whose own folders Cra may read
     /// at launch; a browser listed twice loads once, and it saves as a plain array.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/757"))

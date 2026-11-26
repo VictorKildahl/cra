@@ -1,0 +1,34 @@
+# promise: #595
+# A shared extension (Settings ▸ Extensions ▸ Share…, discussion #595) is managed in Cra's Settings, not in
+# chrome://extensions: Chrome keeps it installed there (no Remove, chrome.management.uninstall refused) and
+# chrome://extensions says "Managed by Cra". Settings says which profiles have each extension, and the share
+# survives a relaunch. Stop Sharing gives the extension back to chrome://extensions.
+budget rss=700
+extension ${FIXTURES}/Extension
+cra://open?url=${PAGE}?n=before
+wait 3
+cra://debug?extensionProfiles=before
+expect-log extension profiles before: ${EXTENSION_ID} In Default$
+cra://debug?shareExtension=${EXTENSION_ID}
+expect-log shared extension ${EXTENSION_ID}: shared with every profile
+cra://debug?extensionProfiles=shared
+expect-log extension profiles shared: ${EXTENSION_ID} Shared with every profile$
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('${EXTENSION_ID}').then(i=>'shared-info:'+i.mustRemainInstalled+'/'+(i.controlledInfo?i.controlledInfo.text:'none')+'/'+(i.locationText||''))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*shared-info:true/Managed by Cra/Managed by Cra
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.uninstall('${EXTENSION_ID}',{showConfirmDialog:false}).then(()=>'uninstall went through',e=>'uninstall refused: '+e.message)","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*uninstall (refused|went through)
+reject-log uninstall went through
+relaunch
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('${EXTENSION_ID}').then(i=>'relaunched-info:'+i.mustRemainInstalled+'/'+(i.controlledInfo?i.controlledInfo.text:'none'))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*relaunched-info:true/Managed by Cra
+# What the person sees there: no Remove, "Managed by Cra" as the source and on the enable switch's icon.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const m=document.querySelector('extensions-manager');const d=m?m.shadowRoot.querySelector('extensions-detail-view'):null;if(!d){r('detail:missing');return}const s=d.shadowRoot;const rm=s.querySelector('[id=remove-extension]');const src=s.querySelector('[id=source]');const tip=s.querySelector('[id=enable-section] cr-tooltip-icon');r('detail:remove='+(rm?(rm.hidden?'hidden':'shown'):'missing')+'/source='+(src?src.textContent.trim():'missing')+'/tip='+(tip?(tip.hidden?'hidden':tip.tooltipText):'missing'))},1500))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*detail:remove=hidden/source=Managed by Cra/tip=Managed by Cra
+cra://debug?stopSharing=${EXTENSION_ID}
+expect-log shared extension ${EXTENSION_ID}: no longer shared
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('${EXTENSION_ID}').then(i=>'unshared-info:'+i.mustRemainInstalled+'/'+(i.controlledInfo?i.controlledInfo.text:'none'))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*unshared-info:false/none

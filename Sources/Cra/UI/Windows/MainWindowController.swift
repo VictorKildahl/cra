@@ -3341,6 +3341,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         b.setZoomLevel(b.zoomLevel() + delta)
     }
 
+    /// cra://debug?pageScale=<factor> pinches the front page to that scale (as a trackpad pinch does);
+    /// pageScale=read:<label> logs "page scale <label>: <visualViewport.scale> zoom level: <n>".
+    func debugPageScale(_ value: String) {
+        guard let b = currentBrowser else { return CraLog.note("page scale: no page") }
+        if let factor = Double(value) {
+            b.sendDevToolsMethod("Emulation.setPageScaleFactor", params: #"{"pageScaleFactor":\#(factor)}"#) { _, error in
+                CraLog.note("page scale set \(factor)\(error.map { ": \($0)" } ?? "")")
+            }
+            return
+        }
+        let label = value.hasPrefix("read:") ? String(value.dropFirst(5)) : value
+        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"window.visualViewport.scale","returnByValue":true}"#) { result, error in
+            let object = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            let scale = ((object?["result"] as? [String: Any])?["value"] as? NSNumber)?.doubleValue
+            DispatchQueue.main.async {
+                CraLog.note("page scale \(label): \(scale.map { String(format: "%.2f", $0) } ?? "? \(error ?? "")") zoom level: \(b.zoomLevel())")
+            }
+        }
+    }
+
     var captureOverlay: CaptureOverlay?
     var captureRequest: (id: UUID, window: NSWindow)?
 

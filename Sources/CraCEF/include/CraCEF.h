@@ -690,6 +690,23 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// Default), as JSON. Chromium writes it to Preferences ~10 s after a change. nil until
 /// that profile has loaded.
 + (nullable NSString *)extensionSettingsForProfile:(nullable NSString *)profilePath;
+/// Shared extensions (GitHub discussion #595): by profile folder name ("Default", "Profile <id>"), the extensions Cra
+/// keeps installed there. Chrome can't remove them then (chrome://extensions has no Remove, chrome.management.uninstall
+/// and the Web Store's "Remove from Chrome" are refused) and chrome://extensions says "Managed by Cra". Replaces the
+/// whole map; a profile that loads later takes its list as it loads. Does nothing on CEF.
++ (void)setManagedExtensionIDs:(NSDictionary<NSString *, NSArray<NSString *> *> *)idsByProfile;
+/// Installs a Chrome Web Store extension in a loaded profile (nil profilePath is Default), as Cra.installFromWebStore
+/// does in a page's: the store's signed CRX, no prompt, and the store's version may not ask for more than
+/// `manifestJSON` (the copy the person has). The completion gets nil once it is installed (or already was), else why
+/// not, on the main queue. This doesn't load the profile. Fails on CEF.
++ (void)installWebStoreExtension:(NSString *)extensionID manifest:(NSString *)manifestJSON
+                     profilePath:(nullable NSString *)profilePath
+                      completion:(void (^)(NSString * _Nullable error))completion;
+/// Uninstalls an extension from a loaded profile (nil profilePath is Default) with its data, as chrome://extensions'
+/// Remove does, without asking. NO when the profile hasn't loaded (this doesn't load it), the extension isn't there,
+/// or a policy keeps it: take it out of setManagedExtensionIDs first. NO on CEF.
++ (BOOL)uninstallExtension:(NSString *)extensionID profilePath:(nullable NSString *)profilePath
+    NS_SWIFT_NAME(uninstallExtension(_:profilePath:));
 /// A profile's pref as Chromium holds it now (nil profilePath is Default), as JSON: how Cra reads
 /// `default_search_provider_data.template_url_data`, the engine chrome://settings/searchEngines
 /// made the default. nil until that profile has loaded.

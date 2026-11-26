@@ -52,6 +52,7 @@ final class CommandTextField {
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         coordinator.field = field
+        coordinator.undo = FieldTypingUndo(field: field) { [weak coordinator] text in coordinator?.restoreTyped(text) }
         return field
     }
 
@@ -70,6 +71,8 @@ final class CommandTextField {
         }
         if coord.appliedVersion != controller.fieldTextVersion {
             coord.appliedVersion = controller.fieldTextVersion
+            // Text the bar put in itself (opening, a completion accepted): typing before it isn't undone into it.
+            coord.undo?.reset(text: controller.fieldText)
             coord.suppressChange = true
             field.stringValue = controller.fieldText
             coord.lastTyped = controller.fieldText
@@ -78,6 +81,7 @@ final class CommandTextField {
             DispatchQueue.main.async {
                 field.window?.makeFirstResponder(field)
                 guard let editor = field.currentEditor() else { return }
+                coord.undo?.adopt(editor)
                 if selected { editor.selectAllShowingStart() } else { editor.selectedRange = NSRange(location: (field.stringValue as NSString).length, length: 0) }
             }
         }
@@ -103,8 +107,23 @@ final class CommandTextField {
         var lastTyped = ""
         var suppressChange = false
         var pendingCompletion: String?
+        /// ⌘Z for what was typed (#809).
+        var undo: FieldTypingUndo?
 
         init(controller: CommandBarController) { self.controller = controller }
+
+        /// An undo or redo brings back `text` as typed: in the field with the caret at its end, listed without a
+        /// completion (as after deleting).
+        func restoreTyped(_ text: String) {
+            guard let field else { return }
+            suppressChange = true
+            field.stringValue = text
+            lastTyped = text
+            pendingCompletion = nil
+            field.currentEditor()?.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            suppressChange = false
+            controller.update(query: text, allowCompletion: false)
+        }
 
         func applyCompletion(_ completion: String) {
             guard let field, let editor = field.currentEditor() else { return }
@@ -121,6 +140,7 @@ final class CommandTextField {
         /// Show the arrowed-to row's text, or restore what was typed.
         func showPreview(_ text: String?) {
             guard let field else { return }
+            undo?.interrupted()
             let shown = text ?? controller.query
             suppressChange = true
             field.stringValue = shown
@@ -146,6 +166,8 @@ final class CommandTextField {
             guard !suppressChange, let field else { return }
             let text = field.stringValue
             let deleting = text.count < lastTyped.count || (pendingCompletion != nil && text == lastTyped)
+            undo?.adopt(field.currentEditor())
+            undo?.typed(from: lastTyped, to: text)
             lastTyped = text
             pendingCompletion = nil
             controller.update(query: text, allowCompletion: !deleting)

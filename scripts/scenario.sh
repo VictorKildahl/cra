@@ -20,6 +20,10 @@
 # on a snapshot that differs or couldn't be compared (a 1x display) even then: the snapshots gate.
 # Logs land in build/scenarios/<name>/.
 #
+# A line starting with # is a comment, and so is the rest of a line after a space, # and a space
+# ("budget stalls50=6   # why"). A # with text right after it belongs to the line (expect-log
+# fill #4B2323, a URL's fragment).
+#
 # Scenario lines: a cra:// command (sent through CRA_COMMAND_FILE, then `pace` seconds),
 # or one of
 #   wait <s>                    let the app work
@@ -491,10 +495,12 @@ PACE=0.2
 RSS_BUDGET=1500 MAXSTALL=1500 STALLS50=10 STALLS16= LAUNCHSTALL=1000 PERFCPU=0.1
 BASELINE=""
 
+# shellcheck source=scenario-line.sh
+source "$ROOT/scripts/scenario-line.sh"
 echo "$NAME (pid $PID, logs in ${OUT#$ROOT/})"
 while IFS= read -r raw || [ -n "$raw" ]; do
-  line="$(expand "${raw%%#*}")"
-  line="${line%"${line##*[![:space:]]}"}"
+  line="$(scenario_line "$raw")" || continue
+  line="$(expand "$line")"
   [ -z "$line" ] && continue
   alive || { problem "Cra exited during: $line"; break; }
   set -f; set -- $line; set +f

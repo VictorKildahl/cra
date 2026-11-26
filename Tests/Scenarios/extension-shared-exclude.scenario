@@ -1,0 +1,34 @@
+# promise: #595
+# A shared extension taken out of one profile in Settings (its checkmark under Profiles, discussion #595) is removed
+# from that profile only, at once where the profile has loaded (one that hasn't loses it as it loads:
+# Tests/ExtensionStoreMigrationTests.swift). The other profile keeps it, and it stays out after a relaunch. The
+# spaces Personal (Default) and Random (on the profile Hobbies), as in engine-host-closes-profile-stays.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+extension ${FIXTURES}/Extension
+cra://open?url=${PAGE}?n=personal&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?shareExtension=${EXTENSION_ID}
+expect-log shared extension ${EXTENSION_ID}: shared with every profile
+cra://debug?extensionProfiles=shared
+expect-log extension profiles shared: ${EXTENSION_ID} Shared with every profile$
+cra://debug?shareExtension=${EXTENSION_ID}&profile=Profile%20B0000000-0000-0000-0000-000000000001&included=0
+expect-log shared extension ${EXTENSION_ID}: taken out of Profile B0000000-0000-0000-0000-000000000001
+cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
+wait 3
+expect-log shared extension ${EXTENSION_ID}: removed from Profile B0000000-0000-0000-0000-000000000001
+reject-log shared extension ${EXTENSION_ID}: (removed from|could not be removed from) Default
+cra://debug?extensionProfiles=excluded
+expect-log extension profiles excluded: ${EXTENSION_ID} Shared with Default$
+cra://debug?extensionList=random
+expect-log extension list random: incognito=0 \[\]
+relaunch
+cra://open?url=${PAGE}?n=random-again&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?extensionList=random-again
+expect-log extension list random-again: incognito=0 \[\]
+cra://open?url=${PAGE}?n=personal-again&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?extensionList=personal-again
+expect-log extension list personal-again: incognito=0 \[Cra Scenario Fixture\]
