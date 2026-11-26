@@ -142,10 +142,12 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
         if saturation != 50 { filters.append("saturate(\(fmt(saturation / 50)))") }
         if !filters.isEmpty || (engineTints && strength > 0) {
             // A background propagated from body to the canvas is outside the filtered/tinted subtree:
-            // pin Canvas on html so any filter or engine tint covers the page's background too.
-            let background = "background-color: Canvas !important; "
-            let filter = filters.isEmpty ? "" : "filter: \(filters.joined(separator: " ")) !important; "
-            rules.append("html { \(background)\(filter)}")
+            // give html a Canvas background as a fallback. Zero specificity lets a page's own html
+            // background win, so a site that paints its own background is not recoloured.
+            rules.append(":where(html) { background-color: Canvas; }")
+            if !filters.isEmpty {
+                rules.append("html { filter: \(filters.joined(separator: " ")) !important; }")
+            }
             // Pictures and video keep their own colours under an inverted page.
             if invert { rules.append("img, video, picture, canvas, iframe, svg image { filter: invert(1) hue-rotate(180deg) !important; }") }
         }
