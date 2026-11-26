@@ -1,7 +1,7 @@
 import AppKit
 
 /// A browser the import can read: Dia's list (Arc, Brave, Chrome, Edge,
-/// Firefox, Opera, Opera GX, Safari) plus Dia itself, Vivaldi, Chromium, Helium, Yab, Ardia, Phi and Zen.
+/// Firefox, Opera, Opera GX, Safari) plus Dia itself, Vivaldi, Chromium, Helium, Yab, Ardia, Phi, Crest and Zen.
 struct ImportSource: Identifiable, Hashable {
     enum Kind: Hashable {
         /// Arc and Dia: their own sidebar stores, and a Chromium profile for passwords and cookies.
@@ -10,6 +10,8 @@ struct ImportSource: Identifiable, Hashable {
         case yab, ardia
         /// Phi: spaces in its own SwiftData store, Chromium profiles right in its folder.
         case phi
+        /// Crest: spaces in its own SQLite session file, a Chromium profile for each space.
+        case crest
         case chromium, firefox
         /// Zen: Firefox underneath, with Arc-style spaces, Essentials and pinned tabs.
         case zen
@@ -66,6 +68,8 @@ struct ImportSource: Identifiable, Hashable {
                      keychainService: "Ardia Safe Storage", keychainAccount: "Ardia", ownFolder: ArdiaImporter.supportDir),
         ImportSource(id: "phi", name: "Phi", bundleID: "com.phibrowser.Mac", kind: .phi, dataDir: PhiImporter.userData,
                      keychainService: "Phi Safe Storage", keychainAccount: "Phi"),
+        ImportSource(id: "crest", name: "Crest", bundleID: "com.pauldavis.crest", kind: .crest, dataDir: CrestImporter.userData,
+                     keychainService: "Crest Safe Storage", keychainAccount: "com.pauldavis.crest", ownFolder: CrestImporter.supportDir),
         ImportSource(id: "firefox", name: "Firefox", bundleID: "org.mozilla.firefox", kind: .firefox,
                      dataDir: support.appendingPathComponent("Firefox", isDirectory: true)),
         ImportSource(id: "zen", name: "Zen", bundleID: "app.zen-browser.zen", kind: .zen,
@@ -119,6 +123,7 @@ struct ImportSource: Identifiable, Hashable {
         case .yab: return try YabImporter.plan()
         case .ardia: return try ArdiaImporter.plan()
         case .phi: return try PhiImporter.plan()
+        case .crest: return try CrestImporter.plan()
         case .chromium: return try ChromiumImporter.plan(browser: name, userData: dataDir)
         case .firefox: return try FirefoxImporter.plan(browser: name, root: dataDir)
         case .zen: return try ZenImporter.plan(root: dataDir)
@@ -130,20 +135,29 @@ struct ImportSource: Identifiable, Hashable {
     var credentialProfiles: [ChromiumProfile] {
         guard keychainService != nil else { return [] }
         let profiles = ChromiumImporter.profiles(userData: dataDir)
-        // Yab and Ardia name their Chromium folders by an id, shown here by the space's name;
-        // Yab never uses Default.
+        // Yab, Ardia and Crest name their Chromium folders by an id, shown here by the space's name;
+        // Yab never uses Default. Crest browses each space in its own "Crest-<id>": its Default and
+        // any folder no space uses hold none of the person's sign-ins.
         let names: [String: String]
         switch kind {
         case .yab: names = YabImporter.profileNames(supportDir: dataDir.deletingLastPathComponent())
         case .ardia: names = ArdiaImporter.profileNames()
+        case .crest: names = CrestImporter.profileNames()
         default: return profiles
         }
-        return profiles.filter { kind != .yab || $0.id != "Default" }.map { ChromiumProfile(id: $0.id, name: names[$0.id] ?? $0.name, dir: $0.dir) }
+        let unused: (ChromiumProfile) -> Bool = { p in
+            switch kind {
+            case .yab: return p.id == "Default"
+            case .crest: return !names.isEmpty && names[p.id] == nil
+            default: return false
+            }
+        }
+        return profiles.filter { !unused($0) }.map { ChromiumProfile(id: $0.id, name: names[$0.id] ?? $0.name, dir: $0.dir) }
     }
 
     func topSites(limit: Int) -> [TopSite] {
         switch kind {
-        case .arc, .dia, .yab, .ardia, .phi, .chromium: return ChromiumImporter.topSites(userData: dataDir, limit: limit)
+        case .arc, .dia, .yab, .ardia, .phi, .crest, .chromium: return ChromiumImporter.topSites(userData: dataDir, limit: limit)
         case .firefox, .zen: return FirefoxImporter.topSites(root: dataDir, limit: limit)
         case .safari: return []
         }
@@ -156,7 +170,7 @@ struct ImportSource: Identifiable, Hashable {
 
     func extensions() -> [ImportableExtension] {
         switch kind {
-        case .arc, .dia, .yab, .ardia, .phi, .chromium: return ExtensionImporter.extensions(inUserData: dataDir)
+        case .arc, .dia, .yab, .ardia, .phi, .crest, .chromium: return ExtensionImporter.extensions(inUserData: dataDir)
         case .firefox, .zen, .safari: return []
         }
     }
@@ -181,7 +195,7 @@ extension ImportSource.Kind {
         case .yab:
             return ImportFavicons.Stores(own: YabImporter.ownIcons(supportDir: dataDir.deletingLastPathComponent()),
                                          databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
-        case .arc, .dia, .ardia, .phi, .chromium: return ImportFavicons.Stores(databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
+        case .arc, .dia, .ardia, .phi, .crest, .chromium: return ImportFavicons.Stores(databases: { ChromiumImporter.favicons(userData: dataDir, hosts: $0) })
         case .firefox, .zen: return ImportFavicons.Stores(databases: { FirefoxImporter.favicons(root: dataDir, hosts: $0) })
         case .safari: return ImportFavicons.Stores()
         }

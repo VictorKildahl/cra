@@ -1316,7 +1316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         case "import":
             // Headless import (scripting): cra://import?source=arc&archive=1&settings=1, source any
-            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, chrome, zen…).
+            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, crest, chrome, zen…).
             let source = ImportSource.allCases.first { $0.id == (q("source") ?? "arc") }
             let plan = try? source.flatMap { $0.needsExportedFile ? nil : try $0.plan() }
             if let plan {

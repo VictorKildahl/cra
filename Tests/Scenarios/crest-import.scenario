@@ -1,0 +1,9 @@
+# promise: #688
+# Crest's session file (Tests/Fixtures/Crest, in Crest's own format) through the app's import: its
+# three Spaces come over with their favorites, pinned tabs, folders and open tabs.
+home
+env CRA_CREST_DIR=${FIXTURES}/Crest
+fresh
+wait 3
+cra://import?source=crest&archive=0&settings=0
+expect-log imported 3 spaces, 8 tabs, 2 folders, 0 archived
