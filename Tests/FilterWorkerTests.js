@@ -114,3 +114,20 @@ test('failed update of an existing registration restores its exact host exclusio
     await state.apply('second', [loaderRule], [pause('second.example')]);
     assert.deepEqual(state.scripts[0].excludeMatches, ['*://second.example/*']);
 });
+
+test('an allow rule with only excluded initiators keeps recovery on those sites', async () => {
+    const state = worker();
+    const except = (...domains) => ({
+        id: 4, action: { type: 'allow' },
+        condition: { requestDomains: ['html-load.com'], excludedInitiatorDomains: domains },
+    });
+    await state.apply('global');
+    await state.apply('limited', [except('news.example', 'press.example'), loaderRule, except('local.news.example', 'press.example')]);
+    assert.deepEqual(state.scripts[0].matches, ['*://*.local.news.example/*', '*://*.press.example/*']);
+    state.fail = 'dynamic';
+    assert.deepEqual(await state.apply('global-again'), { failed: 'global-again' });
+    assert.deepEqual(state.scripts[0].matches, ['*://*.local.news.example/*', '*://*.press.example/*']);
+    delete state.fail;
+    await state.apply('allow-everywhere', [loaderRule, except()]);
+    assert.deepEqual(state.scripts, []);
+});

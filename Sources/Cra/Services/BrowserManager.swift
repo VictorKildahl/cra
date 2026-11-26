@@ -1652,7 +1652,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let options = (cookies ? 1 : 0) + (warnings ? 2 : 0)
         if options != runtime.recoveryOptions, let recovery = Self.pageRecovery {
             runtime.recoveryOptions = options
-            runPageScript("(\(recovery))(\(cookies),\(warnings))", in: browser)
+            let selectors = CookieBanners.selectors.joined(separator: ",")
+            runPageScript("(\(recovery))(\(cookies),\(warnings),\(Self.jsonString(selectors)))", in: browser)
         }
         let css = BlockLists.shared.style(for: host)
         guard runtime.hasElementHidingStyle || !css.isEmpty else { return }

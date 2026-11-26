@@ -1,5 +1,5 @@
 // Installed in Cra's isolated world. Never choose a consent option or record consent.
-(cookieBanners, warnings) => {
+(cookieBanners, warnings, bannerSelector) => {
     window.__craPageRecovery?.();
     if (!cookieBanners && !warnings) return;
 
@@ -59,10 +59,10 @@
         if (root.nodeType !== Node.ELEMENT_NODE || !root.isConnected || root.closest('script,style,template')) return;
         if (cookieBanners) {
             // A CSS-hidden top-layer dialog still makes the rest of the document inert.
-            const selector = 'dialog:modal:is([id*="cookie" i],[id*="consent" i])';
+            const selector = 'dialog:modal';
             const dialogs = root.matches(selector) ? [root] : root.querySelectorAll(selector);
             for (const dialog of dialogs) {
-                if (getComputedStyle(dialog).display === 'none') dialog.close();
+                if (dialog.matches(bannerSelector + ',[id*="cookie" i],[id*="consent" i]') && getComputedStyle(dialog).display === 'none') dialog.close();
             }
         }
         if (!warnings) return;
@@ -147,7 +147,7 @@
                 queue(notice);
             }
             if (entry.type === 'attributes') {
-                if (entry.attributeName !== 'class' || entry.target.id === 'iubenda-cs-banner') queue(entry.target);
+                if (entry.attributeName !== 'class' || entry.target.id === 'iubenda-cs-banner' || (cookieBanners && target.matches('dialog:modal'))) queue(entry.target);
             }
             else if (entry.type === 'characterData') {
                 if (warning.test(entry.target.data)) queue(entry.target.parentElement);

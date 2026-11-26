@@ -10,6 +10,9 @@ function loaderSettings(snapshot) {
     const pauses = new Set((snapshot.siteExceptions || []).flatMap(rule => rule.condition.requestDomains || []));
     const excludeMatches = new Set(Array.from(pauses, host => `*://${host}/*`));
     let blocksLoader = false;
+    // Outside these domain subtrees an exception allows the loader.
+    let remainingHosts;
+    const within = (host, root) => host === root || host.endsWith('.' + root);
     for (const { action, condition } of snapshot.rules) {
         if (condition.domainType === 'firstParty'
             || (condition.resourceTypes && !condition.resourceTypes.includes('script'))
@@ -18,17 +21,27 @@ function loaderSettings(snapshot) {
         if (action.type === 'allow' && (domainRule || condition.urlFilter?.startsWith('||html-load.com/'))) {
             // Respect an explicit loader exception even if it only allows some SDK paths.
             if (!condition.initiatorDomains?.length) {
-                blocksLoader = false;
-                break;
+                const roots = condition.excludedInitiatorDomains || [];
+                if (!roots.length) return null;
+                if (!remainingHosts) remainingHosts = roots;
+                else {
+                    const intersection = new Set();
+                    for (const a of remainingHosts) for (const b of roots) {
+                        if (within(a, b)) intersection.add(a);
+                        else if (within(b, a)) intersection.add(b);
+                    }
+                    remainingHosts = [...intersection];
+                }
+                continue;
             }
             for (const host of condition.initiatorDomains) excludeMatches.add(`*://*.${host}/*`);
         }
         if (action.type === 'block' && domainRule && !condition.urlFilter
             && !condition.initiatorDomains && !condition.excludedInitiatorDomains) blocksLoader = true;
     }
-    if (!blocksLoader) return null;
+    if (!blocksLoader || remainingHosts?.length === 0) return null;
     return {
-        id: loaderID, matches: ['http://*/*', 'https://*/*'], excludeMatches: [...excludeMatches].sort(),
+        id: loaderID, matches: remainingHosts ? remainingHosts.map(host => `*://*.${host}/*`).sort() : ['http://*/*', 'https://*/*'], excludeMatches: [...excludeMatches].sort(),
         js: ['adshield.js'], runAt: 'document_start',
     };
 }
@@ -39,8 +52,9 @@ async function setLoader(previous, next) {
     else if (!previous && next) await scripting.registerContentScripts([next]);
     else if (previous && next) {
         const oldHosts = [...(previous.excludeMatches || [])].sort();
-        if (JSON.stringify(oldHosts) !== JSON.stringify(next.excludeMatches || [])) {
-            await scripting.updateContentScripts([{ id: loaderID, excludeMatches: next.excludeMatches || [] }]);
+        if (JSON.stringify(oldHosts) !== JSON.stringify(next.excludeMatches || [])
+            || JSON.stringify([...(previous.matches || [])].sort()) !== JSON.stringify([...next.matches].sort())) {
+            await scripting.updateContentScripts([{ id: loaderID, matches: next.matches, excludeMatches: next.excludeMatches || [] }]);
         }
     }
 }

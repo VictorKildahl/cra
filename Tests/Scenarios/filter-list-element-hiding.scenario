@@ -8,7 +8,7 @@ cra://open?url=http://reader.example:47134/page.html?n=filter-list
 expect-log loaded reader\.example \(HTTP 200\)
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const e=document.createElement('div');e.id='filter-list-fixture';e.className='iklan-banner';document.body.append(e);return 'before:'+getComputedStyle(e).display})()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"before:block"
-cra://debug?blockLists=http://127.0.0.1:47134/blocklist-abp.txt
+cra://debug?blockLists=http://127.0.0.1:47134/blocklist-slot-selectors.txt
 expect-log block lists: [0-9]+ domains, 1 added list
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'added:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
 expect-log Cra cdp Runtime.evaluate .*"value":"added:none"
