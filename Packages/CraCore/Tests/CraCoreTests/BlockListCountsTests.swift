@@ -67,4 +67,13 @@ struct BlockListCountsTests {
         // a, b, c, z and one hiding rule.
         #expect(total == 5)
     }
+
+    @Test func sharedBuiltInHidingRulesCountOnceAcrossSources() {
+        let list = DesktopHidingRules.read("##.ad-container", address: "", fetched: .distantPast)
+        let builtIn = ["##.ad-container", "##.dfp-slot"]
+        for networkRules in [true, false] {
+            #expect(BlockListCount.total(builtIn: [], builtInHiding: builtIn, lists: [list], networkRules: networkRules) == 2)
+            #expect(BlockListCount.total(builtIn: [], builtInHiding: [], lists: [list], networkRules: networkRules) == 1)
+        }
+    }
 }

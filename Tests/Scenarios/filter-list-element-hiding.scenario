@@ -6,6 +6,10 @@ pace 0.5
 budget rss=800 stalls50=30
 cra://open?url=http://reader.example:47134/page.html?n=filter-list
 expect-log loaded reader\.example \(HTTP 200\)
+# The publisher insists the reserved slot should display. Only the layered filter
+# wins while active; pausing and removing the filter must reveal the same slot.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const sheet=document.createElement('style');sheet.textContent='body #filter-list-fixture.iklan-banner { display: block !important }';document.head.append(sheet);return sheet.sheet.cssRules[0].style.getPropertyPriority('display')})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"important"
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const e=document.createElement('div');e.id='filter-list-fixture';e.className='iklan-banner';document.body.append(e);return 'before:'+getComputedStyle(e).display})()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"before:block"
 cra://debug?blockLists=http://127.0.0.1:47134/blocklist-slot-selectors.txt

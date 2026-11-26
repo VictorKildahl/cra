@@ -247,7 +247,8 @@ final class BlockLists {
             }
             let limitNotice = notice
             let personalRules = BlockListCount(user, networkRules: useNetwork).applied
-            let total = BlockListCount.total(builtIn: selected.map { Self.bundled[$0] ?? [] }, lists: sources, networkRules: useNetwork)
+            let total = BlockListCount.total(builtIn: selected.map { Self.bundled[$0] ?? [] }, builtInHiding: adRegions,
+                                             lists: sources, networkRules: useNetwork)
             let listsInUse = selected.filter { !(Self.bundled[$0] ?? []).isEmpty }.count
                 + lists.filter { BlockListCount($0, networkRules: useNetwork).applied > 0 }.count + (personalRules > 0 ? 1 : 0)
             let usage: (rules: Int, lists: Int)? = notice == nil ? (total, listsInUse) : nil
