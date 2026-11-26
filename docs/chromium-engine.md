@@ -390,3 +390,12 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   Chrome's never-seen DevTools window (`StrayWindows`, `TYPE_DEVTOOLS`) is transient and out of the ⌘` cycle, so
   Mission Control no longer shows one empty window per page with DevTools. Scenario `devtools-picker-keys` (fails on -4: `chromeExposed=1`,
   `focus=page` after the pick).
+- 26 Nov 2026: **engine-159.0.8154.45-11** (on -10's layer), no download arrow of Chrome's over a page Cra hosts (#774,
+  `cra-download-started-animation.patch`). A download from a link ran Chrome's `DownloadBubbleStartedAnimationViews`,
+  aimed at the download button of a toolbar nobody sees. Its popup widget is made without bounds and shown before its
+  first frame moves it, so its window came up at the top left of the primary display, and with Cra on a second
+  display and another app full screen on the primary one, macOS switched that display to a desktop on every download.
+  Cra already throws Arc's download flight. The bridge also counts every `NativeWidgetMacNSWindow` ordered onto the
+  screen and the ones that come up off every Cra window (`chrome=` `chrome-away=` `last-away=` in
+  `cra://debug?pageWindows=`). Scenario `download-arrow-off-primary` (fails without the patch: `chrome-away=1
+  last-away=NativeWidgetMacNSWindow@0,1439,1x1`).

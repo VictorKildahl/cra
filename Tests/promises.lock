@@ -1744,6 +1744,7 @@
 #768   Tests/StoreTests.swift::arcSiteProfiles  885ccfe0b076
 #770   Tests/Scenarios/downloads-tray-covers-tabs.scenario  0e79296ef349
 #770   Tests/TooltipCoverTests.swift::aListOverTheTabsHidesThemFromThePointer  ff612b388453
+#774   Tests/Scenarios/download-arrow-off-primary.scenario  19d326add1bf
 #776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::inspectOnClosedDevToolsArmsThePickerOnceUp  7815e7dc488a
 #776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::networkOnClosedDevToolsSwitchesOnceTheFrontendIsUp  78eeea00f591
 #776   Packages/CraCore/Tests/CraCoreTests/DevToolsFrontendCallsTests.swift::toggleOpensWithTheKeysAndClosesWithNothing  89198a38c111

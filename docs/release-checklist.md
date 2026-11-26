@@ -301,6 +301,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#354:** on two displays, with another app full screen on the primary one and Cra on the
   other: a link that opens a tab, a ⌘-click that opens one behind, a tab whose page has to load,
   a Peek and DevTools all leave the primary display on its full-screen Space.
+- **#774:** the same two displays: a click on a link that downloads (with and without Ask Where to
+  Save), a page's file picker and an alert leave the primary display on its full-screen Space,
+  and only Cra's download flight shows, no arrow of Chromium's.
 - **#231:** with Keep Cra in the menu bar on, the C shows in the menu bar in light and dark.
   ⌘Q takes the windows and the Dock icon away, and focus goes to the app behind. A full-screen
   window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the

@@ -675,6 +675,22 @@ void PlaceChromeWindow(NSWindow* window) {
   window.animationBehavior = NSWindowAnimationBehaviorNone;
 }
 
+// Whether a window's centre is on no Cra window on screen (and there is one).
+BOOL AwayFromCraWindows(NSWindow* window) {
+  NSPoint centre = NSMakePoint(NSMidX(window.frame), NSMidY(window.frame));
+  BOOL anyCraWindow = NO;
+  for (NSWindow* w in NSApp.windows) {
+    if (w == window || !w.isVisible || w.parentWindow || w.alphaValue == 0 || [g_host_windows containsObject:w]) {
+      continue;
+    }
+    if (NSPointInRect(centre, w.frame)) {
+      return NO;
+    }
+    anyCraWindow = YES;
+  }
+  return anyCraWindow;
+}
+
 // A window of Chrome's for a page, where it is now: away when its centre is on no Cra window on screen.
 void NoteChromeWindowShown(NSWindow* window) {
   if (!window) {
@@ -684,19 +700,44 @@ void NoteChromeWindowShown(NSWindow* window) {
   if (window.animationBehavior != NSWindowAnimationBehaviorNone) {
     g_page_windows_animated++;
   }
-  NSPoint centre = NSMakePoint(NSMidX(window.frame), NSMidY(window.frame));
-  BOOL anyCraWindow = NO;
-  for (NSWindow* w in NSApp.windows) {
-    if (w == window || !w.isVisible || w.parentWindow || w.alphaValue == 0 || [g_host_windows containsObject:w]) {
-      continue;
-    }
-    if (NSPointInRect(centre, w.frame)) {
-      return;
-    }
-    anyCraWindow = YES;
-  }
-  if (anyCraWindow) {
+  if (AwayFromCraWindows(window)) {
     g_page_windows_away++;
+  }
+}
+
+// Every window of Chrome's views (NativeWidgetMacNSWindow: a bubble, a popup, an animation, Chrome's own windows) as
+// it comes on screen, and the ones that came on screen off every Cra window, with where the last of those was: for
+// cra://debug?pageWindows=. With Cra on a second display, a window of Cra's ordered in on the primary display takes
+// that display off a full-screen Space to a desktop: Chrome's download arrow did, from the primary display's corner
+// (GitHub #774), as page windows did (#354).
+NSInteger g_chrome_windows_shown = 0;
+NSInteger g_chrome_windows_away = 0;
+NSString* g_chrome_window_away_last = @"none";
+
+void CountChromeWindowsShown() {
+  Class cls = NSClassFromString(@"NativeWidgetMacNSWindow");
+  SEL selector = @selector(orderWindow:relativeTo:);
+  Method method = cls ? class_getInstanceMethod(cls, selector) : nullptr;
+  if (!method) {
+    return;
+  }
+  using OrderIMP = void (*)(id, SEL, NSWindowOrderingMode, NSInteger);
+  OrderIMP original = reinterpret_cast<OrderIMP>(method_getImplementation(method));
+  IMP counting = imp_implementationWithBlock(^(NSWindow* me, NSWindowOrderingMode place, NSInteger other) {
+    if (place != NSWindowOut && !me.visible) {
+      g_chrome_windows_shown++;
+      if (AwayFromCraWindows(me)) {
+        g_chrome_windows_away++;
+        NSRect f = me.frame;
+        g_chrome_window_away_last = [NSString stringWithFormat:@"%@@%.0f,%.0f,%.0fx%.0f", NSStringFromClass([me class]),
+                                                               f.origin.x, f.origin.y, f.size.width, f.size.height];
+      }
+    }
+    original(me, selector, place, other);
+  });
+  // NativeWidgetMacNSWindow's own method, or NSWindow's, which only Chrome's windows get here.
+  if (!class_addMethod(cls, selector, counting, method_getTypeEncoding(method))) {
+    method_setImplementation(method, counting);
   }
 }
 
@@ -4426,8 +4467,10 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   return ui::ScopedPasswordInputEnabler::IsPasswordInputEnabled();
 }
 + (NSString*)pageWindowsReadout {
-  return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_page_windows_shown,
-                                    (long)g_page_windows_away, (long)g_page_windows_animated];
+  return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld chrome=%ld chrome-away=%ld last-away=%@",
+                                    (long)g_page_windows_shown, (long)g_page_windows_away,
+                                    (long)g_page_windows_animated, (long)g_chrome_windows_shown,
+                                    (long)g_chrome_windows_away, g_chrome_window_away_last];
 }
 // The view Chrome's Settings find as the page's browser window (kBrowserViewElementId), in a profile's hidden Browser.
 views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
@@ -4765,6 +4808,7 @@ void DropFirstResponderAfterResigningException() {
     base::CommandLine::Init(0, nullptr);
   }
   DropFirstResponderAfterResigningException();
+  CountChromeWindowsShown();
 }
 
 + (NSInteger)backgroundActivations {

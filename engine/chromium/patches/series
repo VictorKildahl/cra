@@ -83,3 +83,4 @@ renderer-startup-reused-process.patch
 cra-close-without-asking.patch
 cra-history-no-expiry.patch
 cra-page-window-bounds.patch
+cra-download-started-animation.patch

@@ -650,7 +650,9 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 + (void)floatOverFullScreenSpaces:(NSWindow *)window;
 /// "shown=<n> away=<n> animated=<n>": the page and DevTools windows Chromium has shown, how many of
 /// them it showed off every Cra window that was on screen, and how many macOS animates in and out
-/// (GitHub #354), for cra://debug?pageWindows=.
+/// (GitHub #354), for cra://debug?pageWindows=. On the engine it goes on with
+/// "chrome=<n> chrome-away=<n> last-away=<class@x,y,wxh|none>": every window of Chromium's views ordered
+/// onto the screen, the ones that came up off every Cra window, and the last of those (GitHub #774).
 @property (class, nonatomic, readonly) NSString *pageWindowsReadout;
 /// "element=<0|1> shown=<0|1>" per profile's hidden Browser on the engine: whether Chrome finds the browser element its
 /// Settings look for, for cra://debug?hostBrowserView=. "no engine" on CEF.
