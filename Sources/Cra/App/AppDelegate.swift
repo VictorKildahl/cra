@@ -1335,6 +1335,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // pageScale=<factor> pinch-zooms the front tab's page as a trackpad does; pageScale=read:<label> logs its
+            // pinch scale and zoom level (GitHub #825: ⌘0 left a pinch in place).
+            if let scale = dict["pageScale"] { main.debugPageScale(scale); return }
             if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             if let mode = dict["coverWindow"] { main.debugCoverWindow(mode); return }
             if let mode = dict["missionControl"] { main.debugMissionControl(mode); return }
@@ -4380,7 +4383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
         case "zoomIn": main.zoom(by: 0.5)
         case "zoomOut": main.zoom(by: -0.5)
-        case "resetZoom": main.currentBrowser?.setZoomLevel(0)
+        case "resetZoom": main.currentBrowser?.resetZoom()
         case "viewSource": main.currentBrowser?.viewSource()
         // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
         // DevTools only when that panel already shows (DevToolsToggle.run).

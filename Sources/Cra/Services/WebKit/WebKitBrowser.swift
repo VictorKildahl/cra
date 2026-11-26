@@ -950,6 +950,10 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                         self?.reply(completion, #"{"playing":\#(playing > 0),"session":false,"paused":\#(playing),"resisted":0}"#, nil)
                     }
                 }
+            case "Emulation.setPageScaleFactor":
+                // ⌘0 sets 1 (CraBrowser.resetZoom, #825): a trackpad pinch is WebKit's magnification.
+                web.magnification = (Self.object(params)["pageScaleFactor"] as? Double).map { CGFloat($0) } ?? 1
+                reply(completion, "{}", nil)
             case "Cra.setFreezingVote", "Cra.load":
                 // WebKit decides when a hidden page sleeps; tab sleeping closes the page instead.
                 reply(completion, "{}", nil)

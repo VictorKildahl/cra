@@ -1,0 +1,27 @@
+# promise: #825
+# View ▸ Zoom to Actual Size (⌘0) puts the page back to its actual size after a trackpad pinch too, as Arc and Chrome
+# do (Chrome's reset sets the zoom level and the page scale). Cra's set only the zoom level, so a pinched page stayed
+# magnified (GitHub #825, joodaloop, 0.1.56). The pinch is the page scale a trackpad pinch sets, through the page's
+# DevTools session; the reset is the menu's own action, after a pinch alone and after a pinch with ⌘+ on top.
+budget rss=600 stalls50=6
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+cra://open?url=${PAGE}?n=pinch
+wait 3
+cra://debug?pageScale=2
+wait 1
+cra://debug?pageScale=read:pinched
+expect-log page scale pinched: 2\.00 zoom level: 0
+cra://action/resetZoom
+wait 1
+cra://debug?pageScale=read:reset
+expect-log page scale reset: 1\.00 zoom level: 0
+cra://debug?pageScale=3
+cra://action/zoomIn
+wait 1
+cra://debug?pageScale=read:both
+expect-log page scale both: [0-9.]+ zoom level: 0\.5
+cra://action/resetZoom
+wait 1
+cra://debug?pageScale=read:both-reset
+expect-log page scale both-reset: 1\.00 zoom level: 0
