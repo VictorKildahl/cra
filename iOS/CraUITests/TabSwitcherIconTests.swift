@@ -90,14 +90,4 @@ final class TabSwitcherIconTests: BrowserTestCase {
     private func isRed(_ c: (r: Int, g: Int, b: Int)) -> Bool { c.r > 170 && c.g < 100 && c.b < 100 }
     private func isBlue(_ c: (r: Int, g: Int, b: Int)) -> Bool { c.b > 170 && c.r < 100 }
 
-    /// The screenshot's colour at a point on the screen.
-    private func colour(_ image: UIImage, at point: CGPoint) -> (r: Int, g: Int, b: Int) {
-        guard let cg = image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
-        let x = Int(point.x * image.scale), y = Int(point.y * image.scale)
-        let i = y * cg.bytesPerRow + x * (cg.bitsPerPixel / 8)
-        // Simulator screenshots are BGRA.
-        let first = Int(bytes[i]), third = Int(bytes[i + 2])
-        let bgra = cg.bitmapInfo.contains(.byteOrder32Little)
-        return (bgra ? third : first, Int(bytes[i + 1]), bgra ? first : third)
-    }
 }

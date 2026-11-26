@@ -68,6 +68,17 @@ class BrowserTestCase: XCTestCase {
         return nil
     }
 
+    /// The screenshot's colour at a point on the screen.
+    func colour(_ image: UIImage, at point: CGPoint) -> (r: Int, g: Int, b: Int) {
+        guard let cg = image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
+        let x = Int(point.x * image.scale), y = Int(point.y * image.scale)
+        let i = y * cg.bytesPerRow + x * (cg.bitsPerPixel / 8)
+        // Simulator screenshots are BGRA.
+        let first = Int(bytes[i]), third = Int(bytes[i + 2])
+        let bgra = cg.bitmapInfo.contains(.byteOrder32Little)
+        return (bgra ? third : first, Int(bytes[i + 1]), bgra ? first : third)
+    }
+
     func keep(_ name: String) {
         guard let shot = capture() else { return }
         let attachment = XCTAttachment(screenshot: shot)
@@ -1500,6 +1511,44 @@ final class IncognitoTests: BrowserTestCase {
 }
 
 final class SpacesTests: BrowserTestCase {
+    /// Each sheet background reaches both window edges, including the side safe area.
+    func testSpacesBackgroundsReachTheWindowEdges() throws {
+        func checkEdges(_ state: String) throws {
+            guard let shot = capture()?.image else {
+                throw XCTSkip("XCTest screen capture is blank on this display; the pixel check cannot judge Cra here")
+            }
+            let window = app.windows.firstMatch.frame
+            let y = window.minY + window.height * 0.72
+            let left = colour(shot, at: CGPoint(x: window.minX + 4, y: y))
+            let right = colour(shot, at: CGPoint(x: window.maxX - 4, y: y))
+            XCTAssertTrue(abs(left.r - right.r) <= 6 && abs(left.g - right.g) <= 6 && abs(left.b - right.b) <= 6,
+                          "\(state): left \(left), right \(right)")
+        }
+
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        let card = app.buttons["sync-card-open"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        card.tap()
+        XCTAssertTrue(app.staticTexts["sync-title"].waitForExistence(timeout: 10))
+        sleep(1)
+        try checkEdges("Sync intro")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraSyncDelay", "3"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.staticTexts["spaces-connecting"].waitForExistence(timeout: 2))
+        try checkEdges("Connecting")
+        XCTAssertTrue(app.staticTexts["spaces-connecting"].exists, "captured while Connecting is visible")
+        XCTAssertTrue(app.buttons["share-prompt-no-thanks"].waitForExistence(timeout: 10))
+        sleep(1)
+        try checkEdges("Share prompt")
+    }
+
     /// The tab row's left button shows the Mac's Spaces: the pinned tabs and folders of each,
     /// folders shut until a tap opens them (Arc Search), and a tap on a tab that opens it here.
     func testTheMacsSpacesOpenFromTheTabRow() {
