@@ -104,6 +104,11 @@ public extension AppSettings {
 }
 
 public extension AppSettings {
+    var removesAdblockWarnings: Bool {
+        customBlocklists.contains(DesktopFilterList.warningListAddress)
+            && !disabledCustomBlocklists.contains(DesktopFilterList.warningListAddress)
+    }
+
     var customFilterAddresses: [String] {
         let presets = Set(DesktopFilterList.catalog.map(\.address))
         return Set(customBlocklists + disabledCustomBlocklists).subtracting(presets).sorted()

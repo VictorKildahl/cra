@@ -1648,8 +1648,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
               ["http", "https"].contains(scheme.lowercased()), let host = url.host else { return }
         let active = !BlockLists.shared.isPaused(url: browser.currentURL)
         let cookies = active && store.settings.blockCookieBanners
-        let warnings = active && store.settings.customBlocklists.contains(DesktopFilterList.warningListAddress)
-            && !store.settings.disabledCustomBlocklists.contains(DesktopFilterList.warningListAddress)
+        let warnings = active && store.settings.removesAdblockWarnings
         let options = (cookies ? 1 : 0) + (warnings ? 2 : 0)
         if options != runtime.recoveryOptions, let recovery = Self.pageRecovery {
             runtime.recoveryOptions = options
