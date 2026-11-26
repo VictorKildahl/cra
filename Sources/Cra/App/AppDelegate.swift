@@ -2282,6 +2282,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 // chromeKeyable=1: Chrome's own (hidden) DevTools window could take the keys from Cra's window.
                 let hidden = NSApp.windows.filter { $0.title.hasPrefix("DevTools") && $0.alphaValue == 0 && $0 !== window }
                 docked += " chromeKeyable=\(hidden.contains { $0.canBecomeKey } ? 1 : 0)"
+                // chromeExposed=1: one of them is on screen as a window Mission Control and ⌘` would show (empty).
+                docked += " chromeExposed=\(hidden.contains { $0.isVisible && !$0.collectionBehavior.contains(.transient) } ? 1 : 0)"
                 // panel=: the panel the frontend last said it shows (DevToolsToggle.panel), - before it says one.
                 docked += " panel=\(main.browsers.visibleRuntime?.devTools.panel ?? "-")"
                 CraLog.note("tab devtools \(label): windows=\(littleWindows.count) open=\(main.currentBrowser?.hasDevTools == true ? 1 : 0)"

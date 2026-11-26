@@ -209,6 +209,7 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 - (void)devToolsOpened:(BrowserWindowInterface*)devtools;
 - (void)devToolsClosed:(BrowserWindowInterface*)devtools;
 - (void)devToolsShowsPanel:(NSString*)panel;
+- (void)devToolsFrontendWantsKeys;
 - (void)devToolsFrontendDocked:(BOOL)docked;
 - (void)devToolsFrontendPageBounds:(NSRect)bounds;
 - (void)makeChromeActiveTab;
@@ -731,7 +732,9 @@ void MakeHostWindow(NSWindow* window) {
 }
 
 // The DevTools frontend of a page of Cra's: the panel it shows, on load and on every switch, so ⌥⌘J and Network
-// tell a switch from a close (GitHub #138), as the CEF bridge's frontend hooks report it.
+// tell a switch from a close (GitHub #138), as the CEF bridge's frontend hooks report it. And when the element
+// picker lets go (an element picked on the page, or Esc), the frontend asks for the keys: the click that picked
+// left them with the page, and the arrows and DevTools' shortcuts are for the element just picked.
 const char kDevToolsPanelScript[] =
     "(function(){if(window.__craPanel)return;window.__craPanel=1;"
     "function find(root,sel){var r=root.querySelector(sel);if(r)return r;var all=root.querySelectorAll('*');"
@@ -739,18 +742,25 @@ const char kDevToolsPanelScript[] =
     "var now=null,n=0,w=setInterval(function(){var e=find(document,'#tab-elements'),tabs=e&&e.parentNode;"
     "if(tabs){clearInterval(w);var report=function(){var t=tabs.querySelector('.tabbed-pane-header-tab.selected');"
     "var p=t&&t.id.indexOf('tab-')==0?t.id.slice(4):null;if(p&&p!==now){now=p;console.log('__cra_devtools_panel:'+p);}};"
-    "report();new MutationObserver(report).observe(tabs,{attributes:true,subtree:true,attributeFilter:['class']});return;}"
-    "if(++n>200)clearInterval(w);},150);})();";
+    "report();new MutationObserver(report).observe(tabs,{attributes:true,subtree:true,attributeFilter:['class']});"
+    "picker(0);return;}if(++n>200)clearInterval(w);},150);"
+    // The picker's action is registered a moment after the tabs show.
+    "function picker(k){import('./ui/legacy/legacy.js').then(function(UI){var r=UI.ActionRegistry.ActionRegistry.instance();"
+    "if(!r.hasAction('elements.toggle-element-search')){if(k<50)setTimeout(function(){picker(k+1);},100);return;}"
+    "r.getAction('elements.toggle-element-search').addEventListener('Toggled',function(e){"
+    "if(!e.data)console.log('__cra_devtools_keys');});});}})();";
 
 // The frontend docked in Cra's card, as on CEF (Sources/CraCEF/CraCEF.mm, kCraDevToolsHooks): Chrome's DevTools window
 // is never shown and stays undocked (patches/cra-devtools.patch), while the frontend loads with can_dock=true, so
 // it draws the page's place, its splitter, its close button and its dock menu. Its embedder calls for docking come
 // back here as console messages instead of going to Chrome: setIsDocked (acknowledged at once; Cra lays the window
-// out), setInspectedPageBounds (where Cra puts the page) and closeWindow (the close button).
+// out), setInspectedPageBounds (where Cra puts the page), closeWindow (the close button) and bringToFront (the
+// frontend asks for the keys: Chrome would activate its never-shown window).
 const char kDevToolsDockScript[] =
     "(function(){var h=window.InspectorFrontendHost;if(!h||h.__craDock)return;h.__craDock=1;"
     "if(!/[?&]can_dock=true/.test(location.search))return;"
     "h.closeWindow=function(){console.log('__cra_devtools_close');};"
+    "h.bringToFront=function(){console.log('__cra_devtools_keys');};"
     "var sent=false;"
     "h.setInspectedPageBounds=function(b){sent=true;try{console.log('__cra_devtools_bounds:'+JSON.stringify("
     "{x:b.x,y:b.y,width:b.width,height:b.height}));}catch(e){}};"
@@ -783,10 +793,13 @@ class DevToolsFrontendObserver : public content::WebContentsObserver {
                                 const std::optional<std::u16string>& stack) override {
     constexpr std::u16string_view kPanel = u"__cra_devtools_panel:";
     constexpr std::u16string_view kClose = u"__cra_devtools_close";
+    constexpr std::u16string_view kKeys = u"__cra_devtools_keys";
     constexpr std::u16string_view kDocked = u"__cra_devtools_docked:";
     constexpr std::u16string_view kBounds = u"__cra_devtools_bounds:";
     if (message.starts_with(kPanel) && message.size() > kPanel.size()) {
       [page_ devToolsShowsPanel:base::SysUTF16ToNSString(message.substr(kPanel.size()))];
+    } else if (message == kKeys) {
+      [page_ devToolsFrontendWantsKeys];
     } else if (message == kClose) {
       // Later: closing destroys this observer's WebContents.
       CraBrowser* page = page_;
@@ -1542,6 +1555,10 @@ class StrayWindows : public BrowserCollectionObserver, public TabStripModelObser
       // frontend takes focus (a click in it), and Cra's window, where the frontend is, lost the keys. Chromium then
       // dropped mouse moves (no splitter cursor, no hover) and the next click only made Cra's window key again.
       MakeHostWindow(window);
+      // Out of Mission Control and ⌘`: on screen, though never seen (Mission Control showed one empty window per page
+      // that had DevTools, GitHub #778). Only DevTools': a profile's page host is the parent of extension popups,
+      // which Cra finds by that chain, and keeps the collection behaviour it had.
+      window.collectionBehavior |= NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle;
       Later(base::BindOnce(&StrayWindows::TakeDevTools, base::Unretained(this), browser->GetWeakPtr()));
       return;
     }
@@ -2763,6 +2780,12 @@ static TabSharingInfoBarDelegate* ShareInsteadBar(content::WebContents* contents
       bar->RemoveSelf();
     }
     return;
+  }
+}
+
+- (void)devToolsFrontendWantsKeys {
+  if (_hasDevTools && [_delegate respondsToSelector:@selector(browserDevToolsWantsKeys:)]) {
+    [_delegate browserDevToolsWantsKeys:self];
   }
 }
 

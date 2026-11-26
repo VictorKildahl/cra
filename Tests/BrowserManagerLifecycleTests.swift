@@ -242,6 +242,7 @@ enum BrowserManagerLifecycleTests {
         await sweepThatClosesNothingCase()
         devToolsCase()
         devToolsFrontendCase()
+        devToolsPickerKeysCase()
         extensionTabActivationCase()
         await translationCase()
         await beforeUnloadCase()
@@ -1794,6 +1795,27 @@ enum BrowserManagerLifecycleTests {
         manager.browser(browser, devToolsShowsPanel: "elements")
         expect(browser.devToolsScripts.last == DevToolsFrontendCalls.armPicker && observer.devToolsKeys.count == 3,
                "and arms the picker once the frontend is up")
+        manager.closeAll()
+    }
+
+    // promise: #778
+    /// The element picker letting go after a pick (the frontend's bringToFront, or the picker's action turning off)
+    /// gives DevTools the keys back from the page the pick clicked.
+    @MainActor
+    private static func devToolsPickerKeysCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let id = store.createTab(url: "https://example.test/devtools").id
+        manager.show(id, focus: false)
+        let browser = manager.runtime(for: id)!.browser
+        manager.runDevTools(.inspect)
+        manager.browser(browser, didCreateDevToolsView: NSView())
+        manager.browser(browser, devToolsShowsPanel: "elements")
+        let before = observer.devToolsKeys
+        manager.browserDevToolsWantsKeys(browser)
+        expect(observer.devToolsKeys == before + [id], "the frontend asking for the keys gets them")
         manager.closeAll()
     }
 

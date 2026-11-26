@@ -376,3 +376,17 @@ switch, idle CPU, idle wakeups: "Speed, 14 Nov" below) are fixed ("15 Nov, -7").
   page from a profile's history, every visit (`cra/history.mm`: `HistoryService::DeleteURLs`, as Chrome's omnibox does
   for a deleted history row). It runs on the history thread before any later `+searchHistory:`, so the bar's next
   search doesn't find the page. Scenario `command-bar-delete-suggestion`.
+- 25 Nov 2026: **engine-159.0.8154.45-4**, "Always allow <origin> to open links of this type" (#785):
+  `cra-links.patch` passes the initiating origin to `ExternalProtocolHook`, and the bridge says which origin started an
+  app link and whether Chrome may remember it (`ExternalProtocolHandler::GetBlockState`/`SetBlockState`). Scenario
+  `app-link-always-allow`.
+- 25 Nov 2026: **engine-159.0.8154.45-6** (-5 was published the same night with the Mission Control change on every
+  hidden host window, a profile's page host too; that host is the parent of extension popups, and
+  `extension-open-popup` then failed 2 of 3 runs against 2 of 2 on -4, so -6 keeps the change to DevTools windows
+  and -5 was never pinned). DevTools take the keys back after the element picker (#778, PR #812 by
+  rushelex). The frontend hooks report `InspectorFrontendHost.bringToFront` (`kDevToolsDockScript`) and the picker's
+  action turning off (`kDevToolsPanelScript`) as `__cra_devtools_keys`, and the bridge passes it on as
+  `browserDevToolsWantsKeys:`: a pick clicks the page, which kept the keys until DevTools were clicked. And
+  Chrome's never-seen DevTools window (`StrayWindows`, `TYPE_DEVTOOLS`) is transient and out of the ⌘` cycle, so
+  Mission Control no longer shows one empty window per page with DevTools. Scenario `devtools-picker-keys` (fails on -4: `chromeExposed=1`,
+  `focus=page` after the pick).

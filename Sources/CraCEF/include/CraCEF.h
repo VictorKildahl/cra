@@ -250,6 +250,9 @@ CRA_EXPORT @interface CraSSLStatus : NSObject
 /// The DevTools frontend shows `panel` ("elements", "console", "network", …): on load, and
 /// on every switch, from Cra or the frontend's own tab bar.
 - (void)browser:(CraBrowser *)browser devToolsShowsPanel:(NSString *)panel;
+/// The DevTools frontend asks for the keys: its bringToFront, and the element picker letting go after a pick on
+/// the page (whose click left the keys with the page).
+- (void)browserDevToolsWantsKeys:(CraBrowser *)browser;
 @end
 
 CRA_EXPORT @interface CraBrowser : NSObject

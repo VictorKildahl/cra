@@ -2436,6 +2436,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         take(devToolsCalls.frontendShowsPanel(first: first))
     }
 
+    func browserDevToolsWantsKeys(_ browser: CraBrowser) {
+        if browser === self.browser { take(.init(takesKeys: true)) }
+    }
+
     /// Hangs the DevTools window on this one over the page area, under the page's own window, or,
     /// once the frontend's "Undock into separate window" is picked, lets it go as a window of its own.
     private func syncDevToolsWindow() {
