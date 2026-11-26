@@ -581,6 +581,33 @@ struct MobileTabCarouselTests {
         #expect(MobileTabCarousel.restingIndex(position: -0.2, velocity: 2000, count: 4, in: Self.phone) == 0)
     }
 
+    /// Titles above the cards ran into each other (#816): every card showed its title across its
+    /// whole width, under the card in front of it. Arc Search (MacStories' v1.0 picture) titles
+    /// only the card in focus; the cards behind and in front show their favicon alone.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/816")) func onlyTheCardInFocusShowsItsTitle() {
+        #expect(MobileTabCarousel.titleAlpha(relative: 0) == 1)
+        #expect(MobileTabCarousel.titleAlpha(relative: -1) == 0, "the card behind: favicon alone")
+        #expect(MobileTabCarousel.titleAlpha(relative: 1) == 0, "the card in front: favicon alone")
+        #expect(MobileTabCarousel.titleAlpha(relative: 2.4) == 0 && MobileTabCarousel.titleAlpha(relative: -3) == 0)
+        #expect(MobileTabCarousel.titleAlpha(relative: 0.25) == 0.5, "it fades out over half a card of drag")
+        #expect(MobileTabCarousel.titleAlpha(relative: -0.5) == 0)
+    }
+
+    /// The focused card's title ran under the next card's favicon (#816's screenshot: the
+    /// Paramount title over the Shopify icon). It stops before the card in front of it.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/816")) func theFocusedTitleStopsBeforeTheCardInFront() {
+        let focus = MobileTabCarousel.placement(relative: 0, in: Self.phone).frame
+        let next = MobileTabCarousel.placement(relative: 1, in: Self.phone)
+        let nextLeft = next.frame.minX + next.frame.width * (1 - next.scale) / 2
+        let titleLeft = focus.minX + MobileTabCarousel.headerInset + MobileTabCarousel.headerIconSide + 7.5
+        let width = MobileTabCarousel.titleWidth(titleLeft: titleLeft, cardRight: focus.maxX, nextCardLeft: nextLeft)
+        #expect(titleLeft + width <= nextLeft - 8, "clear of the card in front, and of its favicon")
+        #expect(width > 120, "room for a title still")
+        let alone = MobileTabCarousel.titleWidth(titleLeft: titleLeft, cardRight: focus.maxX, nextCardLeft: nil)
+        #expect(titleLeft + alone == focus.maxX - 16, "the newest card's title runs to its own edge")
+        #expect(MobileTabCarousel.titleWidth(titleLeft: 300, cardRight: 310, nextCardLeft: 200) == 0)
+    }
+
     @Test func aCardIsThrownAwayByDistanceOrByAFlick() {
         #expect(MobileTabCarousel.closes(translation: -130, velocity: 0))
         #expect(MobileTabCarousel.closes(translation: -40, velocity: -900))

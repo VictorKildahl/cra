@@ -101,6 +101,8 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         let screen = bounds.size
         guard screen.width > 0 else { return }
         let expandedIndex = cards.firstIndex { $0.tabID == expandedID }
+        var frames: [(frame: CGRect, placement: MobileTabCarousel.Placement)] = []
+        var fills: [CGFloat] = []
         for (index, card) in cards.enumerated() {
             let relative = CGFloat(index) - position
             let placement = MobileTabCarousel.placement(relative: relative, in: screen, sideInsets: sideInsets)
@@ -120,9 +122,17 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
                     frame.origin.x += (index < expandedIndex ? -1 : 1) * expansion * screen.width * 0.7
                 }
             }
-            card.layout(frame: frame, screen: screen, bandHeight: bandHeight, fill: fill,
+            frames.append((frame, placement))
+            fills.append(fill)
+        }
+        for (index, card) in cards.enumerated() {
+            let (frame, placement) = frames[index]
+            // The card in front covers this one's right part: the title stops before it (#816).
+            let next = index + 1 < cards.count && !row.isThrown(cards[index + 1].tabID) ? frames[index + 1].frame.minX : nil
+            card.layout(frame: frame, screen: screen, bandHeight: bandHeight, fill: fills[index],
                         dim: placement.dim * (1 - expansion), headerAlpha: 1 - min(1, expansion * 2),
-                        scale: placement.scale)
+                        titleAlpha: MobileTabCarousel.titleAlpha(relative: CGFloat(index) - position),
+                        nextCardLeft: next, scale: placement.scale)
         }
     }
 
@@ -296,7 +306,7 @@ final class TabCardView: UIView {
     /// Places the card. `frame` is its place in the row; `fill` (0…1) grows it to the whole
     /// `screen`, where its band takes the status bar's strip and its picture the rest.
     func layout(frame row: CGRect, screen: CGSize, bandHeight: CGFloat, fill: CGFloat, dim: CGFloat,
-                headerAlpha: CGFloat, scale: CGFloat) {
+                headerAlpha: CGFloat, titleAlpha: CGFloat, nextCardLeft: CGFloat?, scale: CGFloat) {
         let full = CGRect(origin: .zero, size: screen)
         let frame = CGRect(x: row.minX + (full.minX - row.minX) * fill, y: row.minY + (full.minY - row.minY) * fill,
                            width: row.width + (full.width - row.width) * fill, height: row.height + (full.height - row.height) * fill)
@@ -322,8 +332,18 @@ final class TabCardView: UIView {
         let headerY = frame.minY - MobileTabCarousel.headerGap * scale - side
         headerFrame = CGRect(x: frame.minX, y: headerY - 1, width: frame.width, height: side + 2)
         icon.frame = CGRect(x: frame.minX + MobileTabCarousel.headerInset * scale, y: headerY, width: side, height: side)
-        title.frame = CGRect(x: icon.frame.maxX + 7.5, y: headerY - 1, width: max(0, frame.maxX - icon.frame.maxX - 16), height: side + 2)
+        let titleLeft = icon.frame.maxX + 7.5
+        // Only the card in focus is titled, and its title stops before the card in front (#816).
+        let titleWidth = MobileTabCarousel.titleWidth(titleLeft: titleLeft, cardRight: frame.maxX, nextCardLeft: nextCardLeft)
+        title.frame = CGRect(x: titleLeft, y: headerY - 1, width: titleWidth, height: side + 2)
         icon.alpha = headerAlpha
-        title.alpha = headerAlpha
+        title.alpha = headerAlpha * titleAlpha
+        if Self.readsTitles {
+            accessibilityValue = title.alpha > 0.01 && titleWidth > 0 ? "title to \(Int(title.frame.maxX.rounded()))" : "favicon alone"
+        }
     }
+
+    /// `-CraReadCardTitles YES`: each card says in its accessibility value whether its title shows
+    /// and where it ends, for the UI tests (#816).
+    private static let readsTitles = LaunchOptions.value("CraReadCardTitles") == "YES"
 }

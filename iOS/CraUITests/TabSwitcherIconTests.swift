@@ -1,8 +1,47 @@
 import XCTest
 
-/// The site icon above each card in the tab switcher.
+/// The site icon and title above each card in the tab switcher.
 final class TabSwitcherIconTests: BrowserTestCase {
     private var base: String { ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765" }
+
+    private func openTab(_ title: String) {
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(Self.page(title) + "\n")
+        waitForPage(title)
+    }
+
+    // promise: #816
+    /// The titles above the cards ran into each other (#816's screenshot): every card showed its
+    /// title across its whole width, under the card in front of it, so the card behind wrote over
+    /// the focused card's title and that one ran under the next card's favicon. As in Arc Search,
+    /// only the card in focus is titled now, and its title stops before the card in front.
+    func testOnlyTheFocusedCardIsTitledAndItsTitleStopsBeforeTheNextCard() {
+        let titles = ["Feature-request-import-from-Phi-Browser-and-more",
+                      "Paramount-Plus-Stream-Movies-Shows-and-Live-Sports",
+                      "Log-in-to-your-Shopify-account-and-continue"]
+        launch(["-CraOpenURL", Self.page(titles[0]), "-CraSearch", "NO", "-CraReadCardTitles", "YES"])
+        waitForPage(titles[0])
+        openTab(titles[1])
+        openTab(titles[2])
+        app.buttons["bar-tabs"].tap()
+        let found = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
+        XCTAssertTrue(found.firstMatch.waitForExistence(timeout: 10))
+        sleep(1)
+        keep("card-titles")
+        let cards = found.allElementsBoundByIndex.sorted { $0.frame.minX < $1.frame.minX }
+        XCTAssertEqual(cards.count, 3)
+        guard cards.count == 3 else { return }
+        // The row opens on the card left of the page: the second tab.
+        XCTAssertEqual(cards[1].label, titles[1])
+        XCTAssertEqual(cards[0].value as? String, "favicon alone", "the card behind shows no title")
+        XCTAssertEqual(cards[2].value as? String, "favicon alone", "the card in front shows no title")
+        let focused = cards[1].value as? String ?? ""
+        XCTAssertTrue(focused.hasPrefix("title to "), "the card in focus is titled: \(focused)")
+        let end = CGFloat(Int(focused.dropFirst("title to ".count)) ?? .max)
+        XCTAssertLessThanOrEqual(end, cards[2].frame.minX - 8, "its title stops before the card in front")
+    }
 
     /// Every card's icon was a rounded square: the page's touch icon, an app icon most sites list
     /// first and largest, was fetched first, and the header clipped whatever it showed to a

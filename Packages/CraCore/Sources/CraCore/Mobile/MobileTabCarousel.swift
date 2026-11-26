@@ -69,6 +69,24 @@ public enum MobileTabCarousel {
         return Int(min(CGFloat(count - 1), max(0, target)))
     }
 
+    /// How much of a card's title shows when it is `relative` cards right of the one in focus.
+    /// Only the card in focus has its title, as in Arc Search (MacStories' v1.0 picture of the
+    /// row): the cards behind it and in front of it show their favicon alone, so titles never run
+    /// into each other (#816). A drag fades it out within half a card.
+    public static func titleAlpha(relative: CGFloat) -> CGFloat {
+        max(0, 1 - abs(relative) * 2)
+    }
+
+    /// The width of a card's title starting at `titleLeft`: it ends 16 pt before its own card's
+    /// right edge, or before the left edge of the card in front of it (`nextCardLeft`), which
+    /// would otherwise cover its end and put its favicon over the words (#816).
+    public static func titleWidth(titleLeft: CGFloat, cardRight: CGFloat, nextCardLeft: CGFloat?) -> CGFloat {
+        max(0, min(cardRight, nextCardLeft ?? cardRight) - titleEndGap - titleLeft)
+    }
+
+    /// The room left after a title.
+    public static let titleEndGap: CGFloat = 16
+
     /// Whether a card dragged up by `translation` (negative: up) at `velocity` is thrown away.
     public static func closes(translation: CGFloat, velocity: CGFloat) -> Bool {
         translation < -120 || (translation < -30 && velocity < -700)
