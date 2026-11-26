@@ -275,6 +275,7 @@ enum BrowserManagerLifecycleTests {
         await protectedVideoCase()
         await widevineFailureCase()
         await backgroundTabToastCase()
+        linkRouteCase()
         backgroundPageStartsHiddenCase()
         pageHistoryCase()
         await permissionWaitsForItsTabCase()
@@ -691,6 +692,37 @@ enum BrowserManagerLifecycleTests {
         expect(observer.backgroundTabs.count == 2, "a tab opened in front is no background tab")
         manager.browser(page, requestsNewTabWithURL: "cra://action/nextTab", inBackground: true)
         expect(observer.backgroundTabs.count == 2, "a cra:// link opens nothing, so nothing is said")
+        manager.closeAll()
+    }
+
+    // promise: #868
+    /// A link a page opens in a new tab goes through Air Traffic Control like one from another app: once the
+    /// new page's address matches a route to another space (after Google's /url?q= hop or a redirect), the
+    /// tab moves there. The page that opened it stays; a tab that has finished loading stays put.
+    @MainActor
+    private static func linkRouteCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let personal = UUID(), pro = UUID()
+        store.settings.linkRoutes = ["www.scaler.test": personal]
+        let source = store.createTab(url: "https://sheets.test/dsa", in: pro).id
+        manager.show(source, focus: false)
+        let page = manager.runtime(for: source)!.browser
+
+        let host = manager.browser(page, popupHostForURL: "", inBackground: false)!
+        let opened = manager.tabID(of: host)!
+        host.navigate(to: "https://www.google.com/url?q=https://scaler.test")
+        expect(store.spaceID(ofItem: opened) == pro, "the redirector's address matches no route")
+        host.navigate(to: "https://www.scaler.test")
+        expect(store.spaceID(ofItem: opened) == personal && store.spaceID(ofItem: source) == pro,
+               "the routed site's tab moves to its space, the page that opened it stays")
+
+        let settled = manager.browser(page, popupHostForURL: "https://example.test/a", inBackground: false)!
+        let other = manager.tabID(of: settled)!
+        settled.navigate(to: "https://example.test/a")
+        settled.setLoading(false)
+        settled.navigate(to: "https://www.scaler.test")
+        expect(store.spaceID(ofItem: other) == pro, "a tab that has loaded a page stays where it is")
         manager.closeAll()
     }
 
