@@ -1511,20 +1511,20 @@ final class IncognitoTests: BrowserTestCase {
 }
 
 final class SpacesTests: BrowserTestCase {
+    // promise: #839
     /// Each sheet background reaches both window edges, including the side safe area.
     func testSpacesBackgroundsReachTheWindowEdges() throws {
+        defer { XCUIDevice.shared.orientation = .portrait }
         func checkEdges(_ state: String) throws {
-            guard let shot = capture()?.image else {
-                throw XCTSkip("XCTest screen capture is blank on this display; the pixel check cannot judge Cra here")
-            }
+            let shot = try XCTUnwrap(capture()?.image,
+                                     "\(state): XCTest screen capture is blank on this display; the edge check cannot judge Cra here")
             let window = app.windows.firstMatch.frame
             let pixels = try XCTUnwrap(shot.cgImage)
             let width = CGFloat(pixels.width) / shot.scale
             let height = CGFloat(pixels.height) / shot.scale
             // Inner-screen fallback captures can be portrait-shaped for a landscape window.
-            if window.width > window.height && abs(width / height - window.width / window.height) > 0.01 {
-                throw XCTSkip("XCTest capture pixel layout does not match the landscape window; the edge check cannot judge this display")
-            }
+            XCTAssertEqual(width / height, window.width / window.height, accuracy: 0.01,
+                           "\(state): XCTest capture pixel layout does not match the window; the edge check cannot judge this display")
             let y = height * 0.72
             let left = colour(shot, at: CGPoint(x: 4, y: y))
             let right = colour(shot, at: CGPoint(x: width - 4, y: y))
@@ -1534,6 +1534,7 @@ final class SpacesTests: BrowserTestCase {
 
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
+        XCUIDevice.shared.orientation = .landscapeLeft
         app.buttons["bar-tabs"].tap()
         let card = app.buttons["sync-card-open"]
         XCTAssertTrue(card.waitForExistence(timeout: 8))
