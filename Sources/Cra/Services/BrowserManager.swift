@@ -8,6 +8,9 @@ final class TabRuntime {
     let tabID: UUID
     let browser: CraBrowser
     var hasElementHidingStyle = false
+    /// The site the page's address was on when its document committed, until the next address comes.
+    /// Chromium's bridge names a pop-up's or a redirected page's address only after the commit (#869).
+    var committedSite: String?
     var progress: Double = 0
     /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
@@ -1609,13 +1612,22 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         scheduleHistorySave(id)
         if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
         protectedVideoPageChanged(id, browser, url: url)
+        // The document committed under another site's address (a pop-up, Google's /url?q= hop): its
+        // styles were picked for that site, so it gets this one's (#869).
+        if let rt = runtimes[id], let committed = rt.committedSite {
+            rt.committedSite = nil
+            if committed != Self.site(of: url) { applyPageStyles(id, browser, clearing: true) }
+        }
         delegate?.browserManagerDidUpdate(id)
     }
+
+    private static func site(of url: String) -> String { URL(string: url)?.host.map(Boost.siteHost) ?? "" }
 
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
         guard let id = tabID(of: browser) else { return }
         if loading, findOwner?.tabID == id { stopFinding(false) }
         if loading {
+            runtimes[id]?.committedSite = nil
             runtimes[id]?.navigationRevision &+= 1
             invalidateAskOnPageDocument(for: id)
         }
@@ -1642,15 +1654,22 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
         if committed {
-            if let runtime = runtimes[id] {
-                runtime.hasElementHidingStyle = false
-                applyElementHiding(to: runtime)
+            if let rt = runtimes[id] {
+                rt.hasElementHidingStyle = false
+                rt.committedSite = Self.site(of: browser.currentURL)
             }
-            shareTheme(id, with: browser)
-            applyBoost(to: browser, clearing: false)
-            if !BlockLists.shared.isPaused(url: browser.currentURL), let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+            applyPageStyles(id, browser, clearing: false)
         }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// What a new document gets from Cra: list filters, the theme's variables, the site's boost, cookie banner rules.
+    /// `clearing`: the document may hold another site's boost, which goes.
+    private func applyPageStyles(_ id: UUID, _ browser: CraBrowser, clearing: Bool) {
+        if let runtime = runtimes[id] { applyElementHiding(to: runtime) }
+        shareTheme(id, with: browser)
+        applyBoost(to: browser, clearing: clearing)
+        if !BlockLists.shared.isPaused(url: browser.currentURL), let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
     }
 
     func refreshElementHiding() {

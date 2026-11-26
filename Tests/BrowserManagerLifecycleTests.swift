@@ -202,6 +202,7 @@ enum BrowserManagerLifecycleTests {
         await snapshotCase()
         loadingTabCase()
         themeDataCase()
+        boostAfterRedirectCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -1112,6 +1113,31 @@ enum BrowserManagerLifecycleTests {
                && rt.browser.lastIsolatedParams.contains("h1 { color: red }") && rt.browser.scripts.last == "window.boosted = 1",
                "a boosted site's page gets the boost's CSS and runs its script")
         expect(rt.browser.boostTint == "0.7,0.125,0.27,0.5,0.108,0.838", "and the engine its colours, drawn around images (#602)")
+        BrowserManager.boostFor = nil
+        manager.closeAll()
+    }
+
+    /// #869: a page opened from a link (a pop-up with no address yet, or Google's `/url?q=` hop)
+    /// commits before the engine names its address. Once the address comes, the boosted site's
+    /// page gets its boost; later addresses on the same site don't run its script again.
+    // promise: #869
+    @MainActor
+    private static func boostAfterRedirectCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let id = store.createTab(url: "https://www.google.com/url?q=x").id
+        let rt = manager.ensureRuntime(for: id)!
+        BrowserManager.boostFor = { url, _ in
+            url.contains("scaler.test") ? (css: ".day { display: none !important; }", js: "window.boosted = 1", tint: nil) : nil
+        }
+        manager.browser(rt.browser, didChangeCommittedLoad: true)
+        expect(!rt.browser.lastIsolatedParams.contains("__craBoost"), "the redirector's page gets no boost")
+        rt.browser.navigate(to: "https://www.scaler.test/problems/151")
+        expect(rt.browser.lastIsolatedParams.contains("__craBoost") && rt.browser.lastIsolatedParams.contains(".day { display: none")
+               && rt.browser.scripts.filter { $0 == "window.boosted = 1" }.count == 1,
+               "the boosted site's page gets its zaps once its address comes")
+        rt.browser.navigate(to: "https://www.scaler.test/problems/49")
+        expect(rt.browser.scripts.filter { $0 == "window.boosted = 1" }.count == 1, "a later address on the same site doesn't run the script again")
         BrowserManager.boostFor = nil
         manager.closeAll()
     }
