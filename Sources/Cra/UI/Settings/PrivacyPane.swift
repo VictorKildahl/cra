@@ -120,51 +120,25 @@ private struct BlockListsSheet: View {
 private struct BlockListRows: View {
     @Environment(SidebarStore.self) private var store
     private let lists = BlockLists.shared
-    @State private var regionalListsExpanded = false
+    @State private var expanded: Set<DesktopFilterList.Category> = [.ads, .tracking, .security]
     @State private var adding = false
     @State private var editingRules = false
     @State private var draft = ""
     @State private var text = ""
     @State private var error: String?
 
-    private func rows(_ category: DesktopFilterList.Category) -> some View {
-        let entries = DesktopFilterList.catalog.filter { $0.category == category }
-        return ForEach(entries) { list in
-            SettingsCardDivider()
-            listRow(list.address, name: list.name, detail: list.detail)
-        }
-    }
-
-    /// A card's rows with dividers only between them.
-    private func listRows(_ category: DesktopFilterList.Category) -> some View {
-        let entries = DesktopFilterList.catalog.filter { $0.category == category }
-        return ForEach(entries) { list in
-            if list.id != entries.first?.id { SettingsCardDivider() }
-            listRow(list.address, name: list.name, detail: list.detail)
-        }
-    }
-
     var body: some View {
         @Bindable var store = store
         VStack(alignment: .leading, spacing: 0) {
-            SettingsHeader("Ads")
+            SettingsHeader("Built-in lists")
             SettingsFeatureCard {
                 SettingsToggleRow("AdAway", detail: "Built in. Blocks third-party ad and tracker domains, including in-app advertising networks.", isOn: $store.settings.adAwayEnabled)
                 SettingsCardDivider()
                 SettingsToggleRow("Anudeep’s Blacklist", detail: "Built in. Blocks third-party connections to known advertising and tracking servers.", isOn: $store.settings.anudeepEnabled)
-                rows(.ads)
             }
-            regionalListCard.padding(.top, 14)
-            SettingsHeader("Trackers").padding(.top, 14)
-            SettingsFeatureCard { listRows(.tracking) }
-            SettingsHeader("Cookie notices and page annoyances").padding(.top, 14)
-            SettingsFeatureCard { listRows(.annoyances) }
-            SettingsHeader("Security and privacy lists").padding(.top, 14)
-            SettingsFeatureCard {
-                ForEach(DesktopFilterList.catalog.filter { $0.category == .mixed }) { list in
-                    listRow(list.address, name: list.name, detail: list.detail)
-                    if list.id != DesktopFilterList.catalog.last(where: { $0.category == .mixed })?.id { SettingsCardDivider() }
-                }
+            SettingsHeader("Filter lists").padding(.top, 14)
+            ForEach(DesktopFilterList.Category.allCases, id: \.self) { category in
+                categoryCard(category).padding(.bottom, 6)
             }
             SettingsFootnote("These lists block connections to third-party domains on pages you visit. Opening a listed address directly does not show a warning.")
             HStack {
@@ -216,37 +190,49 @@ private struct BlockListRows: View {
         }
     }
 
-    private var regionalListCard: some View {
-        let regional = DesktopFilterList.catalog.filter(\.regional)
-            .sorted { lhs, rhs in
-                let languageOrder = lhs.name.localizedStandardCompare(rhs.name)
-                if languageOrder == .orderedSame { return lhs.detail.localizedStandardCompare(rhs.detail) == .orderedAscending }
-                return languageOrder == .orderedAscending
+    private func categoryCard(_ category: DesktopFilterList.Category) -> some View {
+        var entries = DesktopFilterList.catalog.filter { $0.category == category }
+        if category == .regional {
+            entries.sort {
+                let order = $0.name.localizedStandardCompare($1.name)
+                return order == .orderedSame ? $0.detail.localizedStandardCompare($1.detail) == .orderedAscending : order == .orderedAscending
             }
+        }
         let selected = Set(store.settings.customBlocklists)
-        let count = regional.filter { selected.contains($0.address) }.count
-        let summary = "\(count) of \(regional.count) selected"
+        let count = entries.filter { selected.contains($0.address) }.count
+        let selectable = entries.filter { !$0.referenceOnly || selected.contains($0.address) }.count
+        let summary = "\(count) of \(selectable) selected"
+        let isExpanded = expanded.contains(category)
         return SettingsFeatureCard {
             Button {
-                regionalListsExpanded.toggle()
+                if isExpanded { expanded.remove(category) } else { expanded.insert(category) }
             } label: {
                 SettingsCardRow {
-                    Label("Regional lists", systemImage: "globe")
+                    Text(category.rawValue).fontWeight(.medium)
                 } trailing: {
                     Text(summary).foregroundStyle(.secondary).monospacedDigit()
-                    Image(systemName: regionalListsExpanded ? "chevron.down" : "chevron.forward")
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
                         .font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Regional lists")
-            .accessibilityValue(regionalListsExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
-
-            if regionalListsExpanded {
-                ForEach(regional) { list in
+            .accessibilityLabel(category.rawValue)
+            .accessibilityValue(isExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
+            if isExpanded {
+                if category == .security {
                     SettingsCardDivider()
-                    listRow(list.address, name: list.name, detail: list.detail)
+                    SettingsPlainRow("Online Malicious URL Blocklist", detail: "URLhaus uses full-page blocking rules that Cra cannot enforce yet.", trailing: {
+                        Link("Source", destination: URL(string: "https://gitlab.com/malware-filter/urlhaus-filter")!)
+                    })
+                }
+                ForEach(entries) { list in
+                    SettingsCardDivider()
+                    if list.referenceOnly && !selected.contains(list.address), let url = URL(string: list.address) {
+                        SettingsPlainRow(list.name, detail: list.detail, trailing: { Link("Source", destination: url) })
+                    } else {
+                        listRow(list.address, name: list.name, detail: list.detail)
+                    }
                 }
             }
         }
