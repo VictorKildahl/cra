@@ -1877,6 +1877,11 @@
 #851   Tests/CaptureOverlayTests.swift::checkEditRow  1f215ab319b9
 #851   Tests/EaselCanvasTests.swift::captureEditor  bf466e9417dc
 #852   Tests/Scenarios/little-window-open-in-keeps-page.scenario  2201e37d916c
+#853   Packages/CraCore/Tests/CraCoreTests/SiteDataClearingTests.swift::cookiesAndCacheStayArcs  afbb441d841c
+#853   Packages/CraCore/Tests/CraCoreTests/SiteDataClearingTests.swift::noSiteNoPlan  c2bd7cf77807
+#853   Packages/CraCore/Tests/CraCoreTests/SiteDataClearingTests.swift::siteDataClearsTheWholeOriginOnly  677e518daa0b
+#853   Packages/CraCore/Tests/CraCoreTests/SiteDataClearingTests.swift::siteMenuRow  4f27515a2cc7
+#853   Tests/Scenarios/clear-site-data.scenario  386eed987c2e
 #854   Packages/CraCore/Tests/CraCoreTests/SiteSearchTests.swift::addedEnginesTakeTheirKeywordsAndCanBeTheDefault  f92abb8d62ba
 #854   Tests/Scenarios/command-bar-search-keywords.scenario  525e1b9f06e0
 #864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::aRoutedAddressCountsInTheSpaceItOpensIn  529145e04959

@@ -4416,8 +4416,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "toggleDeveloperMode": if let url = store.selectedTab?.tab?.url { store.settings.toggleDeveloperMode(url: url) }
         case "reload": main.currentBrowser?.reload()
         case "hardReload": main.currentBrowser?.reloadIgnoringCache()
-        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(cookies: false)
-        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(cookies: true)
+        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(.cache)
+        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(.cookies)
+        case "clearSiteData": main.currentBrowser?.clearSiteDataAndReload(.siteData)
         // View ▸ Stop Loading while an agent's pill is up in the window: its Take Over (AgentPill).
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
         case "zoomIn": main.zoom(by: 0.5)
@@ -4723,7 +4724,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("stop")); view.addItem(item("reload")); view.addItem(item("hardReload"))
         // Arc's View menu order: cookies, then cache.
-        view.addItem(item("clearCookies")); view.addItem(item("clearCache"))
+        // Cra's Clear Site Data and Refresh (#853) sits with them.
+        view.addItem(item("clearCookies")); view.addItem(item("clearCache")); view.addItem(item("clearSiteData"))
         view.addItem(.separator())
         view.addItem(item("resetZoom")); view.addItem(item("zoomIn")); view.addItem(item("zoomOut"))
         view.addItem(.separator())

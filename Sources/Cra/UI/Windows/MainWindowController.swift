@@ -4895,8 +4895,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         actions.addExtension = { [weak self] in self?.openTab("https://chromewebstore.google.com/category/extensions") }
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }
-        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: false) }
-        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: true) }
+        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.cache) }
+        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.cookies) }
+        actions.clearSiteData = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.siteData) }
         let ssl = currentBrowser?.sslStatus()
         let secure = ConnectionSecurity.isSecure(url: url, status: ssl.map {
             ConnectionSecurity.Status(secureConnection: $0.secureConnection, certStatus: $0.certStatus, contentStatus: $0.contentStatus)

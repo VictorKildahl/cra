@@ -916,7 +916,9 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                     self?.reply(completion, (try? r.get()) as? String, "Page.getLayoutMetrics failed")
                 }
             case "Storage.clearDataForOrigin":
-                clearCookies(origin: Self.object(params)["origin"] as? String ?? "", completion: completion)
+                let p = Self.object(params)
+                clearSiteData(origin: p["origin"] as? String ?? "", everything: (p["storageTypes"] as? String) == SiteDataClearing.everything,
+                              completion: completion)
             case "Network.clearBrowserCache":
                 let types: Set<String> = [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeFetchCache]
                 web.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak self] in
@@ -1083,13 +1085,14 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         return ctx.makeImage()
     }
 
-    /// Arc's "Clear Cookies and Refresh" for this site (its registrable domain's records).
+    /// Arc's "Clear Cookies and Refresh" for this site (its registrable domain's records), and with `everything`
+    /// Cra's "Clear Site Data and Refresh" (#853): every kind of data WebKit keeps for it.
     @MainActor
-    private func clearCookies(origin: String, completion: @escaping (String?, String?) -> Void) {
+    private func clearSiteData(origin: String, everything: Bool, completion: @escaping (String?, String?) -> Void) {
         guard let store = webView?.configuration.websiteDataStore, let host = URL(string: origin)?.host?.lowercased() else {
             return reply(completion, nil, "no origin")
         }
-        let types: Set<String> = [WKWebsiteDataTypeCookies]
+        let types: Set<String> = everything ? WKWebsiteDataStore.allWebsiteDataTypes() : [WKWebsiteDataTypeCookies]
         store.fetchDataRecords(ofTypes: types) { [weak self] records in
             let mine = records.filter { r in
                 let d = r.displayName.lowercased()
