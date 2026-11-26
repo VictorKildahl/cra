@@ -25,6 +25,11 @@ final class TabRuntime {
     /// When Cra last ran the page's own `enterpictureinpicture` handler on leaving the tab (a
     /// Google Meet call opens its Document Picture in Picture window); coming back closes it.
     var sessionPictureInPictureAt: Date?
+    /// The space this tab was last shown in, so Picture in Picture started after leaving it
+    /// still remembers where to return (#843).
+    var lastShownSpaceID: UUID?
+    /// The space that held this tab when Picture in Picture started (#843).
+    var pictureInPictureSpaceID: UUID?
     /// The tab switcher's thumbnail, taken while the page was last on screen.
     var snapshot: NSImage?
     var snapshotWork: DispatchWorkItem?
@@ -408,12 +413,19 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         show(tabID.map { [$0] } ?? [], focused: tabID, focus: focus)
     }
 
+    /// The window moved to another space while keeping the same visible tab(s) on screen (e.g. a
+    /// shared favorite selected in both spaces): update their remembered space (#843).
+    func spaceChanged(to spaceID: UUID) {
+        for id in visibleTabIDs { runtimes[id]?.lastShownSpaceID = spaceID }
+    }
+
     /// Show several tabs at once (split view); `focused` gets keyboard focus.
     /// `autoPictureInPicture` false: the pages going out of sight don't open their automatic Picture in Picture
     /// (another space came on screen, #703).
     func show(_ tabIDs: [UUID], focused: UUID?, focus: Bool, autoPictureInPicture: Bool = true) {
         let started = Perf.now()
         let previousFocus = visibleTabID
+        let currentSpace = store.focusedSpaceID(window: windowID)
         let newSet = Set(tabIDs)
         for previous in visibleTabIDs where !newSet.contains(previous) {
             runtimes[previous]?.hiddenAt = clock.now
@@ -422,6 +434,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             if tabIDs.contains(where: { !visibleTabIDs.contains($0) && isSplitCopy($0, of: previous) }) {
                 hibernate(previous)
             } else if autoPictureInPicture {
+                runtimes[previous]?.lastShownSpaceID = currentSpace
                 leaveTab(previous)
             }
         }
@@ -433,6 +446,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             let made = runtimes[id] == nil ? Perf.now() : nil
             guard let rt = ensureRuntime(for: id) else { shown.append(id); continue }
             if let made { creating += Perf.ms(since: made) }
+            rt.lastShownSpaceID = currentSpace
             if !wasVisible.contains(id) {
                 wake(id, rt)
                 returnToTab(rt)
@@ -1181,10 +1195,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         PictureInPictureChrome.shared.time = (position, duration)
     }
 
-    /// Picture in Picture's "back to tab": select the tab, bring its window up
-    /// and put the video back in the page (also when the tab was already selected).
+    /// Picture in Picture's "back to tab": select the tab in the space the video came from,
+    /// bring its window up and put the video back in the page (also when the tab was already selected).
     private func bringToFront(_ tabID: UUID) {
-        store.selectTab(tabID, window: windowID)
+        store.selectTab(tabID, in: runtimes[tabID]?.pictureInPictureSpaceID, window: windowID)
         container.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         runtimes[tabID]?.browser.exitPictureInPicture()
@@ -1199,7 +1213,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         guard let id = tabID(of: browser) else { return }
         log(id, "Picture in Picture: back to tab")
         runtimes[id]?.pendingAutoPictureInPicture = false
-        store.selectTab(id, window: windowID)
+        store.selectTab(id, in: runtimes[id]?.pictureInPictureSpaceID, window: windowID)
         container.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -1273,12 +1287,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             PictureInPictureChrome.shared.videoLeft()
         }
         if active {
+            let focused = store.focusedSpaceID(window: windowID)
+            rt.pictureInPictureSpaceID = visibleTabIDs.contains(id) ? focused : (rt.lastShownSpaceID ?? focused)
             rt.autoPictureInPicture = rt.pendingAutoPictureInPicture
             rt.pendingAutoPictureInPicture = false
             // The request from leaving the tab landed after the user came back.
             if rt.autoPictureInPicture, id == visibleTabID, !windowCovered { browser.exitPictureInPicture() }
         } else {
             rt.autoPictureInPicture = false
+            rt.pictureInPictureSpaceID = nil
         }
         delegate?.browserManagerDidUpdate(id)
     }

@@ -1859,6 +1859,8 @@
 #841   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::commandWOnAFavoriteDeselectsItAsInArc  ba51c260542c
 #842   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::removeOpensTheProfileThatHasIt  aa9ee3fabce9
 #842   Tests/Scenarios/extension-remove-in-its-profile.scenario  1756245b2867
+#843   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureBackToTabSpaceCase  beb48900e792
+#843   Tests/StoreTests.swift::selectSharedFavoriteInSpace  70f2cd4ec02f
 #844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
