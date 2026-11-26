@@ -193,7 +193,13 @@ final class ExtensionPopupWindow: NSWindow {
         // frame stays where it was dropped.
         if dragging {
             // Through the drop too: the frame's own didMove comes on the leftMouseUp, maybe after the bubble's.
-            if Self.leftButtonDown() || isUserGesture(NSApp.currentEvent, [.leftMouseDragged, .leftMouseUp]) { return }
+            // The frame stays where the pointer has it, but a bubble Chrome moved (it re-anchors it whenever the page
+            // resizes) goes straight back under its title bar: left where Chrome put it, the page trailed behind its
+            // frame until the drop and missed clicks (#786, 0.1.57).
+            if Self.leftButtonDown() || isUserGesture(NSApp.currentEvent, [.leftMouseDragged, .leftMouseUp]) {
+                pinBubbleInFrame()
+                return
+            }
             // The button is up: where the pointer took the frame is where the user dropped it (#664).
             if followsPointer() { keepDrop() }
             dragging = false
@@ -222,6 +228,19 @@ final class ExtensionPopupWindow: NSWindow {
         let origin = NSPoint(x: frame.minX + border - page.minX, y: frame.minY + border - page.minY)
         if bubble.frame.origin != origin { bubble.setFrameOrigin(origin) }
         roundPageCorners()
+    }
+
+    /// The bubble back under the frame's title bar, the frame where it is (in a drag the pointer has it).
+    private func pinBubbleInFrame() {
+        guard let bubble, !placing else { return }
+        placing = true
+        defer { placing = false }
+        let inset = Self.bubbleInset
+        let titleHeight = max(Self.titleBarHeight, frame.height - contentLayoutRect.maxY)
+        let page = pageRectInBubble ?? NSRect(x: inset, y: inset, width: bubble.frame.width - 2 * inset, height: bubble.frame.height - 2 * inset)
+        let border = ExtensionPopupFrame.border
+        let origin = NSPoint(x: frame.minX + border - page.minX, y: frame.maxY - titleHeight - page.maxY)
+        if bubble.frame.origin != origin { bubble.setFrameOrigin(origin) }
     }
 
     /// The popup page's view (Chromium's RenderWidgetHostViewCocoa) in Chrome's bubble.
@@ -264,6 +283,10 @@ final class ExtensionPopupWindow: NSWindow {
 
     private func userMoved() {
         guard dragging, !placing, bubble != nil else { return }
+        // Chrome may have taken the bubble mid-drag, leaving it behind while the frame went on: take it back now and
+        // put it under the title bar, or it follows at the offset it was left at until the drop (#786, 0.1.57).
+        if bubble?.parent !== self, Self.leftButtonDown() { keepBubble() }
+        if Self.leftButtonDown() { pinBubbleInFrame() }
         // A title-bar drag ends in one didMove, on its leftMouseUp. Until 0.1.51 `dragging` stayed set
         // until the next layout, and a move after that (the window carrying the frame along, into full
         // screen or across a display) became the offset every later popup hung by, away from its
