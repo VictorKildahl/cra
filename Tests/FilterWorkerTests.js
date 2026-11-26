@@ -131,3 +131,17 @@ test('an allow rule with only excluded initiators keeps recovery on those sites'
     await state.apply('allow-everywhere', [loaderRule, except()]);
     assert.deepEqual(state.scripts, []);
 });
+
+test('a document exception excludes the site and its subdomains from recovery', async () => {
+    const state = worker();
+    const allowPage = condition => ({ id: 4, action: { type: 'allowAllRequests' },
+        condition: { resourceTypes: ['main_frame', 'sub_frame'], ...condition } });
+    await state.apply('before', [loaderRule], []);
+    await state.apply('except-news', [allowPage({requestDomains: ['news.example']}), loaderRule], []);
+    assert.deepEqual(state.scripts[0].matches, ['http://*/*', 'https://*/*']);
+    assert.deepEqual(state.scripts[0].excludeMatches, ['*://*.news.example/*']);
+    await state.apply('unbounded', [loaderRule, allowPage({urlFilter: '/preview/'})], []);
+    assert.deepEqual(state.scripts, []);
+    await state.apply('removed', [loaderRule], []);
+    assert.deepEqual(state.scripts[0].excludeMatches, []);
+});

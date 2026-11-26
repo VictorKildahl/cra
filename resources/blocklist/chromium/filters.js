@@ -14,6 +14,13 @@ function loaderSettings(snapshot) {
     let remainingHosts;
     const within = (host, root) => host === root || host.endsWith('.' + root);
     for (const { action, condition } of snapshot.rules) {
+        if (action.type === 'allowAllRequests') {
+            // Frame exceptions apply to their descendant requests too. A document
+            // pattern without a bounded host cannot safely scope a registration.
+            if (!condition.requestDomains?.length) return null;
+            for (const host of condition.requestDomains) excludeMatches.add(`*://*.${host}/*`);
+            continue;
+        }
         if (condition.domainType === 'firstParty'
             || (condition.resourceTypes && !condition.resourceTypes.includes('script'))
             || condition.excludedResourceTypes?.includes('script')) continue;
