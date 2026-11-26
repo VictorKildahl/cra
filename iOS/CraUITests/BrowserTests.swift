@@ -1514,7 +1514,21 @@ final class SpacesTests: BrowserTestCase {
     // promise: #839
     /// Each sheet background reaches both window edges, including the side safe area.
     func testSpacesBackgroundsReachTheWindowEdges() throws {
-        func checkEdges(_ state: String) throws {
+        func waitForStableFrame(_ element: XCUIElement) {
+            var previous: CGRect?
+            let settled = expectation(for: NSPredicate { _, _ in
+                guard element.exists, element.isHittable else {
+                    previous = nil
+                    return false
+                }
+                let frame = element.frame
+                defer { previous = frame }
+                return !frame.isEmpty && frame == previous
+            }, evaluatedWith: element)
+            wait(for: [settled], timeout: 5)
+        }
+
+        func checkEdges(_ state: String, at windowY: CGFloat? = nil) throws {
             let shot = try XCTUnwrap(capture()?.image,
                                      "\(state): XCTest screen capture is blank on this display; the edge check cannot judge Cra here")
             let window = app.windows.firstMatch.frame
@@ -1524,7 +1538,7 @@ final class SpacesTests: BrowserTestCase {
             // Inner-screen fallback captures can be portrait-shaped for a landscape window.
             XCTAssertEqual(width / height, window.width / window.height, accuracy: 0.01,
                            "\(state): XCTest capture pixel layout does not match the window; the edge check cannot judge this display")
-            let y = height * 0.72
+            let y = windowY.map { ($0 - window.minY) / window.height * height } ?? height * 0.72
             let left = colour(shot, at: CGPoint(x: 4, y: y))
             let right = colour(shot, at: CGPoint(x: width - 4, y: y))
             XCTAssertTrue(abs(left.r - right.r) <= 6 && abs(left.g - right.g) <= 6 && abs(left.b - right.b) <= 6,
@@ -1538,7 +1552,7 @@ final class SpacesTests: BrowserTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 8))
         card.tap()
         XCTAssertTrue(app.staticTexts["sync-title"].waitForExistence(timeout: 10))
-        sleep(1)
+        waitForStableFrame(app.staticTexts["sync-title"])
         try checkEdges("Sync intro")
 
         app.terminate()
@@ -1548,11 +1562,28 @@ final class SpacesTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
         app.buttons["bar-spaces"].tap()
         XCTAssertTrue(app.staticTexts["spaces-connecting"].waitForExistence(timeout: 2))
+        waitForStableFrame(app.staticTexts["spaces-connecting"])
         try checkEdges("Connecting")
         XCTAssertTrue(app.staticTexts["spaces-connecting"].exists, "captured while Connecting is visible")
         XCTAssertTrue(app.buttons["share-prompt-no-thanks"].waitForExistence(timeout: 10))
-        sleep(1)
+        waitForStableFrame(app.buttons["share-prompt-no-thanks"])
         try checkEdges("Share prompt")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraAppearance", "dark"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 10))
+        waitForStableFrame(noThanks)
+        noThanks.tap()
+        let icon = app.buttons["space-icon-Personal"]
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        waitForStableFrame(icon)
+        // The icon centre is inside the bar, below its hairline and above the bottom safe area.
+        try checkEdges("Dark Spaces icon bar", at: icon.frame.midY)
     }
 
     /// The tab row's left button shows the Mac's Spaces: the pinned tabs and folders of each,
