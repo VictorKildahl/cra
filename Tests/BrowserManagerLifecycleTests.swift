@@ -262,6 +262,7 @@ enum BrowserManagerLifecycleTests {
         await coveredWindowPictureInPictureCase()
         pictureInPictureMinimizeCase()
         pictureInPictureMinimizeSilentCase()
+        pictureInPictureBackToTabSpaceCase()
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
@@ -2534,6 +2535,108 @@ enum BrowserManagerLifecycleTests {
         manager.browser(ra.browser, didChangePictureInPicture: false)
         expect(np.shown.map(\.id) == [a], "a minimized video without a card gets one in the sidebar player")
         expect(np.shown.first?.hasVideo == true, "its card has the Picture in Picture button to bring it back")
+        manager.closeAll()
+    }
+
+    // promise: #843
+    /// Back to Tab on a shared favorite's Picture in Picture returns to the space the video came
+    /// from, rather than letting `spaceID(ofItem:)` fall back to the current space or the first
+    /// space that shares the favorite (#843). Covers manual PiP, delayed auto-PiP, PiP started
+    /// from a background tab (including after staying visible across a space switch), and WebKit PiP.
+    @MainActor
+    private static func pictureInPictureBackToTabSpaceCase() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let hostWindow = NSWindow(contentRect: NSRect(x: -12000, y: -10000, width: 800, height: 600),
+                                  styleMask: [.borderless], backing: .buffered, defer: false)
+        hostWindow.isReleasedWhenClosed = false
+        defer { hostWindow.close() }
+        let container = NSView(frame: hostWindow.contentView!.bounds)
+        hostWindow.contentView!.addSubview(container)
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: container)
+        let home = UUID(), entertainment = UUID(), work = UUID()
+        let video = store.createTab(url: "https://example.test/video").id
+        let other = store.createTab(url: "https://example.test/other").id
+        let workTab = store.createTab(url: "https://example.test/work").id
+        let rv = manager.ensureRuntime(for: video)!
+
+        // 1. Manual PiP started while visible in Entertainment, then user switches to Work.
+        store.focusedSpace = entertainment
+        manager.show(video, focus: false)
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == entertainment
+               && !rv.browser.isInPictureInPicture && rv.browser.pictureInPictureCloses == 0 && hostWindow.isVisible,
+               "Back to Tab returns to the space where Picture in Picture started, exits PiP and raises the window")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+        expect(rv.pictureInPictureSpaceID == nil, "leaving Picture in Picture clears its origin space")
+
+        // 2. Same-space tab switch triggers auto-PiP in Entertainment, and user switches to Work
+        //    before didChangePictureInPicture(true) lands.
+        store.focusedSpace = entertainment
+        manager.show(video, focus: false)
+        manager.show([other], focused: other, focus: false, autoPictureInPicture: true)
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == entertainment
+               && !rv.browser.isInPictureInPicture && hostWindow.isVisible,
+               "delayed auto-PiP still remembers the space the tab was left from")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+
+        // 3. Background tab's PiP started (e.g. Now Playing) after switching away to Work.
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == entertainment
+               && !rv.browser.isInPictureInPicture && hostWindow.isVisible,
+               "PiP started from a hidden tab remembers the space it was last shown in")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+
+        // 4. Shared favorite stayed visible across Entertainment -> Home (MainWindowController
+        //    skips show and notifies spaceChanged), then moved Home -> Work and started PiP from
+        //    the hidden tab (Now Playing): Back to Tab returns to Home, not stale Entertainment.
+        store.focusedSpace = entertainment
+        manager.show(video, focus: false)
+        store.focusedSpace = home
+        manager.spaceChanged(to: home)
+        expect(rv.lastShownSpaceID == home, "keeping a visible tab across a space switch updates its remembered space")
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == home
+               && !rv.browser.isInPictureInPicture && hostWindow.isVisible,
+               "PiP started after a tab stayed visible in Home and then moved to Work returns to Home")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+
+        // 5. WebKit Picture in Picture Back to Tab also returns to the origin space and raises the window.
+        let service = store.createTab(url: "https://www.netflix.com/watch/843").id
+        let webKitRuntime = manager.ensureRuntime(for: service)!
+        let webKit = webKitRuntime.browser
+        store.focusedSpace = entertainment
+        manager.show(service, focus: false)
+        webKit.isInPictureInPicture = true
+        manager.browser(webKit, didChangePictureInPicture: true)
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        hostWindow.orderOut(nil)
+        (manager as WebKitPageDelegate).webKitPageReturnsFromPictureInPicture(webKit)
+        expect(store.selections.last == service && store.selectedSpaces.last == entertainment
+               && webKit.isInPictureInPicture && hostWindow.isVisible,
+               "WebKit Back to Tab returns to the origin space, raises the window and lets WebKit move the video")
+        manager.browser(webKit, didChangePictureInPicture: false)
         manager.closeAll()
     }
 

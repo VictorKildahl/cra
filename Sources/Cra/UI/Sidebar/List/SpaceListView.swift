@@ -1104,8 +1104,11 @@ final class SpaceListView: NSView, NSDraggingSource {
             previewRow = nil
         }
         guard let tab = row as? TabRowView, tab !== previewRow, let m = tab.model, m.pinned, !m.selected, !m.editing,
-              ui.draggingID == nil, NSEvent.pressedMouseButtons == 0, let url = store.item(m.id)?.tab?.url,
-              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return }
+              ui.draggingID == nil, NSEvent.pressedMouseButtons == 0, let tabURL = store.item(m.id)?.tab?.url else { return }
+        let item = LiveFolderManager.shared.pullRequestItem(for: m.id)
+        let url = item?.url ?? tabURL
+        guard let kind = SidebarTabPreview.kind(for: url, settings: store.settings),
+              kind != .pullRequest || item != nil else { return }
         previewRow = tab
         let id = m.id
         FavoritePreviewCard.shared.hover(tab, target: .sidebarTab(

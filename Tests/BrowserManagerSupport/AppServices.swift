@@ -78,8 +78,8 @@ enum TestRoot { case today }
     var settings = Settings()
     var items: [UUID: TestItem] = [:]
     func item(_ id: UUID) -> TestItem? { items[id] }
-    private let focusedAskSpace = UUID()
-    func focusedSpaceID(window: UUID?) -> UUID { focusedAskSpace }
+    var focusedSpace = UUID()
+    func focusedSpaceID(window: UUID?) -> UUID { focusedSpace }
     var incognitoItems: Set<UUID> = []
     func isIncognito(item: UUID) -> Bool { incognitoItems.contains(item) }
     var profilePaths: [UUID: String] = [:]
@@ -119,9 +119,14 @@ enum TestRoot { case today }
     var visits: [String] = []
     func recordVisit(url: String, title: String, profile: UUID?) { visits.append(url) }
     func clearHistory(_ range: BrowsingDataClear.Range) {}
-    /// The tabs selected, in order (Picture in Picture's Back to Tab selects; Minimize doesn't).
+    /// The tabs selected, in order (Picture in Picture's Back to Tab selects; Minimize doesn't),
+    /// and the space each selection asked for (#843).
     private(set) var selections: [UUID] = []
-    func selectTab(_ id: UUID, window: UUID?) { selections.append(id) }
+    private(set) var selectedSpaces: [UUID?] = []
+    func selectTab(_ id: UUID, in space: UUID? = nil, window: UUID?) {
+        selections.append(id)
+        selectedSpaces.append(space)
+    }
     func markUnread(_ id: UUID, _ unread: Bool) {}
     @discardableResult
     func createTab(url: String, in space: UUID? = nil, select: Bool = false,

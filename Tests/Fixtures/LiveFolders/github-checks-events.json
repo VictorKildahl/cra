@@ -1,0 +1,7 @@
+{
+  "payload": {
+    "pullRequestsChecksRoute.Main": {
+      "value": "<details class=\"checks-list-item\"><summary class=\"checks-list-item\">CI on: push</summary><div class=\"checks-list-item\"><svg aria-label=\"This job failed\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/9/job/1\"><span>Build</span></a></div></details><details class=\"checks-list-item\"><summary class=\"checks-list-item\">CI on: pull_request 1</summary><div class=\"checks-list-item\"><svg aria-label=\"This job succeeded\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/11/job/1\"><span>Build</span></a></div></details><details class=\"checks-list-item\"><summary class=\"checks-list-item\">CI on: push 2</summary><div class=\"checks-list-item\"><svg aria-label=\"This job succeeded\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/10/job/1\"><span>Build</span></a></div><div class=\"checks-list-item\"><svg aria-label=\"This job was skipped\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/10/job/1\"><span>Optional</span></a></div></details><details class=\"checks-list-item\"><summary class=\"checks-list-item\">Widget App 1</summary><div class=\"checks-list-item\"><svg aria-label=\"This check passed\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/checks/1\"><span>External</span></a></div></details>"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "Checks"
+  },
+  "payload": {
+    "pullRequestsChecksRoute.Main": {
+      "value": "<details class=\"checks-list-item Details-element details-reset\"><summary class=\"checks-list-item summary-reset\"><a><span>Example suite</span></a></summary><div class=\"border-bottom\"><div class=\"d-flex position-relative checks-list-item \">\n  <div class=\"checks-list-item-name pl-2 flex-1\"><div class=\"d-flex flex-items-center\">\n    <span class=\"checks-list-item-icon\"><div><svg aria-label=\"This job succeeded\" role=\"img\" class=\"octicon octicon-check\"><path d=\"M1 1\"></path></svg></div></span>\n    <span class=\"f5 text-normal\"><a class=\"d-inline-block SideNav-subItem v-align-middle\" href=\"/example/widget/actions/runs/1/job/2\"><span>Build</span></a></span>\n  </div></div>\n</div><div class=\"d-flex position-relative checks-list-item \">\n  <div class=\"checks-list-item-name pl-2 flex-1\"><div class=\"d-flex flex-items-center\">\n    <span class=\"checks-list-item-icon\"><div><svg aria-label=\"A new state\" role=\"img\" class=\"octicon octicon-question\"><path d=\"M1 1\"></path></svg></div></span>\n    <span class=\"f5 text-normal\"><a class=\"d-inline-block SideNav-subItem v-align-middle\" href=\"/example/widget/actions/runs/1/job/2\"><span>Mystery</span></a></span>\n  </div></div>\n</div></div></details>"
+    }
+  }
+}

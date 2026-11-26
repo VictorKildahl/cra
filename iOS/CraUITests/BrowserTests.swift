@@ -68,6 +68,17 @@ class BrowserTestCase: XCTestCase {
         return nil
     }
 
+    /// The screenshot's colour at a point on the screen.
+    func colour(_ image: UIImage, at point: CGPoint) -> (r: Int, g: Int, b: Int) {
+        guard let cg = image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
+        let x = Int(point.x * image.scale), y = Int(point.y * image.scale)
+        let i = y * cg.bytesPerRow + x * (cg.bitsPerPixel / 8)
+        // Simulator screenshots are BGRA.
+        let first = Int(bytes[i]), third = Int(bytes[i + 2])
+        let bgra = cg.bitmapInfo.contains(.byteOrder32Little)
+        return (bgra ? third : first, Int(bytes[i + 1]), bgra ? first : third)
+    }
+
     func keep(_ name: String) {
         guard let shot = capture() else { return }
         let attachment = XCTAttachment(screenshot: shot)
@@ -922,8 +933,10 @@ final class GestureTests: BrowserTestCase {
         let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
         XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
         sleep(1)
-        // The focused card is the one whose left edge is 83 pt in: First, the tab to the left.
-        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
+        // The focused card is the one in the middle of the screen: First, the tab to the left,
+        // which is also the first card of the row.
+        let middle = app.windows.firstMatch.frame.midX
+        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.midX - middle) < 3 }
         XCTAssertEqual(focused?.label, "First")
         // The empty background returns to Second, the page that was open.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
@@ -1500,6 +1513,88 @@ final class IncognitoTests: BrowserTestCase {
 }
 
 final class SpacesTests: BrowserTestCase {
+    // promise: #839
+    /// Each sheet background reaches both window edges, including the side safe area.
+    func testSpacesBackgroundsReachTheWindowEdges() throws {
+        func waitForStableFrame(_ element: XCUIElement) {
+            var previous: CGRect?
+            let settled = expectation(for: NSPredicate { _, _ in
+                guard element.exists, element.isHittable else {
+                    previous = nil
+                    return false
+                }
+                let frame = element.frame
+                defer { previous = frame }
+                return !frame.isEmpty && frame == previous
+            }, evaluatedWith: element)
+            wait(for: [settled], timeout: 5)
+        }
+
+        func checkEdges(_ state: String, at windowY: CGFloat? = nil) throws {
+            let shot = try XCTUnwrap(capture()?.image,
+                                     "\(state): XCTest screen capture is blank on this display; the edge check cannot judge Cra here")
+            let window = app.windows.firstMatch.frame
+            let pixels = try XCTUnwrap(shot.cgImage)
+            let width = CGFloat(pixels.width) / shot.scale
+            let height = CGFloat(pixels.height) / shot.scale
+            // Inner-screen fallback captures can be portrait-shaped for a landscape window.
+            XCTAssertEqual(width / height, window.width / window.height, accuracy: 0.01,
+                           "\(state): XCTest capture pixel layout does not match the window; the edge check cannot judge this display")
+            let y = windowY.map { ($0 - window.minY) / window.height * height } ?? height * 0.72
+            let left = colour(shot, at: CGPoint(x: 4, y: y))
+            let right = colour(shot, at: CGPoint(x: width - 4, y: y))
+            XCTAssertTrue(abs(left.r - right.r) <= 6 && abs(left.g - right.g) <= 6 && abs(left.b - right.b) <= 6,
+                          "\(state): left \(left), right \(right)")
+        }
+
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        let card = app.buttons["sync-card-open"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        card.tap()
+        XCTAssertTrue(app.staticTexts["sync-title"].waitForExistence(timeout: 10))
+        waitForStableFrame(app.staticTexts["sync-title"])
+        try checkEdges("Sync intro")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraHoldConnecting", "YES"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.staticTexts["spaces-connecting"].waitForExistence(timeout: 2))
+        waitForStableFrame(app.staticTexts["spaces-connecting"])
+        try checkEdges("Connecting")
+        XCTAssertTrue(app.staticTexts["spaces-connecting"].exists, "captured while Connecting is visible")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        XCTAssertTrue(app.buttons["share-prompt-no-thanks"].waitForExistence(timeout: 10))
+        waitForStableFrame(app.buttons["share-prompt-no-thanks"])
+        try checkEdges("Share prompt")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraAppearance", "dark"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 10))
+        waitForStableFrame(noThanks)
+        noThanks.tap()
+        let icon = app.buttons["space-icon-Personal"]
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        waitForStableFrame(icon)
+        // The icon centre is inside the bar, below its hairline and above the bottom safe area.
+        try checkEdges("Dark Spaces icon bar", at: icon.frame.midY)
+    }
+
     /// The tab row's left button shows the Mac's Spaces: the pinned tabs and folders of each,
     /// folders shut until a tap opens them (Arc Search), and a tap on a tab that opens it here.
     func testTheMacsSpacesOpenFromTheTabRow() {

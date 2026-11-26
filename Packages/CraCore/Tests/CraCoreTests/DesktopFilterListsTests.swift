@@ -202,7 +202,9 @@ struct DesktopFilterListsTests {
         #expect(hiding.css(host: "www.20min.ch") == selector + "{display:none!important}")
         #expect(hiding.css(host: "reader.20min.ch").isEmpty)
         #expect(hiding.css(host: "other.ch").isEmpty)
-        let previous = list.text.replacingOccurrences(of: "# network-format: 3", with: "# network-format: 2")
+        // Copies written by Cra up to 0.1.58 say format 1: they read as having no network source, so the
+        // next launch fetches them again and their newly supported hiding rules are kept.
+        let previous = list.text.replacingOccurrences(of: "# network-format: 3", with: "# network-format: 1")
         #expect(CachedBlocklist(text: previous)?.hasNetworkSource == false)
     }
 

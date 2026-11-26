@@ -741,6 +741,7 @@ public struct AppSettings: Codable, Equatable {
     public var outlookMailPreviews: Bool = true
     public var outlookCalendarPreviews: Bool = true
     public var notionCalendarPreviews: Bool = true
+    public var pullRequestPreviews: Bool = true
     /// Cra's addition (PR #267, Dia-like): the open favorite's rim takes its logo's colours.
     /// Off keeps Arc's neutral 2 pt rim.
     public var favoriteLogoOutline: Bool = false
@@ -1114,6 +1115,7 @@ extension AppSettings {
         outlookMailPreviews = try c.decodeIfPresent(Bool.self, forKey: .outlookMailPreviews) ?? true
         outlookCalendarPreviews = try c.decodeIfPresent(Bool.self, forKey: .outlookCalendarPreviews) ?? true
         notionCalendarPreviews = try c.decodeIfPresent(Bool.self, forKey: .notionCalendarPreviews) ?? true
+        pullRequestPreviews = try c.decodeIfPresent(Bool.self, forKey: .pullRequestPreviews) ?? true
         favoriteLogoOutline = try c.decodeIfPresent(Bool.self, forKey: .favoriteLogoOutline) ?? false
         liveCalendar = try c.decodeIfPresent(Bool.self, forKey: .liveCalendar) ?? true
         calendarHoverPreview = try c.decodeIfPresent(Bool.self, forKey: .calendarHoverPreview) ?? true

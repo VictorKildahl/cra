@@ -10,6 +10,7 @@ enum LiveFolderProviderTests {
         let github = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/github"))
         let gitlab = try LiveFolderPluginPackage(directory: URL(fileURLWithPath: "resources/live-folder-plugins/gitlab"))
         try gitHub(github, executable: executable)
+        try gitHubPreview(github, executable: executable)
         try gitHubOpenOnly(github, executable: executable)
         try gitHubOpenOnlyEdges(github, executable: executable)
         try gitHubMergedSinceLastRefresh(github, executable: executable)
@@ -63,6 +64,90 @@ enum LiveFolderProviderTests {
     }
 
     // MARK: GitHub
+
+    private static func gitHubPreview(_ github: LiveFolderPluginPackage, executable: URL) throws {
+        func fixture(_ name: String) throws -> String {
+            try String(contentsOfFile: "Tests/Fixtures/LiveFolders/" + name, encoding: .utf8)
+        }
+        let dashboard = try fixture("github-dashboard.json")
+        let origins = ["https://github.com"]
+        var requests: [LiveFolderPluginRequest] = []
+        let snapshot = try refresh(github, executable: executable, origins: origins, filters: ["authored"]) { request in
+            requests.append(request)
+            return LiveFolderPluginResponse(status: 200, url: request.url, body: request.headers?["Accept"] == "application/json" ? dashboard : "<html></html>")
+        }.get()
+        check(requests.count == 2 && !requests.contains { $0.url.contains("/checks") }, "refresh adds no checks request")
+        let draft = snapshot.items[0], open = snapshot.items[1]
+        check(draft.updatedAt?.timeIntervalSince1970 == 1795510800 && draft.revision == String(repeating: "a", count: 40), "dashboard date and head")
+        check(draft.details == .init(draft: true, commentCount: 2, labels: [.init(name: "ui", color: "D97757"), .init(name: "tests", color: "00AA00")],
+                                     tasks: .init(done: 2, total: 4)), "confirmed dashboard details")
+        check(open.details == .init(draft: false, commentCount: 0, labels: []) && open.details?.tasks == nil, "zero comments, labels and tasks")
+        let plain = #"{"payload":{"pullsDashboardSurfaceContentRoute":{"results":[{"number":3,"title":"Plain","permalink":"https://github.com/example/widget/pull/3"}]}}}"#
+        let without = try refresh(github, executable: executable, origins: origins, filters: ["authored"]) { request in
+            LiveFolderPluginResponse(status: 200, url: request.url, body: request.headers?["Accept"] == "application/json" ? plain : "<html></html>")
+        }.get().items[0]
+        check(without.updatedAt == nil && without.revision == nil && without.details == nil, "absent dashboard fields stay absent")
+        var filter = 0
+        let merged = try refresh(github, executable: executable, origins: origins, filters: ["authored", "review"]) { request in
+            if request.headers?["Accept"] != "application/json" { return LiveFolderPluginResponse(status: 200, url: request.url, body: "<html></html>") }
+            filter += 1
+            return LiveFolderPluginResponse(status: 200, url: request.url, body: filter == 1 ? dashboard : dashboard.replacingOccurrences(of: "D97757", with: "ffffff"))
+        }.get()
+        check(filter == 2 && merged.items[0].details == draft.details, "first known details win across filters")
+        let url = "https://github.com/example/widget/pull/3"
+        func read(_ body: String, status: Int = 200, finalURL: String? = nil) throws -> [String: Any] {
+            var count = 0
+            let result = try invoke(github, "checks", input: ["url": url, "revision": "a", "settings": [:], "state": ["keep": "me"]],
+                                    origins: origins, executable: executable) { request in
+                count += 1
+                check(request.url == url + "/checks", "checks use the PR route")
+                check(request.headers == ["Accept": "application/json", "X-Requested-With": "XMLHttpRequest", "GitHub-Verified-Fetch": "true"], "checks JSON headers")
+                return LiveFolderPluginResponse(status: status, url: finalURL ?? request.url, body: body)
+            }
+            check(count == 1, "exactly one session GET")
+            return json(result)
+        }
+        let passed = try read(fixture("github-checks-passed.json"))["checks"] as? [String: Any]
+        check(passed?["passed"] as? Int == 2 && passed?["failed"] as? Int == 0 && passed?["pending"] as? Int == 0 && passed?["skipped"] as? Int == 0,
+              "job and standalone check successes, suites excluded")
+        let reruns = try read(fixture("github-checks-reruns.json"))["checks"] as? [String: Any]
+        check(reruns?["passed"] as? Int == 2 && reruns?["failed"] as? Int == 1 && reruns?["pending"] as? Int == 0 && reruns?["skipped"] as? Int == 0,
+              "only the newest run of each check name counts, including standalone checks")
+        check(reruns?["failing"] as? [String] == ["Regressed"], "newest failed run supplies the failing name")
+        let events = try read(fixture("github-checks-events.json"))["checks"] as? [String: Any]
+        check(events?["passed"] as? Int == 3 && events?["failed"] as? Int == 0 && events?["pending"] as? Int == 0 && events?["skipped"] as? Int == 1,
+              "separate events count twice, reruns keep the newest result, skipped and app checks count")
+        check(events?["failing"] as? [String] == [], "recovered workflow has no failing name")
+        for invalidURL in ["https://github.com/example/widget/pull/3/files", "https://github.com/example/widget/pull/3/../../../x",
+                           "https://github.com/example/widget/pull/3?x=1", "https://github.com/example/widget/pull/3#x",
+                           "http://github.com/example/widget/pull/3", "https://other.example/example/widget/pull/3"] {
+            var requests = 0
+            let result = try invoke(github, "checks", input: ["url": invalidURL], origins: origins, executable: executable) { request in
+                requests += 1
+                return LiveFolderPluginResponse(status: 200, url: request.url, body: dashboard)
+            }
+            check(json(result).isEmpty && requests == 0, "noncanonical PR URL returns no checks without fetching: \(invalidURL)")
+        }
+        let failing = try read(fixture("github-checks-failing.json"))["checks"] as? [String: Any]
+        check(failing?["passed"] as? Int == 0 && failing?["failed"] as? Int == 2 && failing?["pending"] as? Int == 1 && failing?["skipped"] as? Int == 1,
+              "failed, queued and skipped jobs")
+        check(failing?["failing"] as? [String] == ["Build & test", "Lint"], "failed names in page order")
+        let fourFailures = try fixture("github-checks-failing.json").replacingOccurrences(of: "This job is queued", with: "This job failed")
+            .replacingOccurrences(of: "This job was skipped", with: "This job failed")
+        let capped = try read(fourFailures)["checks"] as? [String: Any]
+        check(capped?["failed"] as? Int == 4 && capped?["failing"] as? [String] == ["Build & test", "Lint", "Package"], "all failures counted, only three named")
+        for name in ["github-checks-unknown.json", "github-checks-empty.json", "github-checks-signin.html"] {
+            check(try read(fixture(name)).isEmpty, "unreadable checks fail soft: \(name)")
+        }
+        for status in [401, 500] { check(try read(fixture("github-checks-passed.json"), status: status).isEmpty, "HTTP failure is no checks") }
+        check(try read(fixture("github-checks-passed.json"), finalURL: "https://github.com/login").isEmpty, "login redirect is no checks")
+        check(try read(fixture("github-checks-passed.json"), finalURL: "https://github.com/orgs/example/sso").isEmpty, "SSO redirect is no checks")
+        check(try read("{}").isEmpty, "JSON without HTML is no checks")
+        let unknown = try fixture("github-checks-unknown.json")
+        check(try read(unknown.replacingOccurrences(of: "A new state", with: "toString")).isEmpty, "object property names are not states")
+        let missingName = unknown.replacingOccurrences(of: "SideNav-subItem", with: "new-job-link")
+        check(try read(missingName).isEmpty, "job-like entries without recognised names never yield partial counts")
+    }
 
     private static func gitHub(_ github: LiveFolderPluginPackage, executable: URL) throws {
         let origins = ["https://github.com"]
