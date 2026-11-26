@@ -156,6 +156,8 @@ final class ShinyToast {
     }
 
     var isShown: Bool { panel.parent != nil }
+    /// What the toast says now (`cra://debug?toastShown`).
+    private(set) var text = ""
 
     /// A click on the middle of the pill through the event queue, as the pointer's (cra://debug?clickToast=1,
     /// scenario background-tab-toast). False when no toast is up to take it.
@@ -230,6 +232,7 @@ final class ShinyToast {
         label.foregroundColor = colors.text.cgColor
         label.contentsScale = scale
         label.string = text
+        self.text = text
         let lineHeight = ceil(Self.font.ascender - Self.font.descender)
         label.frame = CGRect(x: buttonWidth == nil ? 0 : glyph != nil ? Self.glyphPadding : Self.padding, y: (height - lineHeight) / 2,
                              width: buttonWidth == nil ? width : textWidth, height: lineHeight)

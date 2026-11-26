@@ -1506,7 +1506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // clickToast=1: a click on the toast up now, through the event queue as the pointer's (#543).
             if dict["clickToast"] == "1" { main.clickToastForTest(); return }
             // toastShown=<label>: whether a toast is up in the front window (#543: a click leaves it up).
-            if let label = dict["toastShown"] { CraLog.note("toast shown \(label): \(main.toastIsShown ? "yes" : "no")"); return }
+            if let label = dict["toastShown"] { CraLog.note("toast shown \(label): \(main.toastIsShown ? "yes '\(main.toastText)'" : "no")"); return }
             // dragAt=x,y&by=dx,dy: a press there moved by dx,dy (down is +) and released, through the event
             // queue as clickAt's click (#547); target=floating as for clickAt.
             if let g = dict["dragAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
@@ -4439,9 +4439,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "clearSiteData": main.currentBrowser?.clearSiteDataAndReload(.siteData)
         // View ▸ Stop Loading while an agent's pill is up in the window: its Take Over (AgentPill).
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
-        case "zoomIn": main.zoom(by: 0.5)
-        case "zoomOut": main.zoom(by: -0.5)
-        case "resetZoom": main.currentBrowser?.resetZoom()
+        case "zoomIn": main.zoom(in: true)
+        case "zoomOut": main.zoom(in: false)
+        case "resetZoom": main.resetPageZoom()
         case "viewSource": main.currentBrowser?.viewSource()
         // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
         // DevTools only when that panel already shows (DevToolsToggle.run).

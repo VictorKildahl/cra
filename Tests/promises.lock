@@ -1888,6 +1888,9 @@
 #855   Packages/CraCore/Tests/CraCoreTests/ChromeCommandPagesTests.swift::theTaskManagerOpensWithNoPageInFront  2f99e20db13e
 #855   Tests/Scenarios/task-manager-shortcut.scenario  2600af90f19a
 #855   Tests/Scenarios/task-manager.scenario  27ef3e294f9e
+#856   Packages/CraCore/Tests/CraCoreTests/PageZoomStepsTests.swift::aLevelBetweenStepsGoesToTheNearestStepPastIt  2ee791cf4ec5
+#856   Packages/CraCore/Tests/CraCoreTests/PageZoomStepsTests.swift::zoomGoesThroughChromesStepsAsInArc  9bcb2270775d
+#856   Tests/Scenarios/page-zoom-toast.scenario  89b2a2bcd73a
 #864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::aRoutedAddressCountsInTheSpaceItOpensIn  529145e04959
 #864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::everythingElseCountsInTheSpaceInUse  3a699f78a3e1
 #864   Tests/Scenarios/command-bar-typed-routed-profile.scenario  1bd12d58f336

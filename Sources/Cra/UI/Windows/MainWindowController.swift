@@ -3338,9 +3338,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.selectTab(tabs[((idx + delta) % n + n) % n].id)
     }
 
-    func zoom(by delta: Double) {
-        guard let b = currentBrowser else { return }
-        b.setZoomLevel(b.zoomLevel() + delta)
+    /// View ▸ Zoom In / Zoom Out (⌘+ ⌘−): Chrome's next step, and Arc's toast names it ("125%", #856).
+    func zoom(in zoomIn: Bool) {
+        guard let label = currentBrowser?.zoomStep(in: zoomIn) else { return }
+        showToast(label)
+    }
+
+    /// View ▸ Zoom to Actual Size (⌘0), with Arc's "100%" toast (#856).
+    func resetPageZoom() {
+        guard let label = currentBrowser?.resetZoomShowing() else { return }
+        showToast(label)
     }
 
     /// cra://debug?pageScale=<factor> pinches the front page to that scale (as a trackpad pinch does);
@@ -5744,6 +5751,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// cra://debug?toastShown=<label>: whether a toast is up in this window.
     var toastIsShown: Bool { toast.isShown }
+    var toastText: String { toast.text }
 
     /// ⌥Return in the bar: the row opens as a split pane beside the current tab instead of in its
     /// place, an open tab of this space joining the split as it is. False takes it as Return: no

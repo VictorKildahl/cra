@@ -1836,9 +1836,9 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "clearCookies": browser?.clearSiteDataAndReload(.cookies)
         case "clearSiteData": browser?.clearSiteDataAndReload(.siteData)
         case "stop": browser?.stopLoading()
-        case "zoomIn": if let b = browser { b.setZoomLevel(b.zoomLevel() + 0.5) }
-        case "zoomOut": if let b = browser { b.setZoomLevel(b.zoomLevel() - 0.5) }
-        case "resetZoom": browser?.resetZoom()
+        case "zoomIn": if let label = browser?.zoomStep(in: true) { showToast(label) }
+        case "zoomOut": if let label = browser?.zoomStep(in: false) { showToast(label) }
+        case "resetZoom": if let label = browser?.resetZoomShowing() { showToast(label) }
         case "copyURL": copyURL()
         case "copyURLMarkdown":
             copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")
