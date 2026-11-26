@@ -12,9 +12,10 @@ public enum MobileSearchMotion {
     /// phone.
     public static let leadDuration: TimeInterval = 0.25
 
-    /// The search drawer's close without a finger: the same ease-in-out for a tap above, the
-    /// keyboard going away, and a drag that is let go short of opening.
-    public static let closeDuration: TimeInterval = 0.35
+    /// The search drawer's moves on a fixed ease-in-out rather than the keyboard or a spring: a
+    /// tap above closing it, a pull let go short of opening, and the page sitting back as a sheet
+    /// let go halfway opens.
+    public static let settleDuration: TimeInterval = 0.35
 
     /// The bar pill's plus while the pill grows into the field: its centre's distance from the field's left end.
     /// It keeps to the leading end, from the pill's middle (closed) to 2 pt in (open), with the placeholder coming
@@ -37,18 +38,6 @@ public enum MobileSearchMotion {
     /// as Arc Search's mic shows once the field is most of the way across. From the start, they sat in the pill.
     public static let accessorySpan: ClosedRange<CGFloat> = 0.5...1
 
-    /// How far the new tab drawer's top edge rises before the bar's tabs and menu buttons have
-    /// faded away, in points.
-    public static let drawerControlsFadeDistance: CGFloat = 120
-    /// How long the new tab drawer's background takes to go from the bar's material to the drawer's
-    /// colour. It starts when the drawer does, not with the finger's distance.
-    public static let drawerMaterialFade: TimeInterval = 0.15
-    /// How much of the drawer's colour lies over the bar's material: the blur still shows, but the
-    /// drawer reads as the search sheet's own surface.
-    public static let drawerMaterialOpacity: CGFloat = 0.65
-    /// In incognito the drawer's colour lies on solid, so the panel reads as dark as the sheet
-    /// instead of letting a light page through the blur.
-    public static let incognitoDrawerOpacity: CGFloat = 1
     /// The incognito mask's blink: the lids drop over the eyes when it is turned on, and lift away
     /// when it is off.
     public static let incognitoBlink: TimeInterval = 0.24
@@ -57,23 +46,21 @@ public enum MobileSearchMotion {
     /// The word beside the incognito mask sliding out from under it, or back under it: slower
     /// than the blink, with a soft finish.
     public static let incognitoLabelSlide: TimeInterval = 0.35
+    /// Sliding back under the mask, the word stays solid for this share of the slide, then fades
+    /// over the rest.
+    public static let incognitoLabelFadeStart: Double = 0.6
     /// The microphone waits this long after incognito goes off before it comes back, then fades
-    /// over `micFade` while springing up.
+    /// over `micFade` while springing up from `micAppearScale`.
     public static let micReturnDelay: TimeInterval = 0.1
     public static let micFade: TimeInterval = 0.3
+    public static let micAppearScale: CGFloat = 0.7
     /// The incognito word and the bar's black tint fading out together as the drawer closes.
     public static let incognitoCloseFade: TimeInterval = 0.2
 
-    /// The tabs and menu buttons over the drawer's top edge: 1 at the bar, 0 once the drawer has
-    /// risen `drawerControlsFadeDistance`.
-    public static func drawerControlsOpacity(reach: CGFloat) -> CGFloat {
-        min(1, max(0, 1 - reach / drawerControlsFadeDistance))
-    }
-
-    /// The drawer's top corners: square at the bar and the sheet's own radius only once the drawer
-    /// is fully open, `openness` being 0 at the bar and 1 at its open top.
-    public static func drawerCornerRadius(openness: CGFloat) -> CGFloat {
-        MobileSearchSheet.cornerRadius * min(1, max(0, openness))
+    /// The open field's hairline edge: there only in the last 2 % of the field's opening, so it goes
+    /// as soon as the field starts back into the pill and the shrinking bar carries no rim.
+    public static func fieldEdgeOpacity(openness: CGFloat) -> CGFloat {
+        min(1, max(0, (openness - 0.98) / 0.02))
     }
 
     /// How far in something faded over `span` is at `openness`, 0...1: for the sheet pulled by a finger.

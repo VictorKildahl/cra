@@ -159,6 +159,60 @@ final class PageUnderBarTests: BrowserTestCase {
         keep("bottom colour, not top")
     }
 
+    /// On a light page the bar lays white over its material (`MobileBottomBar.pageTint`): in dark
+    /// mode, over a light grey page, it reads nearly white rather than the dark material's grey.
+    /// Over a dark page it lays nothing and stays dark. Colours by name: a launch address keeps
+    /// `%23` as typed.
+    func testALightPagesBarIsLiftedWhite() {
+        launch(["-CraOpenURL", Self.colouredPage("Light", "silver"), "-CraSearch", "NO", "-CraAppearance", "dark"])
+        waitForPage("Light")
+        sleep(1)
+        let light = screenColour(x: 0.25, y: 0.94)
+        XCTAssertGreaterThan(luminance(light), 0.82, "the light page's bar is lifted white: \(light)")
+        keep("white lift over a light page")
+
+        launch(["-CraOpenURL", Self.colouredPage("Dark", "black"), "-CraSearch", "NO", "-CraAppearance", "dark"])
+        waitForPage("Dark")
+        sleep(1)
+        let dark = screenColour(x: 0.25, y: 0.94)
+        XCTAssertLessThan(luminance(dark), 0.35, "the dark page's bar has no white lift: \(dark)")
+    }
+
+    /// An incognito tab's bar lays black over its material (`MobileBottomBar.incognitoTint`), so
+    /// it reads black even over a white page in a light app.
+    func testAnIncognitoTabsBarIsBlack() {
+        openIncognitoTab()
+        let bar = screenColour(x: 0.25, y: 0.94)
+        XCTAssertLessThan(luminance(bar), 0.1, "the incognito tab's bar is black over a white page: \(bar)")
+        keep("incognito bar over a white page")
+    }
+
+    /// Over the tab row the bar has no slab, incognito or not: an incognito tab's black goes with
+    /// the bar's material and leaves the row's buttons floating on the backdrop.
+    func testAnIncognitoTabsBarFloatsOverTheTabRow() {
+        openIncognitoTab()
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
+        sleep(1)
+        let bar = screenColour(x: 0.25, y: 0.94)
+        XCTAssertGreaterThan(luminance(bar), 0.6, "no black slab under the tab row's buttons: \(bar)")
+        keep("incognito tab row")
+    }
+
+    /// A white page, then an incognito tab with another white page, in a light app.
+    private func openIncognitoTab() {
+        launch(["-CraOpenURL", Self.colouredPage("First", "white"), "-CraSearch", "NO", "-CraAppearance", "light"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.buttons["search-incognito"].tap()
+        waitForValue("On", of: app.buttons["search-incognito"])
+        field.typeText(Self.colouredPage("Secret", "white") + "\n")
+        waitForPage("Secret")
+        sleep(1)
+    }
+
     private static func colouredPage(_ title: String, _ colour: String) -> String {
         "data:text/html,<meta/name=viewport/content=width=device-width><title>\(title)</title>"
             + "<body/style=margin:0;background:\(colour);height:100vh><h1>\(title)</h1>"

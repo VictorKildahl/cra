@@ -53,6 +53,8 @@ enum Palette {
     static let clearFill = dynamic(light: rgb(0xafafaf), dark: rgb(0x5a565c))
     /// Its cross: cut out of the disc in 2025, so the field's grey shows through.
     static let clearCross = dynamic(light: rgb(0xdbd9da), dark: .white)
+    /// "You're browsing Incognito" under the dark sheet's field.
+    static let incognitoNote = rgb(0xc9c8cd)
     /// "Browse for Me" on a suggestion row.
     static let chipFill = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x332c2f))
     static let chipBorder = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x403a3d))
@@ -64,9 +66,6 @@ enum Palette {
     static let lightBarBorder = UIColor(white: 0, alpha: 0.18)
     /// The light-page address field's placeholder and icons: a light grey ink.
     static let fieldLightPageInk = rgb(0xd8d8d8)
-    /// The light-page address field's typed text: black in light mode, dark grey over the lifted
-    /// dark-mode field.
-    static let fieldLightPageText = dynamic(light: .black, dark: rgb(0x3a3a3c))
     /// The same controls floating over the tab switcher's backdrop.
     /// Dark: Victor's screenshot IMG_1896 (13 Nov), pill #3B3B4B and circles #40404D on #232333.
     static let switcherPillFill = dynamic(light: UIColor(red: 71 / 255, green: 58 / 255, blue: 190 / 255, alpha: 0.16), dark: UIColor(white: 1, alpha: 0.11))

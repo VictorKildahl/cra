@@ -37,8 +37,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     private let incognitoLabel = UILabel()
     /// Whether the mic is fading back in, so the layout leaves its alpha to that fade.
     private var micIsAppearing = false
-    /// Which close the word's fade belongs to, so a faster reopen is not hidden by an older fade.
-    private var incognitoLabelHide = 0
+    /// The word's moves: a slide's or a fade's end only lands while it is still the latest, so a
+    /// quick toggle back is not cut short by an older one.
+    private var labelMoves = MobileMotion.Ticket()
     /// Voice search from the field (Arc Search 1.19), left of the incognito eyes while it is empty.
     private let micButton = UIButton(type: .system)
     private let incognitoNote = UILabel()
@@ -80,7 +81,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     }
     /// The address field's colour over the drawer: none in the page menu's sheet, a white lift over
     /// a light page, and a softer one over a dark page.
-    enum FieldStyle: Equatable { case standard, lightPage, darkPage }
+    typealias FieldStyle = MobileSearchSheet.FieldStyle
 
     /// How the open address field sits on the drawer.
     var fieldStyle: FieldStyle = .standard {
@@ -88,10 +89,13 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
             guard fieldStyle != oldValue else { return }
             fieldBackground.fieldStyle = fieldStyle
             field.lightPageField = fieldStyle == .lightPage
-            micButton.tintColor = fieldStyle == .lightPage ? Palette.fieldLightPageInk : Palette.placeholder
-            incognitoNote.textColor = fieldStyle == .lightPage ? Palette.secondaryText : Palette.rgb(0xc9c8cd)
+            incognitoNote.textColor = fieldStyle == .lightPage ? Palette.secondaryText : Palette.incognitoNote
             applyIncognito()
         }
+    }
+    /// For the new tab drawer's UI test: how much of the "Incognito" word beside the mask shows.
+    var incognitoWordOpacity: CGFloat {
+        incognitoLabel.isHidden || incognitoLabelClip.isHidden ? 0 : incognitoLabelClip.alpha * incognitoLabel.alpha
     }
     /// Whether "Browse for Me" is offered: only where the device's own model can answer.
     var offersBrowseForMe = false { didSet { rowViews.forEach { $0.showsBrowseForMe = offersBrowseForMe } } }
@@ -157,7 +161,6 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         incognitoButton.addSubview(incognitoEyes)
 
         micButton.setImage(UIImage(systemName: "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)), for: .normal)
-        micButton.tintColor = Palette.placeholder
         micButton.accessibilityLabel = "Voice Search"
         micButton.accessibilityIdentifier = "search-voice"
         micButton.addTarget(self, action: #selector(micTapped), for: .touchUpInside)
@@ -168,7 +171,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
 
         incognitoNote.text = "You're browsing Incognito"
         incognitoNote.font = .systemFont(ofSize: 17, weight: .medium)
-        incognitoNote.textColor = Palette.rgb(0xc9c8cd)
+        incognitoNote.textColor = Palette.incognitoNote
         incognitoNote.textAlignment = .center
         incognitoNote.accessibilityIdentifier = "incognito-note"
         incognitoNote.isHidden = true
@@ -196,6 +199,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         }
         applyIncognito()
         updateAccessories()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (sheet: SearchSheet, _) in
+            sheet.applyAccessoryInk()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -435,7 +441,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                           !self.isIncognito, self.text.isEmpty else { return }
                     self.micButton.layer.removeAllAnimations()
                     self.micButton.alpha = 0
-                    self.micButton.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+                    self.micButton.transform = CGAffineTransform(scaleX: MobileSearchMotion.micAppearScale, y: MobileSearchMotion.micAppearScale)
                     self.micButton.isHidden = false
                     UIView.animate(spring: MobileMotion.micAppear) {
                         self.micButton.transform = .identity
@@ -474,15 +480,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// it hidden for the next, normal search. `animated: false` is for a word that has already
     /// finished its slide.
     func hideIncognitoLabel(animated: Bool = true) {
-        incognitoLabelHide += 1
-        let token = incognitoLabelHide
+        let ticket = labelMoves.next()
         incognitoLabel.layer.removeAnimation(forKey: "slide")
         incognitoLabel.layer.removeAnimation(forKey: "fade")
-        guard !incognitoLabel.isHidden else {
-            resetIncognitoLabel()
-            return
-        }
-        guard animated else {
+        guard animated, !incognitoLabel.isHidden else {
             resetIncognitoLabel()
             return
         }
@@ -490,9 +491,20 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                        options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
             self.incognitoLabel.alpha = 0
         } completion: { [weak self] _ in
-            guard let self, self.incognitoLabelHide == token else { return }
+            guard let self, self.labelMoves.isCurrent(ticket) else { return }
             self.resetIncognitoLabel()
         }
+    }
+
+    /// A sheet being prepared is not the toggle's animated change: the word is just there or not,
+    /// at its resting place.
+    private func snapIncognitoLabel() {
+        _ = labelMoves.next()
+        incognitoLabel.layer.removeAnimation(forKey: "slide")
+        incognitoLabel.layer.removeAnimation(forKey: "fade")
+        incognitoLabel.isHidden = !isIncognito
+        incognitoLabel.layer.transform = CATransform3DIdentity
+        incognitoLabel.alpha = 1
     }
 
     /// Leaves the word at its resting place, out of sight.
@@ -517,17 +529,15 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// off, it slides back under it, fading only once most of the way there. The slide is on the
     /// label's layer, so a layout during it cannot take the word back to its place.
     private func animateIncognitoLabel() {
-        incognitoLabelHide += 1
+        let ticket = labelMoves.next()
         let duration = MobileSearchMotion.incognitoLabelSlide
         let hidden = CATransform3DMakeTranslation(incognitoLabel.bounds.width + MobileSearchSheet.incognitoLabelGap, 0, 0)
         let visible = CATransform3DIdentity
-        let timing = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+        let timing = Self.labelSlideTiming
         incognitoLabel.layer.removeAnimation(forKey: "slide")
         incognitoLabel.layer.removeAnimation(forKey: "fade")
         guard !isHidden else {
-            incognitoLabel.isHidden = !isIncognito
-            incognitoLabel.layer.transform = isIncognito ? visible : hidden
-            incognitoLabel.alpha = 1
+            snapIncognitoLabel()
             return
         }
         if isIncognito {
@@ -544,12 +554,12 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 1
         fade.toValue = 0
-        fade.beginTime = CACurrentMediaTime() + duration * 0.6
-        fade.duration = duration * 0.4
+        fade.beginTime = CACurrentMediaTime() + duration * MobileSearchMotion.incognitoLabelFadeStart
+        fade.duration = duration * (1 - MobileSearchMotion.incognitoLabelFadeStart)
         fade.fillMode = .backwards
         incognitoLabel.layer.add(fade, forKey: "fade")
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            guard let self, !self.isIncognito else { return }
+            guard let self, self.labelMoves.isCurrent(ticket), !self.isIncognito else { return }
             self.hideIncognitoLabel(animated: false)
         }
     }
@@ -557,17 +567,9 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// Incognito turns the sheet dark, names itself beside the mask, and brings the dark keyboard.
     private func applyIncognito() {
         overrideUserInterfaceStyle = isIncognito ? .dark : .unspecified
-        incognitoEyes.lightPageField = fieldStyle == .lightPage
-        incognitoLabel.attributedText = Self.incognitoTitle(lightPageField: fieldStyle == .lightPage)
+        applyAccessoryInk()
         incognitoButton.accessibilityValue = isIncognito ? "On" : "Off"
-        // A sheet being prepared is not the toggle's animated change: the word is just there or
-        // not.
-        if isHidden {
-            incognitoLabelHide += 1
-            incognitoLabel.isHidden = !isIncognito
-            incognitoLabel.transform = .identity
-            incognitoLabel.alpha = 1
-        }
+        if isHidden { snapIncognitoLabel() }
         let appearance: UIKeyboardAppearance = isIncognito ? .dark : .default
         if field.keyboardAppearance != appearance {
             field.keyboardAppearance = appearance
@@ -575,6 +577,15 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         }
         updateAccessories()
         setNeedsLayout()
+    }
+
+    /// The mic and the mask share one ink, resolved once for the sheet's appearance.
+    private func applyAccessoryInk() {
+        let ink = (fieldStyle == .lightPage ? Palette.fieldLightPageInk : Palette.placeholder)
+            .resolvedColor(with: traitCollection)
+        micButton.tintColor = ink
+        incognitoEyes.ink = ink
+        incognitoLabel.attributedText = Self.incognitoTitle(ink: ink)
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
@@ -676,8 +687,10 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         incognitoLabel.bounds = CGRect(origin: .zero, size: labelSize)
         incognitoLabel.center = CGPoint(x: labelArea - MobileSearchSheet.incognitoLabelGap - labelSize.width / 2,
                                         y: incognitoLabelClip.bounds.midY)
-        micButton.frame = accessory.offsetBy(dx: -40, dy: 0)
-        fade([clearButton, incognitoButton], over: MobileSearchMotion.accessorySpan, from: fieldStart, to: morph)
+        micButton.frame = MobileSearchSheet.micFrame(field: frame)
+        // The incognito word comes and goes with the mask beside it, not ahead of the field.
+        fade([clearButton, incognitoButton, incognitoLabelClip], over: MobileSearchMotion.accessorySpan,
+             from: fieldStart, to: morph)
         if !micIsAppearing {
             fade([micButton], over: MobileSearchMotion.accessorySpan, from: fieldStart, to: morph)
         }
@@ -716,197 +729,15 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         }.withRenderingMode(.alwaysOriginal)
     }
 
-    /// "Incognito" beside the mask while it is on: 13 pt grey (Victor's screenshot IMG_1905: the
-    /// word 51.6 pt wide in #9C9B9D). Its gap to the mask is `incognitoLabelGap`.
-    private static func incognitoTitle(lightPageField: Bool) -> NSAttributedString {
-        let ink = lightPageField ? Palette.fieldLightPageInk : Palette.placeholder
-        return NSAttributedString(string: "Incognito", attributes: [
+    /// "Incognito" beside the mask while it is on: 13 pt in the accessory ink (Victor's screenshot
+    /// IMG_1905: the word 51.6 pt wide in #9C9B9D). Its gap to the mask is `incognitoLabelGap`.
+    /// The word's slide: quick off the mark, a long soft finish.
+    private static let labelSlideTiming = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+
+    private static func incognitoTitle(ink: UIColor) -> NSAttributedString {
+        NSAttributedString(string: "Incognito", attributes: [
             .font: UIFont.systemFont(ofSize: 13), .foregroundColor: ink,
         ])
-    }
-}
-
-/// The incognito mask: two hollow eggs leaning in, a pupil in each, and eyelids that fill them.
-/// Turning incognito on drops the lids over the eyes; turning it off lifts them away.
-final class IncognitoEyesView: UIView {
-    /// The drawing's own canvas.
-    static let size = CGSize(width: 28, height: 17)
-    /// Where each egg sits across the canvas, and how far it leans.
-    private static let eggs: [(x: CGFloat, angle: CGFloat)] = [(7, 0.16), (21, -0.16)]
-    private static let eggSize = CGSize(width: 11.8, height: 14.2)
-    /// The pupils look a little to the left; closing moves them 1 pt right.
-    private static let pupilLook = CGPoint(x: -2, y: 0)
-    private static let pupilDiameter: CGFloat = 6
-    /// How far the pupils dip while the toggle is held.
-    private static let pupilNudge: CGFloat = 0.7
-    /// With the eyes shut the pupils sit 1 pt right of their open look, a straight move.
-    private static let pupilClosed = CGPoint(x: pupilLook.x + 1, y: pupilLook.y)
-    /// The eye's rim.
-    private static let rimWidth: CGFloat = 1.5
-
-    private let outline = CAShapeLayer()
-    private let pupils = CAShapeLayer()
-    /// Each eye's filled egg over its pupil, revealed by its own mask. The right eye's lid waits
-    /// a moment, so the blink rolls across the pair.
-    private let lids = [CAShapeLayer(), CAShapeLayer()]
-    private let lidMasks = [CALayer(), CALayer()]
-    private var shapes: [CAShapeLayer] { [outline, pupils] + lids }
-    /// Which blink the pending right lid belongs to: a new toggle cancels an older one's start,
-    /// so repeated presses cannot stack the delay.
-    private var blinkGeneration = 0
-    private var pupilsDown = false
-    /// Whether the lids are over the eyes.
-    private(set) var closed = false
-
-    /// The light-page field's lighter ink, rather than the microphone's grey.
-    var lightPageField = false {
-        didSet {
-            guard lightPageField != oldValue else { return }
-            applyInk()
-        }
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        isAccessibilityElement = false
-        for shape in shapes {
-            shape.frame = bounds
-            layer.addSublayer(shape)
-        }
-        outline.fillColor = UIColor.clear.cgColor
-        outline.lineWidth = Self.rimWidth
-        // The lids are the eggs filled in, each with a mask that comes down over it. Its height
-        // is the lid's own state, set by `setClosed`; layout leaves it alone.
-        for (lid, mask) in zip(lids, lidMasks) {
-            mask.bounds = CGRect(x: 0, y: 0, width: Self.size.width, height: 0)
-            mask.backgroundColor = UIColor.black.cgColor
-            mask.anchorPoint = .zero
-            lid.mask = mask
-        }
-        applyInk()
-        // The eyes start looking to the lower left, not straight ahead.
-        pupils.transform = CATransform3DMakeTranslation(Self.pupilLook.x, Self.pupilLook.y, 0)
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: IncognitoEyesView, _) in view.applyInk() }
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        let canvas = CGRect(origin: .zero, size: Self.size)
-        // Bounds and position, not frame: the pupils carry their look as a transform, and a
-        // layer's frame is its transformed bounds, which would undo that look.
-        for shape in shapes {
-            shape.bounds = CGRect(origin: .zero, size: canvas.size)
-            shape.position = CGPoint(x: canvas.midX, y: canvas.midY)
-        }
-        outline.path = eggPath(Self.eggs, expandedBy: 0).cgPath
-        pupils.path = pupilPath()
-        for (index, lid) in lids.enumerated() {
-            lid.path = eggPath([Self.eggs[index]], expandedBy: Self.rimWidth / 2).cgPath
-        }
-    }
-
-    /// Drops the lids over the eyes, or lifts them away. The right eye starts a moment after the
-    /// left one, and the pupils move 1 pt right as they close, with no dip from the press. A new
-    /// toggle cancels a pending right lid, so the wait never stacks.
-    func setClosed(_ closed: Bool, animated: Bool) {
-        guard closed != self.closed else { return }
-        self.closed = closed
-        // The press is over: the close moves straight across, not from the dip.
-        pupilsDown = false
-        blinkGeneration += 1
-        let generation = blinkGeneration
-        movePupils(duration: MobileSearchMotion.incognitoBlink, animated: animated)
-        let height = closed ? Self.size.height : 0
-        moveLid(0, to: height, animated: animated, generation: generation)
-        if animated {
-            DispatchQueue.main.asyncAfter(deadline: .now() + MobileSearchMotion.incognitoBlinkStagger) { [weak self] in
-                self?.moveLid(1, to: height, animated: true, generation: generation)
-            }
-        } else {
-            moveLid(1, to: height, animated: false, generation: generation)
-        }
-    }
-
-    /// A small dip of the pupils while the toggle is held.
-    func setPupilsDown(_ down: Bool) {
-        guard down != pupilsDown else { return }
-        pupilsDown = down
-        movePupils(duration: 0.1, animated: true)
-    }
-
-    private func moveLid(_ index: Int, to height: CGFloat, animated: Bool, generation: Int) {
-        guard generation == blinkGeneration else { return }
-        let mask = lidMasks[index]
-        let from = mask.presentation()?.bounds.height ?? mask.bounds.height
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        mask.bounds = CGRect(x: 0, y: 0, width: Self.size.width, height: height)
-        CATransaction.commit()
-        guard animated, window != nil else { return }
-        let animation = CABasicAnimation(keyPath: "bounds.size.height")
-        animation.fromValue = from
-        animation.toValue = height
-        animation.duration = MobileSearchMotion.incognitoBlink
-        animation.timingFunction = CAMediaTimingFunction(controlPoints: 0.45, 0, 0.15, 1)
-        mask.add(animation, forKey: "blink")
-    }
-
-    /// In the middles when the eyes close, looking to the lower left while they are open; a held
-    /// button dips them.
-    /// The pupils look a little left with the eyes open; they move 1 pt right as the eyes
-    /// shut and back as they open. A held button dips them.
-    private func movePupils(duration: TimeInterval, animated: Bool) {
-        let rest = closed ? Self.pupilClosed : Self.pupilLook
-        let target = CATransform3DMakeTranslation(rest.x, rest.y + (pupilsDown ? Self.pupilNudge : 0), 0)
-        let from = pupils.presentation()?.transform ?? pupils.transform
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        pupils.transform = target
-        CATransaction.commit()
-        guard animated, window != nil else { return }
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = NSValue(caTransform3D: from)
-        animation.toValue = NSValue(caTransform3D: target)
-        animation.duration = duration
-        animation.timingFunction = CAMediaTimingFunction(controlPoints: 0.45, 0, 0.15, 1)
-        pupils.add(animation, forKey: "pupils")
-    }
-
-    private func applyInk() {
-        let ink = (lightPageField ? Palette.fieldLightPageInk : Palette.placeholder)
-            .resolvedColor(with: traitCollection)
-        outline.strokeColor = ink.cgColor
-        pupils.fillColor = ink.cgColor
-        for lid in lids { lid.fillColor = ink.cgColor }
-    }
-
-    /// The eggs, each leaning in from its middle; `grow` covers the rim's own width.
-    private func eggPath(_ eggs: [(x: CGFloat, angle: CGFloat)], expandedBy grow: CGFloat) -> UIBezierPath {
-        let path = UIBezierPath()
-        for egg in eggs {
-            let rect = CGRect(x: -Self.eggSize.width / 2 - grow, y: -Self.eggSize.height / 2 - grow,
-                              width: Self.eggSize.width + grow * 2, height: Self.eggSize.height + grow * 2)
-            let oval = UIBezierPath(ovalIn: rect)
-            oval.apply(CGAffineTransform(translationX: egg.x, y: bounds.midY).rotated(by: egg.angle))
-            path.append(oval)
-        }
-        return path
-    }
-
-    private func pupilPath() -> CGPath {
-        let path = UIBezierPath()
-        for egg in Self.eggs {
-            let rect = CGRect(x: -Self.pupilDiameter / 2, y: -Self.pupilDiameter / 2,
-                              width: Self.pupilDiameter, height: Self.pupilDiameter)
-            let pupil = UIBezierPath(ovalIn: rect)
-            // The pupil's place in the eye is its layer's; the path is the middle.
-            pupil.apply(CGAffineTransform(translationX: egg.x, y: bounds.midY).rotated(by: egg.angle))
-            path.append(pupil)
-        }
-        return path.cgPath
     }
 }
 
@@ -936,7 +767,8 @@ final class SearchField: UITextField {
     }
 
     private func applyInk() {
-        textColor = lightPageField ? Palette.fieldLightPageText : Palette.primaryText
+        // The address bar's input is white in every appearance and over every field.
+        textColor = .white
         attributedPlaceholder = NSAttributedString(string: "Search...", attributes: [
             .foregroundColor: lightPageField ? Palette.fieldLightPageInk : Palette.placeholder,
             .font: UIFont.systemFont(ofSize: 20, weight: .regular),
@@ -965,11 +797,11 @@ final class FieldBackgroundView: UIView {
     var plusCenter: CGFloat = 0 { didSet { if plusCenter != oldValue { setNeedsLayout() } } }
     /// The bar behind the drawer is a light page's: the closed plus pill takes the light bar's fill,
     /// rim and ink.
-    var lightPlusChrome = false { didSet { if lightPlusChrome != oldValue { applyColors(animated: true) } } }
+    var lightPlusChrome = false { didSet { if lightPlusChrome != oldValue { crossfadeColors() } } }
     /// The address field's colour over the drawer: none in the page menu's sheet, a white lift
     /// over a light page, and a softer one over a dark page.
     var fieldStyle: SearchSheet.FieldStyle = .standard {
-        didSet { if fieldStyle != oldValue { applyColors(animated: true) } }
+        didSet { if fieldStyle != oldValue { crossfadeColors() } }
     }
 
     override init(frame: CGRect) {
@@ -1004,12 +836,8 @@ final class FieldBackgroundView: UIView {
 
     /// A style change comes in with the drawer's own material fade, so the plus and field change
     /// over without a snap.
-    private func applyColors(animated: Bool) {
-        guard animated else {
-            applyColors()
-            return
-        }
-        UIView.transition(with: self, duration: MobileSearchMotion.drawerMaterialFade,
+    private func crossfadeColors() {
+        UIView.transition(with: self, duration: MobileNewTabDrawer.colourFade,
                           options: [.transitionCrossDissolve, .allowUserInteraction]) {
             self.applyColors()
         }
@@ -1018,13 +846,7 @@ final class FieldBackgroundView: UIView {
     private func applyColors() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let lift: CGFloat?
-        switch fieldStyle {
-        case .standard: lift = nil
-        case .lightPage: lift = MobileBottomBar.fieldLightPageWhite
-        case .darkPage: lift = MobileBottomBar.fieldDarkPageWhite
-        }
-        if let lift {
+        if let lift = fieldStyle.whiteLift {
             // Over the drawer, a little white makes the field a shade lighter than the surface
             // behind it rather than a fixed colour.
             let white = UIColor.white.withAlphaComponent(lift)
@@ -1044,7 +866,7 @@ final class FieldBackgroundView: UIView {
     /// The field's hairline edge belongs to the open field. It goes as soon as the field starts
     /// back into the pill, so shrinking into the bar leaves no dark rim.
     private func applyBorder() {
-        let alpha = max(0, min(1, (openness - 0.98) / 0.02))
+        let alpha = MobileSearchMotion.fieldEdgeOpacity(openness: openness)
         layer.borderColor = Palette.raisedHairline
             .withAlphaComponent(Palette.raisedHairlineOpacity * alpha).cgColor
     }

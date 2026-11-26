@@ -51,13 +51,6 @@ public enum MobileSearchSheet {
         screenHeight - keyboardHeight - height
     }
 
-    /// Whether the keyboard going away closes the new tab drawer: only while the drawer grown from
-    /// the bar is up and the keyboard had been up. The page menu's address editor stays.
-    public static func closesOnKeyboardHide(isSearching: Bool, growsFromBar: Bool,
-                                            keyboardWasUp: Bool, height: CGFloat) -> Bool {
-        isSearching && growsFromBar && keyboardWasUp && height <= 0
-    }
-
     /// The sheet with `rows` suggestion rows in view.
     public static func height(rows: Int) -> CGFloat {
         topInset + fieldHeight + rowsTopGap + CGFloat(rows) * rowHeight + bottomInset
@@ -84,6 +77,17 @@ public enum MobileSearchSheet {
         heldAt ?? top(screenHeight: screenHeight, keyboardHeight: keyboardHeight, safeTop: safeTop)
     }
 
+    /// Where a drawer pulled up out of the pill heads the moment it is let go, before the keyboard
+    /// has said where it will be: its open place over `expectedKeyboard`, the keyboard last seen,
+    /// so it carries on from the finger instead of waiting still for the keyboard. With no keyboard
+    /// seen yet that place is only a guess, so it never sends the drawer down from where it was
+    /// let go.
+    public static func releasedTop(screenHeight: CGFloat, expectedKeyboard: CGFloat, keyboardSeen: Bool,
+                                   safeTop: CGFloat, releasedAt: CGFloat) -> CGFloat {
+        let open = top(screenHeight: screenHeight, keyboardHeight: expectedKeyboard, safeTop: safeTop)
+        return keyboardSeen ? open : min(open, releasedAt)
+    }
+
     /// The field's button at its right end (clear, incognito): 44 pt square, its centre 29.5 pt
     /// from the field's right end.
     public static func accessoryFrame(field: CGRect) -> CGRect {
@@ -98,6 +102,39 @@ public enum MobileSearchSheet {
         let accessory = accessoryFrame(field: field)
         let width = labelledWidth ?? accessory.width
         return CGRect(x: field.maxX - incognitoTrailingInset - width, y: accessory.minY, width: width, height: accessory.height)
+    }
+
+    /// The microphone, 40 pt left of the accessory: left of the incognito mask while the field is
+    /// empty.
+    public static func micFrame(field: CGRect) -> CGRect {
+        accessoryFrame(field: field).offsetBy(dx: -40, dy: 0)
+    }
+
+    /// How the open address field sits on what is behind it.
+    public enum FieldStyle: Equatable, Sendable {
+        /// The page menu's address editor: the sheet's own grey field.
+        case standard
+        /// The new tab drawer over a light page.
+        case lightPage
+        /// The new tab drawer over a dark page.
+        case darkPage
+
+        /// The new tab drawer's field follows the page under the bar; a sheet in place of the page
+        /// menu keeps its own.
+        public init(growsFromBar: Bool, pageIsLight: Bool) {
+            self = !growsFromBar ? .standard : pageIsLight ? .lightPage : .darkPage
+        }
+
+        /// How much white the field lays over the drawer, so it reads a shade lighter than the
+        /// surface behind it: a little on a light page, a softer, still see-through lift on a dark
+        /// one. Nil keeps the sheet's own field colour.
+        public var whiteLift: CGFloat? {
+            switch self {
+            case .standard: nil
+            case .lightPage: 0.2
+            case .darkPage: 0.12
+            }
+        }
     }
 
     /// The chrome's moves under way (the sheet, the bar, the page behind). The sheet is put away into the pill only
@@ -139,12 +176,23 @@ public enum MobileBottomBar {
     public static let incognitoTint: CGFloat = 0.75
     /// The crossfade as a tab's light or dark page changes the bar's white overlay.
     public static let pageTintFade: TimeInterval = 0.2
-    /// How much white the address field lays over the drawer on a light page, so the field reads
-    /// slightly lighter than the surface behind it.
-    public static let fieldLightPageWhite: CGFloat = 0.2
-    /// How much white the address field lays over a dark page's drawer: a softer lift, still
-    /// see-through and just lighter than the drawer.
-    public static let fieldDarkPageWhite: CGFloat = 0.12
+
+    /// Whether the page under the bar is light, from the status bar's ink: dark text means a light
+    /// page. With no band showing, the app's own appearance decides, as `.default` text does.
+    public static func pageIsLight(statusBarFill: String?, darkMode: Bool) -> Bool {
+        statusBarFill.map { !MobileStatusBand.lightContent(fill: $0) } ?? !darkMode
+    }
+
+    /// Whether the bar's plus and menu button take the light bar's dark grey ink, rim and glass.
+    /// A light app or a light page gives a light bar; incognito's black bar and the floating
+    /// buttons over the home or the tab row never do. `overDrawer`: the control sits on the new
+    /// tab drawer's colour, which is the dark one in a dark app even over a light page.
+    public static func lightChrome(darkMode: Bool, pageIsLight: Bool, incognito: Bool,
+                                   floats: Bool, overDrawer: Bool) -> Bool {
+        if incognito || floats { return false }
+        if overDrawer, darkMode { return false }
+        return !darkMode || pageIsLight
+    }
 
     public struct Frames: Equatable {
         public var bar: CGRect
