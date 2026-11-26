@@ -8,11 +8,12 @@ final class ImportPlanLoader {
     private var count = 0
 
     /// Runs `read` on a background thread and hands its result to `done` on the main actor,
-    /// unless another `load` or `cancel` came after it.
-    func load(_ read: @escaping @Sendable () throws -> ImportPlan, done: @escaping (Result<ImportPlan, Error>) -> Void) {
+    /// unless another `load` or `cancel` came after it. The task ends once `done` ran or was skipped.
+    @discardableResult
+    func load(_ read: @escaping @Sendable () throws -> ImportPlan, done: @escaping (Result<ImportPlan, Error>) -> Void) -> Task<Void, Never> {
         count += 1
         let pick = count
-        Task { @MainActor in
+        return Task { @MainActor in
             let result = await Task.detached(priority: .userInitiated) { Result { try read() } }.value
             guard pick == count else { return }
             done(result)

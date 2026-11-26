@@ -1297,12 +1297,17 @@ enum StoreTests {
             let deadline = Date().addingTimeInterval(10)
             while !done() && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
         }
-        /// A read that waits for `gate`, then signals `finished` once its result is on its way.
-        func slowRead(_ gate: DispatchSemaphore, _ finished: DispatchSemaphore) -> @Sendable () throws -> ImportPlan {
-            { gate.wait(); defer { finished.signal() }; return ImportPlan(source: "slow") }
+        /// A read that waits for `gate`.
+        func slowRead(_ gate: DispatchSemaphore) -> @Sendable () throws -> ImportPlan {
+            { gate.wait(); return ImportPlan(source: "slow") }
         }
-        /// Lets the main actor take a dropped result, if it were to take one.
-        func settle() { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+        /// Spins until `load`'s task has delivered or dropped its result.
+        func finish(_ load: Task<Void, Never>) {
+            var finished = false
+            Task { @MainActor in await load.value; finished = true }
+            spin { finished }
+            expect(finished, "the earlier pick's read finishes")
+        }
 
         loader.load({ ImportPlan(source: Thread.isMainThread ? "main thread" : "background") }, done: record)
         spin { !delivered.isEmpty }
@@ -1314,23 +1319,20 @@ enum StoreTests {
         expect(delivered == ["error"], "a read that fails hands over its error")
 
         delivered = []
-        var gate = DispatchSemaphore(value: 0), finished = DispatchSemaphore(value: 0)
-        loader.load(slowRead(gate, finished), done: record)
+        var gate = DispatchSemaphore(value: 0)
+        var slow = loader.load(slowRead(gate), done: record)
         loader.load({ ImportPlan(source: "fast") }, done: record)
         spin { !delivered.isEmpty }
         gate.signal()
-        spin { finished.wait(timeout: .now()) == .success }
-        settle()
+        finish(slow)
         expect(delivered == ["fast"], "a slow read for an earlier pick is dropped once a later pick's plan is in")
 
         delivered = []
         gate = DispatchSemaphore(value: 0)
-        finished = DispatchSemaphore(value: 0)
-        loader.load(slowRead(gate, finished), done: record)
+        slow = loader.load(slowRead(gate), done: record)
         loader.cancel()
         gate.signal()
-        spin { finished.wait(timeout: .now()) == .success }
-        settle()
+        finish(slow)
         expect(delivered.isEmpty, "a later pick that reads nothing (Full Disk Access, Safari's export) drops the read in flight")
     }
 
