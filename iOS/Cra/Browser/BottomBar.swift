@@ -6,11 +6,11 @@ import UIKit
 /// as the bar plus the bottom safe area.
 final class BottomBar: UIView {
     let tabsButton = TabStackButton()
-    let pill = BarButton(symbol: "plus", pointSize: 16, weight: .semibold)
+    let pill = BarButton(symbol: "plus", pointSize: 20, weight: .semibold)
     let menuButton = BarButton(symbol: "chevron.up", pointSize: 16, weight: .semibold)
     /// In the tab switcher the tab stack gives way to Spaces, and the menu to Settings.
-    // Over the tab row (IMG_1896): the monitor 19 pt wide, the plus 16.3 pt, and the gear is
-    // the spoked one, 18 pt across.
+    // Over the tab row (IMG_1896): the monitor 19 pt wide, the plus 16.3 pt (drawn 4 pt larger
+    // since), and the gear is the spoked one, 18 pt across.
     let spacesButton = BarButton(symbol: "desktopcomputer", pointSize: 16, weight: .semibold)
     let settingsButton = BarButton(symbol: "gear", pointSize: 17, weight: .medium)
 
@@ -20,7 +20,17 @@ final class BottomBar: UIView {
     var overBackdrop = false {
         didSet { if overBackdrop != oldValue { applyMode() } }
     }
-    private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+    private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+    /// The drawer's colour over the bar's material. It grows with the blur and is under the controls,
+    /// so the tabs and menu buttons ride on top of it until they fade.
+    private let drawerTint = UIView()
+    /// The drawer's hairline edge, a shade lighter than its fill.
+    private let drawerEdge = UIView()
+    /// The bar's white lift over the material on a light page, under the controls.
+    private let pageTint = UIView()
+    /// The black rectangle over the material in incognito, under the controls: a dark page's bar
+    /// has no white lift, so this is what makes it read black.
+    private let incognitoTint = UIView()
     private let hairline = UIView()
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
@@ -29,6 +39,69 @@ final class BottomBar: UIView {
     private var wasFloating = false
     var ringsMenu = false {
         didSet { applyFade() }
+    }
+
+    /// How far the new tab drawer's top edge has risen above the bar, in points. The tabs and menu
+    /// buttons ride that edge and leave; the material and its colour carry it up too.
+    var drawerRise: CGFloat = 0 {
+        didSet {
+            guard drawerRise != oldValue else { return }
+            setNeedsLayout()
+            applyFade()
+        }
+    }
+
+    /// 1 with the drawer's colour over the bar's material, 0 with the bar's material alone.
+    var drawerAppearance: CGFloat = 0 {
+        didSet { if drawerAppearance != oldValue { applyDrawer() } }
+    }
+
+    /// 0 at the bar, 1 with the drawer fully open. Its top corners reach the sheet's radius only at 1.
+    var drawerOpenness: CGFloat = 0 {
+        didSet { if drawerOpenness != oldValue { setNeedsLayout() } }
+    }
+
+    /// The drawer is on screen, from the first touch until it has sunk back. The bar's own hairline
+    /// stays hidden the whole time: the material's top edge is the drawer's, not the bar's.
+    var drawerActive = false {
+        didSet { if drawerActive != oldValue { applyFade() } }
+    }
+
+    /// The bar carries an incognito tab or search: the whole bar is dark, drawer or not.
+    var isIncognito = false {
+        didSet {
+            guard isIncognito != oldValue else { return }
+            overrideUserInterfaceStyle = isIncognito ? .dark : .unspecified
+            applyDrawer()
+            applyPageChrome()
+            applyIncognitoTint(animated: true)
+        }
+    }
+
+    /// For the new tab drawer's UI test: the bar material's own opacity behind the drawer.
+    var materialAlpha: CGFloat { blur.alpha }
+
+    /// Whether the page's status bar text is dark, meaning a light page: the bar lays white over
+    /// its material then. Crossfaded when it changes, so switching tabs is smooth.
+    var pageIsLight = false {
+        didSet {
+            guard pageIsLight != oldValue else { return }
+            UIView.animate(withDuration: MobileBottomBar.pageTintFade, delay: 0,
+                           options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
+                self.pageTint.alpha = self.pageTintAlpha
+            }
+            applyPageChrome()
+        }
+    }
+
+    /// The material's own visibility: the bar's slab, or the drawer's while it is out.
+    private var slabAlpha: CGFloat {
+        drawerActive ? 1 : ((mode == .tabs || overBackdrop) ? 0 : controlsVisibility)
+    }
+
+    /// The white overlay's opacity: only on a light page, and only where the bar's material shows.
+    private var pageTintAlpha: CGFloat {
+        (pageIsLight ? MobileBottomBar.pageTint : 0) * slabAlpha
     }
 
     /// 1 with every control showing; 0 while the search sheet is open and only the pill's place
@@ -51,14 +124,65 @@ final class BottomBar: UIView {
 
     /// 1 while the pill is the page's, 0 while the search sheet's field stands in for it.
     var pillVisibility: CGFloat = 1 {
-        didSet { applyFade() }
+        didSet {
+            if pillVisibility <= 0.001 { pillRevealing = false }
+            applyFade()
+        }
+    }
+
+    /// The pill is fading in as the sheet leaves; `applyFade` must leave its alpha to that animation.
+    private var pillRevealing = false
+
+    /// Fades the plus back in as the address field closes, instead of letting it appear at full once
+    /// the sheet is gone.
+    func revealPill(over duration: TimeInterval) {
+        pillRevealing = true
+        pillVisibility = 1
+        pill.alpha = 0
+        UIView.animate(withDuration: duration, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+            self.pill.alpha = 1
+        } completion: { _ in
+            self.pillRevealing = false
+        }
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(blur)
+        // The material rounds its top corners as the drawer rises; the strip along the bottom
+        // stays square, as the bar always has.
+        configureDrawerSurface(blur)
+        // The page's own colour over the material: the bar follows a white page instead of
+        // keeping the material's grey, and it rounds with the material as the drawer rises.
+        pageTint.isUserInteractionEnabled = false
+        pageTint.backgroundColor = .white
+        pageTint.alpha = 0
+        addSubview(pageTint)
+        configureDrawerSurface(pageTint)
         hairline.backgroundColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.12))
-        blur.contentView.addSubview(hairline)
+        addSubview(hairline)
+        // The drawer's own colour sits over the material, never taking touches: the bar's controls
+        // stay live above it.
+        drawerTint.backgroundColor = Palette.sheetDrawer
+        drawerTint.isUserInteractionEnabled = false
+        drawerTint.alpha = 0
+        addSubview(drawerTint)
+        configureDrawerSurface(drawerTint)
+        // The incognito bar's black, over the material and under the controls.
+        incognitoTint.backgroundColor = .black
+        incognitoTint.isUserInteractionEnabled = false
+        incognitoTint.alpha = 0
+        addSubview(incognitoTint)
+        configureDrawerSurface(incognitoTint)
+        // The drawer's own hairline: white over the fill, so it reads a shade lighter than it in
+        // either appearance.
+        drawerEdge.isUserInteractionEnabled = false
+        drawerEdge.backgroundColor = .clear
+        drawerEdge.alpha = 0
+        drawerEdge.layer.borderWidth = 0.5
+        drawerEdge.layer.borderColor = Palette.raisedHairline.cgColor
+        addSubview(drawerEdge)
+        configureDrawerSurface(drawerEdge)
         tabsButton.accessibilityIdentifier = "bar-tabs"
         tabsButton.accessibilityLabel = "Tabs"
         pill.accessibilityIdentifier = "bar-search"
@@ -69,6 +193,10 @@ final class BottomBar: UIView {
         spacesButton.accessibilityLabel = "Spaces"
         settingsButton.accessibilityIdentifier = "bar-settings"
         settingsButton.accessibilityLabel = "Settings"
+        // The buttons keep one centre; the right side button's glyph reads a point high in its
+        // circle, and its blocker ring stays on the button.
+        menuButton.glyphRise = 1
+        settingsButton.glyphRise = 1
         [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach(addSubview)
         menuRing.isUserInteractionEnabled = false
         menuRing.layer.borderColor = UIColor.white.cgColor
@@ -77,6 +205,9 @@ final class BottomBar: UIView {
         menuRing.accessibilityIdentifier = "bar-menu-ring"
         addSubview(menuRing)
         applyMode()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (bar: BottomBar, _) in
+            bar.applyPageChrome()
+        }
     }
 
     /// The controls' opacity, faded as the bar slides away, and whether they take touches. The
@@ -84,35 +215,90 @@ final class BottomBar: UIView {
     private func applyFade() {
         let visible = controlsVisibility
         let fade = 1 - collapseProgress
+        // The drawer's own fade is the whole story while it is out; `visible` covers the address
+        // editor, where the sheet is not the bar and the bar's controls still leave with it.
+        let sideVisible = drawerActive ? MobileSearchMotion.drawerControlsOpacity(reach: drawerRise) : visible
         let tabs = mode == .tabs
-        tabsButton.alpha = (tabs ? 0 : visible) * fade
-        menuButton.alpha = (tabs ? 0 : visible) * fade
-        spacesButton.alpha = (tabs ? visible : 0) * fade
-        settingsButton.alpha = (tabs ? visible : 0) * fade
+        tabsButton.alpha = (tabs ? 0 : sideVisible) * fade
+        menuButton.alpha = (tabs ? 0 : sideVisible) * fade
+        spacesButton.alpha = (tabs ? sideVisible : 0) * fade
+        settingsButton.alpha = (tabs ? sideVisible : 0) * fade
         // The pill has its own visibility: it is the search field's starting point, and the field
-        // stands in for it while the sheet is open.
-        pill.alpha = pillVisibility * fade
-        menuRing.alpha = (ringsMenu ? 1 : 0) * fade
+        // stands in for it while the sheet is open. While it fades back in, leave the animation to it.
+        if !pillRevealing { pill.alpha = pillVisibility * fade }
+        menuRing.alpha = (ringsMenu ? 1 : 0) * fade * (drawerActive ? sideVisible : 1)
+        // The hairline belongs to the bar's own slab: over the home or switcher, or under the
+        // drawer, there is no edge to draw.
+        hairline.alpha = (drawerActive || slabAlpha <= 0.001) ? 0 : 1
+        pageTint.alpha = pageTintAlpha
         // Faded or away, the controls take no touches: the strip along the safe area is the way
-        // back, not a half-faded button.
+        // back, not a half-faded button. The side buttons also let go as soon as the drawer starts
+        // to rise: they are on their way out, and the drag owns the finger.
         let live = visible > 0.01 && collapseProgress < 0.01
-        // The slide sets this every frame; the controls only change at its ends.
-        guard live != pill.isUserInteractionEnabled else { return }
-        [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach { $0.isUserInteractionEnabled = live }
+        let sideLive = live && drawerRise <= 0.01
+        [tabsButton, menuButton, spacesButton, settingsButton].forEach { $0.isUserInteractionEnabled = sideLive }
+        pill.isUserInteractionEnabled = live
+    }
+
+    /// The material's own colour: clear over the bar alone, the search sheet's colour over the
+    /// material once the new tab drawer shows.
+    private func applyDrawer() {
+        // An incognito tab keeps the whole bar dark, whether the drawer is out or not.
+        drawerTint.alpha = isIncognito
+            ? MobileSearchMotion.incognitoDrawerOpacity
+            : drawerAppearance * MobileSearchMotion.drawerMaterialOpacity
+        drawerEdge.alpha = drawerAppearance
+        // Over the home or the switcher the bar has no slab of its own; the drawer brings it back
+        // with the drawer's colour, so the drawer still looks like the bar's material.
+        blur.alpha = slabAlpha
+        pageTint.alpha = pageTintAlpha
+        setNeedsLayout()
+    }
+
+    /// The black rectangle fades in and out with incognito, like the light page's white lift.
+    private func applyIncognitoTint(animated: Bool) {
+        let alpha = isIncognito ? MobileBottomBar.incognitoTint : 0
+        guard animated else {
+            incognitoTint.alpha = alpha
+            return
+        }
+        UIView.animate(withDuration: MobileSearchMotion.incognitoCloseFade, delay: 0,
+                       options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
+            self.incognitoTint.alpha = alpha
+        }
+    }
+
+    /// The pill's ink and glass follow the page's bar: dark grey over a light page, the app's own
+    /// pair over a dark one; incognito's dark bar takes the latter too.
+    private func applyPageChrome() {
+        let tabs = mode == .tabs
+        let light = (traitCollection.userInterfaceStyle == .light || pageIsLight) && !tabs && !overBackdrop
+            && !isIncognito
+        pill.usesLightBackground = light
+        pill.backgroundColor = tabs ? Palette.switcherPillFill
+            : overBackdrop ? Palette.homeButtonFill
+            : light ? Palette.lightBarControlFill : Palette.barControlFill
+        pill.glyphTint = tabs ? Palette.switcherGlyph : light ? Palette.lightBarGlyph : Palette.glyph
+        // The menu button sits on the same bar and follows it.
+        menuButton.usesLightBackground = light
+        menuButton.backgroundColor = overBackdrop ? Palette.homeButtonFill
+            : light ? Palette.lightBarControlFill : Palette.barControlFill
+        menuButton.glyphTint = light ? Palette.lightBarGlyph : Palette.glyph
     }
 
     /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
     /// inside an animation block.
     private func applyMode() {
         applyFade()
-        let visible = controlsVisibility
         let tabs = mode == .tabs
         // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
         // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd). The
         // empty home screen's bar floats the same way. The blur goes with the bar, not the fade:
         // its strip is all that is left of the bar when it is closed.
         let floats = tabs || overBackdrop
-        let slabAlpha = floats ? 0 : visible
+        // The drawer brings the bar's material with it and keeps it for as long as it is out, even
+        // over the home's dots or the switcher, and while its colour fades back on the way down.
+        let slabAlpha = self.slabAlpha
         if wasFloating, !floats {
             // The slab comes back with the page, whole: animating its opacity up from the row's
             // no-slab state leaves the material see-through for the length of the close.
@@ -125,10 +311,10 @@ final class BottomBar: UIView {
             blur.alpha = slabAlpha
         }
         wasFloating = floats
-        pill.backgroundColor = tabs ? Palette.switcherPillFill : overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
-        menuButton.backgroundColor = overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
-        pill.setSymbol("plus", pointSize: tabs ? 20.5 : 16, weight: .semibold)
-        pill.glyphTint = tabs ? Palette.switcherGlyph : Palette.glyph
+        applyPageChrome()
+        // The plus keeps one size in the page's bar and the tab row's: only the row's Spaces and
+        // Settings shrink, so the new tab button does not grow as the row opens.
+        pill.setSymbol("plus", pointSize: 20, weight: .semibold)
         spacesButton.glyphTint = Palette.switcherGlyph
         settingsButton.glyphTint = Palette.switcherGlyph
         spacesButton.backgroundColor = Palette.switcherButtonFill
@@ -145,9 +331,27 @@ final class BottomBar: UIView {
     /// The pill's frame in this view, for the search field to grow out of.
     var pillFrame: CGRect { pill.frame }
 
+    /// The layers that carry the bar and its drawer: they all reach the drawer's top edge and
+    /// round its two top corners with it, leaving the bottom strip square.
+    private func configureDrawerSurface(_ surface: UIView) {
+        surface.clipsToBounds = true
+        surface.layer.cornerCurve = .continuous
+        surface.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        blur.frame = bounds
+        // The bar's material and colour reach as far up as the new tab drawer has. The strip at
+        // the screen's bottom stays where it was; only the top edge moves.
+        let rise = max(0, drawerRise)
+        let radius = MobileSearchMotion.drawerCornerRadius(openness: drawerOpenness)
+        let drawer = CGRect(x: 0, y: -rise, width: bounds.width, height: bounds.height + rise)
+        for surface in [blur, pageTint, drawerTint, incognitoTint, drawerEdge] as [UIView] {
+            surface.frame = drawer
+            surface.layer.cornerRadius = radius
+        }
+        // The hairline stays on the bar's own top edge, not the drawer's, and fades out under the
+        // drawer's colour.
         hairline.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1 / UIScreen.main.scale)
         // The bar's frames are worked out for a view that ends at the screen's bottom edge.
         let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height)
@@ -165,7 +369,10 @@ final class BottomBar: UIView {
         spacesButton.frame = frames.tabs.insetBy(dx: 0.75, dy: 0.75)
         settingsButton.frame = frames.menu.insetBy(dx: 0.75, dy: 0.75)
         zip([tabsButton, menuButton, spacesButton, settingsButton], transforms).forEach { $0.transform = $1 }
-        menuRing.frame = frames.menu.insetBy(dx: -4, dy: -4)
+        // The tabs and menu buttons ride the drawer's top edge, keeping their inset from it; the
+        // new tab pill is drawn by the sheet at the same edge, so the three stay in line.
+        [tabsButton, menuButton, spacesButton, settingsButton].forEach { $0.center.y -= rise }
+        menuRing.frame = frames.menu.insetBy(dx: -4, dy: -4).offsetBy(dx: 0, dy: -rise)
         menuRing.layer.cornerRadius = menuRing.bounds.width / 2
     }
 
@@ -210,10 +417,18 @@ final class BarButton: UIControl {
         set { glyph.alpha = newValue }
     }
 
+    /// The glyph's own lift inside the button, leaving the button and its ring where they are.
+    var glyphRise: CGFloat = 0 { didSet { if glyphRise != oldValue { setNeedsLayout() } } }
+
+    /// The button sits on a light page's bar: its rim is the dark grey one.
+    var usesLightBackground = false {
+        didSet { if usesLightBackground != oldValue { applyColors() } }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         layer.cornerRadius = bounds.height / 2
-        glyph.frame = bounds
+        glyph.frame = bounds.offsetBy(dx: 0, dy: -glyphRise)
     }
 
     override var isHighlighted: Bool {
@@ -231,7 +446,8 @@ final class BarButton: UIControl {
     }
 
     private func applyColors() {
-        layer.borderColor = Palette.barControlBorder.resolvedColor(with: traitCollection).cgColor
+        layer.borderColor = (usesLightBackground ? Palette.lightBarBorder : Palette.barControlBorder)
+            .resolvedColor(with: traitCollection).cgColor
     }
 }
 

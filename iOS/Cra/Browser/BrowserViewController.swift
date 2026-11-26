@@ -61,6 +61,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// moved with the bar, the most its bottom was ever apart from the bar's top, and the bar's
     /// range WebKit was given.
     let viewportTraceView = UIView()
+    /// For UI tests (`-CraTraceNewTabDrawer YES`): the settled new tab drawer's rise, field morph
+    /// and material, and the last frame of a drag before the finger lets go.
+    let newTabDrawerTraceView = UIView()
+    let newTabDrawerDragTraceView = UIView()
     private var viewportChanges = 0
     private var viewportMismatch: CGFloat = 0
     var pagePushedBack = false
@@ -255,6 +259,21 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     var searchPull: CGFloat?
     /// A pulled sheet let go: where it stays, and how open its field is, until the keyboard comes (#623).
     var pulledSheetHold: (top: CGFloat, openness: CGFloat)?
+    /// A drag up out of the pill keeps the plus closed until the finger lets go: the drawer's
+    /// background and buttons move, the field does not.
+    var fieldWaitsForRelease = false
+    /// A drag down on the open drawer keeps the field open until the finger lets go: the drawer
+    /// moves down, the field only shrinks into the pill once it is closing.
+    var fieldWaitsForClose = false
+    /// The search sheet is the new tab drawer grown out of the bar, rather than a sheet in place of
+    /// the page menu. Its background then belongs to the bar's material.
+    var searchGrowsFromBar = false
+    /// The new tab drawer is out for its own colour: from the first touch until a close starts.
+    /// A light page in a dark app then has a light bar over a dark drawer.
+    private var drawerIsShowing = false
+    /// The drawer was pulled up and let go: its rise into place springs, rather than following the
+    /// keyboard's own curve.
+    private var opensFromPull = false
     /// A drag up from the tab button: the tab it brings back (#537).
     var barSwipeTarget: MobileTab?
     // Voice search (BrowserGestures.swift).
@@ -351,6 +370,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         installTrace(pullTraceView, flag: "CraTracePull", id: "pull-trace", label: "Pull", value: "pull 0 band 0 page 0")
         installTrace(viewportTraceView, flag: "CraTraceViewport", id: "viewport-trace", label: "Viewport",
                      value: "changes 0 apart 0 range 0")
+        installTrace(newTabDrawerTraceView, flag: "CraTraceNewTabDrawer", id: "new-tab-drawer-trace",
+                     label: "New Tab Drawer")
+        installTrace(newTabDrawerDragTraceView, flag: "CraTraceNewTabDrawer", id: "new-tab-drawer-drag-trace",
+                     label: "New Tab Drawer Drag")
         PressHaptics.installCounter(in: view)
 
         bar.tabsButton.addTarget(self, action: #selector(showTabs), for: .touchUpInside)
@@ -462,6 +485,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
+        // The new tab drawer over the pushed-back page takes white status bar text while it is up.
+        if isSearching, searchGrowsFromBar { return .lightContent }
         guard let fill = statusBarFill else { return .default }
         return MobileStatusBand.lightContent(fill: fill) ? .lightContent : .darkContent
     }
@@ -514,6 +539,15 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             statusBandFill = fill
             setNeedsStatusBarAppearanceUpdate()
         }
+        // The bar's white overlay follows the status bar's own text: dark ink means a light page.
+        // With no band, `.default` is dark ink in light mode and light ink in dark mode.
+        let barFill = statusBarFill
+        bar.pageIsLight = barFill.map { !MobileStatusBand.lightContent(fill: $0) }
+            ?? (traitCollection.userInterfaceStyle != .dark)
+        // The field follows the bar's own brightness: light in a light app, or over a light page's
+        // white overlay. Only the new tab drawer's open field takes the light page's little-white
+        // lift; the menu's address editor keeps its own sheet colour.
+        applyDrawerChrome()
     }
 
     /// The band's colour for a page, as hex: its theme-color, else its own background.
@@ -738,6 +772,28 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         sheet.frame = CGRect(x: 0, y: top, width: bounds.width, height: max(MobileSearchSheet.height(rows: sheet.rowsInView) + keyboard, bounds.height - top))
         sheet.collapsedFieldFrame = bar.pillFrame
         sheet.openness = isSearching ? pulledSheetHold?.openness ?? 1 : pulled ?? 0
+        // Grown out of the pill, the bar itself carries the drawer: its material and colour reach
+        // the drawer's top edge, and its tabs, menu and plus ride that edge.
+        bar.drawerRise = searchGrowsFromBar ? max(0, bar.frame.minY - sheet.frame.minY) : 0
+        // Square at the bar, the sheet's radius only once the drawer is fully open.
+        bar.drawerOpenness = searchGrowsFromBar ? drawerProgress : 0
+        // A pull up keeps the plus closed until the finger lets go; a drag down keeps the field
+        // open until it does; every other move, opening or closing, morphs the field with the drawer.
+        let fieldOpenness: CGFloat
+        if fieldWaitsForRelease, !isSearching {
+            fieldOpenness = 0
+        } else if fieldWaitsForClose, !isSearching {
+            fieldOpenness = 1
+        } else {
+            fieldOpenness = isSearching ? 1 : pulled ?? 0
+        }
+        sheet.fieldOpenness = fieldOpenness
+        // The drawer's pinned tabs and suggestions fade with its open position, so they are all
+        // there when it is fully open; a sheet in place of the page menu keeps them with the field.
+        sheet.listOpenness = searchGrowsFromBar ? drawerProgress : fieldOpenness
+        if newTabDrawerTraceView.superview != nil {
+            newTabDrawerTraceView.accessibilityValue = newTabDrawerTrace()
+        }
         dismissArea.frame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, top))
         logo.alpha = emptyHome.showsLogo ? 1 : 0
         dotField.alpha = emptyHome.showsDots ? 1 : 0
@@ -829,22 +885,99 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func animateChrome(duration: TimeInterval, options: UIView.AnimationOptions) {
         chromeMoves.began()
         UIView.animate(withDuration: duration, delay: 0, options: options.union([.beginFromCurrentState, .allowUserInteraction])) {
-            self.pageOpening = false
-            self.pageClosing = false
-            self.layoutChrome()
-            self.bar.layoutIfNeeded()
-            self.sheet.layoutIfNeeded()
+            self.layOutChromeForMove()
         } completion: { _ in
-            // Only once every move has ended: one that moved nothing (a second keyboard notice) ends at once.
-            guard self.chromeMoves.ended() else { return }
-            self.chromeSettled()
+            self.chromeMoveEnded()
         }
+    }
+
+    /// A chrome move on one of the app's springs, for a drawer let go to settle rather than a
+    /// fixed curve.
+    func animateChrome(spring: MobileMotion.Spring) {
+        chromeMoves.began()
+        UIView.animate(spring: spring, animations: {
+            self.layOutChromeForMove()
+        }, completion: {
+            self.chromeMoveEnded()
+        })
+    }
+
+    /// Only once every move has ended: one that moved nothing (a second keyboard notice) ends at once.
+    private func chromeMoveEnded() {
+        guard chromeMoves.ended() else { return }
+        chromeSettled()
+    }
+
+    /// What every chrome move lays out: the page and the sheet, inside the animation's block.
+    private func layOutChromeForMove() {
+        pageOpening = false
+        pageClosing = false
+        layoutChrome()
+        bar.layoutIfNeeded()
+        sheet.layoutIfNeeded()
     }
 
     func chromeSettled() {
         guard !isSearching, searchPull == nil else { return }
         sheet.isHidden = true
+        sheet.hideIncognitoLabel(animated: false)
+        // The drawer's incognito is only for the search: back to the shown tab's own state.
+        restoreBarIncognito()
         bar.pillVisibility = 1
+        // The drawer is gone with the sheet: the bar is only the bar again.
+        bar.drawerAppearance = 0
+        bar.drawerRise = 0
+        bar.drawerOpenness = 0
+        bar.drawerActive = false
+        searchGrowsFromBar = false
+        fieldWaitsForRelease = false
+        fieldWaitsForClose = false
+        drawerIsShowing = false
+        opensFromPull = false
+        applyDrawerChrome()
+    }
+
+    /// The bar's material takes the new tab drawer's colour as soon as the drawer starts, over a
+    /// fixed move of its own: the finger's distance does not decide when the colour changes.
+    func setDrawerMaterial(_ showing: Bool, animated: Bool) {
+        // A light page in a dark app gives a light bar but a dark drawer; the plus switches to the
+        // dark appearance's own fill as the drawer colour comes in (or back on close).
+        drawerIsShowing = showing
+        applyDrawerChrome()
+        if showing { bar.drawerActive = true }
+        let change = { self.bar.drawerAppearance = showing ? 1 : 0 }
+        guard animated else {
+            UIView.performWithoutAnimation(change)
+            return
+        }
+        UIView.animate(withDuration: MobileSearchMotion.drawerMaterialFade, delay: 0,
+                       options: [.beginFromCurrentState, .allowUserInteraction], animations: change)
+    }
+
+    /// The sheet's plus follows the bar or the dark drawer's own light/dark chrome; the address
+    /// field keeps the light page's lifted background.
+    private func applyDrawerChrome() {
+        let barLight = traitCollection.userInterfaceStyle == .light || bar.pageIsLight
+        let drawerDark = drawerIsShowing && traitCollection.userInterfaceStyle == .dark && bar.pageIsLight
+        sheet.lightPlusChrome = barLight && !drawerDark
+        // The drawer's open field is a soft lift over whatever page it is over: a little white on a
+        // light page, a softer white on a dark one; the menu's address editor keeps its own sheet.
+        sheet.fieldStyle = searchGrowsFromBar ? (bar.pageIsLight ? .lightPage : .darkPage) : .standard
+    }
+
+    /// For the new tab drawer's UI test: where the bar has grown to, whether the plus has become
+    /// the field, and whether the drawer's colour is over the bar's material.
+    func newTabDrawerTrace() -> String {
+        String(format: "rise %.0f field %.2f material %.2f base %.2f list %.2f tabs %@",
+               bar.drawerRise, sheet.fieldOpenness, bar.drawerAppearance, bar.materialAlpha,
+               sheet.listOpenness, bar.tabsButton.isUserInteractionEnabled ? "live" : "off")
+    }
+
+    /// Keeps a drag's last frame for `-CraTraceNewTabDrawer`: the release overwrites the settled
+    /// trace, this one keeps what the pull was doing. Nothing to do without the trace element.
+    func traceNewTabDrawerDrag() {
+        guard newTabDrawerDragTraceView.superview != nil else { return }
+        newTabDrawerDragTraceView.accessibilityValue = newTabDrawerTrace()
     }
 
     @objc func keyboardWillChange(_ note: Notification) {
@@ -860,13 +993,26 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         }
         keyboard.apply(event, endFrame: view.convert(end, from: nil))
         let height = keyboard.height(in: view.bounds)
+        let wasUp = keyboardHeight > 0
+        let hides = MobileSearchSheet.closesOnKeyboardHide(isSearching: isSearching, growsFromBar: searchGrowsFromBar,
+                                                           keyboardWasUp: wasUp, height: height)
         // The did-hide is only a backstop: nothing to move when the will-hide already counted it gone.
         guard event != .didHide || height != keyboardHeight else { return }
         keyboardHeight = height
         if height > 0 { lastKeyboardHeight = height }
+        // The keyboard going away closes the new tab drawer, the way Arc Search's does; the menu's
+        // address editor is not the bar's drawer and stays.
+        if hides {
+            setSearching(false)
+            return
+        }
         keyboardDroveLayout = true
         pulledSheetHold = nil
-        if duration > 0 {
+        if isSearching, opensFromPull, height > 0 {
+            // A pulled-up drawer's rise springs into place instead of following the keyboard's
+            // own curve; the keyboard still moves in underneath it.
+            animateChrome(spring: MobileMotion.drawerBounce)
+        } else if duration > 0 {
             animateChrome(duration: duration, options: UIView.AnimationOptions(rawValue: curve << 16))
         } else {
             pageOpening = false
@@ -904,13 +1050,37 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// panel was, its field already full size, so the address turns editable in place.
     /// `editingAddress`: the sheet edits the page on screen; the page behind stays where it is
     /// instead of being pushed back, as only a search from the + button does.
+    /// `deferDrawerMaterial`: a drag down has begun; the drawer keeps its own colour until the
+    /// finger lets go and the close actually starts.
     func setSearching(_ searching: Bool, incognito: Bool? = nil, keepingPull: CGFloat? = nil,
-                      replacingMenuAt replacingTop: CGFloat? = nil, editingAddress: Bool = false) {
+                      replacingMenuAt replacingTop: CGFloat? = nil, editingAddress: Bool = false,
+                      deferDrawerMaterial: Bool = false) {
         guard searching != isSearching else { return }
+        // Closing from a tap or the keyboard: the word goes as the close starts. A drag keeps it
+        // until the finger is released (the gesture hides it then).
+        if !searching, keepingPull == nil {
+            sheet.hideIncognitoLabel()
+            restoreBarIncognito()
+        }
+        // A search from + (or a launch that types) grows out of the bar; the page menu's address
+        // editor takes the menu's place and keeps the sheet's own surface.
+        if searching {
+            searchGrowsFromBar = !editingAddress && replacingTop == nil
+            if !searchGrowsFromBar {
+                drawerIsShowing = false
+                applyDrawerChrome()
+            }
+        }
+        fieldWaitsForRelease = false
+        if searching { fieldWaitsForClose = false }
+        if searchGrowsFromBar, !(deferDrawerMaterial && !searching) {
+            setDrawerMaterial(searching, animated: true)
+        }
         // The sheet grows out of the pill, so the bar is all there when a search starts.
         if searching { liftCover(); showBarAtOnce() }
         // A sheet pulled out of the pill is already laid out under the finger: it goes on from there.
         let pulled = searchPull != nil
+        if searching { opensFromPull = pulled }
         let replacing = searching ? replacingTop : nil
         searchPull = searching ? nil : keepingPull
         pulledSheetHold = searching && (pulled || replacing != nil)
@@ -933,6 +1103,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
             // behind an edited address must stay still, not push back.
         }
         isSearching = searching
+        setNeedsStatusBarAppearanceUpdate()
         pageOpening = searching && !pulled && shownPage != nil
         pageClosing = !searching && keepingPull == nil && pagePushedBack
             && pageContainer.transform != .identity && switcher == nil
@@ -963,14 +1134,20 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if !keyboardDroveLayout {
             if pulledSheetHold != nil {
                 // The page behind sits back now; the sheet stays where it was let go.
-                animateChrome(duration: 0.35, options: .curveEaseInOut)
+                animateChrome(duration: MobileSearchMotion.closeDuration, options: .curveEaseInOut)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                     guard let self, self.isSearching, self.pulledSheetHold != nil else { return }
                     self.pulledSheetHold = nil
-                    self.animateChrome(duration: 0.35, options: .curveEaseInOut)
+                    if self.opensFromPull {
+                        // Pulled up and let go with no keyboard to carry it: the drawer springs
+                        // into place.
+                        self.animateChrome(spring: MobileMotion.drawerBounce)
+                    } else {
+                        self.animateChrome(duration: MobileSearchMotion.closeDuration, options: .curveEaseInOut)
+                    }
                 }
             } else if !leads {
-                animateChrome(duration: 0.35, options: .curveEaseInOut)
+                animateChrome(duration: MobileSearchMotion.closeDuration, options: .curveEaseInOut)
             }
         }
     }
@@ -981,7 +1158,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         editsShownTab = false
         if let incognito { incognitoSearch = incognito }
         sheet.isIncognito = incognitoSearch
-        backdrop.isIncognito = incognitoSearch
+        // The bar carries the drawer's colour, so it turns incognito's dark with the sheet.
+        bar.isIncognito = incognitoSearch
+        // Grown out of the bar, the drawer sits on the bar's material; the sheet's own surface is
+        // for the menu's address editor, whose drawer is not the bar.
+        sheet.drawsSurface = !searchGrowsFromBar
         sheet.text = ""
         sheet.setRows([])
         sheet.offersBrowseForMe = BrowseForMe.isOffered
@@ -1143,10 +1324,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         picture.isUserInteractionEnabled = false
         view.insertSubview(picture, aboveSubview: sheet)
         sheet.alpha = 0
+        // The bar's plus comes back under the rising picture, fading rather than popping in.
+        bar.revealPill(over: MobileSheetLeave.leaveDuration)
         UIView.animate(withDuration: MobileSheetLeave.leaveDuration, delay: 0, options: [.curveEaseInOut]) {
             picture.transform = CGAffineTransform(translationX: 0, y: -MobileSheetLeave.leaveRise)
             picture.alpha = 0
-            self.bar.pill.alpha = 1
         } completion: { _ in
             picture.removeFromSuperview()
         }
@@ -1227,15 +1409,18 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         voiceIsIncognito = incognito
     }
 
+    /// The bar's incognito follows the tab on screen, not an incognito search that was closed.
+    func restoreBarIncognito() {
+        bar.isIncognito = store.selected?.isIncognito ?? false
+    }
+
     func searchSheetDidToggleIncognito(_ sheet: SearchSheet) {
         incognitoSearch.toggle()
+        bar.isIncognito = incognitoSearch
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        UIView.transition(with: sheet, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-            sheet.isIncognito = self.incognitoSearch
-        }
-        UIView.transition(with: backdrop, duration: 0.25, options: [.transitionCrossDissolve]) {
-            self.backdrop.isIncognito = self.incognitoSearch
-        }
+        // Only the new tab panel darkens: the sheet's own look and the bar's material. The
+        // page (or home) behind it keeps its colours.
+        sheet.setIncognito(incognitoSearch)
     }
 
     // MARK: Tabs and pages
@@ -1279,6 +1464,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         shownPage?.webView.removeFromSuperview()
         shownPage?.delegate = nil
         shownPage = page
+        bar.isIncognito = tab.isIncognito
         liftCoverIfDue()
         pagePull = nil
         page.delegate = self

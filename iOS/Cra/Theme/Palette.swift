@@ -31,13 +31,17 @@ enum Palette {
     /// Dark is Arc Search's incognito sheet, which is also how the sheet looks in dark mode.
     static let sheet = dynamic(light: rgb(0xf3f3f4), dark: rgb(0x2e2930))
     static let sheetBottom = dynamic(light: rgb(0xf3e6e8), dark: rgb(0x2e2930))
+    /// The new tab drawer's colour over the bar's material: the sheet's own, a shade lighter.
+    static let sheetDrawer = dynamic(light: rgb(0xf7f7f8), dark: rgb(0x36323a))
     /// Dark mode's faint blue glow behind the rows (60fps.design's dark clip: #34394a at its middle).
     static let sheetGlow = dynamic(light: .clear, dark: rgb(0x343a4e))
     /// The search field: a flat grey in 2025 (#dbd9da, no edge); the 2024 footage had a
     /// lavender-to-pink gradient with a hairline.
     static let fieldLeading = dynamic(light: rgb(0xdbd9da), dark: rgb(0x433f44))
     static let fieldTrailing = dynamic(light: rgb(0xdbd9da), dark: rgb(0x433f44))
-    static let fieldBorder = dynamic(light: rgb(0xdbd9da), dark: rgb(0x504f54))
+    /// A hairline laid over a fill so it reads a shade lighter than it, in either appearance.
+    static let raisedHairlineOpacity: CGFloat = 0.1
+    static let raisedHairline = UIColor.white.withAlphaComponent(raisedHairlineOpacity)
     /// The caret and selection.
     static let accent = dynamic(light: rgb(0x4a5fe6), dark: rgb(0x7f8eff))
     static let primaryText = dynamic(light: .black, dark: .white)
@@ -49,13 +53,20 @@ enum Palette {
     static let clearFill = dynamic(light: rgb(0xafafaf), dark: rgb(0x5a565c))
     /// Its cross: cut out of the disc in 2025, so the field's grey shows through.
     static let clearCross = dynamic(light: rgb(0xdbd9da), dark: .white)
-    /// The incognito mask in the field while incognito is off: barely there.
-    static let incognitoOff = dynamic(light: rgb(0xe4dce4), dark: rgb(0x4a464c))
     /// "Browse for Me" on a suggestion row.
     static let chipFill = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x332c2f))
     static let chipBorder = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x403a3d))
     /// The pill and the round buttons of the bottom bar, over the bar's blur.
     static let barControlFill = dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.14))
+    /// The bar's controls over a light page: dark grey ink and rim on a darker glass.
+    static let lightBarGlyph = rgb(0x3a3a3c)
+    static let lightBarControlFill = UIColor(white: 0, alpha: 0.12)
+    static let lightBarBorder = UIColor(white: 0, alpha: 0.18)
+    /// The light-page address field's placeholder and icons: a light grey ink.
+    static let fieldLightPageInk = rgb(0xd8d8d8)
+    /// The light-page address field's typed text: black in light mode, dark grey over the lifted
+    /// dark-mode field.
+    static let fieldLightPageText = dynamic(light: .black, dark: rgb(0x3a3a3c))
     /// The same controls floating over the tab switcher's backdrop.
     /// Dark: Victor's screenshot IMG_1896 (13 Nov), pill #3B3B4B and circles #40404D on #232333.
     static let switcherPillFill = dynamic(light: UIColor(red: 71 / 255, green: 58 / 255, blue: 190 / 255, alpha: 0.16), dark: UIColor(white: 1, alpha: 0.11))

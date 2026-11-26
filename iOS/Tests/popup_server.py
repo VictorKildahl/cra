@@ -150,7 +150,7 @@ function createPasskey() {
             # the status band the top (PageUnderBarTests).
             self.page('<meta name="theme-color" content="#000000"><title>Two Tones</title>'
                       '<style>html,body{margin:0;padding:0}</style>'
-                      '<div style="height:100vh;background:black">'
+                      '<div style="height:240px;background:black">'
                       '<h1 style="color:white;padding:24px">Two Tones</h1></div>'
                       '<div style="height:100vh;background:white"></div>')
         elif url.path == '/dark-page':

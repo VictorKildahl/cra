@@ -96,4 +96,66 @@ final class SearchPullTests: BrowserTestCase {
         XCTAssertTrue(value.hasPrefix("under the keyboard 0 of "), "the sheet stayed in sight: \(value)")
         XCTAssertGreaterThan(Int(value.split(separator: " ").last ?? "") ?? 0, 10, "the drag was followed frame by frame: \(value)")
     }
+
+    /// The new tab drawer is the bar grown upward: the material takes the drawer's colour at once,
+    /// the side buttons ride the top edge and let go, and the plus stays a plus until the finger
+    /// lifts. The drag's last frame is kept for the test after the drawer has sunk back.
+    func testPullingTheNewTabDrawerKeepsThePlusUntilRelease() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceNewTabDrawer", "YES"])
+        waitForPage("First")
+        let trace = app.descendants(matching: .any)["new-tab-drawer-drag-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 5))
+        let pill = pillPoint()
+        pill.press(forDuration: 0.05, thenDragTo: pill.withOffset(CGVector(dx: 0, dy: -50)),
+                   withVelocity: .slow, thenHoldForDuration: 0.2)
+        let value = trace.value as? String ?? ""
+        XCTAssertTrue(value.contains("field 0.00"), "the plus has not become the field yet: \(value)")
+        XCTAssertTrue(value.contains("material 1.00"), "the drawer's colour came in at once: \(value)")
+        XCTAssertTrue(value.contains("tabs off"), "the tabs button let go as the bar rose: \(value)")
+        XCTAssertFalse(value.contains("list 0.00"), "the pinned rows fade in with the drawer: \(value)")
+        let parts = value.split(separator: " ")
+        let rise = Int(parts.dropFirst().first ?? "") ?? 0
+        XCTAssertGreaterThan(rise, 35, "the bar rose with the finger: \(value)")
+        XCTAssertLessThan(rise, 65, "the bar rose with the finger: \(value)")
+    }
+
+    /// Tapped, the drawer opens and the plus becomes the field: the side buttons are gone and the
+    /// drawer's colour is over the bar's material.
+    func testTappingThePillOpensTheNewTabDrawer() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceNewTabDrawer", "YES"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let trace = app.descendants(matching: .any)["new-tab-drawer-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 5))
+        let value = trace.value as? String ?? ""
+        XCTAssertTrue(value.contains("field 1.00"), "the plus became the field: \(value)")
+        XCTAssertTrue(value.contains("material 1.00"), "the drawer's colour stayed: \(value)")
+        XCTAssertTrue(value.contains("list 1.00"), "the pinned rows are in with the drawer: \(value)")
+        XCTAssertTrue(value.contains("tabs off"), "the side buttons left: \(value)")
+        let parts = value.split(separator: " ")
+        let rise = Int(parts.dropFirst().first ?? "") ?? 0
+        XCTAssertGreaterThan(rise, 200, "the drawer is open, its top edge well above the bar: \(value)")
+        keep("new tab drawer over a light page")
+    }
+
+    /// Dragging the open drawer down keeps its colour until the finger lifts; the bar's own
+    /// material stays behind it, so the background never goes transparent.
+    func testDraggingTheOpenDrawerDownKeepsTheBarMaterialBehindIt() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceNewTabDrawer", "YES"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let trace = app.descendants(matching: .any)["new-tab-drawer-drag-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 5))
+        let start = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 3.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 200)),
+                    withVelocity: .slow, thenHoldForDuration: 0.2)
+        let value = trace.value as? String ?? ""
+        XCTAssertTrue(value.contains("base 1.00"), "the bar's material stayed behind the drawer: \(value)")
+        XCTAssertTrue(value.contains("material 1.00"), "the drawer kept its colour until the finger lifted: \(value)")
+        XCTAssertTrue(value.contains("field 1.00"), "the address bar stayed open until the finger lifted: \(value)")
+    }
 }

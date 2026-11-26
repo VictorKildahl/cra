@@ -41,19 +41,21 @@ struct MobileChromeTests {
     }
 
     /// The incognito glyph keeps the same room to the field's right end off and on: before, off,
-    /// it sat 7.5 pt from the end and on (with its label) 18.5 pt (#654).
+    /// it sat 7.5 pt from the end and on (with its label) 16.5 pt (#654).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/654")) func theIncognitoGlyphKeepsItsPlaceOffAndOn() {
         let field = CGRect(x: 16, y: 16, width: 361, height: 48)
         let off = MobileSearchSheet.incognitoToggleFrame(field: field)
-        let on = MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: 130)
+        let on = MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: MobileSearchSheet.incognitoLabelledWidth)
         #expect(off.maxX == on.maxX)
-        #expect(field.maxX - off.maxX == 18.5)
-        #expect(off.width == 44 && on.width == 130)
+        #expect(field.maxX - off.maxX == MobileSearchSheet.incognitoTrailingInset)
+        #expect(off.width == 44 && on.width == MobileSearchSheet.incognitoLabelledWidth)
         #expect(off.midY == field.midY && on.midY == field.midY)
         let accessory = MobileSearchSheet.accessoryFrame(field: field)
         #expect(field.maxX - accessory.midX == 29.5, "the clear button stays where Arc Search has it")
-        // The 23 pt glyph, right-aligned, is centred where the accessory's centre is, give or take a point.
-        #expect(abs((off.maxX - 11.5) - accessory.midX) <= 1)
+        #expect(MobileSearchSheet.incognitoLabelledWidth == 130)
+        #expect(MobileSearchSheet.incognitoLabelGap == 8.7)
+        // The 28 pt mask, right-aligned, sits a little left of the accessory's centre.
+        #expect(abs((off.maxX - 14) - accessory.midX) <= 3.5)
     }
 
     /// A sheet let go halfway up stays there until the keyboard comes, then goes where the
@@ -66,6 +68,21 @@ struct MobileChromeTests {
         #expect(MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 291, safeTop: 59, heldAt: nil) == 259, "with the keyboard up, Arc's place")
     }
 
+    /// The new tab drawer closes when the keyboard goes away; the page menu's address editor is
+    /// not the bar's drawer and stays.
+    @Test func theNewTabDrawerClosesWhenTheKeyboardGoesAway() {
+        #expect(MobileSearchSheet.closesOnKeyboardHide(isSearching: true, growsFromBar: true,
+                                                       keyboardWasUp: true, height: 0))
+        #expect(!MobileSearchSheet.closesOnKeyboardHide(isSearching: true, growsFromBar: true,
+                                                        keyboardWasUp: true, height: 291), "the keyboard is still there")
+        #expect(!MobileSearchSheet.closesOnKeyboardHide(isSearching: true, growsFromBar: true,
+                                                        keyboardWasUp: false, height: 0), "it never came up")
+        #expect(!MobileSearchSheet.closesOnKeyboardHide(isSearching: true, growsFromBar: false,
+                                                        keyboardWasUp: true, height: 0), "the page menu's address editor")
+        #expect(!MobileSearchSheet.closesOnKeyboardHide(isSearching: false, growsFromBar: true,
+                                                        keyboardWasUp: true, height: 0), "already closing")
+    }
+
     /// The same phone's bar: 76 pt tall, pill 76 × 39 centred 44.5 pt above the bottom edge,
     /// round buttons 35 pt wide centred 41 pt from each side.
     @Test func bottomBarOnAnIPhone15Pro() {
@@ -75,6 +92,15 @@ struct MobileChromeTests {
         #expect(frames.pill.midY == 807.5)
         #expect(frames.tabs == CGRect(x: 23.5, y: 790, width: 35, height: 35))
         #expect(frames.menu == CGRect(x: 334.5, y: 790, width: 35, height: 35))
+        // The right side button and the new tab pill share one vertical centre.
+        #expect(frames.pill.midY == frames.tabs.midY)
+        #expect(frames.pill.midY == frames.menu.midY)
+        // The bar lays white over its material on a light page, so a white page doesn't leave it grey.
+        #expect(MobileBottomBar.pageTint > 0 && MobileBottomBar.pageTint < 1)
+        #expect(MobileBottomBar.pageTintFade > 0)
+        #expect(MobileBottomBar.incognitoTint > 0 && MobileBottomBar.incognitoTint <= 1)
+        #expect(MobileBottomBar.fieldLightPageWhite > 0 && MobileBottomBar.fieldLightPageWhite < 1)
+        #expect(MobileBottomBar.fieldDarkPageWhite > 0 && MobileBottomBar.fieldDarkPageWhite < 1)
     }
 
     @Test func bottomBarWithoutAHomeIndicator() {
@@ -108,6 +134,7 @@ struct MobileSearchMotionTests {
     /// The sheet sets off on the tap, eased out, and the keyboard takes it over; it no longer waits for the keyboard.
     @Test func theSheetSetsOffBeforeTheKeyboardComes() {
         #expect(MobileSearchMotion.leadDuration == 0.25)
+        #expect(MobileSearchMotion.closeDuration == 0.35)
     }
 
     /// The pill's plus keeps to the field's leading end as it grows, the placeholder to its right; it no longer
@@ -146,6 +173,35 @@ struct MobileSearchMotionTests {
         // From halfway open, the surface is already solid: nothing left to fade.
         #expect(MobileSearchMotion.fadeWindow(from: 0.5, to: 1, over: surface) == 0...0)
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 1, over: surface) == 0...0)
+    }
+
+    /// The new tab drawer's tabs and menu buttons leave slowly over its pull, and its top corners
+    /// stay square until the drawer is fully open.
+    @Test func theDrawerLetsItsSideButtonsGoAndRoundsItsTop() {
+        #expect(MobileSearchMotion.drawerControlsFadeDistance == 120)
+        #expect(MobileSearchMotion.drawerControlsOpacity(reach: 0) == 1)
+        #expect(MobileSearchMotion.drawerControlsOpacity(reach: 60) == 0.5)
+        #expect(MobileSearchMotion.drawerControlsOpacity(reach: 120) == 0)
+        #expect(MobileSearchMotion.drawerControlsOpacity(reach: 240) == 0)
+        #expect(MobileSearchMotion.drawerControlsOpacity(reach: -10) == 1, "above the bar is still in place")
+        #expect(MobileSearchMotion.drawerCornerRadius(openness: 0) == 0)
+        #expect(MobileSearchMotion.drawerCornerRadius(openness: 0.5) == MobileSearchSheet.cornerRadius / 2)
+        #expect(MobileSearchMotion.drawerCornerRadius(openness: 1) == MobileSearchSheet.cornerRadius)
+        #expect(MobileSearchMotion.drawerCornerRadius(openness: 2) == MobileSearchSheet.cornerRadius, "no more than the sheet's")
+        #expect(MobileSearchMotion.drawerCornerRadius(openness: -0.5) == 0)
+        #expect(MobileSearchMotion.drawerMaterialOpacity > 0 && MobileSearchMotion.drawerMaterialOpacity <= 1)
+        #expect(MobileSearchMotion.drawerMaterialFade > 0)
+        #expect(MobileSearchMotion.incognitoDrawerOpacity > MobileSearchMotion.drawerMaterialOpacity)
+        #expect(MobileSearchMotion.incognitoBlink > 0)
+        #expect(MobileSearchMotion.incognitoBlink < MobileSearchMotion.closeDuration, "a blink, not a close")
+        #expect(MobileSearchMotion.incognitoBlinkStagger > 0)
+        #expect(MobileSearchMotion.incognitoBlinkStagger < MobileSearchMotion.incognitoBlink, "a roll, not a second blink")
+        #expect(MobileSearchMotion.incognitoBlinkStagger == 0.05)
+        #expect(MobileSearchMotion.incognitoLabelSlide == 0.35)
+        #expect(MobileSearchMotion.incognitoLabelSlide > MobileSearchMotion.incognitoBlink)
+        #expect(MobileSearchMotion.micReturnDelay > 0)
+        #expect(MobileSearchMotion.incognitoCloseFade > 0)
+        #expect(MobileSearchMotion.micFade > MobileSearchMotion.micReturnDelay)
     }
 }
 
@@ -1397,6 +1453,27 @@ struct MobileMotionTests {
         #expect(MobileMotion.tabOpen.remaining(after: 5.0 / 30) < 0.1)
     }
 
+    /// The new tab drawer let go on its way down settles with a small overshoot, not a critical
+    /// damp.
+    @Test func theNewTabDrawerSettlesWithASmallOvershoot() {
+        let spring = MobileMotion.drawerBounce
+        #expect(spring.dampingRatio > 0.7 && spring.dampingRatio < 1)
+        #expect(spring.response > 0.2 && spring.response < MobileSearchMotion.closeDuration)
+        let z = spring.dampingRatio
+        let overshoot = exp(-Double.pi * z / (1 - z * z).squareRoot())
+        #expect(overshoot > 0.005 && overshoot < 0.06)
+    }
+
+    /// The microphone returns with a spring: a small scale up, a slight overshoot.
+    @Test func theMicComesBackWithASmallOvershoot() {
+        let spring = MobileMotion.micAppear
+        #expect(spring.dampingRatio > 0.5 && spring.dampingRatio < 1)
+        #expect(spring.response > 0.2 && spring.response < 0.4)
+        let z = spring.dampingRatio
+        let overshoot = exp(-Double.pi * z / (1 - z * z).squareRoot())
+        #expect(overshoot > 0.01 && overshoot < 0.08)
+    }
+
     @Test func draggingTheBarUpOpensTheRowByDistanceOrFlick() {
         #expect(MobileMotion.switcherProgress(dragUp: 150) == 0.5)
         #expect(MobileMotion.switcherProgress(dragUp: 900) == 1)
@@ -2469,7 +2546,7 @@ struct MobileSideInsetsTests {
         #expect(field.maxX <= 382)
         #expect(MobileSearchSheet.accessoryFrame(field: field).maxX <= 382)
         #expect(MobileSearchSheet.incognitoToggleFrame(field: field).maxX <= 382)
-        #expect(MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: 130).maxX <= 382)
+        #expect(MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: MobileSearchSheet.incognitoLabelledWidth).maxX <= 382)
         let usable = CGSize(width: 382, height: size.height)
         #expect(MobileTabCarousel.placement(relative: 0, in: size, sideInsets: sides).frame.maxX <= 382)
         for relative: CGFloat in [-1, 0, 1] {

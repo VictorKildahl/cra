@@ -29,6 +29,12 @@ public enum MobileSearchSheet {
     public static let bottomInset: CGFloat = 8
     /// The sheet's top corners.
     public static let cornerRadius: CGFloat = 38
+    /// The incognito toggle's glyph ends this far inside the field's right end (#654).
+    public static let incognitoTrailingInset: CGFloat = 16.5
+    /// The toggle's width with its word beside it: room for "Incognito" and the mask.
+    public static let incognitoLabelledWidth: CGFloat = 130
+    /// The gap between the incognito word and the mask.
+    public static let incognitoLabelGap: CGFloat = 8.7
 
     public static func openFieldFrame(width: CGFloat, sideInsets: (left: CGFloat, right: CGFloat)) -> CGRect {
         CGRect(x: sideInsets.left + fieldSideInset, y: topInset,
@@ -43,6 +49,13 @@ public enum MobileSearchSheet {
     /// Where the sheet's top edge sits in a screen `screenHeight` tall with the keyboard up.
     public static func top(screenHeight: CGFloat, keyboardHeight: CGFloat) -> CGFloat {
         screenHeight - keyboardHeight - height
+    }
+
+    /// Whether the keyboard going away closes the new tab drawer: only while the drawer grown from
+    /// the bar is up and the keyboard had been up. The page menu's address editor stays.
+    public static func closesOnKeyboardHide(isSearching: Bool, growsFromBar: Bool,
+                                            keyboardWasUp: Bool, height: CGFloat) -> Bool {
+        isSearching && growsFromBar && keyboardWasUp && height <= 0
     }
 
     /// The sheet with `rows` suggestion rows in view.
@@ -77,14 +90,14 @@ public enum MobileSearchSheet {
         CGRect(x: field.maxX - 29.5 - 22, y: field.midY - 22, width: 44, height: 44)
     }
 
-    /// The incognito toggle, whose glyph sits at its right edge: 18.5 pt from the field's right
+    /// The incognito toggle, whose glyph sits at its right edge: 16.5 pt from the field's right
     /// end whether it is off (the glyph alone) or on (the glyph with "Incognito" to its left,
     /// `labelledWidth` wide). Off, it used to end at the accessory's edge, 7.5 pt from the end,
     /// so the glyph sat hard against the field's rim (#654).
     public static func incognitoToggleFrame(field: CGRect, labelledWidth: CGFloat? = nil) -> CGRect {
         let accessory = accessoryFrame(field: field)
         let width = labelledWidth ?? accessory.width
-        return CGRect(x: field.maxX - 18.5 - width, y: accessory.minY, width: width, height: accessory.height)
+        return CGRect(x: field.maxX - incognitoTrailingInset - width, y: accessory.minY, width: width, height: accessory.height)
     }
 
     /// The chrome's moves under way (the sheet, the bar, the page behind). The sheet is put away into the pill only
@@ -118,6 +131,20 @@ public enum MobileBottomBar {
     public static let sideButtonDiameter: CGFloat = 35
     /// A side button's centre from its edge of the screen.
     public static let sideButtonCenterInset: CGFloat = 41
+    /// How much white the bar lays over its material on a light page: a white page gives a nearly
+    /// white bar rather than the material's fixed grey.
+    public static let pageTint: CGFloat = 0.75
+    /// The black the bar lays over its material in incognito, under the controls: a dark page has
+    /// no white lift, so this is what makes the bar read black.
+    public static let incognitoTint: CGFloat = 0.75
+    /// The crossfade as a tab's light or dark page changes the bar's white overlay.
+    public static let pageTintFade: TimeInterval = 0.2
+    /// How much white the address field lays over the drawer on a light page, so the field reads
+    /// slightly lighter than the surface behind it.
+    public static let fieldLightPageWhite: CGFloat = 0.2
+    /// How much white the address field lays over a dark page's drawer: a softer lift, still
+    /// see-through and just lighter than the drawer.
+    public static let fieldDarkPageWhite: CGFloat = 0.12
 
     public struct Frames: Equatable {
         public var bar: CGRect
