@@ -9,7 +9,6 @@ import SwiftUI
         let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 320,height: 55), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
         host.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         func popup(_ view: NSView) -> NSPopUpButton? {
             if let button = view as? NSPopUpButton { return button }
             return view.subviews.lazy.compactMap(popup).first
@@ -35,7 +34,6 @@ import SwiftUI
         selected = .off
         host.rootView = menu.disabled(true)
         host.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         guard let locked = popup(host) else { fatalError("Missing managed DNS control") }
         precondition(!locked.isEnabled && locked.titleOfSelectedItem == "Off")
         precondition(locked.toolTip == locked.selectedItem?.toolTip)
