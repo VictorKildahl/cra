@@ -55,7 +55,7 @@ final class PageSwipeStage: NSObject {
     var cardsAt: CFTimeInterval?
     var progress: CGFloat = 0
     private var link: CADisplayLink?
-    private var onFrame: (() -> Void)?
+    private var onFrame: ((CFTimeInterval) -> Void)?
     var animators: [UIViewPropertyAnimator] = []
     /// Let go: when the page it leads to was asked for, the page's address then, the page whose drawing is awaited,
     /// and when it said it had drawn.
@@ -80,10 +80,13 @@ final class PageSwipeStage: NSObject {
     /// 1 when the swipe leads by dragging right (Back, a tab closing), -1 when it leads by dragging left (Forward).
     var direction: CGFloat { MobilePageSwipe.arrivesOnTop(reveal) ? -1 : 1 }
 
-    func startClock(_ frame: @escaping () -> Void) {
+    /// Calls `frame` once a display frame with the time that frame goes on screen, at the display's full rate: 120 Hz
+    /// on a ProMotion iPhone, where a display link left alone runs at 60 and the cards' flight looked choppy.
+    func startClock(_ frame: @escaping (CFTimeInterval) -> Void) {
         stopClock()
         onFrame = frame
-        let link = CADisplayLink(target: self, selector: #selector(tick))
+        let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         self.link = link
     }
@@ -94,7 +97,7 @@ final class PageSwipeStage: NSObject {
         onFrame = nil
     }
 
-    @objc private func tick() { onFrame?() }
+    @objc private func tick(_ link: CADisplayLink) { onFrame?(link.targetTimestamp) }
 
     func removeViews() {
         stopClock()
@@ -140,14 +143,15 @@ extension BrowserViewController {
                 return
             }
             let stage = pageSwipe.flatMap { $0.reveal == reveal ? $0 : nil } ?? startPageSwipe(reveal, on: page)
+            // The finger's new place, on the magnet's clock as it stands: time moves on with the display's frames.
             stage.translation = x
-            stepPageSwipe(stage)
+            stepPageSwipe(stage, at: stage.lastStep)
             placePageSwipe(stage)
         case .ended, .cancelled:
             let velocity = pan.velocity(in: view).x
             guard let stage = pageSwipe else { return cancelPageSwipe(velocity: velocity) }
             // Once the magnet has let the page go, letting go goes there; held, only a flick does.
-            stepPageSwipe(stage)
+            stepPageSwipe(stage, at: stage.lastStep)
             let goes = pan.state == .ended
                 && MobilePageSwipe.commits(letGo: stage.magnet.letGo, velocity: velocity * stage.direction,
                                            distance: x * stage.direction)
@@ -206,9 +210,9 @@ extension BrowserViewController {
         // The magnet's own clock: the page catches up with a still finger too.
         stage.letGoTick.prepare()
         stage.lastStep = CACurrentMediaTime()
-        stage.startClock { [weak self, weak stage] in
+        stage.startClock { [weak self, weak stage] time in
             guard let self, let stage, self.pageSwipe === stage else { return }
-            self.stepPageSwipe(stage)
+            self.stepPageSwipe(stage, at: time)
             self.placePageSwipe(stage)
         }
         return stage
@@ -216,10 +220,9 @@ extension BrowserViewController {
 
     /// Moves the magnet on to now: how far the page has come behind the finger. As it lets the page go it ticks, and
     /// a closing tab's cards set off.
-    private func stepPageSwipe(_ stage: PageSwipeStage) {
-        let now = CACurrentMediaTime()
-        let step = stage.magnet.step(distance: stage.translation * stage.direction, dt: now - stage.lastStep)
-        stage.lastStep = now
+    private func stepPageSwipe(_ stage: PageSwipeStage, at now: CFTimeInterval) {
+        let step = stage.magnet.step(distance: stage.translation * stage.direction, dt: max(0, now - stage.lastStep))
+        stage.lastStep = max(stage.lastStep, now)
         stage.pageTranslation = step.page * stage.direction
         if step.letGoNow {
             stage.letGoTick.impactOccurred()
@@ -350,8 +353,37 @@ extension BrowserViewController {
             pageContainer.transform = .identity
         }
 
+        // The motion first, handed to the render server now: going where the swipe leads below can hold the main
+        // thread for a frame or more (a tab's page put on screen, its history saved), and the release stuttered on it.
+        if stage.reveal == .closingTab {
+            settleClosingTab(stage, velocity: velocity)
+        } else {
+            let width = view.bounds.width
+            let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
+            let target: CGFloat = MobilePageSwipe.arrivesOnTop(stage.reveal) ? 0 : width
+            let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: edge, to: target)
+            animatePageSwipe(stage, spring: MobilePageSwipe.settle, velocity: speed, {
+                self.layOutPageSwipe(stage, edge: target)
+            }, completion: { [weak self, weak stage] in
+                guard let self, let stage, self.pageSwipe === stage else { return }
+                stage.settled = true
+                stage.leaving?.removeFromSuperview()
+                stage.leaving = nil
+                stage.shadow.removeFromSuperview()
+                self.liftPageSwipePictureIfDue()
+            })
+        }
+        CATransaction.flush()
         stage.addressAtRelease = page.webView.url
         stage.navigatedAt = CACurrentMediaTime()
+        DispatchQueue.main.async { [weak self, weak stage, weak page] in
+            guard let self, let stage, let page, self.pageSwipe === stage, self.shownPage === page else { return }
+            self.go(navigation, from: page, stage: stage)
+        }
+    }
+
+    /// Takes the live page where the swipe leads, under the pictures settling over it.
+    private func go(_ navigation: MobileSwipe.Navigation, from page: WebPage, stage: PageSwipeStage) {
         switch navigation {
         case .back: page.webView.goBack()
         case .forward: page.webView.goForward()
@@ -372,7 +404,11 @@ extension BrowserViewController {
             curtain.frame = view.bounds
             curtain.backgroundColor = view.backgroundColor
             curtain.isUserInteractionEnabled = false
-            if let leaving = stage.leaving { view.insertSubview(curtain, belowSubview: leaving) }
+            if let leaving = stage.leaving {
+                view.insertSubview(curtain, belowSubview: leaving)
+            } else {
+                view.insertSubview(curtain, belowSubview: stage.arriving)
+            }
             stage.curtain = curtain
             if let tab = store.selected { show(tab) }
             refreshTabStack()
@@ -390,25 +426,8 @@ extension BrowserViewController {
         }
         watchPageSwipeDrawn(stage)
         tracePageSwipe("went \(stage.reveal)")
-
-        if stage.reveal == .closingTab {
-            settleClosingTab(stage, velocity: velocity)
-            return
-        }
-        let width = view.bounds.width
-        let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
-        let target: CGFloat = MobilePageSwipe.arrivesOnTop(stage.reveal) ? 0 : width
-        let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: edge, to: target)
-        animatePageSwipe(stage, spring: MobilePageSwipe.settle, velocity: speed, {
-            self.layOutPageSwipe(stage, edge: target)
-        }, completion: { [weak self, weak stage] in
-            guard let self, let stage, self.pageSwipe === stage else { return }
-            stage.settled = true
-            stage.leaving?.removeFromSuperview()
-            stage.leaving = nil
-            stage.shadow.removeFromSuperview()
-            self.liftPageSwipePictureIfDue()
-        })
+        // Settled already, it comes off as soon as the page has drawn.
+        liftPageSwipePictureIfDue()
     }
 
     /// The closing tab let go: its card springs off to the right, still a card, while the tab shown next grows from
