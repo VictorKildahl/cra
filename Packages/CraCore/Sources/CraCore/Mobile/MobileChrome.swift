@@ -30,11 +30,11 @@ public enum MobileSearchSheet {
     /// The sheet's top corners.
     public static let cornerRadius: CGFloat = 38
     /// The incognito toggle's glyph ends this far inside the field's right end (#654).
-    public static let incognitoTrailingInset: CGFloat = 16.5
+    public static let incognitoTrailingInset: CGFloat = 13.5
     /// The toggle's width with its word beside it: room for "Incognito" and the mask.
     public static let incognitoLabelledWidth: CGFloat = 130
     /// The gap between the incognito word and the mask.
-    public static let incognitoLabelGap: CGFloat = 8.7
+    public static let incognitoLabelGap: CGFloat = 6.7
 
     public static func openFieldFrame(width: CGFloat, sideInsets: (left: CGFloat, right: CGFloat)) -> CGRect {
         CGRect(x: sideInsets.left + fieldSideInset, y: topInset,
@@ -88,13 +88,13 @@ public enum MobileSearchSheet {
         return keyboardSeen ? open : min(open, releasedAt)
     }
 
-    /// The field's button at its right end (clear, incognito): 44 pt square, its centre 29.5 pt
+    /// The field's button at its right end (clear, incognito): 44 pt square, its centre 26.5 pt
     /// from the field's right end.
     public static func accessoryFrame(field: CGRect) -> CGRect {
-        CGRect(x: field.maxX - 29.5 - 22, y: field.midY - 22, width: 44, height: 44)
+        CGRect(x: field.maxX - 26.5 - 22, y: field.midY - 22, width: 44, height: 44)
     }
 
-    /// The incognito toggle, whose glyph sits at its right edge: 16.5 pt from the field's right
+    /// The incognito toggle, whose glyph sits at its right edge: 13.5 pt from the field's right
     /// end whether it is off (the glyph alone) or on (the glyph with "Incognito" to its left,
     /// `labelledWidth` wide). Off, it used to end at the accessory's edge, 7.5 pt from the end,
     /// so the glyph sat hard against the field's rim (#654).
@@ -102,6 +102,60 @@ public enum MobileSearchSheet {
         let accessory = accessoryFrame(field: field)
         let width = labelledWidth ?? accessory.width
         return CGRect(x: field.maxX - incognitoTrailingInset - width, y: accessory.minY, width: width, height: accessory.height)
+    }
+
+    /// A row's "Browse for Me" chip: a capsule 29.5 pt tall, as wide as its title with
+    /// `browseChipPadding` either side (Arc Search's fixed 100.5 pt left about 6).
+    public static let browseChipHeight: CGFloat = 29.5
+    public static let browseChipPadding: CGFloat = 12
+    public static func browseChipSize(titleWidth: CGFloat) -> CGSize {
+        CGSize(width: (titleWidth + 2 * browseChipPadding).rounded(.up), height: browseChipHeight)
+    }
+
+    /// The buttons at the field's right end.
+    public struct Accessories: OptionSet, Hashable, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+        public static let mic = Accessories(rawValue: 1 << 0)
+        public static let incognito = Accessories(rawValue: 1 << 1)
+        public static let clear = Accessories(rawValue: 1 << 2)
+        public static let all: [Accessories] = [.mic, .incognito, .clear]
+        /// Each one in the set, on its own.
+        public var elements: [Accessories] { Self.all.filter(contains) }
+    }
+
+    /// Which of them the field shows: the mic and the incognito toggle while it is empty, the
+    /// clear button once something is typed; incognito has no mic.
+    public static func accessories(hasText: Bool, incognito: Bool) -> Accessories {
+        if hasText { return .clear }
+        return incognito ? .incognito : [.mic, .incognito]
+    }
+
+    /// How the field's end goes from one set of buttons to the next.
+    public enum AccessoryChange: Equatable, Sendable {
+        /// The same buttons: whatever is moving carries on. Every keystroke after the first.
+        case keep
+        /// Straight to the new set, nothing moving: a first look, or a sheet out of sight.
+        case snap
+        /// Typed into or cleared: the old ones leave, then the new ones come in.
+        case swap
+        /// Incognito switched with the field empty: only the mic comes or goes.
+        case mic
+    }
+
+    public static func accessoryChange(from previous: Accessories?, to shown: Accessories,
+                                       canAnimate: Bool) -> AccessoryChange {
+        guard let previous, canAnimate else { return .snap }
+        if previous == shown { return .keep }
+        return previous.contains(.clear) == shown.contains(.clear) ? .mic : .swap
+    }
+
+    /// How much of the field's right end the typed text keeps clear of: the accessory's, or in
+    /// incognito the "Incognito" word's too (`wordWidth` wide, left of the `maskWidth` mask), as
+    /// the word stays beside the clear button while there is text.
+    public static func textTrailingReserve(incognitoWordWidth wordWidth: CGFloat?, maskWidth: CGFloat) -> CGFloat {
+        guard let wordWidth else { return 49 }
+        return max(49, incognitoTrailingInset + maskWidth + incognitoLabelGap + wordWidth + 6)
     }
 
     /// The microphone, 40 pt left of the accessory: left of the incognito mask while the field is
@@ -126,12 +180,12 @@ public enum MobileSearchSheet {
         }
 
         /// How much white the field lays over the drawer, so it reads a shade lighter than the
-        /// surface behind it: a little on a light page, a softer, still see-through lift on a dark
-        /// one. Nil keeps the sheet's own field colour.
+        /// surface behind it, still see-through, over a light page or a dark one. Nil keeps the
+        /// sheet's own field colour.
         public var whiteLift: CGFloat? {
             switch self {
             case .standard: nil
-            case .lightPage: 0.2
+            case .lightPage: 0.25
             case .darkPage: 0.12
             }
         }

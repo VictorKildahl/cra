@@ -35,8 +35,16 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// The word beside the mask, clipped just left of it so it slides out and back cleanly.
     private let incognitoLabelClip = UIView()
     private let incognitoLabel = UILabel()
-    /// Whether the mic is fading back in, so the layout leaves its alpha to that fade.
-    private var micIsAppearing = false
+    /// The mic, the toggle and the clear button each sit in a slot that carries their swap as the
+    /// field fills or empties (fade and scale), apart from the buttons' own fade with the field's
+    /// opening, so neither undoes the other.
+    private let micSlot = UIView()
+    private let incognitoSlot = UIView()
+    private let clearSlot = UIView()
+    /// The accessories shown, nil until the first update.
+    private var accessories: MobileSearchSheet.Accessories?
+    /// The swap's moves: a button only hides at the end of its leave while that is still the latest.
+    private var accessoryMoves = MobileMotion.Ticket()
     /// The word's moves: a slide's or a fade's end only lands while it is still the latest, so a
     /// quick toggle back is not cut short by an older one.
     private var labelMoves = MobileMotion.Ticket()
@@ -139,11 +147,11 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         field.accessibilityIdentifier = "search-field"
         addSubview(field)
 
-        clearButton.setImage(Self.clearImage(), for: .normal)
         clearButton.addTarget(self, action: #selector(clearText), for: .touchUpInside)
         clearButton.accessibilityLabel = "Clear text"
         clearButton.accessibilityIdentifier = "search-clear"
-        addSubview(clearButton)
+        clearSlot.addSubview(clearButton)
+        addSubview(clearSlot)
 
         incognitoButton.addTarget(self, action: #selector(toggleIncognito), for: .touchUpInside)
         incognitoButton.addTarget(self, action: #selector(incognitoPressed), for: .touchDown)
@@ -164,10 +172,12 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         micButton.accessibilityLabel = "Voice Search"
         micButton.accessibilityIdentifier = "search-voice"
         micButton.addTarget(self, action: #selector(micTapped), for: .touchUpInside)
-        addSubview(micButton)
+        micSlot.addSubview(micButton)
+        addSubview(micSlot)
 
         addSubview(incognitoLabelClip)
-        addSubview(incognitoButton)
+        incognitoSlot.addSubview(incognitoButton)
+        addSubview(incognitoSlot)
 
         incognitoNote.text = "You're browsing Incognito"
         incognitoNote.font = .systemFont(ofSize: 17, weight: .medium)
@@ -426,49 +436,93 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
 
     private func updateAccessories() {
         let empty = text.isEmpty
-        clearButton.isHidden = empty
-        incognitoButton.isHidden = !empty
-        incognitoLabelClip.isHidden = !empty
-        // On comes in a blink, so the mic goes at once. Off, it comes back with the word's slide.
-        let micShown = empty && !isIncognito
-        if micShown {
-            if micButton.isHidden {
-                // A beat after the word starts leaving, then from nothing: no opacity, a little
-                // small, both coming in over the spring's scale.
-                micIsAppearing = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + MobileSearchMotion.micReturnDelay) { [weak self] in
-                    guard let self, self.micIsAppearing, self.micButton.isHidden,
-                          !self.isIncognito, self.text.isEmpty else { return }
-                    self.micButton.layer.removeAllAnimations()
-                    self.micButton.alpha = 0
-                    self.micButton.transform = CGAffineTransform(scaleX: MobileSearchMotion.micAppearScale, y: MobileSearchMotion.micAppearScale)
-                    self.micButton.isHidden = false
-                    UIView.animate(spring: MobileMotion.micAppear) {
-                        self.micButton.transform = .identity
-                    }
-                    UIView.animate(withDuration: MobileSearchMotion.micFade, delay: 0,
-                                   options: [.beginFromCurrentState, .allowUserInteraction]) {
-                        self.micButton.alpha = 1
-                    } completion: { _ in
-                        self.micIsAppearing = false
-                    }
+        let shown = MobileSearchSheet.accessories(hasText: !empty, incognito: isIncognito)
+        let previous = accessories
+        accessories = shown
+        let enterScale = MobileSearchMotion.accessoryEnterScale, enterFade = MobileSearchMotion.accessoryFade
+        switch MobileSearchSheet.accessoryChange(from: previous, to: shown,
+                                                 canAnimate: window != nil && !isHidden && fieldOpenness > 0) {
+        case .keep:
+            break
+        case .snap:
+            for kind in MobileSearchSheet.Accessories.all { snap(kind, shown: shown.contains(kind)) }
+        case .mic:
+            // On, the mic goes at once with the blink; off, it comes back a beat after the word
+            // starts leaving, as the other buttons come in.
+            if shown.contains(.mic) {
+                enter([.mic], after: MobileSearchMotion.micReturnDelay, from: enterScale,
+                      spring: MobileMotion.accessoryEnter, fade: enterFade)
+            } else {
+                snap(.mic, shown: false)
+            }
+        case .swap:
+            // What goes fades and shrinks, then what comes springs in.
+            let leaving = (previous ?? []).subtracting(shown)
+            let ticket = accessoryMoves.next()
+            let visible = leaving.elements.contains { !slot(for: $0).isHidden }
+            for kind in leaving.elements {
+                let slot = slot(for: kind)
+                let scale = MobileSearchMotion.accessoryLeaveScale
+                UIView.animate(withDuration: MobileSearchMotion.accessoryLeave, delay: 0,
+                               options: [.beginFromCurrentState, .curveEaseIn]) {
+                    slot.alpha = 0
+                    slot.transform = CGAffineTransform(scaleX: scale, y: scale)
+                } completion: { [weak self] _ in
+                    guard let self, self.accessoryMoves.isCurrent(ticket) else { return }
+                    slot.isHidden = true
+                    slot.transform = .identity
                 }
             }
-        } else {
-            micIsAppearing = false
-            micButton.isHidden = true
-            micButton.alpha = 0
-            micButton.transform = .identity
+            enter(shown.subtracting(previous ?? []), after: visible ? MobileSearchMotion.accessoryLeave : 0,
+                  from: enterScale, spring: MobileMotion.accessoryEnter, fade: enterFade)
         }
         incognitoNote.isHidden = !(empty && isIncognito)
         showRows()
     }
 
+    private func slot(for kind: MobileSearchSheet.Accessories) -> UIView {
+        switch kind {
+        case .mic: micSlot
+        case .incognito: incognitoSlot
+        default: clearSlot
+        }
+    }
+
+    /// A button there or not, at rest, with nothing moving.
+    private func snap(_ kind: MobileSearchSheet.Accessories, shown: Bool) {
+        let slot = slot(for: kind)
+        slot.layer.removeAllAnimations()
+        slot.isHidden = !shown
+        slot.alpha = shown ? 1 : 0
+        slot.transform = .identity
+    }
+
+    /// Brings buttons in after `delay`: from nothing and `scale`, fading over `fade` while the
+    /// scale springs up. One still on its way out is taken from where it is.
+    private func enter(_ kinds: MobileSearchSheet.Accessories, after delay: TimeInterval, from scale: CGFloat,
+                       spring: MobileMotion.Spring, fade: TimeInterval) {
+        guard !kinds.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            for kind in kinds.elements where self.accessories?.contains(kind) == true {
+                let slot = self.slot(for: kind)
+                if slot.isHidden || slot.alpha == 0 {
+                    slot.layer.removeAllAnimations()
+                    slot.alpha = 0
+                    slot.transform = CGAffineTransform(scaleX: scale, y: scale)
+                }
+                slot.isHidden = false
+                UIView.animate(spring: spring) { slot.transform = .identity }
+                UIView.animate(withDuration: fade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                    slot.alpha = 1
+                }
+            }
+        }
+    }
+
     /// Switches the sheet's incognito look. The look itself changes at once; the mask's lids
     /// and the word are what move, so the sheet is not crossfaded over the toggle.
     func setIncognito(_ on: Bool) {
-        // On, the mic goes at once. Off, it comes back as the word goes, together.
-        if on { micButton.isHidden = true }
         incognitoEyes.setClosed(on, animated: true)
         isIncognito = on
         // The word's place is settled before it starts to move.
@@ -567,6 +621,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// Incognito turns the sheet dark, names itself beside the mask, and brings the dark keyboard.
     private func applyIncognito() {
         overrideUserInterfaceStyle = isIncognito ? .dark : .unspecified
+        fieldBackground.isIncognito = isIncognito
         applyAccessoryInk()
         incognitoButton.accessibilityValue = isIncognito ? "On" : "Off"
         if isHidden { snapIncognitoLabel() }
@@ -579,12 +634,13 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         setNeedsLayout()
     }
 
-    /// The mic and the mask share one ink, resolved once for the sheet's appearance.
+    /// The mic, the mask and the clear disc share one ink, resolved once for the sheet's appearance.
     private func applyAccessoryInk() {
         let ink = (fieldStyle == .lightPage ? Palette.fieldLightPageInk : Palette.placeholder)
             .resolvedColor(with: traitCollection)
         micButton.tintColor = ink
         incognitoEyes.ink = ink
+        clearButton.setImage(Self.clearImage(ink: ink), for: .normal)
         incognitoLabel.attributedText = Self.incognitoTitle(ink: ink)
     }
 
@@ -617,6 +673,15 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                        options: [.overrideInheritedDuration, .overrideInheritedCurve, .curveLinear, .beginFromCurrentState]) {
             views.forEach { $0.alpha = alpha }
         }
+    }
+
+    /// Lays a slot over `rect` by its bounds and position, which a running scale leaves alone, and
+    /// fills it with its button. `anchorX` is where along it the swap scales about.
+    private func place(_ slot: UIView, _ rect: CGRect, anchorX: CGFloat = 0.5) {
+        slot.layer.anchorPoint = CGPoint(x: anchorX, y: 0.5)
+        slot.bounds = CGRect(origin: .zero, size: rect.size)
+        slot.center = CGPoint(x: rect.minX + rect.width * anchorX, y: rect.midY)
+        slot.subviews.first?.frame = slot.bounds
     }
 
     override func layoutSubviews() {
@@ -657,15 +722,21 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         // The pill's plus keeps to the leading end as it grows, the placeholder coming in to its right (Arc Search).
         fieldBackground.plusCenter = MobileSearchMotion.plusCenter(closedWidth: closed.width, openness: morph)
 
-        // Text starts 24.5 pt inside the open field; the accessory's centre is 29.5 pt from its right end.
+        // Text starts 24.5 pt inside the open field; the accessory's centre is 26.5 pt from its right end.
         let textInset = MobileSearchMotion.textInset(closedWidth: closed.width, openness: morph)
-        field.frame = CGRect(x: frame.minX + textInset, y: frame.minY, width: max(0, frame.width - textInset - 52), height: frame.height)
+        // In incognito the word stays beside the clear button, so the text stops short of it.
+        let word = isIncognito ? incognitoLabel.sizeThatFits(CGSize(width: 1000, height: 44)).width : nil
+        let reserve = MobileSearchSheet.textTrailingReserve(incognitoWordWidth: word, maskWidth: IncognitoEyesView.size.width)
+        field.frame = CGRect(x: frame.minX + textInset, y: frame.minY,
+                             width: max(0, frame.width - textInset - reserve), height: frame.height)
         field.alpha = morph
         let accessory = MobileSearchSheet.accessoryFrame(field: frame)
-        clearButton.frame = accessory
-        // Off or with its "Incognito" label, the toggle's glyph keeps one place (#654).
-        incognitoButton.frame = MobileSearchSheet.incognitoToggleFrame(
+        place(clearSlot, accessory)
+        // Off or with its "Incognito" label, the toggle's glyph keeps one place (#654). It swaps
+        // in and out around the mask, not around the labelled toggle's middle.
+        let toggle = MobileSearchSheet.incognitoToggleFrame(
             field: frame, labelledWidth: isIncognito ? MobileSearchSheet.incognitoLabelledWidth : nil)
+        place(incognitoSlot, toggle, anchorX: (toggle.width - IncognitoEyesView.size.width / 2) / toggle.width)
         // The mask sits at the button's right edge. The word's window is the field's, anchored to
         // the mask's left edge rather than to the toggle's own width, so the toggle narrowing
         // behind it cannot move it.
@@ -679,21 +750,18 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         let fieldRight = MobileSearchSheet.openFieldFrame(width: bounds.width, sideInsets: sideInsets).maxX
         let iconLeft = fieldRight - MobileSearchSheet.incognitoTrailingInset - mask.width
         // The clip stops 2 pt left of the icon, so the word goes just up to it rather than under it.
-        incognitoLabelClip.frame = CGRect(x: iconLeft - labelArea, y: incognitoButton.frame.minY,
-                                          width: labelArea - 2, height: incognitoButton.frame.height)
+        incognitoLabelClip.frame = CGRect(x: iconLeft - labelArea, y: toggle.minY,
+                                          width: labelArea - 2, height: toggle.height)
         let labelSize = incognitoLabel.sizeThatFits(CGSize(width: 1000, height: incognitoLabelClip.bounds.height))
         // Bounds and centre, not frame: the label carries its slide as a transform, and a frame set
         // on a transformed layer shifts it by the transform, which made the word jump mid-slide.
         incognitoLabel.bounds = CGRect(origin: .zero, size: labelSize)
         incognitoLabel.center = CGPoint(x: labelArea - MobileSearchSheet.incognitoLabelGap - labelSize.width / 2,
                                         y: incognitoLabelClip.bounds.midY)
-        micButton.frame = MobileSearchSheet.micFrame(field: frame)
+        place(micSlot, MobileSearchSheet.micFrame(field: frame))
         // The incognito word comes and goes with the mask beside it, not ahead of the field.
-        fade([clearButton, incognitoButton, incognitoLabelClip], over: MobileSearchMotion.accessorySpan,
+        fade([clearButton, incognitoButton, incognitoLabelClip, micButton], over: MobileSearchMotion.accessorySpan,
              from: fieldStart, to: morph)
-        if !micIsAppearing {
-            fade([micButton], over: MobileSearchMotion.accessorySpan, from: fieldStart, to: morph)
-        }
         // Arc Search's note sits 187 pt below the sheet's top edge.
         incognitoNote.frame = CGRect(x: 0, y: 187 - 12, width: bounds.width, height: 24)
         incognitoNote.alpha = morph
@@ -713,27 +781,27 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
 
     // MARK: Glyphs
 
-    /// Arc Search's clear button: an 18 pt tinted disc with a white cross.
-    private static func clearImage() -> UIImage {
+    /// Arc Search's clear button: an 18 pt disc in the accessory ink with its cross cut out, so
+    /// the field shows through it whatever the field is.
+    private static func clearImage(ink: UIColor) -> UIImage {
         let size = CGSize(width: 18, height: 18)
         return UIGraphicsImageRenderer(size: size).image { context in
-            Palette.clearFill.setFill()
+            ink.setFill()
             context.cgContext.fillEllipse(in: CGRect(origin: .zero, size: size))
             let cross = UIBezierPath()
             cross.move(to: CGPoint(x: 6, y: 6)); cross.addLine(to: CGPoint(x: 12, y: 12))
             cross.move(to: CGPoint(x: 12, y: 6)); cross.addLine(to: CGPoint(x: 6, y: 12))
             cross.lineWidth = 1.7
             cross.lineCapStyle = .round
-            Palette.clearCross.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).setStroke()
-            cross.stroke()
+            cross.stroke(with: .clear, alpha: 1)
         }.withRenderingMode(.alwaysOriginal)
     }
 
-    /// "Incognito" beside the mask while it is on: 13 pt in the accessory ink (Victor's screenshot
-    /// IMG_1905: the word 51.6 pt wide in #9C9B9D). Its gap to the mask is `incognitoLabelGap`.
     /// The word's slide: quick off the mark, a long soft finish.
     private static let labelSlideTiming = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
 
+    /// "Incognito" beside the mask while it is on: 13 pt in the accessory ink (Victor's screenshot
+    /// IMG_1905: the word 51.6 pt wide in #9C9B9D). Its gap to the mask is `incognitoLabelGap`.
     private static func incognitoTitle(ink: UIColor) -> NSAttributedString {
         NSAttributedString(string: "Incognito", attributes: [
             .font: UIFont.systemFont(ofSize: 13), .foregroundColor: ink,
@@ -781,6 +849,10 @@ final class SearchField: UITextField {
 /// The field's fill: lavender to pink with a hairline edge when open, the bar pill's fill when
 /// closed, so the pill can grow into the field.
 final class FieldBackgroundView: UIView {
+    /// Prototype (`-CraBarMaterials YES`): the drawer's field is frosted like the drawer, with its
+    /// white lift over the material rather than over nothing.
+    private let material = UIVisualEffectView(effect: nil)
+    private var showsMaterial = false
     private let gradient = CAGradientLayer()
     private let pill = UIView()
     private let plus = UIImageView(image: UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)))
@@ -788,6 +860,7 @@ final class FieldBackgroundView: UIView {
     var openness: CGFloat = 1 {
         didSet {
             gradient.opacity = Float(openness)
+            material.alpha = openness
             pill.alpha = 1 - openness
             plus.alpha = 1 - openness
             applyBorder()
@@ -803,6 +876,22 @@ final class FieldBackgroundView: UIView {
     var fieldStyle: SearchSheet.FieldStyle = .standard {
         didSet { if fieldStyle != oldValue { crossfadeColors() } }
     }
+    /// The sheet is incognito's. Only the lift fades, with the bar's black (`incognitoCloseFade`):
+    /// the field itself is not crossfaded over the toggle, so it does not flash.
+    var isIncognito = false {
+        didSet {
+            guard isIncognito != oldValue else { return }
+            let from = gradient.presentation()?.colors ?? gradient.colors
+            applyColors()
+            guard window != nil else { return }
+            let fade = CABasicAnimation(keyPath: "colors")
+            fade.fromValue = from
+            fade.toValue = gradient.colors
+            fade.duration = MobileSearchMotion.incognitoCloseFade
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            gradient.add(fade, forKey: "lift")
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -813,6 +902,9 @@ final class FieldBackgroundView: UIView {
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
         layer.addSublayer(gradient)
+        // Under the lift: a view's layer goes in at the bottom.
+        material.isUserInteractionEnabled = false
+        insertSubview(material, at: 0)
         pill.backgroundColor = Palette.barControlFill
         pill.layer.borderWidth = 0.5
         pill.layer.cornerCurve = .continuous
@@ -829,6 +921,7 @@ final class FieldBackgroundView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         gradient.frame = bounds
+        material.frame = bounds
         pill.frame = bounds
         pill.layer.cornerRadius = layer.cornerRadius
         plus.frame = CGRect(x: plusCenter - bounds.height / 2, y: 0, width: bounds.height, height: bounds.height)
@@ -846,7 +939,16 @@ final class FieldBackgroundView: UIView {
     private func applyColors() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if let lift = fieldStyle.whiteLift {
+        let frosted = BottomBar.usesMaterials && fieldStyle != .standard
+        if frosted != showsMaterial {
+            showsMaterial = frosted
+            material.effect = frosted ? UIBlurEffect(style: .systemThinMaterial) : nil
+        }
+        if frosted, isIncognito {
+            // Incognito's dark field is the material alone; elsewhere the lift keeps the field a
+            // shade lighter than the drawer.
+            gradient.colors = [UIColor.clear.cgColor, UIColor.clear.cgColor]
+        } else if let lift = fieldStyle.whiteLift {
             // Over the drawer, a little white makes the field a shade lighter than the surface
             // behind it rather than a fixed colour.
             let white = UIColor.white.withAlphaComponent(lift)
@@ -924,14 +1026,14 @@ final class SuggestionRowView: UIControl {
         ]), for: .normal)
         chip.titleLabel?.lineBreakMode = .byClipping
         chip.backgroundColor = Palette.chipFill
-        chip.layer.cornerRadius = 9.5
         chip.layer.cornerCurve = .continuous
         chip.layer.borderWidth = 0.5
-        chip.layer.borderColor = Palette.chipBorder.cgColor
         chip.accessibilityIdentifier = "browse-for-me"
         chip.isHidden = true
         chip.addTarget(self, action: #selector(browseTapped), for: .touchUpInside)
         addSubview(chip)
+        // The chip's border is a layer colour, resolved in layout.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (row: SuggestionRowView, _) in row.setNeedsLayout() }
 
         pin.tintColor = Palette.placeholder
         pin.contentMode = .center
@@ -1003,7 +1105,9 @@ final class SuggestionRowView: UIControl {
         icon.frame = isSite ? CGRect(x: 28.8 - 10, y: bounds.midY - 10, width: 20, height: 20)
                             : CGRect(x: 28.8 - 14, y: bounds.midY - 14, width: 28, height: 28)
         pin.frame = CGRect(x: bounds.width - 46, y: bounds.midY - 12, width: 24, height: 24)
-        let chipSize = CGSize(width: 100.5, height: 29.5)
+        let chipSize = MobileSearchSheet.browseChipSize(titleWidth: chip.titleLabel?.intrinsicContentSize.width ?? 0)
+        chip.layer.cornerRadius = chipSize.height / 2
+        chip.layer.borderColor = Palette.chipBorder.resolvedColor(with: traitCollection).cgColor
         chip.frame = CGRect(x: bounds.width - 17.7 - chipSize.width, y: bounds.midY - chipSize.height / 2,
                             width: chipSize.width, height: chipSize.height)
         let right = !pin.isHidden ? pin.frame.minX - 8 : chip.isHidden ? bounds.width - 18 : chip.frame.minX - 10

@@ -49,15 +49,13 @@ enum Palette {
     static let secondaryText = dynamic(light: rgb(0x6f6e73), dark: rgb(0x9a999f))
     static let placeholder = dynamic(light: rgb(0xa2a0a5), dark: rgb(0x97979e))
     static let glyph = dynamic(light: rgb(0x2e2e30), dark: rgb(0xe6e6ea))
-    /// The round clear button in the field.
-    static let clearFill = dynamic(light: rgb(0xafafaf), dark: rgb(0x5a565c))
-    /// Its cross: cut out of the disc in 2025, so the field's grey shows through.
-    static let clearCross = dynamic(light: rgb(0xdbd9da), dark: .white)
     /// "You're browsing Incognito" under the dark sheet's field.
     static let incognitoNote = rgb(0xc9c8cd)
     /// "Browse for Me" on a suggestion row.
-    static let chipFill = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x332c2f))
-    static let chipBorder = dynamic(light: rgb(0xdbd8d9), dark: rgb(0x403a3d))
+    /// See-through, so the chip takes the sheet or the drawer's material under it rather than
+    /// sitting on it as a dark slab.
+    static let chipFill = dynamic(light: UIColor(white: 0, alpha: 0.06), dark: UIColor(white: 1, alpha: 0.1))
+    static let chipBorder = dynamic(light: UIColor(white: 0, alpha: 0.05), dark: UIColor(white: 1, alpha: 0.08))
     /// The pill and the round buttons of the bottom bar, over the bar's blur.
     static let barControlFill = dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.14))
     /// The bar's controls over a light page: dark grey ink and rim on a darker glass.

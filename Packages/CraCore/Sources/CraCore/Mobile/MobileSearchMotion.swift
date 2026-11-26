@@ -49,11 +49,17 @@ public enum MobileSearchMotion {
     /// Sliding back under the mask, the word stays solid for this share of the slide, then fades
     /// over the rest.
     public static let incognitoLabelFadeStart: Double = 0.6
-    /// The microphone waits this long after incognito goes off before it comes back, then fades
-    /// over `micFade` while springing up from `micAppearScale`.
+    /// The microphone waits this long after incognito goes off before it comes back, as the
+    /// field's buttons come in (`accessoryFade`, `accessoryEnterScale`, `MobileMotion.accessoryEnter`).
     public static let micReturnDelay: TimeInterval = 0.1
-    public static let micFade: TimeInterval = 0.3
-    public static let micAppearScale: CGFloat = 0.7
+    /// Typing into the empty field, or clearing it: the buttons going fade and shrink to
+    /// `accessoryLeaveScale` over `accessoryLeave`; only then do the ones coming fade in over
+    /// `accessoryFade`, springing up from `accessoryEnterScale` on `MobileMotion.accessoryEnter`.
+    public static let accessoryLeave: TimeInterval = 0.12
+    public static let accessoryLeaveScale: CGFloat = 0.6
+    public static let accessoryEnterScale: CGFloat = 0.4
+    public static let accessoryFade: TimeInterval = 0.15
+
     /// The incognito word and the bar's black tint fading out together as the drawer closes.
     public static let incognitoCloseFade: TimeInterval = 0.2
 

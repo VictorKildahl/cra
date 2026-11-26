@@ -1484,8 +1484,8 @@
 #650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  587d781bccdd
 #653   Tests/Scenarios/extension-popup-button-closes.scenario  c5424cc0359c
 #653   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
-#654   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theIncognitoGlyphKeepsItsPlaceOffAndOn  47c5edb00abb
-#654   iOS/CraUITests/SearchFieldTests.swift::testTheIncognitoGlyphStaysPutWhenSwitchedOn  5fd91b49787a
+#654   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theIncognitoGlyphKeepsItsPlaceOffAndOn  16f0249a3945
+#654   iOS/CraUITests/SearchFieldTests.swift::testTheIncognitoGlyphStaysPutWhenSwitchedOn  831d85470bb6
 #655   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aSheetBelowTheKeyboardsTopIsOutOfSight  02c5300e09cb
 #655   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theOpenSheetGoesDownTheWayItCameUp  dd08453b7060
 #655   iOS/CraUITests/SearchPullTests.swift::testDraggingTheEmptySheetDownFromAnywhereClosesIt  e65a5c271b34

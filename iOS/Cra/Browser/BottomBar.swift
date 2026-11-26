@@ -103,6 +103,25 @@ final class BottomBar: UIView {
         }
     }
 
+    /// Prototype (`-CraBarMaterials YES`): the page's lift and the drawer's colour come from the
+    /// material itself, crossfaded between UIKit's materials, rather than from overlays on one
+    /// material; incognito is one solid near-black layer, as no material is that dark.
+    static let usesMaterials = LaunchOptions.value("CraBarMaterials") == "YES"
+    /// The material the bar shows now, so it is only swapped (and crossfaded) when it changes.
+    private var material: UIBlurEffect.Style = .systemUltraThinMaterial
+
+    /// The material for the bar's state: the drawer's thin one while its colour is in, so the
+    /// backdrop shows blurred through it; a thick light one over a light page; the ultra-thin one
+    /// otherwise. Set inside an animation block, it crossfades.
+    private func applyMaterial() {
+        guard Self.usesMaterials else { return }
+        let style: UIBlurEffect.Style = drawerAppearance > 0 ? .systemThinMaterial
+            : pageIsLight && !isIncognito ? .systemThickMaterialLight : .systemUltraThinMaterial
+        guard style != material else { return }
+        material = style
+        blur.effect = UIBlurEffect(style: style)
+    }
+
     /// For the new tab drawer's UI test: the bar material's own opacity behind the drawer.
     var materialAlpha: CGFloat { blur.alpha }
 
@@ -113,7 +132,11 @@ final class BottomBar: UIView {
             guard pageIsLight != oldValue else { return }
             UIView.animate(withDuration: MobileBottomBar.pageTintFade, delay: 0,
                            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
-                self.pageTint.alpha = self.pageIsLight ? MobileBottomBar.pageTint : 0
+                if Self.usesMaterials {
+                    self.applyMaterial()
+                } else {
+                    self.pageTint.alpha = self.pageIsLight ? MobileBottomBar.pageTint : 0
+                }
             }
             applyPageChrome()
         }
@@ -175,7 +198,8 @@ final class BottomBar: UIView {
         hairline.backgroundColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.12))
         // The page's white lift, the bar's hairline, the drawer's colour and incognito's black, in
         // that order, all inside the material and never taking touches.
-        for (tint, colour) in [(pageTint, UIColor.white), (drawerTint, Palette.sheetDrawer), (incognitoTint, .black)] {
+        let incognitoColour = Self.usesMaterials ? Palette.rgb(0x0e0d0f) : .black
+        for (tint, colour) in [(pageTint, UIColor.white), (drawerTint, Palette.sheetDrawer), (incognitoTint, incognitoColour)] {
             tint.backgroundColor = colour
             tint.alpha = 0
             tint.frame = blur.contentView.bounds
@@ -251,8 +275,9 @@ final class BottomBar: UIView {
     /// The material's own colour: clear over the bar alone, the search sheet's colour over the
     /// material once the new tab drawer shows.
     private func applyDrawer() {
+        applyMaterial()
         // An incognito tab keeps the whole bar dark, whether the drawer is out or not.
-        drawerTint.alpha = isIncognito
+        drawerTint.alpha = Self.usesMaterials ? 0 : isIncognito
             ? MobileNewTabDrawer.incognitoTint
             : drawerAppearance * MobileNewTabDrawer.tint
         drawerEdge.alpha = drawerAppearance
@@ -264,7 +289,7 @@ final class BottomBar: UIView {
 
     /// The black rectangle fades in and out with incognito, like the light page's white lift.
     private func applyIncognitoTint() {
-        let alpha = isIncognito ? MobileBottomBar.incognitoTint : 0
+        let alpha = isIncognito ? (Self.usesMaterials ? 1 : MobileBottomBar.incognitoTint) : 0
         UIView.animate(withDuration: MobileSearchMotion.incognitoCloseFade, delay: 0,
                        options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
             self.incognitoTint.alpha = alpha

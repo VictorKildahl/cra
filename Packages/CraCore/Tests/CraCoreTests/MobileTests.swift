@@ -51,9 +51,9 @@ struct MobileChromeTests {
         #expect(off.width == 44 && on.width == MobileSearchSheet.incognitoLabelledWidth)
         #expect(off.midY == field.midY && on.midY == field.midY)
         let accessory = MobileSearchSheet.accessoryFrame(field: field)
-        #expect(field.maxX - accessory.midX == 29.5, "the clear button stays where Arc Search has it")
+        #expect(field.maxX - accessory.midX == 26.5, "3 pt nearer the end than Arc Search's 29.5")
         #expect(MobileSearchSheet.incognitoLabelledWidth == 130)
-        #expect(MobileSearchSheet.incognitoLabelGap == 8.7)
+        #expect(MobileSearchSheet.incognitoLabelGap == 6.7, "2 pt closer to the mask than the 8.7 measured")
         // The 28 pt mask, right-aligned, sits a little left of the accessory's centre.
         #expect(abs((off.maxX - 14) - accessory.midX) <= 3.5)
     }
@@ -66,6 +66,44 @@ struct MobileChromeTests {
         let keyboardless = MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 34, safeTop: 59, heldAt: nil)
         #expect(keyboardless > 420, "what it used to aim at while the keyboard was on its way: lower")
         #expect(MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 291, safeTop: 59, heldAt: nil) == 259, "with the keyboard up, Arc's place")
+    }
+
+    /// The empty field shows the mic and the incognito toggle, a field with text the clear button;
+    /// in incognito only the toggle goes for it, as there is no mic.
+    @Test func theFieldsEndSwapsItsButtonsForTheClearButtonOnceThereIsText() {
+        #expect(MobileSearchSheet.accessories(hasText: false, incognito: false) == [.mic, .incognito])
+        #expect(MobileSearchSheet.accessories(hasText: true, incognito: false) == .clear)
+        #expect(MobileSearchSheet.accessories(hasText: false, incognito: true) == .incognito)
+        #expect(MobileSearchSheet.accessories(hasText: true, incognito: true) == .clear)
+    }
+
+    /// The Browse for Me chip is as wide as its title plus its padding either side, more than Arc
+    /// Search's fixed 100.5 pt gave it.
+    @Test func theBrowseChipFitsItsTitleWithRoomEitherSide() {
+        let size = MobileSearchSheet.browseChipSize(titleWidth: 89.2)
+        #expect(size.width == 114 && size.height == MobileSearchSheet.browseChipHeight)
+        #expect(MobileSearchSheet.browseChipPadding > (100.5 - 89.2) / 2)
+    }
+
+    /// A second keystroke leaves the same buttons showing, so whatever is moving carries on. It
+    /// used to snap every button to its end, cutting the swap short after two quick characters.
+    @Test func aSecondKeystrokeLeavesTheSwapRunning() {
+        let typed = MobileSearchSheet.accessories(hasText: true, incognito: false)
+        let empty = MobileSearchSheet.accessories(hasText: false, incognito: false)
+        #expect(MobileSearchSheet.accessoryChange(from: typed, to: typed, canAnimate: true) == .keep)
+        #expect(MobileSearchSheet.accessoryChange(from: empty, to: typed, canAnimate: true) == .swap)
+        #expect(MobileSearchSheet.accessoryChange(from: typed, to: empty, canAnimate: true) == .swap)
+        #expect(MobileSearchSheet.accessoryChange(from: empty, to: .incognito, canAnimate: true) == .mic)
+        #expect(MobileSearchSheet.accessoryChange(from: nil, to: empty, canAnimate: true) == .snap)
+        #expect(MobileSearchSheet.accessoryChange(from: empty, to: typed, canAnimate: false) == .snap)
+    }
+
+    /// In incognito the word stays beside the clear button, so typed text stops short of it.
+    @Test func typedTextStopsShortOfTheIncognitoWord() {
+        let plain = MobileSearchSheet.textTrailingReserve(incognitoWordWidth: nil, maskWidth: 28)
+        let incognito = MobileSearchSheet.textTrailingReserve(incognitoWordWidth: 52, maskWidth: 28)
+        #expect(plain == 49)
+        #expect(incognito >= MobileSearchSheet.incognitoTrailingInset + 28 + MobileSearchSheet.incognitoLabelGap + 52)
     }
 
     /// A drawer pulled up and let go heads for its open place at once instead of waiting where the
@@ -129,16 +167,16 @@ struct MobileChromeTests {
         #expect(MobileNewTabDrawer.tint < MobileNewTabDrawer.incognitoTint)
     }
 
-    /// The drawer's address field lays white over a light page's drawer, less over a dark page's,
-    /// and the page menu's address editor keeps the sheet's own field.
-    @Test func theDrawersFieldIsLiftedMoreOverALightPage() {
+    /// The drawer's address field lays a little white over the drawer, over a light page or a dark
+    /// one, and the page menu's address editor keeps the sheet's own field.
+    @Test func theDrawersFieldIsLiftedOverEitherPage() {
         typealias Style = MobileSearchSheet.FieldStyle
         #expect(Style(growsFromBar: false, pageIsLight: true) == .standard)
         #expect(Style(growsFromBar: true, pageIsLight: true) == .lightPage)
         #expect(Style(growsFromBar: true, pageIsLight: false) == .darkPage)
         #expect(Style.standard.whiteLift == nil)
         let light = Style.lightPage.whiteLift ?? 0, dark = Style.darkPage.whiteLift ?? 0
-        #expect(dark > 0 && dark < light && light < 1)
+        #expect(light > 0 && light < 0.5 && dark > 0 && dark < 0.5, "a lift, still see-through")
     }
 
     /// The mic sits left of the incognito mask, clear of it.
@@ -239,7 +277,6 @@ struct MobileSearchMotionTests {
         #expect(MobileSearchMotion.incognitoBlink < MobileSearchMotion.settleDuration, "a blink, not a close")
         #expect(MobileSearchMotion.incognitoBlinkStagger < MobileSearchMotion.incognitoBlink, "a roll, not a second blink")
         #expect(MobileSearchMotion.incognitoLabelSlide > MobileSearchMotion.incognitoBlink)
-        #expect(MobileSearchMotion.micFade > MobileSearchMotion.micReturnDelay)
     }
 
     /// The open field's hairline is there only once it is all but open, so the field shrinking
@@ -1549,13 +1586,10 @@ struct MobileMotionTests {
         #expect(spring.overshoot > 0.005 && spring.overshoot < 0.06)
     }
 
-    /// The microphone returns with a spring: a small scale up, a slight overshoot.
-    @Test func theMicComesBackWithASmallOvershoot() {
-        let spring = MobileMotion.micAppear
-        #expect(spring.dampingRatio > 0.5 && spring.dampingRatio < 1)
-        #expect(spring.response > 0.2 && spring.response < 0.4)
-        #expect(spring.overshoot > 0.01 && spring.overshoot < 0.08)
-        #expect(MobileSearchMotion.micAppearScale > 0.5 && MobileSearchMotion.micAppearScale < 1, "a little small")
+    /// The field's buttons come in with a spring that overshoots visibly, from well under their size.
+    @Test func theFieldsButtonsComeInWithAnOvershoot() {
+        #expect(MobileMotion.accessoryEnter.overshoot > 0.05)
+        #expect(MobileSearchMotion.accessoryEnterScale < MobileSearchMotion.accessoryLeaveScale)
     }
 
     /// The incognito word toggled off, on and off again within one slide: only the last slide's

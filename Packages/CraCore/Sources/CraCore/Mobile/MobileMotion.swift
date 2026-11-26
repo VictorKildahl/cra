@@ -73,9 +73,9 @@ public enum MobileMotion {
     public static let tabRowSettle = Spring(response: 0.34, dampingRatio: 1)
     /// A card growing into its page: there within five frames.
     public static let tabOpen = Spring(response: 0.26, dampingRatio: 1)
-    /// The microphone coming back into the field as incognito goes off: a quick scale up into
-    /// place with a slight overshoot.
-    public static let micAppear = Spring(response: 0.28, dampingRatio: 0.7)
+    /// A button at the field's end coming in as the field fills or empties, or the mic as
+    /// incognito goes off: a quick scale up with a clear overshoot.
+    public static let accessoryEnter = Spring(response: 0.27, dampingRatio: 0.6)
     /// The flick's arriving tab, let go, on its way into the page. Each axis of its place is on
     /// its own fully damped spring that starts at the hand's own speed, so a tab thrown sideways
     /// carries on sideways on one smooth arc before it comes in; its lean lets go on a spring of
