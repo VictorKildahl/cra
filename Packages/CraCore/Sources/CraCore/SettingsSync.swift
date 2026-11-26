@@ -33,9 +33,13 @@ public struct SyncManifest: Codable, Equatable {
     /// Bundle path → hash of its bytes, for every easel file and picture in the bundle (`SettingsSync.easelPath`).
     /// Missing in a bundle from an older Cra: its easels are unknown, and none is deleted for it.
     public var easels: [String: String]?
+    /// The `parentIDs` whose easels the writing Mac had (SyncHistory.easelIDs): only those are a base for its
+    /// easels. A bundle an older Cra applied or wrote vouches for none. Missing: no easel base, nothing deleted.
+    public var easelParentIDs: [UUID]?
 
     public init(version: Int = SyncManifest.currentVersion, device: String, deviceID: String, writtenAt: Date, files: [String: String],
-                id: UUID? = nil, parentIDs: [UUID]? = nil, autoArchived: [UUID: Date]? = nil, easels: [String: String]? = nil) {
+                id: UUID? = nil, parentIDs: [UUID]? = nil, autoArchived: [UUID: Date]? = nil, easels: [String: String]? = nil,
+                easelParentIDs: [UUID]? = nil) {
         self.version = version
         self.device = device
         self.deviceID = deviceID
@@ -45,6 +49,7 @@ public struct SyncManifest: Codable, Equatable {
         self.parentIDs = parentIDs
         self.autoArchived = autoArchived.map { Dictionary(uniqueKeysWithValues: $0.map { ($0.key.uuidString, $0.value) }) }
         self.easels = easels
+        self.easelParentIDs = easelParentIDs
     }
 
     /// `autoArchived` by id.

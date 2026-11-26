@@ -3,12 +3,14 @@ import Foundation
 import IOKit
 import Observation
 
-/// Settings ▸ General ▸ Sync: the sidebar, the settings and the shortcut overrides kept the
-/// same on the user's Macs, through iCloud (the app's iCloud Documents container) or through
+/// Settings ▸ General ▸ Sync: the sidebar, the settings, the shortcut overrides and the easels kept
+/// the same on the user's Macs, through iCloud (the app's iCloud Documents container) or through
 /// a folder a file provider syncs (Dropbox, OneDrive or a similar service). Cra writes a bundle
 /// into a `Cra` folder there when something changed here and applies a bundle another Mac
-/// wrote when it is newer (SettingsSync in CraCore decides). No server of Cra's own: iCloud or
-/// the provider moves the files. Logins, cookies, history and the Chromium profile stay on each Mac.
+/// wrote when it is newer (SettingsSync in CraCore decides). Easels go in its `Easels` folder as in
+/// the data folder, each JSON with the pictures its cards show, and apply with the rest or not at all.
+/// No server of Cra's own: iCloud or the provider moves the files. Logins, cookies, history and the
+/// Chromium profile stay on each Mac.
 @MainActor
 @Observable
 final class SettingsSyncService {
@@ -55,11 +57,18 @@ final class SettingsSyncService {
     private(set) var folderState: SyncFolderState?
     /// How long the folder has held files from different writes (#378).
     private var mixWait = SyncMixWait()
+    /// The bundle a Use That Sidebar could not apply: not asked about again, so its error shows until a new one comes.
+    private var failedChoice: SyncManifest?
 
     static let newerCraError = "Your other Mac syncs with a newer version of Cra. Update Cra on this Mac to keep syncing."
 
     /// Reads keybindings.json again after a bundle wrote it (KeyBindingRegistry.reloadOverrides).
     var keybindingsChanged: @MainActor () -> Void = {}
+    /// An easel open in a tab changes on its canvas, which is up to 0.4 s ahead of its file: `change` gets
+    /// the canvas's easel and returns what it becomes, nil when the other Mac deleted it. False: no tab has it open.
+    var changeOpenEasel: @MainActor (UUID, (Easel) -> Easel?) -> Bool = { _, _ in false }
+    /// Library ▸ Easels lists the easels again after a bundle changed them; `removed` are the ones it deleted.
+    var easelsChanged: @MainActor (_ removed: Set<UUID>) -> Void = { _ in }
 
     /// How often the folder is looked at besides when a watcher fires: a provider may change
     /// a file without a directory event, and the timer is what a test host drives.
@@ -88,6 +97,7 @@ final class SettingsSyncService {
     private var iCloudContainer: URL?
     private var poller: ScheduledWork?
     private var watcher: DispatchSourceFileSystemObject?
+    private var easelWatcher: DispatchSourceFileSystemObject?
     private var metadataQuery: NSMetadataQuery?
     private var identityObserver: NSObjectProtocol?
     private var queryObservers: [NSObjectProtocol] = []
@@ -102,10 +112,14 @@ final class SettingsSyncService {
         var document: SidebarDocument
         var settings: AppSettings
         var keybindings: Data
+        var easels: [String: String]
     }
+    /// This Mac's easel folder: `<id>.json` and the pictures in `<id>/`.
+    private let easelFolder: URL
 
-    init(store: SidebarStore, clock: Scheduler, device: String? = nil, deviceID: String? = nil) {
+    init(store: SidebarStore, clock: Scheduler, device: String? = nil, deviceID: String? = nil, easels: URL = AppPaths.file("Easels")) {
         self.store = store
+        easelFolder = easels
         self.clock = clock
         // CRA_SYNC_DEVICE names a test instance (two on one Mac share a computer name and hardware).
         let testDevice = ProcessInfo.processInfo.environment["CRA_SYNC_DEVICE"]
@@ -125,7 +139,7 @@ final class SettingsSyncService {
         store.onChange.append { [weak self] in self?.changedHere() }
     }
 
-    /// The sidebar or the settings changed: a look (and a write) a few seconds after the last change,
+    /// The sidebar, the settings or an easel changed: a look (and a write) a few seconds after the last change,
     /// if more changed than when tabs were last active (#598).
     private func changedHere() {
         guard isEnabled, folder != nil else { return }
@@ -144,10 +158,10 @@ final class SettingsSyncService {
     }
 
     /// This Mac's bundle without last-active times.
-    private func currentShape() -> Shape { shape(of: localBundle()) }
+    private func currentShape() -> Shape { shape(of: localBundle(), easels: localEasels()) }
 
-    private func shape(of bundle: Bundle) -> Shape {
-        Shape(document: bundle.document.withoutActivity(), settings: bundle.settings, keybindings: bundle.keybindings)
+    private func shape(of bundle: Bundle, easels: LocalEasels) -> Shape {
+        Shape(document: bundle.document.withoutActivity(), settings: bundle.settings, keybindings: bundle.keybindings, easels: easels.files)
     }
 
     /// Sync is on and past the first question. A later bundle that iCloud is still downloading
@@ -244,6 +258,7 @@ final class SettingsSyncService {
         historyFile.saveNow(history)
         error = nil
         pendingChoice = nil
+        failedChoice = nil
         awaitingDownload = false
         mixWait.reset()
         stateFile.saveNow(state)
@@ -278,7 +293,11 @@ final class SettingsSyncService {
         pendingChoice = nil
         guard let folder else { return }
         switch look(at: folder) {
-        case .bundle(let manifest, let bundle): apply(manifest, bundle, merge: false)
+        case .bundle(let manifest, let bundle):
+            do { try apply(manifest, bundle, merge: false) } catch {
+                easelsNotSaved(manifest, error)
+                failedChoice = manifest
+            }
         case .newer: error = Self.newerCraError
         default: writeBundle()
         }
@@ -298,6 +317,7 @@ final class SettingsSyncService {
         location = nil
         folder = nil
         pendingChoice = nil
+        failedChoice = nil
         awaitingDownload = false
         error = nil
         state = State(devices: state.devices)
@@ -306,6 +326,9 @@ final class SettingsSyncService {
         historyFile.saveNow(history)
         local = nil
         lastDecoded = nil
+        localEaselsMade = nil
+        fileHashes = [:]
+        folderEasels = [:]
     }
 
     /// One look: a newer bundle from another Mac is applied, then what changed here is written.
@@ -345,19 +368,22 @@ final class SettingsSyncService {
             if !hasSynced {
                 // The bundle sync was turned on against has arrived: now the user picks.
                 if manifest.deviceID != deviceID {
-                    pendingChoice = SyncBundleSummary(manifest: manifest, document: bundle.document)
+                    if manifest != failedChoice { pendingChoice = SyncBundleSummary(manifest: manifest, document: bundle.document) }
                     return
                 }
             } else if SettingsSync.shouldApply(remote: manifest, lastApplied: state.lastApplied, deviceID: deviceID) {
                 // A later bundle, also one iCloud delivered in parts: applied with no question.
-                apply(manifest, bundle)
+                do { guard try apply(manifest, bundle) else { return } } catch {
+                    easelsNotSaved(manifest, error)
+                    return
+                }
             }
         case .none:
             // No bundle at all (the Cra folder was deleted, or emptied): this Mac's goes back.
             gone = true
             awaitingDownload = false
         }
-        if gone || localHashes() != state.lastWritten?.files { writeBundle() }
+        if gone || localHashes() != state.lastWritten?.files || localEasels().files != state.lastWritten?.easels { writeBundle() }
     }
 
     // MARK: Export and import (the same bundle, in a folder the user picks)
@@ -366,7 +392,9 @@ final class SettingsSyncService {
         let target = Self.bundleFolder(in: picked)
         do {
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            _ = try write(localFiles().files, to: target)
+            let easels = localEasels()
+            guard easels.unreadable.isEmpty else { return Self.unreadableEasels(easels) }
+            _ = try write(localFiles().files, easels: easels, to: target)
             return nil
         } catch { return error.localizedDescription }
     }
@@ -376,10 +404,13 @@ final class SettingsSyncService {
         return SyncBundleSummary(manifest: manifest, document: bundle.document)
     }
 
-    func importBundle(from picked: URL) -> Bool {
-        guard case .bundle(let manifest, let bundle) = look(at: Self.bundleFolder(in: picked)) else { return false }
-        apply(manifest, bundle, merge: false, remember: false)
-        return true
+    /// Nil when imported, else what Settings says.
+    func importBundle(from picked: URL) -> String? {
+        guard case .bundle(let manifest, let bundle) = look(at: Self.bundleFolder(in: picked)) else { return "The folder holds no Cra settings." }
+        do {
+            try apply(manifest, bundle, merge: false, remember: false)
+            return nil
+        } catch { return "Not imported: \(error.localizedDescription)" }
     }
 
     /// `<picked>/Cra`, or `picked` itself when the user pointed at the Cra folder.
@@ -389,10 +420,14 @@ final class SettingsSyncService {
 
     // MARK: Bundles
 
+    /// A bundle as read. `easels` are the folder's, by id (nil: an older Cra's bundle, its easels unknown),
+    /// and `folder` is where it was read; this Mac's own easels are `localEasels()`.
     private struct Bundle {
         var document: SidebarDocument
         var settings: AppSettings
         var keybindings: Data
+        var easels: [UUID: Easel]? = nil
+        var folder: URL? = nil
     }
 
     private enum Look {
@@ -473,6 +508,122 @@ final class SettingsSyncService {
         (try? localFiles())?.hashes
     }
 
+    /// This Mac's easels: each JSON and each picture a card shows, by bundle path with its hash, and the
+    /// easels decoded. Listed again only when the folder changed: every save or removal renames in it (#615).
+    private struct LocalEasels {
+        /// The folder's date when listed; nil lists it again at the next look.
+        var folderModified: Date?
+        var files: [String: String] = [:]
+        var easels: [UUID: Easel] = [:]
+        /// Each easel's JSON as hashed: what a write sends, also when the file changed since.
+        var json: [UUID: Data] = [:]
+        /// Easel files this Mac can't read and has no sent copy of, which another Mac may have: a bundle without
+        /// them would delete them there, so none is written.
+        var unreadable: Set<String> = []
+    }
+    private var localEaselsMade: LocalEasels?
+    /// Test hooks (#615): how often an easel file or picture was read, and an easel decoded.
+    private(set) var easelReads = 0
+    private(set) var easelDecodes = 0
+    /// Easel files and pictures, here and in the folder, by path: one whose size and date are the same is not read again.
+    private var fileHashes: [String: (size: UInt64, modified: Date, hash: String)] = [:]
+    /// The folder's easels last decoded, by hash: the same bytes decode the same.
+    private var folderEasels: [String: Easel] = [:]
+
+    private func localEasels() -> LocalEasels {
+        let fm = FileManager.default
+        let modified = (try? fm.attributesOfItem(atPath: easelFolder.path))?[.modificationDate] as? Date
+        if let made = localEaselsMade, made.folderModified != nil, made.folderModified == modified { return made }
+        let before = localEaselsMade
+        var made = LocalEasels(folderModified: modified)
+        for name in (try? fm.contentsOfDirectory(atPath: easelFolder.path)) ?? [] {
+            let path = "\(SettingsSync.easelsName)/\(name)", url = localURL(path)
+            guard let (id, picture) = SettingsSync.easelPath(path), picture == nil, let found = stat(url) else { continue }
+            var listed: (hash: String, easel: Easel, json: Data)?
+            if let known = fileHashes[url.path], known.size == found.size, known.modified == found.modified, before?.files[path] == known.hash,
+               let easel = before?.easels[id], let json = before?.json[id] {
+                listed = (known.hash, easel, json)
+            } else if let json = try? Data(contentsOf: url) {
+                easelReads += 1
+                if let easel = decodeEasel(json), easel.id == id {
+                    listed = (Self.hash(json), easel, json)
+                    fileHashes[url.path] = (found.size, found.modified, Self.hash(json))
+                }
+            }
+            if listed == nil {
+                // Read mid-save, or not readable: never sent as deleted. The last listing's copy stands, or the one sent
+                // last, until a look reads the file.
+                made.folderModified = nil
+                if let hash = before?.files[path], let easel = before?.easels[id], let json = before?.json[id] {
+                    listed = (hash, easel, json)
+                } else if let sent = sentCopy(path) {
+                    listed = sent
+                } else if history.entries.contains(where: { $0.easels?.contains { $0.id == id } == true }) {
+                    made.unreadable.insert(name)
+                }
+            }
+            guard let (hash, easel, json) = listed else { continue }
+            made.files[path] = hash
+            made.easels[id] = easel
+            made.json[id] = json
+            // A picture a card names that isn't here stays out: the other Mac would wait for it for ever.
+            for picture in Set(easel.items.flatMap(Easel.files(of:))) {
+                let picturePath = "\(SettingsSync.easelsName)/\(id.uuidString)/\(picture)"
+                guard SettingsSync.easelPath(picturePath) != nil, let hash = fileHash(localURL(picturePath), coordinated: false) else { continue }
+                made.files[picturePath] = hash
+            }
+        }
+        localEaselsMade = made
+        return made
+    }
+
+    /// The copy of an easel file this Mac last wrote or applied, read from the sync folder; nil when it isn't there.
+    private func sentCopy(_ path: String) -> (hash: String, easel: Easel, json: Data)? {
+        guard let folder, let hash = state.lastWritten?.easels?[path], let (id, _) = SettingsSync.easelPath(path),
+              let json = coordinatedRead(folder.appendingPathComponent(path)) else { return nil }
+        easelReads += 1
+        guard Self.hash(json) == hash, let easel = decodeEasel(json), easel.id == id else { return nil }
+        return (hash, easel, json)
+    }
+
+    /// What Settings says while an easel file this Mac can't read holds its bundle back.
+    private static func unreadableEasels(_ easels: LocalEasels) -> String {
+        "Cra can't read the easel file \(easels.unreadable.sorted().joined(separator: ", ")), so sync waits and your other Mac keeps its copy of that easel."
+    }
+
+    /// Where a bundle path under `Easels/` is on this Mac.
+    private func localURL(_ path: String) -> URL {
+        easelFolder.appendingPathComponent(String(path.dropFirst(SettingsSync.easelsName.count + 1)))
+    }
+
+    private func stat(_ url: URL) -> (size: UInt64, modified: Date)? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = (attributes[.size] as? NSNumber)?.uint64Value, let modified = attributes[.modificationDate] as? Date else { return nil }
+        return (size, modified)
+    }
+
+    private func fileHash(_ url: URL, coordinated: Bool) -> String? {
+        guard let found = stat(url) else { return nil }
+        if let known = fileHashes[url.path], known.size == found.size, known.modified == found.modified { return known.hash }
+        guard let data = coordinated ? coordinatedRead(url) : try? Data(contentsOf: url) else { return nil }
+        easelReads += 1
+        let hash = Self.hash(data)
+        fileHashes[url.path] = (found.size, found.modified, hash)
+        return hash
+    }
+
+    /// A file just written with `hash`: the next look takes the hash without reading it back.
+    private func know(_ url: URL, hash: String) {
+        guard let found = stat(url) else { return }
+        fileHashes[url.path] = (found.size, found.modified, hash)
+    }
+
+    private func decodeEasel(_ data: Data) -> Easel? {
+        guard let easel = try? Self.decoder.decode(Easel.self, from: data) else { return nil }
+        easelDecodes += 1
+        return easel
+    }
+
     private static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -482,14 +633,22 @@ final class SettingsSyncService {
         do {
             let made = try localFiles()
             let bundle = made.bundle
-            let manifest = try write(made.files, to: folder, parentIDs: history.ids)
+            let easels = localEasels()
+            guard easels.unreadable.isEmpty else {
+                // Left out, an easel the other Mac has would go there as deleted.
+                error = Self.unreadableEasels(easels)
+                return
+            }
+            let manifest = try write(made.files, easels: easels, to: folder, parentIDs: history.ids, easelParentIDs: history.easelIDs)
             state.lastWritten = manifest
-            writtenShape = shape(of: bundle)
+            writtenShape = shape(of: bundle, easels: easels)
             lastSync = manifest.writtenAt
             error = nil
             stateFile.save(state)
             if let id = manifest.id {
-                history.remember(id, bundle.document, settings: bundle.settings)
+                // The easels the bundle holds, which the other Mac's merge with this one goes by.
+                let sent = easels.easels.values.filter { manifest.easels?["\(SettingsSync.easelsName)/\($0.id.uuidString).json"] != nil }
+                history.remember(id, bundle.document, settings: bundle.settings, easels: sent.sorted { SettingsSync.precedes($0.id, $1.id) })
                 historyFile.save(history)
             }
         } catch {
@@ -498,16 +657,60 @@ final class SettingsSyncService {
         }
     }
 
-    /// The files first, the manifest last: a reader with a manifest whose hashes match has it all.
-    /// Through a file coordinator, so iCloud sees whole files (a plain folder does not mind).
-    private func write(_ files: [String: Data], to folder: URL, parentIDs: [UUID] = []) throws -> SyncManifest {
+    /// Pictures, the easels that differ, the files, the manifest last: a reader whose manifest's hashes match has it
+    /// all. Through a file coordinator, so iCloud sees whole files; then what `Easels` holds beyond the manifest goes.
+    private func write(_ files: [String: Data], easels: LocalEasels, to folder: URL, parentIDs: [UUID] = [], easelParentIDs: [UUID] = []) throws -> SyncManifest {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var written: [String: String] = [:]
+        for pictures in [true, false] {
+            for (path, hash) in easels.files where (SettingsSync.easelPath(path)?.picture != nil) == pictures {
+                let target = folder.appendingPathComponent(path)
+                // A picture never changes under its name: one there, or on its way, stays.
+                let there = pictures
+                    ? FileManager.default.fileExists(atPath: target.path) || FileManager.default.fileExists(atPath: placeholder(of: target).path)
+                    : (downloadStatus(target).map { $0 == .current } ?? true) && fileHash(target, coordinated: true) == hash
+                if there { written[path] = hash; continue }
+                // An easel as listed, so the bundle, the manifest and the history agree; a picture never changes.
+                guard let data = pictures ? try? Data(contentsOf: localURL(path)) : SettingsSync.easelPath(path).flatMap({ easels.json[$0.id] })
+                else { continue }
+                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try coordinatedWrite(data, to: target)
+                written[path] = Self.hash(data)
+                know(target, hash: Self.hash(data))
+            }
+        }
         for (name, data) in files { try coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
                                     id: UUID(), parentIDs: parentIDs,
-                                    autoArchived: SyncAutoArchive.listed(store.autoArchivedTabs, now: clock.now))
+                                    autoArchived: SyncAutoArchive.listed(store.autoArchivedTabs, now: clock.now), easels: written,
+                                    easelParentIDs: easelParentIDs)
         try coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
+        prune(folder, keeping: written)
         return manifest
+    }
+
+    /// Removes the files in the folder's `Easels` that `named` leaves out, and iCloud's placeholders for them.
+    /// Only after this Mac wrote its manifest: a manifest without `easels` (an older Cra's) prunes nothing.
+    private func prune(_ folder: URL, keeping named: [String: String]) {
+        let fm = FileManager.default
+        /// The name is a file `named` has, or iCloud's placeholder for one.
+        func kept(_ name: String, in parent: String) -> Bool {
+            if named["\(parent)/\(name)"] != nil { return true }
+            guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return false }
+            return named["\(parent)/\(name.dropFirst().dropLast(7))"] != nil
+        }
+        let root = folder.appendingPathComponent(SettingsSync.easelsName, isDirectory: true)
+        for name in (try? fm.contentsOfDirectory(atPath: root.path)) ?? [] {
+            let url = root.appendingPathComponent(name)
+            var isFolder: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isFolder), isFolder.boolValue else {
+                if !kept(name, in: SettingsSync.easelsName) { coordinatedRemove(url) }
+                continue
+            }
+            let inside = (try? fm.contentsOfDirectory(atPath: url.path)) ?? []
+            let gone = inside.filter { !kept($0, in: "\(SettingsSync.easelsName)/\(name)") }
+            if gone.count == inside.count { coordinatedRemove(url) } else { for f in gone { coordinatedRemove(url.appendingPathComponent(f)) } }
+        }
     }
 
     private func coordinatedWrite(_ data: Data, to url: URL) throws {
@@ -517,6 +720,26 @@ final class SettingsSyncService {
             do { try data.write(to: u, options: .atomic) } catch { writeError = error }
         }
         if let e = coordinationError ?? writeError.map({ $0 as NSError }) { throw e }
+    }
+
+    private func coordinatedRemove(_ url: URL) {
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forDeleting, error: nil) { u in
+            try? FileManager.default.removeItem(at: u)
+        }
+    }
+
+    /// iCloud's placeholder for a file it has not downloaded (before macOS 14).
+    private func placeholder(of url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(SettingsSync.placeholderName(for: url.lastPathComponent))
+    }
+
+    /// A file not downloaded yet, or (iCloud before macOS 14) only its placeholder: asked for, and looked
+    /// at again when it has arrived. Since macOS 14 reading it would wait for the download on the main thread.
+    private func isArriving(_ url: URL) -> Bool {
+        let status = downloadStatus(url)
+        guard FileManager.default.fileExists(atPath: placeholder(of: url).path) || (status != nil && status != .current) else { return false }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        return true
     }
 
     private func coordinatedRead(_ url: URL) -> Data? {
@@ -534,12 +757,7 @@ final class SettingsSyncService {
         var data: [String: Data] = [:]
         for name in [SettingsSync.manifestName] + SettingsSync.fileNames {
             let url = folder.appendingPathComponent(name)
-            // A file not downloaded yet, or (iCloud before macOS 14) only its placeholder: ask for
-            // it and look again when it has arrived.
-            let status = downloadStatus(url)
-            let placeholder = FileManager.default.fileExists(atPath: folder.appendingPathComponent(SettingsSync.placeholderName(for: name)).path)
-            if placeholder || (status != nil && status != .current) {
-                try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+            if isArriving(url) {
                 states[name] = .downloading
                 continue
             }
@@ -558,12 +776,19 @@ final class SettingsSyncService {
         case .present?: manifestState = manifest.map { .read($0) } ?? .unreadable(version: manifestData.flatMap(SettingsSync.manifestVersion(in:)))
         default: manifestState = .missing
         }
+        if let easels = manifest?.easels {
+            states.merge(easelStates(easels, in: folder)) { a, _ in a }
+        }
         var bundle: Bundle?
-        let hashes = data.mapValues(Self.hash)
+        let hashes = states.compactMapValues { if case .present(let h) = $0 { h } else { nil } }
         if let manifest, SettingsSync.isComplete(manifest, hashes: hashes),
            let sidebar = hashes[SettingsSync.sidebarName], let settings = hashes[SettingsSync.settingsName],
            let (document, appSettings) = decoded(sidebar: sidebar, settings: settings, from: data) {
-            bundle = Bundle(document: document, settings: appSettings, keybindings: data[SettingsSync.keybindingsName] ?? Data("{}".utf8))
+            switch manifest.easels.map({ decodedEasels($0, in: folder) }) {
+            case .some(nil): break // An easel that doesn't decode leaves the bundle unread, as an unreadable sidebar does.
+            case let easels: bundle = Bundle(document: document, settings: appSettings, keybindings: data[SettingsSync.keybindingsName] ?? Data("{}".utf8),
+                                             easels: easels ?? nil, folder: folder)
+            }
         }
         let state = SettingsSync.folderState(manifest: manifestState, files: states, readable: bundle != nil)
         folderState = state
@@ -593,17 +818,51 @@ final class SettingsSyncService {
         return (document, appSettings)
     }
 
+    /// The easel files and pictures a manifest names, as `look` reports the three files; a bad path is never read.
+    /// A file whose size and date are as before is not read again (#615).
+    private func easelStates(_ paths: [String: String], in folder: URL) -> [String: SyncFileState] {
+        var states: [String: SyncFileState] = [:]
+        for path in paths.keys where SettingsSync.easelPath(path) != nil {
+            let url = folder.appendingPathComponent(path)
+            states[path] = isArriving(url) ? .downloading : fileHash(url, coordinated: true).map { .present(hash: $0) } ?? .missing
+        }
+        return states
+    }
+
+    /// The folder's easels by id, decoded only when their bytes are new; nil when one doesn't decode.
+    private func decodedEasels(_ paths: [String: String], in folder: URL) -> [UUID: Easel]? {
+        var easels: [UUID: Easel] = [:], byHash: [String: Easel] = [:]
+        for (path, hash) in paths {
+            guard let (id, picture) = SettingsSync.easelPath(path), picture == nil else { continue }
+            let read = { () -> Easel? in
+                guard let data = self.coordinatedRead(folder.appendingPathComponent(path)) else { return nil }
+                self.easelReads += 1
+                return Self.hash(data) == hash ? self.decodeEasel(data) : nil
+            }
+            guard let easel = folderEasels[hash] ?? read(), easel.id == id else { return nil }
+            easels[id] = easel
+            byHash[hash] = easel
+        }
+        folderEasels = byHash
+        return easels
+    }
+
     /// The `cra://debug?sync=` readout: what the last look found and what this Mac does about it.
     func readout() -> String {
         let since = mixWait.since.map { "\(Int(clock.now.timeIntervalSince($0)))s" } ?? "-"
         return "folder=\(folderState.map { "\($0)" } ?? "-") awaiting=\(awaitingDownload) mixedFor=\(since) asking=\(pendingChoice?.device ?? "-") "
             + "lastWritten=\(state.lastWritten?.writtenAt.timeIntervalSince1970 ?? 0) error=\(error ?? "-") "
-            + "encodes=\(localEncodes) decodes=\(folderDecodes)"
+            + "encodes=\(localEncodes) decodes=\(folderDecodes) easelReads=\(easelReads)"
     }
 
     /// `merge`: the bundle was written from one this Mac still has (SyncHistory.base), so what changed
     /// here since is kept (SidebarMerge); the user's "Use That Sidebar" and an import take it whole.
-    private func apply(_ manifest: SyncManifest, _ bundle: Bundle, merge: Bool = true, remember: Bool = true) {
+    /// - Returns: false when a canvas took a change it saves in a moment: this look writes nothing.
+    /// - Throws: when an easel or a picture could not be copied or saved. Nothing else is applied then.
+    @discardableResult
+    private func apply(_ manifest: SyncManifest, _ bundle: Bundle, merge: Bool = true, remember: Bool = true) throws -> Bool {
+        // Before the sidebar: a synced row `easel://<id>` must not open a blank easel that saves over the real one.
+        let easels = try applyEasels(manifest, bundle, base: merge ? history.baseEasels(for: manifest) : nil)
         var document = bundle.document
         var settings = bundle.settings
         if merge, var base = history.base(for: manifest) {
@@ -633,24 +892,107 @@ final class SettingsSyncService {
         store.settings = store.settings.applyingSynced(settings)
         try? bundle.keybindings.write(to: AppPaths.file(SettingsSync.keybindingsName), options: .atomic)
         keybindingsChanged()
-        guard remember else { return }
+        if easels.changed { easelsChanged(easels.removed) }
+        guard remember else { return !easels.onCanvas }
         state.lastApplied = manifest
         if let id = manifest.id {
-            history.remember(id, bundle.document, settings: bundle.settings)
+            // `[]` for a bundle without easels, nil for an older Cra's: only the first deletes what the base had.
+            let sent = bundle.easels.map { $0.values.sorted { SettingsSync.precedes($0.id, $1.id) } }
+            history.remember(id, bundle.document, settings: bundle.settings, easels: sent)
             historyFile.save(history)
         }
         // What is here now is what the folder holds: nothing to write back until something changes
         // here. This Mac's own hashes, since a repaired sidebar need not encode to the same bytes.
         // A merge that kept something changed here differs from the folder's: it goes up on this look.
+        // Easels were written as the bundle's bytes; an older Cra's bundle, which names none, gets this Mac's back.
         let same = document == bundle.document && settings == bundle.settings
         let hashes = same ? localHashes() ?? manifest.files : manifest.files
-        state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: hashes)
-        writtenShape = same ? currentShape() : nil
+        state.lastWritten = SyncManifest(device: manifest.device, deviceID: manifest.deviceID, writtenAt: manifest.writtenAt, files: hashes,
+                                         easels: manifest.easels)
+        writtenShape = same && localEasels().files == manifest.easels ? currentShape() : nil
         if manifest.deviceID != deviceID, !state.devices.contains(manifest.device) { state.devices.append(manifest.device) }
         otherDevices = state.devices
         lastSync = manifest.writtenAt
         error = nil
         stateFile.save(state)
+        return !easels.onCanvas
+    }
+
+    /// Settings shows why this Mac stopped syncing: an easel it could not save. The next look tries again.
+    private func easelsNotSaved(_ manifest: SyncManifest, _ failure: Error) {
+        error = "Easels from \(manifest.device) could not be saved on this Mac: \(failure.localizedDescription)"
+        CraLog.fault("sync: \(manifest.device)'s easels not applied, tried again at the next look: \(failure)")
+    }
+
+    /// What an apply did to the easels: whether any changed, the ones it deleted, and whether a canvas took a change.
+    private struct EaselChanges {
+        var changed = false
+        var removed: Set<UUID> = []
+        var onCanvas = false
+    }
+
+    /// The easels the other Mac changed since `base` merged into this Mac's, pictures first (no base: add and
+    /// overwrite, delete nothing). Throws, with nothing but pictures written, when a file could not be copied whole.
+    private func applyEasels(_ manifest: SyncManifest, _ bundle: Bundle, base: [Easel]?) throws -> EaselChanges {
+        var changes = EaselChanges()
+        // An older Cra's bundle: its easels are unknown, and this Mac's stay as they are.
+        guard let remote = bundle.easels, let paths = manifest.easels, let from = bundle.folder else { return changes }
+        let base = base.map { Dictionary($0.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
+        let touched = Set(remote.keys).union(base.map { Array($0.keys) } ?? []).filter { base?[$0] != remote[$0] }
+        var bytes: [UUID: Data] = [:]
+        let fm = FileManager.default
+        for (path, hash) in paths {
+            guard let (id, picture) = SettingsSync.easelPath(path), touched.contains(id) else { continue }
+            let target = localURL(path)
+            if picture != nil, fm.fileExists(atPath: target.path) { continue }
+            guard let data = coordinatedRead(from.appendingPathComponent(path)), Self.hash(data) == hash else {
+                throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: path])
+            }
+            if picture == nil { bytes[id] = data; continue }
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: target, options: .atomic)
+            know(target, hash: hash)
+            // A picture lands in the easel's own folder, which the listing's date doesn't cover.
+            localEaselsMade?.folderModified = nil
+        }
+        let local = localEasels().easels
+        for id in touched.sorted(by: SettingsSync.precedes) {
+            let b = base?[id], r = remote[id]
+            var onCanvas: Easel?? = .none
+            let open = changeOpenEasel(id) { here in
+                let merged = Easel.merge(base: b, local: here, remote: r)
+                if merged != here { onCanvas = .some(merged) }
+                return merged
+            }
+            if open {
+                guard let merged = onCanvas else { continue }
+                changes.changed = true
+                changes.onCanvas = true
+                if merged == nil { changes.removed.insert(id) }
+                continue
+            }
+            let merged = Easel.merge(base: b, local: local[id], remote: r)
+            guard merged != local[id] else { continue }
+            changes.changed = true
+            guard let merged else {
+                EaselFolder.remove(id, in: easelFolder)
+                changes.removed.insert(id)
+                continue
+            }
+            // Taken unchanged, as the bundle's bytes: their hash is the manifest's, and nothing goes back.
+            let data = try merged == r ? bytes[id] ?? Self.encoder.encode(merged) : Self.encoder.encode(merged)
+            let target = localURL("\(SettingsSync.easelsName)/\(id.uuidString).json")
+            try fm.createDirectory(at: easelFolder, withIntermediateDirectories: true)
+            // The copy replaced stays as `.bak`, as at each JSONStore save.
+            let bak = target.appendingPathExtension("bak")
+            if fm.fileExists(atPath: target.path) {
+                try? fm.removeItem(at: bak)
+                try? fm.copyItem(at: target, to: bak)
+            }
+            try data.write(to: target, options: .atomic)
+            know(target, hash: Self.hash(data))
+        }
+        return changes
     }
 
     // MARK: Watching
@@ -659,14 +1001,10 @@ final class SettingsSyncService {
         stopWatching()
         guard let folder else { return }
         poller = clock.every(Self.pollInterval) { [weak self] in self?.poll() }
-        let fd = open(folder.path, O_EVTONLY)
-        if fd >= 0 {
-            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
-            source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.lookSoon() } }
-            source.setCancelHandler { close(fd) }
-            source.resume()
-            watcher = source
-        }
+        watcher = watch(folder) { [weak self] in self?.lookSoon() }
+        // Every easel save or removal renames in this folder: a change there goes up soon, as the sidebar's does (#598).
+        try? FileManager.default.createDirectory(at: easelFolder, withIntermediateDirectories: true)
+        easelWatcher = watch(easelFolder) { [weak self] in self?.changedHere() }
         // iCloud: a download finishing changes no directory entry the source sees; the metadata
         // query reports it (and every other change in the container's Documents).
         if case .iCloud? = location, ProcessInfo.processInfo.environment["CRA_SYNC_ICLOUD_DIR"] == nil {
@@ -681,6 +1019,16 @@ final class SettingsSyncService {
             query.start()
             metadataQuery = query
         }
+    }
+
+    private func watch(_ folder: URL, _ changed: @escaping @MainActor () -> Void) -> DispatchSourceFileSystemObject? {
+        let fd = open(folder.path, O_EVTONLY)
+        guard fd >= 0 else { return nil }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+        source.setEventHandler { MainActor.assumeIsolated { changed() } }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        return source
     }
 
     /// A provider writes a bundle file by file; one look after the last of them.
@@ -698,6 +1046,8 @@ final class SettingsSyncService {
         writeSoon = nil
         watcher?.cancel()
         watcher = nil
+        easelWatcher?.cancel()
+        easelWatcher = nil
         metadataQuery?.stop()
         metadataQuery = nil
         for o in queryObservers { NotificationCenter.default.removeObserver(o) }

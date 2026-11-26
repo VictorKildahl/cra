@@ -260,8 +260,7 @@ extension EaselFiles {
 
     @MainActor static func delete(_ id: UUID) {
         deleted.insert(id)
-        let names = [id.uuidString + ".json", id.uuidString + ".json.bak", id.uuidString]
-        let remove = { for n in names { try? FileManager.default.removeItem(at: folder.appendingPathComponent(n)) } }
+        let remove = { EaselFolder.remove(id, in: folder) }
         remove()
         // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: remove)

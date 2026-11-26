@@ -4323,6 +4323,7 @@ enum StoreTests {
         syncKeepsASettingChangedBeforeTheOtherMacWrote()
         syncKeepsATabSeenOnTheOtherMac()
         syncKeepsATabSeenHereThatTheOtherMacArchivedFirst()
+        syncEasels()
     }
 
     /// A tab closed on one Mac came back (reported by a user, 13 Nov 2026). The other Mac still
@@ -5030,6 +5031,502 @@ enum StoreTests {
         expect(syncC.pendingChoice?.device == "Studio", "and the new Mac asks which sidebar to keep, as when sync is turned on")
         syncC.useLocal()
         syncA.disable(); syncC.disable()
+    }
+
+    // MARK: Easels in the sync bundle
+
+    /// Two Macs syncing through one folder, each with its own easel folder: the services in this
+    /// process share one data folder, so each gets its own `easels:`.
+    @MainActor
+    private final class EaselMacs {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-easels-\(UUID().uuidString)", isDirectory: true)
+        let root: URL, bundle: URL, easelsA: URL, easelsB: URL
+        let clockA = ManualScheduler(), clockB: ManualScheduler
+        let a: SidebarStore, b: SidebarStore
+        let syncA: SettingsSyncService, syncB: SettingsSyncService
+
+        /// Both Macs synced: the first turns sync on with `easels` saved, the second uses its sidebar.
+        /// `olderSecond`: the second took that bundle on a Cra without easel sync, then updated.
+        init(_ easels: [(Easel, [String: Data])] = [], olderSecond: Bool = false) {
+            root = dir.appendingPathComponent("sync", isDirectory: true)
+            bundle = root.appendingPathComponent(SettingsSync.folderName, isDirectory: true)
+            easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true)
+            easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+            clockB = ManualScheduler(now: clockA.now)
+            a = SidebarStore(clock: clockA)
+            b = SidebarStore(clock: clockB)
+            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            for (easel, pictures) in easels { StoreTests.saveEasel(easel, pictures: pictures, in: easelsA) }
+            syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio", easels: easelsA)
+            syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook", easels: easelsB)
+            StoreTests.expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
+            let written = manifest
+            if olderSecond, var unknown = written {
+                unknown.easels = nil
+                write(unknown)
+            }
+            guard case .bundleFound = syncB.enable(folder: root) else { StoreTests.expect(false, "the second Mac is asked once"); return }
+            syncB.useRemote()
+            if olderSecond, let written { write(written) }
+        }
+
+        var manifest: SyncManifest? {
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return (try? Data(contentsOf: bundle.appendingPathComponent(SettingsSync.manifestName))).flatMap { try? decoder.decode(SyncManifest.self, from: $0) }
+        }
+
+        func write(_ manifest: SyncManifest) {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+            try? encoder.encode(manifest).write(to: bundle.appendingPathComponent(SettingsSync.manifestName))
+        }
+
+        /// A change on the first Mac, then a look on each.
+        func syncAToB() {
+            clockA.advance(by: 10); syncA.poll()
+            clockB.advance(by: 10); syncB.poll()
+        }
+
+        func done() {
+            syncA.disable(); syncB.disable()
+            try? FileManager.default.removeItem(at: dir)
+        }
+    }
+
+    /// Saves an easel the way the canvas does: its JSON, and its pictures in the folder of its id.
+    private static func saveEasel(_ easel: Easel, pictures: [String: Data] = [:], in folder: URL) {
+        let pictureFolder = folder.appendingPathComponent(easel.id.uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: pictureFolder, withIntermediateDirectories: true)
+        for (name, data) in pictures { try? data.write(to: pictureFolder.appendingPathComponent(name)) }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+        try? encoder.encode(easel).write(to: folder.appendingPathComponent(easel.id.uuidString + ".json"), options: .atomic)
+    }
+
+    private static func loadEasel(_ id: UUID, in folder: URL) -> Easel? {
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        return (try? Data(contentsOf: folder.appendingPathComponent(id.uuidString + ".json"))).flatMap { try? decoder.decode(Easel.self, from: $0) }
+    }
+
+    /// An easel with one picture card, and that picture's bytes by name.
+    private static func pictured(_ title: String) -> (Easel, [String: Data]) {
+        let name = UUID().uuidString + ".png"
+        let card = Easel.Item(kind: .image(file: name), frame: .init(x: 120, y: 160, width: 200, height: 100))
+        return (Easel(title: title, items: [card]), [name: Data("the picture \(name)".utf8)])
+    }
+
+    @MainActor
+    private static func syncEasels() {
+        syncCarriesAnEaselAndItsPicture()
+        syncMergesEaselEditsFromBothMacs()
+        syncDeletesAnEaselDeletedOnTheOtherMac()
+        syncPrunesADeletedEaselFromTheBundle()
+        syncLeavesEaselsAloneForAnOlderCrasBundle()
+        syncHoldsABundleWhileAnEaselArrives()
+        importNeverDeletesAnEasel()
+        syncNeverTouchesABadEaselPath()
+        syncWritesSoonAfterAnEaselChange()
+        syncLooksWithoutReadingAnIdleEasel()
+        syncChangesAnOpenEaselOnItsCanvas()
+        syncKeepsTheEaselsOfTheMacThatUpdatedFirst()
+        syncTakesTheRealEaselOverABlankCopy()
+        importKeepsARealEaselOverABlankCopy()
+        syncPutsBackAnEaselFileGoneFromTheFolder()
+        syncNeverSendsAnUnreadableEaselAsDeleted()
+        syncSaysWhenAnEaselCannotBeSaved()
+        syncKeepsTheEaselsOfTheMacThatUpdatedFirstAfterTheOtherWroteOnAnOlderCra()
+        syncNeverSendsAnUnreadableEaselAsDeletedAfterARelaunch()
+        syncHoldsItsBundleWhileAnUnreadableEaselHasNoCopyToSend()
+        useThatSidebarThatFailsAsksAgainOnlyForANewBundle()
+    }
+
+    /// Sync carried an easel's sidebar row but not the easel: on the other Mac it opened empty.
+    @MainActor
+    private static func syncCarriesAnEaselAndItsPicture() {
+        let (easel, pictures) = pictured("Moodboard")
+        var lacking = Easel(title: "Names a picture this Mac lacks")
+        lacking.items = [Easel.Item(kind: .image(file: "gone.png"), frame: .init(x: 0, y: 0, width: 10, height: 10))]
+        let macs = EaselMacs([(easel, pictures), (lacking, [:])])
+        defer { macs.done() }
+        let (name, bytes) = pictures.first!
+        expect(loadEasel(easel.id, in: macs.easelsB) == easel, "an easel made on the first Mac is on the second")
+        expect((try? Data(contentsOf: macs.easelsB.appendingPathComponent(easel.id.uuidString).appendingPathComponent(name))) == bytes,
+               "with the picture its card shows")
+        expect(Set(macs.manifest.map { Array($0.files.keys) } ?? []) == Set(SettingsSync.fileNames), "the manifest's files stay the three an older Cra reads")
+        expect(macs.manifest?.easels?["Easels/\(lacking.id.uuidString)/gone.png"] == nil && loadEasel(lacking.id, in: macs.easelsB) == lacking,
+               "a picture the writing Mac lacks is left out of the manifest, and its easel arrives without waiting for it")
+    }
+
+    @MainActor
+    private static func syncMergesEaselEditsFromBothMacs() {
+        let (easel, pictures) = pictured("Plans")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        // The first Mac renames it and writes; the second adds a card before its next look.
+        var onA = easel
+        onA.title = "Plans, renamed"
+        saveEasel(onA, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        var onB = easel
+        onB.items.append(Easel.Item(kind: .rectangle, frame: .init(x: 400, y: 400, width: 50, height: 50)))
+        saveEasel(onB, in: macs.easelsB)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        let merged = loadEasel(easel.id, in: macs.easelsB)
+        expect(merged?.title == "Plans, renamed" && merged?.items.map(\.id) == onB.items.map(\.id),
+               "the second Mac takes the first's title and keeps its own card")
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        expect(merged != nil && loadEasel(easel.id, in: macs.easelsA) == merged, "and the first Mac takes the merge")
+    }
+
+    @MainActor
+    private static func syncDeletesAnEaselDeletedOnTheOtherMac() {
+        let (easel, pictures) = pictured("Doomed")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        var removed: Set<UUID> = []
+        macs.syncB.easelsChanged = { removed = $0 }
+        EaselFolder.remove(easel.id, in: macs.easelsA)
+        macs.syncAToB()
+        let fm = FileManager.default
+        expect(!fm.fileExists(atPath: macs.easelsB.appendingPathComponent(easel.id.uuidString + ".json").path)
+               && !fm.fileExists(atPath: macs.easelsB.appendingPathComponent(easel.id.uuidString).path),
+               "an easel deleted in Library on the first Mac is gone from the second, pictures and all")
+        expect(removed == [easel.id], "and the app hears which easel went, to close its tabs")
+    }
+
+    @MainActor
+    private static func syncPrunesADeletedEaselFromTheBundle() {
+        let (easel, pictures) = pictured("Pruned")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        EaselFolder.remove(easel.id, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let easels = macs.bundle.appendingPathComponent(SettingsSync.easelsName)
+        expect(!FileManager.default.fileExists(atPath: easels.appendingPathComponent(easel.id.uuidString + ".json").path)
+               && !FileManager.default.fileExists(atPath: easels.appendingPathComponent(easel.id.uuidString).path),
+               "the next bundle leaves a deleted easel's file and pictures out of the sync folder")
+    }
+
+    /// An older Cra writes a manifest without `easels`: its easels are unknown, not deleted.
+    @MainActor
+    private static func syncLeavesEaselsAloneForAnOlderCrasBundle() {
+        let (easel, pictures) = pictured("Kept")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        let file = macs.easelsB.appendingPathComponent(easel.id.uuidString + ".json")
+        let before = try? Data(contentsOf: file)
+        guard var old = macs.manifest else { return expect(false, "the first Mac wrote a manifest") }
+        old.easels = nil
+        old.device = "Old"; old.deviceID = "old"; old.id = UUID()
+        old.writtenAt = macs.clockB.now.addingTimeInterval(5)
+        macs.write(old)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(macs.syncB.otherDevices.contains("Old"), "the older Cra's bundle is applied")
+        expect(before != nil && (try? Data(contentsOf: file)) == before, "and leaves this Mac's easels as they were")
+        expect(macs.manifest?.easels?["Easels/\(easel.id.uuidString).json"] != nil, "this Mac's next bundle puts its easels back")
+    }
+
+    /// A bundle applies whole: a sidebar row `easel://<id>` never arrives before its easel.
+    @MainActor
+    private static func syncHoldsABundleWhileAnEaselArrives() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Arriving")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        let tab = macs.a.createTab(url: easel.url, title: easel.title)
+        let picture = pictures.keys.first!
+        macs.syncB.downloadStatus = { $0.lastPathComponent == picture ? .notDownloaded : nil }
+        macs.syncAToB()
+        expect(!macs.b.document.items.contains { $0.id == tab.id } && loadEasel(easel.id, in: macs.easelsB) == nil,
+               "while a picture is still downloading, neither the easel nor the sidebar is applied")
+        macs.syncB.downloadStatus = { _ in nil }
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(macs.b.document.items.contains { $0.id == tab.id } && loadEasel(easel.id, in: macs.easelsB) == easel,
+               "once it has arrived, both are")
+    }
+
+    /// Import… adds and overwrites easels, and removes none: the export may come from a Mac that never had them.
+    @MainActor
+    private static func importNeverDeletesAnEasel() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-import-easels-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true), easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+        let exported = dir.appendingPathComponent("export", isDirectory: true)
+        let clock = ManualScheduler()
+        let (easel, pictures) = pictured("Exported")
+        saveEasel(easel, pictures: pictures, in: easelsA)
+        let syncA = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easelsA)
+        expect(syncA.export(to: exported) == nil, "the first Mac exports")
+        let onlyHere = Easel(title: "Only on this Mac")
+        saveEasel(onlyHere, in: easelsB)
+        var older = easel
+        older.title = "An older copy"
+        saveEasel(older, in: easelsB)
+        let syncB = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        expect(syncB.importBundle(from: exported) == nil, "the second Mac imports it")
+        expect(loadEasel(easel.id, in: easelsB) == easel, "Import… takes the exported easel over this Mac's copy")
+        expect(loadEasel(onlyHere.id, in: easelsB) == onlyHere, "and keeps an easel the export lacks")
+        let bak = (try? Data(contentsOf: easelsB.appendingPathComponent(easel.id.uuidString + ".json.bak")))
+            .flatMap { try? JSONDecoder().decode(Easel.self, from: $0) }
+        expect(bak == older, "and keeps the copy it replaced as .bak, as a save does")
+    }
+
+    /// The Mac that updated Cra second took the first Mac's bundle on a Cra without easel sync. Its first look
+    /// wrote a bundle without them, and the first Mac read that as every easel deleted.
+    @MainActor
+    private static func syncKeepsTheEaselsOfTheMacThatUpdatedFirst() {
+        let (easel, pictures) = pictured("Made on the Mac updated first")
+        let macs = EaselMacs([(easel, pictures)], olderSecond: true)
+        defer { macs.done() }
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        macs.clockA.advance(by: 20); macs.syncA.poll()
+        expect(loadEasel(easel.id, in: macs.easelsA) == easel, "the first Mac keeps its easel when the second updates")
+    }
+
+    /// An older Cra that opens a synced `easel://` row saves a blank easel under its id. After the update,
+    /// the other Mac's real easel replaces it, never the other way round.
+    @MainActor
+    private static func syncTakesTheRealEaselOverABlankCopy() {
+        let (easel, pictures) = pictured("The real one")
+        let macs = EaselMacs([(easel, pictures)], olderSecond: true)
+        defer { macs.done() }
+        saveEasel(Easel(id: easel.id), in: macs.easelsB)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        macs.syncAToB()
+        expect(loadEasel(easel.id, in: macs.easelsB) == easel, "the second Mac's blank copy gives way to the real easel")
+    }
+
+    /// With no history to merge against (Import, Use That Sidebar, a bundle an older Cra wrote last), a blank
+    /// copy of an easel never replaces the real one here.
+    @MainActor
+    private static func importKeepsARealEaselOverABlankCopy() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-import-blank-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true), easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+        let exported = dir.appendingPathComponent("export", isDirectory: true)
+        let clock = ManualScheduler()
+        let (easel, pictures) = pictured("Real on this Mac")
+        saveEasel(Easel(id: easel.id), in: easelsA)
+        saveEasel(easel, pictures: pictures, in: easelsB)
+        let syncA = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easelsA)
+        expect(syncA.export(to: exported) == nil, "the first Mac exports its blank copy")
+        let syncB = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        _ = syncB.importBundle(from: exported)
+        expect(loadEasel(easel.id, in: easelsB) == easel, "Import… leaves the real easel in place of the blank copy")
+    }
+
+    /// A file the writer's own manifest names goes from the folder after it looked: it writes it again after a minute.
+    @MainActor
+    private static func syncPutsBackAnEaselFileGoneFromTheFolder() {
+        let (easel, pictures) = pictured("Gone from the folder")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        macs.clockA.advance(by: 1); macs.syncA.poll()
+        let file = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString).json")
+        try? FileManager.default.removeItem(at: file)
+        for _ in 0..<4 { macs.clockA.advance(by: 30) }
+        expect(FileManager.default.fileExists(atPath: file.path), "the writing Mac puts the easel's file back")
+    }
+
+    /// An easel file this Mac can't read at the moment (a save landing mid-read, or bytes it can't decode) is
+    /// not left out of the bundle: the other Mac would delete it.
+    @MainActor
+    private static func syncNeverSendsAnUnreadableEaselAsDeleted() {
+        let (easel, pictures) = pictured("Read mid-save")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        try? Data("{ half a save".utf8).write(to: macs.easelsA.appendingPathComponent(easel.id.uuidString + ".json"), options: .atomic)
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        macs.syncAToB()
+        expect(loadEasel(easel.id, in: macs.easelsB) == easel, "the other Mac keeps the easel")
+    }
+
+    /// The second Mac, still on an older Cra, took the first Mac's bundle and wrote one of its own while the first
+    /// slept, then updated. Its bundle names no parent it had easels for, so the first Mac deletes nothing.
+    @MainActor
+    private static func syncKeepsTheEaselsOfTheMacThatUpdatedFirstAfterTheOtherWroteOnAnOlderCra() {
+        let (easel, pictures) = pictured("Made on the Mac updated first")
+        let macs = EaselMacs([(easel, pictures)], olderSecond: true)
+        defer { macs.done() }
+        guard var older = macs.manifest, let first = older.id else { return expect(false, "the first Mac wrote a manifest") }
+        older.easels = nil
+        older.device = "MacBook"; older.deviceID = "macbook"; older.id = UUID(); older.parentIDs = [first]
+        older.writtenAt = older.writtenAt.addingTimeInterval(5)
+        macs.write(older)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        macs.clockA.advance(by: 20); macs.syncA.poll()
+        expect(loadEasel(easel.id, in: macs.easelsA) == easel, "the first Mac keeps its easel")
+    }
+
+    /// An easel file this Mac can't decode at launch still goes up as the copy the folder has, which the
+    /// other Mac's base has too: it is never sent as deleted.
+    @MainActor
+    private static func syncNeverSendsAnUnreadableEaselAsDeletedAfterARelaunch() {
+        let (easel, pictures) = pictured("Undecodable after a relaunch")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        let relaunched = relaunchWithAnUnreadableEasel(easel, macs)
+        defer { relaunched.disable() }
+        macs.clockB.advance(by: 30); macs.syncB.poll()
+        expect(loadEasel(easel.id, in: macs.easelsB) == easel, "the other Mac keeps the easel")
+    }
+
+    /// No copy to send in its place: the Mac writes nothing and Settings names the file.
+    @MainActor
+    private static func syncHoldsItsBundleWhileAnUnreadableEaselHasNoCopyToSend() {
+        let (easel, pictures) = pictured("Undecodable, and gone from the folder")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        let relaunched = relaunchWithAnUnreadableEasel(easel, macs, keepFolderCopy: false)
+        defer { relaunched.disable() }
+        macs.clockA.advance(by: 90)
+        expect(relaunched.error?.contains(easel.id.uuidString + ".json") == true, "Settings names the easel file it can't read")
+        expect(macs.manifest?.deviceID == "studio" && macs.manifest?.easels?["Easels/\(easel.id.uuidString).json"] != nil,
+               "and the folder's bundle still names the easel")
+    }
+
+    /// Use That Sidebar that fails on an easel says so once: the question comes back only for a new bundle.
+    @MainActor
+    private static func useThatSidebarThatFailsAsksAgainOnlyForANewBundle() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-choice-\(UUID().uuidString)", isDirectory: true)
+        let easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true), easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+        let root = dir.appendingPathComponent("sync", isDirectory: true)
+        try? FileManager.default.createDirectory(at: easelsB, withIntermediateDirectories: true)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: easelsB.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: easelsB.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let (easel, pictures) = pictured("Can't be saved on the second Mac")
+        saveEasel(easel, pictures: pictures, in: easelsA)
+        let a = SidebarStore(clock: clockA)
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio", easels: easelsA)
+        let syncB = SettingsSyncService(store: SidebarStore(clock: clockB), clock: clockB, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        defer { syncA.disable(); syncB.disable() }
+        expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
+        guard case .bundleFound = syncB.enable(folder: root) else { return expect(false, "the second Mac is asked once") }
+        syncB.useRemote()
+        clockB.advance(by: 30)
+        expect(syncB.pendingChoice == nil && syncB.error != nil, "a failed Use That Sidebar shows its error and doesn't ask again")
+        clockA.advance(by: 10)
+        _ = a.createTab(url: "https://example.com/a-later-bundle")
+        syncA.poll()
+        clockB.advance(by: 30)
+        expect(syncB.pendingChoice != nil, "a later bundle from the other Mac asks again")
+    }
+
+    /// The first Mac relaunched with `easel`'s file undecodable, after a few writes so each Mac's history and
+    /// sync.json are on disk, and one look.
+    @MainActor
+    private static func relaunchWithAnUnreadableEasel(_ easel: Easel, _ macs: EaselMacs, keepFolderCopy: Bool = true) -> SettingsSyncService {
+        _ = macs.a.createTab(url: "https://example.com/one"); macs.syncAToB()
+        Thread.sleep(forTimeInterval: 1)
+        _ = macs.a.createTab(url: "https://example.com/two"); macs.clockA.advance(by: 10); macs.syncA.poll()
+        Thread.sleep(forTimeInterval: 1)
+        try? Data("{ not an easel".utf8).write(to: macs.easelsA.appendingPathComponent(easel.id.uuidString + ".json"), options: .atomic)
+        if !keepFolderCopy { try? FileManager.default.removeItem(at: macs.bundle.appendingPathComponent("Easels/\(easel.id.uuidString).json")) }
+        // Quit: the first Mac's service stops, and its sync.json and history stay as it saved them.
+        let saved = ["sync.json", "sync-history.json"].map { (AppPaths.file($0), try? Data(contentsOf: AppPaths.file($0))) }
+        macs.syncA.disable()
+        for (url, data) in saved { try? data?.write(to: url) }
+        let relaunched = SettingsSyncService(store: macs.a, clock: macs.clockA, device: "Studio", deviceID: "studio", easels: macs.easelsA)
+        relaunched.start()
+        _ = macs.a.createTab(url: "https://example.com/three")
+        macs.clockA.advance(by: 30)
+        return relaunched
+    }
+
+    /// An easel this Mac can't save leaves the bundle untaken, and Settings says why rather than showing sync as fine.
+    @MainActor
+    private static func syncSaysWhenAnEaselCannotBeSaved() {
+        let macs = EaselMacs()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: macs.easelsB.path)
+            macs.done()
+        }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: macs.easelsB.path)
+        let (easel, pictures) = pictured("Can't be saved")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.syncAToB()
+        expect(macs.syncB.error != nil, "sync on the second Mac reports the easel it couldn't save")
+        let exported = macs.dir.appendingPathComponent("export", isDirectory: true)
+        expect(macs.syncA.export(to: exported) == nil, "the first Mac exports")
+        expect(macs.syncB.importBundle(from: exported) != nil, "Import… reports the easels it couldn't save")
+    }
+
+    /// A manifest path that names no easel file or picture is never read or written, here or in the folder.
+    @MainActor
+    private static func syncNeverTouchesABadEaselPath() {
+        let macs = EaselMacs([pictured("Safe")])
+        defer { macs.done() }
+        let planted = Data("not an easel".utf8)
+        let target = macs.bundle.appendingPathComponent("escape.json")
+        try? planted.write(to: target)
+        guard var bad = macs.manifest else { return expect(false, "the first Mac wrote a manifest") }
+        bad.easels?["Easels/../escape.json"] = SHA256.hash(data: planted).map { String(format: "%02x", $0) }.joined()
+        bad.device = "Mini"; bad.deviceID = "mini"; bad.id = UUID()
+        bad.writtenAt = macs.clockB.now.addingTimeInterval(5)
+        macs.write(bad)
+        let reads = macs.syncB.easelReads
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(!macs.syncB.otherDevices.contains("Mini"), "a manifest naming a path outside the easels is not applied")
+        expect(macs.syncB.easelReads == reads, "and the path is never read")
+        expect(!FileManager.default.fileExists(atPath: macs.easelsB.deletingLastPathComponent().appendingPathComponent("escape.json").path),
+               "nothing is written outside this Mac's easel folder")
+        for _ in 0..<25 { macs.clockB.advance(by: 30) }
+        expect(macs.manifest?.deviceID == "macbook" && macs.manifest?.easels?.keys.allSatisfy { SettingsSync.easelPath($0) != nil } == true,
+               "the Mac puts the folder right with a bundle naming easel paths only")
+        expect((try? Data(contentsOf: target)) == planted, "and leaves the file the bad path named as it was")
+    }
+
+    /// An easel saved here goes up a few seconds later, like a sidebar change: no easel code calls sync.
+    @MainActor
+    private static func syncWritesSoonAfterAnEaselChange() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let pending = macs.clockA.pendingCount
+        let (easel, pictures) = pictured("Made after sync was on")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        let deadline = Date().addingTimeInterval(5)
+        while macs.clockA.pendingCount == pending && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        macs.clockA.advance(by: SettingsSync.writeSoonDelay)
+        expect(macs.manifest?.easels?["Easels/\(easel.id.uuidString).json"] != nil, "an easel saved here goes up 3 s later, before the next look")
+    }
+
+    /// An idle look reads, hashes and decodes no easel or picture, on the Mac that wrote and on the one that applied.
+    @MainActor
+    private static func syncLooksWithoutReadingAnIdleEasel() {
+        let macs = EaselMacs([pictured("One"), pictured("Two")])
+        defer { macs.done() }
+        macs.syncA.poll(); macs.syncB.poll()
+        let (readsA, decodesA) = (macs.syncA.easelReads, macs.syncA.easelDecodes)
+        let (readsB, decodesB) = (macs.syncB.easelReads, macs.syncB.easelDecodes)
+        for _ in 0..<3 { macs.clockA.advance(by: 30); macs.clockB.advance(by: 30) }
+        expect(macs.syncA.easelReads == readsA && macs.syncA.easelDecodes == decodesA,
+               "an idle look on the writing Mac reads no easel (\(macs.syncA.easelReads - readsA) reads, \(macs.syncA.easelDecodes - decodesA) decodes)")
+        expect(macs.syncB.easelReads == readsB && macs.syncB.easelDecodes == decodesB,
+               "nor on the Mac that applied it (\(macs.syncB.easelReads - readsB) reads, \(macs.syncB.easelDecodes - decodesB) decodes)")
+    }
+
+    /// An easel open in a tab is up to 0.4 s ahead of its file: the change goes onto its canvas, which saves it.
+    @MainActor
+    private static func syncChangesAnOpenEaselOnItsCanvas() {
+        let (easel, pictures) = pictured("Open in a tab")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        var canvas = easel
+        macs.syncB.changeOpenEasel = { id, change in
+            guard id == easel.id else { return false }
+            if let changed = change(canvas) { canvas = changed }
+            return true
+        }
+        var onA = easel
+        onA.title = "Renamed on the other Mac"
+        saveEasel(onA, in: macs.easelsA)
+        let file = macs.easelsB.appendingPathComponent(easel.id.uuidString + ".json")
+        let before = try? Data(contentsOf: file)
+        macs.syncAToB()
+        expect(canvas.title == "Renamed on the other Mac", "an easel open in a tab takes the change on its canvas")
+        expect(before != nil && (try? Data(contentsOf: file)) == before, "and sync writes no file for it: the canvas saves it")
     }
 
     /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle

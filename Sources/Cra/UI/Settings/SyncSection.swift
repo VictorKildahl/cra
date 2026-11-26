@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Settings ▸ General ▸ Sync: iCloud keeps the sidebar, the settings and the shortcuts the
+/// Settings ▸ General ▸ Sync: iCloud keeps the sidebar, the settings, the shortcuts and the easels the
 /// same on the user's Macs (SettingsSyncService); a folder a provider syncs is the other way.
 /// Off, the card is one switch and "Use a folder instead…"; on, the state and Stop Syncing.
 /// The same bundle backs Export… and Import… for people with one Mac.
@@ -17,15 +17,15 @@ struct SyncSection: View {
                 Button("Replace It with This Mac’s") { sync.useLocal() }
                 Button("Cancel", role: .cancel) { sync.disable() }
             } message: {
-                if let found = sync.pendingChoice { Text(Self.describe(found) + " Using it replaces this Mac’s sidebar, settings and shortcuts.") }
+                if let found = sync.pendingChoice { Text(Self.describe(found) + " Using it replaces this Mac’s sidebar, settings and shortcuts, and adds its easels without removing any of this Mac’s.") }
             }
             .alert("Import these settings?", isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } })) {
                 Button("Import") {
-                    if let (url, _) = importing { notice = sync.importBundle(from: url) ? "Settings imported." : "The folder holds no Cra settings." }
+                    if let (url, _) = importing { notice = sync.importBundle(from: url) ?? "Settings imported." }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                if let (_, s) = importing { Text(Self.describe(s) + " Importing replaces this Mac’s sidebar, settings and shortcuts.") }
+                if let (_, s) = importing { Text(Self.describe(s) + " Importing replaces this Mac’s sidebar, settings and shortcuts, and adds its easels without removing any of this Mac’s.") }
             }
     }
 
@@ -34,7 +34,7 @@ struct SyncSection: View {
         SettingsFeatureCard {
             SettingsPlainRow("Sync with iCloud",
                                detail: sync.iCloudAvailable
-                                   ? "Your spaces, pinned tabs, favorites, settings and shortcuts stay the same on every Mac signed in to this iCloud account."
+                                   ? "Your spaces, pinned tabs, favorites, easels, settings and shortcuts stay the same on every Mac signed in to this iCloud account."
                                    : iCloudUnavailableReason,
                                trailing: {
                 Toggle("Sync with iCloud", isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
@@ -81,7 +81,7 @@ struct SyncSection: View {
                 Button("Import…") { importBundle() }
             }
         }
-        SettingsFootnote(notice ?? "Spaces, pinned tabs, favorites, folders, settings and shortcuts sync. Logins, cookies, history and extensions stay on each Mac.")
+        SettingsFootnote(notice ?? "Spaces, pinned tabs, favorites, folders, easels, settings and shortcuts sync. Logins, cookies, history and extensions stay on each Mac.")
     }
 
     static let appleAccountSettings = URL(string: "x-apple.systempreferences:com.apple.systempreferences.AppleIDSettings")!
@@ -135,7 +135,7 @@ struct SyncSection: View {
     }
 
     private func exportBundle() {
-        let panel = folderPanel(prompt: "Export", message: "Choose where to save a “Cra” folder with your sidebar, settings and shortcuts.")
+        let panel = folderPanel(prompt: "Export", message: "Choose where to save a “Cra” folder with your sidebar, settings, shortcuts and easels.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         notice = sync.export(to: url).map { "Not exported: \($0)" } ?? "Exported to \((url.path as NSString).abbreviatingWithTildeInPath)/Cra."
     }

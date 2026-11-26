@@ -182,9 +182,10 @@ public struct SyncHistory: Codable, Equatable {
         baseEntry(for: manifest)?.settings
     }
 
-    /// The easels of the same bundle `base(for:)` picks; nil when it has none (no easels, or an older Cra's).
+    /// The easels of the newest of the manifest's `easelParentIDs` remembered with easels; nil when there is none.
     public func baseEasels(for manifest: SyncManifest) -> [Easel]? {
-        baseEntry(for: manifest)?.easels
+        for id in manifest.easelParentIDs ?? [] { if let easels = entries.first(where: { $0.id == id })?.easels { return easels } }
+        return nil
     }
 
     private func baseEntry(for manifest: SyncManifest) -> Entry? {
@@ -194,4 +195,6 @@ public struct SyncHistory: Codable, Equatable {
 
     /// The ids a bundle written now names as its parents (`SyncManifest.parentIDs`).
     public var ids: [UUID] { entries.map(\.id) }
+    /// The bundles remembered with their easels, newest first: a manifest's `easelParentIDs`.
+    public var easelIDs: [UUID] { entries.filter { $0.easels != nil }.map(\.id) }
 }

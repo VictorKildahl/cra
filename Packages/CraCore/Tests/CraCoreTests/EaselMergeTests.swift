@@ -43,6 +43,19 @@ struct EaselMergeTests {
         #expect(Easel.merge(base: nil, local: base, remote: other) == other, "Import and Use That Sidebar overwrite")
     }
 
+    /// Every released Cra saves `Easel(id:)` when a tab opens an easel row whose file it lacks.
+    @Test func withNoBaseABlankCopyNeverReplacesAnEaselHere() {
+        #expect(Easel.merge(base: nil, local: base, remote: Easel(id: id)) == base)
+    }
+
+    @Test func withNoBaseABlankCopyIsAddedWhereThereIsNone() {
+        #expect(Easel.merge(base: nil, local: nil, remote: Easel(id: id)) == Easel(id: id))
+    }
+
+    @Test func withABaseABlankedEaselIsAChangeLikeAnyOther() {
+        #expect(Easel.merge(base: base, local: base, remote: Easel(id: id)) == Easel(id: id))
+    }
+
     @Test func anEaselDeletedOnEitherMacStaysDeleted() {
         var edited = base
         edited.title = "Edited"
@@ -171,18 +184,58 @@ struct EaselMergeTests {
 
     // MARK: What it is merged against
 
-    @Test func theHistoryKeepsEachBundlesEaselsForItsMerge() {
+    /// The writer names the parents it had with easels, newest first: a bundle an older Cra applied or wrote
+    /// vouches for none, so the other Mac never merges against easels this one never had.
+    struct Bases {
         let doc = SidebarDocument.fresh()
-        let (older, newer, gone) = (UUID(), UUID(), UUID())
+        let older = UUID(), newer = UUID(), gone = UUID()
         var history = SyncHistory()
-        history.remember(older, doc)
-        history.remember(newer, doc, easels: [base])
-        let m = { (parents: [UUID]) in
-            SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: .now, files: [:], parentIDs: parents)
+        func manifest(_ parents: [UUID]?) -> SyncManifest {
+            SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: .now, files: [:], parentIDs: parents, easelParentIDs: parents)
         }
-        #expect(history.entries.map(\.easels) == [[base], nil])
-        #expect(history.baseEasels(for: m([gone, newer, older])) == [base], "the bundle base(for:) picks")
-        #expect(history.baseEasels(for: m([older, newer])) == nil, "a bundle remembered without easels")
-        #expect(history.baseEasels(for: m([gone])) == nil)
+    }
+
+    @Test func theHistoryKeepsEachBundlesEaselsForItsMerge() {
+        var b = Bases()
+        b.history.remember(b.older, b.doc)
+        b.history.remember(b.newer, b.doc, easels: [base])
+        #expect(b.history.entries.map(\.easels) == [[base], nil])
+    }
+
+    @Test func theNewestEaselParentHeldWithEaselsIsTheBase() {
+        var b = Bases()
+        var older = base
+        older.title = "Older"
+        b.history.remember(b.older, b.doc, easels: [older])
+        b.history.remember(b.newer, b.doc, easels: [base])
+        #expect(b.history.baseEasels(for: b.manifest([b.gone, b.newer, b.older])) == [base])
+    }
+
+    @Test func anEaselParentHeldWithoutEaselsIsSkipped() {
+        var b = Bases()
+        b.history.remember(b.older, b.doc, easels: [base])
+        b.history.remember(b.newer, b.doc)
+        #expect(b.history.baseEasels(for: b.manifest([b.newer, b.older])) == [base])
+    }
+
+    @Test func noEaselParentHeldMeansNoBase() {
+        var b = Bases()
+        b.history.remember(b.newer, b.doc, easels: [base])
+        #expect(b.history.baseEasels(for: b.manifest([b.gone])) == nil)
+    }
+
+    @Test func aManifestWithoutEaselParentsHasNoBase() {
+        var b = Bases()
+        b.history.remember(b.newer, b.doc, easels: [base])
+        let m = SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: .now, files: [:], parentIDs: [b.newer])
+        #expect(b.history.baseEasels(for: m) == nil, "parentIDs alone vouch for no easels")
+    }
+
+    @Test func theWriterNamesOnlyParentsItHoldsWithEasels() {
+        var b = Bases()
+        b.history.remember(b.older, b.doc, easels: [base])
+        b.history.remember(b.gone, b.doc)
+        b.history.remember(b.newer, b.doc, easels: [])
+        #expect(b.history.easelIDs == [b.newer, b.older])
     }
 }

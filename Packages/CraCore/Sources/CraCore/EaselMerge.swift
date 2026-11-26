@@ -4,7 +4,11 @@ extension Easel {
     /// One easel on two Macs for sync, by SidebarMerge's rules: `base` from the bundle both were written from,
     /// nil when there is none (Import, Use That Sidebar), which adds and overwrites but deletes nothing. Nil: deleted.
     public static func merge(base: Easel?, local: Easel?, remote: Easel?) -> Easel? {
-        guard let b = base else { return remote ?? local }
+        guard let b = base else {
+            // The blank every Cra saves when a tab opens an easel row it has no file for never replaces a real one.
+            if let local, let remote, remote == Easel(id: remote.id) { return local }
+            return remote ?? local
+        }
         guard let l = local, let r = remote else { return nil }
         if l == b { return r }
         if r == b { return l }

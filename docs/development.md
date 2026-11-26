@@ -64,7 +64,7 @@ and a Chromium profile folder. Delete it to
 start over.
 
 Settings ▸ General ▸ Sync keeps `sidebar.json`, `settings.json` (minus each Mac's own fields,
-`AppSettings.forSync`) and `keybindings.json` the same on the user's Macs, through iCloud
+`AppSettings.forSync`), `keybindings.json` and the easels the same on the user's Macs, through iCloud
 (`Documents/Cra` in the app's iCloud Documents container; docs/release.md says how the signed
 build gets the entitlement) or through a folder a file provider syncs: `SettingsSyncService`
 writes them with a `manifest.json` into a `Cra` folder there and applies a newer bundle another
@@ -78,7 +78,18 @@ bundle's manifest names the bundles its Mac had written or applied, newest first
 Mac that has one of them (`sync-history.json`, the last eight written or applied, `SyncHistory`)
 merges the bundle with what changed here since the newest it has (`SidebarMerge` in CraCore: a tab closed on either Mac stays
 closed, a tab opened on either is on both, an item both changed takes the other Mac's) and writes
-the merge back. A bundle from an older Cra, or from one too far back, is applied whole. `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
+the merge back. A bundle from an older Cra, or from one too far back, is applied whole. Easels go in
+the bundle's `Easels/` as in the data folder: `<id>.json` and the pictures its cards show in `<id>/`,
+each with its hash under the manifest's `easels` (not `files`, so an older Cra still finds the bundle
+whole). A picture the writing Mac lacks is left out. A bundle applies whole, pictures first, then the
+easels, then the sidebar; each easel merges three ways (`Easel.merge`) against the newest bundle the
+writer names under `easelParentIDs`, the parents it had easels for, and one deleted on either Mac
+goes. With none of them here, easels are added and overwritten and none is deleted, and a blank
+`Easel(id:)` (what any Cra saves when a tab opens a row it has no file for) never replaces a real one. Import… and Use That Sidebar add and overwrite easels and delete none. A
+manifest without `easels` (an older Cra's) changes no easel, and the next write puts this Mac's back.
+After writing its manifest a Mac removes what `Easels/` holds that the manifest doesn't name. A
+watcher on the data folder's `Easels/` writes a change within seconds, as for the sidebar.
+`cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
 folder holds the location and the last bundle written or applied. To try it on one Mac, run a second instance on another
 `CRA_DATA_DIR` with `CRA_SYNC_DEVICE=<name>` (a Mac is known in the folder by a hash of its
 hardware UUID, which two instances share);
