@@ -1854,6 +1854,8 @@
 #828   Packages/CraCore/Tests/CraCoreTests/SiteSearchTests.swift::anAddedChatSiteSearchTakesTabAndCarriesTheMessage  04b86b3b639b
 #829   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::thePlacesSayTheyAreOnTheIPhone  6beac92ad82c
 #829   iOS/CraUITests/BrowserTests.swift::testTheShareSheetSavesThroughTheExtension  8102a922a145
+#835   Packages/CraCore/Tests/CraCoreTests/ContentCaptureTests.swift::littleWindowCapturePicksNormalHostWindow  b39a23c6048a
+#835   Tests/CaptureOverlayTests.swift::checkLittleWindow  d0e59f05a0d9
 #839   iOS/CraUITests/BrowserTests.swift::testSpacesBackgroundsReachTheWindowEdges  f2c334cb5bd7
 #841   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::commandWOnAFavoriteDeselectsItAsInArc  ba51c260542c
 #842   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::removeOpensTheProfileThatHasIt  aa9ee3fabce9

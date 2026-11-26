@@ -198,4 +198,23 @@ struct ContentCaptureTests {
         #expect(js.contains("120.0 / dpr / k"))
         #expect(js.contains("'IMG'"))
     }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/835"))
+    func littleWindowCapturePicksNormalHostWindow() {
+        let incognito = ContentCapture.HostWindow(id: UUID(), isStandalone: true)
+        let firstNormal = ContentCapture.HostWindow(id: UUID(), isStandalone: false)
+        let lastNormal = ContentCapture.HostWindow(id: UUID(), isStandalone: false)
+        let fallback = UUID()
+
+        let cases: [(windows: [ContentCapture.HostWindow], last: UUID?, fallback: UUID?, expected: UUID?)] = [
+            ([incognito, firstNormal, lastNormal], lastNormal.id, fallback, lastNormal.id),
+            ([incognito, firstNormal], incognito.id, fallback, firstNormal.id),
+            ([incognito, firstNormal], nil, fallback, firstNormal.id),
+            ([incognito], nil, fallback, fallback),
+            ([], nil, nil, nil),
+        ]
+        for c in cases {
+            #expect(ContentCapture.hostWindowID(from: c.windows, lastNormalWindowID: c.last, fallbackID: c.fallback) == c.expected)
+        }
+    }
 }
