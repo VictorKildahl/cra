@@ -4260,6 +4260,13 @@ Shift-click on a lab page's link, then HID clicks and drags; Peek open or closed
   ~10 pt corners, fill (18,15,44) (Background, dark) even on a light theme: "Send To…" field (13–42.5 pt, white 7 %),
   rows 40 pt apart (Save to Library ○, Copy, Save…, Send via iMessage…), hairline, Edit, Retake, hairline, New Easel.
   Symbols 30 % white centred 25 pt in, 14 pt medium text 90 % white from 41 pt; hairlines 10 pt in from both sides.
+- [O live] Edit (26 Nov 2026, Arc 1.174 Little Arc, real clicks, 2x window captures, #851): `EaselUI.ModalImageEditor`.
+  The whole window goes dark under black at ~78 % (page white 255 → 57), the menu included; the capture shows in a
+  card centred in the window at a point per pixel (a ~260 × 180 pt selection → a 520 × 359.5 pt card), 10.5 pt corners,
+  no border. Easel's toolbar with the seven tools and no Duplicate (272 × 44 pt) sits 12 pt in from the card's left
+  and bottom; Text was picked on opening, a drawn rectangle (Easel's filled green) put the pointer back. Escape does
+  nothing; a click on the dark area closes the editor and the capture stays lit with the drawing on it, the menu still
+  beside it (Copy then takes the edited picture).
   The partial capture does not touch the clipboard by itself. First Esc left the menu up, the second ended the mode.
 - [?] A scripted HID click on an element did not capture (no menu after 0.6 s), so the click result, Copy's toast text
   and Retake were not observed. Arc's strings have "Confirmation toast when copying a captured image" (text inline).

@@ -3477,7 +3477,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             revealForLittleWindowEasel(from: peek)
         case .retake?:
             capturePage(in: peek)
-        case nil:
+        case .edit?, nil:
+            // Edit stays in the capture (its editor); it never ends the mode.
             break
         }
     }

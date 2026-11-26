@@ -1869,6 +1869,11 @@
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
 #849   Packages/CraCore/Tests/CraCoreTests/BlockListCountsTests.swift::countsShowAndBigDomainListsStayUnderChromiumsLimit  d0a73cb6d7df
 #850   Tests/CaptureOverlayTests.swift::checkArcsColours  d24cf6ec4814
+#851   Packages/CraCore/Tests/CraCoreTests/CaptureEditorLayoutTests.swift::bigCapturesFitAndSmallOnesHoldTheToolbar  74f1fc7c5309
+#851   Packages/CraCore/Tests/CraCoreTests/CaptureEditorLayoutTests.swift::theCaptureShowsAtItsPixelSizeInTheMiddle  cabb041d63ac
+#851   Packages/CraCore/Tests/CraCoreTests/CaptureMenuLayoutTests.swift::editSitsAboveRetakeAsInArc  2134a35705d6
+#851   Tests/CaptureOverlayTests.swift::checkEditRow  1f215ab319b9
+#851   Tests/EaselCanvasTests.swift::captureEditor  bf466e9417dc
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
