@@ -1029,7 +1029,7 @@ private struct PullRequestPreviewView: View {
                         .lineLimit(3).truncationMode(.tail)
                     Text(meta).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    if reservesChecksSlot || card.draft || card.checks != nil || card.commentCount != nil || card.tasks != nil {
+                    if card.showsStatusRow(reservingChecks: reservesChecksSlot) {
                         FlowRow(spacing: 8) {
                             if card.draft { status("circle.fill", "Draft", dot: true) }
                             // Keep the snapshot's status items in place when checks arrive.

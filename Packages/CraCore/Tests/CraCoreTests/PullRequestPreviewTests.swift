@@ -87,6 +87,15 @@ struct PullRequestPreviewTests {
         #expect(card.checks?.state == .failed && card.checks?.passed == 5 && card.checks?.total == 6)
     }
 
+    @Test func statusRowHoldsTheChecksSlotWhileLoading() {
+        // An open PR with no draft mark, comments or tasks: the row must exist before checks arrive, or the card grows.
+        let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR")
+        let loading = PullRequestPreview.card(item: item, checks: nil, now: now)
+        #expect(loading.showsStatusRow(reservingChecks: true))
+        #expect(!loading.showsStatusRow(reservingChecks: false))
+        #expect(PullRequestPreview.card(item: item, checks: .init(passed: 1), now: now).showsStatusRow(reservingChecks: false))
+    }
+
     @Test func checksSlotIsReleasedAfterEmptyAnswer() {
         let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR")
         let key = PullRequestChecksCache.Key(item)

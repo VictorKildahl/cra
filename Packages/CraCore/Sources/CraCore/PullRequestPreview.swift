@@ -87,6 +87,9 @@ public enum PullRequestPreview {
         public var tasks: LiveFolderPluginItem.Details.Tasks?
         public var labels: [Label]
         public var extraLabels: Int
+        public func showsStatusRow(reservingChecks: Bool) -> Bool {
+            reservingChecks || draft || checks != nil || commentCount != nil || tasks != nil
+        }
     }
 
     public static func identity(for url: String) -> String? {
