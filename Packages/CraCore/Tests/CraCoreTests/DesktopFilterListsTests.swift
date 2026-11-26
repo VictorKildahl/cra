@@ -3,6 +3,24 @@ import Foundation
 import Testing
 
 struct DesktopFilterListsTests {
+    @Test func catalogGroupsOrderAndCountOnlyKnownSubscriptions() throws {
+        let groups = DesktopFilterList.groups(selected: Set(DesktopFilterList.strictAddresses + ["https://custom.example/list"]))
+        #expect(groups.map(\.category) == [.ads, .tracking, .security, .mixed, .cookies, .social, .annoyances, .compatibility, .regional])
+        #expect(groups.map(\.selectedCount) == [1, 1, 0, 0, 0, 0, 0, 0, 0])
+        #expect(groups[0].entries.first?.name == "EasyList")
+        #expect(groups[1].entries.first?.name == "EasyPrivacy")
+        let entries = groups.flatMap(\.entries)
+        #expect(entries.count == DesktopFilterList.catalog.count)
+        // One row per subscription: two rows with one address would switch together.
+        #expect(Set(entries.map(\.address)).count == entries.count)
+        #expect(entries.allSatisfy { !$0.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        let regional = try #require(groups.last).entries
+        for (lhs, rhs) in zip(regional, regional.dropFirst()) {
+            let order = lhs.name.localizedStandardCompare(rhs.name)
+            #expect(order == .orderedAscending || (order == .orderedSame && lhs.detail.localizedStandardCompare(rhs.detail) != .orderedDescending))
+        }
+    }
+
     @Test func catalogUsesUniqueHTTPSAddresses() {
         let addresses = DesktopFilterList.catalog.map(\.address)
         #expect(addresses.count == Set(addresses).count)

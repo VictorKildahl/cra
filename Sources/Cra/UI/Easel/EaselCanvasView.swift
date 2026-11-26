@@ -213,6 +213,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     var home: NSRect? { didSet { if home != oldValue { needsLayout = true } } }
     /// A tool's key was pressed (Arc: V, I, T, O, R, A, P), or Escape with a tool in hand.
     var onToolKey: (Easel.Tool) -> Void = { _ in }
+    /// Arc's capture editor (#851): the sheet lies over a capture, with no title.
+    var editsImage = false { didSet { title.isHidden = editsImage } }
     private let title = EaselTextField()
     private var texts: [UUID: NSTextField] = [:]
     /// The picked items, in the order they were picked (#580: ⌘- or ⇧-click and the drag box pick several).
@@ -327,6 +329,14 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     private func rect(_ r: Easel.Rect) -> NSRect { NSRect(x: r.x, y: r.y, width: r.width, height: r.height) }
+
+    /// Nothing picked and no text being typed: the drawing as it goes into a capture (#851).
+    func clearPicks() {
+        window?.makeFirstResponder(self)
+        picked = []
+        needsDisplay = true
+    }
+
     private func point(_ e: NSEvent) -> Easel.Point { let p = convert(e.locationInWindow, from: nil); return .init(p.x, p.y) }
 
     /// A change, undoable as `name` (Arc's undo labels: Move, Delete, Paste…).
@@ -1460,6 +1470,9 @@ final class EaselToolbar: NSView {
     /// Arc's eighth button, Duplicate (AX "Duplicate"), after the tools.
     var onDuplicate: () -> Void = {}
     var tool: Easel.Tool = .pointer { didSet { needsDisplay = true } }
+    /// Arc's capture editor shows the seven tools only (#851): no Duplicate and no line before it.
+    var showsDuplicate = true { didSet { needsDisplay = true } }
+    private var shownItems: [EaselToolbarLayout.Item] { EaselToolbarLayout.items.filter { showsDuplicate || $0 != .duplicate } }
 
     private static let symbols: [Easel.Tool: String] = [
         .pointer: "cursorarrow", .image: "photo", .text: "character", .ellipse: "circle",
@@ -1487,10 +1500,12 @@ final class EaselToolbar: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Self.bar.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
-        Self.line.setFill()
-        EaselToolbarLayout.divider.fill()
+        if showsDuplicate {
+            Self.line.setFill()
+            EaselToolbarLayout.divider.fill()
+        }
         let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold).applying(.init(paletteColors: [Self.glyph]))
-        for item in EaselToolbarLayout.items {
+        for item in shownItems {
             let r = EaselToolbarLayout.rect(of: item)
             let look = EaselToolbarLayout.look(of: item, picked: tool, hovered: hovered)
             if look.fill != .none {
@@ -1515,7 +1530,7 @@ final class EaselToolbar: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        switch EaselToolbarLayout.item(at: convert(event.locationInWindow, from: nil)) {
+        switch shownItem(at: convert(event.locationInWindow, from: nil)) {
         case .tool(let t)?: onPick(t)
         case .duplicate?: onDuplicate()
         case nil: break
@@ -1533,7 +1548,11 @@ final class EaselToolbar: NSView {
     override func mouseExited(with event: NSEvent) { hovered = nil }
 
     /// The pointer at `point` (the toolbar's coordinates), or gone (nil). Also the test hook's way in.
-    func hover(at point: NSPoint?) { hovered = point.flatMap { EaselToolbarLayout.item(at: $0) } }
+    func hover(at point: NSPoint?) { hovered = point.flatMap { shownItem(at: $0) } }
+
+    private func shownItem(at point: NSPoint) -> EaselToolbarLayout.Item? {
+        EaselToolbarLayout.item(at: point).flatMap { shownItems.contains($0) ? $0 : nil }
+    }
 
     /// For cra.log: the picked tool, the button under the pointer and each letter that shows.
     var debugLine: String {

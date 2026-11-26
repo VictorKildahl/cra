@@ -4,9 +4,10 @@
 # user's Mac. SwiftPM links Cra's own binaries with an rpath into the toolchain that built them
 # (/Applications/Xcode….app/…/usr/lib/swift-6.2/macosx, for back-deployed Swift libraries Cra doesn't load), and
 # Sparkle loads through @rpath, so that path came first: syspolicy_check called it a fatal "Bad Load Command" and
-# macOS's malware check failed on Intel Macs (GitHub #720, 0.1.54).
+# macOS's malware check failed on Intel Macs (GitHub #720, 0.1.54). Xcode 27's SwiftPM also adds an rpath to its
+# build folder's PackageFrameworks (build/swiftpm-…/Products/Debug/PackageFrameworks), where Cra loads nothing from.
 #   scripts/check-load-paths.sh <App.app>          fails, naming each such path
-#   scripts/check-load-paths.sh --strip <file>…    deletes toolchain rpaths from those Mach-O files (before signing)
+#   scripts/check-load-paths.sh --strip <file>…    deletes toolchain and build-folder rpaths from those Mach-O files (before signing)
 # scripts/build.sh strips Cra's binaries and checks the bundle on every build; scripts/test-load-paths.sh tests both.
 set -euo pipefail
 # otool reads "name(member)" as an archive member, and Chrome's helpers end in "(Alerts)", "(GPU)": it reads a link.
@@ -26,7 +27,7 @@ if [ "${1:-}" = --strip ]; then
     [ -f "$f" ] || continue
     while IFS= read -r rpath; do
       [ -n "$rpath" ] && install_name_tool -delete_rpath "$rpath" "$f"
-    done < <(paths "$f" rpaths | grep -E '\.xctoolchain|/Xcode[^/]*\.app/' || true)
+    done < <(paths "$f" rpaths | grep -E '\.xctoolchain|/Xcode[^/]*\.app/|/PackageFrameworks/?$' || true)
   done
   exit 0
 fi

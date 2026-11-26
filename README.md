@@ -94,6 +94,9 @@ On first launch, or later from Cra ▸ Import from Arc or Dia…, Cra brings ove
   extensions, and Ardia's passwords. A space with sign-ins of its own lands on a Cra profile.
 - **Phi:** spaces, pinned tabs, folders and favorites, plus passwords, sign-ins and
   extensions. A space on another Phi profile lands on a Cra profile.
+- **Crest:** spaces, favorites, pinned tabs, folders, open tabs and archived tabs, plus
+  passwords, sign-ins and extensions. Each space after the first lands on a Cra profile, as
+  each Crest space has sign-ins of its own.
 - **Dia, Chrome, Brave, Edge, Opera, Vivaldi, Chromium, Helium:** tabs, bookmarks, history,
   passwords, sign-ins and extensions.
 - **Zen and Firefox:** open tabs, bookmarks and history, and Zen's spaces, Essentials and

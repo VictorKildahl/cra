@@ -6,7 +6,14 @@ import QuartzCore
 /// MCPAgentPresence) and Take Over with its keys, ⌘ and . — ⌘. or a click ends the agent's session.
 /// A new step changes the words in place: the old ones rise and fade, the new ones come up from
 /// below, the capsule eases to its new width and the face blinks. It stays up while the agent
-/// works (and while the pointer is on it) and goes `visibleFor` after the last step.
+/// works (and while the pointer is on it) and goes `lingers` after the last step (Settings ▸
+/// Advanced ▸ Agents, discussion #862).
+///
+/// While the agent acts in a tab the user isn't looking at, the pill is only the agent's face,
+/// still, where the pill would be (MCPAgentPresence.pillLook, discussion #579): no words, no
+/// blinking. A click on the face opens the whole pill; ⌘. takes over either way. The whole pill
+/// shows a × on hover, as macOS's notifications do: the pill goes until the agent's session ends,
+/// and the agent keeps working.
 @MainActor
 final class AgentPill {
     static let height: CGFloat = 46
@@ -26,7 +33,11 @@ final class AgentPill {
     static let capSide: CGFloat = 26
     static let capGap: CGFloat = 4
     static let capsLead: CGFloat = 9
-    static let visibleFor: TimeInterval = 4.85
+    /// The face alone: the capsule shrunk to the face with the same room on both sides.
+    static let faceWidth: CGFloat = 2 * leading + faceSide
+    static let closeSide: CGFloat = 18
+    /// The ×'s middle, in from the capsule's top left corner.
+    static let closeInset: CGFloat = 4
     static let takeOverTitle = "Take Over"
     static let background = NSColor(srgbRed: 0.12, green: 0.12, blue: 0.125, alpha: 1)
 
@@ -41,8 +52,15 @@ final class AgentPill {
     private let buttonLabel = CATextLayer()
     private let caps = [CALayer(), CALayer()]
     private let capLabels = [CATextLayer(), CATextLayer()]
+    private let closeButton = CALayer()
+    private let closeGlyph = CAShapeLayer()
     private(set) var text = ""
+    private(set) var look: MCPAgentPresence.PillLook = .full
+    /// The user clicked the face: the whole pill until it goes.
+    private var opened = false
+    private var lingers: TimeInterval = MCPAgentPresence.Linger.standard.seconds
     private var takeOver: (() -> Void)?
+    private var close: (() -> Void)?
     private var page: (() -> NSRect?)?
     private var hide: DispatchWorkItem?
     /// When the shown words came in, and newer words waiting for them to have shown long enough
@@ -104,6 +122,27 @@ final class AgentPill {
             button.addSublayer(cap)
         }
         pill.addSublayer(button)
+        closeButton.bounds = CGRect(x: 0, y: 0, width: Self.closeSide, height: Self.closeSide)
+        closeButton.cornerRadius = Self.closeSide / 2
+        closeButton.backgroundColor = NSColor(srgbRed: 0.24, green: 0.24, blue: 0.25, alpha: 1).cgColor
+        closeButton.borderWidth = 1
+        closeButton.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        closeButton.shadowColor = NSColor.black.cgColor
+        closeButton.shadowOpacity = 0.25
+        closeButton.shadowRadius = 3
+        closeButton.shadowOffset = CGSize(width: 0, height: -1)
+        let glyph = CGMutablePath(), a: CGFloat = 6, b = Self.closeSide - 6
+        glyph.move(to: CGPoint(x: a, y: a)); glyph.addLine(to: CGPoint(x: b, y: b))
+        glyph.move(to: CGPoint(x: a, y: b)); glyph.addLine(to: CGPoint(x: b, y: a))
+        closeGlyph.frame = closeButton.bounds
+        closeGlyph.path = glyph
+        closeGlyph.strokeColor = NSColor.white.withAlphaComponent(0.85).cgColor
+        closeGlyph.lineWidth = 1.5
+        closeGlyph.lineCap = .round
+        closeButton.addSublayer(closeGlyph)
+        closeButton.opacity = 0
+        closeButton.zPosition = 1
+        pill.addSublayer(closeButton)
         pill.opacity = 0
         view.layer?.addSublayer(pill)
         view.onHover = { [weak self] inside in self?.hovered(inside) }
@@ -131,26 +170,36 @@ final class AgentPill {
     }
 
     /// Shows `text` over the bottom middle of `page()` (window coordinates; asked again as the
-    /// window resizes); `takeOver` runs on the button or ⌘., once.
-    func show(_ text: String, page: @escaping () -> NSRect?, in window: NSWindow, takeOver: @escaping () -> Void) {
+    /// window resizes), whole while the agent acts in a tab the user is looking at (`tabWatched`),
+    /// else its face alone; it goes `lingers` after the last call. `takeOver` runs on the button or
+    /// ⌘., once; `close` on the ×.
+    func show(_ text: String, tabWatched: Bool, lingers: TimeInterval, page: @escaping () -> NSRect?, in window: NSWindow,
+              takeOver: @escaping () -> Void, close: @escaping () -> Void) {
         self.takeOver = takeOver
+        self.close = close
         self.page = page
+        self.lingers = lingers
         guard let frame = page() else { return }
         let first = !isShown || pill.opacity == 0
+        if first { opened = false }
         place(frame, in: window)
         let scale = window.backingScaleFactor
         let sizes = Self.widths(text: text, available: frame.width)
+        let wanted = MCPAgentPresence.pillLook(tabWatched: tabWatched, opened: opened)
         if first {
+            look = wanted
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            layout(width: sizes.pill, scale: scale)
+            layout(width: width(sizes), scale: scale)
             label?.removeFromSuperlayer()
             label = makeLabel(text, width: sizes.text, scale: scale)
             clip.addSublayer(label!)
+            showParts()
             pill.opacity = 1
             CATransaction.commit()
             appear()
-            face.startBlinking()
+            if look == .full { face.startBlinking() }
+            CraLog.note("mcp pill look: \(look == .full ? "full" : "face")")
             NSAccessibility.post(element: window, notification: .announcementRequested,
                                  userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.low.rawValue])
             waiting?.cancel()
@@ -159,10 +208,17 @@ final class AgentPill {
             self.text = text
             view.setAccessibilityLabel(text)
             CraLog.note("mcp pill shows: \(text)")
-        } else if text == self.text {
-            waiting?.cancel()
-            waiting = nil
         } else {
+            // The user went to the agent's tab, or away from it: the pill grows or shrinks first.
+            if wanted != look {
+                look = wanted
+                morph(text: text, available: frame.width, scale: scale)
+            }
+            guard text != self.text else {
+                waiting?.cancel()
+                waiting = nil
+                return finishShow(in: window)
+            }
             let wait = MCPAgentPresence.pillWait(shownFor: CACurrentMediaTime() - shownAt)
             waiting?.cancel()
             waiting = nil
@@ -180,6 +236,10 @@ final class AgentPill {
                 DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
             }
         }
+        finishShow(in: window)
+    }
+
+    private func finishShow(in window: NSWindow) {
         if resize == nil {
             resize = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -208,8 +268,8 @@ final class AgentPill {
         // with an ellipsis rather than the capsule running off the page's edges.
         if let label, !text.isEmpty, label.animation(forKey: "in") == nil {
             let sizes = Self.widths(text: text, available: page.width)
-            if abs(pill.bounds.width - sizes.pill) > 0.5 {
-                layout(width: sizes.pill, scale: window.backingScaleFactor)
+            if abs(pill.bounds.width - width(sizes)) > 0.5 {
+                layout(width: width(sizes), scale: window.backingScaleFactor)
                 label.frame.size.width = sizes.text + 2
             }
         }
@@ -226,6 +286,7 @@ final class AgentPill {
             face.configure(side: Self.faceSide, fill: Self.background, eyes: .white, outline: .white, scale: scale)
         }
         face.position = CGPoint(x: Self.leading + Self.faceSide / 2, y: h / 2)
+        closeButton.position = CGPoint(x: Self.closeInset, y: h - Self.closeInset)
         let bw = Self.buttonWidth, bh = h - 2 * Self.buttonInset
         button.bounds = CGRect(x: 0, y: 0, width: bw, height: bh)
         button.position = CGPoint(x: width - Self.buttonInset - bw / 2, y: h / 2)
@@ -299,7 +360,7 @@ final class AgentPill {
         CATransaction.begin()
         CATransaction.setAnimationDuration(reduceMotion ? 0.2 : 0.38)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1))
-        layout(width: sizes.pill, scale: scale)
+        layout(width: width(sizes), scale: scale)
         CATransaction.commit()
 
         if let old {
@@ -335,8 +396,75 @@ final class AgentPill {
         group.fillMode = .backwards
         group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
         new.add(group, forKey: "in")
-        face.blink()
+        // The face alone stays still: the words change out of sight, ready for a click on it.
+        if look == .full { face.blink() }
         updateHitRects()
+    }
+
+    /// The capsule's width for the look: the face alone, or the words and Take Over.
+    private func width(_ sizes: (pill: CGFloat, text: CGFloat)) -> CGFloat { look == .face ? Self.faceWidth : sizes.pill }
+
+    /// The words and Take Over show with the whole pill and hide with the face alone (inside an
+    /// animation when one is open).
+    private func showParts() {
+        let whole: Float = look == .full ? 1 : 0
+        clip.opacity = whole
+        button.opacity = whole
+        if look == .face { closeButton.opacity = 0 }
+        updateAccessibility()
+    }
+
+    /// From the face alone to the whole pill or back: the capsule eases to its width around its
+    /// middle as the words and Take Over fade in or out.
+    private func morph(text: String, available: CGFloat, scale: CGFloat) {
+        let sizes = Self.widths(text: self.text.isEmpty ? text : self.text, available: available)
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(reduceMotion ? 0.2 : 0.38)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1))
+        layout(width: width(sizes), scale: scale)
+        label?.frame.size.width = sizes.text + 2
+        showParts()
+        CATransaction.commit()
+        if look == .full { face.startBlinking(); face.blink() } else { face.stopBlinking() }
+        if look == .full && pointerInside { setClose(visible: true) }
+        updateHitRects()
+        CraLog.note("mcp pill look: \(look == .full ? "full" : "face")")
+    }
+
+    /// A click on the face alone (or cra://debug?mcpPill=open): the whole pill until it goes.
+    func open() {
+        guard isShown, pill.opacity > 0, look == .face, let window = panel.parent, let frame = page?() else { return }
+        CraLog.note("mcp pill: opened from the face")
+        opened = true
+        look = .full
+        morph(text: text, available: frame.width, scale: window.backingScaleFactor)
+    }
+
+    /// The × (or cra://debug?mcpPill=close): away until the agent's session ends; it keeps working.
+    func pressClose() {
+        guard isShown, pill.opacity > 0, look == .full, let run = close else { return }
+        close = nil
+        run()
+        dismiss()
+    }
+
+    private func setClose(visible: Bool) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.12)
+        closeButton.opacity = visible ? 1 : 0
+        CATransaction.commit()
+    }
+
+    private func updateAccessibility() {
+        let actions: [NSAccessibilityCustomAction]
+        switch look {
+        case .full:
+            actions = [NSAccessibilityCustomAction(name: Self.takeOverTitle) { [weak self] in self?.takeOverIfUp() ?? false },
+                       NSAccessibilityCustomAction(name: "Hide") { [weak self] in self?.pressClose(); return true }]
+        case .face:
+            actions = [NSAccessibilityCustomAction(name: "Show") { [weak self] in self?.open(); return true }]
+        }
+        view.setAccessibilityCustomActions(actions)
     }
 
     private func scheduleHide() {
@@ -344,7 +472,7 @@ final class AgentPill {
         guard !pointerInside else { hide = nil; return }
         let work = DispatchWorkItem { [weak self] in self?.dismiss() }
         hide = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.visibleFor, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + lingers, execute: work)
     }
 
     /// ⌘. while the pill is up in its window (CraWindow.sendEvent), or View ▸ Stop Loading chosen
@@ -378,10 +506,14 @@ final class AgentPill {
         pointerInside = inside
         if inside { hide?.cancel(); hide = nil } else if isShown { scheduleHide() }
         if !inside { setButtonFill(0.1) }
+        setClose(visible: inside && look == .full && close != nil)
     }
 
     private func moved(to point: NSPoint) {
+        guard look == .full else { return }
         setButtonFill(buttonRect().insetBy(dx: -2, dy: -2).contains(point) ? 0.17 : 0.1)
+        let onClose = closeRect().insetBy(dx: -3, dy: -3).contains(point)
+        closeButton.backgroundColor = NSColor(srgbRed: onClose ? 0.32 : 0.24, green: onClose ? 0.32 : 0.24, blue: onClose ? 0.33 : 0.25, alpha: 1).cgColor
     }
 
     private func setButtonFill(_ alpha: CGFloat) {
@@ -392,6 +524,8 @@ final class AgentPill {
     }
 
     private func clicked(at point: NSPoint) {
+        if look == .face { return open() }
+        if closeRect().insetBy(dx: -3, dy: -3).contains(point) { return pressClose() }
         guard buttonRect().insetBy(dx: -4, dy: -4).contains(point) else { return }
         pressTakeOver()
     }
@@ -407,7 +541,16 @@ final class AgentPill {
                       width: button.bounds.width, height: button.bounds.height)
     }
 
-    private func updateHitRects() { view.hitRect = pill.opacity > 0 ? pillRect() : .zero }
+    private func closeRect() -> NSRect {
+        let p = pillRect(), side = Self.closeSide
+        return NSRect(x: p.minX + Self.closeInset - side / 2, y: p.maxY - Self.closeInset - side / 2, width: side, height: side)
+    }
+
+    /// The capsule, and with the whole pill its × (which sticks out past the corner).
+    private func updateHitRects() {
+        guard pill.opacity > 0 else { view.hitRect = .zero; return }
+        view.hitRect = look == .full ? pillRect().union(closeRect()) : pillRect()
+    }
 
     func dismiss() {
         hide?.cancel()
@@ -415,7 +558,10 @@ final class AgentPill {
         waiting = nil
         hide = nil
         takeOver = nil
+        close = nil
+        opened = false
         pointerInside = false
+        closeButton.opacity = 0
         if let resize { NotificationCenter.default.removeObserver(resize) }
         resize = nil
         face.stopBlinking()

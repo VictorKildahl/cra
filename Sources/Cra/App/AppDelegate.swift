@@ -130,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
         CaptureOverlay.easels = { EaselFiles.all().map { CaptureMenuLayout.Destination(id: $0.id, title: $0.title) } }
+        CaptureEditors.make = { frame, image in CaptureEditorView(frame: frame, image: image) }
         EaselBrowser.registerServices(self)
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
         BrowserManager.boostFor = { [store] url, engineTints in
@@ -1316,7 +1317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         case "import":
             // Headless import (scripting): cra://import?source=arc&archive=1&settings=1, source any
-            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, chrome, zen…).
+            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, crest, chrome, zen…).
             let source = ImportSource.allCases.first { $0.id == (q("source") ?? "arc") }
             let plan = try? source.flatMap { $0.needsExportedFile ? nil : try $0.plan() }
             if let plan {
@@ -1341,6 +1342,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             if let mode = dict["coverWindow"] { main.debugCoverWindow(mode); return }
             if let mode = dict["missionControl"] { main.debugMissionControl(mode); return }
+            // littleBreakNextShow=hide|size: the next Little Window to come up leaves its page hidden or laid out at its
+            // grow-in's start, as #848's white Little Window; littlePage=<label>: what Cra sees of the newest Little
+            // Window's page (LittlePageHealth's verdict and PageProbe's line).
+            if let mode = dict["littleBreakNextShow"] { LittleWindowController.debugBreakNextShow = mode; return }
+            if let label = dict["littlePage"] {
+                guard let w = littleWindows.last else { CraLog.note("little page \(label): no Little Window"); return }
+                w.lookAtPage { verdict, said in
+                    let v: String
+                    switch verdict {
+                    case .drawing: v = "drawing"
+                    case .notJudged: v = "not judged"
+                    case .stuck(let reasons): v = "stuck (" + reasons.joined(separator: ", ") + ")"
+                    }
+                    CraLog.note("little page \(label): \(v), \(said)")
+                }
+                return
+            }
             // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
             // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
             // never-shown window drew there instead, and the tab stayed blank (GitHub #469).
@@ -1834,6 +1852,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the latest pill's Stop (that agent disconnects, MCP stays on).
             if dict["mcpStop"] != nil { MCPServer.shared.stopLatestPill(); return }
+            // mcpPill=open|close|takeover: a click on the pill's face (opens the whole pill), on its ×, or ⌘.
+            if let part = dict["mcpPill"] { main.pressAgentPill(part); return }
             // mcpWatched=on|off: a shown tab counts as watched even while its window is covered.
             if let watched = dict["mcpWatched"] { MainWindowController.agentTabsWatchedUnseen = watched == "on"; return }
             // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸
@@ -4396,8 +4416,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "toggleDeveloperMode": if let url = store.selectedTab?.tab?.url { store.settings.toggleDeveloperMode(url: url) }
         case "reload": main.currentBrowser?.reload()
         case "hardReload": main.currentBrowser?.reloadIgnoringCache()
-        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(cookies: false)
-        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(cookies: true)
+        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(.cache)
+        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(.cookies)
+        case "clearSiteData": main.currentBrowser?.clearSiteDataAndReload(.siteData)
         // View ▸ Stop Loading while an agent's pill is up in the window: its Take Over (AgentPill).
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
         case "zoomIn": main.zoom(by: 0.5)
@@ -4703,7 +4724,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("stop")); view.addItem(item("reload")); view.addItem(item("hardReload"))
         // Arc's View menu order: cookies, then cache.
-        view.addItem(item("clearCookies")); view.addItem(item("clearCache"))
+        // Cra's Clear Site Data and Refresh (#853) sits with them.
+        view.addItem(item("clearCookies")); view.addItem(item("clearCache")); view.addItem(item("clearSiteData"))
         view.addItem(.separator())
         view.addItem(item("resetZoom")); view.addItem(item("zoomIn")); view.addItem(item("zoomOut"))
         view.addItem(.separator())

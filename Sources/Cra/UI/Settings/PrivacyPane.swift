@@ -121,34 +121,16 @@ private struct BlockListsSheet: View {
 private struct BlockListRows: View {
     @Environment(SidebarStore.self) private var store
     private let lists = BlockLists.shared
-    @State private var regionalListsExpanded = false
     @State private var adding = false
     @State private var editingRules = false
     @State private var draft = ""
     @State private var text = ""
     @State private var error: String?
 
-    private func rows(_ category: DesktopFilterList.Category) -> some View {
-        let entries = DesktopFilterList.catalog.filter { $0.category == category }
-        return ForEach(entries) { list in
-            SettingsCardDivider()
-            listRow(list.address, name: list.name, detail: list.detail)
-        }
-    }
-
-    /// A card's rows with dividers only between them.
-    private func listRows(_ category: DesktopFilterList.Category) -> some View {
-        let entries = DesktopFilterList.catalog.filter { $0.category == category }
-        return ForEach(entries) { list in
-            if list.id != entries.first?.id { SettingsCardDivider() }
-            listRow(list.address, name: list.name, detail: list.detail)
-        }
-    }
-
     var body: some View {
         @Bindable var store = store
         VStack(alignment: .leading, spacing: 0) {
-            SettingsHeader("Ads")
+            SettingsHeader("Built-in lists")
             SettingsFeatureCard {
                 SettingsToggleRow("AdAway", detail: "Built in. Blocks third-party ad and tracker domains, including in-app advertising networks.", isOn: $store.settings.adAwayEnabled) {
                     RuleCountLine(count: lists.builtInCounts["adaway"])
@@ -157,19 +139,16 @@ private struct BlockListRows: View {
                 SettingsToggleRow("Anudeep’s Blacklist", detail: "Built in. Blocks third-party connections to known advertising and tracking servers.", isOn: $store.settings.anudeepEnabled) {
                     RuleCountLine(count: lists.builtInCounts["anudeep"])
                 }
-                rows(.ads)
             }
-            regionalListCard.padding(.top, 14)
-            SettingsHeader("Trackers").padding(.top, 14)
-            SettingsFeatureCard { listRows(.tracking) }
-            SettingsHeader("Cookie notices and page annoyances").padding(.top, 14)
-            SettingsFeatureCard { listRows(.annoyances) }
-            SettingsHeader("Security and privacy lists").padding(.top, 14)
-            SettingsFeatureCard {
-                ForEach(DesktopFilterList.catalog.filter { $0.category == .mixed }) { list in
-                    listRow(list.address, name: list.name, detail: list.detail)
-                    if list.id != DesktopFilterList.catalog.last(where: { $0.category == .mixed })?.id { SettingsCardDivider() }
-                }
+            SettingsHeader("Filter lists").padding(.top, 14)
+            ForEach(DesktopFilterList.groups(selected: Set(store.settings.customBlocklists))) { group in
+                FilterListGroupCard(title: group.category.title, selected: group.selectedCount, total: group.entries.count,
+                                    isExpanded: [.ads, .tracking, .security].contains(group.category)) {
+                    ForEach(group.entries) { list in
+                        SettingsCardDivider()
+                        listRow(list.address, name: list.name, detail: list.detail)
+                    }
+                }.padding(.bottom, 6)
             }
             SettingsFootnote("These lists block connections to third-party domains on pages you visit. Opening a listed address directly does not show a warning.")
             HStack {
@@ -217,42 +196,6 @@ private struct BlockListRows: View {
                             .disabled(draft == (store.settings.personalBlockFilters ?? ""))
                         }
                     }
-                }
-            }
-        }
-    }
-
-    private var regionalListCard: some View {
-        let regional = DesktopFilterList.catalog.filter(\.regional)
-            .sorted { lhs, rhs in
-                let languageOrder = lhs.name.localizedStandardCompare(rhs.name)
-                if languageOrder == .orderedSame { return lhs.detail.localizedStandardCompare(rhs.detail) == .orderedAscending }
-                return languageOrder == .orderedAscending
-            }
-        let selected = Set(store.settings.customBlocklists)
-        let count = regional.filter { selected.contains($0.address) }.count
-        let summary = "\(count) of \(regional.count) selected"
-        return SettingsFeatureCard {
-            Button {
-                regionalListsExpanded.toggle()
-            } label: {
-                SettingsCardRow {
-                    Label("Regional lists", systemImage: "globe")
-                } trailing: {
-                    Text(summary).foregroundStyle(.secondary).monospacedDigit()
-                    Image(systemName: regionalListsExpanded ? "chevron.down" : "chevron.forward")
-                        .font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Regional lists")
-            .accessibilityValue(regionalListsExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
-
-            if regionalListsExpanded {
-                ForEach(regional) { list in
-                    SettingsCardDivider()
-                    listRow(list.address, name: list.name, detail: list.detail)
                 }
             }
         }
@@ -342,18 +285,10 @@ private struct SecureDNSRows: View {
     @State private var customText = ""
 
     var body: some View {
-        SettingsPlainRow("Secure DNS",
-                           detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
-                           trailing: { EmptyView() }) {
-            Picker("Secure DNS", selection: choice) {
-                Text("Automatic").tag(SecureDNSChoice.automatic)
-                Text("Off").tag(SecureDNSChoice.off)
-                Divider()
-                ForEach(SecureDNSProvider.all) { Text($0.name).tag(SecureDNSChoice.provider($0)) }
-                Divider()
-                Text("Custom…").tag(SecureDNSChoice.custom)
-            }
-            .labelsHidden()
+        SettingsPlainRow("DNS over HTTPS",
+                         detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
+                         trailing: { EmptyView() }) {
+            DNSProviderMenu(choice: choice)
             .fixedSize()
             .disabled(dns.prefs == nil || dns.isManaged)
             .onAppear { dns.refresh() }

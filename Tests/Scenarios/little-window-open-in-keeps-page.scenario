@@ -1,0 +1,49 @@
+# promise: #852
+# A Little Window's page goes into the space as it is: ⌘O and a click on "Open in <space>" move the live page into
+# that space's Today, select it in the browser window and close the Little Window, without reloading it. What the
+# page held stays: a value its script set, text typed into its field and how far it was scrolled (Arc's Little Arc
+# "Open in", #852).
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+
+cra://open?url=${PAGE}?n=main
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# ⌘O.
+cra://debug?externalURL=${PAGE}?n=keyed
+wait 3
+cra://debug?littleShown=keyed
+expect-log little shown keyed: windows=1 space=Personal
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(window.kept='same page',document.querySelector('input').value='typed text',scrollTo(0,1200),'set '+Math.round(scrollY))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"set 1200"
+cra://debug?key=o,31,1048576
+wait 2
+cra://debug?littleShown=keyed-after
+expect-log little shown keyed-after: windows=0
+cra://debug?selectedTab=keyed
+expect-log selected tab keyed: .*\?n=keyed$
+cra://debug?todayOrder=keyed
+expect-log today order keyed: .*\?n=keyed
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[window.kept,document.querySelector('input').value,Math.round(scrollY)].join(' / ')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"same page / typed text / 1200"
+
+# The "Open in Personal" button.
+cra://debug?externalURL=${PAGE}?n=clicked
+wait 3
+cra://debug?littleShown=clicked
+expect-log little shown clicked: windows=1 space=Personal
+cra://debug?cdp=Runtime.evaluate&target=little&params={"expression":"(window.kept='still the page',document.querySelector('input').value='more text',scrollTo(0,800),'set '+Math.round(scrollY))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"set 800"
+cra://debug?littleToolbar=clickOpen
+expect-log littleToolbar clickOpen: clicked
+wait 2
+cra://debug?littleShown=clicked-after
+expect-log little shown clicked-after: windows=0
+cra://debug?selectedTab=clicked
+expect-log selected tab clicked: .*\?n=clicked$
+cra://debug?todayOrder=clicked
+expect-log today order clicked: .*\?n=clicked.*\?n=keyed|today order clicked: .*\?n=keyed.*\?n=clicked
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[window.kept,document.querySelector('input').value,Math.round(scrollY)].join(' / ')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"still the page / more text / 800"

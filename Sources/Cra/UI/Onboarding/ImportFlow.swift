@@ -288,7 +288,7 @@ final class ImportFlowModel {
         switch source.kind {
         case .safari: go(.safariExport)
         case .firefox, .zen: go(.passwordsFile)
-        case .arc, .dia, .yab, .ardia, .phi, .chromium: credentialProfiles.isEmpty ? goToSpaces() : go(.unlock)
+        case .arc, .dia, .yab, .ardia, .phi, .crest, .chromium: credentialProfiles.isEmpty ? goToSpaces() : go(.unlock)
         }
     }
 

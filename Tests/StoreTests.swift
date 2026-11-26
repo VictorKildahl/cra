@@ -23,6 +23,7 @@ enum StoreTests {
         setenv("CRA_ARDIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Ardia").path, 1)
         setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
         setenv("CRA_PHI_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Phi").path, 1)
+        setenv("CRA_CREST_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Crest").path, 1)
 
         try arcImport()
         try arcKeepsAnyAddress()
@@ -32,6 +33,7 @@ enum StoreTests {
         try diaIconsFromItsDatabase()
         try ardiaImport()
         try phiImport()
+        try crestImport()
         try arcImportReport()
         try arcSpacesOnOneProfileCountTheirFavoritesOnce()
         try arcArchiveBeyondItsLimitIsListed()
@@ -1068,6 +1070,66 @@ enum StoreTests {
         let spaces = result.spaceIDs.compactMap { store.space($0) }
         expect(spaces[0].profileID == nil && spaces[1].profileID != nil && spaces[2].profileID == nil,
                "Work goes on a Cra profile of its own, Home and Reading stay on Default")
+        expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        for id in result.spaceIDs { store.deleteSpace(id) }
+    }
+
+    // promise: #688
+    /// Crest (Discussion #688): its session file (Tests/Fixtures/Crest/ControlPlane/session.sqlite, in
+    /// Crest's own format, see make-session.txt). Spaces come in Crest's order; tile-row tabs are
+    /// favorites and saved tabs the pinned section, both at the page they were saved with, saved
+    /// folders nested; current tabs are Today, a current folder's tabs on their own. Crest's own
+    /// pages and blank tabs stay behind, cra: addresses are listed, and archived tabs come over
+    /// newest first. The first Space stays on Default; the others land on a Cra profile for their
+    /// "Crest-<id>" Chromium folder, Spaces sharing one on the same Cra profile.
+    @MainActor
+    private static func crestImport() throws {
+        expect(CrestImporter.isAvailable, "ControlPlane/session.sqlite counts as Crest data")
+        let plan = try CrestImporter.plan()
+        expect(plan.source == "Crest" && plan.spaces.map(\.title) == ["Work", "Personal", "Side"], "Crest's Spaces come over in its order")
+        let work = plan.spaces[0], personal = plan.spaces[1], side = plan.spaces[2]
+        expect(work.favorites.compactMap(\.url) == ["https://mail.example.com/"] && work.favorites[0].pageTitle == "Inbox",
+               "a tile-row tab is a favorite, at the page it was saved with")
+        expect(work.skipped == [cra("Cra Settings", "cra://settings", .favorites)], "a cra: favorite is listed")
+        expect(work.pinned.map { $0.url ?? "folder " + $0.pageTitle } == ["folder Projects", "https://status.example.com/now"],
+               "saved tabs are the pinned section, a folder where its first tab is; Crest's own Settings page stays behind")
+        let projects = work.pinned[0].children
+        expect(projects.count == 2 && projects[0].url == "https://github.com/" && projects[0].customTitle == "Code"
+               && projects[1].isFolder && projects[1].pageTitle == "Reading" && projects[1].children.compactMap(\.url) == ["https://docs.example.com/"],
+               "saved folders nest through parentID, renamed tabs keep their name")
+        expect(work.today.compactMap(\.url) == ["https://news.example.com/", "https://left.example.com/"],
+               "current tabs are Today, a current folder's tabs on their own; a blank tab and the Start Page stay behind")
+        expect(work.profile == nil && work.emoji == "" && work.symbol == "hammer.fill" && work.theme?.colors == ["#3C0E1A", "#722030"],
+               "the first Space stays on Default, with its SF Symbol and its branding colours")
+        expect(personal.favorites.compactMap(\.url) == ["https://calendar.example.com/"] && personal.pinned.compactMap(\.url) == ["file:///Users/me/notes.html"],
+               "each Space reads its own tabs; a file: page comes over")
+        expect(personal.emoji == "🏡" && personal.theme?.accent == "#1F7D85", "a crest.emoji: icon, and the accent's swatch without branding colours")
+        expect(personal.profile == ImportedProfile(folder: "Crest-B0000000-0000-4000-8000-00000000000B", name: "Personal"),
+               "a later Space signs in on its own \"Crest-<id>\" folder")
+        expect(side.profile == personal.profile && side.pinned.isEmpty && side.symbol == "leaf",
+               "a Space sharing another's Chromium profile goes on the same one; an empty Space still comes over")
+        expect(plan.archive.map(\.url) == ["https://spec.example.com/", "https://plan.example.com/"]
+               && plan.archive.map(\.reason) == [.manual, .auto] && plan.archive[0].customTitle == "Spec" && plan.archive[0].spaceTitle == "Work",
+               "archived tabs come over newest first, a cleanup as auto-archived")
+        expect(plan.archiveSkipped.map(\.url) == ["blob:https://files.example.com/5c1e"], "an archived blob: tab is listed")
+
+        let crest = ImportSource.allCases.first { $0.id == "crest" }
+        expect(crest?.isAvailable == true && crest?.keychainService == "Crest Safe Storage" && crest?.keychainAccount == "com.pauldavis.crest",
+               "Crest is listed from its folder, its passwords and cookies open with Crest's Keychain item")
+        expect(crest?.credentialProfiles.map(\.id) == ["Crest-A0000000-0000-4000-8000-00000000000A", "Crest-B0000000-0000-4000-8000-00000000000B"]
+               && crest?.credentialProfiles.map(\.name) == ["Work", "Personal"],
+               "Crest's \"Crest-<id>\" folders are found, shown by Space; its Default and a folder no Space uses are left out")
+
+        let composition = AppComposition(clock: ManualScheduler())
+        let store = composition.store
+        let result = store.apply(plan, includeArchive: true, includeSettings: false)
+        expect(result.spaces == 3 && result.folders == 2 && result.archived == 2, "applying adds the Spaces, their folders and the archive")
+        let spaces = result.spaceIDs.compactMap { store.space($0) }
+        expect(spaces[0].profileID == nil && spaces[1].profileID != nil && spaces[1].profileID == spaces[2].profileID,
+               "Personal and Side share one Cra profile, Work stays on Default")
+        expect(result.profiles.craFolder(forSource: "Crest-B0000000-0000-4000-8000-00000000000B") != "Default"
+               && result.profiles.craFolder(forSource: "Crest-A0000000-0000-4000-8000-00000000000A") == "Default",
+               "Personal's cookies go to its Cra profile, Work's to Default")
         expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
         for id in result.spaceIDs { store.deleteSpace(id) }
     }

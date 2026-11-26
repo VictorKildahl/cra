@@ -10,9 +10,11 @@ struct ShippedPlatformTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/133"))
     func secureDNSMenuProviders() {
         #expect(SecureDNSProvider.all.map(\.name) == [
-            "Google (Public DNS)", "Cloudflare (1.1.1.1)", "Quad9 (9.9.9.9)", "OpenDNS",
+            "Google Public DNS", "Cloudflare", "Cloudflare (Malware Filter)", "Quad9 (Threat Blocking)", "OpenDNS",
             "CleanBrowsing (Family Filter)", "DNS4EU (Protective)",
         ])
+        let malware = SecureDNSProvider.all[2]
+        #expect(malware.template == "https://security.cloudflare-dns.com/dns-query")
         #expect(SecureDNSProvider.all.allSatisfy { SecureDNSPrefs.validTemplates($0.template) == $0.template })
     }
 

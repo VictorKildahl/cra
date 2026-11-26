@@ -157,6 +157,22 @@ struct AdvancedPane: View {
                             get: { MCPServer.shared.allowsHistory }, set: { MCPServer.shared.allowsHistory = $0 }))
                             .toggleStyle(.arcSwitch).labelsHidden()
                     }
+                    SettingsCardDivider()
+                    // Discussion #862: agents think for seconds between steps.
+                    SettingsCardRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Keep an agent on screen for").font(.system(size: 13))
+                            Text("How long the agent’s pill, cursor and face stay after its last step, so they don’t come and go while it thinks.")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } trailing: {
+                        Picker("Keep an agent on screen for", selection: Binding(
+                            get: { MCPServer.shared.linger }, set: { MCPServer.shared.linger = $0 })) {
+                            ForEach(MCPAgentPresence.Linger.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                        .labelsHidden().fixedSize()
+                    }
                     ForEach(MCPServer.shared.agents) { agent in
                         SettingsCardDivider()
                         SettingsCardRow {

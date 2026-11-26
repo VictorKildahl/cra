@@ -21,7 +21,7 @@ permissions:
 jobs:
   scenarios:
     name: Scenarios (backdrop=${{ matrix.backdrop }}, ${{ matrix.shard }}/4)
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -91,7 +91,7 @@ jobs:
   sanitizers:
     if: github.event.inputs.scenarios == ''
     name: Harnesses under ${{ matrix.sanitizer }} sanitizer
-    runs-on: macos-26
+    runs-on: xcode-27
     # Thread sanitizer took 27-28 min on 19-20 Nov and hit 30 on a slower runner with every check passing.
     timeout-minutes: 45
     strategy:
@@ -112,7 +112,7 @@ jobs:
   fuzz:
     if: github.event.inputs.scenarios == ''
     name: Parser fuzzing
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -131,7 +131,7 @@ jobs:
   mutation:
     name: Mutation testing
     if: (github.event_name == 'workflow_dispatch' && github.event.inputs.scenarios == '') || github.event.schedule == '41 3 * * 1'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7

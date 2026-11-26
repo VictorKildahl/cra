@@ -9,6 +9,9 @@ final class TabRuntime {
     let browser: CraBrowser
     var hasElementHidingStyle = false
     var recoveryOptions = 0
+    /// The site (host) the committed page was styled for (list filters, boost), nil until it commits.
+    /// Chromium reports a link's or redirect's page committing before its address (#869).
+    var styledSite: String?
     var progress: Double = 0
     /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
@@ -19,6 +22,14 @@ final class TabRuntime {
     var infoBars: [PageInfoBar] = []
     /// What the page paints behind its content ("#RRGGBB", "" until reported).
     var backgroundColor: String = ""
+    /// Whether this document needs Cra's fallback Canvas background, nil until probed (#846).
+    var boostCanvasNeedsFallback: Bool?
+    /// Whether the fallback stylesheet is currently on this page.
+    var boostCanvasFallbackOn = false
+    /// Counts this tab's documents, so a probe answered after the next page committed is dropped.
+    var boostCanvasDocument = 0
+    /// The stylesheet last adopted for this page's Boost, so live edits with unchanged CSS don't repaint.
+    var boostCSS = ""
     /// Cra popped this tab's video out because the user left the tab (Arc's
     /// auto Picture in Picture); coming back brings the video home.
     var autoPictureInPicture = false
@@ -1603,6 +1614,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if !browser.isAudible { nowPlaying?.remove(id) }
         // Our own error page is a data: URL; keep the real address in the model.
         if url.hasPrefix("data:text/html;base64,") { return }
+        if let runtime = runtimes[id] { restyleCommittedPage(runtime, url: url) }
         // A restored page has no address yet when it is shown.
         if id == visibleTabID { Perf.visibleSite(browser.isIncognito ? nil : SiteNames.siteHost(of: url)) }
         store.updateTab(id, url: url)
@@ -1646,13 +1658,35 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
                 runtime.recoveryOptions = 0
+                runtime.styledSite = Self.styledSite(of: browser.currentURL)
+                runtime.boostCanvasNeedsFallback = nil
+                runtime.boostCanvasDocument += 1
+                runtime.boostCanvasFallbackOn = false
+                runtime.boostCSS = ""
                 applyElementHiding(to: runtime)
             }
             shareTheme(id, with: browser)
             applyBoost(to: browser, clearing: false)
             if !BlockLists.shared.isPaused(url: browser.currentURL), let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+        } else {
+            runtimes[id]?.styledSite = nil
         }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    private static func styledSite(of url: String) -> String { URL(string: url)?.host?.lowercased() ?? "" }
+
+    /// A committed page whose address names another site than the one it was styled for: a link's popup (no
+    /// address yet) or a page reached through a redirect (google.com/url?q=…), whose address Chromium reports
+    /// just after the commit. It gets that site's list filters and boost, replacing what the first guess put on
+    /// it (#869). A page's own address change (pushState) stays on its site and styles nothing again.
+    private func restyleCommittedPage(_ runtime: TabRuntime, url: String) {
+        guard let styled = runtime.styledSite else { return }
+        let site = Self.styledSite(of: url)
+        guard site != styled, !site.isEmpty else { return }
+        runtime.styledSite = site
+        applyElementHiding(to: runtime)
+        applyBoost(to: runtime.browser)
     }
 
     func refreshElementHiding() {
@@ -1702,9 +1736,68 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let boost = Self.boostFor?(browser.currentURL, engineTints)
         // A new document has nothing adopted: no call unless there is a boost to put on it.
         guard boost != nil || clearing else { return }
-        adopt(boost?.css ?? "", as: "__craBoost", in: browser)
+        let css = boost?.css ?? ""
+        let rt = tabID(of: browser).flatMap { runtimes[$0] }
+        // A colour drag with the engine drawing the tint leaves this CSS unchanged; replacing an
+        // identical sheet would invalidate paint and flash the page's dark background (#846).
+        let reused = clearing && rt?.boostCSS == css
+        if !reused {
+            adopt(css, as: "__craBoost", in: browser)
+            rt?.boostCSS = css
+        }
+        applyBoostCanvasFallback(css.contains("filter:") == true, in: browser)
         if engineTints { browser.setBoostTint(boost?.tint) }
         if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
+    }
+
+    /// A CSS filter on `html` also needs the page's background inside the filtered subtree, but only
+    /// when the page has no background of its own: a fallback would otherwise replace a site's
+    /// colours. Both `html` and `body` must compute transparent; a tint-only boost has no CSS filter
+    /// and is left alone (#846).
+    private func applyBoostCanvasFallback(_ needed: Bool, in browser: CraBrowser) {
+        guard let id = tabID(of: browser), let rt = runtimes[id],
+              !(browser is NativePage), PageEngines.engine(of: browser) == .chromium else { return }
+        guard needed else {
+            if rt.boostCanvasFallbackOn {
+                adopt("", as: "__craBoostCanvas", in: browser)
+                rt.boostCanvasFallbackOn = false
+            }
+            return
+        }
+        // The probe must run once per document: once Cra's Canvas background is adopted, reading it
+        // back would see it as the page's own background and toggle the fallback off on every edit.
+        if let needs = rt.boostCanvasNeedsFallback {
+            if needs != rt.boostCanvasFallbackOn {
+                adopt(needs ? "html { background-color: Canvas !important; }" : "",
+                      as: "__craBoostCanvas", in: browser)
+                rt.boostCanvasFallbackOn = needs
+            }
+            return
+        }
+        // Read once the page has loaded: at commit a site's stylesheet (one its script adds, or a slow
+        // file) isn't applied yet, and its dark background would read as none (#846). A page that never
+        // finishes loading is read after five seconds.
+        let js = "/*__craBoostCanvas*/new Promise(done=>{const read=()=>{"
+            + "const h=getComputedStyle(document.documentElement).backgroundColor;"
+            + "const b=getComputedStyle(document.body||document.documentElement).backgroundColor;"
+            + "const clear=s=>!s||s==='transparent'||s==='rgba(0, 0, 0, 0)';"
+            + "done(clear(h)&&clear(b)?'yes':'no');};"
+            + "if(document.readyState==='complete')return read();"
+            + "const t=setTimeout(read,5000);addEventListener('load',()=>{clearTimeout(t);read();},{once:true});})"
+        let params = Self.jsonObjectString(["expression": js, "returnByValue": true, "awaitPromise": true])
+        let document = rt.boostCanvasDocument
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak self, weak rt] result, _ in
+            DispatchQueue.main.async {
+                guard let self, let rt, self.runtimes[id] === rt, rt.boostCanvasDocument == document,
+                      let answer = Self.stringResult(result) else { return }
+                let needs = answer == "yes"
+                rt.boostCanvasNeedsFallback = needs
+                if needs {
+                    self.adopt("html { background-color: Canvas !important; }", as: "__craBoostCanvas", in: browser)
+                    rt.boostCanvasFallbackOn = true
+                }
+            }
+        }
     }
 
     /// Every page on `host` gets its boost again (the editor's changes, live).

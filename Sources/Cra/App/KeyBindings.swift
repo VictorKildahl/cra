@@ -226,6 +226,10 @@ final class KeyBindingRegistry {
             // Arc's command bar (1.171): "clear" lists both, cache first, with a trash glyph.
             KeyAction(id: "clearCache", name: "Clear Cache and Refresh", section: .view, shortcuts: [], symbol: "trash"),
             KeyAction(id: "clearCookies", name: "Clear Cookies and Refresh", section: .view, shortcuts: [], symbol: "trash"),
+            // Cra's (#853): everything this site keeps (storage, IndexedDB, service workers, cookies), then a reload
+            // past the cache. After Arc's two, so "clear" still lists Clear Cache first.
+            KeyAction(id: "clearSiteData", name: "Clear Site Data and Refresh", section: .view, shortcuts: [],
+                      triggers: ["clear storage", "clear local storage", "reset site", "site data"], symbol: "trash"),
             // Arc: View ▸ Developer ▸ "Turn on/off Developer Mode for this site" (⌃D).
             KeyAction(id: "toggleDeveloperMode", name: "Toggle Developer Mode for this Site", section: .view, shortcuts: [Shortcut("d", .control)], triggers: ["developer mode", "dev mode"]),
             KeyAction(id: "resetZoom", name: "Zoom to Actual Size", section: .view, shortcuts: [Shortcut("0", cmd)], triggers: ["reset zoom"]),

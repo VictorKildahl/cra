@@ -6,8 +6,22 @@ public struct DesktopFilterList: Identifiable {
     public let name: String
     public let detail: String
     public let address: String
-    public enum Category: String {
-        case ads, tracking, annoyances, mixed, regional
+    public enum Category: String, CaseIterable {
+        case ads, tracking, security, mixed, cookies, social, annoyances, compatibility, regional
+
+        public var title: String {
+            switch self {
+            case .ads: return "Ad blocking"
+            case .tracking: return "Privacy and tracking"
+            case .security: return "Malware protection and security"
+            case .mixed: return "Multipurpose"
+            case .cookies: return "Cookie notices"
+            case .social: return "Social widgets"
+            case .annoyances: return "Annoyances"
+            case .compatibility: return "Compatibility and fixes"
+            case .regional: return "Regional lists"
+            }
+        }
     }
 
     public let category: Category
@@ -20,6 +34,27 @@ public struct DesktopFilterList: Identifiable {
         self.category = category
     }
 
+    public struct Group: Identifiable {
+        public let category: Category
+        public let entries: [DesktopFilterList]
+        public let selectedCount: Int
+        public var id: Category { category }
+    }
+
+    public static func groups(selected: Set<String>) -> [Group] {
+        Category.allCases.map { category in
+            var entries = catalog.filter { $0.category == category }
+            if category == .regional {
+                entries.sort { lhs, rhs in
+                    let order = lhs.name.localizedStandardCompare(rhs.name)
+                    if order == .orderedSame { return lhs.detail.localizedStandardCompare(rhs.detail) == .orderedAscending }
+                    return order == .orderedAscending
+                }
+            }
+            return Group(category: category, entries: entries, selectedCount: entries.filter { selected.contains($0.address) }.count)
+        }
+    }
+
     static let proAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
     static let proMiniAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.mini-onlydomains.txt"
 
@@ -28,13 +63,13 @@ public struct DesktopFilterList: Identifiable {
     public static let catalog = [
         Self("EasyList", "Ads on international sites", "https://easylist.to/easylist/easylist.txt", category: .ads),
         Self("EasyPrivacy", "Tracking and analytics", "https://easylist.to/easylist/easyprivacy.txt", category: .tracking),
-        Self("EasyList Cookie List", "Cookie notices", "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt", category: .annoyances),
+        Self("EasyList Cookie List", "Cookie notices", "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt", category: .cookies),
         Self("Fanboy’s Annoyance List", "Overlays, social widgets and cookie notices", "https://easylist-downloads.adblockplus.org/fanboy-annoyance.txt", category: .annoyances),
-        Self("Fanboy’s Social Blocking List", "Social sharing buttons and widgets", "https://easylist-downloads.adblockplus.org/fanboy-social.txt", category: .annoyances),
+        Self("Fanboy’s Social Blocking List", "Social sharing buttons and widgets", "https://easylist-downloads.adblockplus.org/fanboy-social.txt", category: .social),
         Self("AdGuard Popups", "Promotional popups and overlays", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_19_Annoyances_Popups/filter.txt", category: .annoyances),
         Self("AdGuard Widgets", "Third-party widgets, including support chats", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_22_Annoyances_Widgets/filter.txt", category: .annoyances),
         Self("Adblock Warning Removal List", "Anti-adblock notices", warningListAddress, category: .ads),
-        Self("StevenBlack Unified Hosts", "Advertising and tracking domains", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", category: .ads),
+        Self("StevenBlack Unified Hosts", "Advertising and tracking domains", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", category: .mixed),
         Self("HaGeZi Multi NORMAL", "For everyday browsing. Blocks ad, tracker, phishing and malware domains while allowing crash reports.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt", category: .mixed),
         Self("HaGeZi Multi PRO Mini", "A smaller download for everyday sites, including common crash trackers. Its domains are included in full PRO.", proMiniAddress, category: .mixed),
         Self("HaGeZi Multi PRO", "Covers less common trackers as well. Choose it for maximum coverage if you can make site exceptions.", proAddress, category: .mixed),
@@ -71,6 +106,39 @@ public struct DesktopFilterList: Identifiable {
         Self("Turkish", "AdGuard Turkish", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_13_Turkish/filter.txt", category: .regional),
         Self("Ukrainian", "AdGuard Ukrainian", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_23_Ukrainian/filter.txt", category: .regional),
         Self("Vietnamese", "ABPVN", "https://raw.githubusercontent.com/abpvn/abpvn/master/filter/abpvn.txt", category: .regional),
+        Self("uBlock filters – Ads", "Ad requests and page elements, alongside EasyList", "https://ublockorigin.github.io/uAssetsCDN/filters/filters.min.txt", category: .ads),
+        Self("uBlock filters – Badware risks", "Requests to known harmful resources", "https://ublockorigin.github.io/uAssets/filters/badware.txt", category: .security),
+        Self("uBlock filters – Privacy", "Tracking requests and page elements", "https://ublockorigin.github.io/uAssetsCDN/filters/privacy.min.txt", category: .tracking),
+        Self("uBlock filters – Unbreak", "Exceptions that restore site functionality", "https://ublockorigin.github.io/uAssets/filters/unbreak.txt", category: .compatibility),
+        Self("uBlock filters – Quick fixes", "Time-sensitive fixes for broken pages", "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt", category: .compatibility),
+        Self("uBlock filters – Experimental", "Experimental rules that may affect site behaviour", "https://ublockorigin.github.io/uAssets/filters/experimental.txt", category: .compatibility),
+        Self("AdGuard – Ads", "Advertising requests and page elements", "https://filters.adtidy.org/extension/ublock/filters/2_without_easylist.txt", category: .ads),
+        Self("AdGuard – Mobile Ads", "Advertising on mobile sites", "https://filters.adtidy.org/extension/ublock/filters/11.txt", category: .ads),
+        Self("AdGuard – Cookie Notices", "Cookie banners and consent overlays", "https://filters.adtidy.org/extension/ublock/filters/18.txt", category: .cookies),
+        Self("uBlock filters – Cookie Notices", "Companion rules for EasyList and AdGuard cookie lists", "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt", category: .cookies),
+        Self("AdGuard – Social Widgets", "Social sharing buttons and embedded widgets", "https://filters.adtidy.org/extension/ublock/filters/4.txt", category: .social),
+        Self("Fanboy – Anti-Facebook", "Third-party Facebook widgets and connections", "https://secure.fanboy.co.nz/fanboy-antifacebook.txt", category: .social),
+        Self("AdGuard – Mobile App Banners", "Prompts to install mobile apps", "https://filters.adtidy.org/extension/ublock/filters/20.txt", category: .annoyances),
+        Self("AdGuard – Other Annoyances", "Promotional notices and other distractions", "https://filters.adtidy.org/extension/ublock/filters/21.txt", category: .annoyances),
+        Self("EasyList – Other Annoyances", "Page overlays and other distractions", "https://ublockorigin.github.io/uAssets/thirdparties/easylist-annoyances.txt", category: .annoyances),
+        Self("EasyList – Chat Widgets", "Embedded chat and support widgets", "https://ublockorigin.github.io/uAssets/thirdparties/easylist-chat.txt", category: .annoyances),
+        Self("EasyList – AI Widgets", "AI assistant widgets on websites", "https://ublockorigin.github.io/uAssets/thirdparties/easylist-ai.txt", category: .annoyances),
+        Self("EasyList – Newsletter Notices", "Newsletter signup prompts", "https://ublockorigin.github.io/uAssets/thirdparties/easylist-newsletters.txt", category: .annoyances),
+        Self("EasyList – Notifications", "Prompts to enable browser notifications", "https://ublockorigin.github.io/uAssets/thirdparties/easylist-notifications.txt", category: .annoyances),
+        Self("uBlock filters – Annoyances", "Additional rules for overlays and intrusive widgets", "https://ublockorigin.github.io/uAssetsCDN/filters/annoyances.min.txt", category: .annoyances),
+        Self("Albanian", "Adblock List for Albania", "https://raw.githubusercontent.com/AnXh3L0/blocklist/master/albanian-easylist-addition/Albania.txt", category: .regional),
+        Self("Estonian", "Eesti saitidele kohandatud filter", "https://ubo-et.lepik.io/list.txt", category: .regional),
+        Self("Finnish", "Adblock List for Finland", "https://raw.githubusercontent.com/finnish-easylist-addition/finnish-easylist-addition/gh-pages/Finland_adb.txt", category: .regional),
+        Self("Persian", "PersianBlocker · Hosts edition", "https://raw.githubusercontent.com/MasterKia/PersianBlocker/main/PersianBlockerHosts.txt", category: .regional),
+        Self("Hebrew", "EasyList Hebrew", "https://raw.githubusercontent.com/easylist/EasyListHebrew/master/EasyListHebrew.txt", category: .regional),
+        Self("Korean", "List-KR · Domain rules", "https://cdn.jsdelivr.net/npm/@list-kr/filterslists@latest/dist/filterslist-DNS.txt", category: .regional),
+        Self("Latvian", "Latvian List", "https://raw.githubusercontent.com/Latvian-List/adblock-latvian/master/lists/latvian-list.txt", category: .regional),
+        Self("Macedonian", "Macedonian adBlock Filters", "https://raw.githubusercontent.com/DeepSpaceHarbor/Macedonian-adBlock-Filters/master/Filters", category: .regional),
+        Self("Romanian", "Romanian Ad (ROad) Block List Light", "https://raw.githubusercontent.com/tcptomato/ROad-Block/master/road-block-filters-light.txt", category: .regional),
+        Self("Russian", "RU AdList: Counters", "https://raw.githubusercontent.com/easylist/ruadlist/master/cntblock.txt", category: .regional),
+        Self("Slovenian", "Slovenian List", "https://raw.githubusercontent.com/betterwebleon/slovenian-list/master/filters.txt", category: .regional),
+        Self("Swedish", "Frellwit's Swedish Filter", "https://raw.githubusercontent.com/lassekongo83/Frellwits-filter-lists/master/Frellwits-Swedish-Filter.txt", category: .regional),
+        Self("Thai", "EasyList Thailand", "https://raw.githubusercontent.com/easylist-thailand/easylist-thailand/master/subscription/easylist-thailand.txt", category: .regional),
     ]
 }
 

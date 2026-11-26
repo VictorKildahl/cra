@@ -87,11 +87,31 @@ struct MCPAgentPresenceTests {
         #expect(MCPAgentPresence.pillWait(shownFor: -1) == MCPAgentPresence.pillHold)
     }
 
-    @Test func theCursorStaysWhileTheAgentThinks() {
-        // Agents take seconds between steps: the cursor lasts as long as the tab's face does.
-        #expect(MCPAgentPresence.cursorLingers == MCPAgentPresence.lingers)
-        #expect(MCPAgentPresence.cursorLingers >= 8)
+    @Test(.bug("https://github.com/VictorKildahl/cra/discussions/862"))
+    func theAgentStaysOnScreenWhileItThinks() {
+        // Agents think 5–15 s between steps: by default the pill, cursor and row face outlast that.
+        typealias Linger = MCPAgentPresence.Linger
+        #expect(Linger.standard == .ten)
+        #expect(Linger.standard.seconds >= 10)
+        #expect(Linger.allCases.map(\.seconds) == [5, 10, 30, 60])
+        #expect(Linger.allCases.map(\.title) == ["5 seconds", "10 seconds", "30 seconds", "1 minute"])
+        // A saved choice comes back; nothing saved, or a number that isn't a choice, is the standard.
+        #expect(Linger(saved: 30) == .thirty)
+        #expect(Linger(saved: nil) == .standard)
+        #expect(Linger(saved: 7) == .standard)
+        #expect(Linger(saved: -1) == .standard)
         #expect(MCPAgentPresence.revealLimit > 0.5 && MCPAgentPresence.revealLimit < 2)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/discussions/579"))
+    func onlyTheFaceForATabOutOfSight() {
+        // The tab the user looks at: every step and Take Over.
+        #expect(MCPAgentPresence.pillLook(tabWatched: true, opened: false) == .full)
+        // A tab out of sight: the face alone, still, where the pill would be.
+        #expect(MCPAgentPresence.pillLook(tabWatched: false, opened: false) == .face)
+        // A click on the face opens the pill until it goes.
+        #expect(MCPAgentPresence.pillLook(tabWatched: false, opened: true) == .full)
+        #expect(MCPAgentPresence.pillLook(tabWatched: true, opened: true) == .full)
     }
 
     @Test func aWatchedPageScrollsOnlyToWhatIsOutOfView() throws {
