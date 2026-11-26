@@ -286,13 +286,7 @@ enum ExtensionPopupWindowTests {
     /// the title bar is dragged, a bubble Chrome moved goes straight back into the frame, the frame staying put.
     @MainActor
     private static func keepsItsPageInTheFrameWhenChromeMovesItMidDrag() {
-        // Keep the drag inside the visible screen. With an offscreen anchor the frame opens at
-        // the bottom-left limit, where AppKit can constrain a synthetic window move.
-        guard let screen = NSScreen.main?.visibleFrame else { fatalError("Popup drag needs a display") }
-        let anchor = NSPoint(x: screen.maxX - 24, y: screen.maxY - 24)
-        let pointerStart = NSPoint(x: anchor.x - 150, y: anchor.y - 6)
-        let chromeOrigin = NSPoint(x: screen.minX + 8, y: screen.minY + 8)
-        var pointer = pointerStart, held = false
+        var pointer = NSPoint(x: -9900, y: -9690), held = false
         ExtensionPopupWindow.pointer = { pointer }
         ExtensionPopupWindow.leftButtonDown = { held }
         defer {
@@ -300,6 +294,7 @@ enum ExtensionPopupWindowTests {
             ExtensionPopupWindow.leftButtonDown = { NSEvent.pressedMouseButtons & 1 != 0 }
             UserDefaults.standard.removeObject(forKey: "extensionPopupWindowOffset")
         }
+        let anchor = NSPoint(x: -9800, y: -9700)
         let (page, frame) = presentPopup(anchor: anchor)
         let inFrame = NSPoint(x: page.frame.minX - frame.frame.minX, y: page.frame.maxY - frame.frame.maxY)
         func offset() -> NSPoint { NSPoint(x: page.frame.minX - frame.frame.minX, y: page.frame.maxY - frame.frame.maxY) }
@@ -311,10 +306,10 @@ enum ExtensionPopupWindowTests {
         let start = frame.frame.origin
         for step in 1...3 {
             let d = NSPoint(x: CGFloat(step) * -40, y: CGFloat(step) * -20)
-            pointer = NSPoint(x: pointerStart.x + d.x, y: pointerStart.y + d.y)
+            pointer = NSPoint(x: -9900 + d.x, y: -9690 + d.y)
             frame.setFrameOrigin(NSPoint(x: start.x + d.x, y: start.y + d.y))
             // Chrome re-anchors its bubble where its own hidden button is.
-            page.setFrameOrigin(chromeOrigin)
+            page.setFrameOrigin(NSPoint(x: anchor.x - 2000, y: anchor.y - 1500))
             expect(offset() == inFrame, "the page stays in its frame while Chrome moves it mid-drag (step \(step): \(NSStringFromPoint(offset())), was \(NSStringFromPoint(inFrame)))")
             expect(frame.frame.origin == NSPoint(x: start.x + d.x, y: start.y + d.y), "the frame stays with the pointer (step \(step))")
         }
@@ -328,13 +323,13 @@ enum ExtensionPopupWindowTests {
             page.parent?.removeChildWindow(page)
             chrome.addChildWindow(page, ordered: .above)
             let d = NSPoint(x: CGFloat(step) * -40, y: CGFloat(step) * -20)
-            pointer = NSPoint(x: pointerStart.x + d.x, y: pointerStart.y + d.y)
+            pointer = NSPoint(x: -9900 + d.x, y: -9690 + d.y)
             frame.setFrameOrigin(NSPoint(x: start.x + d.x, y: start.y + d.y))
             expect(page.parent === frame, "the frame takes its bubble back as it moves (step \(step))")
             expect(offset() == inFrame, "the page moves with its frame though Chrome took it mid-drag (step \(step): \(NSStringFromPoint(offset())), was \(NSStringFromPoint(inFrame)))")
         }
         // Chrome resizes it too (the page grew): the page's top stays under the title bar.
-        page.setFrame(NSRect(origin: chromeOrigin, size: NSSize(width: page.frame.width, height: page.frame.height + 40)), display: false)
+        page.setFrame(NSRect(x: anchor.x - 2000, y: anchor.y - 1500, width: page.frame.width, height: page.frame.height + 40), display: false)
         expect(offset() == inFrame, "a page that grows mid-drag stays under the title bar (\(NSStringFromPoint(offset())))")
         held = false
         makeCurrent(.leftMouseUp, at: titleBar, in: frame)
