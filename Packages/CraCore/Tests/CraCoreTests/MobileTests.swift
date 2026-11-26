@@ -176,8 +176,8 @@ struct MobileChromeTests {
     }
 
     /// The drawer's address field is frosted and lays a little white over its material, over a
-    /// light page or a dark one but not in incognito, and over the tab switcher fainter
-    /// still, in either appearance; the page menu's address editor keeps the
+    /// light page or a dark one but not in incognito, and over the tab switcher one lift
+    /// in either appearance; the page menu's address editor keeps the
     /// sheet's own field.
     @Test func theDrawersFieldIsLiftedOverEitherPageAndTheTabRowButNotInIncognito() {
         typealias Style = MobileSearchSheet.FieldStyle
@@ -192,7 +192,7 @@ struct MobileChromeTests {
         #expect(Style.standard.whiteLift(incognito: true) == nil, "the page menu's field keeps its own")
         let row = Style.darkPage.whiteLift(incognito: false, overTabRow: true) ?? 0
         #expect(row == Style.lightPage.whiteLift(incognito: false, overTabRow: true), "the same in either appearance")
-        #expect(row > 0 && row < dark, "over the tab switcher, fainter than over a dark page")
+        #expect(row > dark && row < light, "over the tab switcher, between a dark page's and a light page's")
         #expect(Style.darkPage.whiteLift(incognito: true, overTabRow: true) == 0, "incognito still has none")
     }
 
@@ -337,6 +337,17 @@ struct MobileNewTabDrawerTests {
         #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 0.3) == 0.3)
         #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 0) == 0, "back in the bar")
         #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 1.2) == 1)
+    }
+
+    /// In dark mode the drawer's material takes a faint grey haze so it reads frosted; light mode
+    /// and incognito take none.
+    @Test func theDrawerIsHazedInDarkModeOnly() {
+        let haze = MobileNewTabDrawer.haze(darkMode: true, incognito: false)
+        #expect(haze > 0 && haze < 0.8, "a haze, the blur still showing")
+        #expect(MobileNewTabDrawer.haze(darkMode: false, incognito: false) == 0)
+        #expect(MobileNewTabDrawer.haze(darkMode: true, incognito: true) == 0)
+        let row = MobileNewTabDrawer.haze(darkMode: true, incognito: false, overTabRow: true)
+        #expect(row > 0 && row < haze, "less over the tab switcher")
     }
 
     @Test func theDrawersListFollowsItsOpenPositionAndTheMenusFollowsItsField() {

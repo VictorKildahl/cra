@@ -31,6 +31,11 @@ enum Palette {
     /// Dark is Arc Search's incognito sheet, which is also how the sheet looks in dark mode.
     static let sheet = dynamic(light: rgb(0xf3f3f4), dark: rgb(0x2e2930))
     static let sheetBottom = dynamic(light: rgb(0xf3e6e8), dark: rgb(0x2e2930))
+    /// The bar's top hairline and the new tab drawer's edge: a slightly dark grey in either
+    /// appearance, translucent black over the light material, a mid grey over the dark one.
+    static let barEdge = dynamic(light: UIColor(white: 0, alpha: 0.16), dark: UIColor(white: 0.42, alpha: 0.55))
+    /// The new tab drawer's haze over its material in dark mode: a dark grey.
+    static let drawerHaze = rgb(0x48464c)
     /// The bar's black in incognito, over its material.
     static let incognitoBar = rgb(0x0e0d0f)
     /// Dark mode's faint blue glow behind the rows (60fps.design's dark clip: #34394a at its middle).

@@ -30,6 +30,8 @@ final class BottomBar: UIView {
     private let hairline = UIView()
     /// Near-black over the material in incognito, as no material is that dark.
     private let incognitoTint = UIView()
+    /// The drawer's grey haze over the material in dark mode (`MobileNewTabDrawer.haze`).
+    private let drawerHaze = UIView()
     /// The drawer's hairline edge, a shade lighter than its fill.
     private let drawerEdge = UIView()
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
@@ -178,20 +180,21 @@ final class BottomBar: UIView {
         // The material rounds its top corners as the drawer rises; the strip along the bottom
         // stays square, as the bar always has.
         configureDrawerSurface(blur)
-        hairline.backgroundColor = Palette.dynamic(light: UIColor(white: 0, alpha: 0.10), dark: UIColor(white: 1, alpha: 0.12))
-        // The bar's hairline, then incognito's black over it, inside the material.
-        incognitoTint.backgroundColor = Palette.incognitoBar
-        incognitoTint.alpha = 0
-        incognitoTint.frame = blur.contentView.bounds
-        incognitoTint.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        [hairline, incognitoTint].forEach(blur.contentView.addSubview)
-        // The drawer's own hairline: white over the fill, so it reads a shade lighter than it in
-        // either appearance.
+        hairline.backgroundColor = Palette.barEdge
+        // The drawer's haze, the bar's hairline, then incognito's black, inside the material.
+        for (tint, colour) in [(drawerHaze, Palette.drawerHaze), (incognitoTint, Palette.incognitoBar)] {
+            tint.backgroundColor = colour
+            tint.alpha = 0
+            tint.frame = blur.contentView.bounds
+            tint.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        }
+        [drawerHaze, hairline, incognitoTint].forEach(blur.contentView.addSubview)
+        // The drawer's own hairline, the same grey as the bar's top edge.
         drawerEdge.isUserInteractionEnabled = false
         drawerEdge.backgroundColor = .clear
         drawerEdge.alpha = 0
         drawerEdge.layer.borderWidth = 0.5
-        drawerEdge.layer.borderColor = Palette.raisedHairline.cgColor
+        drawerEdge.layer.borderColor = Palette.barEdge.resolvedColor(with: traitCollection).cgColor
         addSubview(drawerEdge)
         configureDrawerSurface(drawerEdge)
         tabsButton.accessibilityIdentifier = "bar-tabs"
@@ -220,6 +223,9 @@ final class BottomBar: UIView {
         applyMode()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (bar: BottomBar, _) in
             bar.applyPageChrome()
+            bar.applyDrawer()
+            // A layer colour, resolved for the new appearance.
+            bar.drawerEdge.layer.borderColor = Palette.barEdge.resolvedColor(with: bar.traitCollection).cgColor
         }
     }
 
@@ -256,6 +262,8 @@ final class BottomBar: UIView {
     private func applyDrawer() {
         applyMaterial()
         drawerEdge.alpha = drawerAppearance
+        drawerHaze.alpha = drawerAppearance * MobileNewTabDrawer.haze(
+            darkMode: traitCollection.userInterfaceStyle == .dark, incognito: isIncognito, overTabRow: mode == .tabs)
         blur.alpha = slabAlpha
         setNeedsLayout()
     }

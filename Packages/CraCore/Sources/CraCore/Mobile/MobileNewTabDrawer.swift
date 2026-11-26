@@ -35,6 +35,14 @@ public struct MobileNewTabDrawer: Equatable, Sendable {
     /// it settles.
     public static let bounce = MobileMotion.Spring(response: 0.3, dampingRatio: 0.82)
 
+    /// A faint dark grey haze over the drawer's material in dark mode (`Palette.drawerHaze`), so it
+    /// reads frosted rather than as a plain dark panel. None in light mode, whose material is
+    /// already milky, nor in incognito, whose black covers it. Over the tab switcher, a little less.
+    public static func haze(darkMode: Bool, incognito: Bool, overTabRow: Bool = false) -> CGFloat {
+        guard darkMode, !incognito else { return 0 }
+        return overTabRow ? 0.3 : 0.6
+    }
+
     /// The tabs and menu buttons over the drawer's top edge: 1 at the bar, 0 once the drawer has
     /// risen `controlsFadeDistance`.
     public static func controlsOpacity(reach: CGFloat) -> CGFloat {
