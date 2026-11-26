@@ -748,3 +748,31 @@ holds one frame a second at 1 px per point (frame N is second N − 1). The best
 | 2:50–3:20 | Site Settings ("GOOGLE.COM SETTINGS"), App Settings (full list, 1.49.0 (68824.2)), Default Site Settings, empty Archive, Downloads (Files browser). |
 | 3:20–3:30 | "Did it fix the issue?" thumbs pill, "Blockers disabled for google.com" pill. |
 | 3:30–4:00 | Tab row in dark with the "Every tab, anywhere. Sync with Arc Desktop" card; Spaces button opens "Sync with Arc Desktop" (Sign in with Arc / I don't have an account), "Sign up on your computer first", "← Go back"; Arc's farewell page. |
+
+## Paul's recordings, 25 and 26 November 2026 (Arc Search 1.50.0, a 390 pt iPhone)
+
+Two screen recordings of the tab row dragged slowly both ways, 1170 × 2532 px = 390 × 844 pt
+at 3 px per point: four tabs on the 25th, six on the 26th (the clip in the pull request that
+centred the row's ends). Each card's favicon was followed through the frames by template
+matching, and how strongly the favicon and the title show was read against the same pixels at
+rest.
+
+- **Where the row rests.** Cards are 274 pt wide. Left edges, card in focus first:
+
+  | In focus | Itself | Behind | Next |
+  |---|---|---|---|
+  | First of four | 58 | | 234 |
+  | Second | 83 | 10 | 276 |
+  | Third | 82 | 12 | 300 |
+  | Last | 58 | 6 | |
+
+  The first and the last card rest in the middle of the screen. The next card's place differs
+  with the card in focus; Cra keeps the one pitch measured in 2024 (the third row here).
+- **Titles.** Only the card in focus shows its title in full. It fades in a straight line with
+  the card's travel, both ways from the first point: gone about 55 pt to the left (three
+  quarters of the way to the place behind) and about 110 pt to the right (half the way to the
+  next card's place). A card waiting on the right shows no title. A title is at most 181 pt
+  wide and ends in an ellipsis. The next card's favicon is drawn over it: over the ellipsis
+  where the next card is 276 pt in, over the middle of the title on the first card (234 pt).
+- **Favicons.** Whole on the card in focus and on every card right of it. Going left a favicon
+  fades in a straight line to 0.48 on the card behind, and further on the one behind that.

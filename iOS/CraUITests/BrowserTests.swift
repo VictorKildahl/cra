@@ -933,8 +933,10 @@ final class GestureTests: BrowserTestCase {
         let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
         XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
         sleep(1)
-        // The focused card is the one whose left edge is 83 pt in: First, the tab to the left.
-        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.minX - 83) < 3 }
+        // The focused card is the one in the middle of the screen: First, the tab to the left,
+        // which is also the first card of the row.
+        let middle = app.windows.firstMatch.frame.midX
+        let focused = cards.allElementsBoundByIndex.first { abs($0.frame.midX - middle) < 3 }
         XCTAssertEqual(focused?.label, "First")
         // The empty background returns to Second, the page that was open.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
