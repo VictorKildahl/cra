@@ -123,5 +123,29 @@ class RaiseTests(unittest.TestCase):
         self.assertEqual(raises["saivan"]["timestamp"], "2026-11-18T00:58:00Z")
 
 
+COMPANY = "**Company** — For teams running Cra at work. Your logo on crabrowser.app/support, and bugs that block your team go to the front of the queue."
+COMPANY_BACKER = "**Company Backer** — Everything in Company, plus your logo in the GitHub README, your name in the release notes when you join, and a post from @crabrowser welcoming you."
+COMPANY_PARTNER = "**Company Partner** — Everything in Company Backer, plus your logo on the crabrowser.app home page and a thank-you in the notes of every release while you sponsor."
+PATRON = "**Patron** — Everything in Insider, plus your name in the notes of every release while you sponsor."
+
+
+class CompanyPerkTests(unittest.TestCase):
+    """26 Nov 2026: company tiers at $250, $1,000 and $2,500 a month promise a README logo,
+    a home-page logo and a welcome post. The report has to list them, so nobody has to
+    remember a promise made to a paying company."""
+
+    def test_company_keeps_only_the_support_logo(self):
+        self.assertEqual(sponsors.tier_perks([COMPANY]), {"logo"})
+
+    def test_company_backer_adds_readme_welcome_and_notes(self):
+        self.assertEqual(sponsors.tier_perks([COMPANY, COMPANY_BACKER]), {"logo", "readme", "welcome", "notes"})
+
+    def test_company_partner_adds_the_home_page(self):
+        self.assertIn("home", sponsors.tier_perks([COMPANY, COMPANY_BACKER, COMPANY_PARTNER]))
+
+    def test_patron_gets_no_company_perks(self):
+        self.assertEqual(sponsors.tier_perks([PATRON]), {"notes"})
+
+
 if __name__ == "__main__":
     unittest.main()
