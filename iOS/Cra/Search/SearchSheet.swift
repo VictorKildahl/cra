@@ -92,6 +92,11 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     typealias FieldStyle = MobileSearchSheet.FieldStyle
 
     /// How the open address field sits on the drawer.
+    /// The drawer is grown over the tab switcher, where its field has no lift.
+    var fieldOverTabRow: Bool {
+        get { fieldBackground.overTabRow }
+        set { fieldBackground.overTabRow = newValue }
+    }
     var fieldStyle: FieldStyle = .standard {
         didSet {
             guard fieldStyle != oldValue else { return }
@@ -439,7 +444,6 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         let shown = MobileSearchSheet.accessories(hasText: !empty, incognito: isIncognito)
         let previous = accessories
         accessories = shown
-        let enterScale = MobileSearchMotion.accessoryEnterScale, enterFade = MobileSearchMotion.accessoryFade
         switch MobileSearchSheet.accessoryChange(from: previous, to: shown,
                                                  canAnimate: window != nil && !isHidden && fieldOpenness > 0) {
         case .keep:
@@ -450,31 +454,16 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
             // On, the mic goes at once with the blink; off, it comes back a beat after the word
             // starts leaving, as the other buttons come in.
             if shown.contains(.mic) {
-                enter([.mic], after: MobileSearchMotion.micReturnDelay, from: enterScale,
-                      spring: MobileMotion.accessoryEnter, fade: enterFade)
+                enter([.mic], after: MobileSearchMotion.micReturnDelay)
             } else {
                 snap(.mic, shown: false)
             }
         case .swap:
             // What goes fades and shrinks, then what comes springs in.
             let leaving = (previous ?? []).subtracting(shown)
-            let ticket = accessoryMoves.next()
-            let visible = leaving.elements.contains { !slot(for: $0).isHidden }
-            for kind in leaving.elements {
-                let slot = slot(for: kind)
-                let scale = MobileSearchMotion.accessoryLeaveScale
-                UIView.animate(withDuration: MobileSearchMotion.accessoryLeave, delay: 0,
-                               options: [.beginFromCurrentState, .curveEaseIn]) {
-                    slot.alpha = 0
-                    slot.transform = CGAffineTransform(scaleX: scale, y: scale)
-                } completion: { [weak self] _ in
-                    guard let self, self.accessoryMoves.isCurrent(ticket) else { return }
-                    slot.isHidden = true
-                    slot.transform = .identity
-                }
-            }
-            enter(shown.subtracting(previous ?? []), after: visible ? MobileSearchMotion.accessoryLeave : 0,
-                  from: enterScale, spring: MobileMotion.accessoryEnter, fade: enterFade)
+            let waits = leaving.elements.contains { !slot(for: $0).isHidden }
+            leave(leaving)
+            enter(shown.subtracting(previous ?? []), after: waits ? MobileSearchMotion.accessoryLeave : 0)
         }
         incognitoNote.isHidden = !(empty && isIncognito)
         showRows()
@@ -497,11 +486,30 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         slot.transform = .identity
     }
 
-    /// Brings buttons in after `delay`: from nothing and `scale`, fading over `fade` while the
-    /// scale springs up. One still on its way out is taken from where it is.
-    private func enter(_ kinds: MobileSearchSheet.Accessories, after delay: TimeInterval, from scale: CGFloat,
-                       spring: MobileMotion.Spring, fade: TimeInterval) {
+    /// Fades and shrinks buttons away, hiding them at the end unless a later swap has begun.
+    private func leave(_ kinds: MobileSearchSheet.Accessories) {
+        let ticket = accessoryMoves.next()
+        let scale = MobileSearchMotion.accessoryLeaveScale
+        for kind in kinds.elements {
+            let slot = slot(for: kind)
+            UIView.animate(withDuration: MobileSearchMotion.accessoryLeave, delay: 0,
+                           options: [.beginFromCurrentState, .curveEaseIn]) {
+                slot.alpha = 0
+                slot.transform = CGAffineTransform(scaleX: scale, y: scale)
+            } completion: { [weak self] _ in
+                guard let self, self.accessoryMoves.isCurrent(ticket) else { return }
+                slot.isHidden = true
+                slot.transform = .identity
+            }
+        }
+    }
+
+    /// Brings buttons in after `delay`: from nothing and `accessoryEnterScale`, fading in while
+    /// the scale springs up past full size and back. One still on its way out is taken from where
+    /// it is.
+    private func enter(_ kinds: MobileSearchSheet.Accessories, after delay: TimeInterval) {
         guard !kinds.isEmpty else { return }
+        let scale = MobileSearchMotion.accessoryEnterScale
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             for kind in kinds.elements where self.accessories?.contains(kind) == true {
@@ -512,8 +520,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
                     slot.transform = CGAffineTransform(scaleX: scale, y: scale)
                 }
                 slot.isHidden = false
-                UIView.animate(spring: spring) { slot.transform = .identity }
-                UIView.animate(withDuration: fade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                UIView.animate(spring: MobileMotion.accessoryEnter) { slot.transform = .identity }
+                UIView.animate(withDuration: MobileSearchMotion.accessoryFade, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
                     slot.alpha = 1
                 }
             }
@@ -725,7 +733,8 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         // Text starts 24.5 pt inside the open field; the accessory's centre is 26.5 pt from its right end.
         let textInset = MobileSearchMotion.textInset(closedWidth: closed.width, openness: morph)
         // In incognito the word stays beside the clear button, so the text stops short of it.
-        let word = isIncognito ? incognitoLabel.sizeThatFits(CGSize(width: 1000, height: 44)).width : nil
+        let labelSize = incognitoLabel.sizeThatFits(CGSize(width: 1000, height: 44))
+        let word = isIncognito ? labelSize.width : nil
         let reserve = MobileSearchSheet.textTrailingReserve(incognitoWordWidth: word, maskWidth: IncognitoEyesView.size.width)
         field.frame = CGRect(x: frame.minX + textInset, y: frame.minY,
                              width: max(0, frame.width - textInset - reserve), height: frame.height)
@@ -752,7 +761,6 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
         // The clip stops 2 pt left of the icon, so the word goes just up to it rather than under it.
         incognitoLabelClip.frame = CGRect(x: iconLeft - labelArea, y: toggle.minY,
                                           width: labelArea - 2, height: toggle.height)
-        let labelSize = incognitoLabel.sizeThatFits(CGSize(width: 1000, height: incognitoLabelClip.bounds.height))
         // Bounds and centre, not frame: the label carries its slide as a transform, and a frame set
         // on a transformed layer shifts it by the transform, which made the word jump mid-slide.
         incognitoLabel.bounds = CGRect(origin: .zero, size: labelSize)
@@ -849,10 +857,8 @@ final class SearchField: UITextField {
 /// The field's fill: lavender to pink with a hairline edge when open, the bar pill's fill when
 /// closed, so the pill can grow into the field.
 final class FieldBackgroundView: UIView {
-    /// Prototype (`-CraBarMaterials YES`): the drawer's field is frosted like the drawer, with its
-    /// white lift over the material rather than over nothing.
+    /// The drawer's field is frosted like the drawer, its white lift over the material.
     private let material = UIVisualEffectView(effect: nil)
-    private var showsMaterial = false
     private let gradient = CAGradientLayer()
     private let pill = UIView()
     private let plus = UIImageView(image: UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)))
@@ -875,6 +881,10 @@ final class FieldBackgroundView: UIView {
     /// over a light page, and a softer one over a dark page.
     var fieldStyle: SearchSheet.FieldStyle = .standard {
         didSet { if fieldStyle != oldValue { crossfadeColors() } }
+    }
+    /// Grown over the tab switcher: no lift, the material alone.
+    var overTabRow = false {
+        didSet { if overTabRow != oldValue { applyColors() } }
     }
     /// The sheet is incognito's. Only the lift fades, with the bar's black (`incognitoCloseFade`):
     /// the field itself is not crossfaded over the toggle, so it does not flash.
@@ -930,7 +940,7 @@ final class FieldBackgroundView: UIView {
     /// A style change comes in with the drawer's own material fade, so the plus and field change
     /// over without a snap.
     private func crossfadeColors() {
-        UIView.transition(with: self, duration: MobileNewTabDrawer.colourFade,
+        UIView.transition(with: self, duration: MobileNewTabDrawer.materialFade,
                           options: [.transitionCrossDissolve, .allowUserInteraction]) {
             self.applyColors()
         }
@@ -939,18 +949,10 @@ final class FieldBackgroundView: UIView {
     private func applyColors() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let frosted = BottomBar.usesMaterials && fieldStyle != .standard
-        if frosted != showsMaterial {
-            showsMaterial = frosted
-            material.effect = frosted ? UIBlurEffect(style: .systemThinMaterial) : nil
+        if fieldStyle.isFrosted != (material.effect != nil) {
+            material.effect = fieldStyle.isFrosted ? UIBlurEffect(style: .systemThinMaterial) : nil
         }
-        if frosted, isIncognito {
-            // Incognito's dark field is the material alone; elsewhere the lift keeps the field a
-            // shade lighter than the drawer.
-            gradient.colors = [UIColor.clear.cgColor, UIColor.clear.cgColor]
-        } else if let lift = fieldStyle.whiteLift {
-            // Over the drawer, a little white makes the field a shade lighter than the surface
-            // behind it rather than a fixed colour.
+        if let lift = fieldStyle.whiteLift(incognito: isIncognito, overTabRow: overTabRow) {
             let white = UIColor.white.withAlphaComponent(lift)
             gradient.colors = [white.cgColor, white.cgColor]
         } else {

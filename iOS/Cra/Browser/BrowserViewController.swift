@@ -914,11 +914,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     func setDrawerMaterial(_ showing: Bool) {
         // A light page in a dark app gives a light bar but a dark drawer; the plus switches to the
         // dark appearance's own fill as the drawer colour comes in (or back on close).
-        drawer.showsColour = showing
+        drawer.showsMaterial = showing
         applyDrawerChrome()
         if showing { bar.drawerActive = true }
         bar.drawerLetGo = !showing
-        UIView.animate(withDuration: MobileNewTabDrawer.colourFade, delay: 0,
+        UIView.animate(withDuration: MobileNewTabDrawer.materialFade, delay: 0,
                        options: [.beginFromCurrentState, .allowUserInteraction]) {
             self.bar.drawerAppearance = showing ? 1 : 0
         }
@@ -929,8 +929,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private func applyDrawerChrome() {
         sheet.lightPlusChrome = MobileBottomBar.lightChrome(
             darkMode: traitCollection.userInterfaceStyle == .dark, pageIsLight: bar.pageIsLight,
-            incognito: bar.isIncognito, floats: false, overDrawer: drawer.showsColour)
+            incognito: bar.isIncognito, floats: false, overDrawer: drawer.showsMaterial)
         sheet.fieldStyle = drawer.fieldStyle(pageIsLight: bar.pageIsLight)
+        sheet.fieldOverTabRow = bar.mode == .tabs
     }
 
     /// The bar turns incognito's black for an incognito tab or search, and the sheet's plus
@@ -1034,7 +1035,7 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         if searching {
             drawer.growsFromBar = !editingAddress && replacingTop == nil
             if !drawer.growsFromBar {
-                drawer.showsColour = false
+                drawer.showsMaterial = false
                 applyDrawerChrome()
             }
         }

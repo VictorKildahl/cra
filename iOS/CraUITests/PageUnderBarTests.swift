@@ -159,9 +159,9 @@ final class PageUnderBarTests: BrowserTestCase {
         keep("bottom colour, not top")
     }
 
-    /// On a light page the bar lays white over its material (`MobileBottomBar.pageTint`): in dark
+    /// On a light page the bar takes a thick light material (`MobileBottomBar.material`): in dark
     /// mode, over a light grey page, it reads nearly white rather than the dark material's grey.
-    /// Over a dark page it lays nothing and stays dark. Colours by name: a launch address keeps
+    /// Over a dark page it keeps the thin one and stays dark. Colours by name: a launch address keeps
     /// `%23` as typed.
     func testALightPagesBarIsLiftedWhite() {
         launch(["-CraOpenURL", Self.colouredPage("Light", "silver"), "-CraSearch", "NO", "-CraAppearance", "dark"])
@@ -178,7 +178,7 @@ final class PageUnderBarTests: BrowserTestCase {
         XCTAssertLessThan(luminance(dark), 0.35, "the dark page's bar has no white lift: \(dark)")
     }
 
-    /// An incognito tab's bar lays black over its material (`MobileBottomBar.incognitoTint`), so
+    /// An incognito tab's bar lays near-black over its material (`Palette.incognitoBar`), so
     /// it reads black even over a white page in a light app.
     func testAnIncognitoTabsBarIsBlack() {
         openIncognitoTab()

@@ -179,14 +179,20 @@ public enum MobileSearchSheet {
             self = !growsFromBar ? .standard : pageIsLight ? .lightPage : .darkPage
         }
 
-        /// How much white the field lays over the drawer, so it reads a shade lighter than the
-        /// surface behind it, still see-through, over a light page or a dark one. Nil keeps the
-        /// sheet's own field colour.
-        public var whiteLift: CGFloat? {
+        /// Whether the field is frosted with the drawer's material: the drawer's is, the page
+        /// menu's sheet keeps its own grey field.
+        public var isFrosted: Bool { self != .standard }
+
+        /// How much white the field lays over its material, so it reads a shade lighter than the
+        /// drawer behind it, still see-through, over a light page or a dark one. Incognito's dark
+        /// field and the field over the tab switcher are the material alone. Nil keeps the sheet's
+        /// own field colour.
+        public func whiteLift(incognito: Bool, overTabRow: Bool = false) -> CGFloat? {
             switch self {
             case .standard: nil
-            case .lightPage: 0.25
-            case .darkPage: 0.12
+            case _ where incognito || overTabRow: 0
+            case .lightPage: 0.22
+            case .darkPage: 0.05
             }
         }
     }
@@ -222,14 +228,24 @@ public enum MobileBottomBar {
     public static let sideButtonDiameter: CGFloat = 35
     /// A side button's centre from its edge of the screen.
     public static let sideButtonCenterInset: CGFloat = 41
-    /// How much white the bar lays over its material on a light page: a white page gives a nearly
-    /// white bar rather than the material's fixed grey.
-    public static let pageTint: CGFloat = 0.75
-    /// The black the bar lays over its material in incognito, under the controls: a dark page has
-    /// no white lift, so this is what makes the bar read black.
-    public static let incognitoTint: CGFloat = 0.75
-    /// The crossfade as a tab's light or dark page changes the bar's white overlay.
-    public static let pageTintFade: TimeInterval = 0.2
+    /// The bar's material, one of UIKit's: the colour comes from the material itself rather than
+    /// from tints laid over one. Incognito has none dark enough, so it lays near-black over it.
+    public enum Material: Equatable, Sendable {
+        /// Over a dark page: the thinnest, so the page's colour shows through.
+        case page
+        /// Over a light page: a thick light one, so a white page gives a nearly white bar.
+        case lightPage
+        /// The new tab drawer: thin, so the backdrop shows blurred through it.
+        case drawer
+    }
+
+    public static func material(drawerShowing: Bool, pageIsLight: Bool, incognito: Bool) -> Material {
+        if drawerShowing { return .drawer }
+        return pageIsLight && !incognito ? .lightPage : .page
+    }
+
+    /// The crossfade as a tab's light or dark page changes the bar's material.
+    public static let materialFade: TimeInterval = 0.2
 
     /// Whether the page under the bar is light, from the status bar's ink: dark text means a light
     /// page. With no band showing, the app's own appearance decides, as `.default` text does.

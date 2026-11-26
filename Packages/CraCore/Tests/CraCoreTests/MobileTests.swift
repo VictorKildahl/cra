@@ -163,20 +163,36 @@ struct MobileChromeTests {
         #expect(!MobileBottomBar.pageIsLight(statusBarFill: "#000000", darkMode: false))
         #expect(MobileBottomBar.pageIsLight(statusBarFill: nil, darkMode: false))
         #expect(!MobileBottomBar.pageIsLight(statusBarFill: nil, darkMode: true))
-        // The incognito drawer lies on solid; the ordinary one lets the blur show.
-        #expect(MobileNewTabDrawer.tint < MobileNewTabDrawer.incognitoTint)
     }
 
-    /// The drawer's address field lays a little white over the drawer, over a light page or a dark
-    /// one, and the page menu's address editor keeps the sheet's own field.
-    @Test func theDrawersFieldIsLiftedOverEitherPage() {
+    /// The bar's material: the drawer's while it is out, a thick light one over a light page (not
+    /// in incognito, whose black covers it), the thinnest otherwise.
+    @Test func theBarsMaterialFollowsThePageAndTheDrawer() {
+        #expect(MobileBottomBar.material(drawerShowing: false, pageIsLight: false, incognito: false) == .page)
+        #expect(MobileBottomBar.material(drawerShowing: false, pageIsLight: true, incognito: false) == .lightPage)
+        #expect(MobileBottomBar.material(drawerShowing: false, pageIsLight: true, incognito: true) == .page)
+        #expect(MobileBottomBar.material(drawerShowing: true, pageIsLight: true, incognito: false) == .drawer)
+        #expect(MobileBottomBar.material(drawerShowing: true, pageIsLight: false, incognito: true) == .drawer)
+    }
+
+    /// The drawer's address field is frosted and lays a little white over its material, over a
+    /// light page or a dark one but not in incognito or over the tab switcher; the page menu's
+    /// address editor keeps the
+    /// sheet's own field.
+    @Test func theDrawersFieldIsLiftedOverEitherPageButNotInIncognitoOrOverTheTabRow() {
         typealias Style = MobileSearchSheet.FieldStyle
         #expect(Style(growsFromBar: false, pageIsLight: true) == .standard)
         #expect(Style(growsFromBar: true, pageIsLight: true) == .lightPage)
         #expect(Style(growsFromBar: true, pageIsLight: false) == .darkPage)
-        #expect(Style.standard.whiteLift == nil)
-        let light = Style.lightPage.whiteLift ?? 0, dark = Style.darkPage.whiteLift ?? 0
+        #expect(Style.standard.whiteLift(incognito: false) == nil && !Style.standard.isFrosted)
+        let light = Style.lightPage.whiteLift(incognito: false) ?? 0, dark = Style.darkPage.whiteLift(incognito: false) ?? 0
         #expect(light > 0 && light < 0.5 && dark > 0 && dark < 0.5, "a lift, still see-through")
+        #expect(Style.lightPage.whiteLift(incognito: true) == 0 && Style.darkPage.whiteLift(incognito: true) == 0,
+                "incognito's field is the material alone")
+        #expect(Style.standard.whiteLift(incognito: true) == nil, "the page menu's field keeps its own")
+        #expect(Style.lightPage.whiteLift(incognito: false, overTabRow: true) == 0
+                    && Style.darkPage.whiteLift(incognito: false, overTabRow: true) == 0,
+                "over the tab switcher the field is the material alone")
     }
 
     /// The mic sits left of the incognito mask, clear of it.

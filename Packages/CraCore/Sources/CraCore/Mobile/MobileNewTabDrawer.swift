@@ -18,8 +18,8 @@ public struct MobileNewTabDrawer: Equatable, Sendable {
     /// The search sheet is this drawer, grown out of the bar: its background is the bar's material.
     public var growsFromBar = false
     public var fieldHold: FieldHold = .none
-    /// The drawer's colour is over the bar's material: from the first touch until a close starts.
-    public var showsColour = false
+    /// The drawer's material and edge are in: from the first touch until a close starts.
+    public var showsMaterial = false
     /// Pulled up and let go: its rise into place springs, rather than following the keyboard.
     public var opensFromPull = false
 
@@ -28,15 +28,9 @@ public struct MobileNewTabDrawer: Equatable, Sendable {
     /// How far the drawer's top edge rises before the bar's tabs and menu buttons have faded away,
     /// in points.
     public static let controlsFadeDistance: CGFloat = 120
-    /// How long the drawer's background takes to go from the bar's material to the drawer's colour.
-    /// It starts when the drawer does, not with the finger's distance.
-    public static let colourFade: TimeInterval = 0.15
-    /// How much of the drawer's colour lies over the bar's material: the blur still shows, but the
-    /// drawer reads as the search sheet's own surface.
-    public static let tint: CGFloat = 0.65
-    /// In incognito the drawer's colour lies on solid, so the bar reads as dark as the sheet instead
-    /// of letting a light page through the blur.
-    public static let incognitoTint: CGFloat = 1
+    /// How long the bar's material takes to become the drawer's. It starts when the drawer does,
+    /// not with the finger's distance.
+    public static let materialFade: TimeInterval = 0.15
     /// Let go on its way down, or pulled up and released: a short spring with a small overshoot as
     /// it settles.
     public static let bounce = MobileMotion.Spring(response: 0.3, dampingRatio: 0.82)
