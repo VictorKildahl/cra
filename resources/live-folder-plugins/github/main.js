@@ -244,10 +244,8 @@ function parseChecks(html) {
         "This job is queued": "pending", "This job is in progress": "pending", "This check is in progress": "pending",
         "This job was skipped": "skipped", "This check was skipped": "skipped"
     };
-    const sections = matches(/<summary\b[^>]*>([\s\S]*?)<\/summary>/gi, html).map(m => {
-        const heading = /<span\b[^>]*class="[^"]*\bv-align-middle\b[^"]*"[^>]*>([\s\S]*?)<\/span>/.exec(m[1]);
-        return {index: m.index, title: heading ? plain(heading[1]) : null};
-    });
+    const sections = matches(/<summary\b[^>]*>([\s\S]*?)<\/summary>/gi, html)
+        .map(m => ({index: m.index, title: plain(m[1]).replace(/ \d+$/, "")}));
     const jobs = new Map();
     for (let i = 0; i < starts.length; i++) {
         const chunk = html.slice(starts[i].index + starts[i][0].length, starts[i + 1]?.index ?? html.length);
