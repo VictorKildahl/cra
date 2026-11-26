@@ -1663,7 +1663,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
               ["http", "https"].contains(scheme.lowercased()), let host = url.host else { return }
         let css = BlockLists.shared.style(for: host)
         guard runtime.hasElementHidingStyle || !css.isEmpty else { return }
-        adopt(css, as: "__craListFilters", in: browser)
+        // Important declarations in a layer outrank unlayered site author styles.
+        let layered = css.isEmpty ? "" : "@layer cra-list-filters {\n" + css + "\n}"
+        adopt(layered, as: "__craListFilters", in: browser)
         runtime.hasElementHidingStyle = !css.isEmpty
     }
 
