@@ -20,14 +20,4 @@ struct SidebarWidthTests {
         #expect(SidebarWidth.clamped(501) == 500)
         #expect(SidebarWidth.clamped(328) == 328)
     }
-
-    /// Double-clicking the resize edge restores Arc's "default" width: the same 228 pt as the
-    /// drag snap (`canSnapToDefaultWidth`), not the 328 pt a fresh window starts at.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/819"))
-    func doubleClickRestoresArcsDefault() {
-        #expect(SidebarResize.snapWidth == 228)
-        #expect(SidebarWidth.initial == 328)
-        #expect(SidebarResize.snapWidth != SidebarWidth.initial)
-        #expect(SidebarWidth.clamped(SidebarResize.snapWidth) == SidebarResize.snapWidth)
-    }
 }

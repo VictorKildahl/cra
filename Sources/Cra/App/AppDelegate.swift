@@ -3552,6 +3552,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 main.testDragEnded(tab.id, at: point)
                 return
             }
+            // sidebarEdge=doubleClick: a double click on the sidebar's edge (#819).
+            if dict["sidebarEdge"] == "doubleClick" { main.testSidebarEdgeDoubleClick(); return }
             // edgeDrag=next|previous[&hold=<seconds>]: a row's drag held just past the sidebar's right or
             // left edge, which pages to the space on that side every SidebarEdgeDrag.delay (#499).
             if let edge = dict["edgeDrag"] {

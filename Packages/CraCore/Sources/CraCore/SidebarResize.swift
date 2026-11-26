@@ -57,6 +57,11 @@ public struct SidebarResize: Equatable {
         return .width(SidebarWidth.clamped(proposed))
     }
 
+    /// The width a double click on the sidebar's edge gives it: Arc's default width, the one its drag
+    /// snaps to (`SidebarResizeState.canSnapToDefaultWidth`). #819's Arc recording: from about 160
+    /// and from about 332 pt, a double click puts the edge at 227–228 pt at once (#819).
+    public static let doubleClickWidth: Double = snapWidth
+
     /// True while the width is held at `snapWidth` (Arc plays a haptic tick when it takes hold).
     public var isSnapped: Bool { snapped }
 }

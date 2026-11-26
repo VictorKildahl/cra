@@ -1,0 +1,16 @@
+# promise: #819
+# A double click on the sidebar's edge did nothing. In the reporter's Arc recording it puts the edge at Arc's
+# default width, 228 pt, the width a drag snaps to (SidebarResize.doubleClickWidth), from a narrow sidebar and from
+# a wide one alike. The two presses go to the edge as AppKit sends them (clickCount 1, then 2), and the width is
+# kept for the next launch.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=edge
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?sidebarEdge=doubleClick
+wait 1
+expect-log sidebar edge before: 328 pt
+expect-log sidebar edge double click: 228 pt
+expect-log sidebar edge after: 228 pt, saved 228 pt

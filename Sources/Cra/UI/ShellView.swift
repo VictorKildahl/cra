@@ -1502,7 +1502,7 @@ final class ResizeHandleView: NSView {
     /// pointer, snaps at slow speeds and hides the sidebar when dragged far enough).
     var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
-    /// Double-click restores Arc's default sidebar width (#819).
+    /// A double click on the strip (the sidebar's: Arc's default width, #819). Its press starts no drag.
     var onDoubleClick: (() -> Void)?
     /// The sidebar's side: on the right a drag toward the window's left makes it wider (#464).
     var side: SidebarSide = .left
@@ -1538,10 +1538,8 @@ final class ResizeHandleView: NSView {
     private func x(_ event: NSEvent) -> CGFloat { side.place(dx: event.locationInWindow.x) }
 
     override func mouseDown(with event: NSEvent) {
-        // Arc: a double-click of the edge resets to the default width (issue #819). Same pattern
-        // as the split-pane divider — don't start a drag.
-        if event.clickCount == 2 {
-            onDoubleClick?()
+        if event.clickCount == 2, let onDoubleClick {
+            onDoubleClick()
             return
         }
         lastX = x(event)

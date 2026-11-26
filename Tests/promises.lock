@@ -1811,6 +1811,8 @@
 #818   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderHitTests.swift::neighbouringButtonsLeaveNoDeadSpace  bcd899a069b8
 #818   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderHitTests.swift::theDrawnBoxesStayArcs  65fac1adc52c
 #818   Tests/Scenarios/sidebar-header-no-dead-space.scenario  025488babe9c
+#819   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::aDoubleClickGivesArcsDefaultWidth  3cb973fd856a
+#819   Tests/Scenarios/sidebar-edge-double-click.scenario  cabcaff6d2ac
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAddressWhoseAppIsCraIsSearched  a6692de56b64
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aWindowOpenedOnlyOnTheAppsAddressCloses  37a32911d3de
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::anAddressWhoseAppIsCraIsNotHandedBack  c4bfd41c035a

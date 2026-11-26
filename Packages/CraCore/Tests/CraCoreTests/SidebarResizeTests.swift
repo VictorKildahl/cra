@@ -44,3 +44,15 @@ struct SidebarResizeTests {
         #expect(trace(from: 300, through: [100, 290, 520]) == [.width(164), .width(290), .width(500)])
     }
 }
+
+/// A double click on the sidebar's edge (#819).
+struct SidebarEdgeDoubleClickTests {
+    /// Nothing happened. In the reporter's Arc recording a double click puts the edge back at Arc's default
+    /// width, about 228 pt, from a sidebar dragged narrow and from one dragged wide: the width its drag snaps to.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/819"))
+    func aDoubleClickGivesArcsDefaultWidth() {
+        #expect(SidebarResize.doubleClickWidth == 228)
+        #expect(SidebarResize.doubleClickWidth == SidebarResize.snapWidth)
+        #expect(SidebarWidth.clamped(SidebarResize.doubleClickWidth) == SidebarResize.doubleClickWidth)
+    }
+}

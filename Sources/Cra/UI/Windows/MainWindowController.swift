@@ -332,20 +332,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             store.prefs.sidebarWidth = Double(shell.sidebarWidth)
             lastSidebarWidth = shell.sidebarWidth
         }
-        // Arc: double-click the edge to restore the default width (#819) — same 228 pt as the
-        // drag snap (`SidebarResizeState.canSnapToDefaultWidth`).
+        // Arc: a double click on the edge gives the sidebar its default width, 228 pt (#819).
         shell.resizeHandle.onDoubleClick = { [weak self] in
-            guard let self else { return }
-            let width = CGFloat(SidebarResize.snapWidth)
-            store.prefs.sidebarWidth = SidebarResize.snapWidth
-            lastSidebarWidth = width
+            guard let self, sidebarResize == nil else { return }
+            let width = CGFloat(SidebarResize.doubleClickWidth)
             shell.sidebarWidth = width
-            if shell.sidebarDetached {
-                // Floating panel follows via FloatingSidebar's own onDoubleClick → reposition.
-                return
-            }
-            shell.animateSidebar(visible: sidebarVisible, floating: shell.floatingSidebar,
-                                 fullscreen: shell.contentFullscreen, width: width)
+            shell.layoutSubtreeIfNeeded()
+            store.prefs.sidebarWidth = Double(width)
+            lastSidebarWidth = width
+            CraLog.note("sidebar edge double click: \(Int(width)) pt")
         }
         shell.onEdgeHover = { [weak self] inStrip in
             if inStrip { self?.floatingSidebar?.edgeHovered() } else { self?.floatingSidebar?.edgeLeft() }
@@ -847,6 +842,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         guard let l = window?.contentView.flatMap(list(in:)) else { CraLog.note("dragEnd: no list"); return }
         l.dragEnded(id, at: screenPoint, operation: [])
+    }
+
+    /// `cra://debug?sidebarEdge=doubleClick`: a double click's two presses sent to the sidebar's edge as AppKit sends
+    /// them (#819), then the sidebar's width.
+    func testSidebarEdgeDoubleClick() {
+        let handle = shell.resizeHandle
+        guard let window, handle.window === window else { CraLog.note("sidebar edge: no handle"); return }
+        let at = handle.convert(NSPoint(x: handle.bounds.midX, y: handle.bounds.midY), to: nil)
+        CraLog.note("sidebar edge before: \(Int(shell.sidebarWidth)) pt")
+        for (type, clicks) in [(NSEvent.EventType.leftMouseDown, 1), (.leftMouseUp, 1), (.leftMouseDown, 2), (.leftMouseUp, 2)] {
+            guard let e = NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clicks, pressure: 1) else { continue }
+            if type == .leftMouseDown { handle.mouseDown(with: e) } else { handle.mouseUp(with: e) }
+        }
+        CraLog.note("sidebar edge after: \(Int(shell.sidebarWidth)) pt, saved \(Int(store.prefs.sidebarWidth)) pt")
     }
 
     /// `cra://debug?edgeDrag`: the focused space's list held at the sidebar's edge for `hold`
