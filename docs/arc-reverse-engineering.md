@@ -5602,3 +5602,22 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   selected. Arc moves the live page and reloads the Favorite; Cra loads the page in the new tab and a Favorite at
   home keeps its own. Scenario `favorite-command-click`.
 - **Open questions:** a ⌘-click on a Favorite that isn't open (not loaded), on a Favorite split's pane, and ⌘⇧/⌘⌥.
+
+## GitHub pull request card (24 Nov 2026)
+
+Research job 012 inspected strings in `/Applications/Arc.app/Contents/MacOS/Arc`, searching
+for `GitHubClient+PullRequestsParsing.swift` and the pull-request model, fetcher and UI action
+names. The binary contains `Checks`/`FailingCheck`, `StatusChecks`/`Count`/`Check`,
+`fetchPullRequestChecks` and `fetchPullRequestStatusChecks`. Its card actions include
+`pullRequestViewCheck` and `pullRequestShowAllFailures`. These findings establish a checks
+card as Arc parity; they do not establish a row glyph.
+
+The same inspection found `Status` (open, closed, merged, draft), `ReviewStatus`
+(`latestOpinionatedReviews`, `pendingReviewRequests`, APPROVED, CHANGES_REQUESTED, COMMENTED,
+DISMISSED, PENDING), `DiffStats`, `MergeBox`, and fetchers for merge boxes, threads, diffs and
+user hovercards. HTML/XPath strings include `data-pr-has-conflicts`,
+`data-pr-has-unresolved-conversations`, `data-pr-files-changed`, `review-status-*` and diff
+colours. Other actions are `pullRequestResolveConflicts` and `pullRequestShowComments`.
+The client uses `GitHub-Verified-Fetch`, `X-Requested-With` and embedded
+`pullsDashboardSurfaceContentRoute` JSON. Cra limits this phase to a snapshot card and
+GET-only checks on hover; review state and the other actions remain out of scope.

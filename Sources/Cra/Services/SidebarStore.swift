@@ -769,7 +769,7 @@ final class SidebarStore {
     /// as in Arc (RecentTabOrder.listsPane, #784). Not saved: a relaunch unloads them anyway.
     var favoritesClosedWithCmdW: Set<UUID> = []
 
-    func selectTab(_ id: UUID?, window: UUID? = nil) {
+    func selectTab(_ id: UUID?, in preferredSpace: UUID? = nil, window: UUID? = nil) {
         var w = self.window(window).id
         // A space's tab picked while an incognito or Blank Window is in front (a link from
         // another app, the Library) opens in the last normal window.
@@ -780,7 +780,10 @@ final class SidebarStore {
             touch()
             return
         }
-        let sid = spaceID(ofItem: id, window: w) ?? focused
+        // A shared favorite belongs to every space on its profile; callers that know which space
+        // the action started in (Picture in Picture's Back to Tab, #843) pass it so it returns
+        // there rather than the window's current space or the first space in sidebar order.
+        let sid = preferredSpace.flatMap { isInSpace(id, $0) ? $0 : nil } ?? spaceID(ofItem: id, window: w) ?? focused
         // Incognito and Blank Windows show only their own tabs, and only there.
         guard isStandalone(window: w) ? sid == focused : !isStandalone(space: sid) else { return }
         updateWindow(w) {

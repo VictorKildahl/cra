@@ -110,6 +110,7 @@ private struct PreviewsSheet: View {
                 Toggle("Outlook Mail", isOn: $store.settings.outlookMailPreviews)
                 Toggle("Recent pages on Linear, Notion, and Figma", isOn: $store.settings.recentPagesPreviews)
                 Toggle("Notion Calendar", isOn: $store.settings.notionCalendarPreviews)
+                Toggle("GitHub Pull Requests", isOn: $store.settings.pullRequestPreviews)
             }
             .toggleStyle(.checkbox)
             .padding(.top, 4)

@@ -28,6 +28,59 @@ final class LiveFolderManager {
     /// A page on a folder's service loaded while it waits for a sign-in: refresh once pages have settled.
     @ObservationIgnored private var signInChecks: [UUID: DispatchWorkItem] = [:]
 
+    static let checksChanged = Notification.Name("LiveFolderChecksChanged")
+    @ObservationIgnored private var checksCaches: [String: PullRequestChecksCache] = [:]
+
+    func pullRequestItem(for tab: UUID) -> LiveFolderPluginItem? {
+        guard let store, let url = store.item(tab)?.tab?.liveItemURL,
+              PullRequestPreview.identity(for: url) != nil,
+              let folder = store.liveFolder(containing: tab) else { return nil }
+        return folder.liveFolder?.plugin?.snapshot?.items.first { $0.url == url }
+    }
+
+    func checks(for item: LiveFolderPluginItem, tab: UUID) -> PullRequestChecks? {
+        let profile = store?.profilePath(item: tab) ?? ""
+        return checksCaches[profile]?.checks(for: .init(item))
+    }
+
+    func reservesChecksSlot(for item: LiveFolderPluginItem, tab: UUID) -> Bool {
+        let profile = store?.profilePath(item: tab) ?? ""
+        return checksCaches[profile]?.reservesSlot(for: .init(item)) ?? true
+    }
+
+    /// Best effort, entirely separate from refresh: no folder state or error is written.
+    func fetchChecks(for item: LiveFolderPluginItem, tab: UUID) {
+        guard let store, let folder = store.liveFolder(containing: tab), let configuration = folder.liveFolder?.plugin,
+              let context = store.liveRequestContext(folder.id),
+              LiveFolderPluginStore.shared.isEnabled(configuration.id),
+              let entry = LiveFolderPluginStore.shared.entries[configuration.id] else { return }
+        let profile = store.profilePath(item: tab)
+        let scope = profile ?? ""
+        let key = PullRequestChecksCache.Key(item)
+        if checksCaches[scope] == nil { checksCaches[scope] = PullRequestChecksCache() }
+        guard checksCaches[scope]!.begin(key) else { return }
+        Task {
+            var checks: PullRequestChecks?
+            do {
+                struct Input: Encodable {
+                    var url: String
+                    var revision: String?
+                    var settings: [String: String]
+                    var state: [String: String]
+                }
+                struct Output: Decodable { var checks: PullRequestChecks? }
+                let input = Input(url: item.url, revision: item.revision, settings: configuration.settings, state: configuration.state)
+                let data = try await LiveFolderPluginStore.shared.invoke(entry.package, method: "checks", input: JSONEncoder().encode(input),
+                    origins: configuration.sessionOrigins.map { try LiveFolderSessionOrigin($0) }, profile: profile,
+                    isCurrent: { store.liveRequestContext(folder.id) == context })
+                checks = try JSONDecoder().decode(Output.self, from: data).checks
+            } catch { checks = nil }
+            checksCaches[scope]?.finish(key, checks: checks)
+            CraLog.note("pull request checks: \(checks == nil ? "empty" : "loaded")")
+            NotificationCenter.default.post(name: Self.checksChanged, object: nil)
+        }
+    }
+
     /// Dia's github-live-folder-min-refresh-interval-seconds (120 in its flag cache, 27 Oct 2026).
     nonisolated static let refreshInterval: TimeInterval = 120
     /// Dia's github-live-folder-post-merge/-post-review-retention-seconds (120 each): an item

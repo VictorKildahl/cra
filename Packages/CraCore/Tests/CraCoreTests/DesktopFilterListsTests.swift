@@ -198,6 +198,54 @@ struct DesktopFilterListsTests {
         #expect(compiled.map(\.condition.urlFilter) == ["||cdn.example/ads/*"])
     }
 
+    @Test func subscriptionCanHideAnAdContainerByItsContents() {
+        let selector = #"section aside[class^="sc-"]:has(> div[class^="sc-"]:not([id]) > div[class^="sc-"]:not([id]) > div[data-ad-unit-id])"#
+        let rule = "20min.ch##" + selector
+        let list = DesktopHidingRules.read([rule, "reader.20min.ch#@#" + selector,
+            rule + "{color:red}", rule + ":style(color:red)", rule + "("].joined(separator: "\n"), address: "", fetched: .now)
+        #expect(list.hidingRules.count == 2)
+        let hiding = DesktopHidingRules(lines: list.hidingRules)
+        #expect(hiding.css(host: "www.20min.ch") == selector + "{display:none!important}")
+        #expect(hiding.css(host: "reader.20min.ch").isEmpty)
+        #expect(hiding.css(host: "other.ch").isEmpty)
+        // Copies written by Cra up to 0.1.58 say format 1: they read as having no network source, so the
+        // next launch fetches them again and their newly supported hiding rules are kept.
+        let previous = list.text.replacingOccurrences(of: "# network-format: 3", with: "# network-format: 1")
+        #expect(CachedBlocklist(text: previous)?.hasNetworkSource == false)
+    }
+
+    @Test func attributeExclusionsReplaceGenericSlotRuleAndRespectHostExceptions() {
+        let slot = #"[id^="div-gpt-ad"]"#
+        let refined = slot + #":not([style^="width: 1px; height: 1px; position: absolute; left: -10000px; top: -"]):not([style="pointer-events: none; height: 1px; width: 0px; opacity: 0; visibility: hidden; position: fixed; bottom: 0px;"])"#
+        let lines = ["##" + slot, "#@#" + slot, "~except.example##" + refined,
+                     "other.example#@#" + refined, "##" + refined + "{color:red}",
+                     "##" + refined + ":style(height:0)", "##" + refined + ","]
+        let list = DesktopHidingRules.read(lines.joined(separator: "\n"), address: "", fetched: .now)
+        #expect(list.hidingRules == Array(lines.prefix(4)))
+        let rules = DesktopHidingRules(lines: list.hidingRules)
+        #expect(rules.css(host: "news.example") == refined + "{display:none!important}")
+        #expect(rules.css(host: "sub.except.example").isEmpty)
+        #expect(rules.css(host: "other.example").isEmpty)
+    }
+
+    @Test func compoundClassExceptionsAndEmptySlotsPreserveTheWholeSelector() {
+        let refined = ".ad-slot:not(.adsbox):not(.adsbygoogle)"
+        let empty = "[data-ad][data-ad-unit]:empty"
+        let lines = ["##.ad-slot", "#@#.ad-slot", "##" + refined, "##" + empty,
+                     "except.example#@#" + refined, "##.ad-slot:not(.a,.b)", "##:empty"]
+        let list = DesktopHidingRules.read(lines.joined(separator: "\n"), address: "", fetched: .now)
+        #expect(list.hidingRules == Array(lines.prefix(5)))
+        let rules = DesktopHidingRules(lines: list.hidingRules)
+        #expect(rules.css(host: "example.org").contains(refined + "{display:none!important}"))
+        #expect(rules.css(host: "except.example") == empty + "{display:none!important}")
+    }
+
+    @Test func collapsingReservedSpaceRespectsCosmeticExceptions() {
+        let rules = DesktopHidingRules(lines: ["##.dfp-slot", "reader.example#@#.dfp-slot", "##.sponsor"])
+        #expect(rules.css(host: "news.example").contains(".dfp-slot{min-block-size:0!important"))
+        #expect(rules.css(host: "reader.example") == ".sponsor{display:none!important}")
+    }
+
     @Test func hidingAndExceptionsUseDomainBoundaries() {
         let list = DesktopHidingRules.read("""
         ||tracker.example^

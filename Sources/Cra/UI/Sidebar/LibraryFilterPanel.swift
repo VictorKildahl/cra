@@ -71,7 +71,7 @@ struct LibraryFilterPanel: View {
 }
 
 /// Chips left to right, onto the next line when the row is full.
-private struct FlowRow: Layout {
+struct FlowRow: Layout {
     var spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

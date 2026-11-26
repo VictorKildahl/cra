@@ -12,6 +12,8 @@ import Foundation
 /// imported from (imported-browsers.json), never from a browser's folder Cra wasn't
 /// asked to read: macOS can keep Chrome's and Brave's folders from other apps, and
 /// reading them at launch showed "Data Access Blocked" on Cra's first launch (#757).
+/// For apps that install only into browsers they know (1Password), Cra writes the
+/// manifest itself when the app is installed and no browser's was linked (#847).
 enum NativeMessagingHosts {
     static func link(into profileRoot: URL) {
         let fm = FileManager.default
@@ -33,6 +35,17 @@ enum NativeMessagingHosts {
                 if (try? link.checkResourceIsReachable()) == true { continue }
                 try? fm.createSymbolicLink(at: link, withDestinationURL: dir.appendingPathComponent(name))
             }
+        }
+
+        // Apps that install their manifest only into browsers they know (1Password): with the app installed and no
+        // browser's manifest linked above, Cra writes it into its own folder and links that (KnownNativeHosts, #847).
+        let linked = Set((try? fm.contentsOfDirectory(atPath: dest.path)) ?? [])
+        let known = AppPaths.file("KnownNativeHosts")
+        for manifest in KnownNativeHosts.manifests(linked: linked, exists: { fm.isExecutableFile(atPath: $0) }) {
+            try? fm.createDirectory(at: known, withIntermediateDirectories: true)
+            let file = known.appendingPathComponent(manifest.file)
+            if (try? Data(contentsOf: file)) != manifest.data { try? manifest.data.write(to: file, options: .atomic) }
+            try? fm.createSymbolicLink(at: dest.appendingPathComponent(manifest.file), withDestinationURL: file)
         }
     }
 

@@ -103,6 +103,7 @@ imports, filesystem access and browser globals are not exposed. Promise results 
 | `describe()` | Empty object | Native presentation description |
 | `refresh(input)` | `settings`, `filters`, `state`, `groups`, session grants and cached metadata | Complete snapshot |
 | `signIn(input)` | Folder configuration | Sign-in action and instance-specific strings |
+| `checks(input)` (optional) | `url`, `revision`, `settings`, `state` | Hover-card `{checks: {passed, failed, pending, skipped, failing}}`, or `{}` |
 | `pageChanged(input)` | `url`, `previousURL`, `settings`, `state` | `{state, refreshAfter, checkSignIn}` |
 
 `pageChanged` runs only when a tab in the folder’s profile moves to or from one of the folder’s
@@ -118,7 +119,12 @@ exclusion submenu. Optional `setup` has `key`, `title`, `message`, `placeholder`
 `instanceLabel` and `detailLabel` supply the folder’s empty/error rows and instance menu labels.
 
 A snapshot contains `items`, `actions` and `preservedGroups`. Each item has a unique `id` and `url`,
-`title`, optional `subtitle`, `group` and `createdAt` (Unix seconds). Actions have `title` and `url`;
+`title`, optional `subtitle`, `group`, `createdAt` and `updatedAt` (Unix seconds), `revision`
+(the head commit), and `details: {draft?, commentCount?, labels?: [{name, color?}], tasks?: {done, total}}`.
+The new fields decode independently and fail soft: wrong types are omitted, negative counts and
+`done > total` drop that part, and labels with no nonempty name are dropped. A malformed details
+object never fails the snapshot or sidebar file. Old snapshots need none of these keys.
+Actions have `title` and `url`;
 optional `actionMessage` and `warning` describe additional sign-in requirements; while a snapshot has a
 `warning`, the folder row shows a key (Arc's single sign-on glyph) with it as the tip, and a click opens
 the first action. A sign-in or refresh error shows a warning triangle instead and wins over it. `preservedGroups`
@@ -167,3 +173,19 @@ migration (`Tests/LiveFolderProviderTests.swift`). The store harness checks nati
 The helper uses an explicit `(deny default)` profile: macOS terminates binaries built with SDK 27 or
 newer that select a legacy named profile such as `pure-computation` (see `sandbox_init(3)`).
 The dev build uses `build/CraDev.app` and `build/dev-data` by default.
+
+## Pull request hover checks
+
+`checks({url, revision, settings, state})` is optional and used only on hover of a live PR row.
+The GitHub plugin makes one GET to `<url>/checks` with the same JSON headers as refresh, through
+`cra.session.fetch` and the folder's exact session origins and profile. It reads labelled job SVGs
+and the names in `a.SideNav-subItem` from the JSON-wrapped HTML, excluding suite headings.
+Unknown job icons, sign-in/SSO, non-2xx and malformed answers return `{}`. Failed names are in
+page order, limited to three. Skipped jobs are separate from passed/failed/pending totals.
+
+The app invokes this method off the main thread through the usual plugin host. Missing methods
+(`Unknown plugin method`) and every other error mean no checks, without changing folder state,
+items, alerts or `lastError`. Snapshot content shows first and the card updates in place.
+A per-run, in-memory cache (separate per profile) fetches once per URL and revision, falling back
+to updatedAt without a revision; even an empty or failed answer finishes that key. It is never
+persisted and refresh does not request checks.

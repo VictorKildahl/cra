@@ -217,6 +217,16 @@ final class BlockLists {
                 Self.builtInCounts = counts
                 DispatchQueue.main.async { [self] in builtInCounts = counts }
             }
+            // Hide explicitly marked ad regions when built-in ad blocking is enabled.
+            // Use normal cosmetic rules so personal exceptions still apply.
+            let adRegions = selected.isEmpty ? [] : [
+                #"##[data-component="ad-slot"]"#,
+                "##.ad-container",
+                "##.dfp-slot",
+                "##[data-ad][data-ad-unit]:empty",
+                #"##[id^="div-gpt-ad"]"#,
+                #"##[class~="adContainer"][aria-label="Advertisement"]"#,
+            ]
             let base = selected.flatMap { Self.bundled[$0] ?? [] }
             let user = DesktopHidingRules.read(personalText, address: "", fetched: .distantPast)
             let sources = lists + [user]
@@ -224,7 +234,7 @@ final class BlockLists {
             let useNetwork = ChromiumFilterLists.available && !lines.isEmpty
             let hosts = useNetwork ? CustomBlocklist.merged([base] + sources.map(\.plainDomains)) : []
             let candidate = AcceptedFilters(domains: CustomBlocklist.merged([base] + sources.map(\.domains)),
-                                            hiding: sources.flatMap(\.hidingRules),
+                                            hiding: adRegions + sources.flatMap(\.hidingRules),
                                             rules: useNetwork ? DesktopNetworkRules.compile(domains: hosts, lines: lines) : [])
             var active = candidate
             var notice: String?
@@ -237,7 +247,8 @@ final class BlockLists {
             }
             let limitNotice = notice
             let personalRules = BlockListCount(user, networkRules: useNetwork).applied
-            let total = BlockListCount.total(builtIn: selected.map { Self.bundled[$0] ?? [] }, lists: sources, networkRules: useNetwork)
+            let total = BlockListCount.total(builtIn: selected.map { Self.bundled[$0] ?? [] }, builtInHiding: adRegions,
+                                             lists: sources, networkRules: useNetwork)
             let listsInUse = selected.filter { !(Self.bundled[$0] ?? []).isEmpty }.count
                 + lists.filter { BlockListCount($0, networkRules: useNetwork).applied > 0 }.count + (personalRules > 0 ? 1 : 0)
             let usage: (rules: Int, lists: Int)? = notice == nil ? (total, listsInUse) : nil
