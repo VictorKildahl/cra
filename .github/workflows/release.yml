@@ -37,9 +37,10 @@ permissions:
 jobs:
   build:
     name: Build, sign, notarize (${{ matrix.arch }})
-    # The SDK a release links against decides AppKit's behaviour, so build on the macOS
-    # (and SDK) local builds use: macos-15's 15.5 SDK rounded the page window's corners.
-    # Intel is cross-compiled on the same Apple silicon runner, with the same SDK.
+    # The SDK a release links against decides AppKit's behaviour (macos-15's 15.5 SDK rounded the
+    # page window's corners), so local builds use the same Xcode as this runner: Xcode 27, whose
+    # actool renders the Icon Composer icon's macOS 27 features (#863). Intel is cross-compiled on
+    # the same Apple silicon runner, with the same SDK.
     runs-on: xcode-27
     strategy:
       # One CPU stopping (Apple's notary queue running past the wait) doesn't cancel the other's
