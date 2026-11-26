@@ -911,7 +911,7 @@ public struct WindowSession: Codable, Equatable, Identifiable {
 }
 
 public struct WindowPrefs: Codable, Equatable {
-    public var sidebarWidth: Double = 328
+    public var sidebarWidth: Double = SidebarWidth.initial
     public var expandedFolders: Set<UUID> = []
     public var collapsedPinnedSpaces: Set<UUID> = []
     /// Arc's topAppsEmptyStateDismissedForProfiles: favorites containers whose empty-state card
@@ -939,7 +939,7 @@ public struct WindowPrefs: Codable, Equatable {
     /// The profile picked for each site in a Little Window (Arc's domainToProfilePreferences).
     public var siteProfiles = SiteProfiles()
 
-    public init(sidebarWidth: Double = 328, expandedFolders: Set<UUID> = [], collapsedPinnedSpaces: Set<UUID> = [],
+    public init(sidebarWidth: Double = SidebarWidth.initial, expandedFolders: Set<UUID> = [], collapsedPinnedSpaces: Set<UUID> = [],
                 favoritesEmptyStateDismissed: Set<UUID> = [], peekedFolders: [UUID: [UUID]] = [:],
                 windows: [WindowSession] = [WindowSession()], littleWindowSize: String? = nil, sidebarVisibleInNewWindows: Bool = true) {
         self.sidebarWidth = sidebarWidth
@@ -1118,7 +1118,7 @@ extension WindowPrefs {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        sidebarWidth = try c.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 328
+        sidebarWidth = try c.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? SidebarWidth.initial
         expandedFolders = try c.decodeIfPresent(Set<UUID>.self, forKey: .expandedFolders) ?? []
         collapsedPinnedSpaces = try c.decodeIfPresent(Set<UUID>.self, forKey: .collapsedPinnedSpaces) ?? []
         favoritesEmptyStateDismissed = try c.decodeIfPresent(Set<UUID>.self, forKey: .favoritesEmptyStateDismissed) ?? []

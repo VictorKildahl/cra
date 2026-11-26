@@ -625,6 +625,11 @@ final class FloatingSidebarController {
             reposition()
         }
         resizeHandle.onEnd = { [weak self] in self?.shell.resizeHandle.onEnd?() }
+        resizeHandle.onDoubleClick = { [weak self] in
+            guard let self else { return }
+            shell.resizeHandle.onDoubleClick?()
+            reposition()
+        }
         followMoves(of: p)
         return p
     }

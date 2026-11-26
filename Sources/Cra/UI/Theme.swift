@@ -524,7 +524,7 @@ final class PagedGradientView: NSView {
 
 /// Layout constants measured from Arc 1.168 at 2x (see docs).
 enum CraMetrics {
-    static let sidebarDefaultWidth: CGFloat = 328
+    static let sidebarDefaultWidth: CGFloat = CGFloat(SidebarWidth.initial)
     static let rowHeight: CGFloat = 40
     static let rowSpacing: CGFloat = 1
     static let rowCorner: CGFloat = 10
