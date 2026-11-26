@@ -323,18 +323,10 @@ private struct SecureDNSRows: View {
     @State private var customText = ""
 
     var body: some View {
-        SettingsPlainRow("Secure DNS",
-                           detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
-                           trailing: { EmptyView() }) {
-            Picker("Secure DNS", selection: choice) {
-                Text("Automatic").tag(SecureDNSChoice.automatic)
-                Text("Off").tag(SecureDNSChoice.off)
-                Divider()
-                ForEach(SecureDNSProvider.all) { Text($0.name).tag(SecureDNSChoice.provider($0)) }
-                Divider()
-                Text("Custom…").tag(SecureDNSChoice.custom)
-            }
-            .labelsHidden()
+        SettingsPlainRow("DNS over HTTPS",
+                         detail: footnote ?? "Encrypt DNS lookups when your system provider supports it.",
+                         trailing: { EmptyView() }) {
+            DNSProviderMenu(choice: choice)
             .fixedSize()
             .disabled(dns.prefs == nil || dns.isManaged)
             .onAppear { dns.refresh() }
@@ -383,6 +375,55 @@ private struct SecureDNSRows: View {
             customText = prefs.templates
         } else {
             error = "Cra couldn’t change secure DNS."
+        }
+    }
+}
+
+/// AppKit exposes a tooltip on each open menu item, including the provider's actual DoH endpoint.
+private struct DNSProviderMenu: NSViewRepresentable {
+    @Binding var choice: SecureDNSChoice
+
+    func makeCoordinator() -> Coordinator { Coordinator($choice) }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.setAccessibilityLabel("DNS over HTTPS")
+        func add(_ title: String, _ value: SecureDNSChoice, _ help: String) {
+            button.addItem(withTitle: title)
+            button.lastItem?.representedObject = value
+            button.lastItem?.toolTip = help
+        }
+        add("Use System DNS (Default)", .automatic, "Use your current DNS provider over HTTPS when available.")
+        add("Off", .off, "Let the system handle DNS.")
+        button.menu?.addItem(.separator())
+        for provider in SecureDNSProvider.all {
+            add(provider.name, .provider(provider),
+                "DoH endpoint: \(provider.template)\nPublic resolver IPv4: \(provider.resolverIPv4.joined(separator: ", "))")
+        }
+        button.menu?.addItem(.separator())
+        add("Custom…", .custom, "Enter your provider’s DNS-over-HTTPS URL.")
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectProvider(_:))
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        context.coordinator.selection = $choice
+        button.isEnabled = context.environment.isEnabled
+        if let item = button.itemArray.first(where: { ($0.representedObject as? SecureDNSChoice) == choice }) {
+            button.select(item)
+            button.toolTip = item.toolTip
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<SecureDNSChoice>
+        init(_ selection: Binding<SecureDNSChoice>) { self.selection = selection }
+
+        @objc func selectProvider(_ sender: NSPopUpButton) {
+            if let value = sender.selectedItem?.representedObject as? SecureDNSChoice {
+                selection.wrappedValue = value
+            }
         }
     }
 }
