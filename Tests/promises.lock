@@ -1690,6 +1690,8 @@
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::aLaunchWithSegmentsLeavesTheApplicationIconAlone  25e46ecec582
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsGivenToTheDockWhileItsCacheMayBeStale  9ac039c2814c
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsLeftToTheDockSoItFollowsTheIconStyle  d6d0d50c159d
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconCatalogTests.swift::theBundledIconHasALightADarkAndATintedLook  73b359c41e16
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconCatalogTests.swift::theIconUsesOnlyWhatXcodesActoolReads  bc4c2fe41e35
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theBundledIconSitsOnApplesGrid  be403575cf81
 #739   Tests/Scenarios/app-icon-segments-dock.scenario  25c9642c4b70
 #740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closeTabInAFavoritesMenuLetsItsPageGo  37f7421f67ad

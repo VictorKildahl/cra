@@ -1,20 +1,16 @@
 {
-  "features": [
-    "refractivity",
-    "specular-location"
-  ],
   "fill": {
     "linear-gradient": [
-      "gray:1.00000,1.00000",
-      "display-p3:0.91373,0.91373,0.91373,1.00000"
+      "srgb:0.94902,0.89020,0.76863,1.00000",
+      "srgb:0.90980,0.82745,0.66667,1.00000"
     ],
     "orientation": {
       "start": {
-        "x": 0.5,
+        "x": 0,
         "y": 1
       },
       "stop": {
-        "x": 0.5,
+        "x": 1,
         "y": 0
       }
     }
@@ -102,7 +98,7 @@
         "kind": "layer-color",
         "opacity": 0.32
       },
-      "specular": "inside",
+      "specular": true,
       "translucency": {
         "enabled": true,
         "value": 0.3
@@ -190,7 +186,7 @@
         "kind": "layer-color",
         "opacity": 0.32
       },
-      "specular": "inside",
+      "specular": true,
       "translucency": {
         "enabled": true,
         "value": 0.3
@@ -268,7 +264,7 @@
         "kind": "layer-color",
         "opacity": 0.32
       },
-      "specular": "inside",
+      "specular": true,
       "translucency": {
         "enabled": true,
         "value": 0.3
@@ -356,7 +352,7 @@
         "kind": "layer-color",
         "opacity": 0.32
       },
-      "specular": "inside",
+      "specular": true,
       "translucency": {
         "enabled": true,
         "value": 0.3

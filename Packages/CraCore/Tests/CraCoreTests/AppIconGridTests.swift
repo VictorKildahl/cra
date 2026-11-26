@@ -3,10 +3,10 @@ import Foundation
 import ImageIO
 import Testing
 
-/// The icon Cra.app is bundled with (resources/AppIcon.icns) sits on Apple's icon grid: the tile 824 of 1024 px,
-/// centred, with a transparent margin. macOS draws an icon like that in the Dark, Clear and Tinted icon styles; one
-/// that fills its canvas edge to edge it leaves as drawn, light in the Dark style (EzraNz on #739, 0.1.57).
-/// scripts/make-app-icons.swift --icns renders it.
+/// The .icns Cra.app is bundled with (resources/AppIcon.icns, its icon on macOS 14 and 15) sits on Apple's icon grid:
+/// the tile 824 of 1024 px, centred, with a transparent margin, like the Dock's other icons (EzraNz on #739, 0.1.57).
+/// On macOS 26 the Dock draws the Icon Composer icon instead (AppIconCatalogTests): the grid alone didn't bring the
+/// Dark style. scripts/make-app-icons.swift --icns renders it.
 struct AppIconGridTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func theBundledIconSitsOnApplesGrid() throws {
         let icns = URL(fileURLWithPath: #filePath)

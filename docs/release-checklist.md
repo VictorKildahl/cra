@@ -12,9 +12,10 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Themes and window chrome
 
-- **#739:** with Settings ▸ App Icon on Segments, System Settings ▸ Appearance ▸ Icon & widget style set to Dark, then Clear and Tinted,
-  turns Cra's Dock icon dark, clear and tinted like the other apps' (resources/AppIcon.icns is on Apple's grid, AppIconGridTests). A picked
-  icon stays as drawn.
+- **#739:** with Settings ▸ General ▸ App Icon on Segments (check `defaults read dk.kildahl.cra appIcon`: a pick is
+  drawn as it is, by design), System Settings ▸ Appearance ▸ Icon & widget style set to Dark, then Clear and Tinted,
+  turns Cra's Dock icon dark, glassy and tinted like the other apps' (the Icon Composer icon, resources/AppIcon.icon,
+  compiled into Assets.car; AppIconCatalogTests). Default keeps the sand tile. On macOS 14 or 15 the .icns shows.
 - **#372:** Settings opens at 684 × 650 pt on the first tab (your first name, "Cra" without one) every time, whatever tab it was closed on, and ⌘W closes it. Go through the
   ten tabs in dark and in light: the window is the system's window colour (not Arc's navy, Victor 12 Nov 2026), the chosen tab's pill
   (white 10 % with a hairline in dark, white with a shadow in light), 36 × 16 pt switches, the cards, Max's banner (Cra's mark and "Max"),

@@ -100,6 +100,14 @@ if [ "$EXE" = CraEngine ]; then
 fi
 echo -n "APPL????" > "$APP/Contents/PkgInfo"
 [ -f resources/AppIcon.icns ] && cp resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# macOS 26 draws the icon in the Dark, Clear and Tinted icon styles only from the bundle's Icon Composer icon
+# (Assets.car, named by CFBundleIconName); the .icns above stays the icon on macOS 14 and 15 (GitHub #739).
+ICON_OUT="$(mktemp -d "${TMPDIR:-/tmp}/cra-app-icon.XXXXXX")"
+scripts/compile-app-icon.sh "$ICON_OUT" > /dev/null
+cp "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
+rm -rf "$ICON_OUT"
+/usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$APP/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist"
 # The AppleScript dictionary (Arc's, same terms and codes: Info.plist OSAScriptingDefinition).
 cp resources/Cra.sdef "$APP/Contents/Resources/Cra.sdef"
 [ -d resources/web ] && cp -R resources/web "$APP/Contents/Resources/web"
@@ -186,9 +194,12 @@ fi
 
 # Every app in the bundle shows Cra's icon. macOS takes a bundle's icon from its asset catalog (CFBundleIconName)
 # before its .icns, and Chrome's alerts helpers carry Chromium's: the "Cra" notification prompt and every page's
-# notification showed Chromium's icon (0.1.44, a user's screenshot).
+# notification showed Chromium's icon (0.1.44, a user's screenshot). Cra.app's own catalog is Cra's icon (#739).
+[ "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP/Contents/Info.plist" 2>/dev/null)" = AppIcon ] &&
+  [ -s "$APP/Contents/Resources/Assets.car" ] || { echo "Cra.app lacks its AppIcon catalog (scripts/compile-app-icon.sh)" >&2; exit 1; }
 for plist in $(find "$APP" -path '*.app/Contents/Info.plist' | tr ' ' '\001'); do
   plist="$(tr '\001' ' ' <<<"$plist")"
+  [ "$plist" = "$APP/Contents/Info.plist" ] && continue
   if /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$plist" >/dev/null 2>&1 ||
      [ -e "$(dirname "$plist")/Resources/Assets.car" ]; then
     echo "An app in the bundle takes its icon from an asset catalog, not Cra's .icns: ${plist#"$APP"/}" >&2
