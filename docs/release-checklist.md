@@ -579,6 +579,13 @@ built release app with a test profile. Note anything that fails in the release's
   `AddedListRulesTests` compile a list of EasyList's shape on the Mac, and
   `testAnAddedListsPathRuleStopsAScriptFromAnUnlistedDomain` pins a served list in the simulator.
 
+- **PR #827, the filter helper's new permissions on an existing profile:** update a Mac from the previous
+  release, with EasyList (or any list with network rules) on in Settings ▸ Privacy ▸ Block lists. After
+  the update, chrome://extensions in that profile shows no disabled helper and no permission prompt,
+  and a page from a blocked ad host still fails to load. The helper (1.2) asks for scripting and site
+  access; Chrome grants an unpacked extension's new permissions as it loads, but only an update from
+  a real older profile shows that. The scenarios start from a fresh profile.
+
 - **#623, the pull-up's motion:** on a real iPhone at 60 fps, record a drag up from the + pill let go
   halfway and compare it frame by frame with the reporter's Arc Search recording
   (streamable.com/vbu4dx): let go, the sheet stays put until the keyboard comes, then rises with it
