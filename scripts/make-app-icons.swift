@@ -1,7 +1,11 @@
 // Renders the alternate app icons in Settings ▸ General ▸ App Icon from the brand marks
 // (brand/*.svg) into resources/app-icons/<id>.png, 512 px (Dock tiles top out at 128 pt), on Apple's icon grid:
-// the tile is 824 of 1024 px, centred, the size the Dock gives the edge-to-edge AppIcon.icns.
+// the tile is 824 of 1024 px, centred, with a transparent margin round it.
 // segments.png is only the picker's preview of the bundled icon.
+// With --icns it renders segments the same way at 1024 px into resources/AppIcon.icns, the icon the app is
+// bundled with. On the grid, macOS can draw it in the Dark, Clear and Tinted icon styles; an icon that fills its
+// canvas edge to edge is drawn as it is in every style (#739).
+//   swift scripts/make-app-icons.swift --icns
 // WebKit draws them so the ribbons' multiply blending survives (see brand/README.md).
 //   swift scripts/make-app-icons.swift
 // With --ios it renders the same four for the iPhone app instead: 1024 px, square and opaque
@@ -47,9 +51,35 @@ let icons: [String: String] = [
 ]
 
 let forIOS = CommandLine.arguments.contains("--ios")
+let forICNS = CommandLine.arguments.contains("--icns")
 let iosCatalog = root.appendingPathComponent("iOS/Cra/Resources/Assets.xcassets")
 /// The iOS icon set each id is: the app's own icon, and its alternates by name.
 let iosIconNames = ["segments": "AppIcon", "midnight": "AppIcon-Midnight", "mono": "AppIcon-Mono", "violet": "AppIcon-Violet"]
+
+/// resources/AppIcon.icns from the 1024 px rendering: every size of the icon set, drawn down from it.
+func writeICNS(_ cg: CGImage) {
+    let set = FileManager.default.temporaryDirectory.appendingPathComponent("AppIcon-\(UUID().uuidString).iconset")
+    try! FileManager.default.createDirectory(at: set, withIntermediateDirectories: true)
+    let sizes = [("icon_16x16", 16), ("icon_16x16@2x", 32), ("icon_32x32", 32), ("icon_32x32@2x", 64), ("icon_128x128", 128),
+                 ("icon_128x128@2x", 256), ("icon_256x256", 256), ("icon_256x256@2x", 512), ("icon_512x512", 512), ("icon_512x512@2x", 1024)]
+    for (name, px) in sizes {
+        let context = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.interpolationQuality = .high
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: px, height: px))
+        try! NSBitmapImageRep(cgImage: context.makeImage()!).representation(using: .png, properties: [:])!
+            .write(to: set.appendingPathComponent("\(name).png"))
+    }
+    let out = root.appendingPathComponent("resources/AppIcon.icns")
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
+    task.arguments = ["-c", "icns", set.path, "-o", out.path]
+    try! task.run()
+    task.waitUntilExit()
+    precondition(task.terminationStatus == 0, "iconutil failed")
+    try? FileManager.default.removeItem(at: set)
+    print("wrote \(out.path)")
+}
 
 func writeIOS(_ id: String, _ cg: CGImage) {
     // Redrawn without an alpha channel: App Store Connect refuses an icon that has one.
@@ -74,7 +104,7 @@ func writeIOS(_ id: String, _ cg: CGImage) {
 final class Renderer: NSObject, WKNavigationDelegate {
     let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 256, height: 256))
     var queue: [(String, String)]
-    init(_ icons: [String: String]) { queue = icons.sorted { $0.key < $1.key } }
+    init(_ icons: [String: String]) { queue = icons.filter { !forICNS || $0.key == "segments" }.sorted { $0.key < $1.key } }
 
     func next() {
         guard let (_, svg) = queue.first else { exit(0) }
@@ -93,13 +123,17 @@ final class Renderer: NSObject, WKNavigationDelegate {
         let (id, _) = queue.removeFirst()
         // 512 px on any display: 256 pt at 2x, or rendered at 512 pt where the window is 1x.
         let config = WKSnapshotConfiguration()
-        config.snapshotWidth = NSNumber(value: (forIOS ? 1024 : 512) / Double(webView.window?.backingScaleFactor ?? 2))
+        config.snapshotWidth = NSNumber(value: (forIOS || forICNS ? 1024 : 512) / Double(webView.window?.backingScaleFactor ?? 2))
         webView.takeSnapshot(with: config) { image, error in
             guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 fatalError("\(id): \(error?.localizedDescription ?? "no image")")
             }
             if forIOS {
                 writeIOS(id, cg)
+                return self.next()
+            }
+            if forICNS {
+                writeICNS(cg)
                 return self.next()
             }
             let rep = NSBitmapImageRep(cgImage: cg)
