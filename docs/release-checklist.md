@@ -597,6 +597,14 @@ built release app with a test profile. Note anything that fails in the release's
   simulator records animations at a variable rate, so
   only a phone settles the handoff; `testTheMenusAddressIsEditedInThisTab` pins the end state.
 
+- **Escape closes the search sheet:** on a real iPad with a hardware keyboard, press ⌘T over a page,
+  then Escape: the sheet closes and the page stays as it was; Escape on a page with the sheet down
+  still reaches the page (a site's own dialog closes). XCTest never delivers Escape to the app in the
+  simulator; `MobileKeyCommandsTests.escapeIsThePagesUnlessTheSheetIsUp` pins when it is claimed, and
+  `KeyCommandTests` pins ⌘T and ⌘L. On an iPad on iPadOS 26, ⌘T and ⌘L open the search too, also with
+  nothing in focus (no tap on the page since it loaded) and on the empty home, and neither opens anything
+  under a summary: XCTest on iOS 26 drops ⌘ more often than not, so `KeyCommandTests` runs from iOS 27.
+
 - **A choice in the search sheet (`MobileSheetLeave`):** on a real iPhone in dark mode beside Arc Search, with
   google.com's dark theme on, search for google.com from a page and from the empty home screen. The sheet rises and
   fades, the screen goes black without lightening on the way (the band under the Dynamic Island included), and the
