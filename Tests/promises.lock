@@ -1853,6 +1853,7 @@
 #825   Tests/Scenarios/reset-zoom-pinch.scenario  5c8fba8f4b8f
 #829   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::thePlacesSayTheyAreOnTheIPhone  6beac92ad82c
 #829   iOS/CraUITests/BrowserTests.swift::testTheShareSheetSavesThroughTheExtension  8102a922a145
+#835   Tests/CaptureOverlayTests.swift::checkLittleWindow  7d7323d1a554
 #842   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::removeOpensTheProfileThatHasIt  aa9ee3fabce9
 #842   Tests/Scenarios/extension-remove-in-its-profile.scenario  1756245b2867
 #844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
