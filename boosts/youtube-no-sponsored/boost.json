@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "name": "Hide Sponsored",
+  "host": "youtube.com",
+  "about": "Hides sponsored videos at the top of search results, ad slots in the feed, and the ad box beside the player.",
+  "by": "aashishvinu",
+  "preview": "https://www.youtube.com/results?search_query=mac+browser&hl=en&gl=US",
+  "zapped": [
+    "ytd-search-pyv-renderer",
+    "ytd-ad-slot-renderer",
+    "#player-ads"
+  ]
+}
