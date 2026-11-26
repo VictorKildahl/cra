@@ -1026,7 +1026,7 @@ private struct PullRequestPreviewView: View {
                     Text(meta).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if card.draft || card.checks != nil || card.commentCount != nil || card.tasks != nil {
-                        FlowRow(spacing: 14) {
+                        FlowRow(spacing: 8) {
                             if card.draft { status("circle.fill", "Draft", dot: true) }
                             // Keep the snapshot's status items in place when checks arrive.
                             ZStack(alignment: .leading) {
