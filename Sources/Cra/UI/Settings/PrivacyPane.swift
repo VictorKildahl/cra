@@ -343,7 +343,7 @@ private struct SecureDNSRows: View {
 
     var body: some View {
         SettingsPlainRow("DNS over HTTPS",
-                         detail: footnote ?? "Encrypt DNS lookups when your system provider supports it.",
+                         detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
                          trailing: { EmptyView() }) {
             DNSProviderMenu(choice: choice)
             .fixedSize()
