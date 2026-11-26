@@ -1,0 +1,17 @@
+# promise: #820
+# Tab on "youtube" with Settings ▸ Advanced ▸ Command bar ▸ "Fill the command bar with the site’s color" off,
+# its default: the bar keeps Arc's neutral fill, the site only in the pill and in the one-second wash that
+# fades, as in Arc. The pale red bar in #820's screenshot is that setting's fill, (246,223,223) on a light bar
+# (command-bar-site-color), so it was on there.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=site-color-off
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://commandbar?query=youtube
+wait 1
+cra://debug?commandBarScope=enter
+wait 2
+expect-log command bar scope enter: YouTube, fill default
+reject-log command bar scope enter: YouTube, fill .(4B2323|F6DFDF)
+cra://dismiss

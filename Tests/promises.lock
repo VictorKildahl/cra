@@ -1815,6 +1815,7 @@
 #818   Tests/Scenarios/sidebar-header-no-dead-space.scenario  025488babe9c
 #819   Packages/CraCore/Tests/CraCoreTests/SidebarResizeTests.swift::aDoubleClickGivesArcsDefaultWidth  3cb973fd856a
 #819   Tests/Scenarios/sidebar-edge-double-click.scenario  cabcaff6d2ac
+#820   Tests/Scenarios/command-bar-site-color-off.scenario  7d7750642abd
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAddressWhoseAppIsCraIsSearched  a6692de56b64
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aWindowOpenedOnlyOnTheAppsAddressCloses  37a32911d3de
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::anAddressWhoseAppIsCraIsNotHandedBack  c4bfd41c035a
