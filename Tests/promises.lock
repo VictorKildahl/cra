@@ -1865,6 +1865,8 @@
 #844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onePasswordInstalledGetsItsManifestWithoutAnImport  6cd3a3b215da
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
+#865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
+#865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

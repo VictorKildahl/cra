@@ -50,4 +50,12 @@ public enum AppIconBundle {
     public static func setsApplicationIcon(giving: Bool, gaveBefore: Bool) -> Bool {
         giving || gaveBefore
     }
+
+    /// The picture (resources/app-icons/<name>.png) Settings ▸ Icon shows for an icon: the icon the Dock shows. Segments
+    /// is the bundle's own icon, which macOS 26 draws from the Icon Composer icon (the glass Segments, GitHub #739) and
+    /// macOS 14 and 15 from AppIcon.icns (the sticker), so its tile follows the system; the others are pictures the app
+    /// hands the Dock, the same everywhere (#865).
+    public static func previewName(for id: String, defaultID: String, macOSMajor: Int) -> String {
+        id == defaultID && macOSMajor >= 26 ? "segments-glass" : id
+    }
 }
