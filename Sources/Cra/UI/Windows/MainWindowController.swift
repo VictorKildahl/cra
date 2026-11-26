@@ -3468,11 +3468,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .newEasel?:
             guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
-            if peek?.isPeek == false, window?.isVisible != true { showWindow(nil) }
+            revealForLittleWindowEasel(from: peek)
         case .sendToEasel(let id)?:
             guard let png else { return }
             sendCapture(png, toEasel: id, source: source)
-            if peek?.isPeek == false, window?.isVisible != true { showWindow(nil) }
+            revealForLittleWindowEasel(from: peek)
         case .retake?:
             capturePage(in: peek)
         case nil:
@@ -3487,7 +3487,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         let url = dir.appendingPathComponent(PageCommands.captureFileName())
         guard (try? png.write(to: url)) != nil, let service = NSSharingService(named: .composeMessage),
               service.canPerform(withItems: [url]) else {
-            if let peek { peek.showToast("Messages Isn't Available") } else { showToast("Messages Isn't Available") }
+            showCaptureToast("Messages Isn't Available", in: peek)
             return
         }
         service.perform(withItems: [url])

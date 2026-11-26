@@ -10,7 +10,8 @@ final class MainWindowController: NSWindowController {
     /// Where the last capture came from (page points, the page's size): an easel keeps it.
     var capturedFrom: (rect: CGRect, page: CGSize)?
 
-    func showToast(_ text: String) {}
+    var toasts: [String] = []
+    func showToast(_ text: String) { toasts.append(text) }
 
     func captureFinished(_ action: CaptureOverlay.Action?, _ png: Data?, in peek: LittleWindowController? = nil,
                          from: (browser: CraBrowser, rect: CGRect, page: CGSize)? = nil) {
@@ -32,7 +33,8 @@ final class LittleWindowController: NSWindowController {
     var isParked = false
     var closingPeek = false
 
-    func showToast(_ text: String) {}
+    var toasts: [String] = []
+    func showToast(_ text: String) { toasts.append(text) }
 }
 
 @MainActor

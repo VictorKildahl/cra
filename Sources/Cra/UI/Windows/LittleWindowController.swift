@@ -173,9 +173,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// The normal browser window that hosts Capture for an ordinary Little Window (never an
     /// incognito or Blank Window, so "New Easel" and "Send To…" land in a normal space).
     var captureHost: MainWindowController? {
-        app.mainWindows.first { $0.windowID == store.lastNormalWindowID }
-            ?? app.mainWindows.first { !$0.isStandalone }
-            ?? app.main
+        let candidates = app.mainWindows.map { ContentCapture.HostWindow(id: $0.windowID, isStandalone: $0.isStandalone) }
+        guard let id = ContentCapture.hostWindowID(from: candidates, lastNormalWindowID: store.lastNormalWindowID,
+                                                   fallbackID: app.main?.windowID) else { return app.main }
+        return app.mainWindows.first { $0.windowID == id } ?? app.main
     }
     /// This Peek to its window's veil (MainWindowController.showPeekVeil).
     let peekID = UUID()

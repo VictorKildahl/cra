@@ -349,6 +349,34 @@ enum CaptureOverlayTests {
             expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
                    "switching capture host while pending (\(viaImage ? "image" : "page")) cancels the first host's request")
         }
+
+        // Sending a Little Window capture to an easel reveals a hidden host window, and capture
+        // toasts (Messages unavailable, capture failed) surface on the Little Window itself.
+        do {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.mainWindow.removeChildWindow(fixture.peekWindow)
+            fixture.mainWindow.orderOut(nil)
+            expect(!fixture.mainWindow.isVisible, "host window starts hidden")
+            fixture.peek.isPeek = true
+            fixture.main.revealForLittleWindowEasel(from: fixture.peek)
+            expect(!fixture.mainWindow.isVisible, "Peek easel capture does not unexpectedly reveal a hidden host")
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            fixture.main.revealForLittleWindowEasel(from: fixture.peek)
+            expect(fixture.mainWindow.isVisible, "ordinary Little Window easel capture reveals a hidden host window")
+
+            fixture.main.showCaptureToast("Messages Isn't Available", in: fixture.peek)
+            expect(fixture.peek.toasts == ["Messages Isn't Available"] && fixture.main.toasts.isEmpty,
+                   "Messages unavailable toast surfaces on the Little Window when capture started there")
+            fixture.main.showCaptureToast("Messages Isn't Available", in: nil)
+            expect(fixture.main.toasts == ["Messages Isn't Available"],
+                   "Messages unavailable toast surfaces on the main window for main-window capture")
+            pressCapture(fixture)
+            fixture.peekBrowser.fail("Page.captureScreenshot", with: "boom")
+            expect(fixture.peek.toasts.last == "Capture Failed",
+                   "a failed Little Window screenshot surfaces its toast on the Little Window")
+        }
     }
 
     /// #451: the pointer on a title line lights Arc's choice, the card around it; holding ⌥ lights
